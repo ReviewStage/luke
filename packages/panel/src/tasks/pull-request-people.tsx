@@ -18,24 +18,6 @@ import { type ReactNode, useCallback } from "react";
 import { ActorRef, ActorStack, type StackFace } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 
-/**
- * pull-request-people.tsx -- who an agent's pull request names, as its Pull request tab's header draws them: who opened it and when, and its reviewers as a facepile wearing where each stands.
- *
- * GitHub names everyone by an account of its own; the window names each as
- * the actor they are to the reader (`githubActor`). A GitHub account linked
- * to a member is that member, by their face and card; anyone else is
- * themself on GitHub, a person's circle or an App's bot's square, by their
- * avatar and a card saying so, our own App's bot among them. A
- * reviewer's face wears where they stand at its corner, a disc in GitHub's
- * own colors with its glyph cut from it: approved a green check, changes
- * asked for a red cross, a review asked for and not given an amber dot, and
- * a comment or a dismissed review quiet. Every name and word here is
- * the repository's, so the places drawing them are left out of the screen
- * recording, as the Changes tab is. The pull request's card names them too,
- * each reviewer on a row of its own (`pull-request-card.tsx`).
- */
-
-/** Where a reviewer stands, in the words their face's pill, a comment's line, and their row on the pull request's card say it. */
 export const REVIEW_WORDS = {
   [REVIEW_STATE.APPROVED]: "Approved",
   [REVIEW_STATE.CHANGES_REQUESTED]: "Changes requested",
@@ -44,7 +26,6 @@ export const REVIEW_WORDS = {
   [REVIEW_STATE.REQUESTED]: "Review requested",
 } as const satisfies Record<ReviewState, string>;
 
-/** The glyph a reviewer's standing wears, as GitHub draws each. */
 const REVIEW_GLYPHS = {
   [REVIEW_STATE.APPROVED]: <CheckIcon />,
   [REVIEW_STATE.CHANGES_REQUESTED]: <FileDiffIcon />,
@@ -53,12 +34,6 @@ const REVIEW_GLYPHS = {
   [REVIEW_STATE.REQUESTED]: <CircleDashedIcon />,
 } as const satisfies Record<ReviewState, ReactNode>;
 
-/**
- * The glyph a face's standing wears at its corner, cut from a disc of its
- * color: a check or a cross a face's corner holds legibly, where the
- * standing's own glyph beside its words would blur; a review asked for and
- * not given wears the disc alone, as GitHub's waiting dot.
- */
 const FACE_GLYPHS = {
   [REVIEW_STATE.APPROVED]: <CheckIcon />,
   [REVIEW_STATE.CHANGES_REQUESTED]: <XIcon />,
@@ -67,7 +42,6 @@ const FACE_GLYPHS = {
   [REVIEW_STATE.REQUESTED]: null,
 } as const satisfies Record<ReviewState, ReactNode>;
 
-/** Names the people as the members around the caller say. */
 export function useNamer(): (person: GitHubPerson) => Actor {
   const { members, readerId, former } = useMemberDirectory();
   return useCallback(
@@ -76,11 +50,6 @@ export function useNamer(): (person: GitHubPerson) => Actor {
   );
 }
 
-/**
- * A reviewer's standing in GitHub's colors, its glyph's ink and its disc's
- * ground: approved green, changes asked for red, a review asked for amber, a
- * comment or a dismissal quiet.
- */
 const REVIEW_TONE = {
   [REVIEW_STATE.APPROVED]: { ink: "text-complete", disc: "bg-complete" },
   [REVIEW_STATE.CHANGES_REQUESTED]: { ink: "text-destructive", disc: "bg-destructive" },
@@ -89,7 +58,6 @@ const REVIEW_TONE = {
   [REVIEW_STATE.DISMISSED]: { ink: "text-muted-foreground", disc: "bg-muted-foreground" },
 } as const satisfies Record<ReviewState, { ink: string; disc: string }>;
 
-/** A reviewer's standing beside the words for it, its glyph in its color; a GitHub line's card wears it alone in its icon's seat (`line-cards.tsx`). */
 export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
@@ -101,12 +69,6 @@ export function ReviewBadge({ state }: { state: ReviewState }): React.JSX.Elemen
   );
 }
 
-/**
- * A reviewer's standing at their face's corner: a disc of its color, its
- * glyph cut from it in the ground's color, so a check reads apart from a
- * cross at a face's size; a review asked for is the disc alone, smaller, as
- * GitHub's waiting dot. The badge's own ground rings it off the face.
- */
 function FaceBadge({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
@@ -118,12 +80,10 @@ function FaceBadge({ state }: { state: ReviewState }): React.JSX.Element {
   );
 }
 
-/** Someone the pull request names, by their face and name, hanging their card, as every actor is drawn. */
 function PersonRef({ person }: { person: GitHubPerson }): React.JSX.Element {
   return <ActorRef actor={useNamer()(person)} />;
 }
 
-/** Where a review left its reviewer, its glyph in its color beside the words for it. */
 export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Element {
   return (
     <span
@@ -136,13 +96,11 @@ export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Ele
   );
 }
 
-/** The reviewers as a facepile, each face wearing where they stand and hanging their card, the rest counted past `drawn`. */
 function ReviewerPile({
   reviewers,
   drawn,
 }: {
   reviewers: NonNullable<AgentChangesPeople["reviewers"]>;
-  /** How many faces stand before the rest are counted. */
   drawn: number;
 }): React.JSX.Element {
   const name = useNamer();
@@ -160,21 +118,13 @@ function ReviewerPile({
   );
 }
 
-/**
- * Who opened the pull request and when, in a pull request's header, as one
- * phrase: "[face] dana opened 3h ago", or, once it merged, "[face] dana
- * opened · merged 1h ago", the moment that matters once it has; without
- * anyone to name, the phrase alone.
- */
 export function OpenedLine({
   person,
   opened,
   merged,
 }: {
   person: GitHubPerson | undefined;
-  /** When it was opened, as the header says a time. */
   opened: ReactNode;
-  /** When it merged, where it has. */
   merged: ReactNode | undefined;
 }): React.JSX.Element {
   const verb = person === undefined ? "Opened" : "opened";
@@ -198,10 +148,8 @@ export function OpenedLine({
   );
 }
 
-/** How many reviewers' faces a pull request's header draws before it counts the rest, as stage-cli's header does. */
 const HEADER_FACES = 3;
 
-/** The reviewers compactly, as a pull request's header names them: their first faces, each wearing where they stand, and a count of the rest. */
 export function HeaderReviewers({
   reviewers,
 }: {

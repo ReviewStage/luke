@@ -7,15 +7,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ThreadsDock } from "./threads-dock.js";
 
-/**
- * threads-dock.test.ts -- the line over an agent's box names the one thread
- * waiting on the developer, or how many wait and the next of them, and
- * opens the next one, the oldest posted, in the Inbox. Synthetic items.
- */
-
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** A thread the agent posted that waits on the developer. */
 function waiting(n: number, title: string): InboxItem {
   return {
     id: `6c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4${n}`,
@@ -38,7 +31,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The dock drawn over the threads given, its words, and what its press opened. */
 function dock(threads: readonly InboxItem[]) {
   const opened: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));

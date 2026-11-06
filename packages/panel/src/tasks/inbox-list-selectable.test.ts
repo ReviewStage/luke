@@ -20,12 +20,6 @@ import { INBOX_COLUMNS, useInboxRowPresses } from "./inbox-columns.js";
 import { InboxList } from "./inbox-list.js";
 import { INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
-/**
- * inbox-list-selectable.test.ts -- the Inbox's list chooses its items as
- * every selectable list does (`@repo/ui/testing/selectable-list`). The list
- * alone over five open items of one task; the key of each is its item's id.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -41,7 +35,6 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** An open item of one agent's, the `number`th. */
 function item(number: number): InboxItem {
   return {
     id: `a1b2c3d4-0000-4000-8000-00000000000${number}`,
@@ -78,7 +71,6 @@ const VIEW: InboxListView = {
   })),
 };
 
-/** The list drawn over `VIEW`, and the ids of the items it was asked to open. */
 function mount() {
   fakeAppPlatform(QUIET_PANEL);
   vi.stubGlobal(

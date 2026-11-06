@@ -33,21 +33,6 @@ import {
   toolCallView,
 } from "./tool-call-model.js";
 
-/**
- * replay-card-model.ts -- the opening of an agent started from another, read out of its first message: the brief as its source's was, the replay's card, and the developer's note.
- *
- * An agent continued from another, or forked from one at a message, is
- * handed one first message holding three things (`@repo/features/agent-replay`):
- * the brief its source was handed, the source's transcript replayed, and
- * the note the developer wrote with the start. The tab draws them apart:
- * the brief as the source's transcript drew it, the replay as one folded
- * card naming the source, and the note as the developer's own line. This
- * module reads the message into those three and says the card's words; a
- * message whose markers do not add up has no replay, and is drawn whole as
- * any first message is.
- */
-
-/** What the card's summary row says before the source's chip: a continue's, or a fork's at one of the source's messages. */
 export const REPLAY_VERB = {
   CONTINUED: "Continued from",
   FORKED: "Forked from",
@@ -55,44 +40,30 @@ export const REPLAY_VERB = {
 
 type ReplayVerb = (typeof REPLAY_VERB)[keyof typeof REPLAY_VERB];
 
-/** What a step's row names the agent by, for its words and its calls. */
 const AGENT_WORD = "Agent";
 
-/** What a line's row names its sender by where its summary names none. */
 const SENDER_WORD = "Developer";
 
-/** What stands between who a summary is of and what they did, as the service writes a line's and the agent's words' summaries ("Dean: Check the tests", "Said: Done."). */
 const SPEAKER_SEPARATOR = ": ";
 
-/** The word the service leads the agent's words' summary with, which the row's "Agent" already says. */
 const SAID_WORD = "Said";
 
-/** How the service lays a call's step out: its input after this lead, then its result after the next. */
 const CALL_PARTS = {
   INPUT: "Input: ",
   RESULT: "\nResult: ",
   FAILED: "Failed: ",
 } as const;
 
-/** What the service adds to a call's summary while the call was still under way. */
 const RUNNING_MARK = " (running)";
 
-/** The service's whole result of a call still under way, which with the mark tells a running call from one whose subject ends in the mark's words. */
 const NO_RESULT = "(no result: the call was still under way)";
 
-/**
- * The kind of call each verb the service says a call in names, the first
- * kind of the transcript's own words to say it, so a replayed call wears
- * the icon its row wears in a transcript; a verb the transcript does not
- * say, as "Used", is another call's.
- */
 const VERB_KIND: ReadonlyMap<string, CallKind> = new Map(
   Object.values(CALL_KIND)
     .toReversed()
     .map((kind) => [CALL_WORDS[kind].verb, kind] as const),
 );
 
-/** What one step is drawn as: a line sent to the source, the source agent's words, or one of its calls as a transcript's row. */
 export const STEP_VIEW = {
   LINE: "line",
   SAID: "said",
@@ -102,13 +73,9 @@ export const STEP_VIEW = {
 export type StepView =
   | {
       readonly kind: typeof STEP_VIEW.LINE;
-      /** Who sent it by name, as its summary says, which a step written before its marker named its sender is drawn under. */
       readonly sender: string;
-      /** Who sent it as a transcript's line names its sender, where its marker said; none for the developer's own and a step written before. */
       readonly sentBy: AgentSender | undefined;
-      /** Whether the developer sent it, drawn as the reader's own. */
       readonly own: boolean;
-      /** When it was sent, where its marker said; none for a step written before. */
       readonly at: number | undefined;
       readonly words: string;
     }
@@ -116,56 +83,33 @@ export type StepView =
   | {
       readonly kind: typeof STEP_VIEW.CALL;
       readonly state: ToolState;
-      /** The call's row and body as a transcript's call of its tool draws them, or as its summary's verb says where its marker named no tool. */
       readonly view: ToolCallView;
       readonly errorText: string | undefined;
-      /** The agent a call about one names, which its row draws as the agent's chip; none for any other call. */
       readonly agent: CalledAgent | undefined;
     };
 
-/** The most links of a `from` chain a brief's source is looked for along, so a chain that loops ends. */
 const MAX_CHAIN = 32;
 
-/**
- * How many of the replay's newest steps the opened card draws at first, and
- * how many more each press of its earlier-steps row draws. Note that twenty
- * is about two screens of the panel's rows, most of them a call's folded
- * line, which holds the last exchange a continuation picks up from, while a
- * replay of thousands draws no more than that until the reader asks.
- */
 export const REPLAY_PAGE = 20;
 
-/** The steps the card draws once opened: from which of the kept steps, which is also how many earlier ones are not yet drawn, and how many of those the row above them draws next. */
 export interface ReplayPage {
   readonly from: number;
   readonly next: number;
 }
 
-/** An agent's opening, read out of its first message: the brief as a message of its own, the replay, and the note as a line of its own where one was written. */
 export interface ReplayOpening {
-  /** The first message with only the brief for its words, and its files kept. */
   readonly brief: AgentTranscriptMessage;
   readonly replay: Replay;
-  /** The note as the developer's line: the first message with the note for its words and no files; none where no note was written. */
   readonly note: AgentTranscriptMessage | undefined;
 }
 
-/**
- * The id the note's line is drawn under. Note that it is none of the
- * transcript's, because the note is a part of the first message, and a
- * Copy link under the first message's id would bring the brief into view
- * rather than the note; a line whose id the transcript does not hold offers
- * no link (`message-links.tsx`).
- */
 const NOTE_LINE_ID = "replay-note";
 
-/** One step's row: who it names and the one line after. */
 export interface StepLine {
   readonly who: string;
   readonly line: string;
 }
 
-/** The message with the words given in place of its own words, its files kept or dropped. */
 function withWords(
   message: AgentTranscriptMessage,
   words: string,
@@ -174,21 +118,10 @@ function withWords(
   return { ...message, parts: [...files, { type: "text", text: words }] };
 }
 
-/** The media type a text file is handed in, inlined, whose files the service counts apart from images and PDFs. */
 const TEXT_FILE_TYPE = "text/plain";
 
-/**
- * Each first message's opening as it was read, so a render reads a message
- * once rather than parsing the whole replay again: a transcript's messages
- * are the same objects until a read hands new ones, which then read afresh.
- */
 const OPENINGS = new WeakMap<AgentTranscriptMessage, ReplayOpening | undefined>();
 
-/**
- * The first message's files parted between the brief and the note: the
- * note's are the last of each group the service hands files in, text files
- * and the rest, as many as its marker counts, since the brief's go first.
- */
 function filesOf(message: AgentTranscriptMessage, noteFiles: NoteFiles) {
   const kinds = agentParts(message);
   const files = message.parts.filter((_, index) => kinds[index]?.kind !== AGENT_PART.TEXT);
@@ -206,7 +139,6 @@ function filesOf(message: AgentTranscriptMessage, noteFiles: NoteFiles) {
   };
 }
 
-/** The opening read afresh from the first message. */
 function readOpening(first: AgentTranscriptMessage): ReplayOpening | undefined {
   const parts = firstMessageParts(messageWords(first));
   if (parts.replay === undefined) return undefined;
@@ -221,12 +153,6 @@ function readOpening(first: AgentTranscriptMessage): ReplayOpening | undefined {
   };
 }
 
-/**
- * The opening of an agent started from another, read from its first
- * message; nothing where the message holds no replay that adds up, which
- * is then drawn as any first message is. The same message answers the same
- * opening, read once (`OPENINGS`).
- */
 export function replayOpening(first: AgentTranscriptMessage): ReplayOpening | undefined {
   if (OPENINGS.has(first)) return OPENINGS.get(first);
   const opening = readOpening(first);
@@ -234,53 +160,39 @@ export function replayOpening(first: AgentTranscriptMessage): ReplayOpening | un
   return opening;
 }
 
-/** The words the card's summary leads with: a fork's where the replay was cut at a message, a continue's otherwise. */
 export function replayVerb(replay: Replay): ReplayVerb {
   return replay.messageId === undefined ? REPLAY_VERB.CONTINUED : REPLAY_VERB.FORKED;
 }
 
-/** How many steps the replay kept, and of how many where it left the earliest out: "38 steps", "38 of 212 steps". */
 export function replayCount(replay: Replay): string {
   const kept = replay.steps.length;
   if (kept < replay.totalSteps) return `${kept} of ${replay.totalSteps} steps`;
   return kept === 1 ? "1 step" : `${kept} steps`;
 }
 
-/** The line saying how many of the source's earliest steps the replay left out; none where it kept them all. */
 export function leftOutLine(replay: Replay): string | undefined {
-  // Note that steps we summarized are no steps left out: the summary stands for them.
   const left = replay.totalSteps - replay.steps.length - (replay.summary?.steps ?? 0);
   if (left <= 0) return undefined;
   const steps = left === 1 ? "1 earlier step was" : `${left} earlier steps were`;
   return `${steps} left out to keep the replay within its size limit.`;
 }
 
-/** What the summary's row says: how many of the oldest steps it stands for, and that we wrote it rather than the agent; none where the replay holds no summary. */
 export function summaryLine(replay: Replay): string | undefined {
   const steps = replay.summary?.steps;
   if (steps === undefined) return undefined;
   return `Summary of ${steps === 1 ? "1 earlier step" : `${steps} earlier steps`} (written by ${PRODUCT_NAME})`;
 }
 
-/** The steps drawn of `kept` once `shown` of the newest are: never fewer than one page, nor more than are kept. */
 export function replayPage(kept: number, shown: number): ReplayPage {
   const from = Math.max(0, kept - Math.max(shown, REPLAY_PAGE));
   return { from, next: Math.min(REPLAY_PAGE, from) };
 }
 
-/** What the row before the drawn steps says: how many earlier steps a press draws, and of how many where more stand: "Show 20 of 180 earlier steps", "Show 3 earlier steps". */
 export function earlierStepsLine(page: ReplayPage): string {
   if (page.next < page.from) return `Show ${page.next} of ${page.from} earlier steps`;
   return page.next === 1 ? "Show 1 earlier step" : `Show ${page.next} earlier steps`;
 }
 
-/**
- * Where a line's summary parts its sender from its words: the first
- * separator after which the summary reads as the start of the line's own
- * words on one line, so a sender whose name holds the separator (an
- * automation's "Nightly: deploy") keeps it; the first separator where none
- * does, and none where the summary holds no separator.
- */
 function lineSplit(step: ReplayStep): number {
   const words = step.words.replace(/\s+/gu, " ").trim();
   let first = -1;
@@ -293,12 +205,6 @@ function lineSplit(step: ReplayStep): number {
   return first;
 }
 
-/**
- * A step's row: a line under whoever sent it, as its summary names them
- * (a member, the app, an automation, GitHub, another agent), and the agent's
- * words and calls under the agent, the words without the summary's own
- * "Said" since the row names the agent.
- */
 export function stepLine(step: ReplayStep): StepLine {
   switch (step.kind) {
     case REPLAY_STEP_KIND.LINE: {
@@ -317,12 +223,6 @@ export function stepLine(step: ReplayStep): StepLine {
   }
 }
 
-/**
- * The agent among `agents` whose brief an agent started from another
- * carries: the first along its `from` chain that was handed its brief
- * afresh; the agent itself where it was started afresh, or where a link of
- * its chain is not listed.
- */
 function briefSource(agent: AgentSummary, agents: readonly AgentSummary[]): AgentSummary {
   let at = agent;
   for (let link = 0; link < MAX_CHAIN && at.from !== undefined; link += 1) {
@@ -334,13 +234,6 @@ function briefSource(agent: AgentSummary, agents: readonly AgentSummary[]): Agen
   return at;
 }
 
-/**
- * The agent as its opening is drawn: where its brief is an automation's
- * run's prompt, carried over from the run along its `from` chain, it wears
- * the run's automation, so its opening draws the automation's Prompt card
- * under the automation as the run's did. Note that the agent is still no
- * run of the automation: only what its opening is drawn from changes.
- */
 export function briefAgent(agent: AgentSummary, agents: readonly AgentSummary[]): AgentSummary {
   const source = briefSource(agent, agents);
   if (source === agent) return agent;
@@ -353,14 +246,6 @@ export function briefAgent(agent: AgentSummary, agents: readonly AgentSummary[])
   };
 }
 
-/**
- * The words a call took or gave as the value they spell, as the service
- * wrote them: read back from their JSON where their marker says they were a
- * value's JSON, and kept as they are where it says they were text, so a
- * text that only looks like JSON stays the text it was. Where the marker
- * names no form, an object or a list is read back from its JSON and
- * anything else kept as words.
- */
 function wireOf(words: string, form: ReplayValueForm | undefined): WireValue {
   if (form === REPLAY_VALUE_FORM.TEXT) return words;
   const value = valueFromJsonText(words);
@@ -368,7 +253,6 @@ function wireOf(words: string, form: ReplayValueForm | undefined): WireValue {
   return isRecord(value) || Array.isArray(value) ? value : words;
 }
 
-/** Where a call stood and what it took and gave, as a call's row draws them. */
 interface CallRead {
   readonly state: ToolState;
   readonly input: string;
@@ -376,14 +260,12 @@ interface CallRead {
   readonly errorText: string | undefined;
 }
 
-/** The row's state for each state a step's marker names. */
 const ROW_STATE = {
   [REPLAY_TOOL_STATE.DONE]: TOOL_STATE.OUTPUT_AVAILABLE,
   [REPLAY_TOOL_STATE.FAILED]: TOOL_STATE.OUTPUT_ERROR,
   [REPLAY_TOOL_STATE.RUNNING]: TOOL_STATE.INPUT_AVAILABLE,
 } as const satisfies Record<ReplayToolState, ToolState>;
 
-/** A call read from what its step's marker names: where it stood, its input, and its result or its error. */
 function markedCall(
   step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
 ): CallRead {
@@ -396,17 +278,10 @@ function markedCall(
   };
 }
 
-/**
- * A call read from its words alone, as a step written before its marker
- * named them is: its input after its lead, its result after the next, a
- * failure where the result says so, and still running where the summary
- * is marked so and no result came.
- */
 function spelledCall(step: ReplayStep): CallRead {
   const words = step.words.startsWith(CALL_PARTS.INPUT)
     ? step.words.slice(CALL_PARTS.INPUT.length)
     : step.words;
-  // Note that the first result lead is the one, because a call's input is its JSON, which holds no bare newline.
   const at = words.indexOf(CALL_PARTS.RESULT);
   const input = at < 0 ? words : words.slice(0, at);
   const result = at < 0 ? undefined : words.slice(at + CALL_PARTS.RESULT.length);
@@ -425,7 +300,6 @@ function spelledCall(step: ReplayStep): CallRead {
   };
 }
 
-/** A call's step whose marker named its tool as the transcript draws it: a native harness's as the eve call that draws the same (`drawnCall`), its input and its result as the values they were. */
 function stepCall(
   step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
   tool: string,
@@ -438,13 +312,6 @@ function stepCall(
   });
 }
 
-/**
- * A call's step whose marker named its tool, read back as a transcript
- * draws a call of that tool (`toolCallView`): its kind, subject, and
- * description, the integration whose mark it wears and the server it ran
- * on, its input and its result drawn as that tool's are, and the agent it
- * is about.
- */
 function toolView(
   step: ReplayStep & { readonly state: ReplayToolState; readonly input: string },
   tool: string,
@@ -455,7 +322,6 @@ function toolView(
   return {
     kind: STEP_VIEW.CALL,
     state: read.state,
-    // Note that one of Claude Code's task calls is drawn as the list as it stood after it, as the transcript draws it, where the replay's fold handed one.
     view: todos === undefined ? toolCallView(call) : todosListView(todos),
     errorText: read.errorText,
     agent: calledAgent(call),
@@ -464,14 +330,12 @@ function toolView(
 
 type Todos = AgentTodos["todos"];
 
-/** A tool call's step whose marker named its tool, which is read as the transcript reads a call of that tool. */
 type MarkedToolStep = ReplayStep & {
   readonly state: ReplayToolState;
   readonly input: string;
   readonly tool: string;
 };
 
-/** A step as a marked tool call, or nothing where its marker named no tool, its state, or its input. */
 function markedToolStep(step: ReplayStep): MarkedToolStep | undefined {
   const { state, input, tool } = step;
   return state !== undefined && input !== undefined && tool !== undefined
@@ -479,12 +343,6 @@ function markedToolStep(step: ReplayStep): MarkedToolStep | undefined {
     : undefined;
 }
 
-/**
- * The to-do list as it stood after each of Claude Code's task calls among
- * a replay's steps, by the step's place among them, folded as the
- * transcript folds the calls (`agent-todos.ts`); an empty map for a replay
- * that holds none.
- */
 export function replayTaskTodos(steps: readonly ReplayStep[]): ReadonlyMap<number, Todos> {
   const lists = new Map<number, Todos>();
   let fold: TaskFold = NO_TASKS;
@@ -501,7 +359,6 @@ export function replayTaskTodos(steps: readonly ReplayStep[]): ReadonlyMap<numbe
   return lists;
 }
 
-/** A call's step read back as its row: as a transcript draws its tool where its marker named one, and otherwise its kind and subject from its summary, and where it stood, its input, and its output from its marker, or from its words where the marker names none. */
 function callView(step: ReplayStep, todos: Todos | undefined): StepView {
   const { state, input, tool } = step;
   const marked = state !== undefined && input !== undefined ? { ...step, state, input } : undefined;
@@ -531,12 +388,6 @@ function callView(step: ReplayStep, todos: Todos | undefined): StepView {
   };
 }
 
-/**
- * A line's sender as a transcript's line names one (`lineSender`), from the
- * kind its marker names and the name its summary gives: a member by their
- * account, the app, an automation, GitHub's login, or another agent; none for
- * the developer's own line and for a step whose marker names no sender.
- */
 function sentByOf(step: ReplayStep, name: string): AgentSender | undefined {
   const sent = step.sender;
   switch (sent?.kind) {
@@ -558,11 +409,6 @@ function sentByOf(step: ReplayStep, name: string): AgentSender | undefined {
   }
 }
 
-/**
- * What a step is drawn as in the card, as a transcript draws the same:
- * a line as a sent message under whoever sent it, the agent's words as its
- * words, and a call as a call's row opening onto its input and its result.
- */
 export function stepView(step: ReplayStep, todos?: Todos): StepView {
   switch (step.kind) {
     case REPLAY_STEP_KIND.LINE: {
@@ -583,7 +429,6 @@ export function stepView(step: ReplayStep, todos?: Todos): StepView {
   }
 }
 
-/** One step as the card's Copy copies it: a line under who sent it, the agent's words as they are, and a call under its line with its input and its result. */
 function stepWords(step: ReplayStep): string {
   switch (step.kind) {
     case REPLAY_STEP_KIND.LINE:
@@ -595,13 +440,11 @@ function stepWords(step: ReplayStep): string {
   }
 }
 
-/** The replay as its card's Copy copies it, as the agent was handed it: our summary of the oldest steps where it wrote one, then each step. */
 export function replayWords(replay: Replay): string {
   const summary = replay.summary === undefined ? [] : [replay.summary.text];
   return [...summary, ...replay.steps.map(stepWords)].join("\n\n");
 }
 
-/** Whether a step is a call of a server's tool, as the transcript draws it, whose row names the account it ran on. */
 function callsServer(step: ReplayStep): boolean {
   const { state, input, tool } = step;
   if (step.kind !== REPLAY_STEP_KIND.TOOL || state === undefined || input === undefined)
@@ -609,7 +452,6 @@ function callsServer(step: ReplayStep): boolean {
   return tool !== undefined && isServerCallTool(stepCall({ ...step, state, input }, tool).tool);
 }
 
-/** Whether any of the steps is a call of a server's tool, which is all the accounts' names are read for (`ConnectionNames`). */
 export function replayCallsServer(steps: readonly ReplayStep[]): boolean {
   return steps.some(callsServer);
 }

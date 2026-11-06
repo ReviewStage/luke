@@ -117,89 +117,18 @@ import type { TreeShown } from "./file-view.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
- *
- * The chapters are the workspace's newest for the pull request, which the
- * host holds while the tab is shown and follows over the service's live read
- * (`chapters-read.ts`'s `useChaptersRead`), so any member's claim, finish,
- * or failure draws here within a moment, never on a clock. The view is a
- * chunk of its own, loaded the first time it is shown, as Settings is. Nothing makes them but a press of
- * Generate chapters, which answers once the generation lands, minutes later
- * at most; until then the view stands as a ring timed from the press.
- * Every Generate runs on Haiku's tier, on the member's own API key: the
- * button names the model the read says it would run on, Haiku 5.5 or
- * OpenAI's model of its tier, and the line over it the key it spends.
- * Chapters someone else is making stand the same way, until their
- * generation lands. A generation that failed says why with a
- * Retry; a member who saved no API key, which chapters run on, is told to
- * save one. Chapters made for a head the pull request has moved on
- * from stand as they were, under a line saying new commits came since,
- * with Regenerate (`chapters-model.ts`): their titles, risks, summaries,
- * and What to review, but no diff, no lines or threads counted, no Viewed,
- * and no press to a key change's lines, because a chapter names its hunks
- * by their file and old start line, which the newest push's files may hold
- * an unrelated hunk at, and a hunk drawn under the wrong chapter's risk is
- * worse than none.
- *
- * Ready, the view is a rail of the chapters on its left, as Files changed's
- * tree stands on its right, and the chapter chosen beside it. Each row of
- * the rail is drawn as the Inbox's are (`ListRow`), the open one in the
- * accent's tint: its risk as a mark in its color, its title on up to two
- * lines, and under the title the lines it adds and removes, summed as Files
- * changed sums them, or how many files it holds where it counts no line,
- * with how many review threads stand on its hunks at that line's end, and a
- * check there once it is viewed, the row standing back; its place and its
- * risk in words are a reader's alone. A chapter is viewed once each of its files is
- * marked viewed on GitHub, the marks Files changed sets, so a file two
- * chapters hold is shared by both. The rail stands beside the chapter while
- * the panel has room for it, slid in and out by its toggle as the tree is
- * (`usePaneSlide`), and folds to a strip of one mark a chapter while
- * hidden; a panel too narrow floats it over the chapter instead, put away
- * by a choice in it or Escape. "Other changes" bears no risk and is always
- * last.
- *
- * The chapter leads with its title, its number left to its rail row and
- * to a reader, its risk as a chip whose card says why, then at the bar's
- * end its Viewed box, which counts its files viewed, "Viewed 1/14", stands
- * mixed while only some are, and marks or unmarks every file in it; its
- * place, "1 of 8", and the arrows to the chapters either side (`Pager`), as
- * ← and → step; its list's diff settings, Collapse all, and tree toggle
- * (`ChangesBarHost`); and its ⋯, which offers Regenerate where chapters can
- * be made, the tab's head holding the one Refresh and the list's bar
- * nothing that acts on the whole pull request inside a chapter. The model
- * that told the chapters is named at the rail's foot. Under the bar its summary in Markdown as the
- * transcript draws words; then What to review, each change a reviewer
- * should weigh with the first lines it points at, a press of which brings
- * that file into view in the list. Under it, the
- * chapter's diff is Files changed itself (`AgentChangesTab`) fed only the
- * chapter's hunks (`chapterPatches`) and the review threads on them, over
- * the Pull request tab's own read of the files and the member's viewed
- * marks, so comments, threads, the review, and Viewed work as they do
- * there, under the chapter's bar alone; its own tree starts hidden, leaving
- * no strip, the rail standing in its room. ← and
- * → step to the previous and the next chapter, and ⇧V marks the chapter
- * viewed (`CHAPTERS_SHORTCUTS`), each answering only past the list's own
- * keys, none of which they share. Every word here is the repository's or
- * a model's about it, so the view stands inside the tab's `ph-no-capture`.
- */
-
-/** The view's own words. */
 const CHAPTERS_WORDS = {
   READING: "Reading chapters",
   FAILED: "The chapters could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  /** That no chapters stand yet, and whose key a Generate would spend where the read says. */
   none: (runsOn: ChaptersRunsOn | undefined) =>
     runsOn === undefined
       ? "No chapters yet."
       : `No chapters yet. Generating them runs on your ${API_KEY_WORDS[runsOn.provider]}.`,
-  /** The Generate, naming the model it would run on where the read says, short enough that an empty state's width holds it whole. */
   generate: (runsOn: ChaptersRunsOn | undefined) =>
     runsOn === undefined
       ? "Generate chapters"
       : `Generate with ${chaptersModelLabel(runsOn.model)}`,
-  /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
   REGENERATE: "Regenerate",
@@ -207,18 +136,13 @@ const CHAPTERS_WORDS = {
   NOTHING: "This pull request has nothing to chapter.",
   NO_FILES: "None of this chapter's changes are in the pull request now.",
   STALE_DIFF: "Regenerate the chapters to see this chapter's changes.",
-  /** Which model told the chapters, as quiet caption text at the rail's foot. */
   credit: (model: string) => `Chapters by ${model}`,
   STALE: "New commits since these chapters",
   BRIEF: "Summary",
   WHAT_TO_REVIEW: "What to review",
-  /** What a key change's lines name, as a reader hears its pill's kind. */
   FILE: "file",
-  /** What parts a key change's file from its lines, as a reader hears its pill. */
   LINES_APART: " · ",
-  /** What a press on a key change's lines does, as a reader hears it. */
   reveal: (ref: LineRef) => `Show ${lineRefLabel(ref)} in the diff`,
-  /** How many of a chapter's files are viewed, as its Viewed box says it. */
   viewed: (seen: number, count: number) => `Viewed ${seen}/${count}`,
   MARK_VIEWED: "Mark chapter viewed",
   UNMARK_VIEWED: "Mark chapter not viewed",
@@ -229,20 +153,14 @@ const CHAPTERS_WORDS = {
   RAIL: "Chapters",
   ACTIONS_THING: "Chapters",
   RISK_REASONS: "Why",
-  /** What an arrow's hint says: where it steps, and the chapter it steps to. */
   stepTo: (words: string, chapter: Chapter | undefined) =>
     chapter === undefined ? words : `${words}: ${chapter.title}`,
-  /** How many review threads stand on a chapter's hunks, as its row's speech mark says to a reader. */
   threads: "threads",
-  /** How many files a chapter holds, as its row says where it counts no line: a binary file or a pure rename. */
   files: (count: number) => (count === 1 ? "1 file" : `${formatCount(count)} files`),
-  /** A chapter's place in the rail, as a reader hears it before its title. */
   place: (at: number) => `${at}. `,
-  /** That a chapter is viewed, as its row's check says to a reader. */
   VIEWED: "viewed",
 } as const;
 
-/** Why a generation failed, as the view says it. */
 const FAILURE_WORDS = {
   [PULL_REQUEST_CHAPTERS_FAILURE_KIND.TOO_LARGE]: "This pull request is too large to chapter.",
   [PULL_REQUEST_CHAPTERS_FAILURE_KIND.TIMEOUT]: "Generating chapters took too long.",
@@ -257,27 +175,22 @@ const FAILURE_WORDS = {
 
 type Risk = NonNullable<Chapter["risk"]>;
 
-/** A chapter's risk in words, as its chip and its row say it. */
 const RISK_WORDS = {
   high: "High risk",
   medium: "Medium risk",
   low: "Low risk",
 } as const satisfies Record<Risk, string>;
 
-/** The tone a chapter's risk chip takes. */
 const RISK_TONES = {
   high: STATUS_TONE.DANGER,
   medium: STATUS_TONE.ATTENTION,
   low: STATUS_TONE.COMPLETE,
 } as const satisfies Record<Risk, StatusTone>;
 
-/** The rail's toggle that opens it beside the chapter, which the stylesheet draws only where it has room there. */
 const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 
-/** The rail's toggle that floats it over the chapter, which the stylesheet draws only where the panel has no room for it beside. */
 const OVER_TOGGLE = '.chapter-rail-toggle[data-place="over"]';
 
-/** The chapters' body: the rail, its strip, and the chapter being read, side by side, clipped at its edges as the rail slides. */
 function ChaptersBody({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
@@ -286,7 +199,6 @@ function ChaptersBody({ children }: { children: ReactNode }): React.JSX.Element 
   );
 }
 
-/** The rail's list in its scroller, which the chapters' rows stand in. */
 function ChapterRailList({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <ScrollArea>
@@ -297,7 +209,6 @@ function ChapterRailList({ children }: { children: ReactNode }): React.JSX.Eleme
   );
 }
 
-/** Which model told the chapters, as muted caption text at the rail's foot, under its rows. */
 function ChaptersCredit({ model }: { model: string }): React.JSX.Element {
   return (
     <div className="chapter-rail-credit">
@@ -308,7 +219,6 @@ function ChaptersCredit({ model }: { model: string }): React.JSX.Element {
   );
 }
 
-/** The rail's own pane beside the chapter, which the chapters' rows stand in, over its foot. */
 function ChapterRailFrame({
   pane,
   leaving = false,
@@ -334,14 +244,12 @@ function ChapterRailFrame({
   );
 }
 
-/** What the rail floating over the chapter is handed (`OverPane`): whether it stands there, the doors that put it away, and the controls that float it. */
 interface RailOver {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly toggle: readonly RefObject<HTMLElement | null>[];
 }
 
-/** The chapter being read, beside the rail, named by its title where it has one. */
 function ChapterReading({
   label,
   children,
@@ -356,11 +264,6 @@ function ChapterReading({
   );
 }
 
-/**
- * Chapters being made, by this window's Generate or another's: a ring over
- * what is happening and how long it has been, counted only while the view
- * is shown, since the view stays mounted behind `hidden`.
- */
 function Generating({ startedAt, live }: { startedAt: number; live: boolean }): React.JSX.Element {
   return (
     <EmptyState
@@ -372,7 +275,6 @@ function Generating({ startedAt, live }: { startedAt: number; live: boolean }): 
   );
 }
 
-/** A chapter's risk as its row's mark, in the risk's color; none for "Other changes". Decoration: the row's name says it. */
 function RiskMark({ risk }: { risk: Chapter["risk"] }): React.JSX.Element {
   return (
     <span
@@ -382,7 +284,6 @@ function RiskMark({ risk }: { risk: Chapter["risk"] }): React.JSX.Element {
   );
 }
 
-/** A chapter's risk as a chip in its tone, whose card says why. */
 function RiskChip({
   risk,
   reasons,
@@ -395,7 +296,6 @@ function RiskChip({
       <HoverCard data-risk-card="">
         <HoverCardHead
           glyph={
-            // Note that the dot stands in a box of its own, because the head's glyph box sizes its child to a glyph's, which would swell the dot.
             <span className="flex items-center justify-center">
               <RiskMark risk={risk} />
             </span>
@@ -416,7 +316,6 @@ function RiskChip({
   );
 }
 
-/** A chapter as its rail row draws it. */
 interface ChapterRow {
   readonly chapter: Chapter;
   readonly paths: readonly string[];
@@ -428,7 +327,6 @@ interface ChapterRow {
   readonly threads: number;
 }
 
-/** What a rail row's last line starts with: the lines its chapter adds and removes, or its files where it counts no line. */
 function ChapterLines({ row }: { row: ChapterRow }): React.JSX.Element {
   const { additions, deletions, files } = row.counts;
   return (
@@ -442,7 +340,6 @@ function ChapterLines({ row }: { row: ChapterRow }): React.JSX.Element {
   );
 }
 
-/** What a rail row's last line ends with: a speech mark and its threads where any stand, then a check once it is viewed. */
 function ChapterMarks({ row, viewed }: { row: ChapterRow; viewed: boolean }): React.JSX.Element {
   const parts: readonly CountPart[] = [
     ...(row.threads === 0
@@ -459,7 +356,6 @@ function ChapterMarks({ row, viewed }: { row: ChapterRow; viewed: boolean }): Re
   return <CountParts parts={parts} />;
 }
 
-/** The rail's toggle, drawn for each place the rail can stand, the stylesheet showing the one the panel's width leaves room for, as the tree's is (`TreeToggle`). */
 function RailToggle({
   beside,
   over,
@@ -469,7 +365,6 @@ function RailToggle({
 }: {
   beside: boolean;
   over: boolean;
-  /** The box around the toggle that floats the rail, which the rail takes as its toggle. */
   overBox: RefObject<HTMLSpanElement | null>;
   onBeside: () => void;
   onOver: () => void;
@@ -502,7 +397,6 @@ function RailToggle({
   );
 }
 
-/** The rail: a row for each chapter, the one shown marked; a press shows it; and its foot under them. */
 function ChapterRail({
   rows,
   at,
@@ -516,14 +410,11 @@ function ChapterRail({
 }: {
   rows: readonly ChapterRow[];
   at: number;
-  /** Whether the chapters were made for an older head, whose lines and threads the files now read cannot count. */
   stale: boolean;
   viewed: (paths: readonly string[]) => boolean;
   pane: React.Ref<HTMLElement>;
   leaving: boolean;
-  /** What the rail floating over the chapter is handed; none draws it beside the chapter. */
   over: RailOver | undefined;
-  /** What stands under the rows: which model told the chapters. */
   foot: ReactNode;
   onChoose: (at: number) => void;
 }): React.JSX.Element {
@@ -539,7 +430,6 @@ function ChapterRail({
             currentLook={LIST_ROW_CURRENT_LOOK.TINT}
             leading={<RiskMark risk={risk} />}
             title={
-              // Note that its place and its risk are a reader's alone, the mark saying the risk to the eye.
               <>
                 <VisuallyHidden>{CHAPTERS_WORDS.place(index + 1)}</VisuallyHidden>
                 {title}
@@ -581,7 +471,6 @@ function ChapterRail({
   );
 }
 
-/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's color, dimmed once viewed, the one shown standing out; a press shows the rail (`MarkStrip`). Its box is the stylesheet's to draw only while the rail is hidden. */
 function ChapterStrip({
   rows,
   at,
@@ -592,7 +481,6 @@ function ChapterStrip({
   rows: readonly ChapterRow[];
   at: number;
   viewed: (paths: readonly string[]) => boolean;
-  /** The strip's box, which the rail floating over the chapter takes as a toggle of its own. */
   box: RefObject<HTMLDivElement | null>;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -610,14 +498,12 @@ function ChapterStrip({
   );
 }
 
-/** One change a reviewer should weigh: its words, and the first lines it points at in the chapter's reading order, as a pill of the file's type icon, its path, and its lines, whose card names the file whole, as a file is named in place (`file-ref.tsx`), a press of which brings them into view; named alone where there is no diff to bring them into (`onReveal` none). */
 function KeyChangeItem({
   change,
   paths,
   onReveal,
 }: {
   change: Chapter["keyChanges"][number];
-  /** The paths of the files the chapter draws, in its order. */
   paths: readonly string[];
   onReveal: ((ref: LineRef) => void) | undefined;
 }): React.JSX.Element {
@@ -633,7 +519,6 @@ function KeyChangeItem({
           label={first.path}
           name={INLINE_REF_NAME.PATH}
           state={
-            // Note that the pill's rule parts its path from its lines to the eye alone, so a reader hears them parted in words.
             <>
               <VisuallyHidden>{CHAPTERS_WORDS.LINES_APART}</VisuallyHidden>
               {lineRefLines(first)}
@@ -648,10 +533,8 @@ function KeyChangeItem({
   );
 }
 
-/** No review thread, for a view handed none. */
 const NO_THREADS: ChangesThreads = { list: [], draw: () => null };
 
-/** The chapters ready: the rail, the chapter chosen, and its diff. */
 function ChaptersReading({
   agentId,
   source,
@@ -674,13 +557,11 @@ function ChaptersReading({
   repository: string | null;
   tree: TreeShown;
   chapters: readonly Chapter[];
-  /** The provider's id of the model that told the chapters. */
   model: string;
   stale: boolean;
   generatable: boolean;
   read: ChaptersRead;
   changes: ChangesReads;
-  /** Every file the pull request changes, as the read of its files answered. */
   files: readonly AgentChangedFile[];
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
@@ -690,7 +571,6 @@ function ChaptersReading({
   const [beside, setBeside] = useState(true);
   const [over, setOver] = useState(false);
   const slide = usePaneSlide(beside, PANE_EDGE.LEFT);
-  // The chapter's own tree starts hidden, the rail standing in its room; its width is the panel's for every tree.
   const [filesOpen, setFilesOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(true);
   const filesTree: TreeShown = {
@@ -701,14 +581,11 @@ function ChaptersReading({
   const [reveal, setReveal] = useState<FileReveal | undefined>(undefined);
   const asks = useRef(0);
   const [root, setRoot] = useState<HTMLElement | null>(null);
-  // The box in the chapter's bar its list's own tools are drawn into, the list drawing no bar of its own.
   const [tools, setTools] = useState<HTMLElement | null>(null);
-  // The box at the bar's very end its list's tree toggle is drawn into, past the ⋯, as every tab's bar stands it.
   const [end, setEnd] = useState<HTMLElement | null>(null);
   const host: ChangesBarHost = { tools, end, view: root };
   const overBox = useRef<HTMLSpanElement | null>(null);
   const stripBox = useRef<HTMLDivElement | null>(null);
-  // Note that the rail floats over the chapter wherever the stylesheet draws its over toggle, and then only.
   const narrow = useFloatsOver(root, OVER_TOGGLE, BESIDE_TOGGLE);
   const hunks = useMemo(() => chapterHunks(files), [files]);
   const rows = useMemo(
@@ -725,7 +602,6 @@ function ChaptersReading({
   );
   const chapter = chapters[at];
   const row = rows[at];
-  // Note that the chapter's files and threads are kept while it and the read stand, because the list draws itself anew for new ones.
   const chapterFiles = useMemo(
     () => (chapter === undefined ? [] : chapterPatches(chapter, files)),
     [chapter, files],
@@ -740,7 +616,6 @@ function ChaptersReading({
           },
     [chapter, threads, hunks],
   );
-  // Note that stale chapters name hunks of an older head, so they mark no file of this one viewed.
   const marks = stale ? undefined : changes.viewedFiles.marks;
   const viewed = (paths: readonly string[]) =>
     marks === undefined ? false : chapterViewed(paths, marks.viewed);
@@ -754,12 +629,10 @@ function ChaptersReading({
     setOver(false);
   };
   const step = (by: number) => choose(steppedChapter(at, by, chapters.length));
-  // Note that the rail is shown where it is seen: beside the chapter where it has room, else over it.
   const toggleRail = () =>
     drawnIn(root, BESIDE_TOGGLE) ? setBeside((was) => !was) : setOver((was) => !was);
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" && over && !event.nativeEvent.isComposing) {
-      // Note that the Escape is stopped here, because the window's own would leave the view.
       event.stopPropagation();
       setOver(false);
       return;
@@ -786,7 +659,6 @@ function ChaptersReading({
   const previous = chapters[at - 1];
   const next = chapters[at + 1];
   return (
-    // The view hears its chapter keys from whatever in it has the focus, past the list's own.
     <Fill
       ref={setRoot}
       className="chapters-view"
@@ -835,7 +707,6 @@ function ChaptersReading({
             title={chapter.title}
             detail={
               chapter.risk === null ? undefined : (
-                // A phone's bar folds the chip away, the rail's row marking the risk in its color and saying it to a reader.
                 <span className="chapter-risk flex">
                   <RiskChip risk={chapter.risk} reasons={chapter.riskReasons} />
                 </span>
@@ -893,7 +764,6 @@ function ChaptersReading({
             }
           />
           <div className="flex max-h-1/2 min-h-0 flex-initial flex-col border-b border-border">
-            {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters, and a swipe past its end scrolls the Pull request tab, which a short window scrolls to the foot. */}
             <ScrollArea
               size={SCROLL_SIZE.CONTENT}
               fade={SCROLL_FADE.BOTH}
@@ -954,7 +824,6 @@ function ChaptersReading({
             <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHAPTERS_WORDS.NO_FILES}</EmptyState>
           ) : (
             <AgentChangesTab
-              // Note that each chapter's list stands on its own, its folds and the file stood on its own, as a chapter is its own page.
               key={at}
               agentId={agentId}
               source={source}
@@ -976,7 +845,6 @@ function ChaptersReading({
   );
 }
 
-/** What the view draws for each state but the chapters ready, which `ChaptersReading` draws. */
 function chaptersState(
   state: Exclude<ChaptersShown, { kind: typeof CHAPTERS_SHOWN.READY }>,
   read: ChaptersRead,
@@ -1036,12 +904,6 @@ function chaptersState(
   }
 }
 
-/**
- * One agent's Chapters view: what its read and its Generate leave to draw
- * (`chaptersShown`), and, once the chapters are ready, the chapters over
- * the Pull request tab's read of the files, which they wait on as Files
- * changed does.
- */
 export function AgentChaptersTab({
   agentId,
   source,
@@ -1055,24 +917,19 @@ export function AgentChaptersTab({
 }: {
   agentId: string;
   source: PullRequestSource;
-  /** Whether the view is on screen, which is when its time counts and its keys' sheet stands. */
   shown: boolean;
   repository: string | null;
-  /** Whether the tree beside File and Changes tabs is open, whose width the chapter's own tree takes. */
   tree: TreeShown;
   chapters: ChaptersRead;
-  /** The Pull request tab's read of the files and the member's viewed marks, Files changed's own. */
   changes: ChangesReads;
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
-  // Note that the files' head counts as well as the pull request's, because a chapter's hunks are found in the files drawn.
   const state = chaptersShown(chapters.answer, chapters.generating, {
     pullRequest: chapters.head,
     files: changes.pullRequest?.headSha,
   });
   if (state.kind !== CHAPTERS_SHOWN.READY) return <>{chaptersState(state, chapters, shown)}</>;
-  // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;

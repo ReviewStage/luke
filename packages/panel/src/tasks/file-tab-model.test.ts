@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { fileUrl, lineCountOf } from "./file-tab-model.js";
 
-/**
- * A File tab's page on GitHub: the commit its lines were read at, where the
- * service named one, so the page holds the lines the tab draws, and the
- * branch where it named none.
- */
-
 const HEAD = "0123456789abcdef0123456789abcdef01234567";
 
 const held = (commit: string | undefined) => ({

@@ -30,34 +30,8 @@ import type { PublishedDoors } from "./agent-published.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 
-/**
- * edit-composer.tsx -- one of the developer's lines written again where it stands, in the agent's own message box.
- *
- * Edit opens the line as the box at the tab's foot is drawn, its "+",
- * Dictate, and `@` and `/` lists and all, holding the line's words and the
- * files it carried, which come off and on as a draft's do. A picture the
- * window is still reading joins the box as it lands, and the box sends
- * nothing until it has, since the send drops the line it would be lost with. What belongs to
- * the agent rather than to one line, its model, its servers, what it has
- * cost and what its context holds, stays on the foot's box alone. Cancel,
- * or Escape where no list or dictation takes it, closes it and sends
- * nothing; Send hands the words and files on to go in the line's place.
- * Its draft is its own, kept by agent and line (`composer-drafts.ts`), so
- * the foot's box keeps whatever it held, and a Cancel, an Escape, or a
- * switch away keeps what was written, which Edit opens on again; Send lets
- * it go, and so does writing the line back as it was. The line's files
- * join the box again as it opens on a draft, but for those it took off,
- * since a relaunch keeps a draft's words alone. Where messages follow the line, Send asks first, as Revert to here
- * does, since the send drops them and what it drops is gone.
- */
-
-/** What the foot's Cancel says. */
 const CANCEL_WORDS = "Cancel";
 
-/**
- * What Send asks before it drops the messages after the line. Where `takes`
- * names another member's messages among them, the body says so.
- */
 function sendQuestion(takes: string | undefined): DialogQuestion {
   return {
     title: "Send the edited message?",
@@ -66,20 +40,16 @@ function sendQuestion(takes: string | undefined): DialogQuestion {
     running: "Sending",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
     replayUnmasked: true,
-    // Note that `takes` names the members whose messages go.
     bodyReplayMasked: takes !== undefined,
   };
 }
 
-/** What the box hands on as it sends, and the doors it is drawn with beside the tab's own box. */
 export interface EditComposerDoors {
   readonly agentId: string;
   readonly doors: PublishedDoors;
   readonly keywords?: readonly string[] | undefined;
   readonly skills?: SkillSource | undefined;
-  /** Whether messages follow the line, which its send drops, so Send asks first. */
   readonly cuts: boolean;
-  /** What the send drops of other members' messages, as "2 messages from Sam"; none where it drops none of theirs. */
   readonly takes?: string | undefined;
   readonly onCancel: () => void;
   readonly onSend: (words: string, attachments: readonly AgentAttachment[]) => void;
@@ -87,11 +57,6 @@ export interface EditComposerDoors {
 
 const noop = () => undefined;
 
-/**
- * The line's files the box does not hold, each matched to a file of the
- * box's at most once, so where the line carries one file twice and the
- * box holds it once, one of the two is the one it does not.
- */
 function unheld(
   line: readonly LineAttachment[],
   files: readonly AgentAttachment[],
@@ -105,7 +70,6 @@ function unheld(
   });
 }
 
-/** The box's files with the line's joined after them, but for those already there and those it took off. */
 function joined(
   files: readonly AgentAttachment[],
   line: readonly LineAttachment[],
@@ -124,7 +88,6 @@ export function EditComposer({
   edit,
 }: {
   message: AgentTranscriptMessage;
-  /** The line's words as its bubble shows them. */
   words: string;
   edit: EditComposerDoors;
 }): ReactNode {
@@ -132,8 +95,6 @@ export function EditComposer({
   const place: EditPlace = { kind: DRAFT_PLACE.EDIT, agentId: edit.agentId, messageId: message.id };
   const kept = useDraft(place).draft;
   const writer = useDraftWriter();
-  // Note that a draft kept from an earlier Edit is what the box opens on, and the line's files
-  // join it but for those it took off, since a relaunch keeps a draft's words and not its files.
   const [resumed] = useState(() => kept !== EMPTY_DRAFT);
   const [draft, setDraft] = useState(() => (resumed ? kept.text : words));
   const [attachments, setAttachments] = useState<readonly AgentAttachment[]>(() =>
@@ -141,13 +102,9 @@ export function EditComposer({
       ? joined(kept.attachments, line.attachments, kept.dropped ?? [])
       : line.attachments.map((each) => each.attachment),
   );
-  // What the box holds as last drawn, which a change landing before the next draw moves on from.
   const held = useRef({ text: draft, attachments, dropped: resumed ? (kept.dropped ?? []) : [] });
   held.current = { ...held.current, text: draft, attachments };
-  // Note that each of the line's files joins the box once, as it opens or as its picture lands,
-  // so one taken off stays off when a read lands after.
   const offered = useRef(new Set(line.attachments.map((each) => each.key)));
-  // What the box holds is kept, the files of the line it took off named beside it, and let go where it holds the line as it stands.
   const keep = (text: string, files: readonly AgentAttachment[]) => {
     const dropped = [
       ...held.current.dropped.filter((key) => !line.attachments.some((each) => each.key === key)),
@@ -174,7 +131,6 @@ export function EditComposer({
           },
     );
   };
-  // A picture that lands joins the box and its draft, as one there as it opened did.
   useEffect(() => {
     const landed = line.attachments.filter((each) => !offered.current.has(each.key));
     if (landed.length === 0) return;
@@ -187,7 +143,6 @@ export function EditComposer({
     writer.update(place, () => EMPTY_DRAFT);
     edit.onSend(draft, attachments);
   };
-  // Note that the send answers at once: the tab takes it in turn behind any send, and says there if it did not go.
   const confirm = useConfirmDialog(
     { subject: edit.cuts, surfaceOpen: true },
     neverBusyAct(send),
@@ -208,7 +163,6 @@ export function EditComposer({
     sending: false,
     note: undefined,
     closed: undefined,
-    // Note that the box sends nothing while one of the line's pictures is still read, which it would leave behind.
     send: () => {
       if (line.reading) return;
       if (edit.cuts) confirm.ask();
@@ -221,7 +175,6 @@ export function EditComposer({
     <>
       <AgentComposer
         agentId={edit.agentId}
-        // Note that the box's round button sends while it is open, whatever the agent is doing.
         status={AGENT_STATUS.COMPLETED}
         composer={composer}
         model={undefined}

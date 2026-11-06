@@ -17,15 +17,6 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
-/**
- * Every modal over the window as the developer meets it: opened from a
- * button, it holds Tab, Escape and a press on the dimmed window put it away,
- * a press dragged out of the card puts nothing away, and however it goes,
- * focus goes back to the button that opened it. Each dialog stands in an
- * owner that opens it from that button and can take it away unanswered, as a
- * surface closing behind it does.
- */
-
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
@@ -42,12 +33,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What each owner is handed: whether its surface still stands, and the button and dialog it draws. */
 interface OwnerProps {
   shown: boolean;
 }
 
-/** An owner's opener and its dialog, drawn while `open`. */
 function owned(open: () => void, dialog: ReactElement | null): ReactElement {
   return createElement(
     Fragment,
@@ -129,7 +118,6 @@ function AttachmentOwner({ shown }: OwnerProps): ReactElement {
   );
 }
 
-/** Each modal by the role its card carries. */
 const DIALOGS = [
   { name: "a confirm", Owner: ConfirmOwner, role: "alertdialog" },
   { name: "New task", Owner: NewTaskOwner, role: "dialog" },
@@ -139,7 +127,6 @@ const DIALOGS = [
 
 type Dialog = (typeof DIALOGS)[number];
 
-/** The owner drawn, its dialog opened from its button, and the ways to reach both. */
 function open({ Owner, role }: Dialog) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -172,11 +159,6 @@ function open({ Owner, role }: Dialog) {
   return { opener, card, backdrop, key, press, withdraw: () => draw(false) };
 }
 
-/**
- * Whether `element` holds the keyboard. Note that a focus is compared by
- * hand, because a failed `assert.equal` prints both elements, and a jsdom
- * element printed whole runs the worker out of memory.
- */
 function holds(element: Element | null | undefined): boolean {
   return element !== null && element !== undefined && document.activeElement === element;
 }

@@ -14,15 +14,8 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
-/**
- * version-title.test.ts -- a version of a description names its task in the page
- * title's role, as the description's header does, and not as a `#` heading of its
- * text, so the page keeps the one `h1` its bar gives it.
- */
-
 const NAME = "Invitations";
 
-// A version's words are drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];

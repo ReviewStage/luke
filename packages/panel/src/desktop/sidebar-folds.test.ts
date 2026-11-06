@@ -15,18 +15,10 @@ import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-folds.test.ts -- every group that folds folds under one
- * header, `GroupHeader`: the sidebar's Pinned and repositories, and the summary's archived
- * agents, alike but for what each counts, each unrolling as it opens, and a
- * folded group leaving the task open standing.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
-  // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -58,12 +50,10 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** The sidebar on the Tasks tab, open, listing what `tasks` lists. */
 function mountSidebar(tasks: TasksControl): HTMLElement {
   return mount(createElement(DesktopSidebar, sidebarProps(tasks)));
 }
 
-/** The fold whose words start with `name`. */
 function fold(within: HTMLElement, name: string): HTMLButtonElement {
   const found = [...within.querySelectorAll<HTMLButtonElement>("button[aria-expanded]")].find(
     (button) => button.textContent?.startsWith(name),
@@ -276,7 +266,6 @@ test("a child task stands under its parent, folded until the parent's chevron op
   assert.deepEqual(names(mountSidebar(tasks)), ["Parent", "Child", "Grandchild", "Other"]);
 });
 
-/** A task on acme/relay named for its id, under `parentTaskId` where one is named. */
 function family(id: string, parentTaskId?: string, more: Partial<TaskSummary> = {}): TaskSummary {
   return {
     ...task(id, id, "acme/relay"),
@@ -285,14 +274,12 @@ function family(id: string, parentTaskId?: string, more: Partial<TaskSummary> = 
   };
 }
 
-/** The names of the rows a list of the sidebar draws, in order. */
 function rowNames(within: HTMLElement, list: string): (string | null | undefined)[] {
   return [...within.querySelectorAll(`nav[aria-label="${list}"] .ui-list-row-title`)].map(
     (title) => title.firstChild?.textContent,
   );
 }
 
-/** The chevron folding a task's child tasks. */
 function childFold(within: HTMLElement, name: string): HTMLButtonElement {
   const found = within.querySelector<HTMLButtonElement>(
     `button[aria-label="Sub-tasks of ${name}"]`,

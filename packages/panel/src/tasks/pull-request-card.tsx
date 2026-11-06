@@ -44,37 +44,6 @@ import {
   usePlaceStanding,
 } from "./use-link-standing.js";
 
-/**
- * pull-request-card.tsx -- the one card a pull request hangs wherever the window names one: its mark and title, its key and where it stands, its size and checks, its branches and labels, who opened it, the agent whose it is, and its reviewers.
- *
- * A pull request is named in several kinds of place: the chip beside its
- * agent in the plan's list of agents and a task row's chip, which know
- * what the task's row says of it; its Pull request tab, a pin of that tab,
- * and the chip of a pull request one of the plan's agents opened, which
- * know the agent and, once the tab has read them, who the pull request
- * names; and a link to its page in any words. Each hangs this one card,
- * passes what it knows and the place it stands in, and the card fills
- * every part its place did not pass from what the workspace's GitHub App
- * answered for the pull request's page (`use-link-standing.ts`), read
- * through that place's workspace, so every card of one pull request says
- * the same. It draws only what it knows, so a card read from an older
- * service, which answers little, still draws its head. The head is the mark for where it stands, the title, and under it
- * one key everywhere, `acme/relay#42 · Merged`, with the age of its latest
- * moment, opened, merged, or closed, at the corner where the service said
- * one. One note says its size and checks, `+120 −14 in 3 files · Checks
- * passing · 7 comments · 1 commit`, each piece where known; its branches
- * stand as inline code, `main ← fix`, and every label as a badge wearing
- * a dot of its own color, since GitHub lets a label be any color, a
- * dark one among them, which the card's words could not be read in. Who
- * opened it is the provenance row every card draws, their face as its glyph,
- * "Opened by octo-dev · 3d ago", and where one of the window's agents
- * opened it a second row, "By Invite flow", names the agent by its tile,
- * which hangs the agent's card and opens its tab. Its reviewers, where
- * known, are listed under a rule, each row a face and a name with where
- * they stand at its end, every one of them, scrolling past a few rows.
- */
-
-/** What a pull request's card says of its checks; nothing where it has none, or where the place knows nothing of them. */
 const CHECKS_WORDS = {
   [CHECK_SUMMARY.PASSING]: "Checks passing",
   [CHECK_SUMMARY.PENDING]: "Checks running",
@@ -82,7 +51,6 @@ const CHECKS_WORDS = {
   [CHECK_SUMMARY.NONE]: undefined,
 } as const satisfies Record<CheckSummary, string | undefined>;
 
-/** The moment a pull request's state names: merged once merged, closed once closed, and opened while open or a draft. */
 const MOMENT_OF_STATE = {
   [PULL_REQUEST_STATE.OPEN]: PULL_REQUEST_MOMENT.OPENED,
   [PULL_REQUEST_STATE.DRAFT]: PULL_REQUEST_MOMENT.OPENED,
@@ -90,43 +58,32 @@ const MOMENT_OF_STATE = {
   [PULL_REQUEST_STATE.CLOSED]: PULL_REQUEST_MOMENT.CLOSED,
 } as const satisfies Record<PullRequestState, PullRequestMoment>;
 
-/** What parts the pieces of a card's line. */
 const SEPARATOR = " · ";
 
-/** What the reviewers' list is named for a reader moving between lists. */
 const REVIEWERS_LABEL = "Reviewers";
 
-/** What the labels' list is named for a reader moving between lists. */
 const LABELS_LABEL = "Labels";
 
-/** A pull request as every place that hangs its card holds one: its number and title, where it stands, its page, and its checks where the place reads them. */
 export interface CardedPullRequest {
   readonly number: number;
   readonly title: string;
   readonly state: PullRequestState;
-  /** True where it is open and GitHub's merge queue holds it. */
   readonly queued?: true;
-  /** Its page on GitHub, whose address names its repository; none from a service before it sent one. */
   readonly url?: string | undefined;
-  /** How its checks went; none where the place knows nothing of them. */
   readonly checks?: CheckSummary | undefined;
 }
 
-/** A reviewer of the pull request, and where they stand on it. */
 export interface PullRequestReviewer {
   readonly by: GitHubPerson;
   readonly state: ReviewState;
 }
 
-/** The agent whose pull request it is, as the place names it, and how its tab opens. */
 export interface PullRequestAgent {
   readonly subject: AgentSubject;
-  /** The catalog as last read, which names the agent's model on its card. */
   readonly models: readonly CatalogModel[] | undefined;
   readonly onOpen: () => void;
 }
 
-/** Who a pull request names, as its tab last read them for that very pull request; none where the tab read them for another, or has not yet. */
 export function peopleOf(
   held: HeldPeople | undefined,
   pullRequest: Pick<AgentPullRequest, "url">,
@@ -134,14 +91,6 @@ export function peopleOf(
   return held?.url === pullRequest.url ? held.people : undefined;
 }
 
-/**
- * The age the head's corner says: the pull request's latest moment, where
- * that moment is the one its state names. Note that a service answering no
- * time for a merge or a close falls back to when it was opened, and an
- * opening age beside "Merged" or "Closed" would read as the age of the
- * merge, so the corner says nothing then, and only the row naming who
- * opened it says the opening age.
- */
 function cornerAge(
   pullRequest: CardedPullRequest,
   when: StandingPullRequest["when"],
@@ -150,14 +99,12 @@ function cornerAge(
   return <Time at={when.at} look={TIME_LOOK.SINCE} hint={false} />;
 }
 
-/** A pull request's key as its card's head says it: `owner/name#42` where its page names its repository, else `#42`. */
 function pullRequestKey(pullRequest: CardedPullRequest): string {
   const repository =
     pullRequest.url === undefined ? undefined : pullRequestAddressOf(pullRequest.url)?.repository;
   return `${repository ?? ""}${pullRequestNumberLabel(pullRequest)}`;
 }
 
-/** The one note of its size and checks: the lines it adds and removes across the files it changes, how its checks went, and how many comments and commits it holds, each where known; nothing where none is. */
 function SizeNote({
   lines,
   files,
@@ -191,7 +138,6 @@ function SizeNote({
   return (
     <HoverCardNote>
       {pieces.map((piece, index) => (
-        // Note that the pieces stand in one order, so each is keyed by its place.
         <span key={index}>
           {index === 0 ? null : SEPARATOR}
           {piece}
@@ -201,16 +147,6 @@ function SizeNote({
   );
 }
 
-/**
- * Who opened a pull request or a GitHub issue, as every card's provenance
- * row says it (`ProvenanceRow`): their face as its glyph, their name as the
- * window names a GitHub account (a member's own where it is linked to one,
- * else their avatar), which hangs their card, and how long ago it was
- * opened where the service said so, "Opened by octo-dev · 3d ago". Note
- * that the time is the opening alone: once it merged or closed, the age the
- * service answers is the merge's or the close's, which the head's corner
- * says beside the state, so the row names the opener and no time.
- */
 export function OpenedByRow({
   opener,
   when,
@@ -230,7 +166,6 @@ export function OpenedByRow({
   );
 }
 
-/** The agent whose pull request it is, as a quieter row in the provenance row's shape: its tile as the glyph, "By" and its name, which hang the agent's card and open its tab. Note that it is no `ProvenanceRow`, since no verb of that row's reads as a bare "By". */
 function ByAgentRow({ agent }: { agent: PullRequestAgent }): React.JSX.Element {
   return (
     <HoverCardRow
@@ -251,7 +186,6 @@ function ByAgentRow({ agent }: { agent: PullRequestAgent }): React.JSX.Element {
   );
 }
 
-/** One reviewer's row: their face, their name, which hangs their card, and where they stand at the row's end. */
 function ReviewerRow({ reviewer }: { reviewer: PullRequestReviewer }): React.JSX.Element {
   const actor = useNamer()(reviewer.by);
   return (
@@ -265,10 +199,6 @@ function ReviewerRow({ reviewer }: { reviewer: PullRequestReviewer }): React.JSX
   );
 }
 
-/**
- * The one card a pull request hangs: its head, then what the place knows
- * of it, each part only where it is known.
- */
 export function PullRequestCard({
   pullRequest,
   place,
@@ -277,31 +207,22 @@ export function PullRequestCard({
   ...given
 }: {
   pullRequest: CardedPullRequest;
-  /** Where the card stands: its task, or on none the workspace named, whose GitHub App fills what the place did not pass. */
   place: { readonly taskId: string | null; readonly workspaceId?: string | undefined };
-  /** The lines it adds and removes. */
   lines?: StandingPullRequest["lines"];
-  /** How many files it changes. */
   files?: number | undefined;
-  /** When it was last opened, merged, or closed, as its state says. */
   when?: StandingPullRequest["when"];
   branches?: StandingPullRequest["branches"];
   labels?: StandingPullRequest["labels"] | undefined;
   comments?: number | undefined;
   commits?: number | undefined;
-  /** Who opened it, where GitHub named them. */
   opener?: GitHubPerson | undefined;
-  /** The agent whose pull request it is, where one of the window's opened it. */
   agent?: PullRequestAgent | undefined;
-  /** Its reviewers and where each stands, where the place has read them. */
   reviewers?: readonly PullRequestReviewer[] | undefined;
 }): React.JSX.Element {
-  // An agent's pull request opens in its Pull request tab, a chunk of its own (`pages-on-demand.ts`), and the card hanging is the pointer on what opens it, so the chunk is read now rather than at the press.
   const owned = agent !== undefined;
   useEffect(() => {
     if (owned) PULL_REQUEST_TAB.prefetch();
   }, [owned]);
-  // What the place passed stands, and the pull request's link standing fills the rest.
   const standing = usePlaceStanding(place, pullRequest.url);
   const read = standing?.pullRequest;
   const lines = given.lines ?? read?.lines;

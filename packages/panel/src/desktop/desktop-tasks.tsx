@@ -147,65 +147,8 @@ import {
   useSummaryLayout,
 } from "./task-summary.js";
 
-/**
- * The work column while Tasks is chosen: the open task's column, its
- * toolbar above, and the side panel beside it, the
- * window's full height, while that is open (or over it, while it fills the
- * window); or, with none open, Home (`desktop-home.tsx`).
- * The task list itself is the sidebar's, and so is moving between tasks: the
- * toolbar offers no way out of the open task, only its actions: Start, which
- * hands the task to a coding agent, and the ⋯ menu, where Copy description and the
- * rest stand. The toolbar is one row, the side panel's bar's height exactly;
- * the task's repository is the sidebar's row's to name, so the toolbar draws
- * the repository chip only while the task has none, and otherwise only the
- * chip's menu, which Change repository opens.
- *
- * A task opens on its agents. Its topbar spans the page, over the column
- * and the side panel: the task's status mark and name, Details, and the
- * task's ⋯ (`main-tabs.tsx`'s `TaskTopbar`). Under it, on one row of the
- * frame, the column's bar holds the agents' tabs, the "+", and the chosen
- * agent's ⋯, and the side panel's its own. Details opens the task's details,
- * its Overview, across the page in place of the column's bar and the side
- * panel, the way back to the agents pinned at its card's top left: its path over its title (its
- * repository, the task it is a child of, and its key), its chips, its
- * relations, its agents, and its description. A phone heads the task with its own row instead (`TaskHead`).
- *
- * The column's summary stands at its right, under the column's bar, listing what
- * both "+" menus open, with its button last in that bar (`task-summary.tsx`).
- *
- * The column holds tabs as the side panel does (`main-tabs.tsx`): the
- * plan's own first, showing its document, then one per coding agent,
- * showing its transcript and its composer at the document's measure, and
- * the draft agent's. A task with no agent's tab to show shows a new
- * agent's draft (`use-main-tabs.ts`), whose composer starts an agent on
- * what is typed. Start and the ⋯ menu are the task's, not an agent's,
- * so only the plan's own tab draws them, while their chords (Copy description,
- * Archive, Permanently delete) answer on every tab. The document stays laid out while an agent's tab is shown,
- * so coming back to it finds it where it was left.
- *
- * ⌘T opens the "+" of the column holding the window's focus, ⌘W closes
- * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
- * panel's once the pointer or the focus went into it, else this column's,
- * which a panel shut hands them back to.
- *
- * A skill named in a message to a coding agent, in either column, opens
- * its `SKILL.md` in a File tab of the side panel (`../tasks/skill-chip.tsx`).
- *
- * What is wrong with the task itself, whichever tab is read, is said in one
- * line under the toolbar, over every tab of the column, and under the side
- * panel's bar while the panel covers the column (`task-banner.tsx`): a
- * task whose repository belongs to another of the account's workspaces says
- * which, with the press that moves it there (`stranded-task-banner.tsx`).
- */
-
-/** What the task's page says to a reader while the task is read. */
 const TASK_LOADING_LABEL = readingWords("the task");
 
-/**
- * The task's page as it and its placeholder stand it: the column, its
- * toolbar over its body, and what stands beside it, the side panel; the
- * column hidden rather than left out while the panel fills the window.
- */
 function TaskPage({
   areaRef,
   columnRef,
@@ -219,7 +162,6 @@ function TaskPage({
   columnRef: (column: HTMLElement | null) => void;
   panelOpen: boolean;
   fullScreen: boolean;
-  /** Whether the column stands with no bar of its own, its sheet starting under the topbar: the task's details. */
   barless?: boolean;
   column: React.ReactNode;
   children?: React.ReactNode;
@@ -239,17 +181,10 @@ function TaskPage({
   );
 }
 
-/** The column's body under its toolbar: what the column shows, and the summary beside it. */
 function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <div className="desktop-description-body relative flex min-h-0 flex-1">{children}</div>;
 }
 
-/**
- * The row the agents' tabs stand in under the task's topbar, which a task's
- * page tightens under the topbar (desktop.css's `task-tabs`): drawn by the
- * loaded page and its skeleton alike, so the row stands where it will as the
- * task lands; `hidden` where no strip stands, a phone's or the details'.
- */
 function TaskTabsRow({
   hidden,
   children,
@@ -264,16 +199,6 @@ function TaskTabsRow({
   );
 }
 
-/**
- * The task's page while the task is read, in the shape it lands in and
- * through the frames it lands in: the toolbar empty where it stands, the
- * column standing as an agent's tab does before its transcript lands
- * (`AgentTabSkeleton`), the summary's room where it will stand, and the
- * side panel at its width where it is open. The column's tab draws the very
- * same placeholder until it lands, so a task opens through one placeholder
- * rather than a chain of them, and nothing moves as the page arrives but
- * what fills it.
- */
 function TaskPageSkeleton({
   drawing,
   summary,
@@ -281,22 +206,16 @@ function TaskPageSkeleton({
   starting,
   head,
 }: {
-  /** New task's agent start under way, the line its agent opens on and the model it names, which the column draws as the agent's tab will; none while a task is read. */
   starting?: { readonly line: SentLine; readonly model: ComposerModel | undefined } | undefined;
-  /** The side panel as it will be drawn, its panel none where it is shut. */
   drawing: SidePanelDrawing;
-  /** How the summary will stand, whose room is kept. */
   summary: Pick<SummaryLayout, "mode">;
-  /** Hands over the column, which the summary's room is measured on, as the page's own does. */
   onColumn: (column: HTMLElement | null) => void;
-  /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
   head?: React.ReactNode;
 }): React.JSX.Element {
   const { panel, ...frame } = drawing;
   return (
     <>
       {head}
-      {/* Note that the bars stand empty, never in blocks for the words, tabs, and actions they land with, and a phone, whose page hides them, draws none. */}
       {head === undefined ? <Toolbar measure /> : null}
       <TaskPage
         columnRef={onColumn}
@@ -304,7 +223,6 @@ function TaskPageSkeleton({
         fullScreen={panel?.fullScreen === true}
         column={
           <>
-            {/* The tabs' row stands as the loaded one does, so nothing moves as the task lands. */}
             {head === undefined ? (
               <TaskTabsRow hidden={false}>
                 <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
@@ -331,12 +249,6 @@ function TaskPageSkeleton({
   );
 }
 
-/**
- * A phone's head over a task that is not drawn yet, or cannot be: its way
- * back, as the task's own head leads (`TaskHead`), and its title a block
- * while it is read, nothing where it cannot be; no ⋯, since a task not
- * drawn offers no menu.
- */
 function TaskWaitHead({
   away,
   reading,
@@ -354,15 +266,12 @@ function TaskWaitHead({
   );
 }
 
-/** How wide a phone's head's title stands as a block while the task is read. */
 const TASK_TITLE_SKELETON = "50%";
 
-/** The block standing in a phone's head's title while the task is read. */
 function TaskTitleSkeleton(): React.JSX.Element {
   return <Skeleton width={TASK_TITLE_SKELETON} />;
 }
 
-/** The column showing an agent's tab before its agent lands: the placeholder or the line it starts on. */
 function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <Fill as={FILL_ELEMENT.SECTION} className="desktop-agent">
@@ -371,14 +280,7 @@ function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Ele
   );
 }
 
-/**
- * ⌥⌘C on the description, the toolbar's while a task is drawn: the press itself
- * stands in the ⋯ menu, and what came of it is said in the window's toast.
- * A focused agent's pane or tab offers its transcript's copy over it
- * (`main-tabs.tsx`, `side-panel.tsx`).
- */
 function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
-  // While Descriptions is off there is no description to copy, so the chord is an agent's alone.
   useAppCommand(
     APP_COMMAND.COPY_CONTENT,
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
@@ -388,34 +290,23 @@ function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
   return null;
 }
 
-/** ⌘T's offer while a task is drawn: the "+" of the column holding the window's focus. */
 function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   useAppCommand(APP_COMMAND.NEW_TAB, onNewTab);
   return null;
 }
 
-/** What a phone's header's ⋯ acts on, which names its menu ("Agent actions"), by the screen standing. */
 const PHONE_THING = {
   [TASK_PANE.OVERVIEW]: "Task",
   [TASK_PANE.AGENT]: "Agent",
   [TASK_PANE.PANEL]: "Tab",
 } as const satisfies Record<TaskPane, string>;
 
-/** What a phone's header's ⋯ calls letting a draft go. */
 const DISCARD_DRAFT = "Discard draft";
 
-/** A phone's way to let a draft go, which no strip's close stands for there: its tab closes and its words go, as the strip's close does (`main-tabs.tsx`). */
 function discardDraftItem(onSelect: () => void): MenuEntry {
   return { label: DISCARD_DRAFT, icon: <GLYPH.DELETE />, onSelect };
 }
 
-/**
- * The open task's region: its column, or the state standing in its place.
- * While the task is read, its strip holds one tab-shaped skeleton where the
- * plan's tab will stand, so the row does not move when the task is drawn,
- * and no name is guessed before the read says it; a task that could not be
- * drawn has no tab at all.
- */
 function DescriptionDocument({
   tasks,
   looks,
@@ -430,14 +321,12 @@ function DescriptionDocument({
   away: TaskHeadBack;
 }): React.JSX.Element {
   const { region } = tasks;
-  // The tab a phone's panel shows past the plan, which its header is named by, and the tab its column shows, whose menu the header's ⋯ offers on the agent's screen (`strip-tabs.tsx`'s `ShownTab`).
   const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
   const [shownAgentTab, setShownAgentTab] = useState<ShownTab | undefined>(undefined);
   const phone = room === SHELL_ROOM.NARROW;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
-  // The task's agents' cloud browser tabs, which a phone's Show browser goes back to, read only on a phone.
   const agentBrowsers = useCloudBrowserTabs(
     inboxTaskId === undefined ? undefined : { taskId: inboxTaskId },
     phone,
@@ -450,7 +339,6 @@ function DescriptionDocument({
     readerId: tasks.me,
     agents: tasks.agents,
   });
-  // The task's comments are held from its open while it is shown, for its description's margin and list, so its first ready frame marks them; none are read while Descriptions is off.
   const descriptionsOn =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const commentsTaskId = tasks.shown && descriptionsOn ? tasks.activeTaskId : undefined;
@@ -460,10 +348,6 @@ function DescriptionDocument({
       [commentsTaskId],
     ),
   );
-  // A link to a comment thread is let go once the task's comments are read,
-  // so nothing opens it again. Note that the description has taken it by then,
-  // beside its words or, resolved, in its list, since a child's effects run
-  // before ours.
   const commentAsk = tasks.commentReveal?.planId === inboxTaskId ? tasks.commentReveal : undefined;
   const commentsRead = comments?.read === true;
   const { onCommentRevealed } = tasks;
@@ -473,8 +357,6 @@ function DescriptionDocument({
   }, [commentAsk, inboxTaskId, commentsRead, onCommentRevealed]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  // The description in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
-  // Note that each box is handed afresh as it mounts, and the document's for each task, because the document stands only once the task is read, and the heading watched is that task's.
   const [documentBox, setDocumentBox] = useState<HTMLElement | null>(null);
   const headingTask = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const columnHeld = useMemo(() => ({ current: column }), [column]);
@@ -483,9 +365,6 @@ function DescriptionDocument({
     [documentBox, headingTask],
   );
   const descriptionHeading = useHeadingAway(columnHeld, documentHeld);
-  // The summary lists the task's agents once they are read, so where the
-  // task's row says it has some, the summary's room is kept from the open on
-  // and the list landing moves nothing in the column.
   const listedRow = tasks.tasks.find((each) => each.id === tasks.activeTaskId);
   const agentsComing =
     tasks.agents.agents === undefined &&
@@ -498,7 +377,6 @@ function DescriptionDocument({
     agentsComing || summaryHolds(tasks, inbox.board),
   );
   const summaryCard = useId();
-  // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
@@ -508,14 +386,8 @@ function DescriptionDocument({
   const taskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const renaming = useMutation(tasks.renameTask);
   const rename = useInlineRename(taskId, renameWrite(renaming, TASK_RENAME_SHAPE));
-  // The open task's one rename door, which its toolbar's ⋯, its title's ⋯,
-  // and ⌘K all ask. On a phone it opens the head's field; wider, it puts the
-  // caret in the description's own title, showing the description first where the panel
-  // hides it. Note that the title is asked once the description stands, because a
-  // title drawn afresh takes only the asks that come after it.
   const [titleAsked, setTitleAsked] = useState(false);
   const [titleAsks, setTitleAsks] = useState(0);
-  // The description is shown while the column is on Overview, with no panel filling the window over it.
   const descriptionShown = isOverviewTab(tasks.mainTabs.tab) && !tasks.sidePanel.fullScreen;
   const { onChoose: chooseColumnTab } = tasks.mainTabs;
   useEffect(() => {
@@ -523,7 +395,6 @@ function DescriptionDocument({
     setTitleAsked(false);
     setTitleAsks((count) => count + 1);
   }, [titleAsked, descriptionShown]);
-  // Overview shown, a panel filling the window over the column giving way, as a row opening a tab of the column does.
   const showOverview = useSteadyDoor(() => {
     if (tasks.sidePanel.fullScreen) tasks.sidePanel.onToggleFullScreen();
     chooseColumnTab(MAIN_TAB.OVERVIEW);
@@ -537,27 +408,15 @@ function DescriptionDocument({
     setTitleAsked(true);
   });
   useOfferTaskRename(taskId, beginRename);
-  // A terminal shown hands the keys to the side panel, where it stands; an
-  // agent's tab's Show terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
-  // Show terminal opens an agent's terminal as on every surface that draws it (`agent-actions.tsx`).
   const terminalDoors = useAgentTerminalDoors(tasks.sidePanel, showSide);
-  // A refusal is said beside the chip, under the task it was about and no
-  // other. Note that it is held above the states with no document, because
-  // a task opened from the list is drawn reading before its read lands, and
-  // a hook that only the ready page reached would be one more hook than
-  // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ taskId: string; note: string } | undefined>(undefined);
-  // The task as the list names it, its owner, agents, and pull requests
-  // among it, which its card and its banner read. Held above the states
-  // with no document for the same reason.
   const opened = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
   const listedOpen =
     opened === undefined
       ? undefined
       : (tasks.tasks.find((each) => each.id === opened.id) ?? opened);
   const stranded = useStrandedTaskBanner(tasks, listedOpen);
-  // The workspace's agents an `@` offers after the task's own, named by the tasks the window lists.
   const readMentionAgents = useMentionAgentsReader(
     opened?.workspaceId,
     tasks.tasks,
@@ -565,7 +424,6 @@ function DescriptionDocument({
   );
   const openMention = tasks.onShowMention;
   const revealed = tasks.sectionReveal;
-  // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     lines === undefined
       ? tasks.sidePanel.onPreviewFile({ path })
@@ -579,20 +437,13 @@ function DescriptionDocument({
     opened === undefined
       ? undefined
       : tasks.workspaces.find((each) => each.id === opened.workspaceId);
-  // The slug the task's links are written under, as its ⋯ menu's Copy link to task writes it.
   const workspace =
     opened === undefined ? undefined : taskLinkPlace(tasks.workspaces, opened).workspace;
-  // A row that opens a tab of this column, as a coding agent's start in an
-  // agent's tab opens the agent's, first has a panel filling the window over it
-  // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
   const openColumnTab = (opened: MainTab) => {
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
   };
-  // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page
-  // instead, where it is read and brought back, a panel filling the window over it giving way and
-  // the keys handed to the page, as a tab of this column opens.
   const openAgentColumn = (agent: string) => {
     if (agents.archived?.some((each) => each.id === agent) !== true) {
       openColumnTab({ agent });
@@ -602,10 +453,7 @@ function DescriptionDocument({
     tasks.agentView.onOpen(agent);
     setFocus(COLUMN.MAIN);
   };
-  // The description stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
-  // The task's details go back to the agent's tab they were opened over, or the agents' last, or
-  // a new agent's draft where no agent's tab stands, as a task with none opens on.
   const leaveDetails = () => {
     const { returnTab } = mainTabs;
     if (returnTab !== undefined) {
@@ -615,10 +463,8 @@ function DescriptionDocument({
     const [start] = newAgentStarts(mainTabs, agents);
     if (start !== undefined && start.disabled !== true) start.onSelect();
   };
-  // Details opens the task's details in the column's place, and pressed again goes back to the agents.
   const toggleDetails = () =>
     tab !== undefined && isOverviewTab(tab) ? leaveDetails() : openOverview();
-  // The way back to the agents stands pinned in the details' own card; a phone's head is its way back.
   const leaveDetailsDoor = useSteadyDoor(leaveDetails);
   const detailsLead = useMemo(
     () =>
@@ -627,8 +473,6 @@ function DescriptionDocument({
       ),
     [phone, leaveDetailsDoor],
   );
-  // The panel opened over the task's details, as its toggle opens it, goes back to the agents,
-  // beside which the panel stands, since the details take the panel's room too.
   const detailsOver = isOverviewTab(tab) && !phone;
   const panelWasOpen = useRef(sidePanel.open);
   useEffect(() => {
@@ -636,18 +480,10 @@ function DescriptionDocument({
     panelWasOpen.current = sidePanel.open;
     if (opened && detailsOver) leaveDetailsDoor();
   }, [sidePanel.open, detailsOver, leaveDetailsDoor]);
-  // A row that opens the comments, which stand in the side panel, shows the
-  // panel on them and hands it the keys, as a terminal shown does.
   const openPanelTab = (opened: SidePanelTab) => {
     sidePanel.onChoose(opened);
     showSide();
   };
-  // A call's row in a transcript opens what the call is about where the
-  // window already draws it: an agent or the plan in this column, the
-  // thread a call names in the window's Inbox as it stands, where the task's
-  // items hold it, posted by the agent whose row it was (`from`), else the
-  // window's Inbox narrowed to the task,
-  // another task as a link to it opens (`route.ts`), the rest in the side panel.
   const openPlace = useOpenPlace();
   const openTarget = (target: ToolTarget, from?: string) => {
     switch (target.kind) {
@@ -669,36 +505,27 @@ function DescriptionDocument({
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
-        // A call that named this very task opens its plan in the column, as one on its own plan does.
         if (target.agent === undefined && target.task === taskId) return openOverview();
         return openPlace?.(placeOfTaskTarget(target));
     }
   };
-  // A delegation's row in an agent's transcript opens its worker in the side
-  // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
     sidePanel.onPreview({ subagent: callId, delegation: { agent, task } });
   };
-  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
-  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
   const openPullRequest = (agentId: string, number?: number) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
-  // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
-  // An agent the task lists not has no tab here, so a link to it, which names no task, wears what the window reads of it.
   const agentLook = (agentId: string) => {
     const subject = agentSubject(agents, agentId, views.held, false);
     if (subject.agent === undefined) return undefined;
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
-  // A pull request one of the task's agents opened hangs its Pull request tab's card wherever a link names it.
   const agentPullRequests = agents.pullRequests;
   const changesPeople = useChangesPeopleOf(
     useMemo(() => [...agentPullRequests.keys()], [agentPullRequests]),
   );
   const pullRequestCard = (url: string) => {
     const owned = [...agents.pullRequests].map(([agentId, each]) => ({ agentId, url: each.url }));
-    // A page under an agent's pull request, as its files, is still that pull request, as its press says.
     const number = repositoryPullRequestOf(url, opened?.repository);
     const owner =
       pullRequestAgentOf(url, owned) ??
@@ -720,18 +547,9 @@ function DescriptionDocument({
     });
     return card ?? undefined;
   };
-  // Note that what the transcripts and the description are handed, and what they
-  // read from around them, is held across this page's draws over the same
-  // task, because each holds while that does (`AgentPane`, `DescriptionBody`), and
-  // the page is drawn again as its column's focus, its side
-  // panel's width, and the minute's clock move; only the cards a
-  // transcript's rows hang move with the minute. Each door stands across
-  // draws and calls the newest closure (`useSteadyDoor`).
-  // Note that the column's pane draws its tab's agent alone, so a row it opens is that agent's.
   const openTargetDoor = useSteadyDoor((target: ToolTarget) => openTarget(target, agentOfTab(tab)));
   const openDelegationDoor = useSteadyDoor(openDelegation);
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
-  // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
     sidePanel.onPreview({ page }, place),
   );
@@ -749,7 +567,6 @@ function DescriptionDocument({
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
   const descriptionEdit = opened === undefined ? undefined : tasks.descriptionEdit(opened.id);
-  // Note that the plan's title reads its rename's answer, on the same mutation the header's field draws its refusal from.
   const renameDoor = useSteadyDoor(
     (name: string): Promise<boolean> =>
       taskId === undefined
@@ -765,17 +582,12 @@ function DescriptionDocument({
       ? undefined
       : (name: string | undefined) => tasks.onDraftName(opened.id, name),
   );
-  // The chips send a change through the door the rows use, which says so
-  // where the service did not keep it, and the chip goes on drawing the
-  // task's own value, which is the one that stands.
   const standingDoor = useStandingDoor(tasks);
   const setStanding = useSteadyDoor(
     opened === undefined ? undefined : (standing: TaskStanding) => standingDoor(opened, standing),
   );
   const openedId = opened?.id;
   const openedRepository = opened?.repository ?? null;
-  // The threads each agent posted that wait on the developer, which its tab counts and its box's
-  // dock opens in the Inbox narrowed to the task, on the next of them.
   const waitingOf = useMemo(() => waitingByAgent(inbox.board.waiting), [inbox.board.waiting]);
   const openWaitingThread = useSteadyDoor((item: InboxItem) => {
     if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId, itemId: item.id });
@@ -787,11 +599,6 @@ function DescriptionDocument({
   }, [tabAgent, waitingOf, openWaitingThread]);
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
-  // The task's own menu, as the task's page holds it keyed by the task
-  // (`TaskActions`), handed up here for the Plan tab's ⋯ and right-click and
-  // a phone's header on its Plan view, each reading the newest items as it
-  // draws. Note that the page draws `TaskActions` ahead of the panel, so the
-  // items stand here by the time the panel's tabs read them.
   const taskMenuHand = useRef<TaskMenuItems | undefined>(undefined);
   const descriptionMenu = useMemo<DocumentMenu>(
     () => ({
@@ -805,14 +612,6 @@ function DescriptionDocument({
     }),
     [],
   );
-  // The repository crumb's doors (`task-standing.tsx`): a pick is sent
-  // through the task's own door, which answers why the service refused it,
-  // said under the path of the task it was about and no other. ⌘K's
-  // Change repository asks the crumb to open its menu, each ask counted so
-  // the same press opens it again: the ask stands until the crumb answers it
-  // (`onAsked`), so a crumb drawn again later does not open on an ask already
-  // answered, and the description is shown first where the panel hides it, since
-  // the crumb stands in the description.
   const chooseRepository = useSteadyDoor((repository: string) => {
     if (opened === undefined) return;
     const { id: taskId } = opened;
@@ -836,7 +635,6 @@ function DescriptionDocument({
     if (menuRequest === undefined || descriptionShown) return;
     showOverview();
   }, [menuRequest, descriptionShown, showOverview]);
-  // Note that the crumb is handed the ask only once the description is in sight, so its menu never opens behind a list.
   const openRequest = descriptionShown ? menuRequest : undefined;
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
     () =>
@@ -852,7 +650,6 @@ function DescriptionDocument({
     [openedId, repositories, chooseRepository, openRequest, repositoryNote],
   );
   const workspaceName = home?.name ?? "";
-  // The task's path and its add menu name and offer the tasks of its own workspace, and a press on the parent's crumb opens it as a list's row would.
   const openedWorkspace = opened?.workspaceId;
   const {
     tasks: everyTask,
@@ -866,7 +663,6 @@ function DescriptionDocument({
     () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
     [everyTask, openedWorkspace],
   );
-  // A task the head names, a crumb or a related row, opens on its plan, as a list's row does.
   const openTask = useSteadyDoor(selectTask);
   const changeBlock = useSteadyDoor(
     openedId === undefined
@@ -879,7 +675,6 @@ function DescriptionDocument({
       ? undefined
       : (kind: TaskCreateRelationKind) => onNewRelatedTask(openedId, kind),
   );
-  // The task's menus and ⌘K ask the head to open the add menu, each ask counted and answered as the repository chip's is, once the description is in sight.
   const [answeredRelation, setAnsweredRelation] = useState(0);
   const relationPending =
     relationMenu !== undefined &&
@@ -904,7 +699,6 @@ function DescriptionDocument({
     }),
     [workspaceName, blockTasks, changeBlock, setParent, newRelatedTask, relationAsk],
   );
-  // Note that S opens the status chip only while the description is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(
     () => ({
       workspaceName,
@@ -942,19 +736,16 @@ function DescriptionDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its description, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
     () => (
       <PlanAgents
         agents={agents}
         held={views.held}
         tab={tab}
-        // Overview's agents stand open, its list the task's own rather than a fold under the description's head.
         folded={false}
         waiting={waitingOf}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
         onOpenPullRequest={openPullRequestDoor}
-        // Note that New agent stands at every width, a fresh plan's one next step, as the "+" offers it.
         starts={
           room === SHELL_ROOM.NARROW
             ? phoneAgentStarts(mainTabs, agents)
@@ -992,9 +783,6 @@ function DescriptionDocument({
       tasks.onShowInbox,
     ],
   );
-  // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
-  // so another task's groups start folded rather than as this one's were left. Note that the
-  // key is the head's alone, because two siblings under one key leave the old task's drawn.
   const descriptionHead = useCallback(
     (room: DescriptionRoom) => (
       <Fragment key={openedId}>
@@ -1012,8 +800,6 @@ function DescriptionDocument({
     ),
     [openedId, opened, tasks, relations, openTask, planAgents],
   );
-  // A row in a transcript that opens a tab hangs that tab's card, read as
-  // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const listedCard = listedOpen ?? opened;
   const sideTab = sidePanel.tab;
   const cards = useMemo(
@@ -1034,10 +820,6 @@ function DescriptionDocument({
           }),
     [agents, views.held, tab, sideTab, listedCard, tasks, now],
   );
-  // A link anywhere on the task to a pull request one of its agents opened, a chip in the description,
-  // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
-  // pull request of the task's repository opens in a Pull request tab by its number, and one to
-  // another task's page opens beside the task.
   const openHere = useMemo(
     () =>
       openPullRequestsHere(
@@ -1054,7 +836,6 @@ function DescriptionDocument({
       ),
     [agents, openPullRequestDoor, openPageBeside, openedRepository, openedId],
   );
-  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
   const { pages } = tasks;
   const mentions = useMemo<TaskMentionsValue | undefined>(() => {
     if (opened === undefined || workspace === undefined) return undefined;
@@ -1102,9 +883,7 @@ function DescriptionDocument({
       region.kind === DOCUMENT_REGION.FAILED
         ? "The task could not be read."
         : "Choose a task, or start a new one.";
-    // A plan that cannot be drawn offers no menu, so its way out is said here.
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
-    // A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs.
     if (region.kind === DOCUMENT_REGION.MISSING) {
       return (
         <NotFound
@@ -1138,22 +917,12 @@ function DescriptionDocument({
   }
   const { task } = region;
   const listed = listedOpen ?? task;
-  // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's
-  // empty column, which a pilot task's never does (`startsOwnAgents`).
   const columnComing =
     agents.agents === undefined ? !agents.listFailed : startsOwnAgents(agents.mode);
-  // The panel holds the keys while the focus went into it last, or while it
-  // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
-  // The agent a terminal command means from where the developer is: the one
-  // whose own tab, Changes tab, or Terminal tab holds the keys, if any.
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  // The description stands in the column's Overview and the task's Inbox
-  // in the side panel, each drawn here, where what they read is held.
-  // A summary row that opens a tab of the side panel hands the panel the
-  // keys, as a transcript's row does (`openPanelTab`), so ⌘W closes what it opened.
   const summaryTasks: TasksControl = {
     ...tasks,
     sidePanel: {
@@ -1165,10 +934,7 @@ function DescriptionDocument({
       },
     },
   };
-  // Note that the document stays laid out while another tab of the column is
-  // shown, so coming back to Overview finds it where it was left.
   const overviewShown = isOverviewTab(tab);
-  // Wider than a phone, the task's details take the whole page, its column and its side panel alike.
   const detailsWide = overviewShown && !phone;
   const documentBody = (
     <Fill
@@ -1179,7 +945,6 @@ function DescriptionDocument({
       aria-label={task.name}
       hidden={!overviewShown}
     >
-      {/* The way back to the agents stays pinned at the card's top left, over the details as they scroll. */}
       {detailsWide ? <div className="task-details-back">{detailsLead}</div> : null}
       <DescriptionBody
         task={task}
@@ -1187,7 +952,6 @@ function DescriptionDocument({
         agents={editAgents}
         onShowHistory={showHistory}
         edit={descriptionEdit}
-        // The title renames as the chip's field does, so a refusal is said beside it.
         onRename={renameDoor}
         onDraftName={draftNameDoor}
         rename={titleRename}
@@ -1201,8 +965,6 @@ function DescriptionDocument({
     </Fill>
   );
   const pane = taskPaneOf({ open: sidePanel.open, column: tab });
-  // A phone's agent's ⋯ shows its cloud browser: the tab it opened last, or a new one, as the panel's
-  // "+" offers either, which a phone draws nowhere.
   const openBrowser = (agentId: string) => {
     const newest = (agentBrowsers ?? [])
       .filter((each) => each.agentId === agentId)
@@ -1211,32 +973,23 @@ function DescriptionDocument({
       cloudBrowser: newest?.id ?? startCloudDraft({ taskId: task.id }, agentId).id,
     });
   };
-  // ⌘T on a phone starts New agent at once, since no "+" stands in sight to drop its menu.
   const newAgentOnPhone = () => {
     const [start] = phoneAgentStarts(mainTabs, agents);
     if (start === undefined || start.disabled === true) return;
     if (sidePanel.open) sidePanel.onToggle();
     start.onSelect();
   };
-  // The plan's screen by the task's name, which a phone's Back says from an agent's screen, so the
-  // way to the task reads as the task itself; Overview where the task is not read or has no name.
   const planLabel = opened?.name.trim() || TAB_WORDS.OVERVIEW;
-  // What the column shows, by name: the agent's or the draft's screen, and where a tab of the panel goes back to.
   const columnLabel =
     tab === undefined || isOverviewTab(tab) ? planLabel : mainTabLabel(tab, agents);
   const draftShown =
     pane === TASK_PANE.AGENT && tab !== undefined && isDraftTab(tab) ? tab : undefined;
-  // Back leaves the task on Overview, and goes back a screen anywhere else: the panel shuts over
-  // the column, and the column goes back to Overview, which lets an empty draft go (`use-main-tabs.ts`).
   const back =
     pane === TASK_PANE.OVERVIEW
       ? away
       : pane === TASK_PANE.PANEL
         ? screenBack(columnLabel ?? planLabel, sidePanel.onToggle)
         : screenBack(planLabel, () => mainTabs.onChoose(MAIN_TAB.OVERVIEW));
-  // What the header's ⋯ offers follows what is on screen: the task's own menu on Overview, the
-  // agent's on its screen, Discard draft on a draft's, and the tab's on one of the panel's, each
-  // agent's item left unnamed, since the header names the agent.
   const shownGroups = (opener: HTMLElement): readonly (readonly MenuEntry[])[] =>
     pane === TASK_PANE.OVERVIEW
       ? descriptionMenu.groups()
@@ -1253,8 +1006,6 @@ function DescriptionDocument({
   const head = phone ? (
     <TaskHead
       back={back}
-      // Note that the task's Rename opens the task's name in the title's place on any screen, since the screen hides the description's own title.
-      // Note that Overview's description names the task in its own heading, so the row names it only once that heading scrolls away.
       title={
         rename.editing
           ? (rename.asked ?? task.name)
@@ -1298,7 +1049,6 @@ function DescriptionDocument({
             >
               <TaskMentions value={mentions}>
                 <OpenAddressesHere value={openHere}>
-                  {/* The task's menu, its shortcuts, and the questions its items ask, keyed by the task so none outlives it; drawn ahead of the panel, which reads the items. */}
                   <TaskActions
                     key={task.id}
                     tasks={tasks}
@@ -1307,11 +1057,9 @@ function DescriptionDocument({
                     hand={taskMenuHand}
                   />
                   {head}
-                  {/* On a phone no bar stands, its head naming the task instead, the bars drawn hidden so the chords they hold still answer. */}
                   <div className={phone ? "task-topbar" : "task-topbar contents"} hidden={phone}>
                     <TaskTopbar
                       task={listed}
-                      // A phone's head offers the task's menu and its details itself (`TaskHead`).
                       details={
                         phone ? undefined : { shown: overviewShown, onToggle: toggleDetails }
                       }
@@ -1339,7 +1087,6 @@ function DescriptionDocument({
                               onShown={showSide}
                             />
                           ) : null}
-                          {/* A version drawn in the description's place is the version's page, which opens no tab. */}
                           {tasks.history.viewing === undefined ? (
                             <NewTabChord
                               onNewTab={
@@ -1355,9 +1102,6 @@ function DescriptionDocument({
                       }
                     />
                   </div>
-                  {/* Note that the column is hidden rather than left out while the
-          panel fills the window, and keeps its layout beneath the panel, so
-          leaving full screen uncovers it as it was. */}
                   <TaskPage
                     areaRef={setArea}
                     columnRef={setColumn}
@@ -1366,7 +1110,6 @@ function DescriptionDocument({
                     barless={detailsWide}
                     column={
                       <>
-                        {/* On a phone no strip stands, its details listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`); wider, the task's details stand in place of the strip and the panel alike. */}
                         <TaskTabsRow hidden={phone || detailsWide}>
                           <MainTabBars
                             task={listed}
@@ -1388,11 +1131,7 @@ function DescriptionDocument({
                             waiting={waitingOf}
                           />
                         </TaskTabsRow>
-                        {/* The plan's banner is the whole plan's, so it stands over every
-            tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
-                        {/* The summary stands beside what the column shows, under the
-            toolbar, which spans the column. */}
                         <TaskBody>
                           <FindScope
                             className="desktop-task-column"
@@ -1401,8 +1140,6 @@ function DescriptionDocument({
                           >
                             {documentBody}
                             {tab === undefined || isOverviewTab(tab) ? (
-                              // While the agents are read, or a draft opens on a task with none, the
-                              // column stands as the tab it will show does before it lands.
                               tab === undefined && columnComing ? (
                                 <AgentColumn>
                                   <AgentTabSkeleton />
@@ -1440,7 +1177,6 @@ function DescriptionDocument({
                       </>
                     }
                   >
-                    {/* Note that the panel stands while its toggle asks for its "+" with nothing to show, drawing the menu alone. */}
                     {!detailsWide && (drawing.panel !== undefined || sidePanel.toggleAsked) ? (
                       <SidePanel
                         {...drawing}
@@ -1477,16 +1213,6 @@ function DescriptionDocument({
   );
 }
 
-/**
- * The page of a task New task is still starting with its agent, before the
- * service has made either: the task's page in the shape it lands in, its
- * column standing as the agent's tab with the developer's words as its first
- * line and no side panel beside it, since the task lands on its agent alone
- * (`useTasksTab`'s `openAgent`), so Start opens the page at once and the
- * start's answer only fills it in. The model the start named stands as
- * itself in the composer's chip rather than a block; the task's title stays
- * a block, since the task is Untitled until its agent names it.
- */
 function StartingTaskPage({
   tasks,
   starting,
@@ -1496,12 +1222,10 @@ function StartingTaskPage({
   tasks: TasksControl;
   starting: StartingTask;
   summary: SummaryPin;
-  /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
   phoneAway: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const drawing = { ...useSidePanelDrawing(tasks.sidePanel), panel: undefined };
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  // Note that the summary's room is kept, as the task's page keeps it for the agent it lists, so nothing moves as the page lands.
   const summaryLayout = useSummaryLayout(summary, column, false, true);
   return (
     <TaskPageSkeleton
@@ -1520,13 +1244,6 @@ function StartingTaskPage({
   );
 }
 
-/**
- * The Tasks tab's work column: the open task's page, or Home.
- *
- * A memo boundary: the shell drawn again over the same tasks, as a setting
- * that moves draws it, leaves the open plan, its transcripts, and its side
- * panel as they were.
- */
 export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
@@ -1537,20 +1254,13 @@ export const DesktopTasks = memo(function DesktopTasks({
   staged = false,
 }: {
   tasks: TasksControl;
-  /** The signed-in account's name, which Home greets. */
   accountName?: string | undefined;
-  /** Whether a fixture stages the window, whose tasks' looks Home's rows read as staged. */
   staged?: boolean;
-  /** The open description's sections changed since the developer last looked, held by the shell across the description's version history. */
   looks: TaskLooks;
-  /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
-  /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
   room?: ShellRoom;
-  /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); Home where none is handed. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
-  // A task New task is starting with its agent stands as its page until the start answers.
   if (tasks.starting !== undefined) {
     return (
       <StartingTaskPage
@@ -1570,8 +1280,6 @@ export const DesktopTasks = memo(function DesktopTasks({
       return (
         <SkillFiles
           source={tasks.agents.readSkills}
-          // Note that a skill's file opens as a file the palette finds does, whole,
-          // so its tab stands on this task though the app never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
           <DescriptionDocument
@@ -1583,8 +1291,6 @@ export const DesktopTasks = memo(function DesktopTasks({
           />
         </SkillFiles>
       );
-    // With no task open the column is Home, whose own composer New task
-    // hands the caret rather than opening its dialog over it.
     case TASKS_PAGE.HOME:
       return (
         <>

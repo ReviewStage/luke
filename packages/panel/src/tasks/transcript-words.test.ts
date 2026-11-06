@@ -15,18 +15,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { bundleLanded } from "../testing/side-bundles.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * transcript-words.test.ts -- a transcript's markdown is drawn to the byte
- * as it was recorded, raw HTML among it: what the parser keeps, what the
- * sanitizer drops, and words that only look like a tag. The drawn markup of
- * every sample is held in `transcript-words.golden.json`, which
- * `APP_UPDATE_FIXTURES=1` writes, so a change to how the words are parsed,
- * or to when the parser arrives, that moves a byte fails here. A heading keeps
- * its level in the outline and takes its type from the role its level maps to,
- * never from a size of its own. Synthetic words.
- */
-
-/** Records the drawings instead of asserting them. `check.sh` never sets it. */
 const UPDATE_FIXTURES = process.env.APP_UPDATE_FIXTURES === "1";
 
 const GOLDEN = path.join(
@@ -34,7 +22,6 @@ const GOLDEN = path.join(
   "transcript-words.golden.json",
 );
 
-/** Representative words a transcript draws, by what each sample holds. */
 const SAMPLES = {
   prose: "Plain words with *emphasis*, **strength**, `inline code`, and ~~a strike~~.",
   links: "See [the docs](https://example.com/docs), www.example.com, and <https://example.org>.",
@@ -57,7 +44,6 @@ const SAMPLES = {
   mention: "Ask [@the plan](https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b).",
 } as const;
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint, and a code block's file icon once the tree's bundle has.
 beforeAll(() =>
   Effect.runPromise(
     Effect.all([markdownHtmlParserLanded, bundleLanded(SIDE_BUNDLES.fileTree)], { discard: true }),
@@ -67,7 +53,6 @@ beforeAll(() =>
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // A fenced block with a language asks main for its colors; refused, it is drawn plain.
   fakeAppBridge({});
 });
 
@@ -76,12 +61,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The markup a transcript draws for the words, once whatever it loads has landed. */
 async function drawn(text: string): Promise<string> {
   return (await drawnInto(text)).innerHTML;
 }
 
-/** The box a transcript draws the words into, once whatever it loads has landed. */
 async function drawnInto(text: string): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);

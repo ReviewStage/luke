@@ -12,13 +12,6 @@ import { restOn } from "../testing/hint-rest.js";
 import { TARGET_HINT, TOOL_TARGET } from "./tool-call-model.js";
 import { TranscriptOpeningCall, TranscriptSubagent, TranscriptTool } from "./transcript-blocks.js";
 
-/**
- * transcript-call-hints.test.ts -- every call's row says on hover what a
- * press on it does: a row that opens a tab names what it opens, and a row
- * that folds says it shows the call, and hides it once open, so the two
- * are told apart under the pointer. Synthetic calls.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -32,7 +25,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** `element` drawn into the page, under the window's atoms. */
 function drawn(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -41,13 +33,11 @@ function drawn(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** What the window's pill says once the pointer rests on `row`, none where it raises none. */
 function hintOver(row: Element): string | undefined {
   restOn(row);
   return document.querySelector('[role="tooltip"]')?.textContent ?? undefined;
 }
 
-/** The one row a drawing holds, a fold's line or a press. */
 function rowOf(container: HTMLElement): HTMLElement {
   return (
     container.querySelector<HTMLElement>("summary, button[data-call-id]") ??

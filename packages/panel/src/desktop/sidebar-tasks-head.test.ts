@@ -13,12 +13,6 @@ import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-tasks-head.test.ts -- the Tasks head carries New section and View
- * options, New section naming the new section in place in the sidebar, and
- * offers no right-click menu that would only repeat them. Synthetic throughout.
- */
-
 const WORKSPACE: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
@@ -60,7 +54,6 @@ function task(id: string, name: string): TaskSummary {
   };
 }
 
-/** The Tasks section, drawn over one task. */
 function mountTasks(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

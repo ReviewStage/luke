@@ -11,13 +11,6 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { type PullRequestComment, PullRequestCommentBox } from "./pull-request-comment-box.js";
 
-/**
- * pull-request-comment-box.test.ts -- the "Add a comment" box at the foot of a pull request's Conversation, as a member meets it: Esc lets go of the box and keeps the words, and the window above it never hears the key, which would leave the task.
- *
- * The editor is the real one, from its bundle. Synthetic words.
- */
-
-// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
 vi.hoisted(() => {
   Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
 });
@@ -36,7 +29,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The box over words its tab holds, with no change out. */
 function Tab({ start }: { start: string }): React.JSX.Element {
   const [body, setBody] = useState(start);
   const comment: PullRequestComment = {
@@ -55,7 +47,6 @@ function Tab({ start }: { start: string }): React.JSX.Element {
 
 test("Esc in the comment box lets go of it, keeps its words, and never reaches the window", () => {
   const reached: string[] = [];
-  // Note that the keys are heard on the window, as the app's own Escape hears them.
   const hear = (event: KeyboardEvent) => reached.push(event.key);
   window.addEventListener("keydown", hear);
   const holder = document.body.appendChild(document.createElement("div"));

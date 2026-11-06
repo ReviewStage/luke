@@ -22,23 +22,9 @@ import { IntegrationRow } from "../integration-row.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useIntegrationToolReads } from "../integration-tools.js";
 
-/**
- * setup-tools.tsx -- setup's tools step: the integrations a first day's tasks most often come from, each connected by its own sign-in in the browser.
- *
- * Each row is Settings › Integrations' own (`../integration-row.tsx`), drawn
- * from the window's one book of integrations, so a sign-in finished in the
- * browser lands here as it does there: a connected account is named beside
- * its provider ("Notion · Acme"), a sign-in waits with Reopen and Cancel, and
- * one that failed says why with Try again. The rows stand in setup's order,
- * a provider's accounts together in theirs, and a provider this deployment
- * does not offer has none.
- */
-
-/** What setup says the tools step is for. */
 export const TOOLS_PURPOSE =
   "Agents read and update these with your own access. Change them anytime in Settings.";
 
-/** The tools setup offers, in its order. */
 const TOOLS: readonly IntegrationProvider[] = [
   INTEGRATION_PROVIDER.LINEAR,
   INTEGRATION_PROVIDER.SLACK,
@@ -46,10 +32,8 @@ const TOOLS: readonly IntegrationProvider[] = [
   INTEGRATION_PROVIDER.NOTION,
 ];
 
-/** The provider a server name that parses as none would be drawn as; never reached. */
 const FIRST_TOOL = INTEGRATION_PROVIDER.LINEAR;
 
-/** What the rows look like while where they stand is read: each a provider not yet connected, its mark, the line saying what it gives agents, and Connect. */
 const TOOLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: false,
@@ -61,7 +45,6 @@ const TOOLS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   },
 ];
 
-/** Setup's tools step. */
 export function ToolRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const { reads, retry } = useIntegrationToolReads(
@@ -82,7 +65,6 @@ export function ToolRows(): React.JSX.Element {
       />
     );
   }
-  // Note that every server here is named from one of setup's tools, so the first stands in only for a name that parses as none.
   const healthOf = (server: string) =>
     connectionHealth(integrationConnectionOf(server)?.provider ?? FIRST_TOOL, reads[server]);
   const rows = serverRows({

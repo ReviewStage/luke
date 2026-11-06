@@ -40,24 +40,14 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { useBusyPress } from "./busy-press.js";
 import { GitHubTokenDialog, TokenFacts } from "./github-dialog.js";
 
-/** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
-/** The row's name. */
 const TOKEN_LABEL = "GitHub personal access token";
 
-/** What the row says where the token could not be read, so what stands is unknown. */
 const TOKEN_READ_FAILED = "The token could not be read.";
 
-/** What the toast says where signing out was refused, so the account is still signed in. */
 const SIGN_OUT_FAILED = "The account could not be signed out. Try again.";
 
-/**
- * Signs the account out and answers once that has settled, never by
- * rejecting: a refusal, such as a browser's whose service could not end the
- * session, is said in a toast, since the account is still signed in and the
- * press that asked is gone. Both of the app's Sign outs press through it.
- */
 export async function signOutSayingFailure(onSignOut: () => Promise<void>): Promise<void> {
   try {
     await onSignOut();
@@ -72,21 +62,11 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
   }
 }
 
-/**
- * The member's own GitHub personal access token: its hint, login, and
- * expiry once one is saved, and Manage or Add, which
- * opens the token's dialog (`github-dialog.tsx`). The token is the one the
- * host holds for the account the row is drawn for (`LIVE_READ.GITHUB_TOKEN`),
- * where a save's and a removal's own answer lands too; a read that fails
- * says so under the row in a `FailureNote` whose Retry asks again, and draws
- * neither Add nor Manage, since what stands is unknown.
- */
 function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React.JSX.Element {
   const read = useQuery(githubTokenQuery(accountId));
   const retry = useMutation(githubTokenRetryMutation());
   const token = read.data?.token;
   const [managing, setManaging] = useState(false);
-  // Note that the card is drawn for the token it opened over until its fade has run, so it does not change under its own exit.
   const { held: drawn, onExited } = useHeldThroughExit(
     managing && token !== undefined ? token : undefined,
   );
@@ -94,14 +74,12 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
   return (
     <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.GITHUB_ACCESS)} className={NO_CAPTURE}>
       <SettingsRow
-        // Note that the row stands under the account's own, whose face is wider than a mark, so its words start where the account's do.
         lead={SETTINGS_ROW_LEAD.FACE}
         leading={
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.ROW} />
         }
         label={<OneLine hint={wholeWordsHint(TOKEN_LABEL)}>{TOKEN_LABEL}</OneLine>}
         description={token ? <TokenFacts token={token} /> : undefined}
-        // Note that a row with nothing below draws no `below` at all, since its box keeps a margin.
         below={
           read.isError
             ? () => (
@@ -135,11 +113,6 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
   );
 }
 
-/**
- * The account's delete, as the question asking it holds its own mutation
- * over it. Note that the delete happens at the service before anything
- * local moves, so a failure answers why and the account still stands.
- */
 const ACCOUNT_DELETE_MUTATION = mutationOptions({
   mutationKey: [ACT_KIND.ACCOUNT_DELETE],
   mutationFn: (): Promise<ActionResult> =>
@@ -152,15 +125,6 @@ const ACCOUNT_DELETE_MUTATION = mutationOptions({
     ),
 });
 
-/**
- * Who is signed in, the member's own GitHub personal access token, and the
- * two ways out of being signed in, at the head of the Account page Settings
- * opens on, and the one place either way out is offered. Sign out acts on
- * the press, since nothing is lost: the host asks first where a call or
- * unsaved words would go. Deleting asks first in the confirm dialog, since it
- * erases the account at the service for good, and a refusal to delete is said
- * in it.
- */
 export function AccountSection({
   account,
   onSignOut,
@@ -169,8 +133,6 @@ export function AccountSection({
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
   const signOut = useBusyPress(() => signOutSayingFailure(onSignOut));
-  // Note that the section is only drawn while its page is, so the page
-  // leaving takes the question with it.
   const deleting = useMutation(ACCOUNT_DELETE_MUTATION);
   const deletionAct = useConfirmAct(deleting, {
     send: () => deleting.mutateAsync(),
@@ -182,17 +144,11 @@ export function AccountSection({
     confirmFailure(FAILURE_SURFACE.ACCOUNT_DELETE),
   );
 
-  // Note that each row stands in a wrapper wearing its search anchor, because
-  // a pressed result lands on and rings the whole row, as it did before the
-  // row was shared, and the shared row takes no attribute of a caller's. The
-  // section is untitled, as the Workspace page's first is, because the page
-  // over it is already headed Account.
   return (
     <SettingsSection>
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
         <SettingsRow
           lead={SETTINGS_ROW_LEAD.FACE}
-          // The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue.
           leading={
             <ReplayMask>
               <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />

@@ -54,30 +54,6 @@ import {
   useDescriptionPicturesDoor,
 } from "./description-pictures.js";
 
-/**
- * editor-pictures.tsx -- a description's pictures in its editor: laid in from a paste, a drop, or Insert image, kept on the service as they wait, and drawn in each picture's node with its tools.
- *
- * A picture laid in waits on its upload: the Mac re-encodes it to at most
- * `PICTURE_BOUNDS.MAX_BYTES` (`encodeImage`), shows it at once from those
- * bytes at half strength with the window's spinner and "Uploading" where
- * its caption will stand, and keeps it on the description (`planning.pictureKeep`).
- * Kept, the picture takes its address and the text writes its line; until
- * then the text writes nothing of it. A keep that fails says so in the same
- * place, as every failure is said (`@repo/ui`'s `ErrorState`): its sentence, then
- * Retry and Remove. A picture of another description pasted in is read as that
- * description's and kept again on this one, so this description's readers can see it; a
- * video an agent recorded is carried across as it is, and waits as a quiet
- * box, since its bytes draw no picture.
- * Selected, a picture offers its tools: Alt text and Caption, each a field
- * under it, Enlarge, and Delete. They hang above the picture from its left
- * edge, as wide as their own names, so a skinny picture neither squeezes
- * them nor sits under them, unless the description's scroller would cut them off
- * there, when they stand inside its top edge; in a column too narrow for
- * their names each is its glyph, named by its tooltip. Insert image (⌥⌘I, ⌘K, the Edit menu)
- * chooses files while the text is edited.
- */
-
-/** What a picture's upload says, and what a failed one says by why. */
 const UPLOAD_WORDS = {
   SENDING: "Uploading",
   NOT_A_PICTURE: "This file is not a picture a description can keep.",
@@ -87,7 +63,6 @@ const UPLOAD_WORDS = {
   FAILED: "The image could not be uploaded.",
 } as const;
 
-/** What each of a selected picture's tools is called. */
 const TOOL = {
   ALT: "Alt text",
   CAPTION: "Caption",
@@ -95,7 +70,6 @@ const TOOL = {
   DELETE: "Delete",
 } as const;
 
-/** What a field under a picture describes. */
 const DESCRIBING = {
   ALT: { label: TOOL.ALT },
   CAPTION: { label: TOOL.CAPTION },
@@ -103,13 +77,10 @@ const DESCRIBING = {
 
 type Describing = (typeof DESCRIBING)[keyof typeof DESCRIBING];
 
-/** The narrowest column a selected picture's tools say their names in; narrower, each is its glyph. */
 const TOOLS_WORDED_PX = 360;
 
-/** The room above a picture, inside the description's scroller, its tools need to stand above it: their height and their gap. */
 const TOOLS_ROOM_PX = 44;
 
-/** One of a selected picture's tools: its name, its glyph, what a press does, and whether it destroys. */
 interface PictureTool {
   readonly label: string;
   readonly icon: ReactNode;
@@ -117,10 +88,8 @@ interface PictureTool {
   readonly danger?: boolean;
 }
 
-/** The image types Insert image offers to choose. */
 const CHOSEN_TYPES = "image/png,image/jpeg,image/webp,image/gif,image/heic";
 
-/** Where an upload stands: sending, or failed with why, each with the Mac's own bytes once it has them. */
 const UPLOAD = { SENDING: "sending", FAILED: "failed" } as const;
 
 type Upload =
@@ -132,7 +101,6 @@ type Upload =
       readonly taken: PictureTaken;
     };
 
-/** A picture's node the panel draws into. */
 interface DrawnPicture {
   readonly key: number;
   readonly element: HTMLElement;
@@ -141,25 +109,21 @@ interface DrawnPicture {
   readonly doors: PictureNodeDoors;
 }
 
-/** Why a keep failed, in the words said where its caption will stand. */
 function keepFailedWords(failure: string | undefined): string {
   if (failure === PICTURE_KEEP_FAILURE.TOO_MANY) return UPLOAD_WORDS.TOO_MANY;
   if (failure === PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS) return UPLOAD_WORDS.TOO_MANY_VIDEOS;
   return UPLOAD_WORDS.FAILED;
 }
 
-/** A `data:` URL of bytes the Mac encoded. */
 function dataUrlOf(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
 }
 
-/** The picture a file is, re-encoded within the bound, as a `data:` URL; nothing for a file that is no picture. */
 async function encodedUrl(file: File): Promise<string | undefined> {
   const encoded = await encodeImage(file, PICTURE_BOUNDS.MAX_BYTES);
   return encoded === undefined ? undefined : dataUrlOf(encoded.mediaType, encoded.base64);
 }
 
-/** A picture waiting on its upload: the Mac's bytes at half strength, and the wait or its failure where its caption will stand. */
 function UploadingPicture({
   upload,
   alt,
@@ -183,7 +147,6 @@ function UploadingPicture({
         {url === undefined || isVideoDataUrl(url) ? (
           <span className={PICTURE_PENDING_CLASS} />
         ) : (
-          // The Mac's own bytes at half strength while the upload waits.
           <img
             className={`${PICTURE_IMAGE_CLASS} opacity-50`}
             src={url}
@@ -216,7 +179,6 @@ function UploadingPicture({
   );
 }
 
-/** The field under a picture that describes it anew: its words saved on Return, let go on Escape. */
 function DescribeField({
   describing,
   value,
@@ -235,13 +197,11 @@ function DescribeField({
   };
   return (
     <span className="mx-0 mt-item-gap mb-block-gap grid w-picture-describe">
-      {/* Note that a picture's words may be cleared, so the field says it may be left empty. */}
       <FormField label={describing.label} optional>
         {(field) => (
           <TextField
             field={field}
             value={words}
-            // Note that the field opens on a press of its own tool, which is where the keyboard is going.
             autoFocus
             onChange={setWords}
             onEnter={keep}
@@ -254,19 +214,11 @@ function DescribeField({
   );
 }
 
-/** How a selected picture's tools stand: with their names or as glyphs, and above the picture or inside its top edge. */
 interface ToolsLayout {
   readonly worded: boolean;
   readonly above: boolean;
 }
 
-/**
- * How a selected picture's tools stand, as the window lays the column out:
- * named where the column has room for their names, and above the picture
- * unless the description's scroller would cut them off there, as it would a
- * picture scrolled to its top. A column not laid out measures nothing and
- * keeps them named and above.
- */
 function useToolsLayout(column: HTMLElement): ToolsLayout {
   const [layout, setLayout] = useState<ToolsLayout>({ worded: true, above: true });
   useLayoutEffect(() => {
@@ -291,7 +243,6 @@ function useToolsLayout(column: HTMLElement): ToolsLayout {
   return layout;
 }
 
-/** A selected picture's tools, above it or inside its top edge where there is no room above: each its glyph and its name, or its glyph and a tooltip where the column is too narrow. */
 function PictureTools({
   column,
   tools,
@@ -326,7 +277,6 @@ function PictureTools({
   );
 }
 
-/** A kept picture in the editor: drawn as the document draws it, its tools above it while selected. */
 function KeptPicture({
   drawn,
   door,
@@ -394,21 +344,13 @@ function KeptPicture({
   );
 }
 
-/** What the editor's pictures hand the document: the editor's doors, the pictures drawn into their nodes, the chooser Insert image opens, and whether one is still being sent. */
 export interface EditorPictures {
   readonly pictures: DescriptionEditorPictures | undefined;
   readonly drawn: ReactNode;
-  /** Whether a picture laid in is still on its way to being kept, which the editor stays open for, since only it can lay in the address that comes back. */
   readonly sending: boolean;
-  /** Opens the chooser Insert image opens, as the `/` menu's Picture does; none where the text takes no pictures. */
   readonly choose: (() => void) | undefined;
 }
 
-/**
- * The description's pictures in its editor: drawn into each node, kept as they are
- * laid in, and chosen by Insert image while the text is edited. None where
- * the place names no workspace to address them under, as the template does.
- */
 export function useEditorPictures(
   taskId: string,
   workspace: string | undefined,
@@ -447,7 +389,6 @@ export function useEditorPictures(
     },
     [sendKeep, queryClient, handle, taskId, settled, workspace],
   );
-  // Note that a picture of another description is read as that description's before it is kept again.
   const begin = useCallback(
     async (taken: PictureTaken) => {
       settled(taken.upload, { kind: UPLOAD.SENDING });
@@ -463,7 +404,6 @@ export function useEditorPictures(
         return keep(taken, url);
       }
       const named = descriptionAttachmentOf(taken.from);
-      // Note that a picture the window holds already is copied as it stands, since a picture's query never goes stale.
       const read =
         named === undefined || door === undefined
           ? undefined
@@ -481,7 +421,6 @@ export function useEditorPictures(
     },
     [door, keep, settled, queryClient],
   );
-  // Note that the doors handed the editor once read the newest of these as they run.
   const beginning = useRef(begin);
   beginning.current = begin;
   const pictures = useRef<DescriptionEditorPictures | undefined>(undefined);

@@ -24,13 +24,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { HostsSection } from "./hosts-section.js";
 
-/**
- * hosts-section.test.ts -- Settings › Hosts, drawn from the hosts the host
- * holds: Add a host shows the public install command and names each host
- * that joins while the page stands, a host updating says so, and This Mac
- * stands first. Synthetic ids, codes, and addresses.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -46,28 +39,19 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the sections let go of the shared presence on a registry as they unmount, so they unmount before it goes.
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.replaceChildren();
 });
 
 const SCRIPT = "https://app.test/install.sh";
 
-/** Lets the window's document, the list's read, and a press's acts land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
-  // Note that the account the list is read under reaches the page on Query's timing, which no count of ticks keeps up with.
   await vi.waitFor(() => assert.equal(pageText().includes("Reading your hosts"), false));
 }
 
-/**
- * Hosts drawn signed in, on a registry of the test's own, so the window's
- * shared presence is read afresh rather than standing as an earlier test
- * left it, the host answering the window's acts as `procedures` say and
- * holding its holds quietly, as it does while their reads are laid.
- */
 function drawHosts(procedures: Partial<FakeActPort> = {}): void {
   fakeActPort(procedures);
   const registry = AtomRegistry.make();
@@ -79,13 +63,6 @@ function drawHosts(procedures: Partial<FakeActPort> = {}): void {
   act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
 }
 
-/**
- * Lays the account's hosts as `hostsOf` names them, as the host holds them,
- * under the account the window's document names, over whatever the window
- * was handed; answers with how they are laid anew as they move, as the host
- * lays them, under another account where one is named, as a sign-in to it
- * lays them.
- */
 function holdHosts(hostsOf: () => readonly HostLine[]): (signedInAs?: string) => void {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listening = fakeAppBridgeCalls().onAppState;
@@ -138,7 +115,6 @@ function holdHosts(hostsOf: () => readonly HostLine[]): (signedInAs?: string) =>
   };
 }
 
-/** The page's words. */
 function pageText(): string {
   return document.body.textContent ?? "";
 }
@@ -160,7 +136,6 @@ test("a host that joins while the page stands is said to be connected, and reads
   const lay = holdHosts(() => [...hosts]);
   drawHosts();
   await settle();
-  // Note that the page stands on the account's first list, read once it reaches the hosts' query, before a host joins.
   await vi.waitFor(() => assert.ok(pageText().includes(`curl -fsSL ${SCRIPT} | sh`)));
 
   hosts.push({ id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "hel-02" });
@@ -186,7 +161,6 @@ test("a sign-in to another account names none of its hosts as just connected", a
   );
 });
 
-/** A host's Remove, chosen in the ⋯ of the row that names it. */
 function removeOf(name: string): void {
   const row =
     [...document.querySelectorAll<HTMLElement>(".ui-settings-row")].find(
@@ -203,7 +177,6 @@ function removeOf(name: string): void {
   act(() => item.click());
 }
 
-/** The button whose words are these, pressed. */
 async function press(words: string): Promise<void> {
   const button = [...document.querySelectorAll("button")].find(
     (each) => each.textContent === words,
@@ -213,7 +186,6 @@ async function press(words: string): Promise<void> {
   await settle();
 }
 
-/** Hosts drawn in the desktop over the hosts given, This Mac held as given, and the beats given. */
 async function machinesWithThisMac(
   hosts: readonly HostLine[],
   thisMac: AppThisMacHost,
@@ -222,7 +194,6 @@ async function machinesWithThisMac(
 ): Promise<void> {
   handBeats(Object.fromEntries(beats.map((beat) => [beat.deviceId, beat.ageMs])));
   holdHosts(() => hosts);
-  // This Mac is laid as the host holds it, under the account the beats are held for.
   const handed = fakeAppBridgeCalls().requestAppState;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -238,10 +209,8 @@ async function machinesWithThisMac(
   await settle();
 }
 
-/** A machine id as a host reports it. */
 const MACHINE_ID = "a".repeat(64);
 
-/** A server, and a Mac on the machine This Mac is, as the service lists them. */
 const SERVER_AND_THIS_MAC: readonly HostLine[] = [
   { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" },
   {
@@ -252,7 +221,6 @@ const SERVER_AND_THIS_MAC: readonly HostLine[] = [
   },
 ];
 
-/** This Mac's switch, Run agents on this Mac. */
 function thisMacSwitch(): HTMLElement {
   const found = document.querySelector<HTMLElement>('[aria-label="Run agents on this Mac"]');
   assert.ok(found !== null, "This Mac's switch is drawn");
@@ -315,7 +283,6 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
   handBeats({});
   const lay = holdHosts(() => hosts);
   drawHosts({
-    // The host draws the removal gone at once, and puts the host back once the service refuses it.
     [ACT_KIND.HOSTS_REMOVE]: async () => {
       hosts = [kept];
       lay();
@@ -368,12 +335,10 @@ test("This Mac's switch turns it on at once, and off only once the question is a
   await settle();
   assert.deepEqual(sent, [{ on: true }]);
 
-  // Note that the switch reads the host's record, so it is laid as turned on before it is turned off.
   document.body.replaceChildren();
   await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true }, [], {
     [ACT_KIND.HOSTS_THIS_MAC_SET]: answered,
   });
-  // Note that one client holds both worlds, so the switch is pressed once this world's record has replaced the last one's.
   await vi.waitFor(() => assert.equal(thisMacSwitch().getAttribute("aria-checked"), "true"));
   await act(async () => thisMacSwitch().click());
   await settle();

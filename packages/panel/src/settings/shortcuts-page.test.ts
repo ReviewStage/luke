@@ -9,16 +9,8 @@ import { afterEach, beforeEach, test } from "vitest";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 
-/**
- * Settings › Keyboard shortcuts as the page draws it: its Writing group, each
- * mark and block the editors answer, with the Markdown typed for it and its
- * chord, and the rules no chord reaches among them; Escape named once; and
- * the keys that answer in place, each in the group of what it acts on.
- */
-
 const roots: Root[] = [];
 
-/** What puts back the command key a test installed. */
 let restoreCommandKey: (() => void) | undefined;
 
 beforeEach(() => {
@@ -34,7 +26,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Each row of one of the page's groups, as its words read: its name, then its Markdown and its chord's glyphs. */
 function groupRows(title: string, capabilities = DESKTOP_CAPABILITIES): string[] {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -54,7 +45,6 @@ function groupRows(title: string, capabilities = DESKTOP_CAPABILITIES): string[]
   );
 }
 
-/** Each row of the page's Writing group. */
 function writingRows(): string[] {
   return groupRows("Writing");
 }
@@ -72,7 +62,6 @@ test("Writing lists each mark and block with the Markdown typed for it and its c
 
 test("the window's Escape is one row, under General, however many layers it steps back from", () => {
   const general = groupRows("General");
-  // Note that Files changed's own Escape, which lets go of the file stood on, is the view's to list, as its sheet does.
   const escapes = [...document.querySelectorAll("section")]
     .filter((section) => section.querySelector("h2")?.textContent !== "Files changed")
     .flatMap((section) => [...section.querySelectorAll(".ui-shortcut")])

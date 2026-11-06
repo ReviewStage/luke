@@ -18,34 +18,10 @@ import { useOpenFeedback } from "../open-feedback.js";
 import { actionRefused, refusalToast, rowWrite } from "./row-write.js";
 import { SwitchRow } from "./switch-row.js";
 
-/**
- * experimental-page.tsx -- Settings › Experimental: a switch for each feature the account can try before it is finished, or the empty state between them.
- *
- * The page says nothing of its own above the rows (Dean, 2026-10-14): its
- * title and each row's one line are the whole of it. A row's switch writes
- * the account's choice on the service at once, as every Settings switch
- * writes, so the feature appears or goes on every Mac the account opens; a
- * write the service refused puts the switch back and is said in a toast. Each
- * row's Send feedback opens the window's feedback dialog about that
- * experiment. With none standing, the page keeps its place and draws the
- * empty state the empty Inbox draws, so a link or a search result that lands
- * here never lands on nothing.
- *
- * Each experiment is a card of its own, holding its switch. The card wears
- * no title, since its switch already names the experiment.
- *
- * Each card is `@repo/ui`'s `SettingsSection` and the signed-out note its
- * caption `Text`; Send feedback stays a press among the row's detail words,
- * drawn as the links beside such words are.
- */
-
-/** What the empty page says. */
 const NO_EXPERIMENTS_LINE = "No experiments.";
 
-/** Why a signed-out page holds no switches: experiments are an account's. */
 const SIGN_IN_NOTE = SIGNED_OUT_WORDS;
 
-/** One experiment's row: its switch, what turning it on brings, and the way to say how it went. */
 function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): React.JSX.Element {
   const mutation = useMutation({
     ...actMutation(ACT_KIND.EXPERIMENT_SET),
@@ -75,15 +51,12 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
   );
 }
 
-/** The page: each experiment's card, or the empty state while none stands; a note while signed out. */
 export function ExperimentalPage({
   entries,
   experiments,
   signedIn,
 }: {
-  /** The experiments standing, newest first: `EXPERIMENTS`, as the registry lists them. */
   entries: readonly ExperimentEntry[];
-  /** The account's choices, as the settings carry them. */
   experiments: ExperimentChoices;
   signedIn: boolean;
 }): React.JSX.Element {

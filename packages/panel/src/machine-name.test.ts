@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { it } from "vitest";
 import { type ListedMachine, machineName, type ThisMac } from "./machine-name.js";
 
-/**
- * machine-name.test.ts -- every list of machines calls the one the desktop runs on This Mac, by its machine id or its host's record, tells two machines of one name apart by their models, and in a browser tab, which has none, calls each by its name.
- * Synthetic ids.
- */
-
 const HERE = "a".repeat(64);
 
 const STUDIO: ListedMachine = {
@@ -16,7 +11,6 @@ const STUDIO: ListedMachine = {
   model: "Mac Studio (M2 Max, 2023)",
 };
 
-/** A Mac of the same name on another machine. */
 const OTHER_STUDIO: ListedMachine = {
   deviceId: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
   name: "Studio",
@@ -24,7 +18,6 @@ const OTHER_STUDIO: ListedMachine = {
   model: "Mac mini (M2, 2023)",
 };
 
-/** The device of a Mac whose host reported no machine yet, which This Mac's host's record names. */
 const RECORDED = "2d4f6a8c-0e1b-4c3d-9e5f-7a9b1c3d5e60";
 
 const UNREPORTED: ListedMachine = { deviceId: RECORDED, name: "Air" };

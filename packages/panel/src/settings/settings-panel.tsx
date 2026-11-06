@@ -34,39 +34,19 @@ import { UpdatesSection } from "./updates.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 import { useSettingsWrites } from "./writes.js";
 
-/**
- * The settings tab, as the grouped controls that draw it. A preference write
- * or a shortcut lives on its own bundle so a leaf can change without the
- * panel, the body, or the app's settings object growing a new field.
- */
 export interface SettingsPanelProps {
   account: AccountSnapshot;
   onSignOut: () => Promise<void>;
-  /**
-   * Asks the service to erase the account, resolving to why when it refuses —
-   * the row keeps drawing the account it still has, with the answer under it.
-   */
-  /**
-   * Which settings page is showing. Held by the app rather than here because
-   * a shortcut or a button elsewhere in the window turns it.
-   */
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   microphone: MicrophoneControl;
   notifications: NotificationsControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  /** What the platform offers, which decides the pages and rows of its features that stand. */
   capabilities: readonly HostCapability[];
-  /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
 }
 
-/**
- * The page the Settings sidebar has chosen, as the groups that draw it. Every
- * option has one home: a page draws only its own groups, and the sidebar is
- * the one list of pages, so no page repeats another's rows.
- */
 export function SettingsPanel({
   account,
   onSignOut,
@@ -79,15 +59,11 @@ export function SettingsPanel({
   capabilities,
   integrationsFilter,
 }: SettingsPanelProps & {
-  /** The Integrations page's own search, its query held by Settings so Settings' search can hand one down. */
   integrationsFilter?: IntegrationsFilter | undefined;
 }): React.JSX.Element {
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, account, capabilities });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  // The shared settings page frames these, spacing them as sections. Note
-  // that every page's words show in a screen recording, because they are
-  // the app's own, but for a person's, which each page masks where it draws them.
   return (
     <ReplayUnmask>
       {view === SETTINGS_VIEW.ACCOUNT ? (
@@ -166,7 +142,6 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
         <>
           <MacCommandsSection view={panelView} writes={writes} notifications={notifications} />
-          {/* Dictation's microphone, on a platform whose microphone the app asks for itself. */}
           {capabilities.includes(HOST_CAPABILITY.MICROPHONE) ? (
             <MicrophoneSection view={panelView} writes={writes} microphone={microphone} />
           ) : null}

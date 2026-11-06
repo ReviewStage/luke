@@ -11,14 +11,6 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
-/**
- * A workspace's tile as the developer meets it: the photo an owner or admin
- * uploaded, as the host holds it at the version the list names; the owner's
- * sign-in picture on a personal workspace with no photo; and the letter
- * where there is neither, while the photo loads, and where an image fails
- * to load. Synthetic workspaces and addresses throughout.
- */
-
 const PHOTO_URL = "data:image/png;base64,iVBORw0KGgo=";
 const PICTURE_URL = "https://avatars.githubusercontent.com/u/1";
 
@@ -29,14 +21,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the window's document, and the redraw it causes, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The tile for the workspace given, as a row draws it, the host holding the photos given. */
 function mount(
   workspace: {
     id: string;
@@ -57,20 +47,16 @@ function mount(
   return container;
 }
 
-/** What a tile shows: the address of an image once it has loaded, the letter it draws, and whether it is filled with its hue. */
 interface Face {
   readonly picture: string | undefined;
   readonly letter: string;
   readonly hue: boolean;
 }
 
-/** The letter tile: the letter given on the workspace's hue, and no picture. */
 const letterTile = (letter: string): Face => ({ picture: undefined, letter, hue: true });
 
-/** A picture alone, with no letter or hue under it for a transparent photo to show through. */
 const pictureTile = (picture: string): Face => ({ picture, letter: "", hue: false });
 
-/** What the tile shows. */
 function drawn(container: HTMLElement): Face {
   const tile = container.querySelector(".ui-avatar[data-shape='tile']");
   const image = container.querySelector('img[data-loaded="true"]');
@@ -81,7 +67,6 @@ function drawn(container: HTMLElement): Face {
   };
 }
 
-/** The tile's image finishes loading, as the browser says it has. */
 function load(container: HTMLElement): void {
   act(() => container.querySelector("img")?.dispatchEvent(new Event("load")));
 }
@@ -95,7 +80,6 @@ test("a workspace with a photo draws its letter while it loads, then the photo t
 
   assert.deepEqual(drawn(tile), letterTile("A"));
   await settle();
-  // Note that the photo is offered once the host's read of it reaches its query.
   await vi.waitFor(() => assert.equal(tile.querySelector("img") !== null, true));
   const read = drawn(tile);
   load(tile);

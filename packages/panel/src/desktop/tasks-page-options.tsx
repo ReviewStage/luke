@@ -96,53 +96,20 @@ import { actionSearchPanel } from "./action-search-menu.js";
 import { type MenuAsk, useAskedMenu } from "./phone-head.js";
 import type { ChosenTasksStore } from "./tasks-selection.js";
 
-/**
- * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
- *
- * Filter drops a submenu for each field a task can be narrowed by, Status,
- * Priority, Assignee and Creator in a shared workspace, Made by, and
- * Repository, each value led by its mark, a repository by its owner's
- * picture as the List's rows lead it, and checked while the filter keeps it;
- * a value toggles where it
- * stands and leaves the menu open, so several are chosen in one visit, as
- * Linear's and Stage's filters are. While the filter keeps anything the
- * button wears the sidebar's dot, and a chip under the toolbar says each
- * field's values, its × lifting the field, beside a Clear that lifts them
- * all, so a filtered page never passes for the whole of it.
- *
- * View options is the Inbox's and the sidebar's sliders: Group by and Order
- * by, each a submenu with its choice checked, the Board offered only the
- * groupings a dragged card can be sent, and by a person only in a shared
- * workspace; then the switches, the pins and
- * sections leading the List, and empty groups; Show completed, which of the
- * Done and Canceled tasks stand by when each was finished; then the
- * properties a row or a card draws; and Reset view while the view is not the
- * one it started as. A settled group the window leaves older tasks out of
- * ends on a muted "+ N older" line, which shows them all.
- */
-
-/** What both views are handed: the page's toolbar, its filter line's chips, and the filter and the view's display. */
 export interface TasksViewFrame {
   readonly toolbar: ReactNode;
-  /** The filter's chips, for the page's filter line; null while it keeps nothing. */
   readonly chips: ReactNode;
   readonly filter: TasksFilter;
   readonly display: TasksDisplay;
-  /** Changes the view's display, as the line under a settled group does. */
   readonly onDisplay: (display: TasksDisplay) => void;
-  /** Where the view's chosen tasks are held across the page's visits; the view's own while nothing outlives it. */
   readonly chosen?: ChosenTasksStore | undefined;
-  /** What each run of the view's rows measured, by the run's key, held across the page's visits; none while nothing outlives the view. */
   readonly measured?: Map<string, VirtualRowMeasurements> | undefined;
-  /** Where the column a narrow room's Columns view shows is held across the page's visits; the view's own otherwise. */
   readonly column?: Store<string | undefined> | undefined;
 }
 
-/** What the buttons are called, on their tooltips and their menus alike. */
 export const FILTER = "Filter";
 export const VIEW_OPTIONS = "View options";
 
-/** What each field is called, on its submenu and its chip. */
 const FIELD_WORDS = {
   [TASKS_FILTER_FIELD.STATUS]: "Status",
   [TASKS_FILTER_FIELD.PRIORITY]: "Priority",
@@ -152,7 +119,6 @@ const FIELD_WORDS = {
   [TASKS_FILTER_FIELD.REPOSITORY]: "Repository",
 } as const satisfies Record<TasksFilterField, string>;
 
-/** Each field's glyph, on its submenu and its chip. */
 const FIELD_ICON = {
   [TASKS_FILTER_FIELD.STATUS]: <GLYPH.STATUS />,
   [TASKS_FILTER_FIELD.PRIORITY]: <SignalHighIcon />,
@@ -162,7 +128,6 @@ const FIELD_ICON = {
   [TASKS_FILTER_FIELD.REPOSITORY]: <GLYPH.REPOSITORY />,
 } as const satisfies Record<TasksFilterField, React.JSX.Element>;
 
-/** What each completed window is called, in the order the menu lists them. */
 const COMPLETED_WORDS = {
   [COMPLETED_WINDOW.NONE]: "None",
   [COMPLETED_WINDOW.PAST_WEEK]: "Past week",
@@ -170,12 +135,6 @@ const COMPLETED_WORDS = {
   [COMPLETED_WINDOW.ALL]: "All",
 } as const satisfies Record<CompletedWindow, string>;
 
-/**
- * What each maker is called in Made by, and the mark it wears there: a
- * person's glyph, a coding agent's square on no harness, and the app's face.
- * Note that an agent an automation's run started makes its tasks as an
- * agent, which the task names by the automation, so Agents says both.
- */
 const MAKER_WORDS = {
   [TASK_MAKER.PERSON]: "People",
   [TASK_MAKER.AGENT]: "Agents and automations",
@@ -192,7 +151,6 @@ const MAKER_ACTOR = {
   [TASK_MAKER.APP]: APP_ACTOR,
 } as const satisfies Record<Exclude<TaskMaker, typeof TASK_MAKER.PERSON>, Actor>;
 
-/** What a grouping is called. */
 const GROUPING_WORDS = {
   [TASKS_GROUPING.STATUS]: "Status",
   [TASKS_GROUPING.PRIORITY]: "Priority",
@@ -211,7 +169,6 @@ const GROUPING_ICON = {
   [TASKS_GROUPING.NONE]: <ListIcon />,
 } as const satisfies Record<TasksGrouping, React.JSX.Element>;
 
-/** What an order is called. */
 const ORDER_WORDS = {
   [TASKS_ORDER.PRIORITY]: "Priority",
   [TASKS_ORDER.UPDATED]: "Last updated",
@@ -226,7 +183,6 @@ const ORDER_ICON = {
   [TASKS_ORDER.NAME]: <ArrowDownAZIcon />,
 } as const satisfies Record<TasksOrder, React.JSX.Element>;
 
-/** What a property is called in the menu. */
 const PROPERTY_WORDS = {
   [TASK_PROPERTY.PRIORITY]: "Priority",
   [TASK_PROPERTY.KEY]: "ID",
@@ -239,27 +195,19 @@ const PROPERTY_WORDS = {
   [TASK_PROPERTY.UPDATED]: "Last updated",
 } as const satisfies Record<TaskProperty, string>;
 
-/** What the List calls a task nobody is named for. */
 export const NO_CREATOR = "No one";
 
-/** How many values a chip names before it counts the rest. */
 const CHIP_VALUES = 2;
 
-/** One value a field may keep: its words, its mark, and the value itself; a repository's owner or a person's detail, and a person's menu name and card, besides. */
 interface FieldValue {
   readonly value: string | null;
-  /** What the chip says of it, the reader as You. */
   readonly words: string;
-  /** What the menu names it where that is not its words: the reader by their name, whose detail says You. */
   readonly label?: string;
   readonly icon: React.JSX.Element;
-  /** Muted words beside the name in the menu, a repository's owner or a person's email or You; the chip names the value without them. */
   readonly detail?: string | undefined;
-  /** The card a person's or a repository's row hangs. */
   readonly card?: React.ReactNode;
 }
 
-/** Who a creator is, as the directory draws them, else as a listed task names them. */
 function creatorFor(
   creatorId: string,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -271,7 +219,6 @@ function creatorFor(
   return creatorActor(named ?? { ownerId: creatorId }, reader, undefined);
 }
 
-/** A creator's name as the page says it: the directory's, else the one a task carries; the reader's own as You. */
 export function creatorWords(
   creatorId: string | null,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -280,7 +227,6 @@ export function creatorWords(
   return creatorId === null ? NO_CREATOR : actorName(creatorFor(creatorId, reader, tasks));
 }
 
-/** Who an assignee is, as the directory draws them, else by the name a listed task assigned to them carries. */
 export function assigneeFor(
   assigneeId: string,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -297,7 +243,6 @@ export function assigneeFor(
   );
 }
 
-/** An assignee's name as the page says it, the reader's own as You; No assignee for the tasks with none. */
 export function assigneeWords(
   assigneeId: string | null,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -308,11 +253,6 @@ export function assigneeWords(
     : actorName(assigneeFor(assigneeId, reader, tasks));
 }
 
-/**
- * The people a person's field offers: the members as every people menu lists
- * them (`memberRows`), then anyone else a task or the filter names, drawn
- * as `actorOf` reads them, each hanging their card.
- */
 function peopleValues(
   held: ReadonlySet<string | null>,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -347,13 +287,6 @@ function peopleValues(
   ];
 }
 
-/**
- * The values a field offers: every status and priority, in their order; for
- * an assignee or a creator, the reader, then each member, then anyone else a
- * task names, and nobody where a task names no one; and each repository a task
- * is on, by name, led by its owner's picture, then none. A value the filter
- * keeps is offered though no task holds it now.
- */
 function fieldValues(
   field: TasksFilterField,
   tasks: readonly TaskSummary[],
@@ -417,7 +350,6 @@ function fieldValues(
           )
           .map((repository) => ({
             value: repository,
-            // Note that the chip says `owner/name` where two kept repositories share a name, as a header would; the menu's row names it apart by its owner.
             words: repositoryLabel(
               repository,
               [...held].map((each) => ({ repository: each })),
@@ -433,38 +365,31 @@ function fieldValues(
   }
 }
 
-/** What a searched field's field asks for: a person's, or a repository's. */
 const SEARCH_MEMBERS = "Search members";
 const SEARCH_REPOSITORIES = "Search repositories";
 
-/** The fields that name a person, which a workspace nobody shares has no use for. */
 const PERSON_FIELDS: readonly TasksFilterField[] = [
   TASKS_FILTER_FIELD.ASSIGNEE,
   TASKS_FILTER_FIELD.CREATOR,
 ];
 
-/** The groupings by a person, offered on the same terms. */
 const PERSON_GROUPINGS: readonly TasksGrouping[] = [
   TASKS_GROUPING.ASSIGNEE,
   TASKS_GROUPING.CREATOR,
 ];
 
-/** Whether a field's values name a person or a repository, which a screen recording keeps masked. */
 function namesData(field: TasksFilterField): boolean {
   return PERSON_FIELDS.includes(field) || field === TASKS_FILTER_FIELD.REPOSITORY;
 }
 
-/** The fields the Filter offers: Assignee and Creator only where the workspace is shared. */
 function offeredFields(shared: boolean): readonly TasksFilterField[] {
   return Object.values(TASKS_FILTER_FIELD).filter(
     (field) => shared || !PERSON_FIELDS.includes(field),
   );
 }
 
-/** What the Filter says of itself while it keeps anything. */
 export const FILTERED = "Filtered";
 
-/** The filter's menu: a submenu for each field, its values toggled where they stand, and Clear filters at its foot. */
 function filterEntries(
   tasks: readonly TaskSummary[],
   filter: TasksFilter,
@@ -478,10 +403,8 @@ function filterEntries(
     const head = { label: FIELD_WORDS[field], icon: FIELD_ICON[field] };
     const values = fieldValues(field, tasks, filter, reader, pictures).map(
       ({ value, words, label, icon, detail, card }): MenuAction => ({
-        // Note that a value is keyed by itself, because two repositories, or two people, may be named alike.
         key: value ?? undefined,
         label: label ?? words,
-        // Note that a person's face draws their letter, so it is masked with their name; none, No assignee or No one, is the app's own.
         icon:
           PERSON_FIELDS.includes(field) && value !== null ? <ReplayMask>{icon}</ReplayMask> : icon,
         ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),
@@ -492,7 +415,6 @@ function filterEntries(
         onSelect: () => onFilter(toggledFilter(filter, field, value)),
       }),
     );
-    // Note that a field naming people or repositories may run to hundreds of values, so it is searched in a panel that draws only those near its view.
     if (namesData(field)) {
       const person = PERSON_FIELDS.includes(field);
       return actionSearchPanel(head, {
@@ -500,7 +422,6 @@ function filterEntries(
         placeholder: person ? SEARCH_MEMBERS : SEARCH_REPOSITORIES,
         noMatch: noMatchWords(person ? TERM.MEMBER : TERM.REPOSITORY),
         actions: values,
-        // Note that the members are read for the people's fields alone, so no other field says it is reading or could not be read.
         note: person ? memberReadNote(reader) : undefined,
         replayUnmasked: true,
       });
@@ -520,7 +441,6 @@ function filterEntries(
   ];
 }
 
-/** The toolbar's Filter: its button, which wears a dot while the filter keeps anything, and the menu it drops. */
 export function TasksFilterButton({
   shown,
   tasks,
@@ -530,17 +450,12 @@ export function TasksFilterButton({
   asked,
   pictures,
 }: {
-  /** Whether the page is on screen, for the menu not to outlive it. */
   shown: boolean;
-  /** The workspace's tasks, whose creators and repositories the menu offers. */
   tasks: readonly TaskSummary[];
   filter: TasksFilter;
   onFilter: (filter: TasksFilter) => void;
-  /** Whether the workspace is shared, which alone filters by assignee or creator. */
   shared: boolean;
-  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
   asked?: { readonly ask: MenuAsk | undefined } | undefined;
-  /** Whether repositories' owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -574,14 +489,12 @@ export function TasksFilterButton({
   );
 }
 
-/** One value a field's chip names, and whether it names a person or a repository, which a screen recording keeps masked. */
 interface ChipValue {
   readonly value: string | null;
   readonly words: string;
   readonly masked: boolean;
 }
 
-/** What a field's chip says of its values: up to two by name, a person or a repository masked, the rest counted. */
 function ChipValues({ values }: { values: readonly ChipValue[] }): React.JSX.Element {
   const more = values.length - CHIP_VALUES;
   return (
@@ -597,17 +510,14 @@ function ChipValues({ values }: { values: readonly ChipValue[] }): React.JSX.Ele
   );
 }
 
-/** What the filter line's last place holds, after a chip for each field: its Clear. */
 const FILTER_LINE = {
   CLEAR: "clear",
 } as const;
 
-/** One place on the filter line: a field's chip, with its words as last drawn, or the Clear after them. */
 type FilterLineEntry =
   | { readonly key: TasksFilterField; readonly values: readonly ChipValue[] }
   | { readonly key: typeof FILTER_LINE.CLEAR };
 
-/** The filter line's places: a chip for each field filtered, its values named in the menu's order, whatever order they were chosen in, and Clear after them; none while nothing is filtered. */
 function filterLineEntries(
   tasks: readonly TaskSummary[],
   filter: TasksFilter,
@@ -622,7 +532,6 @@ function filterLineEntries(
       .map((each) => ({
         value: each.value,
         words: each.words,
-        // Note that a field's none, No assignee or No repository, is the app's own words.
         masked: namesData(field) && each.value !== null,
       }));
     return { key: field, values };
@@ -630,14 +539,8 @@ function filterLineEntries(
   return [...chips, { key: FILTER_LINE.CLEAR }];
 }
 
-/** What a press on a leaving chip or Clear does, out of reach as it is: nothing. */
 function stays(): void {}
 
-/**
- * The filter line's chips and Clear. Note that it is its own component
- * under the line's `ListMotion`, because `useLeaving` finds the motion
- * through the context the motion provides.
- */
 function FilterLine({
   line,
   tasks,
@@ -650,7 +553,6 @@ function FilterLine({
   onFilter: (filter: TasksFilter) => void;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
-  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
   const listed = useMemo(() => filterLineEntries(tasks, filter, reader), [tasks, filter, reader]);
   const drawn = useLeaving(listed, (entry) => entry.key);
   return (
@@ -685,13 +587,6 @@ function FilterLine({
   );
 }
 
-/**
- * The chips on the page's filter line, a field a chip, its values named,
- * its × lifting it, and Clear lifting them all. The line stands, hidden,
- * while the filter keeps nothing, so a field's chip scales in as it is
- * filtered and out as it is lifted, the last one too, under the line's
- * `ListMotion`; Clear comes and goes with the first chip and the last.
- */
 export function TasksFilterChips({
   tasks,
   filter,
@@ -709,7 +604,6 @@ export function TasksFilterChips({
   );
 }
 
-/** Whether a grouping draws a group for each of a fixed set of values, the workspace's members among them, which alone may stand empty. */
 function groupsFixed(grouping: TasksGrouping): boolean {
   return (
     grouping === TASKS_GROUPING.STATUS ||
@@ -718,7 +612,6 @@ function groupsFixed(grouping: TasksGrouping): boolean {
   );
 }
 
-/** Whether two displays lay the tasks out alike. */
 function sameDisplay(a: TasksDisplay, b: TasksDisplay): boolean {
   return (
     a.grouping === b.grouping &&
@@ -731,7 +624,6 @@ function sameDisplay(a: TasksDisplay, b: TasksDisplay): boolean {
   );
 }
 
-/** The view's menu for the List or the Board: Group by and Order by, the switches, the properties, and Reset view. */
 function displayEntries({
   board,
   display,
@@ -747,7 +639,6 @@ function displayEntries({
 }): MenuEntry[][] {
   const set = (change: Partial<TasksDisplay>) => onDisplay({ ...display, ...change });
   const grouping = board ? boardGrouping(display.grouping) : display.grouping;
-  // Note that a grouping by a person kept for a workspace nobody shares now stays offered while it is chosen, so it can be chosen away.
   const groupings = (board ? BOARD_GROUPINGS : Object.values(TASKS_GROUPING)).filter(
     (each) => shared || !PERSON_GROUPINGS.includes(each) || grouping === each,
   );
@@ -835,7 +726,6 @@ function displayEntries({
   ];
 }
 
-/** The toolbar's View options: its button and the menu it drops, for the view shown. */
 export function TasksViewOptions({
   shown,
   board,
@@ -846,15 +736,11 @@ export function TasksViewOptions({
   asked,
 }: {
   shown: boolean;
-  /** Whether the view is the Board, which offers only what its columns and cards can draw. */
   board: boolean;
   display: TasksDisplay;
-  /** The view as it started, which Reset view goes back to. */
   initial: TasksDisplay;
   onDisplay: (display: TasksDisplay) => void;
-  /** Whether the workspace is shared, which alone groups by assignee or creator. */
   shared: boolean;
-  /** Where a phone's ⋯ stands for the button, as the Filter's (`TasksFilterButton`); none elsewhere. */
   asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -881,7 +767,6 @@ export function TasksViewOptions({
   );
 }
 
-/** The foot of a settled group the completed window leaves older tasks out of, which shows them all; nothing where it leaves none. */
 export function OlderCompleted({
   older,
   onShow,

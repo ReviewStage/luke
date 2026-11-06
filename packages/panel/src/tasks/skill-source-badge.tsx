@@ -1,26 +1,12 @@
 import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@repo/features/task-wire";
 import { Badge, STATUS_TONE } from "@repo/ui";
 
-/**
- * skill-source-badge.tsx -- the short word saying where a skill the `/` list offers comes from: Repository, Workspace, or Only you.
- *
- * A skill is offered from the task's repository or from the skills a member
- * installed into the app, for the whole workspace or for themselves
- * (`task-skills.ts`), and the list and Settings › Skills each say which
- * beside its name, as a skill's card says it under its name, so a member
- * reading `/release-notes` knows whether the repository keeps it or
- * Settings › Skills does. The words are the badge, in the neutral tone, since where a
- * skill comes from is no state of it.
- */
-
-/** The badge's word for each source. */
 const SKILL_SOURCE_WORD = {
   [TASK_SKILL_SOURCE.REPOSITORY]: "Repository",
   [TASK_SKILL_SOURCE.WORKSPACE]: "Workspace",
   [TASK_SKILL_SOURCE.PERSONAL]: "Only you",
 } as const satisfies Record<TaskSkillSource, string>;
 
-/** Where the skill comes from, as a neutral badge. */
 export function SkillSourceBadge({ source }: { source: TaskSkillSource }): React.JSX.Element {
   return <Badge tone={STATUS_TONE.NEUTRAL}>{SKILL_SOURCE_WORD[source]}</Badge>;
 }

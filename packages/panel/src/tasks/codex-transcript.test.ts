@@ -11,17 +11,6 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
-/**
- * codex-transcript.test.ts -- a coding agent on Codex stores its items under
- * Codex's own names, with the shapes `codex-moments.ts` keeps of them, and
- * its tab draws each on the renderer our own tool of that kind draws on:
- * its row's verb and subject, and its input and answer once opened. A call to
- * our own MCP server is stored under our tool's name and its answer as
- * that tool's JSON, and is drawn as our tool always is. The shapes are
- * those P16's recording (`tools/codex-probe/fixtures/hermetic`) carries;
- * synthetic paths and words.
- */
-
 const ESCAPE = String.fromCharCode(27);
 
 const roots: Root[] = [];
@@ -33,7 +22,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One part as the events route stores a Codex item: answered where `output` is given, still running where not. */
 function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRecord {
   return {
     type: `tool-${tool}`,
@@ -44,7 +32,6 @@ function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRe
   };
 }
 
-/** The parts drawn as a turn of the agent's, every target its rows open recorded. */
 function drawn(...parts: WireRecord[]) {
   const message: AgentTranscriptMessage = { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
   const opened: ToolTarget[] = [];
@@ -68,7 +55,6 @@ function drawn(...parts: WireRecord[]) {
   return { container, opened };
 }
 
-/** What a row says on its line, and everything it shows once its fold is opened. */
 function opened(part: WireRecord): { readonly line: string; readonly body: string } {
   const { container } = drawn(part);
   const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
@@ -84,9 +70,7 @@ const CODEX_ITEMS: readonly {
   readonly tool: string;
   readonly input: WireRecord;
   readonly output: WireValue;
-  /** What the row's line says. */
   readonly line: readonly string[];
-  /** What its opened body shows, of its input and its answer. */
   readonly body: readonly string[];
 }[] = [
   {
@@ -179,7 +163,6 @@ test("a file change's update marks the lines Codex's diff changed, a file delete
     [...container.querySelectorAll(`[data-row="${kind}"]`)].map((each) => each.textContent);
   assert.deepEqual(marked("removed"), ["-b;", "-gone;"]);
   assert.deepEqual(marked("added"), ["+c;", "+d;"]);
-  // Note that the lines naming a file or a hunk, and a line that stood, are tinted as neither.
   assert.deepEqual(marked("context"), [
     `*** Update File: ${CHECKOUT}/src/a.ts`,
     `*** Move to: ${CHECKOUT}/src/b.ts`,

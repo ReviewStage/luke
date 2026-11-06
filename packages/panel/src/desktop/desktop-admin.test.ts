@@ -24,17 +24,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { DesktopAdmin } from "./desktop-admin.js";
 
-/**
- * desktop-admin.test.ts -- the app's Admin place stands in the task's place
- * as Automations does: its toolbar is the place's, titled Admin, with Open in
- * browser among its acts, and its sections are a bar under it, the one
- * standing chosen; it draws no way back of its own, and Escape leaves it.
- * Each view reads through the window's host (`admin.read`) rather than a
- * browser client, opens an account on a press rather than an address, is
- * blocked from the screen recording whole, and stands a refusal of the
- * service's gate as the app's own failure rather than a sign-in card.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const ADA: AdminUserListRow = {
@@ -50,7 +39,6 @@ const ADA: AdminUserListRow = {
   favorite: false,
 };
 
-/** A synthetic roster of one account. */
 const ROSTER: AdminUserList = {
   generatedAt: Date.UTC(2026, 9, 14, 12),
   windowDays: 30,
@@ -61,14 +49,12 @@ const ROSTER: AdminUserList = {
   rows: [ADA],
 };
 
-/** An answer as the port carries it: JSON, as the host's act answers cross. */
 function onTheWire(value: AdminReadAnswer): WireBoundaryInput {
   return JSON.parse(JSON.stringify(value)) as WireBoundaryInput;
 }
 
 let root: Root | undefined;
 let sent: SentPortAct[] = [];
-/** What the fake host answers every admin read with. */
 let answer: AdminReadAnswer = { answer: ROSTER };
 
 beforeEach(() => {
@@ -86,12 +72,10 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  // After the window is gone, since a find bar clears its highlights as it goes.
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
-/** The place on `view`, in `room`, every view it was asked to open and every exit written down. */
 async function open(
   view: AdminView,
   options: { room?: ShellRoom } = {},
@@ -114,14 +98,12 @@ async function open(
       ),
     ),
   );
-  // Note that the read lands after the act that drew it, as Query tells its observers on a timer of its own.
   await vi.waitFor(() =>
     expect(page.querySelector('[role="status"][aria-busy="true"]')).toBeNull(),
   );
   return { page, opened, exits };
 }
 
-/** The bar of sections, each option by its name and whether it is the one chosen. */
 function sections(page: HTMLElement): { name: string; chosen: boolean }[] {
   const bar =
     page.querySelector('[role="radiogroup"][aria-label="Admin sections"]') ??
@@ -132,7 +114,6 @@ function sections(page: HTMLElement): { name: string; chosen: boolean }[] {
   }));
 }
 
-/** The section option named `name`. */
 function section(page: HTMLElement, name: string): HTMLElement {
   return (
     [...page.querySelectorAll<HTMLElement>('[role="radio"]')].find(
@@ -191,7 +172,6 @@ test("on a phone a section is headed by Open in browser, the place's name and ra
 });
 
 test("on a phone an account's page has one way back, to the section it stands under, in place of the crumb", async () => {
-  // An account whose read is not answered stands its page and head over the failure.
   answer = { refused: ADMIN_UNANSWERED };
   const { page, opened } = await open({ kind: "account", id: ADA.id }, { room: SHELL_ROOM.NARROW });
 
@@ -254,7 +234,6 @@ test("a refusal of the service's gate stands as the app's failure, offering no s
 });
 
 test("⌘F finds in the view standing, its bar under the view's toolbar, and counts the words it matches", async () => {
-  // jsdom paints no highlights and lays nothing out; the find's are kept as a browser keeps them.
   vi.stubGlobal("CSS", { highlights: new Map() });
   vi.stubGlobal("Highlight", Set);
   Range.prototype.getBoundingClientRect = () => new DOMRect();

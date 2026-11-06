@@ -7,14 +7,6 @@ import { SettingsSection } from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/**
- * How the app looks: its theme and its zoom, in one nameless group, since the
- * page's title already names it; then how code and diffs are drawn, in the
- * groups the schema names (`DIFF_SETTING_GROUPS`): Diff, Lines, and Text, the
- * File tabs' numbers and wrap and every diff setting the Files changed
- * popover offers (`../tasks/view-settings.tsx`), the same stored settings,
- * under the same names and in the same order.
- */
 export function AppearanceSection({
   view,
   writes,

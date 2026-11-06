@@ -1,33 +1,9 @@
-/**
- * nested-rows.ts -- a sidebar list's rows with child tasks nested under their parents, held steady while they stand as they did, and the fold a parent's row draws over them.
- *
- * Every list of the sidebar's tasks, Tasks' groups and the account's
- * sections alike, draws its rows through `drawnTaskRows`, each child task
- * first moved into the list holding its parent (`homedTaskRows`), so it
- * stands under its parent wherever that stands. The rows a list draws are
- * handed to `useLeaving`, which takes a list handed anew as a list changed,
- * so they are handed back as the same list for as long as each row stands
- * where it stood, at the same depth and fold.
- *
- * A list whose rows the reader orders, an account's section, keeps them in
- * an order of its own, which nesting redraws: a child stands under its
- * parent wherever its entry stands. So a move is made among a row's
- * siblings as they are drawn, the rows under the same parent or at the
- * top, and lands its entry beside the sibling's, which is all that orders
- * them; and a row let go at a slot lands before the row at the top drawn
- * after it, never inside another's child tasks. A reader hears each row's
- * level and its place among its siblings (`nestsOf`), since the rows stand
- * flat in one list.
- */
-
 import type { ListRowFold, ListRowNest } from "@repo/ui";
 import { type DrawnTaskRow, drawnTaskRows, TASK_ROW, type TaskRow } from "@repo/ui/task-list-model";
 import { useRef } from "react";
 
-/** The words a parent's fold is named by, before its name. */
 const CHILD_TASKS_OF = "Sub-tasks of";
 
-/** Whether two drawings stand every row alike: the same row, at the same depth, folded the same way. */
 function sameDrawn(was: readonly DrawnTaskRow[], now: readonly DrawnTaskRow[]): boolean {
   return (
     was.length === now.length &&
@@ -43,10 +19,8 @@ function sameDrawn(was: readonly DrawnTaskRow[], now: readonly DrawnTaskRow[]): 
   );
 }
 
-/** A drawn row as a move reads it: how deep it stands. */
 type Depth = Pick<DrawnTaskRow, "depth">;
 
-/** For each drawn row, the index of the row it stands nested under; -1 for a row at the top. */
 function parentsOf(nested: readonly Depth[]): number[] {
   const above: number[] = [];
   return nested.map(({ depth }, at) => {
@@ -57,18 +31,12 @@ function parentsOf(nested: readonly Depth[]): number[] {
   });
 }
 
-/** The drawn rows standing beside the one at `at`, itself among them: those nested under the same parent, or at the top, by their index among the drawn. */
 export function siblingsAt(nested: readonly Depth[], at: number): number[] {
   const parents = parentsOf(nested);
   const parent = parents[at];
   return nested.flatMap((_, each) => (parents[each] === parent ? [each] : []));
 }
 
-/**
- * Each drawn row's place among its siblings, which a reader hears with its
- * level, as a nested list's items are read; none for every row of a list
- * that nests none, which reads as the plain list it is.
- */
 export function nestsOf(nested: readonly Depth[]): (ListRowNest | undefined)[] {
   if (nested.every(({ depth }) => depth === 0)) return nested.map(() => undefined);
   const parents = parentsOf(nested);
@@ -84,13 +52,6 @@ export function nestsOf(nested: readonly Depth[]): (ListRowNest | undefined)[] {
   }));
 }
 
-/**
- * Where a row moved from the slot `from` to the slot `to` among the rows a
- * run draws, rows on their way out (`useLeaving`) among them, lands among
- * the rows still listed: how many of those stand before it once it is
- * moved, a row on its way out counting for none, so a move read against
- * the rows listed (`movedBeside`) goes where it was carried.
- */
 export function listedSlot(
   drawn: readonly { readonly leaving: boolean }[],
   from: number,
@@ -100,12 +61,6 @@ export function listedSlot(
   return before.filter((entry, at) => !entry.leaving && at !== from).length;
 }
 
-/**
- * The drawn row a move of the row at `from` toward the slot `to` lands
- * beside: the sibling whose rows `to` falls among, or, where that is the
- * row's own, the next sibling down; none where the move would carry it out
- * from under its parent, or past its last sibling.
- */
 export function movedBeside(
   nested: readonly Depth[],
   from: number,
@@ -119,7 +74,6 @@ export function movedBeside(
   return beside === own ? undefined : siblings[beside];
 }
 
-/** Where a row let go at the drawn slot `at` lands in `rows`, the order the list keeps: before the row at the top drawn next, or last where none is. */
 export function storedSlot(
   rows: readonly TaskRow[],
   nested: readonly DrawnTaskRow[],
@@ -129,7 +83,6 @@ export function storedSlot(
   return next === undefined ? rows.length : rows.indexOf(next.row);
 }
 
-/** The fold a task's row draws over the child tasks nested under it, asking `onFold` to turn it; none where the list nests none under it. */
 export function childTasksFold(
   drawn: DrawnTaskRow,
   onFold: (taskId: string) => void,
@@ -145,7 +98,6 @@ export function childTasksFold(
   };
 }
 
-/** The rows a list draws (`drawnTaskRows`), the same list across renders while every row stands as it did. */
 export function useNestedRows(
   rows: readonly TaskRow[],
   opened: (taskId: string) => boolean,
@@ -153,7 +105,6 @@ export function useNestedRows(
 ): readonly DrawnTaskRow[] {
   const drawn = drawnTaskRows(rows, opened, standing);
   const held = useRef(drawn);
-  // Note that the ref follows the drawing as it renders, so a list that changed is handed on the same frame.
   if (!sameDrawn(held.current, drawn)) held.current = drawn;
   return held.current;
 }

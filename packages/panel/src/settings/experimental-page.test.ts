@@ -15,16 +15,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ExperimentalPage } from "./experimental-page.js";
 
-/**
- * Settings › Experimental as the panel draws it: a switch per experiment
- * that writes the account's choice, a Send feedback that opens the dialog
- * about that experiment, the empty Inbox's empty state while none stands,
- * and a note while signed out. Nothing of its own above the rows.
- */
-
-/** Each experiment switch the page asked the main process for, as its payload carried it. */
 let sent: unknown[] = [];
-/** Which experiment each Send feedback opened the dialog about. */
 let feedbackAbout: Experiment[] = [];
 const roots: Root[] = [];
 
@@ -78,7 +69,6 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   const memory = page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Memory"]');
   assert.ok(memory, "Memory has a switch");
   assert.equal(memory.getAttribute("aria-checked"), "true");
-  // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
   assert.ok(page.textContent?.startsWith("Task descriptions"));
   assert.deepEqual(
     [...page.querySelectorAll('[role="switch"]')]

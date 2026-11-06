@@ -1,10 +1,3 @@
-/**
- * pending-comments.test.ts -- the member's pending comments are drawn
- * among the review threads, a reply on a published thread in that thread
- * and every other comment as a thread of its own, placed as any thread is,
- * on a line a gap opened over included. Synthetic files only.
- */
-
 import assert from "node:assert/strict";
 import {
   CHANGED_FILE_STATUS,
@@ -16,7 +9,6 @@ import { test } from "vitest";
 import { gapLines, threadsOn } from "./changes-model.js";
 import { pendingThreadsOf } from "./pending-comments.js";
 
-/** A published thread on line 4 of the file. */
 const PUBLISHED: ReviewThread = {
   path: "src/a.ts",
   line: 4,
@@ -33,7 +25,6 @@ const PUBLISHED: ReviewThread = {
   id: "PRRT_published",
 };
 
-/** A pending comment on the file, starting a thread of its own on line 30 unless told otherwise. */
 function draftOf(overrides: Partial<PendingReviewComment>): PendingReviewComment {
   return {
     id: "PRRC_start",
@@ -50,7 +41,6 @@ function draftOf(overrides: Partial<PendingReviewComment>): PendingReviewComment
   };
 }
 
-/** A file of two hunks, new lines 3 to 6 and 41 to 43, a long gap between them. */
 const FILE = {
   path: "src/a.ts",
   previousPath: null,

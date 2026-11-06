@@ -41,31 +41,6 @@ import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js"
 import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
 import { appStateQuery, selectAccount, selectCapability } from "../use-app-state.js";
 
-/**
- * cli-page.tsx -- Settings › CLI, the page named for our command: the `vespin` command's install, to copy and, in the desktop app, run here as VS Code installs `code`, and its sign-in, with Sign out everywhere once it holds one.
- *
- * Install's row holds `npm i -g vespin` in `@repo/ui`'s `CopyField`, as the
- * MCP page's Connect step holds its command; a browser tab shows that alone.
- * Where the client runs the install itself (`HOST_CAPABILITY.CLI_INSTALL`,
- * the desktop app once its build names a release), the row ends in Install,
- * which runs the service's install script in this Mac's account. Once it
- * lands, the row's line says the version installed, or that `~/.local/bin`
- * needs adding to the PATH, and the button becomes Reinstall; an install
- * that did not land says why in the row's failure line, in the script's own
- * words.
- *
- * Sign in reads the command's grant from the clients the account allowed
- * (`LIVE_READ.MCP_CLIENTS`, the MCP page's Connected read, which this page
- * narrows to `vespin-cli` and that page leaves it out of). With none, it shows
- * `vespin login` to copy. With one, its row names the account and when the
- * command was last active, and Sign out everywhere revokes the grant, asking
- * first in the confirm dialog as Connected's Disconnect does: every token the
- * command holds for the account goes, so every computer it is signed in on
- * is signed out, though an access token it already holds keeps working until
- * it expires. A grant revoked while the page shows stays signed out here
- * until the read no longer lists it, unless the command signs in again.
- */
-
 const SECTION_TITLE = {
   INSTALL: "Install",
   SIGN_IN: "Sign in",
@@ -89,7 +64,6 @@ const PAGE_LINE = {
   READ_FAILED: "The command's sign-in could not be read.",
 } as const;
 
-/** The page as it stands while the sign-in is read: Install's row, ending in Install where the client runs it, and Sign in's one row. */
 function pageSkeleton(installs: boolean): readonly SettingsSectionSkeletonShape[] {
   return [
     {
@@ -100,7 +74,6 @@ function pageSkeleton(installs: boolean): readonly SettingsSectionSkeletonShape[
   ];
 }
 
-/** The install row's line once the command is installed: its version, and where the shell will not find it, that its folder needs adding. */
 function InstalledLine({ version, onPath }: { version: string; onPath: boolean }) {
   return onPath ? (
     <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
@@ -113,10 +86,8 @@ function InstalledLine({ version, onPath }: { version: string; onPath: boolean }
   );
 }
 
-/** Install: the npm install to copy, and, where the client runs it, Install and how it went. */
 function InstallSection({ installs }: { installs: boolean }): React.JSX.Element {
   const cliInstall = useMutation(actMutation(ACT_KIND.CLI_INSTALL));
-  // Note that the last answer stays drawn while a new install is out, so it is held here rather than read off the mutation, which forgets it as one starts.
   const [answer, setAnswer] = useState<CliInstallAnswer | undefined>(undefined);
   const install = {
     busy: cliInstall.isPending,
@@ -174,7 +145,6 @@ function InstallSection({ installs }: { installs: boolean }): React.JSX.Element 
   );
 }
 
-/** When the command signed in, and when it was last active, where it has been. */
 function GrantLine({ grant }: { grant: McpClient }): React.JSX.Element {
   return (
     <>
@@ -194,7 +164,6 @@ function GrantLine({ grant }: { grant: McpClient }): React.JSX.Element {
   );
 }
 
-/** The command signed in: the account it is signed in as, when it was last active, and Sign out everywhere. */
 function SignedInRow({
   email,
   grant,
@@ -269,7 +238,6 @@ function SignedInRow({
   );
 }
 
-/** The command not signed in: `vespin login` to copy. */
 function SignInRow(): React.JSX.Element {
   return (
     <SettingsRow
@@ -289,12 +257,10 @@ function SignInRow(): React.JSX.Element {
   );
 }
 
-/** The command's grant among the clients the account allowed, where it holds one. */
 function cliGrant(clients: readonly McpClient[]): McpClient | undefined {
   return clients.find((client) => client.clientId === FIRST_PARTY_OAUTH_CLIENT_ID.CLI);
 }
 
-/** Settings › CLI, for the account signed in: Install, then Sign in as the command's grant stands. */
 export function CliPage(): React.JSX.Element {
   const installs =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.CLI_INSTALL) }).data ===
@@ -304,7 +270,6 @@ export function CliPage(): React.JSX.Element {
   const read = useQuery(mcpClientsQuery(accountId));
   const retry = useMutation(mcpClientsRetryMutation());
   const rows = read.data;
-  // The grant signed out while the page shows, by when it was allowed, which stands signed out until the read drops it or a new sign-in replaces it.
   const [signedOutAt, setSignedOutAt] = useState<number | null | undefined>(undefined);
   if (rows === undefined) {
     return read.isError ? (

@@ -11,19 +11,11 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * transcript-code-card.test.ts -- a fenced block in a transcript or an Inbox
- * item is a code card: its language's name in the header with
- * one Copy, a block of more than 40 lines cut there behind Show all, and
- * Copy copies the whole block however it stands. Synthetic code.
- */
-
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // A fenced block with a language asks main for its colors; refused, it is drawn plain.
   fakeAppBridge({});
 });
 
@@ -32,7 +24,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What the element draws, once whatever it loads has landed. */
 async function drawn(element: ReactElement): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -45,7 +36,6 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** A block of `count` numbered lines. */
 function block(count: number): string {
   return Array.from({ length: count }, (_, at) => `const line${at + 1} = ${at + 1};`).join("\n");
 }
@@ -60,7 +50,6 @@ function buttonNamed(drawing: HTMLElement, name: string): HTMLButtonElement | un
   );
 }
 
-/** The lines the card shows now, less what it holds `hidden` and the newline that closes the last. */
 function shownLines(drawing: HTMLElement): string[] {
   const body = drawing.querySelector(".ui-code-card pre")?.cloneNode(true);
   if (!(body instanceof Element)) return assert.fail("No code card");

@@ -6,17 +6,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useWindowTitle } from "./window-title.js";
 
-/**
- * window-title.test.ts -- the window is called by what it shows: the open
- * task and its workspace, the workspace alone at home, and the product's name while
- * nothing is signed in.
- */
-
 afterEach(() => {
   document.title = "";
 });
 
-/** The document's title once a window showing `input` has drawn. */
 function titleFor(input: Parameters<typeof useWindowTitle>[0]): string {
   function Window() {
     useWindowTitle(input);

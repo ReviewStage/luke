@@ -1,27 +1,3 @@
-/**
- * agent-fixture.ts -- the synthetic coding agent a fixture run's agent profiles open, and the answers its tabs read in place of the service's.
- *
- * The tasks fixture (`tasks-fixture.ts`) draws a task with no agent, since
- * a fixture run reads nothing. Under an agent profile (`RUN_PROFILE.AGENT_*`)
- * the same task holds one agent, finished, whose pull request waits second
- * in its merge queue with its checks passed, an approval, and a bot's review
- * with a thread on a line; the side panel opens on that pull request's
- * overview, its checks, its Files changed, or its Chapters, on a file of its
- * repository, or on its Terminal in one of the states the tab draws. Every
- * person, repository, and line here is invented; nothing is read from an
- * account.
- *
- * Each read the tabs ask is answered here, through the act door
- * (`act.ts`), as main would answer it with the service behind it, but the
- * parts of the pull request the host holds for its tabs, the pull request,
- * its checks, conversation, and what the agent published, the pickers'
- * options, and the viewed marks, which are staged on the document as the
- * host would lay them (`agentAppState`). A Terminal
- * attached is answered as main answers one too: a port posted to the window
- * under the terminal channel, carrying the shell's bytes and the state the
- * profile stages.
- */
-
 import {
   AGENT_CALL_FAILURE,
   type AgentOverviewChecksAnswerView,
@@ -100,19 +76,15 @@ import {
   type StagedSidePanel,
 } from "./use-side-panel.js";
 
-/** The fixture task's repository (`tasks-fixture.ts`), which the agent works in. */
 const REPOSITORY = "ada/relay";
 
-/** The agent's id, its turn's, and its shell's. */
 export const FIXTURE_AGENT_ID = FIXTURE_IDS.AGENT;
 const TURN_ID = "5d9f3b7c-2e4a-4f6b-8c8d-3e5f7a9b1c2d";
 const SHELL_ID = "6e0a4c8d-3f5b-4a7c-9d9e-4f6a8b0c2d3e";
 
-/** When the agent began, and its turn's steps after it, by the service's clock. */
 const STARTED_AT = Date.parse("2026-10-07T16:42:00Z");
 const MINUTE = 60_000;
 
-/** The pull request it opened, from its branch, and the commits its head and base stand at. */
 const PULL_REQUEST = {
   number: 214,
   title: "feat(members): invite a teammate by email",
@@ -123,12 +95,10 @@ const PULL_REQUEST = {
   baseSha: "8b2d4f6a0c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d",
 } as const;
 
-/** The people on the pull request: the developer who started the agent, a teammate who approved it, and a review bot. */
 const ADA: GitHubPerson = { login: "ada", bot: false };
 const GRACE: GitHubPerson = { login: "grace", bot: false };
 const REVIEW_BOT: GitHubPerson = { login: "review-bot[bot]", bot: true };
 
-/** The new file the agent wrote, as its File tab and its diff both read it. */
 const INVITE_LINES: readonly string[] = [
   'import { db } from "../db.js";',
   'import { sendInviteEmail } from "../email/invite.js";',
@@ -162,7 +132,6 @@ const INVITE_TEST_LINES: readonly string[] = [
   "});",
 ];
 
-/** The schema and the removal as the agent left them, which their diffs below end at. */
 const MEMBERSHIPS_LINES: readonly string[] = [
   'import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";',
   "",
@@ -202,7 +171,6 @@ const PACKAGE_LINES: readonly string[] = [
   "}",
 ];
 
-/** Every file of the agent's branch a File tab can read, by path, which its tree lists. */
 const FILES: ReadonlyMap<string, readonly string[]> = new Map([
   ["package.json", PACKAGE_LINES],
   ["src/db/schema/memberships.ts", MEMBERSHIPS_LINES],
@@ -211,12 +179,10 @@ const FILES: ReadonlyMap<string, readonly string[]> = new Map([
   ["src/members/remove.ts", REMOVE_LINES],
 ]);
 
-/** A whole new file's patch, as GitHub writes one. */
 function addedPatch(lines: readonly string[]): string {
   return [`@@ -0,0 +1,${lines.length} @@`, ...lines.map((line) => `+${line}`)].join("\n");
 }
 
-/** A changed file with the counts its patch holds. */
 function changedFile(
   path: string,
   status: AgentChangedFile["status"],
@@ -234,7 +200,6 @@ function changedFile(
   };
 }
 
-/** The pull request's files: the schema's pending state, the invite module and its test, and the removal that now covers invites. */
 const CHANGED_FILES: readonly AgentChangedFile[] = [
   changedFile(
     "src/db/schema/memberships.ts",
@@ -277,7 +242,6 @@ const CHANGED_FILES: readonly AgentChangedFile[] = [
 const ADDITIONS = CHANGED_FILES.reduce((sum, file) => sum + file.additions, 0);
 const DELETIONS = CHANGED_FILES.reduce((sum, file) => sum + file.deletions, 0);
 
-/** The agent as the task's list and its tab hold it. */
 function agentSummary(taskId: string, running = false): AgentSummary {
   return {
     id: FIXTURE_AGENT_ID,
@@ -293,12 +257,10 @@ function agentSummary(taskId: string, running = false): AgentSummary {
   };
 }
 
-/** A tool's call as the transcript stores it, answered. */
 function toolPart(tool: string, callId: string, input: WireRecord, output: WireRecord) {
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
 
-/** The developer's ask that began the agent's one turn. */
 const ASK: AgentTranscriptMessage = {
   id: "fixture-agent-ask",
   role: MESSAGE_ROLE.USER,
@@ -311,7 +273,6 @@ const ASK: AgentTranscriptMessage = {
   sentAt: STARTED_AT,
 };
 
-/** The agent's reads, its edit, its tests, and the pull request it opened, answering the ask. */
 const WORK: AgentTranscriptMessage = {
   id: "fixture-agent-work",
   role: MESSAGE_ROLE.ASSISTANT,
@@ -357,13 +318,11 @@ const WORK: AgentTranscriptMessage = {
   finishedAt: STARTED_AT + 6 * MINUTE,
 };
 
-/** Grace's review of the pull request, which the long transcript's second turn answers. */
 const REVIEW_URL = `${PULL_REQUEST.url}#pullrequestreview-2001`;
 
 const REVIEW_WORDS =
   "The members list shows invited addresses as **members**. Skip a pending membership there and in the access check.";
 
-/** The review's inline comments, more than the card shows before its foot. */
 const REVIEW_COMMENTS = [
   {
     path: "src/members/list.ts",
@@ -391,20 +350,16 @@ const REVIEW_COMMENTS = [
   },
 ];
 
-/** The thread a teammate wrote on, which the long transcript's third turn answers. */
 const THREAD_ITEM_ID = "7a1c3e5b-9d2f-4b6a-8c0e-1f3a5c7e9b2d";
 
 const GRACE_USER_ID = "8b2d4f6a-0c3e-4a5b-9d1f-2a4c6e8b0d3f";
 
-/** The commit whose check failed, which the long transcript's last turn answers. */
 const FAILED_SHA = "c0ffee5a7d3b9e1f2a4c6e8b0d2f4a6c8e0b2d4f";
 
 const FAILED_CHECKS_URL = `https://github.com/${REPOSITORY}/commit/${FAILED_SHA}/checks`;
 
-/** The agent's one turn: the developer's ask, then its work. */
 const MESSAGES: readonly AgentTranscriptMessage[] = [ASK, WORK];
 
-/** One follow-up turn: the developer's ask at `at`, or the line `steered` says carried it, then the agent's work on it, `parts`, done two minutes later. */
 function followUp(input: {
   readonly id: string;
   readonly at: number;
@@ -430,11 +385,6 @@ function followUp(input: {
   ];
 }
 
-/**
- * The agent's turn and the three the developer asked after it, as an agent
- * kept at a pull request reads: more than the window holds, so its
- * transcript scrolls. The newest is the summary's turn.
- */
 const LONG_MESSAGES: readonly AgentTranscriptMessage[] = [
   ASK,
   WORK,
@@ -566,7 +516,6 @@ const LONG_MESSAGES: readonly AgentTranscriptMessage[] = [
   }),
 ];
 
-/** The agent's transcript as the host holds it once read: the whole turn, caught up. */
 const TRANSCRIPT: AppTranscript = {
   messages: MESSAGES,
   cursor: "1:0",
@@ -579,10 +528,8 @@ const TRANSCRIPT: AppTranscript = {
   pages: 1,
 };
 
-/** The agent's transcript with every step the turn took, which runs past the window's height. */
 const LONG_TRANSCRIPT: AppTranscript = { ...TRANSCRIPT, messages: LONG_MESSAGES };
 
-/** A check on the pull request's head, run by GitHub Actions. */
 function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STATE], took: number) {
   const startedAt = STARTED_AT + 7 * MINUTE;
   return {
@@ -595,7 +542,6 @@ function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STAT
   };
 }
 
-/** The review bot's thread on the invite's expiry, answered by the developer. */
 const EXPIRY_THREAD = {
   path: "src/members/invite.ts",
   line: 15,
@@ -626,7 +572,6 @@ const EXPIRY_THREAD = {
   more: 0,
 };
 
-/** What the agent published, as the service answers it. */
 const PUBLISHED: AgentPullRequestAnswerView = {
   repository: REPOSITORY,
   branch: PULL_REQUEST.head,
@@ -643,7 +588,6 @@ const PUBLISHED: AgentPullRequestAnswerView = {
   },
 };
 
-/** The pull request's tab, read by read, as the service answers each. */
 const OVERVIEW_PULL_REQUEST = {
   pullRequest: {
     number: PULL_REQUEST.number,
@@ -753,7 +697,6 @@ const CHANGES = {
   },
 };
 
-/** The pull request's chapters, made for its head: the pending state first, then the invite itself. */
 const CHAPTERS = {
   pullRequest: {
     number: PULL_REQUEST.number,
@@ -819,7 +762,6 @@ const CHAPTERS = {
   },
 };
 
-/** A folder of the agent's branch as a File tab's tree and breadcrumbs read it: what stands in it of the files it holds, its folders first. */
 function treeAt(path: string): readonly TaskTreeEntry[] {
   const prefix = path === "" ? "" : `${path}/`;
   const entries = new Map<string, TaskTreeEntry>();
@@ -836,10 +778,8 @@ function treeAt(path: string): readonly TaskTreeEntry[] {
   );
 }
 
-/** The file the File profile opens, read from the agent's branch. */
 const OPENED_FILE = "src/members/invite.ts";
 
-/** How a profile stages the agent's Terminal: its sandbox stopped or starting, a list it refuses, an attach no port answers, or a port that says how the connection stands. */
 const TERMINAL_STAGE = {
   SANDBOX: "sandbox",
   REFUSED: "refused",
@@ -857,17 +797,14 @@ type TerminalStage =
       readonly code?: number;
     };
 
-/** How long the agent's transcript runs: its one turn as it ran, or that turn with every step it took, which runs past the window's height. */
 const TRANSCRIPT_LENGTH = {
   SHORT: "short",
   LONG: "long",
-  /** An orchestrator's days-long run, still written to (`agent-long-run-fixture.ts`). */
   LONG_RUN: "long-run",
 } as const;
 
 type TranscriptLength = (typeof TRANSCRIPT_LENGTH)[keyof typeof TRANSCRIPT_LENGTH];
 
-/** What one agent profile opens beside the agent: its Pull request tab on a view, with the transcript as long as it says, a file's tab, the page it showed, its Terminal staged one way, or the task's description, whose comments the tasks fixture answers. */
 type AgentStage =
   | { readonly view: PullRequestView; readonly transcript?: TranscriptLength }
   | { readonly file: string }
@@ -913,11 +850,9 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   ],
   [RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE, { terminal: { kind: TERMINAL_STAGE.REFUSED } }],
   [RUN_PROFILE.AGENT_PAGE, { page: FIXTURE_PAGE.id }],
-  // The description's threads are the tasks fixture's to hold (`tasks-fixture.ts`); one of them is this agent's.
   [RUN_PROFILE.TASKS_COMMENTS, { description: true }],
 ]);
 
-/** The shell the agent's sandbox holds. */
 const SHELL = {
   id: SHELL_ID,
   title: "zsh",
@@ -926,7 +861,6 @@ const SHELL = {
   running: false,
 };
 
-/** What the shell printed before the tab attached, as tmux redraws it. */
 const SHELL_SCREEN = [
   "ada@sandbox relay % pnpm test src/members",
   "",
@@ -938,11 +872,6 @@ const SHELL_SCREEN = [
   "ada@sandbox relay % ",
 ].join("\r\n");
 
-/**
- * The end the fixture keeps of the port posted for the shell attached last,
- * held so it is not collected while the tab still reads the other, and
- * closed once the tab detaches or attaches again.
- */
 let heldPort: MessagePort | undefined;
 
 function closeHeldPort(): void {
@@ -950,7 +879,6 @@ function closeHeldPort(): void {
   heldPort = undefined;
 }
 
-/** Posts a shell's port to the window, as main posts one for an attach, saying what the stage says on it. */
 function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STAGE.PORT }>): void {
   closeHeldPort();
   const channel = new MessageChannel();
@@ -970,7 +898,6 @@ function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STA
   );
 }
 
-/** The agent's transcript as the stage says it stands: the long run's at the step it reached, or the one turn, as long as the stage says. */
 function stagedTranscript(stage: AgentStage): AppTranscript {
   if (longRun(stage)) return longRunTranscript();
   return "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG
@@ -978,23 +905,19 @@ function stagedTranscript(stage: AgentStage): AppTranscript {
     : TRANSCRIPT;
 }
 
-/** Whether the profile stages the orchestrator's long run. */
 function longRun(stage: AgentStage): boolean {
   return "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG_RUN;
 }
 
-/** The agent's Terminal stage, where the profile stages one. */
 function terminalStage(stage: AgentStage): TerminalStage | undefined {
   return "terminal" in stage ? stage.terminal : undefined;
 }
 
-/** One kind's answer, from its payload and the profile's stage. */
 type StagedAnswer<Kind extends PortActKind> = (
   payload: PortActPayload<Kind>,
   stage: AgentStage,
 ) => PortActResult<Kind>;
 
-/** Every read the agent's tabs ask through the act door, answered as the service would answer it for this agent; the parts the host holds are staged apart (`STAGED_PARTS`). */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_LIST]: ({ taskId }, stage) => ({
     agents: [agentSummary(taskId, longRun(stage))],
@@ -1045,12 +968,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.TERMINAL_DETACH]: () => closeHeldPort(),
 };
 
-/**
- * The task as an agent profile draws it, from the open task the tasks
- * profiles draw: holding the agent, its row naming the agent and its pull
- * request, and the page it showed, with no call under way and no code
- * shown on one; none under any other profile.
- */
 export function agentTasksView(profile: string, open: TasksView): TasksView | undefined {
   const taskId = open.activeTaskId;
   if (!AGENT_STAGES.has(profile) || taskId === undefined) return undefined;
@@ -1084,7 +1001,6 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
       },
     ],
   };
-  // Note that the agent works where its task does, as the task list carries its row.
   const task = open.tasks.find((each) => each.id === taskId);
   return {
     ...open,
@@ -1095,27 +1011,18 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
   };
 }
 
-/** The fixture agent's tab, one object across draws, as a tab staged must be. */
 const FIXTURE_AGENT_TAB: MainTab = { agent: FIXTURE_AGENT_ID };
 
-/**
- * The tab the task's column opens on under an agent profile: the agent's,
- * or Overview, where the task's description stands, under the profile that stages
- * the description; none under any other profile.
- */
 export function agentColumnTab(profile: string): MainTab | undefined {
   const stage = AGENT_STAGES.get(profile);
   if (stage === undefined) return undefined;
   return "description" in stage ? MAIN_TAB.OVERVIEW : FIXTURE_AGENT_TAB;
 }
 
-/** Main's held pages with the open task's holding the page its agent showed, one object for each of main's. */
 const STAGED_PAGES = new WeakMap<AppPages, AppPages>();
 
-/** Main's held transcripts with the agent's own holding the one its stage says, one object for each of main's and each transcript staged. */
 const STAGED_TRANSCRIPTS = new WeakMap<AppTranscripts, WeakMap<AppTranscript, AppTranscripts>>();
 
-/** Lays `transcript` as the agent's own over main's held transcripts, one object for each pair. */
 function stagedTranscripts(held: AppTranscripts, transcript: AppTranscript): AppTranscripts {
   let ofHeld = STAGED_TRANSCRIPTS.get(held);
   if (ofHeld === undefined) {
@@ -1133,10 +1040,8 @@ function stagedTranscripts(held: AppTranscripts, transcript: AppTranscript): App
   return laid;
 }
 
-/** Main's held chapters with the agent's pull request's holding its chapters, one object for each of main's. */
 const STAGED_CHAPTERS = new WeakMap<AppChapters, AppChapters>();
 
-/** Lays `rows` as one part of the agent's own pull request over main's held part, one object for each of main's. */
 function stagedPart<Part>(
   rows: Part,
 ): (held: AppPullRequestPart<Part>) => AppPullRequestPart<Part> {
@@ -1154,7 +1059,6 @@ function stagedPart<Part>(
   };
 }
 
-/** The parts of the agent's own pull request its tabs hold, as the host would lay each. */
 const STAGED_PARTS = {
   [LIVE_READ.PULL_REQUEST]: stagedPart<AgentOverviewPullRequestAnswerView>(OVERVIEW_PULL_REQUEST),
   [LIVE_READ.PULL_REQUEST_CHECKS]: stagedPart<AgentOverviewChecksAnswerView>(OVERVIEW_CHECKS),
@@ -1172,16 +1076,6 @@ const STAGED_PARTS = {
   }),
 };
 
-/**
- * Main's document as an agent profile draws it: the open task's pages held
- * with the page its agent showed, as the window's read of them holds them
- * (`LIVE_READ.PAGES`), and the agent's pull request's chapters and parts
- * held as its Pull request tab's reads of them hold them
- * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings),
- * and the agent's transcript as its tab's read of it holds it
- * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached.
- * The same document, the very object, under any other profile.
- */
 export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
   const stage = AGENT_STAGES.get(state.run.profile);
   if (stage === undefined) return state;
@@ -1228,12 +1122,6 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
   };
 }
 
-/**
- * The side panel an agent profile opens with, from the panel the tasks
- * profiles open: the agent's Pull request tab on the profile's view, the
- * file's tab, the page's, or the agent's Terminal, or shut beside the description;
- * none under any other profile.
- */
 export function agentSidePanel(
   profile: string,
   panel: SidePanelState,
@@ -1261,17 +1149,11 @@ export function agentSidePanel(
     const page = { page: stage.page };
     return { ...panel, tab: page, pages: [page] };
   }
-  // The description stands in the column's Overview, so the panel beside it is shut (`agentColumnTab`).
   if ("description" in stage) return { ...panel, open: false, tab: undefined };
   const terminal = { terminal: FIXTURE_AGENT_ID };
   return { ...panel, tab: terminal, terminals: [terminal] };
 }
 
-/**
- * What an agent profile answers an act with, in place of main, held in a
- * box so an act that answers nothing is told from one left to main; none
- * for a kind its tabs do not read, and under any other profile.
- */
 export function agentActAnswer(
   profile: string,
   kind: PortActKind,
@@ -1279,9 +1161,7 @@ export function agentActAnswer(
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   const stage = AGENT_STAGES.get(profile);
   if (stage === undefined) return undefined;
-  // Note that only the long run's hold is the fixture's own, which writes its transcript on; any other goes to main, which holds nothing behind its closed gate, the transcript staged whole (`agentAppState`).
   if (kind === ACT_KIND.AGENTS_TRANSCRIPT && !longRun(stage)) return undefined;
-  // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its result.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;
   return answer === undefined ? undefined : { answer: answer(payload, stage) };
 }

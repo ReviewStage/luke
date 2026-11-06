@@ -11,30 +11,18 @@ import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon, ProductMark } from "@r
 import { FlaskConicalIcon, GLYPH, InfoIcon } from "@repo/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
-/** A page's name and glyph. */
 interface SettingsPage {
   readonly title: string;
   readonly icon: React.JSX.Element;
 }
 
-/**
- * What each page is called in the Settings sidebar and at its own head. One
- * table, because the row that opens a page and the title over it must never
- * disagree about its name. The name and the glyph are the whole row: what a
- * page holds is one press away. Account's own page is Account, because it is
- * where the account itself is kept, and "Your profile" in the account menu
- * opens the person page; the Workspace page's row is Workspace under the
- * listed workspace's name, and its head names that workspace.
- */
 const SETTINGS_PAGE = {
   [SETTINGS_VIEW.ACCOUNT]: { title: "Account", icon: <GLYPH.PERSON /> },
   [SETTINGS_VIEW.WORKSPACE]: { title: "Workspace", icon: <GLYPH.PEOPLE /> },
   [SETTINGS_VIEW.AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.HOSTS]: { title: "Hosts", icon: <GLYPH.HOST /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
-  // Note that the outside agents' page is named and marked for the product, never the protocol alone, because the MCP glyph and "MCP servers" are what the window calls the servers its own agents use.
   [SETTINGS_VIEW.MCP]: { title: `${PRODUCT_NAME} MCP`, icon: <ProductMark small glyph /> },
-  // Note that the command's page is named for the product as its MCP page is, so the two read as a pair.
   [SETTINGS_VIEW.CLI]: { title: `${PRODUCT_NAME} CLI`, icon: <GLYPH.TERMINAL /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
   [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
@@ -45,30 +33,20 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.SHORTCUTS]: { title: "Keyboard shortcuts", icon: <KeyboardIcon /> },
 } satisfies Record<SettingsView, SettingsPage>;
 
-/**
- * The Workspace page's group of what the workspace connects for everyone, its
- * heading and its search result alike. Named for the workspace, because the
- * account's own Integrations page holds what the reader connects for
- * themself, and the two once shared one name.
- */
 export const WORKSPACE_CONNECTIONS = "Workspace connections";
 
-/** What each of the Settings sidebar's groups is headed by where no workspace is listed to name the first. */
 const SETTINGS_GROUP_HEADING = {
   [SETTINGS_PAGE_GROUP.WORKSPACE]: "Workspace",
   [SETTINGS_PAGE_GROUP.ACCOUNT]: "Account",
   [SETTINGS_PAGE_GROUP.THIS_MAC]: "This Mac",
 } satisfies Record<SettingsPageGroup, string>;
 
-/** The last group's heading in a browser, which runs on whatever the reader holds rather than on a Mac. */
 const THIS_DEVICE_HEADING = "This device";
 
-/** Any page's name and glyph: what the Settings sidebar, a page's title, and the command palette name it by. */
 export function settingsPageOf(view: SettingsView): SettingsPage {
   return SETTINGS_PAGE[view];
 }
 
-/** The Settings sidebar's groups with the pages this platform and the account's experiments offer, a group left with none dropped. */
 export function shownSettingsPageGroups(
   capabilities: readonly HostCapability[],
   experiments: ExperimentChoices,
@@ -79,7 +57,6 @@ export function shownSettingsPageGroups(
   })).filter(({ pages }) => pages.length > 0);
 }
 
-/** A group's heading in the Settings sidebar, the first's where no workspace is listed; the machine's own group is named for the Mac only in the app installed there. */
 export function settingsGroupHeadingOf(
   group: SettingsPageGroup,
   capabilities: readonly HostCapability[],

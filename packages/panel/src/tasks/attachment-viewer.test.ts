@@ -23,34 +23,14 @@ import { onSideBundles } from "../testing/side-bundles.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 
-/**
- * attachment-viewer.test.ts -- a picture opened over the window zooms as
- * Preview's does: a pinch zooms it, a press zooms it in and back out rather
- * than closing the viewer, a drag moves it without counting as a press, the
- * bare zoom keys and the header's buttons step it, the zoom belongs to the
- * picture rather than its place among the files, a resized frame holds its
- * edges again, and a mouse counting its wheel in lines zooms as one counting
- * pixels does. Two fingers on a touch screen pinch it about the point
- * between them, and a picture asked to open at its own pixels does so from
- * its top left corner once it loads. Copy image puts the picture shown on
- * the clipboard as the PNG it is, and a picture held by its address alone
- * is shown and zoomed with no size, Copy, or Download. A Mermaid file is drawn as the picture the
- * diagram bundle answers, which stands in for Mermaid since it cannot lay out
- * under jsdom, and a file of any other kind imports no bundle. jsdom lays nothing out, so each picture is
- * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
- * screenshot to.
- */
-
 const PIXEL =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-/** A screenshot of its own, told apart from the others by its address alone. */
 function shot(name: string): FileChip {
   return { name, mediaType: "image/png", url: `data:image/png;base64,${PIXEL}#${name}` };
 }
 
 const FIRST = shot("first.png");
-/** A recording, drawn by the video player under its bar. */
 const VIDEO: FileChip = {
   name: "recording.webm",
   mediaType: "video/webm",
@@ -73,21 +53,18 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** `element`'s layout as the window would draw it. */
 function laidOut<Laid extends Element>(element: Laid, sizes: Partial<Laid>): void {
   for (const [name, value] of Object.entries(sizes)) {
     Object.defineProperty(element, name, { configurable: true, value });
   }
 }
 
-/** What the owner of an open viewer holds: the files it hands in, the place shown, and whether it was closed. */
 interface ViewerState {
   files: readonly FileChip[];
   at: number;
   closed: boolean;
 }
 
-/** The viewer open on the two screenshots, at `at`, and the ways to reach the picture shown. */
 function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = SHELL_ROOM.WIDE) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -148,7 +125,6 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = 
   const fire = (target: Element, event: Event) => act(() => target.dispatchEvent(event));
   const pointer = (type: string, x: number, y: number, buttons: number) =>
     new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, buttons });
-  /** A finger, told apart from any other by `id`, as a touch screen's pointer events carry it. */
   const finger = (type: string, id: number, x: number, y: number) => {
     const event = pointer(type, x, y, type === "pointerup" ? 0 : 1);
     Object.defineProperty(event, "pointerId", { value: id });
@@ -163,7 +139,6 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = 
       assert.fail(`the header offers ${label}`);
     act(() => button.click());
   };
-  /** The files and the place shown handed in anew, as the place opening the viewer does when a picture lands. */
   const show = (files: readonly FileChip[], at: number) => {
     state.files = files;
     state.at = at;
@@ -172,7 +147,6 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = 
   return { state, picture, fire, pointer, finger, key, press, show };
 }
 
-/** How far the picture is drawn zoomed and moved, read off its transform. */
 function drawn(image: HTMLImageElement): ImageView {
   const match = /translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/u.exec(
     image.style.transform,
@@ -309,7 +283,6 @@ test("on a phone a finger swiped sideways walks the files, one let go slowly sho
   const surface =
     document.querySelector<HTMLElement>(".attachment-viewer") ?? assert.fail("the viewer");
   laidOut(surface, { getBoundingClientRect: () => DOMRect.fromRect({ width: 400, height: 800 }) });
-  /** A finger going down on `target` at `from` and lifted at `to`, `ms` milliseconds later, in four even moves. */
   const swipe = (from: number, to: number, ms: number, target: Element = viewer.picture()) => {
     const touch = (type: string, x: number, at: number) => {
       const event = new PointerEvent(type, {
@@ -336,7 +309,6 @@ test("on a phone a finger swiped sideways walks the files, one let go slowly sho
   assert.equal(viewer.state.at, 0, "a swipe right shows the one before");
   swipe(300, 250, 1000);
   assert.equal(viewer.state.at, 0, "a short slow swipe stays");
-  // A tap's click counts one press (`detail`), as a key's counts none.
   viewer.fire(
     viewer.picture(),
     new MouseEvent("click", { bubbles: true, clientX: 250, clientY: 250, detail: 1 }),
@@ -501,7 +473,6 @@ test("a text file opened over the window is drawn as every code is, numbered fro
 test("a text file opened over a tab leaves the tab's find its own, the file's words found by none", async () => {
   vi.stubGlobal("CSS", { highlights: new Map() });
   vi.stubGlobal("Highlight", Set);
-  // jsdom lays nothing out, so a range has no box to scroll to.
   Range.prototype.getBoundingClientRect = () => new DOMRect();
   const notes: FileChip = {
     name: "notes.ts",
@@ -660,12 +631,10 @@ test("on a phone the viewer's header is Close alone at its start, the file's nam
   assert.equal(viewer.state.at, 0, "the arrows still walk the files");
 });
 
-/** A file holding `words` under `name`, as the message box keeps a text file. */
 function textFile(name: string, words: string): FileChip {
   return { name, mediaType: "text/plain", url: `data:text/plain;base64,${btoa(words)}` };
 }
 
-/** The viewer open on `file` over `bundles`, once what it asked of them has landed. */
 async function openedOver(file: FileChip, bundles: SideBundles): Promise<void> {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);

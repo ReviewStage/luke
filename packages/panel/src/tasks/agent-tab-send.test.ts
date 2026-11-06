@@ -33,21 +33,10 @@ import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { AgentTab } from "./agent-tab.js";
 
-/**
- * agent-tab-send.test.ts -- a message sent from an agent's tab stands in
- * its transcript at once as the developer's line, the box empty and taking
- * words, and the row the service writes for it lands in the line's place,
- * drawn once, whichever of the row and the send's answer comes first; a
- * message refused stays where it went, marked Not delivered, whether its tab
- * stood as it landed or not, its alert offering Retry and Edit; the working line stands from the
- * press, before the service takes the line. Synthetic throughout.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const KEY = "d16fbf9e-8c7d-42d0-9abb-be91cf7d8076";
 
-/** When the tests press Send, by a clock they hold still. */
 const PRESSED_AT = Date.parse("2026-10-30T15:42:00Z");
 
 const AGENT_SUMMARY: AgentSummary = {
@@ -112,14 +101,9 @@ async function settle(): Promise<void> {
   await settleQueries();
 }
 
-/**
- * The agent's tab, its sends answered only as the test lets it and its
- * transcript pushed with `later` once the test releases it.
- */
 async function drawnTab(
   later: readonly AgentTranscriptMessage[],
   agent = AGENT_SUMMARY,
-  /** What each page says of the agent: the first, and the one that lands `later`. */
   statuses: readonly [AgentStatus, AgentStatus] = [AGENT_STATUS.COMPLETED, AGENT_STATUS.COMPLETED],
 ) {
   fakeAppBridge({});
@@ -194,17 +178,14 @@ async function drawnTab(
       release();
       await settle();
     },
-    /** Closes the tab, the window's registry standing, as another tab or task opening does. */
     close: async () => {
       await draw(false);
       await settle();
     },
-    /** Opens the tab again on the same registry. */
     open: async () => {
       await draw(true);
       await settle();
     },
-    /** Picks `label` from the menu of the red alert beside the line reading `words`. */
     pick: async (words: string, label: string) => {
       const [line] = [...container.querySelectorAll<HTMLElement>(".is-user")].filter((each) =>
         each.textContent?.includes(words),
@@ -216,7 +197,6 @@ async function drawnTab(
       await act(async () => menuItem(label).click());
       await settle();
     },
-    /** The developer's lines in the transcript reading `words`. */
     lines: (words: string) =>
       [...container.querySelectorAll<HTMLElement>(".is-user")].filter((each) =>
         each.textContent?.includes(words),
@@ -224,7 +204,6 @@ async function drawnTab(
   };
 }
 
-/** The row of the transcript's list a line is drawn in. */
 function rowOf(line: HTMLElement | undefined): Element {
   return line?.closest("[data-row-key]") ?? assert.fail("the line is drawn in a row of the list");
 }
@@ -284,7 +263,6 @@ test("a line whose row landed before its send answered offers Edit only once the
 });
 
 test("a message sent to an agent at rest draws the working line at once, before the service takes it, counting from the press rather than the turn before it", async () => {
-  // The summary still holds the ended turn's start, as the task list does until the line wakes it.
   const tab = await drawnTab([], { ...AGENT_SUMMARY, runStartedAt: 2_000 });
   vi.spyOn(Date, "now").mockReturnValue(PRESSED_AT);
   assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
@@ -335,7 +313,6 @@ test("two messages of the same words are two lines, each let go by its own row a
   );
 });
 
-/** What the time under a line is led by where it did not go, said as an alert. */
 function statusOf(line: HTMLElement | undefined): string | null | undefined {
   return line?.querySelector('.ui-message-line [role="alert"]')?.textContent;
 }
@@ -441,7 +418,6 @@ test("a line another hand sent after a stopped turn, its page saying the agent r
     parts: [{ type: "text", text: "Open the pull request." }],
     sentAt: 90_000,
   };
-  // The tab's summary still says the turn was stopped; the page the line lands on says the agent runs.
   const tab = await drawnTab(
     [handedOn],
     { ...AGENT_SUMMARY, status: AGENT_STATUS.CANCELED, runtime: AGENT_RUNTIME.CLAUDE_CODE },

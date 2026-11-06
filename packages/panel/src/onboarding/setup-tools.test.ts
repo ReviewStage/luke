@@ -19,21 +19,12 @@ import { handHostReads, holdIntegrations, holdIntegrationTools } from "../testin
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToolRows } from "./setup-tools.js";
 
-/**
- * Setup's tools step over a bridge answering where every provider stands as
- * the service would: a connected account is named beside its provider, as
- * Settings › Integrations names it, so the developer sees which account
- * each tool connected, and one not connected says what it gives agents.
- */
-
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
 let root: Root | undefined;
 let registry: AtomRegistry.AtomRegistry | undefined;
 
-/** Where every provider stands at the service: Notion connected, every other one not. */
 function heldRead(): AppHostRead<IntegrationStatusesAnswer> {
-  // SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
   const integrations = Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [
       provider,

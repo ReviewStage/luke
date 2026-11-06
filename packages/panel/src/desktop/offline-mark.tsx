@@ -8,24 +8,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { appStateQuery } from "../use-app-state.js";
 
-/**
- * offline-mark.tsx -- the pill that says what the window shows may be behind: this Mac offline, the service not answering, or live updates catching up; in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar, and as a strip under a phone's header.
- *
- * Every surface still fails on its own while the network is gone, each as
- * its read could not be done; the pill says once why, where the window keeps
- * its own state, beside a release on its way in (`sidebar-foot.tsx`). It
- * reads the document's `network` slice, which main keeps from the
- * platform's answer and from whether the service answers its calls,
- * and the host's live state beside the task list (`HOST_LIVE`), which its
- * follow keeps, and draws nothing while both are well, once the pill has
- * faded out. It is a status rather than a press, so
- * it is announced as one, and a sidebar too narrow for its word draws its
- * glyph alone and still names it. A phone keeps its sidebar in a drawer out
- * of sight, so a phone's header says the same under it, as a strip of the
- * pill's glyph and its hint (`OfflineStrip`).
- */
-
-/** What the pill stands for, the Mac's own network first, since nothing else can be read without it. */
 const LIVE_MARK = {
   MAC_OFFLINE: "mac-offline",
   SERVICE_OFFLINE: "service-offline",
@@ -34,7 +16,6 @@ const LIVE_MARK = {
 
 type LiveMark = (typeof LIVE_MARK)[keyof typeof LIVE_MARK];
 
-/** The pill's word, the hint that says why, and its glyph, for each thing it stands for. */
 const LIVE_MARK_LOOK = {
   [LIVE_MARK.MAC_OFFLINE]: { word: "Offline", hint: "You're offline.", Icon: WifiOffIcon },
   [LIVE_MARK.SERVICE_OFFLINE]: {
@@ -49,7 +30,6 @@ const LIVE_MARK_LOOK = {
   },
 } as const satisfies Record<LiveMark, { word: string; hint: string; Icon: unknown }>;
 
-/** What the pill stands for now, or none, which redraws its readers only as it turns. */
 const selectLiveMark = (state: AppStateSnapshot): LiveMark | undefined => {
   const { network } = state;
   if (!network.online) return LIVE_MARK.MAC_OFFLINE;
@@ -59,11 +39,9 @@ const selectLiveMark = (state: AppStateSnapshot): LiveMark | undefined => {
   return undefined;
 };
 
-/** The pill, or nothing while the Mac is online and live updates are current. */
 export function OfflineMark(): React.JSX.Element | null {
   const mark = useQuery({ ...appStateQuery, select: selectLiveMark }).data;
   useAnnounce(ANNOUNCE.POLITE, mark === undefined ? "" : LIVE_MARK_LOOK[mark].word);
-  // Note that the last mark is held drawn through its fade, as anything leaving is.
   const shown = useDisclosure(mark !== undefined);
   const last = useRef(mark);
   if (mark !== undefined) last.current = mark;
@@ -89,12 +67,6 @@ export function OfflineMark(): React.JSX.Element | null {
   );
 }
 
-/**
- * What the pill says, as a strip under a phone's header (`PhoneHead`), its
- * glyph and its hint whole, since a finger has no pointer to hover for it;
- * or nothing while all is well. It says nothing aloud, because the pill in
- * the sidebar's foot, mounted in its drawer, already announces it.
- */
 export function OfflineStrip(): React.JSX.Element | null {
   const mark = useQuery({ ...appStateQuery, select: selectLiveMark }).data;
   if (mark === undefined) return null;

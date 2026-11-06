@@ -60,37 +60,6 @@ import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
 import { AgentHoverCard } from "./tasks/agent-ref.js";
 import { AgentMark } from "./tasks/tab-look.js";
 
-/**
- * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and the app, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
- *
- * A person's circle is the shared `Avatar`: their sign-in picture once it
- * loads, and the first letter of their name on the hue read off their id
- * until then and where it fails, as a workspace's tile does; a member who left keeps their own
- * picture or letter, grayed and muted, their name saying they left, so
- * color is never the only sign; someone the service names nobody for
- * stands on a quiet outline. Someone GitHub names
- * who is no member stands by their GitHub avatar, a person on a circle and
- * an App's bot on a square, its robot until the avatar loads, and its name
- * wears a quiet "bot" badge wherever it is said, as GitHub's own pages mark
- * one. A picture on GitHub's avatar host is asked for at twice the size it
- * is drawn, so a Retina screen draws it sharp and nothing larger is
- * fetched. The app's own square holds
- * its mark in the working ink, an agent's its harness, swapped for the working
- * mark while it writes as its tab's glyph is, and an automation's its Zap,
- * each its glyph alone on the ground beneath it, as a tab's is. In a
- * facepile (`ActorStack`) whose faces overlap each stands on one solid
- * neutral tile instead, so the face it overlaps never shows through it. A disc is one size per place
- * (`ACTOR_SIZE`), so a byline, a facepile, and a list row read level
- * whoever is in them. Named in a line, an actor is its mark and its name as
- * one target that hangs its card (`ActorRef`); a press opens what has a
- * page of its own: an agent's tab, an automation's page, a person's page,
- * the page of someone who left, or a GitHub account's on GitHub
- * (`person-door.tsx`); a card is read, never a door, since its name already is one. Every mark is
- * hidden from a screen reader, since its name always stands beside it or in
- * its card; a picture's address is masked by session replay as its text is.
- */
-
-/** How large an actor is drawn: a sidebar task's creator at its time, a line's, a facepile's, a list row's, the sidebar's account, a card head's and a Settings row's, or a person's page's head. */
 export const ACTOR_SIZE = {
   MARK: "mark",
   INLINE: "inline",
@@ -103,7 +72,6 @@ export const ACTOR_SIZE = {
 
 export type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
 
-/** How many CSS pixels across each size draws its disc, which the shared `Avatar` draws at for the same size. */
 const ACTOR_PIXELS = {
   [ACTOR_SIZE.MARK]: 14,
   [ACTOR_SIZE.INLINE]: 16,
@@ -114,16 +82,10 @@ const ACTOR_PIXELS = {
   [ACTOR_SIZE.PAGE]: 48,
 } as const satisfies Record<ActorSize, number>;
 
-/** How wide an actor of `size` stands, as a length, for a placeholder that stands in its place. */
 export function actorMarkWidth(size: ActorSize): string {
   return `${ACTOR_PIXELS[size]}px`;
 }
 
-/**
- * Where a mark stands in a facepile: none, a face straight in the pile, or
- * the face inside a face that hangs its card (`CardedFace`), each ringed by
- * the ground behind it, which cuts it from the face it overlaps.
- */
 const ACTOR_PILE = {
   NONE: "none",
   IN_PILE: "in-pile",
@@ -132,12 +94,6 @@ const ACTOR_PILE = {
 
 type ActorPile = (typeof ACTOR_PILE)[keyof typeof ACTOR_PILE];
 
-/**
- * The member an actor acted for, on its square's corner: their face at a
- * share of the mark's edge, drawn at the smallest size and scaled, so a
- * letter keeps its weight at every size the mark is; at a card's and a
- * page's size it stands nearer the corner, at its own size.
- */
 const FOR_OF_SIZE = {
   [ACTOR_SIZE.MARK]: "-right-actor-for-x -bottom-actor-for-y scale-60",
   [ACTOR_SIZE.INLINE]: "-right-actor-for-x -bottom-actor-for-y scale-68",
@@ -148,7 +104,6 @@ const FOR_OF_SIZE = {
   [ACTOR_SIZE.PAGE]: "-right-actor-for-near -bottom-actor-for-near scale-100",
 } as const satisfies Record<ActorSize, string>;
 
-/** Whether an actor stands in a rounded square rather than on a circle: the app, an agent, an automation, and an App's bot on GitHub. */
 function squared(actor: Actor): boolean {
   return (
     actor.kind === ACTOR_KIND.APP ||
@@ -158,14 +113,6 @@ function squared(actor: Actor): boolean {
   );
 }
 
-/**
- * The ring a mark wears: in a pile, the ground behind it, around someone
- * unnamed's outline where the face stands straight in the pile; a square
- * no face overlaps stands bare in the pile as in a line, without the ring
- * too, because a ring of a ground it does not stand on would frame it. Out
- * of a pile, someone unnamed keeps their outline, bar a member who left, who
- * keeps their own face on the tile instead, and nobody else wears one.
- */
 function ringOf(actor: Actor, pile: ActorPile, tiled: boolean): string {
   if (pile === ACTOR_PILE.NONE) {
     return actor.kind === ACTOR_KIND.SOMEONE && !leftWithFace(actor) ? "shadow-actor-outline" : "";
@@ -177,17 +124,14 @@ function ringOf(actor: Actor, pile: ActorPile, tiled: boolean): string {
   return "shadow-actor-ring";
 }
 
-/** How many device pixels a picture is asked for per CSS pixel it is drawn at: a Retina screen's. */
 const PICTURE_DENSITY = 2;
 
-/** The glyph state an actor's work wears, which is a tab's own. */
 const GLYPH_OF_STATE = {
   [ACTOR_STATE.WORKING]: GLYPH_STATE.WORKING,
   [ACTOR_STATE.FAILED]: GLYPH_STATE.FAILED,
   [ACTOR_STATE.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<ActorState, GlyphState>;
 
-/** The disc a person's face is drawn at for each size an actor is. */
 const AVATAR_OF_SIZE = {
   [ACTOR_SIZE.MARK]: AVATAR_SIZE.MARK,
   [ACTOR_SIZE.INLINE]: AVATAR_SIZE.INLINE,
@@ -198,14 +142,12 @@ const AVATAR_OF_SIZE = {
   [ACTOR_SIZE.PAGE]: AVATAR_SIZE.PAGE,
 } as const satisfies Record<ActorSize, AvatarSize>;
 
-/** A picture's address at the size a disc draws it, which GitHub serves sized (`githubAvatarAt`). */
 function pictureAt(pictureUrl: string | undefined, size: ActorSize): string | undefined {
   return pictureUrl === undefined
     ? undefined
     : githubAvatarAt(pictureUrl, ACTOR_PIXELS[size] * PICTURE_DENSITY);
 }
 
-/** A person's disc: their picture once it loads, and the first letter of `name` on the hue read off `id` until then and where it fails. */
 function PersonDisc({
   id,
   name,
@@ -229,7 +171,6 @@ function PersonDisc({
   );
 }
 
-/** A square holding a glyph alone, bare or on its tile; an App's bot's avatar stands over its robot once it loads, since a bot's square never holds a letter. */
 function GlyphSquare({
   name,
   glyph,
@@ -242,7 +183,6 @@ function GlyphSquare({
   glyph: ReactNode;
   size: ActorSize;
   tiled: boolean;
-  /** Whether the product's mark stands on its GitHub avatar's tile rather than the window's own. */
   branded?: boolean;
   src?: string | undefined;
 }): React.JSX.Element {
@@ -260,19 +200,16 @@ function GlyphSquare({
   );
 }
 
-/** Someone the window cannot name, by the glyph for why, on the circle the mark outlines. */
 function SomeoneDisc({ glyph, size }: { glyph: ReactNode; size: ActorSize }): React.JSX.Element {
   return <Avatar name="" glyph={glyph} size={AVATAR_OF_SIZE[size]} decorative />;
 }
 
-/** An automation's glyph on its square: what fires it, GitHub's or Sentry's mark among them, or the automation's own glyph where only its name is known, wearing where its newest run stands. */
 function automationGlyph(actor: ActorOf<typeof ACTOR_KIND.AUTOMATION>): React.JSX.Element {
   const glyph =
     actor.trigger === undefined ? <GLYPH.AUTOMATION /> : <FiringGlyph of={actor.trigger} />;
   return <StateGlyph glyph={glyph} state={GLYPH_OF_STATE[actor.state]} />;
 }
 
-/** What stands on an actor's circle or square, at its size. */
 function Face({
   actor,
   size,
@@ -333,7 +270,6 @@ function Face({
         <PersonDisc id={actor.login} name={actor.login} pictureUrl={actor.avatarUrl} size={size} />
       );
     case ACTOR_KIND.SOMEONE:
-      // A member who left keeps their own face, grayed by the mark, where the service still names them.
       if (actor.reason === SOMEONE_REASON.FORMER && actor.name !== undefined) {
         return (
           <PersonDisc
@@ -361,12 +297,6 @@ function Face({
   }
 }
 
-/**
- * An actor as `Comment` draws its writer's face: a person on a circle by
- * their picture or letter, the app, an agent, an automation and an App's bot
- * by their glyph on a square, and someone unnamed by the glyph for why.
- * The name `Comment` says is the caller's, as `ActorRef` says it.
- */
 export function commentAuthor(actor: Actor): CommentAuthor {
   const picture = (url: string | undefined) => pictureAt(url, ACTOR_SIZE.ROW);
   switch (actor.kind) {
@@ -422,7 +352,6 @@ export function commentAuthor(actor: Actor): CommentAuthor {
   }
 }
 
-/** Whether the actor is a member who left whom the service still names, drawn by their own face, grayed. */
 function leftWithFace(actor: Actor): boolean {
   return (
     actor.kind === ACTOR_KIND.SOMEONE &&
@@ -431,15 +360,12 @@ function leftWithFace(actor: Actor): boolean {
   );
 }
 
-/** What a screen reader hears after a name that is a member who left, since their grayed face is hidden from it. */
 const LEFT_WORDS = " (former member)";
 
-/** What a screen reader hears after the name of a member who left, set beside it; nothing for anyone else. */
 export function LeftWords({ actor }: { actor: Actor }): React.JSX.Element | null {
   return leftWithFace(actor) ? <VisuallyHidden>{LEFT_WORDS}</VisuallyHidden> : null;
 }
 
-/** An actor's circle or square alone, at a size. */
 export function ActorMark({
   actor,
   size = ACTOR_SIZE.INLINE,
@@ -450,31 +376,20 @@ export function ActorMark({
 }: {
   actor: Actor;
   size?: ActorSize;
-  /** Whether a square stands on its solid tile rather than bare, as a facepile's overlapping faces do. */
   tiled?: boolean;
-  /**
-   * The member that the app, an agent, or an automation acted for, as a task one of
-   * them made for that member wears them: their face, small, on the square's
-   * corner, as GitHub draws an App acting for someone. None for anyone else.
-   */
   forWhom?: Actor | undefined;
-  /** Where it stands in a facepile, which rings it; none out of one. */
   pile?: ActorPile;
-  /** Whether it overlaps the face before it in a pile, which every face but the first does. */
   overlapping?: boolean;
 }): React.JSX.Element {
-  // Note that a glyph fills the share of the face a glyph does, the working mark included, which the window otherwise draws at a fixed size.
   return (
     <span
       className={cn(
         "actor-mark relative inline-grid flex-none align-middle text-foreground",
         "[--state-glyph-size:var(--spacing-avatar-glyph-share)] [&_.state-glyph>:is(svg,img)]:size-full",
         squared(actor) ? "rounded-avatar-square" : "rounded-disc",
-        // The app wears the working ink on its mark, the color its voice already answers in, its mark filling more of its square than a glyph does. Note that the size is important, because base.css sizes every mark outside the layers.
         actor.kind === ACTOR_KIND.APP &&
           "text-working [&_.ui-product-mark]:size-actor-mark-share! [&_.ui-product-mark]:text-inherit",
         actor.kind === ACTOR_KIND.SOMEONE && "text-muted-foreground",
-        // A member who left keeps their own face, grayed and muted on the tile, their name saying they left.
         leftWithFace(actor) && "bg-actor-tile [&>*]:opacity-80 [&>*]:grayscale",
         ringOf(actor, pile, tiled),
         overlapping && "-ml-actor-overlap",
@@ -502,23 +417,13 @@ export function ActorMark({
   );
 }
 
-/**
- * No one, where a place says who is on something and nobody is: the shared
- * dashed outline (`UnassignedAvatar`) at an actor's size, so it stands
- * level with the faces around it, named Unassigned on hover and to a screen
- * reader. Where the words stand beside it, or a row says them apart
- * (`UnassignedHeard`), it is `decorative`: a reader hears it once; and
- * where the words stand beside it it hangs no hint either (`hint`).
- */
 export function UnassignedMark({
   size = ACTOR_SIZE.INLINE,
   decorative = false,
   hint = !decorative,
 }: {
   size?: ActorSize;
-  /** Whether a screen reader hears "Unassigned" elsewhere, so the mark is hidden from it. */
   decorative?: boolean;
-  /** Whether a pointer resting on the mark is told "Unassigned". */
   hint?: boolean;
 }): React.JSX.Element {
   const mark = (
@@ -534,32 +439,20 @@ export function UnassignedMark({
   return hint ? <Tooltip label={UNASSIGNED_WORDS}>{mark}</Tooltip> : mark;
 }
 
-/** What a screen reader hears of a row no one is assigned to, whose dashed mark says it on screen. */
 function UnassignedHeard(): React.JSX.Element {
   return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
-/** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
 function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
   return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
 }
 
-/**
- * The face a row wears at its end for who is on its task (`assigneeFace`):
- * its assignee's, or the dashed unassigned mark, each with the words a
- * screen reader hears of it unless the row says them elsewhere.
- */
 export function AssigneeFaceMark({
   face,
   heard = true,
 }: {
   face: AssigneeFace;
-  /**
-   * Whether the mark says its words to a screen reader: not on a row whose
-   * end steps aside for its acts while it holds the keyboard, which says
-   * them in its title instead (`AssigneeFaceHeard`).
-   */
   heard?: boolean;
 }): React.JSX.Element {
   return (
@@ -574,7 +467,6 @@ export function AssigneeFaceMark({
   );
 }
 
-/** The words a screen reader hears of a row's `AssigneeFaceMark`, for a row that says them in its title. */
 export function AssigneeFaceHeard({ face }: { face: AssigneeFace }): React.JSX.Element {
   return face.assignee === undefined ? (
     <UnassignedHeard />
@@ -583,30 +475,21 @@ export function AssigneeFaceHeard({ face }: { face: AssigneeFace }): React.JSX.E
   );
 }
 
-/**
- * The reader's own badge, and an App's bot's after its name, as GitHub's own
- * pages mark one: quiet and neutral, never cut, so a long name gives way
- * before the badge does.
- */
 const QUIET_BADGE =
   "shrink-0 rounded-ui-6 bg-fill-strong px-tight-gap text-caption font-ui-medium text-muted-foreground";
 
-/** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
   return <span className={`actor-you ${QUIET_BADGE}`}>You</span>;
 }
 
-/** Whether the actor is an App's bot on GitHub, whose name wears its badge. */
 function githubBot(actor: Actor): boolean {
   return actor.kind === ACTOR_KIND.GITHUB && actor.bot;
 }
 
-/** The quiet badge an App's bot on GitHub wears after its name, as GitHub's own pages mark one; nothing for anyone else. */
 export function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null {
   return githubBot(actor) ? <span className={`actor-bot ${QUIET_BADGE}`}>bot</span> : null;
 }
 
-/** An actor's card head: its mark at a card's size, its name, which `onOpen` makes the press that opens its page, and the line under it. */
 function ActorHead({
   actor,
   sub,
@@ -617,7 +500,6 @@ function ActorHead({
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const you = actor.kind === ACTOR_KIND.PERSON && actor.you;
-  // Note that the card names the reader by their name, beside its badge, since the card is about who they are.
   const name = actor.kind === ACTOR_KIND.PERSON ? actor.name : actorName(actor);
   return (
     <HoverCardHead
@@ -641,13 +523,11 @@ function ActorHead({
   );
 }
 
-/** A card's line under a name from the parts it has, one dot between each; none where it has none. */
 function subLine(...parts: readonly (string | undefined)[]): string | undefined {
   const said = parts.filter((part): part is string => part !== undefined && part !== "");
   return said.length === 0 ? undefined : said.join(" · ");
 }
 
-/** What someone last did in this description, as a quieter row under their card's head. */
 function LatestRow({ latest }: { latest: ReactNode }): React.JSX.Element {
   return (
     <HoverCardRow
@@ -658,16 +538,13 @@ function LatestRow({ latest }: { latest: ReactNode }): React.JSX.Element {
   );
 }
 
-/** A person's card: their face, name, and their email and role under it, then what they last did here where the place knows. A press on their name, not the card, opens their page. */
 export function PersonCard({
   actor,
   latest,
 }: {
   actor: PersonActor;
-  /** Their latest activity in this description, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
 }): React.JSX.Element {
-  // The card hanging is the pointer on their name, a press from their page, so its chunk is read now.
   usePreloadedPerson(actor.userId);
   return (
     <HoverCard data-actor-card={actor.kind}>
@@ -680,14 +557,11 @@ export function PersonCard({
   );
 }
 
-/** The app's own card: its face, how long ago it wrote where the place knows, then what it wrote here. Read, never followed. */
 export function AppCard({
   sub,
   latest,
 }: {
-  /** How long ago he wrote: "2h ago". */
   sub?: ReactNode;
-  /** What he last wrote in this description, in a line: "Edited Rollout and Risks". */
   latest?: ReactNode;
 }): React.JSX.Element {
   return (
@@ -698,21 +572,18 @@ export function AppCard({
   );
 }
 
-/** What a card says of someone the window cannot name, by why. */
 const SOMEONE_NOTES = {
   [SOMEONE_REASON.FORMER]: "No longer in this workspace",
   [SOMEONE_REASON.UNNAMED]: "Who made this change isn't known.",
   [SOMEONE_REASON.EARLIER]: "The description before its history began",
 } as const;
 
-/** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
 function SomeoneCard({
   actor,
 }: {
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.SOMEONE }>;
 }): React.JSX.Element {
   const former = actor.reason === SOMEONE_REASON.FORMER;
-  // Note that a named former member's head already says "Former member".
   const note = former && actor.name !== undefined ? undefined : SOMEONE_NOTES[actor.reason];
   return (
     <HoverCard data-actor-card={actor.kind}>
@@ -725,14 +596,12 @@ function SomeoneCard({
   );
 }
 
-/** What a GitHub account's card says it is, a person's or an App's bot's, and where a person stands. */
 const GITHUB_WORDS = {
   USER: "GitHub user",
   APP: "GitHub App",
   OUTSIDE: "Not in this workspace",
 } as const;
 
-/** Someone on GitHub's card: their face, a person's login or an App's bot's name and badge, whether they are a person or an App's bot, and that a person is no member here. Read, never followed: the name is text. */
 function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>
@@ -754,14 +623,12 @@ function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   );
 }
 
-/** Where an automation's work stands, as its tile wears it: its newest run's standing. */
 const ACTOR_STATE_OF_RUN = {
   [AUTOMATION_RUN_STANDING.WORKING]: ACTOR_STATE.WORKING,
   [AUTOMATION_RUN_STANDING.FAILED]: ACTOR_STATE.FAILED,
   [AUTOMATION_RUN_STANDING.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, ActorState>;
 
-/** An automation as its tile draws it: the glyph of what fires it, wearing where its newest run stands, under its name. */
 export function automationActor(automation: AutomationSummary): Actor {
   return {
     kind: ACTOR_KIND.AUTOMATION,
@@ -772,7 +639,6 @@ export function automationActor(automation: AutomationSummary): Actor {
   };
 }
 
-/** One run of an automation, as its row in a list of every automation's runs wears it: the glyph of what fired it, wearing where it stands, under its automation's name. */
 export function automationRunActor(run: AutomationRunSummary, name: string): Actor {
   return {
     kind: ACTOR_KIND.AUTOMATION,
@@ -782,24 +648,13 @@ export function automationRunActor(run: AutomationRunSummary, name: string): Act
   };
 }
 
-/**
- * An automation's card: the glyph of what fires it, its name over those words
- * and whose it is, when it runs next, and how its last run went, and at
- * its foot, under a rule, who made it and when; one whose maker the members around it do not name has no foot. Note
- * that it offers no way to the automation's page under a rule, because
- * the name it hangs from opens that page on a press; hung from a control
- * whose press does something else, the Inbox's group header, which folds,
- * its own name is that way instead (`onOpen`).
- */
 export function AutomationCard({
   automation,
   workspaceName,
   onOpen,
 }: {
   automation: AutomationSummary;
-  /** The workspace's name, which a workspace automation's line under its name says. */
   workspaceName: string | undefined;
-  /** Opens the automation's page from the card's name, where the control hanging the card opens nothing of its own. */
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
@@ -829,7 +684,6 @@ export function AutomationCard({
   );
 }
 
-/** Who made the automation, under a rule at its card's foot; nothing where the members around it do not name them. */
 function AutomationMaker({
   automation,
   now,
@@ -854,10 +708,8 @@ function AutomationMaker({
   );
 }
 
-/** An actor of the kind given. */
 type ActorOf<K extends Actor["kind"]> = Extract<Actor, { readonly kind: K }>;
 
-/** An automation's card, as the directory around the place naming it knows it; none where it knows no such automation. */
 function KnownAutomationActorCard({ automationId }: { automationId: string }): ReactNode {
   const known = useAutomation(automationId);
   return known === undefined ? undefined : (
@@ -865,14 +717,6 @@ function KnownAutomationActorCard({ automationId }: { automationId: string }): R
   );
 }
 
-/**
- * The card each kind of actor hangs where the place naming it adds
- * nothing, one entry per kind, so a kind added fails to compile until it
- * says: the app its own, an agent its tab's (`AgentHoverCard`), read as it is
- * hung, and an automation its own, as the directory around it knows it.
- * An agent or an automation named by its name alone hangs none, its name
- * standing as a pill.
- */
 const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactNode } = {
   [ACTOR_KIND.PERSON]: (actor) => <PersonCard actor={actor} />,
   [ACTOR_KIND.SOMEONE]: (actor) => <SomeoneCard actor={actor} />,
@@ -888,26 +732,14 @@ const ACTOR_CARD: { readonly [K in Actor["kind"]]: (actor: ActorOf<K>) => ReactN
     ),
 };
 
-/** An actor's card drawn through its kind's own entry. */
 function actorCardOf<K extends Actor["kind"]>(kind: K, actor: ActorOf<K>): ReactNode {
   return ACTOR_CARD[kind](actor);
 }
 
-/** The card an actor hangs where the place naming it adds nothing, by its kind's entry. */
 export function actorCard(actor: Actor): ReactNode {
   return actorCardOf(actor.kind, actor);
 }
 
-/**
- * An actor named in a line: its mark and its name as one target, hanging
- * `card`, or the card its kind hangs where the place adds nothing. With
- * `onOpen` it is a button that opens the actor's page, an agent's tab or an
- * automation's page; a person, someone who left, and a GitHub account open
- * their own (`useActorDoor`); otherwise its press is the line's own. With
- * `faceOnly` the mark stands alone, its name said to a screen reader and in
- * its card, for a line too short to hold the name; with `nameOnly` the name
- * stands alone, where the actor's face already stands beside the line.
- */
 export function ActorRef({
   actor,
   card,
@@ -920,16 +752,11 @@ export function ActorRef({
   actor: Actor;
   card?: ReactNode;
   onOpen?: (() => void) | undefined;
-  /** Whether the name stands inside a sentence: "you" rather than "You". */
   sentence?: boolean;
-  /** Whether the name says whose: "your Mac", "Charles Pan’s call". */
   possessive?: boolean;
-  /** Whether the mark stands without its name, which only a screen reader hears. */
   faceOnly?: boolean;
-  /** Whether the name stands without its mark, whose face the line already draws. */
   nameOnly?: boolean;
 }): React.JSX.Element {
-  // A person's own door, their page or GitHub's, where the place hands none.
   const door = useActorDoor(actor);
   const open = onOpen ?? door;
   return (
@@ -949,11 +776,6 @@ export function ActorRef({
   );
 }
 
-/**
- * Words naming an actor in one row, centered on its disc: the words and the
- * `ActorRef` among them, each word string keeping its own spaces, since a
- * row drops a run of spaces standing alone.
- */
 export function ActorLine({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <span className="actor-words inline-flex max-w-full min-w-0 items-center align-middle whitespace-pre">
@@ -962,21 +784,16 @@ export function ActorLine({ children }: { children: ReactNode }): React.JSX.Elem
   );
 }
 
-/** One face of a facepile that hangs cards: what it says of the actor beyond their name, and its badge. */
 export interface StackFace {
-  /** What the face says beside the actor's name to a screen reader and in its pill, "Approved". */
   readonly says?: string;
-  /** A small mark at the face's corner, a reviewer's standing. */
   readonly badge?: ReactNode;
 }
 
-/** What the face says of an actor to a screen reader and in its pill: their name, that they left where they did, and what the face says beside it. */
 function faceName(actor: Actor, face: StackFace): string {
   const name = leftWithFace(actor) ? `${actorName(actor)}${LEFT_WORDS}` : actorName(actor);
   return face.says === undefined ? name : `${name} · ${face.says}`;
 }
 
-/** One face of a facepile that hangs its card: the actor's mark, tiled where the pile overlaps it, its badge, named to a screen reader by its name and what it says. */
 function CardedFace({
   actor,
   face,
@@ -986,7 +803,6 @@ function CardedFace({
   actor: Actor;
   face: StackFace;
   tiled: boolean;
-  /** How far it stands from the face before it (`pileSpacing`). */
   spacing: string;
 }): React.JSX.Element {
   const name = faceName(actor, face);
@@ -995,7 +811,6 @@ function CardedFace({
       <li className={cn("actor-stack-face relative inline-flex", spacing)} aria-label={name}>
         <ActorMark actor={actor} size={ACTOR_SIZE.STACK} tiled={tiled} pile={ACTOR_PILE.IN_FACE} />
         {face.badge === undefined ? null : (
-          // Note that the badge stands over the next face, which overlaps this one's corner.
           <span
             className="actor-stack-badge absolute -right-ui-4 -bottom-ui-4 z-1 grid size-actor-badge place-items-center rounded-disc bg-actor-stack-ground [&_svg]:size-actor-badge-glyph [&_svg]:stroke-3"
             aria-hidden="true"
@@ -1008,25 +823,16 @@ function CardedFace({
   );
 }
 
-/** An actor's name as a row of the count's card says it, a bot's badge after it held to its line. */
 function MoreFaceName({ actor }: { actor: Actor }): React.JSX.Element {
   return (
     <>
       {faceName(actor, {})}
-      {/* Note that a no-break space holds the badge to its name's line. */}
       {githubBot(actor) ? "\u00a0" : null}
       <BotBadge actor={actor} />
     </>
   );
 }
 
-/**
- * The count past a pile's last face, which hangs a card naming each actor
- * it counts by their mark and what their face would say, so nobody the pile
- * leaves out is left unnamed, each a row of the card's list: their face,
- * their name, and what their face says at its end. A screen reader hears
- * the count as that list.
- */
 function MoreFaces({
   actors,
   faces,
@@ -1037,9 +843,7 @@ function MoreFaces({
   actors: readonly Actor[];
   faces: readonly StackFace[];
   more: string;
-  /** What the pile is, which names the card's list: "Reviewers". */
   label: string;
-  /** How far it stands from the face before it (`pileSpacing`). */
   spacing: string;
 }): React.JSX.Element {
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
@@ -1047,7 +851,6 @@ function MoreFaces({
     <HoverCard data-actor-card="more">
       <HoverCardList label={label}>
         {actors.map((actor, index) => (
-          // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
           <li key={index} data-actor-more="">
             <HoverCardRow
               glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
@@ -1068,48 +871,20 @@ function MoreFaces({
   );
 }
 
-/** What the count's card names its list where the pile names itself nothing. */
 const MORE_FACES_LABEL = "Everyone else";
 
-/**
- * How many more a pile holds, in a pill of a face's height on the tile,
- * ringed by the ground as the faces are.
- */
 const PILE_COUNT =
   "actor-stack-more inline-grid h-avatar-stack min-w-avatar-stack place-items-center rounded-ui-full bg-actor-tile px-tight-gap text-caption-inline font-ui-semibold text-muted-foreground tabular-nums shadow-actor-ring";
 
-/**
- * How far a pile's face or count stands from the one before it: each
- * overlapping the one before, or, in a pile whose faces wear badges, apart
- * so each badge reads clear of what comes next; the first stands where the
- * pile starts.
- */
 function pileSpacing(index: number, apart: boolean): string {
   if (index === 0) return "";
   return apart ? "ml-item-gap" : "-ml-actor-overlap";
 }
 
-/**
- * Whether a pile's faces overlap, and so tile their squares: two or more
- * drawn, none wearing a badge. Note that a lone face overlaps nothing, and a
- * pile whose faces wear badges stands them apart (`desktop.css`), so their
- * squares stand bare as they do in a line.
- */
 function overlaps(drawn: number, faces: readonly StackFace[] | undefined): boolean {
   return drawn > 1 && !(faces ?? []).slice(0, drawn).some((face) => face.badge !== undefined);
 }
 
-/**
- * Many actors as a facepile: the first `drawn`, each cut from the ground
- * behind it by a ring of that ground, a square on its solid tile where the
- * faces overlap, then how many more where `counted`;
- * a place whose words beside the pile already count them, "5 can edit",
- * draws no pill. Handed `faces`, one for each actor, each face hangs the
- * actor's card, wears its badge, and is
- * named to a screen reader, the pile a list under `label`, its count hanging
- * a card naming the rest; without them the pile is the words' picture
- * beside them and a screen reader skips it.
- */
 export function ActorStack({
   actors,
   drawn = 4,
@@ -1121,7 +896,6 @@ export function ActorStack({
   drawn?: number;
   counted?: boolean;
   faces?: readonly StackFace[];
-  /** What a pile of faces is, to a screen reader: "Reviewers". */
   label?: string;
 }): React.JSX.Element {
   const rest = counted ? actors.length - drawn : 0;
@@ -1131,7 +905,6 @@ export function ActorStack({
     return (
       <span className="actor-stack inline-flex items-center" aria-hidden="true">
         {shown.map((actor, index) => (
-          // Note that a pile's order is its place's own and never moves under it, so a disc is keyed by where it stands.
           <ActorMark
             key={index}
             actor={actor}
@@ -1151,7 +924,6 @@ export function ActorStack({
   return (
     <ul className="actor-stack m-0 inline-flex list-none items-center p-0" aria-label={label}>
       {shown.map((actor, index) => (
-        // Note that a pile's order is its place's own and never moves under it, so a face is keyed by where it stands.
         <CardedFace
           key={index}
           actor={actor}
@@ -1173,7 +945,6 @@ export function ActorStack({
   );
 }
 
-/** What a provenance row says its actor did. */
 export const PROVENANCE_VERB = {
   CREATED: "Created",
   STARTED: "Started",
@@ -1183,12 +954,6 @@ export const PROVENANCE_VERB = {
 
 export type ProvenanceVerb = (typeof PROVENANCE_VERB)[keyof typeof PROVENANCE_VERB];
 
-/**
- * Who made, started, showed, or opened a thing, and when, as every card's
- * provenance row says it: their face or tile, then "Created by" and their
- * name, which hangs `card` (or their own) and opens `onOpen`, then when, in
- * the one provenance time ("3d ago", then "Oct 12"), where it is known.
- */
 export function ProvenanceRow({
   verb,
   actor,

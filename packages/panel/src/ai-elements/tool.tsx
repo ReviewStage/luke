@@ -28,38 +28,6 @@ import { copyThroughShell } from "../copy-feedback.js";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { Fold, type FoldProps } from "./fold.js";
 
-/**
- * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
- *
- * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
- * to our tokens and folded on `fold.tsx`. The row is one line, and
- * the whole of it opens the call: the tool's icon, what the call did in
- * a few words, and where it stands, trailing the words so that only their
- * cut moves when the mark goes: the working mark while it runs and the
- * failed mark if it failed, each as an agent's tab draws it
- * (`state-glyph.tsx`); a call that ended well keeps no seat for one. A
- * subject the body says whole, as a command's input is the command and a
- * read's its path, is the closed row's preview, and the open row says its
- * verb alone (`blockSays`), even while a find draws the body hidden. The
- * verb is in the full ink and the icon and the subject in the muted one,
- * so a reader scans what each call did and the subject reads as its
- * preview, fading where the line cuts it rather than ending on an
- * ellipsis. There is no chevron: the icon leads, a hover fill says the
- * line opens, and its hint says what a press does, as a line that opens a
- * tab says what it opens. The body under
- * it, set in under the words, is the call's input and its answer, each a
- * `CodeCard` headed "Input" and "Output" with the window's one Copy and its
- * one cut at 40 lines, so a long answer shows its first lines over "Show
- * all", and Copy copies the whole of it either way; a command is one
- * "Terminal" card instead, its prompt line over what it printed, as a shell
- * shows them. JSON reads as words (`readableBlock`), an answer that only
- * acknowledges is left out, and an empty one says "No output". What the
- * words say is the caller's decision (`tasks/tool-call-model.ts`); how a
- * block of each kind is drawn is this file's. Its look is `.tool`'s
- * (tasks.css).
- */
-
-/** The states a tool part may stand in, as the AI SDK spells them. */
 export const TOOL_STATE = {
   INPUT_STREAMING: "input-streaming",
   INPUT_AVAILABLE: "input-available",
@@ -69,7 +37,6 @@ export const TOOL_STATE = {
 
 export type ToolState = (typeof TOOL_STATE)[keyof typeof TOOL_STATE];
 
-/** How a block of the body is drawn: a command behind its prompt, a patch with its lines colored, words as they are, or JSON. */
 export const TOOL_BLOCK = {
   COMMAND: "command",
   PATCH: "patch",
@@ -84,69 +51,41 @@ export interface ToolBlock {
   readonly text: string;
 }
 
-/** The prompt a command is drawn behind. */
 const COMMAND_PROMPT = "$ ";
 
-/** What a block's header says it is. */
 const BLOCK_TITLE = {
   INPUT: "Input",
   OUTPUT: "Output",
   TERMINAL: "Terminal",
 } as const;
 
-/** What an answer of nothing says in its card's place. */
 const NO_OUTPUT = "No output";
 
-/** What an empty list reads as. */
 const NONE = "(none)";
 
-/** The words that only acknowledge a call, which tell a reader nothing the row does not. */
 const ACKNOWLEDGMENTS: ReadonlySet<unknown> = new Set(["accepted", "Done.", "done", "ok"]);
 
-/** The keys whose `true` only acknowledges a call, as `{ "ok": true }` does; `true` under any other key is an answer. */
 const ACKNOWLEDGING_KEYS: ReadonlySet<string> = new Set(["ok", "success"]);
 
-/**
- * Whether a block says a call's subject whole, so the row previewing it
- * gives way while the body is drawn: a block that is the subject, as a
- * read's input is its path, or JSON holding it as one of its values, as a
- * search's input holds its pattern. Note that words made from the input
- * rather than copied from it, as a page's name is made from its address,
- * are not said by it, so they stay.
- */
 export function blockSays(block: ToolBlock, subject: string | undefined): boolean {
   if (subject === undefined || subject === "") return false;
   if (block.text === subject) return true;
   return block.kind === TOOL_BLOCK.JSON && block.text.includes(`: ${JSON.stringify(subject)}`);
 }
 
-/** What a patch's line does, by its first characters: a line added, one removed, or one that stands. */
 function patchRow(line: string): CodeRow {
   if (line.startsWith("+")) return CODE_ROW.ADDED;
   if (line.startsWith("-")) return CODE_ROW.REMOVED;
   return CODE_ROW.CONTEXT;
 }
 
-/** What the hover over a call's folding line says a press does, by whether the fold stands open. */
 const FOLD_HINT = {
   SHOW: "Show the call",
   HIDE: "Hide the call",
 } as const;
 
-/**
- * The call's label, in the full ink over the line's muted one, cut to the
- * line. Note that a chip after it gives way first (`shrink-0`), since a name
- * cut at its end still reads.
- */
 const TOOL_LABEL_CLASS = "tool-label min-w-0 overflow-hidden whitespace-nowrap text-foreground";
 
-/**
- * The body under an open line, set in past its icon to the line's words,
- * where a call's body, a model's reasoning, and a call's pictures stand
- * (`--transcript-gutter`, tasks.css): `@repo/ui`'s tinted card holding what a
- * call sent, a hairline between its blocks, or cards of their own one over
- * the next with no frame around them.
- */
 const TOOL_BODY_CLASS = "tool-body my-tight-gap mr-0 ml-transcript-gutter";
 
 export type ToolProps = Omit<FoldProps, "className">;
@@ -159,14 +98,6 @@ export function Tool({ children, ...props }: ToolProps): ReactNode {
   );
 }
 
-/**
- * Where the call stands: the working mark while it runs, in the line's
- * muted ink, or the failed mark if it failed, each the one an agent's tab
- * wears and named as it is. A call that ended well draws nothing, no empty
- * seat and no gap beside it, since that is every call's end and a mark on
- * each says nothing. Note that the failed mark gives no hint of its own,
- * because a subagent's row already hangs one over the whole line.
- */
 export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
   if (state === TOOL_STATE.OUTPUT_AVAILABLE) return null;
   if (state === TOOL_STATE.OUTPUT_ERROR) return stateEndMark(GLYPH_STATE.FAILED, false);
@@ -175,31 +106,15 @@ export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
 
 export interface ToolHeaderProps {
   state: ToolState;
-  /** The tool's icon, drawn at 16px. */
   icon: ReactNode;
-  /** What the call did, in the full ink: its verb, or what a described command is for; none for a line that is its subject alone. */
   label: string | undefined;
-  /** What the call was done to, in the muted ink after the label; none for a call that has no one input a reader looks for first. */
   subject: string | undefined;
-  /** Who the call was about, as a chip after the label and before the subject, as a call about one coding agent names the agent; none for the rest. */
   chip?: ReactNode | undefined;
-  /** Whether the subject is code (a command, a path), set in mono, rather than words. */
   subjectIsCode?: boolean;
-  /** Whether the body says the subject whole, as a command's or a read's does (`blockSays`), so an open row drops it. */
   subjectInBody?: boolean;
-  /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac", or whose Mac by their disc and name); none for the rest. */
   place?: ReactNode | undefined;
 }
 
-/**
- * What a call's line says: its icon, what it did, who it was about where it
- * names someone by their chip, and where it stands. Note that the chip
- * gives way before the label does, since a name cut at its end still reads,
- * and that the subject after it takes only what is left. A failure's mark
- * stands right after the label, by what failed, rather than at the line's
- * far end, where a reader scanning the verbs would miss it; the working
- * mark keeps the end, where it moves nothing as the call settles.
- */
 export function ToolLine({
   state,
   icon,
@@ -217,13 +132,11 @@ export function ToolLine({
   return (
     <>
       <GlyphSlot>{icon}</GlyphSlot>
-      {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
       <span className="flex min-w-0 flex-1 items-baseline gap-tight-gap">
         {label === undefined ? null : (
           <OneLine
             className={chip === undefined ? TOOL_LABEL_CLASS : `${TOOL_LABEL_CLASS} shrink-0`}
           >
-            {/* Note that a verb drops its colon where nothing follows it, as an open row's whose body says its subject. */}
             {trailing ? `${label} ` : label.replace(/:$/u, "")}
           </OneLine>
         )}
@@ -258,11 +171,6 @@ export function ToolLine({
   );
 }
 
-/**
- * A call's folding line, which opens and closes its fold, hanging the hint
- * that says so, as a line that opens a tab hangs what it opens; the caller
- * draws what stands in it, and finds it by the marks it hands.
- */
 export function ToolSummary({
   children,
   ...marks
@@ -278,7 +186,6 @@ export function ToolSummary({
   );
 }
 
-/** The one line a call shows: what it did, and where it stands. */
 export function ToolHeader({
   state,
   icon,
@@ -305,15 +212,12 @@ export function ToolHeader({
   );
 }
 
-/** The body under an open row: a card holding the blocks, a hairline between them, clipped to its corners, so what is in it rings inside itself. */
 export function ToolContent({
   name,
   bare = false,
   children,
 }: {
-  /** The class its place names what it holds by, beside the body's own. */
   name?: string | undefined;
-  /** Whether what it holds are cards of their own (`CodeCard`), which stand one over the next with no frame around them. */
   bare?: boolean;
   children: ReactNode;
 }): ReactNode {
@@ -340,7 +244,6 @@ export function ToolContent({
   );
 }
 
-/** A block as the card draws it: what its lines are, what Copy copies, and what each line does where it is a patch. */
 function BlockCard({
   block,
   title,
@@ -355,7 +258,6 @@ function BlockCard({
     <CodeCard
       title={title}
       titleIs={CODE_CARD_TITLE.WORDS}
-      // Note that the prompt is drawn but never copied: Copy takes the command alone.
       code={isCommand ? `${COMMAND_PROMPT}${block.text}` : block.text}
       copied={block.text === "" ? undefined : block.text}
       rows={block.kind === TOOL_BLOCK.PATCH ? block.text.split("\n").map(patchRow) : undefined}
@@ -365,7 +267,6 @@ function BlockCard({
   );
 }
 
-/** A JSON block's value, or its text where it is no JSON, as a string answer is drawn as it is. */
 function blockValue(block: ToolBlock): unknown {
   try {
     return JSON.parse(block.text);
@@ -378,13 +279,11 @@ function isContainer(value: unknown): value is object {
   return value !== null && typeof value === "object";
 }
 
-/** A value that stands on its key's line: a scalar, its later lines set in under the first, or an empty list or record as "(none)". */
 function leafWords(value: unknown, indent: string): string {
   if (isContainer(value)) return NONE;
   return String(value).replaceAll("\n", `\n${indent}  `);
 }
 
-/** A JSON value as indented `key: value` lines and `- item` lines, with no braces or quotes. */
 function readableLines(value: unknown, indent: string): string[] {
   if (Array.isArray(value) && value.length === 0) return [`${indent}${NONE}`];
   if (Array.isArray(value)) {
@@ -401,11 +300,6 @@ function readableLines(value: unknown, indent: string): string[] {
   );
 }
 
-/**
- * A block as a reader reads it: JSON as indented words, a record holding
- * one string as that string, and every other kind as it is. Note that it
- * knows no tool: what one tool's answer means is `tool-call-model.ts`'s.
- */
 function readableBlock(block: ToolBlock): ToolBlock {
   if (block.kind !== TOOL_BLOCK.JSON) return block;
   const value = blockValue(block);
@@ -417,12 +311,6 @@ function readableBlock(block: ToolBlock): ToolBlock {
   return { kind: TOOL_BLOCK.TEXT, text: readableLines(value, "").join("\n") };
 }
 
-/**
- * Whether a JSON answer only acknowledges the call, as "accepted",
- * `{ "status": "accepted" }` or `{ "ok": true }` does. Note that `true`
- * acknowledges only under `ok` or `success`, because `{ "exists": true }`
- * is the call's answer.
- */
 function acknowledges(block: ToolBlock): boolean {
   if (block.kind !== TOOL_BLOCK.JSON) return false;
   const value = blockValue(block);
@@ -436,18 +324,10 @@ function acknowledges(block: ToolBlock): boolean {
   );
 }
 
-/** The block an answer's card draws, read as words; nothing where the answer only acknowledges the call. */
 function shownOutput(block: ToolBlock): ToolBlock | undefined {
   return acknowledges(block) ? undefined : readableBlock(block);
 }
 
-/**
- * The words a call's body draws, as a find counts them before the body is
- * drawn: a command's line and what it printed, then its error; or the
- * input read as words, then the error or else the answer as its card or
- * its "No output" line says it. Note that it reads each block as the cards
- * below do, so a find counts what a reader sees.
- */
 export function bodyWords(
   input: ToolBlock | undefined,
   output: ToolBlock | undefined,
@@ -463,7 +343,6 @@ export function bodyWords(
   return [inputWords, errorText ?? answer ?? ""].filter((words) => words !== "");
 }
 
-/** What the call was given, read as words; nothing where it was given nothing. */
 export function ToolInput({ block }: { block: ToolBlock }): ReactNode {
   const readable = readableBlock(block);
   if (readable.text === "") return null;
@@ -471,16 +350,10 @@ export function ToolInput({ block }: { block: ToolBlock }): ReactNode {
 }
 
 export interface ToolOutputProps {
-  /** Nothing while the call has not answered. */
   block: ToolBlock | undefined;
   errorText: string | undefined;
 }
 
-/**
- * What the call answered, read as words and cut at 40 lines by its card, or
- * the error it ended in, or a muted line where it answered nothing; nothing
- * while it has answered neither, or where it only acknowledged the call.
- */
 export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
   if (errorText !== undefined) {
     return (
@@ -504,15 +377,9 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
 }
 
 export interface ToolTerminalProps extends ToolOutputProps {
-  /** The command, a `TOOL_BLOCK.COMMAND` block. */
   input: ToolBlock;
 }
 
-/**
- * A command and what it printed as one card, as a shell shows them: the
- * prompt line, then its output, and the error it ended in under the card.
- * Note that Copy takes the command alone, without its prompt or output.
- */
 export function ToolTerminal({ input, block, errorText }: ToolTerminalProps): ReactNode {
   const printed = block === undefined ? "" : readableBlock(block).text.trimEnd();
   const prompt = `${COMMAND_PROMPT}${input.text}`;

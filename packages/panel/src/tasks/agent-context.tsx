@@ -33,37 +33,14 @@ import {
   rowWidth,
 } from "./agent-context-model.js";
 
-/**
- * agent-context.tsx -- the ring at the agent box's foot that shows how full the agent's model's context is, and the popover that says what fills it.
- *
- * Beside the model chip stands a small ring, the way Claude Code and
- * Cursor draw one, filled with the share of the window the agent's newest
- * step read and colored by how near eve's compaction that is
- * (`agent-context-model.ts`); its hover says the share in words. A press
- * opens a popover right above the ring, the model menu's width, from the
- * ring's trailing edge as the model menu hangs from its chip, since both
- * stand at the foot's right (`@repo/ui`'s `AnchoredPopover` and
- * `PopoverPanel`). It says the
- * share and the total, draws the parts on one segmented bar, names each
- * part with its count beside a square of its color, and under them the
- * cache, the step's answer, where eve compacts, and when it last did. The
- * ring stands only once a step has ended, since there is nothing to fill
- * it before. The popover closes on its ×, on Escape, which stops there so
- * the panel behind stays open, on a second press of the ring, and on focus
- * leaving it.
- */
-
-/** What the ring and its popover are called. */
 const CONTEXT_LABEL = "Context usage";
 
-/** The ring's fill: muted with room to spare, amber within a tenth of the window of eve's compaction, and red at or past it. */
 const LEVEL_TONE = {
   [CONTEXT_LEVEL.ROOM]: PROGRESS_RING_TONE.MUTED,
   [CONTEXT_LEVEL.NEAR]: PROGRESS_RING_TONE.ATTENTION,
   [CONTEXT_LEVEL.OVER]: PROGRESS_RING_TONE.DANGER,
 } as const satisfies Record<ContextLevel, ProgressRingTone>;
 
-/** Each part of the context's one color, on the bar and on its legend row's square. */
 const PART_GROUND = {
   [CONTEXT_PART.SYSTEM_PROMPT]: "bg-chart-2",
   [CONTEXT_PART.TOOL_DEFINITIONS]: "bg-chart-1",
@@ -71,12 +48,10 @@ const PART_GROUND = {
   [CONTEXT_PART.CONVERSATION]: "bg-muted-foreground",
 } as const satisfies Record<ContextPart, string>;
 
-/** The ring itself, filled with the share of the window and toned by its level: the ring's own face, and the composer's ⋯ row's icon. */
 export function ContextRingIcon({ context }: { context: AgentContext }): React.JSX.Element {
   return <ProgressRing share={contextShare(context)} tone={LEVEL_TONE[contextLevel(context)]} />;
 }
 
-/** What the popover holds: the summary, the bar, each part's row and the stats, which tick on for as long as it is drawn. */
 function ContextBody({
   context,
   brief,
@@ -140,14 +115,11 @@ function ContextPopover({
   onClose,
   onLeave,
 }: {
-  /** Whether it stands; closed, it fades out. */
   open: boolean;
   id: string;
   context: AgentContext;
   brief: AgentBrief | undefined;
-  /** Closes the popover and hands focus back to the ring. */
   onClose: () => void;
-  /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   return (
@@ -173,11 +145,8 @@ export function AgentContextRing({
   open: heldOpen,
   onOpenChange,
 }: {
-  /** What the agent's model's context holds, as the transcript's last page said; nothing before a step ended, which draws no ring. */
   context: AgentContext | undefined;
-  /** What the agent was handed, which names the brief's row. */
   brief: AgentBrief | undefined;
-  /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the ring's own otherwise. */
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
 }): React.JSX.Element | null {
@@ -189,8 +158,6 @@ export function AgentContextRing({
   const trigger = useRef<HTMLButtonElement>(null);
   if (context === undefined) return null;
 
-  // Note that we hand focus back to the ring, as a menu returns it to its
-  // trigger, because closing takes the focused popover away with it.
   const close = () => {
     setOpen(false);
     trigger.current?.focus();

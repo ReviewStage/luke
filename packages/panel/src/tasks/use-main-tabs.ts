@@ -16,98 +16,17 @@ import {
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-/**
- * use-main-tabs.ts -- the task's column's tabs: its Overview, each of its agents, and its draft agent, which is chosen, and the order they stand in, kept per task across launches.
- *
- * The task frames the column, as a workspace frames its chats: each agent
- * started on the task stands under a tab of its own, as an editor draws its
- * files, so an agent's transcript, its calls, and its composer take the room
- * the task is worked in, and a task opens on them. Its Overview, the task's
- * details (its head and its description), is no tab among them but a page
- * of its own the topbar's Details opens (`main-tabs.tsx`), kept first in the
- * order below so the agents' tabs move after it. What supports them, the task's Inbox and the description's comments among it,
- * stands in the side panel (`use-side-panel.ts`). Overview always stands
- * and never closes nor moves; the agents' tabs stand one per agent in the
- * order started, and a draft agent's, opened from the column's "+", after
- * them while the open task holds the draft. A task none of whose tabs viewed
- * still stands shows its agents' last tab, or on a phone its details, and
- * one with no agent's tab standing shows none, which its column opens a
- * draft on (`use-tasks-tab.ts`);
- * a draft left holding nothing closes.
- *
- * An agent's tab closes as an editor's does, which closes the view and
- * leaves the agent running, and the "+" opens it again; the agents whose
- * tabs were closed are kept, so a closed tab stays closed across a launch,
- * and an agent started since opens its tab. A draft's tab is kept nowhere,
- * and closing it lets the draft go, which is its owner's to do. Closing the
- * chosen tab chooses the one viewed before it on that task that still
- * stands, and only where none does its neighbor (`replacementOf`), so a
- * column whose last tab closes is back on a draft.
- *
- * The tab chosen is each task's own: the latest it viewed that still
- * stands, the strip's last where none does. So opening a task from the
- * sidebar shows it as the developer left it, and an
- * agent a notification, a pin, or a Start names is shown by viewing it on
- * its task. An agent's tab stands only once the task's agents are read and
- * hold it, so the column never shows an agent its strip draws no tab for: a
- * task opened on an agent waits on the list in the agent's shape. Before the list answers, the task's row
- * in the sidebar may already settle which tab it will be (`NamedAgents`):
- * the agent last viewed, where the row names it, or the task's one agent,
- * where none viewed stands. The column then shows it
- * at once, its transcript read beside the list, and only where the row
- * cannot settle it does the column wait.
- *
- * The agents' tabs are dragged or moved from the keyboard among themselves,
- * always after Overview, and the task keeps the order from then on: an
- * agent's tab closed and opened again stands where it stood, and one never
- * moved stands after those that were.
- *
- * These facts are this window's preference rather than anything main
- * holds, so they are kept in the renderer's own storage, read once at
- * mount. The description's own tab, the Inbox, the task's Call, and its Chat once
- * stood here (`RETIRED_MAIN_TAB`), the description's under the word `plan`, which
- * is why Overview, holding the description now, is kept under a word of its own; what
- * a launch kept of them reads and is let go, so every other choice it holds
- * still stands. The agents' tabs once stood in
- * the side panel, whose record kept them; a window with no record of its own
- * reads theirs from there once. A fixture run neither reads nor writes
- * them: its tasks have no agents, and a capture must not depend on how the
- * last run left the column. ⌘T's ask for the column's "+" is a moment's,
- * kept nowhere.
- *
- * Each task also keeps when each of its tabs was last viewed, and the
- * agents whose tabs closed because nobody looked at them for a day
- * (`use-idle-tabs.ts`), which the agent waking opens again; a tab the
- * developer closes or opens is no longer one of those.
- */
-
-/**
- * The column's own tabs, named by a word: the task's Overview, holding its
- * description, which leads the strip on every task. Note that it is not
- * spelled `plan`, the word a retired tab was kept under below.
- */
 export const MAIN_TAB = {
   OVERVIEW: "overview",
 } as const;
 
-/** The task's Overview tab. */
 type OverviewTab = typeof MAIN_TAB.OVERVIEW;
 
-/** Whether a tab is the task's Overview. */
 export function isOverviewTab(tab: StripTab | undefined): tab is OverviewTab {
   return tab === MAIN_TAB.OVERVIEW;
 }
 
-/**
- * The column's own tabs an earlier version had and this one does not, which
- * what it kept may still name: the description's own, which Overview
- * holds now, and the Inbox, which stands in the side panel, the task's Call, whose calls every agent's tab takes
- * now, and the task's Chat, gone with Chat. Note that a
- * kind is retired here rather than deleted, because a kept state naming one
- * would otherwise not read at all and lose every other choice it holds.
- */
 const RETIRED_MAIN_TAB = {
-  // Note that the value is the name the description had, which is what an earlier version kept.
   DESCRIPTION: "plan",
   INBOX: "inbox",
   CALL: "call",
@@ -116,78 +35,44 @@ const RETIRED_MAIN_TAB = {
 
 const RETIRED_MAIN_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_MAIN_TAB));
 
-/** A tab of the task's column: its Overview, one agent's, or the draft agent's. */
 export type MainTab = OverviewTab | AgentStripTab | DraftStripTab;
 
-/** Where the preference is kept in the renderer's storage. */
 const STORAGE_KEY = "app.mainTabs";
 
-/** Where the side panel keeps its own, which held the agents' tabs before this column did. */
 const SIDE_PANEL_KEY = "app.sidePanel";
 
-/**
- * How many agents whose tabs were closed are kept, the latest closed. Note
- * that the agents are every task's, so the list is held to a bound rather
- * than growing with every agent ever closed; one past it opens again.
- */
 const CLOSED_AGENTS_KEPT = 500;
 
-/**
- * How many tabs a task keeps as viewed, the latest viewed. Note that a tab
- * closed leaves the list as it closes, so the bound only lets go of tabs
- * long unviewed, which a close then passes over for its neighbor.
- */
 const RECENT_KEPT = 20;
 
-/**
- * How many tasks' own choices are kept, the latest chosen. Note that a task
- * deleted leaves its entry behind, so the record is held to a bound rather
- * than growing with every task ever opened.
- */
 const TASKS_KEPT = 500;
 
-/**
- * How many tabs a task keeps the time it last viewed, the latest viewed.
- * Note that a tab past it counts as viewed when next stamped, which only
- * keeps it open longer.
- */
 const VIEWED_KEPT = 50;
 
-/** A tab as it is kept across a launch: Overview or an agent's; a draft's is kept nowhere. */
 const keptTabSchema = Schema.Union([
   Schema.Struct({ agent: Schema.String }),
   Schema.Literal(MAIN_TAB.OVERVIEW),
 ]);
 
-/** When a kept tab was last viewed, in epoch milliseconds. */
 const keptViewedSchema = Schema.Struct({ tab: keptTabSchema, at: Schema.Number });
 
-/** A tab as it is read: one of today's, or one retired, which reads and is then let go (`currentTasks`). */
 const readTabSchema = Schema.Union([
   keptTabSchema,
   Schema.Literals(Object.values(RETIRED_MAIN_TAB)),
 ]);
 
-/**
- * One task's choices: the tabs viewed on it, the latest last, and its order
- * since a tab was first moved on it. Note that what an earlier version kept
- * of the description's tab, the Inbox, the Call, and whether the Chat was open
- * beside these is left unread.
- */
 const taskChoicesSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(keptTabSchema)),
   order: Schema.optional(Schema.Array(keptTabSchema)),
   viewedAt: Schema.optional(Schema.Array(keptViewedSchema)),
 });
 
-/** One task's choices as they are read, a retired tab among those viewed and moved. */
 const readChoicesSchema = Schema.Struct({
   ...taskChoicesSchema.fields,
   recent: Schema.optional(Schema.Array(readTabSchema)),
   order: Schema.optional(Schema.Array(readTabSchema)),
 });
 
-/** The agents whose tabs were closed, every task's, those of them closed for being idle, and each task's choices, by task id. */
 const mainTabsSchema = Schema.Struct({
   closedAgents: Schema.Array(Schema.String),
   dozing: Schema.optional(Schema.Array(Schema.String)),
@@ -196,26 +81,20 @@ const mainTabsSchema = Schema.Struct({
 
 type MainTabsState = typeof mainTabsSchema.Type;
 
-/** One task's choices as the hook holds them, the draft's tab among them until a launch. */
 interface TaskChoices {
   readonly recent?: readonly MainTab[] | undefined;
   readonly order?: readonly MainTab[] | undefined;
-  /** When each tab was last viewed, the latest last. */
   readonly viewedAt?: readonly ViewedAt<MainTab>[] | undefined;
 }
 
-/** The state the hook holds: the kept one, with a draft's tab possibly among a task's choices. */
 interface HeldState {
   readonly closedAgents: readonly string[];
-  /** The agents among `closedAgents` whose tabs closed for being idle, which open again as the agent wakes. */
   readonly dozing: readonly string[];
   readonly tasks: Readonly<Record<string, TaskChoices>>;
 }
 
-/** A side panel tab as an earlier version kept it: a fixed kind's word, or an agent's. */
 const sidePanelTabSchema = Schema.Union([Schema.String, Schema.Struct({ agent: Schema.String })]);
 
-/** Each task's agents' tabs as an earlier version's side panel record kept them. */
 const sidePanelTaskTabsSchema = Schema.optional(
   Schema.Record(
     Schema.String,
@@ -226,14 +105,12 @@ const sidePanelTaskTabsSchema = Schema.optional(
   ),
 );
 
-/** What of the side panel's record an earlier version kept of the agents' tabs, under `plans` before tasks had their name. */
 const sidePanelAgentsSchema = Schema.Struct({
   closedAgents: Schema.optional(Schema.Array(Schema.String)),
   tasks: sidePanelTaskTabsSchema,
   plans: sidePanelTaskTabsSchema,
 });
 
-/** The kept preference as it is read: one written before tasks had their name keeps them under `plans`. */
 const keptMainTabsSchema = Schema.Struct({
   closedAgents: Schema.Array(Schema.String),
   dozing: Schema.optional(Schema.Array(Schema.String)),
@@ -246,90 +123,54 @@ const decodeKept = Schema.decodeUnknownOption(Schema.fromJsonString(keptMainTabs
 const decodeSidePanel = Schema.decodeUnknownOption(Schema.fromJsonString(sidePanelAgentsSchema));
 const encodeStored = Schema.encodeSync(storedMainTabs);
 
-/** A window that has kept nothing, and a fixture run's column. */
 const NOTHING_KEPT: HeldState = { closedAgents: [], dozing: [], tasks: {} };
 
-/** A task the developer has chosen nothing on. */
 const NO_CHOICES: TaskChoices = {};
 
-/** A task no tab was moved on, or viewed. */
 const NO_TABS: readonly MainTab[] = [];
 
-/** A task none of whose tabs was stamped viewed. */
 const NO_STAMPS: readonly ViewedAt<MainTab>[] = [];
 
-/** What the column draws and hands back. */
 export interface MainTabsControl {
-  /** The column's tabs in the strip's order: Overview, then the open agents' and the draft's, in the task's order. */
   tabs: readonly MainTab[];
-  /** The tab shown; none while the agents are read and the tab the task will show waits on them, nor while no agent's tab stands. */
   tab: MainTab | undefined;
-  /** The agent's or the draft's tab the task's details go back to (`returnedTo`); none where none stands. */
   returnTab: MainTab | undefined;
-  /** The task's agents whose tabs are open, in the order started; nothing while the agents are unread. */
   openAgents: readonly string[] | undefined;
-  /** Whether ⌘T asked for the column's "+" menu and the "+" has not yet opened it. */
   newTabAsked: boolean;
-  /** Shows the tab, opening an agent's where it was closed. */
   onChoose: (tab: MainTab) => void;
-  /** Shows the tab on the task given, as `onChoose` does on the open task: what a pin, a notification, or the call card asks, the task opened beside it. */
   onShow: (taskId: string, tab: MainTab) => void;
-  /** Closes the tab, and only the view: an agent goes on as it was; Overview never closes. */
   onClose: (tab: MainTab) => void;
-  /** Moves a tab to the place `to` among the tabs after Overview, leaving the chosen one chosen; Overview stays where it leads. */
   onMove: (tab: MainTab, to: number) => void;
-  /** Asks the column's "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
-  /** Says the "+" opened its menu on the ask. */
   onNewTabAnswered: () => void;
-  /** When each of the open task's tabs was last viewed (`use-idle-tabs.ts`). */
   viewedAt: readonly ViewedAt<MainTab>[];
-  /** Stamps the tabs viewed at `at` on the task given, and each of `standing` not stamped yet. */
   onViewedAt: (
     taskId: string,
     viewed: readonly MainTab[],
     standing: readonly MainTab[],
     at: number,
   ) => void;
-  /** Closes the agent's tab as `onClose` does, for being idle, so the agent waking opens it again. */
   onDoze: (tab: AgentStripTab) => void;
-  /** Opens again the tabs of the agents given that closed for being idle, as each wakes. */
   onWake: (agents: readonly string[]) => void;
 }
 
-/**
- * The agents the open task's row in the sidebar names before its list is
- * read: at most a few (`TASK_AGENTS_BOUNDS`), those at work first and then
- * the rest, newest started first within each, and none archived.
- */
 export interface NamedAgents {
-  /** The agents named, by id, in the row's order. */
   ids: readonly string[];
-  /** How many agents the task has in all. */
   total: number;
 }
 
-/** What the open task holds for the tabs: its id, its agents, or nothing while unread, what its row names of them meanwhile, and its draft's key. */
 interface DrawnTabs {
   taskId: string | undefined;
   agents: readonly string[] | undefined;
   named: NamedAgents | undefined;
   draft: string | undefined;
-  /** Whether a task none of whose tabs viewed stands opens on its details rather than its agents: a phone's, whose details list its agents as its first screen. */
   detailsFirst: boolean;
 }
 
-/** The task's choices. */
 function choicesOn(held: HeldState, taskId: string | undefined): TaskChoices {
   return taskId === undefined ? NO_CHOICES : (held.tasks[taskId] ?? NO_CHOICES);
 }
 
-/**
- * The state with the task's choices changed, that task's kept latest and the
- * oldest task's let go past the bound. With no task open there is nothing to
- * keep a choice on, and a change that answers the choices it was handed
- * changes nothing.
- */
 function withChoices(
   held: HeldState,
   taskId: string | undefined,
@@ -346,12 +187,10 @@ function withChoices(
   };
 }
 
-/** The task's agents whose tabs are open, in the order started; nothing while the agents are unread. */
 function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
   return agents?.filter((agent) => !held.closedAgents.includes(agent));
 }
 
-/** The tabs that move in their order: the open agents' and the draft's, in the task's order. */
 function movableOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.taskId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
@@ -360,24 +199,14 @@ function movableOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   return inTaskOrder([...agents, ...draft], order, (tab) => tab);
 }
 
-/** The strip in its order: Overview, then the tabs that move (`movableOf`). */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   return [MAIN_TAB.OVERVIEW, ...movableOf(held, drawn)];
 }
 
-/** Whether the tab stands in the task's strip now. */
 function stands(held: HeldState, drawn: DrawnTabs, tab: MainTab): boolean {
   return stripOf(held, drawn).some((each) => sameTab(each, tab));
 }
 
-/**
- * The tab shown on the task: the latest it viewed that still stands, else
- * its agents' last tab, since a task opens on its agents; none with no task
- * open, nor on a task with no agent's tab standing, which its column opens a
- * draft on (`use-tasks-tab.ts`). Note that a fallback is not counted viewed until it is
- * chosen, and an agent viewed waits on the agents' read, so a task opened on
- * an agent it viewed never shows another first.
- */
 function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   if (drawn.taskId === undefined) return undefined;
   if (drawn.agents === undefined) return shownBeforeList(held, drawn);
@@ -388,11 +217,6 @@ function shownIn(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   );
 }
 
-/**
- * The tab the task's details go back to: the latest of its agents' and its
- * draft's it viewed that still stands, else its agents' last; none where no
- * agent's tab stands.
- */
 function returnedTo(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   const recent = choicesOn(held, drawn.taskId).recent ?? NO_TABS;
   return (
@@ -401,22 +225,10 @@ function returnedTo(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   );
 }
 
-/**
- * Whether the row names every one of the task's agents, so an agent it does
- * not name is none of the task's.
- */
 function namesAll(named: NamedAgents): boolean {
   return named.ids.length === named.total;
 }
 
-/**
- * The tab the task will show once its agents are read, where its row
- * already settles it, else none, which waits on the read. The latest tab
- * viewed that the row shows standing is it, Overview among them, which
- * always stands; one the row cannot place, an agent it does not name among
- * more than it names, leaves the choice to the read, as a task none of
- * whose tabs viewed stands does.
- */
 function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined {
   const { named } = drawn;
   const all = named !== undefined && namesAll(named);
@@ -429,14 +241,11 @@ function shownBeforeList(held: HeldState, drawn: DrawnTabs): MainTab | undefined
     }
     if (held.closedAgents.includes(tab.agent)) continue;
     if (named?.ids.includes(tab.agent) === true) return tab;
-    // An agent the row does not name may stand where the row names only some of the agents.
     if (!all) return undefined;
   }
-  // Note that a task none of whose tabs viewed stands waits on its agents, since it opens on them, but on a phone's, its details.
   return drawn.detailsFirst ? MAIN_TAB.OVERVIEW : undefined;
 }
 
-/** The state with the tabs viewed on the task, in the order given, as its latest. */
 function withViewed(
   held: HeldState,
   taskId: string | undefined,
@@ -448,11 +257,6 @@ function withViewed(
   });
 }
 
-/**
- * The state with the task's details let go of its tabs viewed, so the task
- * opens on its agents next time, its main view, whatever opens it: the
- * details stand as the tab shown only while the task stays open on them.
- */
 function withDetailsLeft(held: HeldState, taskId: string): HeldState {
   return withChoices(held, taskId, (was) =>
     was.recent?.some(isOverviewTab) === true
@@ -461,12 +265,10 @@ function withDetailsLeft(held: HeldState, taskId: string): HeldState {
   );
 }
 
-/** The state as a launch reads it: every task's details let go of its tabs viewed (`withDetailsLeft`). */
 function withEveryDetailsLeft(held: HeldState): HeldState {
   return Object.keys(held.tasks).reduce(withDetailsLeft, held);
 }
 
-/** The state with the agent's tab open, where it was closed. */
 function withOpened(held: HeldState, tab: MainTab): HeldState {
   if (!isAgentTab(tab) || !held.closedAgents.includes(tab.agent)) return held;
   return {
@@ -476,7 +278,6 @@ function withOpened(held: HeldState, tab: MainTab): HeldState {
   };
 }
 
-/** The state with the tabs of the agents given open again, of those whose tabs closed for being idle. */
 function withWoken(held: HeldState, agents: readonly string[]): HeldState {
   const woken = held.dozing.filter((agent) => agents.includes(agent));
   if (woken.length === 0) return held;
@@ -487,7 +288,6 @@ function withWoken(held: HeldState, agents: readonly string[]): HeldState {
   };
 }
 
-/** The state with the tabs stamped viewed on the task (`stampedViewed`). */
 function withViewedAt(
   held: HeldState,
   taskId: string | undefined,
@@ -501,35 +301,17 @@ function withViewedAt(
   });
 }
 
-/**
- * The state with the tab shown on the open task, viewed after the one shown
- * until then. Note that the one shown is viewed too, because the tab a close
- * returns to is the one last looked at, which need never have been chosen:
- * the tab a task opened on.
- */
 function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
   const shown = shownIn(held, drawn);
   const viewed = shown === undefined || sameTab(shown, tab) ? [tab] : [shown, tab];
   return withViewed(withOpened(held, tab), drawn.taskId, viewed);
 }
 
-/**
- * The state with the tab shown on the task given: on the open task as
- * `withChosen` shows it, and on another as the tab it will open on.
- */
 function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs): HeldState {
   if (on === drawn.taskId) return withChosen(held, tab, drawn);
   return withViewed(withOpened(held, tab), on, [tab]);
 }
 
-/**
- * The state with the tab closed, gone from those viewed on the task, and
- * the tab viewed before it, or its neighbor, viewed in its place where it
- * was the one shown, Overview where no other stands. Overview never closes. Closing an
- * agent's tab closes nothing of the agent's own, and closing a draft's leaves
- * the draft its owner's to let go. An agent's tab closed `dozing`, for being
- * idle, opens again as the agent wakes; one closed by hand does not.
- */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs, dozing = false): HeldState {
   if (isOverviewTab(tab)) return held;
   const before = stripOf(held, drawn);
@@ -550,17 +332,12 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs, dozing = fa
   }));
   const shown = shownIn(held, drawn);
   if (shown === undefined || !sameTab(shown, tab)) return forgotten;
-  // Note that the draft's tab stands until its owner lets the draft go, so it is left out here.
   const standing = stripOf(forgotten, drawn).filter((each) => !sameTab(each, tab));
   const recent = choicesOn(forgotten, drawn.taskId).recent ?? NO_TABS;
   const replacement = replacementOf(standing, recent, before, tab);
   return replacement === undefined ? forgotten : withViewed(forgotten, drawn.taskId, [replacement]);
 }
 
-/**
- * The state with the tab moved to `to` among the tabs after Overview, kept
- * as the task's order (`movedOrder`); Overview leads where it stands.
- */
 function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs): HeldState {
   if (isOverviewTab(tab)) return held;
   const movable = movableOf(held, drawn);
@@ -571,12 +348,10 @@ function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs):
     : withChoices(held, drawn.taskId, (choices) => ({ ...choices, order }));
 }
 
-/** Whether a tab is kept across a launch: Overview or an agent's, the kinds that stand again after it. */
 function keptTab(tab: MainTab): tab is Exclude<MainTab, DraftStripTab> {
   return !isDraftTab(tab);
 }
 
-/** What is kept of the state: every task's choices without a draft's tab, and neither list where a task has none. */
 function stored(held: HeldState): MainTabsState {
   const kept = (tabs: readonly MainTab[] = NO_TABS) => {
     const each = tabs.filter(keptTab);
@@ -598,7 +373,6 @@ function stored(held: HeldState): MainTabsState {
   };
 }
 
-/** What storage holds under the key, or nothing where it refuses the read. */
 function storedText(key: string): string | null {
   try {
     return window.localStorage.getItem(key);
@@ -607,12 +381,6 @@ function storedText(key: string): string | null {
   }
 }
 
-/**
- * The agents' tabs as the side panel's record kept them before this column
- * held them: the agents whose tabs were closed, and each task's agents in
- * the order it moved and viewed them. Note that a fixed kind's word is the
- * side panel's and stays there.
- */
 function fromSidePanel(record: typeof sidePanelAgentsSchema.Type): HeldState {
   const agentsIn = (tabs: readonly (typeof sidePanelTabSchema.Type)[] = []) =>
     tabs.flatMap((tab) => (isAgentTab(tab) ? [{ agent: tab.agent }] : []));
@@ -631,14 +399,12 @@ function fromSidePanel(record: typeof sidePanelAgentsSchema.Type): HeldState {
   return { closedAgents: record.closedAgents ?? [], dozing: [], tasks: Object.fromEntries(tasks) };
 }
 
-/** Whether a kept tab is of a kind this column still has: any but a retired one. */
 function current<T>(
   tab: T,
 ): tab is Exclude<T, (typeof RETIRED_MAIN_TAB)[keyof typeof RETIRED_MAIN_TAB]> {
   return !RETIRED_MAIN_TABS.has(tab);
 }
 
-/** Each task's kept choices without the tabs retired since they were kept. */
 function currentTasks(
   tasks: Readonly<Record<string, typeof readChoicesSchema.Type>>,
 ): HeldState["tasks"] {
@@ -654,7 +420,6 @@ function currentTasks(
   );
 }
 
-/** The kept preference, or what the side panel's record kept of the agents' tabs where none is, or nothing. */
 function readStored(): HeldState {
   const kept = Option.map(
     decodeKept(storedText(STORAGE_KEY)),
@@ -673,10 +438,6 @@ function readStored(): HeldState {
   );
 }
 
-/**
- * The state a fixture run's column draws from: the one it staged, its task
- * viewed on the tab the run names until a tab is chosen on it.
- */
 function stagedOn(
   staged: HeldState,
   taskId: string | undefined,
@@ -688,15 +449,6 @@ function stagedOn(
   return withViewed(staged, taskId, [tab]);
 }
 
-/**
- * The column's tabs over the open task: `taskId`, none while no task is
- * open, `agents` its agents by id in the order started, or nothing while
- * unread, `named` what its row names of them meanwhile, and `draft` its
- * draft agent's key, if it holds one; `detailsFirst` where a task none of
- * whose tabs viewed stands opens on its details, as a phone's does. A fixture run's column keeps nothing,
- * and starts from the tab the run names (`fixture`), its Overview where it
- * names none.
- */
 export function useMainTabs(
   fixture: { readonly tab: MainTab | undefined } | undefined,
   taskId: string | undefined,
@@ -705,9 +457,6 @@ export function useMainTabs(
   draft: string | undefined,
   detailsFirst = false,
 ): MainTabsControl {
-  // Note that a fixture run's column is a state of its own rather than the
-  // kept one reset, because the run is only known once the first state
-  // arrives, a render after the kept preference was read.
   const [kept, setKept] = useState<HeldState>(readStored);
   const [staged, setStaged] = useState<HeldState>(NOTHING_KEPT);
   const [newTabAsked, setNewTabAsked] = useState(false);
@@ -727,8 +476,6 @@ export function useMainTabs(
     () => ({ taskId, agents, named, draft, detailsFirst }),
     [taskId, agents, named, draft, detailsFirst],
   );
-  // A task left on its details lets them go, so it opens on its agents again wherever it is opened
-  // from; a phone's, whose details are where a task opens, keeps them.
   const [standing, setStanding] = useState(taskId);
   if (standing !== taskId) {
     setStanding(taskId);
@@ -736,15 +483,11 @@ export function useMainTabs(
       update((held) => withDetailsLeft(held, standing));
     }
   }
-  // Note that a write that fails (storage full, or refused) costs only the
-  // preference, so it is not worth a word on screen.
   useEffect(() => {
     if (staging) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, encodeStored(stored(kept)));
-    } catch {
-      // The column keeps working on the state it holds.
-    }
+    } catch {}
   }, [staging, kept]);
 
   const tabs = useMemo(() => stripOf(state, drawn), [state, drawn]);
@@ -753,8 +496,6 @@ export function useMainTabs(
     (tab: MainTab) => update((held) => withChosen(held, tab, drawn)),
     [update, drawn],
   );
-  // Note that a tab shown on another task is not counted viewed after the
-  // open task's, because the task it is viewed on is the one about to open.
   const onShow = useCallback(
     (on: string, tab: MainTab) => update((held) => withShown(held, on, tab, drawn)),
     [update, drawn],

@@ -122,121 +122,39 @@ import {
 } from "./agent-workspace-tools.js";
 import { ServerCard } from "./server-card.js";
 
-/**
- * agent-servers.tsx -- the Integrations row of an agent box's + menu and an automation's servers field, and the popover both open that lists the servers the agent is handed with a switch for each, and each server's tools.
- *
- * The agent box's + opens a menu whose Integrations row opens the popover
- * beside the menu as its submenu (`serversMenuPanel`, `@repo/ui`'s
- * `MenuPanel`), the menu standing behind it; an automation's form opens the
- * same popover from its field's chip, hung from the chip's trailing edge
- * (`AgentServersButton`, `@repo/ui`'s `AnchoredPopover`). Either way it is
- * a `PopoverPanel`, a menu's, drawn as the searchable menu is: a search field first, then, for a
- * started agent, our own tools under Built in, then the servers under
- * Connected, which counts how many this agent has on, and Not connected
- * (`agent-servers-model.ts`), each section under `@repo/ui`'s `MenuSection`,
- * and Manage in Settings pinned at the foot. The app's row is its mark, its
- * name, how many of its tools the agent is offered (`agent-workspace-tools.ts`),
- * `run_on_mac off` in the attention tone where it is, and Always on in a
- * switch's place, since his tools cannot be turned off; pressing it turns
- * the popover into his page, his tools under their groups, each its name and
- * one line of what it does, `run_on_mac` with an On or Off badge and, off,
- * its short reason. Pressing `run_on_mac` opens its own page: what it does
- * and, off, why, in the attention tone, with Open Settings where Settings ›
- * This Mac is what turned it off. A connected server's row names how many
- * tools it offers and ends with this agent's switch; one whose server
- * answered why it lists none says why beside its name and ends with
- * Reconnect; one not connected ends with Connect, which sends the browser
- * to sign in there and then, as Settings does: the row waits on it with a
- * ring after its name, its line said only to a reader and in its title,
- * then Reopen and Cancel, and becomes the switch once the sign-in settles,
- * or says it failed or did not finish and offers Retry
- * (`../integration-sign-in.ts`). Pressing a connected server turns the popover into
- * its page, in place: back, its name, its switch, a filter, and its tools
- * in alphabetical order, each one line of its title, its name, the badge
- * its server's annotations earn it, and what it does
- * (`../integration-tool-list.tsx`). Pressing a tool turns the page into
- * the tool's own, one level further in: back, its title and name, its
- * server's hints, what it does rendered, and its parameters, the popover
- * standing open. What is typed in the home's field finds
- * servers by name and every tool by name, title, or description, and a tool found
- * opens its server's page filtered to the search. Focus stays in the field
- * on the home and a server's page, as the searchable menu keeps it: the
- * arrows move one highlight through the rows, Enter or Right opens the
- * highlighted server or tool, Space on an empty search flips its switch,
- * and on a server's page Left, or Backspace on an empty filter, goes back.
- * A tool's page hands the focus to its body, which the arrows scroll, and
- * Left or Backspace goes back to the server's page with its filter and its
- * highlight as they were. Where every
- * connection stands is the composer's read (`../integration-statuses.ts`),
- * taken as it is drawn and again when the window is focused, which is how
- * the developer comes back from the browser, so the popover stays open
- * while the window is away. A draft agent keeps its choice until its first
- * message starts it. Escape goes back one level, from a tool's page or a
- * server's, and otherwise closes the popover, or, standing as the + menu's
- * submenu, goes back to its row, and stops there so the panel behind stays
- * open; Manage in Settings closes the + menu with it. A second press of the
- * chip, and focus leaving it for another part of the window, close it too.
- * The chip, the back, a row's switch and its Connect, Reopen, Cancel or
- * Retry are `@repo/ui`'s, each pressed without taking the focus from the field.
- */
-
-/** The servers an agent is handed, as the button changes them. */
 export interface AgentServersControl {
-  /** The servers switched off for this agent: the one on its way where one is, else the agent's. */
   readonly disabled: readonly string[];
-  /** Switches the agent's servers, the whole list of those off. */
   readonly onSwitch: (next: readonly string[]) => void;
-  /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
-  /** The started agent whose own tools, the app's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
   readonly workspace?: WorkspaceToolsDoor | undefined;
 }
 
-/** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 
-/**
- * The servers' list, taller than the searchable menu's, as tall as a
- * server's page, so going in and back keeps the popover's size, and never
- * taller than the window leaves above the composer once the field and the
- * foot are drawn, so the field stays on screen in the shortest window.
- */
 const SERVERS_SCROLL_CLASS = "flex max-h-servers-list flex-col";
 
-/** How many tools a server offers, in the muted detail type. */
 const SERVER_COUNT_CLASS =
   "agent-servers-count flex-none whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums";
 
-/** What stands at a server's row's end: its switch, or Connect, as Settings › Integrations draws them. */
 const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
 
-/**
- * A page's head in the popover's place: back, folded to its glyph, its mark
- * and name, its count, and its switch at the end, over a hairline, at the
- * search field's height; a narrowed mention list's crumb stands as one.
- */
 export const SERVER_PAGE_HEAD_CLASS =
   "agent-servers-page-head flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--ui-fold:folded]";
 
-/** What the pinned row at the popover's foot is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
-/** What the popover's list says where the deployment offers the account no server at all. */
 const SERVERS_NONE = "No integrations available";
 
-/** What the home's field asks for, and says where nothing matches. */
 const SEARCH = {
   PLACEHOLDER: "Search integrations and tools",
   NONE: "No integrations or tools match",
   TOOLS: "Tools",
 } as const;
 
-/** What a server's page says where its filter matches nothing. */
 const PAGE = {
   NONE: "No tools match",
 } as const;
 
-/** What the app's own row and pages say. */
 const WORKSPACE_WORDS = {
   SECTION: "Built in",
   ALWAYS_ON: "Always on",
@@ -248,10 +166,8 @@ const WORKSPACE_WORDS = {
   RUN_ON_MAC_OFF: `${AGENT_TOOL.RUN_ON_MAC} off`,
 } as const;
 
-/** Where the home's highlight stands while the app's row heads it: before every server's row. */
 const WORKSPACE_PICK = 0;
 
-/** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
 const WORKING_ACT = {
   CONNECT: "connect",
   CANCEL: "cancel",
@@ -259,19 +175,12 @@ const WORKING_ACT = {
 
 type WorkingAct = (typeof WORKING_ACT)[keyof typeof WORKING_ACT];
 
-/**
- * A pointer's press that leaves the focus in the field, so the keys the
- * field hears go on working after a row, a switch, or a button is clicked;
- * Tab still reaches every control, which takes the focus as it should.
- */
 function keepFieldFocus(event: React.MouseEvent): void {
   event.preventDefault();
 }
 
-/** One thing the home's highlight can land on: a server's row, or a tool a search found. */
 type Pick = { readonly row: ServerRow; readonly tool?: IntegrationTool };
 
-/** The switch that hands the agent a server or takes it away. */
 function ServerSwitch({
   row,
   servers,
@@ -292,12 +201,10 @@ function ServerSwitch({
   );
 }
 
-/** A server's name in its row, faded where the row cuts it short. */
 function ServerName({ name }: { name: string }): React.JSX.Element {
   return <OneLine className="agent-servers-name flex-initial">{name}</OneLine>;
 }
 
-/** A server's name heading its own page, faded where the head cuts it short. */
 function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
   return (
     <OneLine className="agent-servers-page-title text-section-inline font-ui-semibold text-foreground">
@@ -306,28 +213,13 @@ function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
   );
 }
 
-/**
- * The hint over a row's problem: its whole words where the row cut them,
- * and where the server or the sign-in said words of its own, those after
- * ours, quoted and named, whether cut or not. Note that the row's one line
- * holds our sentence alone, because their words are no sentence of ours.
- */
 function problemHint(problem: string, said: string | undefined): OneLineHint {
   if (said === undefined) return wholeWordsHint(problem);
   return (line) => <Tooltip label={`${problem} ${said}`}>{line}</Tooltip>;
 }
 
-/**
- * What a server's row says between its mark and its end: its provider's
- * name, the account's beside it in the muted ink where the row names one,
- * and where its sign-in or its server stands, as the card a mention of the
- * server hangs says them too (`server-card.tsx`). How many tools it offers
- * is the row's metadata, at its end beside its switch.
- */
 function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
-    // Note that the words stand in a line of their own, because a list row's
-    // title would otherwise clip the reason behind a long name.
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
       <ServerName name={INTEGRATION_NAME[row.provider]} />
       {row.accountName !== undefined ? (
@@ -362,12 +254,6 @@ function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   );
 }
 
-/**
- * Every offered server's row as the popover draws it, from where each
- * connection stands and the servers the agent switched off, each connected
- * server's tools read for as long as the caller is drawn: every one's, or
- * only the server named where the caller draws that one alone.
- */
 export function useServerRows(
   statuses: IntegrationStatuses,
   disabled: readonly string[],
@@ -393,32 +279,23 @@ export function useServerRows(
   });
 }
 
-/** Where the caret stands in the field a key was pressed in, heard where it bubbles. */
 function caretOf(event: React.KeyboardEvent<HTMLElement>): number | null | undefined {
   return event.target instanceof HTMLInputElement ? event.target.selectionStart : undefined;
 }
 
-/** Whether a key on a tool's page goes back to the page it was opened from: Left, or Backspace. */
 function goesBack(event: React.KeyboardEvent<HTMLElement>): boolean {
   return event.key === "ArrowLeft" || event.key === "Backspace";
 }
 
-/** A page's list as its field's keys move through it: its filter, its highlight, how many rows it draws, and what back, a step, and opening the highlighted row do. */
 interface PageKeys {
   readonly filter: string;
   readonly at: number;
   readonly count: number;
   readonly back: () => void;
   readonly step: (to: number) => void;
-  /** Opens the highlighted row; none where it opens nothing. */
   readonly open: (() => void) | undefined;
 }
 
-/**
- * What a key in a page's field does, a server's or the app's: Left or
- * Backspace on an empty filter goes back, the arrows step the highlight,
- * and Enter, or Right with the caret at the end, opens the highlighted row.
- */
 function pageFieldKey(event: React.KeyboardEvent<HTMLElement>, page: PageKeys): void {
   const caretAtEnd = caretOf(event) === page.filter.length;
   if (goesBack(event) && page.filter === "") {
@@ -437,7 +314,6 @@ function pageFieldKey(event: React.KeyboardEvent<HTMLElement>, page: PageKeys): 
   }
 }
 
-/** The search field at the top of either page, which holds the focus while the popover is open. */
 function SearchRow({
   field,
   value,
@@ -452,8 +328,6 @@ function SearchRow({
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
 }): React.JSX.Element {
   return (
-    // Note that the field's keys are heard as they bubble out of it, because
-    // the popover steers its rows by keys of its own.
     // biome-ignore lint/a11y/noStaticElementInteractions: the keys are the field's; the box only hears them.
     <div onKeyDown={onKeyDown}>
       <SearchField
@@ -468,7 +342,6 @@ function SearchRow({
   );
 }
 
-/** What the popover's list says in its rows' place. */
 function ServersNote({ words }: { words: string }): React.JSX.Element {
   return (
     <div className="flex min-h-10 items-center justify-center px-list-inset py-tight-gap text-center">
@@ -479,7 +352,6 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** The product's mark, at a provider mark's seat. */
 function AppMark(): React.JSX.Element {
   return (
     <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
@@ -488,7 +360,6 @@ function AppMark(): React.JSX.Element {
   );
 }
 
-/** What stands at the end of the app's row and its page's head in a switch's place: its tools cannot be turned off. */
 function AlwaysOn(): React.JSX.Element {
   return (
     <span className={SERVER_END_CLASS}>
@@ -497,7 +368,6 @@ function AlwaysOn(): React.JSX.Element {
   );
 }
 
-/** What the app's row says between its mark and its end: its name, how many tools it offers once read, and whether `run_on_mac` is off. */
 function WorkspaceRowWords({ workspace }: { workspace: WorkspaceToolsRead }): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
@@ -525,19 +395,16 @@ function WorkspaceRowWords({ workspace }: { workspace: WorkspaceToolsRead }): Re
   );
 }
 
-/** Whether `run_on_mac` is on for the agent, once that is known, as quiet words: On or Off. */
 function RunOnMacWords({ workspace }: { workspace: WorkspaceToolsRead }): React.JSX.Element | null {
   if (workspace.reason !== undefined) return <QuietWords>{WORKSPACE_WORDS.OFF}</QuietWords>;
   if (workspace.answer === undefined) return null;
   return <QuietWords>{WORKSPACE_WORDS.ON}</QuietWords>;
 }
 
-/** Whether a row of the app's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
 function opensWorkspaceTool(tool: WorkspaceToolRow): boolean {
   return tool.name === AGENT_TOOL.RUN_ON_MAC;
 }
 
-/** Whether a search finds the app's row: by its name, or by a tool's name or what it does. */
 function workspaceFound(names: readonly string[], tokens: readonly string[]): boolean {
   return (
     matchesTokens([PRODUCT_NAME], tokens) ||
@@ -545,15 +412,8 @@ function workspaceFound(names: readonly string[], tokens: readonly string[]): bo
   );
 }
 
-/** What makes a row the highlighted one, where the pointer coming onto it moves the highlight. */
 const RowHighlight = createContext<(() => void) | undefined>(undefined);
 
-/**
- * The pointer coming onto a row's press makes it the highlighted one, as a
- * menu's highlight follows the pointer, and the press hangs the card its
- * row's `RowHintOptions` hand it (`RowHint`). Note that it rides the row's
- * hint slot, the one door to its press's pointer handlers.
- */
 const PointerHighlight: ListRowHint = ({ label, row, children }) => {
   const highlight = useContext(RowHighlight);
   return (
@@ -579,24 +439,18 @@ function ServersPopover({
   onLeave,
   onExited,
 }: {
-  /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
   open: boolean;
   id: string;
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
-  /** Closes the popover, and the menu it stands beside, handing focus back to what opened it. */
   onClose: () => void;
-  /** Escape on the home: back to the menu row that opened it, where it stands as a submenu; the close otherwise. */
   onBack?: (() => void) | undefined;
-  /** Whether its field takes the focus as it opens: not where the pointer resting on the + menu's row opened it, which leaves the keyboard in the menu until the pointer arrives. */
   takesFocus?: boolean | undefined;
-  /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
   onExited: () => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  // The run a server's tools are drawn in, which brings in the highlighted tool where it is not drawn.
   const toolRun = useRef<VirtualRowsHandle>(null);
   const moving = useRef<HTMLDivElement>(null);
   const rowsId = useId();
@@ -619,7 +473,6 @@ function ServersPopover({
   const [workspaceFilter, setWorkspaceFilter] = useState("");
   const [workspaceHighlight, setWorkspaceHighlight] = useState(0);
 
-  // The app's page stands only while the popover draws an agent's; its tool's page only over its.
   const workspaceNames = workspace.answer?.tools ?? [];
   const onWorkspace = servers.workspace !== undefined && workspaceOpen;
   const onRunOnMac = onWorkspace && workspaceTool === AGENT_TOOL.RUN_ON_MAC;
@@ -632,11 +485,7 @@ function ServersPopover({
   const workspaceRows = workspaceSections.flatMap((section) => section.tools);
   const workspaceAt = Math.min(workspaceHighlight, Math.max(workspaceRows.length - 1, 0));
 
-  // A server's page stands only while its server still answers with tools; otherwise the home is drawn.
   const page = rows.find((row) => row.connection === opened && opensTools(row));
-  // Note that the page's filter reads as the home's search does, so a query
-  // handed down that found a tool by its server's name ("vercel get") still
-  // finds it here.
   const pageTokens = searchTokens(filter);
   const pageTools =
     page === undefined
@@ -648,7 +497,6 @@ function ServersPopover({
           ),
         );
   const pageAt = Math.min(pageHighlight, Math.max(pageTools.length - 1, 0));
-  // A tool's page stands only while its server still lists it.
   const tool = page?.tools?.find((each) => each.name === openedTool);
   const found = searchServers(rows, query);
   const groups = serverGroups(found.rows);
@@ -656,23 +504,18 @@ function ServersPopover({
     ...groups.flatMap((group) => group.rows).filter((row) => row.kind !== SERVER_ROW.QUIET),
     ...found.tools,
   ].map((each) => ("tool" in each ? each : { row: each }));
-  // The app's row heads the home's picks while it stands: for an agent, and found by the search.
   const homeTokens = searchTokens(query);
   const workspaceShown =
     servers.workspace !== undefined && workspaceFound(workspaceNames, homeTokens);
   const workspaceOffset = workspaceShown ? 1 : 0;
   const at = Math.min(highlight, Math.max(picks.length + workspaceOffset - 1, 0));
   const onWorkspaceRow = workspaceShown && at === WORKSPACE_PICK;
-  // A search that found one of his tools opens his page filtered to it, as a server's does.
   const workspaceSearch = workspaceNames.some((name) =>
     matchesTokens([name, workspaceToolSummary(name) ?? ""], homeTokens),
   )
     ? query
     : "";
 
-  // The field takes focus as the popover opens, unless its owner leaves the
-  // keyboard where it was, and as any page with one is drawn, and a tool's
-  // page its body, so the keys and focus leaving it are heard.
   const opening = useRef(true);
   useEffect(() => {
     const first = opening.current;
@@ -691,19 +534,16 @@ function ServersPopover({
         ? `${rowsId}-${at}`
         : `${rowsId}-tool-${pageAt}`;
     const row = document.getElementById(highlighted);
-    // Note that a tool scrolled out of the rows drawn has no row to keep in view, so it is brought in.
     if (row === null && !onWorkspace && highlightedTool !== undefined) {
       toolRun.current?.bringIn(highlightedTool);
     } else keepInView(list.current, row);
   }, [at, page, pageAt, highlightedTool, tool, rowsId, onWorkspace, onRunOnMac, workspaceAt]);
 
-  /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (server: string) => {
     setWorking({ server, act: WORKING_ACT.CONNECT });
     void grant.begin(server).then(() => setWorking(undefined));
   };
 
-  /** A sign-in waited on, ended here; a Cancel the service refused leaves it waiting, to press again. */
   const cancel = (server: string) => {
     setWorking({ server, act: WORKING_ACT.CANCEL });
     void statuses.cancelSignIn(server).then(() => setWorking(undefined));
@@ -731,7 +571,6 @@ function ServersPopover({
     setOpenedTool(name);
   };
 
-  /** Back from a tool's page to its server's, the filter and the highlight as they were. */
   const closeTool = () => setOpenedTool(undefined);
 
   const openWorkspace = (search: string) => {
@@ -756,14 +595,8 @@ function ServersPopover({
     setWorkspaceTool(name);
   };
 
-  /** Back from a tool's page to the app's, the filter and the highlight as they were. */
   const closeWorkspaceTool = () => setWorkspaceTool(undefined);
 
-  /**
-   * What a pick does when chosen: a server opens or connects, and a tool
-   * opens its server's page, filtered to the search, as does a server the
-   * search found tools of, as Settings › Integrations opens its row onto them.
-   */
   const choose = (pick: Pick | undefined) => {
     if (pick === undefined) return;
     const { row } = pick;
@@ -771,7 +604,6 @@ function ServersPopover({
     if (opensTools(row)) {
       return open(row, found.tools.some((hit) => hit.row === row) ? query : "");
     }
-    // Note that Enter on a sign-in under way reopens it, its first press, as Retry begins it again.
     if (
       row.kind === SERVER_ROW.CONNECT ||
       row.kind === SERVER_ROW.RECONNECT ||
@@ -802,7 +634,6 @@ function ServersPopover({
       if (onWorkspaceRow) openWorkspace(workspaceSearch);
       else choose(pick);
     } else if (event.key === " " && query.trim() === "" && pick?.row.kind === SERVER_ROW.SWITCH) {
-      // Note that we flip the switch only on an empty search, because a space typed after a word is part of the search.
       event.preventDefault();
       servers.onSwitch(switchedServers(servers.disabled, pick.row.connection, !pick.row.on));
     }
@@ -847,7 +678,6 @@ function ServersPopover({
     closeWorkspaceTool();
   };
 
-  // Escape goes back one level, and closes the popover only from its home.
   const dismiss = () => {
     if (onRunOnMac) closeWorkspaceTool();
     else if (onWorkspace) backFromWorkspace();
@@ -856,7 +686,6 @@ function ServersPopover({
     else onBack();
   };
 
-  /** A row's button while its server waits on an act: busy if it started that act, off if the other did. */
   const workingOn = (server: string, mine: WorkingAct, busyLabel: string) => {
     if (working?.server !== server) return {};
     return working.act === mine ? { busy: true, busyLabel } : { disabled: true };
@@ -940,13 +769,11 @@ function ServersPopover({
     }
   };
 
-  /** A row's place among the home's picks, after the app's where it stands, which names its id and its highlight; a quiet row is none. */
   const pickIndex = (row: ServerRow, tool?: IntegrationTool) => {
     const index = picks.findIndex((pick) => pick.row === row && pick.tool === tool);
     return index < 0 ? index : index + workspaceOffset;
   };
 
-  /** A row of the home: its place among the picks names its id and its highlight, and the pointer coming onto its press moves the highlight there. */
   const homeRow = (input: {
     key: string;
     index: number;
@@ -954,11 +781,8 @@ function ServersPopover({
     title: React.ReactNode;
     meta?: React.ReactNode;
     actions?: React.ReactNode;
-    /** The server's card, or the card of the tool a search found, hung beside the row. */
     card: React.ReactNode;
-    /** Whether the press opens a further page, which a chevron says. */
     opens: boolean;
-    /** The key the list's motion follows the row by, out of one section and into another. */
     motionKey?: string;
     onPress: (() => void) | undefined;
   }) => {
@@ -977,7 +801,6 @@ function ServersPopover({
             actions={input.actions}
             current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
             chevron={input.opens}
-            // Note that the chevron takes the metadata's place while the row is in hand, as a sidebar row's ⋯ takes its count's, so a server's account fades to its count rather than short of room kept for the chevron.
             chevronAt={LIST_ROW_CHEVRON.META}
             keepFocus
             tabbable={false}
@@ -990,7 +813,6 @@ function ServersPopover({
     );
   };
 
-  /** What a press on a server's row does: open its page, flip a switch with no page to open, or what Enter does; none for a row the keys pass over. */
   const rowPress = (row: ServerRow): (() => void) | undefined => {
     if (opensTools(row)) return () => open(row);
     if (row.kind === SERVER_ROW.SWITCH) {
@@ -1005,14 +827,11 @@ function ServersPopover({
       index: pickIndex(row),
       row,
       title: <ServerRowWords row={row} />,
-      // Note that the count is the row's metadata, beside its switch, so every row's counts form one column, and the chevron takes its place while the row is in hand.
       meta: row.tools !== undefined ? toolsCount(row.tools.length) : undefined,
       card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
       opens: opensTools(row),
-      // Note that a server's row is followed by its connection, because a server that connects leaves Not connected for Connected and glides across rather than leaving one list and arriving in the other.
       motionKey: row.connection,
-      // Note that a row the keys can choose takes the press as Enter does, because a row hangs its card from its press and a row with none would hang nothing.
       onPress: rowPress(row),
     });
 
@@ -1034,7 +853,6 @@ function ServersPopover({
       onPress: () => open(row, query),
     });
 
-  /** The app's own row, heading the home: its mark, its name, its count, `run_on_mac` where it is off, and Always on, opening its page. */
   const workspaceRow = (
     <RowHighlight.Provider
       value={at === WORKSPACE_PICK ? undefined : () => setHighlight(WORKSPACE_PICK)}
@@ -1168,7 +986,6 @@ function ServersPopover({
     );
   };
 
-  /** One of the app's tools on its page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
   const workspaceToolRow = (shown: WorkspaceToolRow) => {
     const index = workspaceRows.indexOf(shown);
     const runOnMac = shown.name === AGENT_TOOL.RUN_ON_MAC;
@@ -1208,7 +1025,6 @@ function ServersPopover({
     );
   };
 
-  /** The app's page in the popover's place: back, its mark and name, its count, Always on, a filter, and its tools under their groups. */
   const workspacePage = (
     <>
       <div className={SERVER_PAGE_HEAD_CLASS}>
@@ -1262,7 +1078,6 @@ function ServersPopover({
     </>
   );
 
-  /** `run_on_mac`'s page over the app's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
   const runOnMacPage = (reason: RunOnMacReason | undefined) => {
     const detail = reason === undefined ? undefined : runOnMacDetail(reason);
     return (
@@ -1285,7 +1100,6 @@ function ServersPopover({
             <RunOnMacWords workspace={workspace} />
           </span>
         </div>
-        {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
         <ScrollArea ref={toolBody} tabIndex={-1} onKeyDown={onWorkspaceToolKey}>
           <div className="flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
             <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -1363,8 +1177,6 @@ function ServersPopover({
       onLeave={onLeave}
       onExited={onExited}
     >
-      {/* Note that the searchable menu's own class rides a box drawn as its
-          contents, because its rows' highlight is that menu's. */}
       <div className="agent-servers-menu contents">
         {onRunOnMac
           ? runOnMacPage(workspace.reason)
@@ -1393,7 +1205,6 @@ function ServersPopover({
   );
 }
 
-/** The popover as a menu's submenu, drawn while it stands and gone at once as it goes back. */
 function ServersMenuPanel({
   servers,
   statuses,
@@ -1403,13 +1214,11 @@ function ServersMenuPanel({
 }: {
   servers: AgentServersControl;
   statuses: IntegrationStatuses;
-  /** Whether a press or a key opened it, which takes the keyboard into its field. */
   entered: boolean;
   onBack: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const id = useId();
-  // Note that focus leaving the popover is the menu's to hear, which closes unless it went to the menu itself.
   return (
     <ServersPopover
       open
@@ -1425,11 +1234,6 @@ function ServersMenuPanel({
   );
 }
 
-/**
- * The + menu's Integrations row, which opens the popover beside the menu as
- * its submenu: the same popover the chip hangs, Escape on its home going
- * back to the row.
- */
 export function serversMenuPanel(
   servers: AgentServersControl,
   statuses: IntegrationStatuses,
@@ -1449,16 +1253,13 @@ export function serversMenuPanel(
   };
 }
 
-/** The popover hung from a form's field chip, as an automation's servers are picked. */
 export function AgentServersButton({
   servers,
   statuses,
   face,
 }: {
   servers: AgentServersControl;
-  /** Where every connection stands, as the form around the chip reads it. */
   statuses: IntegrationStatuses;
-  /** What the chip shows, as a Settings picker's field chip draws it, chevron and all. */
   face: React.ReactNode;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -1467,12 +1268,9 @@ export function AgentServersButton({
   const faceId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  // Note that the popover is drawn from its opening until its fade has run, and no longer, because its search, its page and its reads of every server's tools are its own and start afresh each time it opens.
   const [drawn, setDrawn] = useState(open);
   if (open && !drawn) setDrawn(true);
 
-  // Note that we hand focus back to the chip, as a menu returns it to its
-  // trigger, because closing takes the focused popover away with it.
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
@@ -1480,9 +1278,7 @@ export function AgentServersButton({
 
   return (
     <div className="agent-servers relative flex min-w-0" ref={root}>
-      {/* A face is a form's field, at least the column its pickers share. */}
       <VisuallyHidden id={labelId}>{SERVERS_LABEL}</VisuallyHidden>
-      {/* Note that the chip is named by its field's name and then the words its face draws ("None", "+2"), through its own id, because a name that left them out would not match the screen. */}
       <Chip
         ref={trigger}
         look={CHIP_LOOK.FIELD}
@@ -1506,7 +1302,6 @@ export function AgentServersButton({
             statuses={statuses}
             onClose={close}
             onLeave={(left) => {
-              // The window losing focus is the browser opened for a sign-in, whose outcome the popover waits to read.
               if (!document.hasFocus()) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}

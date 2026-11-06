@@ -32,20 +32,6 @@ import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-sections.test.ts -- the account's own sections in the sidebar:
- * each drawn over the tasks kept in it, its tasks chosen with those under
- * Tasks by ⌘-click for one menu to act on them all,
- * which Tasks then leaves out, and reached from a task's menu, whose Move
- * to section writes the move and whose section's Delete acts at once with Undo; and
- * the dialog's icon picker, every Lucide glyph in a color and every emoji,
- * found by one search; and a task dragged between Pinned, Tasks, and a
- * section, pinned, unpinned, and moved where it is let go; and, under a finger, which drags nothing, a pin, a
- * section, and a section's task moved a place by its menu, which a long
- * press, a right-click, and the keyboard's ⇧⌘↑ and ⇧⌘↓ all reach, the row
- * kept focused. Synthetic throughout.
- */
-
 const WORKSPACE: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
@@ -92,7 +78,6 @@ function task(id: string, name: string): TaskSummary {
 const INVITES = task("0a1b2c3d-0000-4000-8000-100000000001", "Invite expiry");
 const RETRIES = task("0a1b2c3d-0000-4000-8000-100000000002", "Retry audit");
 
-/** Launch, with its rocket, holding Invite expiry. */
 const SECTIONS: TaskSections = {
   sections: [
     {
@@ -109,7 +94,6 @@ const SECTIONS: TaskSections = {
 
 const SOMEDAY = "0a1b2c3d-0000-4000-8000-000000000002";
 
-/** Launch, and Someday, made without an icon, holding Retry audit. */
 const ICONLESS: TaskSections = {
   sections: [
     ...SECTIONS.sections,
@@ -119,7 +103,6 @@ const ICONLESS: TaskSections = {
   agentEntries: [],
 };
 
-/** Lets the window's document land, as main hands it, and what it moves settle. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -129,7 +112,6 @@ async function settle(): Promise<void> {
 const STARS = "0a1b2c3d-0000-4000-8000-000000000003";
 const LOST = "0a1b2c3d-0000-4000-8000-000000000004";
 
-/** Launch, Stars in a teal telescope, a glyph only Lucide whole draws, and Lost, in a glyph no Lucide knows. */
 const GLYPHS: TaskSections = {
   sections: [
     ...SECTIONS.sections,
@@ -156,7 +138,6 @@ const GLYPHS: TaskSections = {
   agentEntries: [],
 };
 
-/** Lets what the sidebar and the picker load on demand land: Lucide whole, and the emoji. */
 async function settleLoaded(): Promise<void> {
   await act(async () => {
     await Promise.all([import("lucide-react"), import("unicode-emoji-json/data-by-group.json")]);
@@ -164,7 +145,6 @@ async function settleLoaded(): Promise<void> {
   await settle();
 }
 
-/** Types `words` into a field, as a person would. */
 function typeInto(field: HTMLInputElement, words: string): void {
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -173,7 +153,6 @@ function typeInto(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** The dialog's field labeled `label`, failing where none is drawn. */
 function dialogField(label: string): HTMLInputElement {
   const named = [...document.querySelectorAll<HTMLLabelElement>("label")].find(
     (candidate) => candidate.textContent === label,
@@ -184,7 +163,6 @@ function dialogField(label: string): HTMLInputElement {
   return found instanceof HTMLInputElement ? found : assert.fail(`no ${label} field`);
 }
 
-/** The sidebar listing both tasks over `sections`, each write it asks heard by `writes`, and anything else `rest` says of the tasks. */
 function sidebarOver(
   sections: TaskSections,
   writes: TaskSectionWrite[],
@@ -201,7 +179,6 @@ function sidebarOver(
   return createElement(DesktopSidebar, sidebarProps(tasks));
 }
 
-/** The sidebar over `sections`, Launch unless said, and a way to draw it again over other sections, as a refresh does. */
 async function mountSidebarRedrawn(
   writes: TaskSectionWrite[],
   sections = SECTIONS,
@@ -231,7 +208,6 @@ async function mountSidebarRedrawn(
   return { container, draw };
 }
 
-/** The sidebar over `sections`, Launch unless said, each write it asks heard by `writes`. */
 async function mountSidebar(
   writes: TaskSectionWrite[],
   sections = SECTIONS,
@@ -240,8 +216,6 @@ async function mountSidebar(
   return (await mountSidebarRedrawn(writes, sections, rest)).container;
 }
 
-/** The header of the section titled `title`, failing where none is drawn. */
-/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
 function heardName(button: Element): string {
   const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
   return heard?.textContent ?? "";
@@ -255,7 +229,6 @@ function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
   return found ?? assert.fail(`no ${title} section`);
 }
 
-/** Opens the row named `name`'s menu, then the item listing the sections: a task's Move to, an agent's Move to section. */
 function openMoveToSection(sidebar: HTMLElement, name: string, label = "Move to"): void {
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
     (each) => each.textContent?.includes(name),
@@ -267,7 +240,6 @@ function openMoveToSection(sidebar: HTMLElement, name: string, label = "Move to"
   act(() => item(label).click());
 }
 
-/** The dialog's button whose words are `label`, or else whose label is, failing where none is drawn; Lucide's Save glyph is no Save button. */
 function dialogButton(label: string): HTMLButtonElement {
   const buttons = [...document.querySelectorAll<HTMLButtonElement>("button")];
   const found =
@@ -276,7 +248,6 @@ function dialogButton(label: string): HTMLButtonElement {
   return found ?? assert.fail(`no ${label} button`);
 }
 
-/** The names of the tasks drawn under the region labeled `label`. */
 function namesIn(sidebar: HTMLElement, label: string): string[] {
   const region = sidebar.querySelector(`nav[aria-label="${label}"]`);
   return [...(region?.querySelectorAll(".ui-list-row-title") ?? [])].map(
@@ -284,7 +255,6 @@ function namesIn(sidebar: HTMLElement, label: string): string[] {
   );
 }
 
-/** The menu item named `label`, failing where none is drawn. */
 function item(label: string): HTMLElement {
   const name = [...document.querySelectorAll(".ui-menu-item-label")].find(
     (each) => each.textContent === label,
@@ -429,7 +399,6 @@ test("a task's Move to puts it on top of the section chosen", async () => {
   ]);
 });
 
-/** Launch holding both tasks, Invite expiry on top, and Someday holding none. */
 const BOTH_IN_LAUNCH: TaskSections = {
   sections: ICONLESS.sections,
   entries: [
@@ -439,21 +408,18 @@ const BOTH_IN_LAUNCH: TaskSections = {
   agentEntries: [],
 };
 
-/** Opens the section titled `title`'s menu from its ⋯. */
 function openSectionMenu(sidebar: HTMLElement, title: string): void {
   const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="${title} actions"]`);
   assert.ok(actions);
   act(() => actions.click());
 }
 
-/** The words of every item the open menus draw, in order. */
 function menuLabels(): string[] {
   return [...document.querySelectorAll(".ui-menu-item-label")].map(
     (each) => each.textContent ?? "",
   );
 }
 
-/** Opens the menu of the task row named `name` with a right-click. */
 function openRowMenu(sidebar: HTMLElement, name: string): void {
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
     (each) => each.textContent?.includes(name),
@@ -464,13 +430,11 @@ function openRowMenu(sidebar: HTMLElement, name: string): void {
   });
 }
 
-/** The sections' titles, in the order the sidebar draws them. */
 function sectionTitles(sidebar: HTMLElement): string[] {
   const heads = sidebar.querySelectorAll('nav[aria-label="Sections"] .ui-group-header-head');
   return [...heads].map((head) => heardName(head.querySelector("button[aria-expanded]") ?? head));
 }
 
-/** `state` once the service has taken every write of `writes`, in order. */
 function applied(state: TaskSections, writes: readonly TaskSectionWrite[]): TaskSections {
   return writes.reduce((was, write) => applySectionWrite(was, write, 30), state);
 }
@@ -697,7 +661,6 @@ test("two sections titled alike are two items in Move to section, on one task's 
   );
 });
 
-/** Presses the Tasks head's New section, which names a section in place. */
 function newSectionInPlace(sidebar: HTMLElement): HTMLInputElement {
   const button =
     sidebar.querySelector<HTMLButtonElement>(
@@ -707,7 +670,6 @@ function newSectionInPlace(sidebar: HTMLElement): HTMLInputElement {
   return sectionNameField();
 }
 
-/** The name field of the section being named in place, failing where none stands. */
 function sectionNameField(): HTMLInputElement {
   return (
     document.querySelector<HTMLInputElement>(
@@ -716,14 +678,12 @@ function sectionNameField(): HTMLInputElement {
   );
 }
 
-/** Presses `key` in `field`. */
 async function press(field: HTMLElement, key: string, shiftKey = false): Promise<void> {
   await act(async () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true }));
   });
 }
 
-/** Opens the menu of the section titled `title`, then chooses `label` on it. */
 function sectionMenuChoose(sidebar: HTMLElement, title: string, label: string): void {
   const actions =
     sidebar.querySelector<HTMLButtonElement>(`[aria-label="${title} actions"]`) ??
@@ -732,7 +692,6 @@ function sectionMenuChoose(sidebar: HTMLElement, title: string, label: string): 
   act(() => item(label).click());
 }
 
-/** Opens New section from Retry audit's Move to section, then its icon well's picker. */
 async function dialogPicker(sidebar: HTMLElement): Promise<void> {
   openMoveToSection(sidebar, "Retry audit");
   act(() => item("New section").click());
@@ -871,22 +830,14 @@ test("Remove icon in the picker clears a section's icon", async () => {
   ]);
 });
 
-/** Each row's height as laid out here, in CSS pixels. */
 const ROW_HEIGHT = 30;
 
-/** What a drag in the sidebar asked: each pin or unpin, each pin's new place, and each write to the sections. */
 interface Asked {
   marks: [string, TaskMark][];
   moves: PinMove[];
   writes: TaskSectionWrite[];
 }
 
-/**
- * Lays the sidebar out down one column, as jsdom does not: each row, and
- * each empty section's word, a row's height below the one before, and
- * everything holding some of them over exactly those, so each drop zone
- * stands over its own rows and no other's.
- */
 function layOutRows(): void {
   const slots = () => [
     ...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-slot, .ui-drop-slot"),
@@ -904,13 +855,11 @@ function layOutRows(): void {
       height: (last - first + 1) * ROW_HEIGHT,
     });
   });
-  // jsdom captures no pointer; a drag asks its list to, as the window's would.
   for (const list of document.querySelectorAll(".sidebar-tasks")) {
     Object.assign(list, { setPointerCapture: () => undefined });
   }
 }
 
-/** The sidebar listing `plans` over `sections`, laid out down one column, what a drag asks heard by `asked`. */
 async function mountDraggable(
   summaries: readonly TaskSummary[],
   sections: TaskSections,
@@ -943,9 +892,7 @@ async function mountDraggable(
 const pointer = (type: string, y: number) =>
   new PointerEvent(type, { bubbles: true, button: 0, clientY: y, pointerId: 1 });
 
-/** Presses the row named `name` at its middle and carries it a little way toward `y`, past where a press is a drag. */
 function lift(sidebar: HTMLElement, name: string, y: number): void {
-  // Note that a row's name is its title's first words, before what only a screen reader hears of it.
   const label = [...sidebar.querySelectorAll<HTMLElement>(".ui-list-row-title")].find(
     (each) => each.firstChild?.textContent === name,
   );
@@ -957,7 +904,6 @@ function lift(sidebar: HTMLElement, name: string, y: number): void {
   });
 }
 
-/** Carries the row lifted to `y` down the column and lets it go there. */
 function letGo(y: number): void {
   act(() => {
     window.dispatchEvent(pointer("pointermove", y));
@@ -965,23 +911,19 @@ function letGo(y: number): void {
   });
 }
 
-/** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
 function drag(sidebar: HTMLElement, name: string, y: number): void {
   lift(sidebar, name, y);
   letGo(y);
 }
 
-/** The sidebar's Pinned, where it stands. */
 function pinnedGroup(sidebar: HTMLElement): HTMLElement | null {
   return sidebar.querySelector<HTMLElement>('nav[aria-label="Pinned"]');
 }
 
-/** A moment after every stamp the fixtures carry, at which a drag's writes are taken. */
 const AFTER_FIXTURES = 10;
 
 const noneAsked = (): Asked => ({ marks: [], moves: [], writes: [] });
 
-/** A task pinned at the first place a drag gives. */
 const PINNED = {
   ...task("0a1b2c3d-0000-4000-8000-100000000003", "Pin audit"),
   pinnedAt: 5,
@@ -990,7 +932,6 @@ const PINNED = {
 
 test("a task dragged from Tasks into Pinned is pinned below the pin it was let go under", async () => {
   const asked = noneAsked();
-  // Down the column: Pin audit under Pinned, Invite expiry under Launch, Retry audit under Tasks.
   const sidebar = await mountDraggable([PINNED, INVITES, RETRIES], SECTIONS, asked);
 
   drag(sidebar, "Retry audit", ROW_HEIGHT - 4);
@@ -1053,7 +994,6 @@ test("a pinned task dragged into a section is unpinned and lands where it was le
 
 test("with nothing pinned Pinned stands nowhere, and a row lifted into a drag draws it, empty, to take the first pin", async () => {
   const asked = noneAsked();
-  // Down the column: Invite expiry under Launch, Retry audit under Tasks; once a row is lifted, Pinned's slot above them.
   const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked);
   assert.equal(pinnedGroup(sidebar), null, "no Pinned while nothing is pinned");
 
@@ -1127,7 +1067,6 @@ test("a pin dragged below the next one reorders the pins", async () => {
     pinnedAt: 4,
     pinPosition: "a1",
   };
-  // Down the column: Pin audit and Pin review under Pinned, then the section and Tasks.
   const sidebar = await mountDraggable([PINNED, second, INVITES, RETRIES], SECTIONS, asked);
 
   drag(sidebar, "Pin audit", 2 * ROW_HEIGHT - 4);
@@ -1342,7 +1281,6 @@ test("an icon chosen is offered first under Recent the next time the picker open
   assert.equal(recent.querySelector("button")?.getAttribute("aria-label"), "Telescope");
 });
 
-/** Answers the window's media queries as a phone does, its pointer a finger. */
 function underAFinger(): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -1354,7 +1292,6 @@ function underAFinger(): void {
   });
 }
 
-/** A finger's touch of `type` at the row's corner, as the browser sends it. */
 const touch = (type: string) =>
   new PointerEvent(type, {
     bubbles: true,
@@ -1366,7 +1303,6 @@ const touch = (type: string) =>
     clientY: 10,
   });
 
-/** A finger held still on `target` well past a long press, then lifted. */
 function longPress(target: HTMLElement): void {
   vi.useFakeTimers();
   try {
@@ -1385,14 +1321,12 @@ function longPress(target: HTMLElement): void {
   });
 }
 
-/** The words of every item of the menus standing. */
 function menuWords(): string[] {
   return [...document.querySelectorAll(".ui-menu-item-label")].map(
     (each) => each.textContent ?? "",
   );
 }
 
-/** The press of the sidebar row named `name`. */
 function rowPress(sidebar: HTMLElement, name: string): HTMLElement {
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
     (each) => each.textContent?.includes(name),
@@ -1400,7 +1334,6 @@ function rowPress(sidebar: HTMLElement, name: string): HTMLElement {
   return row ?? assert.fail(`no ${name} row`);
 }
 
-/** A second pin, after Pin audit. */
 const SECOND_PIN = {
   ...task("0a1b2c3d-0000-4000-8000-100000000004", "Pin review"),
   pinnedAt: 4,
@@ -1492,7 +1425,6 @@ test("under a finger, a task in a section draws no ⋯ and no Pin or Mark done, 
   assert.deepEqual(sectionTaskIds(after, LAUNCH), [second.id, first.id]);
 });
 
-/** The sidebar over two pins that sorts them by each place `onMovePins` hears, as the window's own state does. */
 function PinsThatMove(): React.JSX.Element {
   const [pins, setPins] = useState([PINNED, SECOND_PIN]);
   const tasks = tasksControl({
@@ -1526,7 +1458,6 @@ test("⇧⌘↓ moves the pin that has the keyboard below the next and leaves it
   assert.deepEqual(namesIn(container, "Pinned"), ["Pin review", "Pin audit"]);
   assert.equal(document.activeElement, rowPress(container, "Pin audit"));
 
-  // Note that the last row has nowhere further down, so the chord leaves it where it stands.
   act(() => {
     runAppCommand(APP_COMMAND.MOVE_ROW_DOWN);
   });
@@ -1573,7 +1504,6 @@ test("⇧⌘↓ on a task in a section moves the task within it, and ⇧⌘↑ o
   );
 });
 
-/** An agent Ada started with no task, last active before either task was saved. */
 const SWEEP: TasklessAgent = {
   id: "0a1b2c3d-0000-4000-8000-200000000001",
   planId: null,
@@ -1590,10 +1520,8 @@ const SWEEP: TasklessAgent = {
   activityAt: 1,
 };
 
-/** The sidebar's agents with no task: Sweep flaky tests alone. */
 const WITH_SWEEP: Partial<TasksControl> = { listedAgents: { standing: [SWEEP], archived: [] } };
 
-/** Launch holding Invite expiry and, put there after it, Sweep flaky tests. */
 const SWEEP_IN_LAUNCH: TaskSections = {
   ...SECTIONS,
   agentEntries: [{ agentId: SWEEP.id, sectionId: LAUNCH, addedAt: 3 }],
@@ -1607,7 +1535,6 @@ test("an agent kept in a section stands among its tasks in its order, which Task
     WITH_SWEEP,
   );
 
-  // Put there last and never dragged, it stands on top.
   assert.deepEqual(namesIn(sidebar, "Sections"), ["Sweep flaky tests", "Invite expiry"]);
   assert.deepEqual(namesIn(sidebar, "My tasks"), ["Retry audit"]);
 
@@ -1656,7 +1583,6 @@ test("an agent's Move to section checks the section it stands in and offers Remo
 
 test("an agent dragged from Tasks into a section lands where it was let go, among the section's tasks", async () => {
   const asked = noneAsked();
-  // Down the column once a row is lifted: Pinned's slot, Invite expiry under Launch, then Retry audit and Sweep flaky tests under Tasks.
   const sidebar = await mountDraggable([INVITES, RETRIES], SECTIONS, asked, WITH_SWEEP);
 
   drag(sidebar, "Sweep flaky tests", 2 * ROW_HEIGHT - 4);
@@ -1677,7 +1603,6 @@ test("an agent dragged from Tasks into a section lands where it was let go, amon
 
 test("an agent dragged from a section onto Tasks leaves every section", async () => {
   const asked = noneAsked();
-  // Down the column once a row is lifted: Pinned's slot, Sweep flaky tests and Invite expiry under Launch, Retry audit under Tasks.
   const sidebar = await mountDraggable([INVITES, RETRIES], SWEEP_IN_LAUNCH, asked, WITH_SWEEP);
 
   drag(sidebar, "Sweep flaky tests", 4 * ROW_HEIGHT - 4);

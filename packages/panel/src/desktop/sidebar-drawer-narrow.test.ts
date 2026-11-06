@@ -15,10 +15,6 @@ import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-drawer-narrow.test.ts -- the column gives its tasks the room: the pages' rows scroll away with them, in a phone's drawer and beside the work alike; and an empty Pinned stands nowhere, under a finger or a mouse, whatever the room.
- */
-
 const WORKSPACE: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
@@ -28,7 +24,6 @@ const WORKSPACE: Workspace = {
 
 const roots: Root[] = [];
 
-/** Answers the device's pointer as a finger's where `coarse`, else as a mouse's. */
 function pointer(coarse: boolean): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -65,7 +60,6 @@ function task(n: number, name: string): TaskSummary {
   };
 }
 
-/** The sidebar in the room given, listing a few tasks and pinning none. */
 async function mountIn(room: ShellRoom): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -90,11 +84,9 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
   return container;
 }
 
-/** Where the sidebar draws a page's row and the Tasks list: whether each stands in the column's scroller. */
 function scrolled(sidebar: HTMLElement) {
   const scroller =
     sidebar.querySelector(".sidebar-section .ui-scroll-area") ?? assert.fail("the scroller");
-  // Note that the Automations row is read, because a phone's bar holds the rows above it (`mobile-bar.tsx`).
   const home =
     [...sidebar.querySelectorAll("button")].find((each) =>
       each.textContent?.startsWith("Automations"),
@@ -103,7 +95,6 @@ function scrolled(sidebar: HTMLElement) {
   return { home: scroller.contains(home), tasks: scroller.contains(list) };
 }
 
-/** Whether the sidebar draws Pinned. */
 function pinnedStands(sidebar: HTMLElement): boolean {
   return sidebar.querySelector('nav[aria-label="Pinned"]') !== null;
 }

@@ -10,58 +10,25 @@ import {
 } from "@repo/ui";
 import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-read";
 
-/**
- * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.
- *
- * While its bytes are read it is a quiet box on the section's fill with the
- * window's spinner; a picture this reader cannot reach, or whose bytes are
- * gone, is its alt text and says it is not available, as a tile of a set
- * says it (`@repo/ui`'s `PictureStandIn`); one whose read did not land this
- * time stands in the box it was read in, the gone picture's glyph, a short
- * line, and Retry where the spinner stood. A gone picture
- * is plain words, never a `role="img"` named by its alt, which would hide the
- * "not available" beside it and leave an empty alt with no name at all. The block is left out
- * of the screen recording (`ph-no-capture`), because a picture can hold
- * words and the recording carries none (`session-replay.ts`), and because a
- * `data:` address is megabytes of attribute a recording has no use for even
- * masked. A video an agent recorded plays in its place instead
- * (`@repo/ui`'s `VideoPlayer`), with the player's own controls, Full screen
- * among them, since a press on a video plays it; what a press on a picture
- * opens is its Expand. Nothing here knows whose picture it is; the place
- * drawing one hands its state and what a press does.
- */
-
-/**
- * A picture in written words: its own block, at its own width up to the
- * column's, standing apart from the words around it. A place that stands it
- * otherwise, in a row or under a version's mark, says so in its own sheet.
- */
 export const PICTURE_BLOCK_CLASS =
   "picture-block ph-no-capture my-block-gap block w-fit max-w-full";
 
-/** The frame, `@repo/ui`'s Card, hugging the picture. */
 export const PICTURE_FRAME_CLASS = "picture-frame w-fit max-w-full";
 
-/** The picture, no taller than a screenful's worth, at its own shape. */
 export const PICTURE_IMAGE_CLASS =
   "picture-image block h-auto max-h-picture-most max-w-full object-contain";
 
-/** While the bytes are read: a quiet box of a screenshot's shape. */
 export const PICTURE_PENDING_CLASS =
   "picture-pending grid aspect-screenshot w-picture-stand-in max-w-full cursor-default place-items-center";
 
-/** A picture from outside the app, a link to it never fetched, marked by a glyph a step under its words' size. */
 export const OUTSIDE_GLYPH_CLASS = "mr-[0.25em] size-picture-glyph align-[-0.12em]";
 
-/** A picture this reader cannot reach, or whose bytes are gone: its words, at a stand-in's width. */
 const PICTURE_MISSING_CLASS =
   "picture-frame picture-missing w-picture-stand-in max-w-full cursor-default p-card-snug";
 
-/** Its caption under it in the secondary ink, which may run wider than a skinny picture, whose frame still hugs the picture. */
 const PICTURE_CAPTION_CLASS =
   "picture-caption mt-item-gap block text-picture-caption text-muted-foreground";
 
-/** The picture's own block, by where its read stands. */
 export function PictureBlock({
   ref,
   state,
@@ -69,21 +36,16 @@ export function PictureBlock({
   caption,
   onOpen,
 }: {
-  /** The block's own element, as the place drawing it may need to find it among others. */
   ref?: React.Ref<HTMLSpanElement> | undefined;
   state: PictureState;
-  /** The picture's description, as its Markdown's alt text gives it; empty where it gives none. */
   alt: string;
-  /** The words drawn under it, as its Markdown's title gives them; none where it gives none. */
   caption: string | undefined;
-  /** Opens the picture over the window; without one, the picture is drawn with no press to it. */
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const said =
     caption === undefined || caption === "" ? null : (
       <span className={PICTURE_CAPTION_CLASS}>{caption}</span>
     );
-  // A video plays where it stands, and what a press on a picture opens is its Expand.
   if (state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url)) {
     return (
       <span ref={ref} className={PICTURE_BLOCK_CLASS} data-state={state.kind} data-video="">
@@ -92,7 +54,6 @@ export function PictureBlock({
       </span>
     );
   }
-  // A picture with nothing to open on a press is drawn as itself, no button.
   if (state.kind === PICTURE_STATE.READY && onOpen === undefined) {
     return (
       <span ref={ref} className={PICTURE_BLOCK_CLASS} data-state={state.kind}>
@@ -121,7 +82,6 @@ export function PictureBlock({
         <PictureTile
           name={alt}
           onOpen={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
             event.stopPropagation();
             open?.();
           }}

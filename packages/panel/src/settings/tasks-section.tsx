@@ -7,12 +7,6 @@ import { SettingsSection } from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/**
- * tasks-section.tsx -- whether a task New task starts opens, the Profile page's Tasks group under Links.
- *
- * The switch is kept on this device, but tasks are the account's, so it
- * stands on Profile beside what is the account's, as Privacy does.
- */
 export function TasksSection({
   view,
   writes,

@@ -13,10 +13,6 @@ import {
   useSkillPicker,
 } from "./skill-picker.js";
 
-/**
- * skill-picker.test.ts -- the `/` skill list's foot, which names the keys it hears as every list's does, its line where no skill matches, and the skills read again behind those drawn as another `/` opens it.
- */
-
 let root: Root | undefined;
 
 afterEach(() => {
@@ -29,10 +25,8 @@ const READ: SkillsRead = {
   skills: [{ name: "deploy", description: "Ship it", source: TASK_SKILL_SOURCE.REPOSITORY }],
 };
 
-/** Where the skills are read from: held, since a new source is a new read. */
 const SOURCE = () => Promise.resolve(READ);
 
-/** The list drawn as a composer draws it, over a repository that keeps one skill unless `source` reads others. */
 async function mounted(source: SkillSource = SOURCE) {
   let latest: SkillPicker | undefined;
   function Picker() {
@@ -107,7 +101,6 @@ test("another `/` opening the list, at the same place or another, draws the skil
   await act(async () => reads[1]?.(added));
   assert.equal(offered().length, 2);
 
-  // The word left, a `/` typed again where it stood is another opening.
   close();
   await type("", 12);
   assert.equal(reads.length, 3, "a `/` typed again at the same place reads them again");

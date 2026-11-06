@@ -5,21 +5,8 @@ import { useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { appStateQuery, selectAccount } from "./use-app-state.js";
 
-/**
- * viewing-as.tsx -- the Viewing as strip across the top of the window while a maintainer is signed in as the member, over every place of it.
- *
- * It is drawn while the account says a maintainer opened its session
- * (`impersonated`, which only a browser tab's cookie session carries) and the
- * shell can end that sign-in (`stopImpersonating`), which the Mac app never
- * can. The strip stands above the window's content rather than over it: its
- * height is written on the root as `--viewing-as-height`, which the stage
- * keeps clear (`desktop.css`), so no toolbar or composer stands under it.
- */
-
-/** The custom property the stage keeps clear of the strip by. */
 const HEIGHT_PROPERTY = "--viewing-as-height";
 
-/** The strip, while a maintainer is signed in as the member; nothing otherwise. */
 export function ViewingAs(): React.JSX.Element | null {
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const stop = appPlatform().stopImpersonating;
@@ -41,11 +28,8 @@ function ViewingAsStrip({
   member: { name?: string | undefined; email: string };
   onStop: () => Promise<string | undefined>;
 }): React.JSX.Element {
-  // Note that the stop answers the service's words where it refused, rather than throwing them.
   const stopping = useMutation({ mutationFn: onStop });
   const strip = useRef<HTMLDivElement>(null);
-  // Note that the height is measured as it changes, because the strip wraps
-  // onto a second line where the window is narrow.
   useLayoutEffect(() => {
     const element = strip.current;
     if (element === null) return;

@@ -14,27 +14,12 @@ import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
 
-/**
- * relation-kind-pill.tsx -- a relation's kind leading a related task's row: a compact pill by the kind's icon, its words, and a chevron, dropping the kinds and Remove relation.
- *
- * The plan's Task relations group leads each row with it (`plan-relations.tsx`),
- * in the attention tone for a blocker still open, and New task's rows over
- * its card lead with it too (`new-task-relation.tsx`), each over its own
- * kinds: the plan's as the open task stands to the other, New task's as the
- * new task will. A press drops, from the pill's start, the kinds, the current
- * one checked, a kind the task cannot take dimmed with why, and Remove
- * relation pinned under them; a pick hands the kind back, and focus goes back to the pill as a native menu hands it back to its
- * button.
- */
-
-/** What the pill's menu names the kinds and the relation's taking away. */
 const WORDS = {
   CHANGE: "Change relation",
   REMOVE: "Remove relation",
   NO_MATCH: "No kinds match",
 } as const;
 
-/** The pinned row's id, apart from every kind's. */
 const REMOVE_ROW_ID = "remove-relation";
 
 export function RelationKindPill<Kind extends string>({
@@ -49,17 +34,11 @@ export function RelationKindPill<Kind extends string>({
   onRemove,
 }: {
   kind: Kind;
-  /** The kinds the menu offers, in its order. */
   kinds: readonly Kind[];
-  /** Each kind as the pill and its menu name it. */
   words: Readonly<Record<Kind, string>>;
-  /** Each kind's icon, which leads the pill and its row in the menu. */
   icon: (kind: Kind) => React.JSX.Element;
-  /** Why the task cannot take a kind, which dims its row in the menu with why; none where every kind may be picked. */
   why?: ((kind: Kind) => string | undefined) | undefined;
-  /** Whether the relation still asks for attention: a blocker not yet done. */
   attention?: boolean | undefined;
-  /** Whether the pill is held, as while New task's start is out. */
   disabled?: boolean | undefined;
   onChange: (to: Kind) => void;
   onRemove: () => void;
@@ -78,7 +57,6 @@ export function RelationKindPill<Kind extends string>({
       ...(whyNot === undefined ? {} : { disabled: whyNot }),
     };
   });
-  // Note that we hand focus back to the pill, as a native menu returns it to its button, because closing takes the focused menu away.
   const close = () => {
     setOpen(false);
     chip.current?.focus();

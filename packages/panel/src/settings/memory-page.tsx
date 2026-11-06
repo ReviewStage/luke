@@ -77,51 +77,6 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
 
-/**
- * memory-page.tsx -- Settings › Memory: the facts and conventions the workspace's coding agents kept, found by search and by whose they are, and forgotten one at a time or several at once.
- *
- * A coding agent keeps a memory as it works without asking, and corrects one
- * in place when its developer says otherwise. They are the workspace's: every
- * member's agents in it recall them, and nothing crosses into another
- * workspace. The page draws them as the host holds them, followed live on
- * the service (`LIVE_READ.MEMORIES`), so one an agent keeps, or another
- * member forgets, draws while the page is open.
- *
- * At the top, a search over the words and their keeper's name
- * (`searchTokens`), lit where it landed, and the Tasks page's Filter, its
- * glyph alone with a dot while it keeps anything, whose one field is Kept by,
- * each keeper with their face and how many they kept, and everyone who left
- * the workspace as one; a chip under the search says each one kept, its ×
- * lifting it, beside a Clear.
- *
- * Each memory reads as a note: its keeper's face and name, the name the
- * panel's person chip hanging their card, when it was last kept, and its
- * words whole at any width, drawn as the notes are, since a memory is
- * Markdown (`pnpm db:generate` in backticks). It opens nothing, so a plain
- * press on it only marks where a run of ⇧-clicks starts. Its ⋯ and a
- * right-click offer Copy words and Delete, which stands unavailable, saying
- * who may, on a memory the reader may not delete: its words are theirs, or
- * they own or administer the workspace.
- *
- * Memories are chosen together as the Tasks page's rows are (#5761): the box
- * in a row's gutter under the pointer, X, ⌘- and ⇧-clicks, ⌘A, and Esc. A
- * bar floating at the page's foot then forgets or copies them all, and a
- * chosen row's ⋯ and right-click offer the bar's acts under how many it acts
- * on. Delete, of one or of several, asks once first, in red, as the Inbox's
- * Resolve does, since no memory comes back once forgotten. Each is gone from
- * the list the moment it is sent, and back only where the service refused
- * it; several are forgotten one after another, the first refusal stopping
- * the rest, and the memories the reader may not forget are left chosen and
- * said so. The list draws only the memories near the view (`VirtualRows`),
- * in the page's own scroller, so a workspace's thousand draw as quickly as a
- * few; ⇧-clicks, ⇧↑↓, and ⌘A reach the memories it leaves undrawn, and the
- * memory holding the keyboard stays drawn wherever the page is scrolled.
- * The whole page is
- * kept out of the screen recording, since a memory is members' own words
- * about their work.
- */
-
-/** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
   FAILED: readFailedWords(`${PRODUCT_NAME}'s memory`),
   WORKSPACES_FAILED: readFailedWords("your workspaces"),
@@ -132,32 +87,25 @@ const PAGE_LINE = {
   CLEAR: "Clear search and filter",
 } as const;
 
-/** What the Filter is called, on its tooltip and its menu, and its one field. */
 const FILTER = "Filter";
 const KEPT_BY = "Kept by";
 
-/** What the selection's acts and a row's menu say. */
 const MEMORY_ACT = {
   FORGET: "Delete",
   COPY: "Copy words",
 } as const;
 
-/** The key the Kept by filter keeps everyone who left the workspace under, together. */
 const FORMER_KEY = "former";
 
-/** What everyone who left is called in the filter. */
 const FORMER_WORDS = "Former members";
 
-/** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
-/** What the skeletons say to a reader who cannot see them. */
 const READING_LABEL = {
   MEMORY: readingWords(`${PRODUCT_NAME}'s memory`),
   WORKSPACES: readingWords("your workspaces"),
 } as const;
 
-/** The memories that stand while they are read: each a name over a line or two of words. */
 const MEMORIES_SKELETON: readonly {
   readonly key: string;
   readonly name: string;
@@ -175,55 +123,39 @@ const MEMORIES_SKELETON: readonly {
   { key: "third", name: "20%", lines: [{ key: "line", width: "66%" }] },
 ];
 
-/**
- * A memory's row: a list row's box, filled under the pointer, keeping a
- * gutter at its start for its box (`SELECT_BOX_PLACE.GUTTER`) as the Tasks
- * list's rows do. Its note stands over the row's press with the pointer let
- * through, and what in it is a control of its own, the keeper's chip, a
- * link, and the ⋯, lifted over the press so a press on one is its own.
- */
 const MEMORY_ROW =
   "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-ui-8 hover:bg-muted";
 const MEMORY_NOTE = "memory-note pointer-events-none";
 const LIFTED = "pointer-events-auto relative z-1";
 const MEMORY_WORDS = "memory-words [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-1";
 
-/** The search's line: the field taking the room the Filter beside it leaves. */
 const SEARCH_LINE =
   "memory-search flex items-center gap-control-gap [&>:first-child]:min-w-0 [&>:first-child]:flex-1";
 
-/** The memories' list, a run of rows. */
 const MEMORY_LIST = "memory-list";
 
-/** How tall a memory is taken to stand before it is measured: a name over a line of words, in pixels. */
 const MEMORY_ESTIMATE_PX = 72;
 
-/** The room between two memories, in pixels: the theme's `ui-2`. */
 const MEMORY_GAP_PX = 2;
 
-/** Where the selection bar floats: at the foot of the page, over the rows, as the Tasks list's does. */
 const SELECTION_FOOT =
   "memory-selection pointer-events-none sticky bottom-ui-16 z-4 flex justify-center *:pointer-events-auto";
 
-/** A Markdown node, as far as its words go: the words it holds itself, and what it holds. */
 interface WordsNode {
   readonly value?: unknown;
   readonly children?: readonly object[];
 }
 
-/** The words a node holds, its marks left out: what a row's press is named by, so a reader hears no backticks. */
 function wordsIn(node: WordsNode): string {
   if (typeof node.value === "string") return node.value;
   return (node.children ?? []).map((child) => wordsIn(child)).join("");
 }
 
-/** Whom the Kept by filter files a memory under: its keeper, or everyone who left as one. */
 function keeperKey(memory: MemorySummary, actor: Actor): string {
   if (memory.keptBy === null || actor.kind !== ACTOR_KIND.PERSON) return FORMER_KEY;
   return memory.keptBy.userId;
 }
 
-/** Who may delete a memory, as its unavailable Delete says it. */
 function forgetterOf(memory: MemorySummary, actor: Actor): string {
   if (actor.kind === ACTOR_KIND.PERSON && actor.you) return "You: its words are yours";
   if (memory.forgettable) return "You, as an owner or admin of the workspace";
@@ -233,14 +165,12 @@ function forgetterOf(memory: MemorySummary, actor: Actor): string {
     : `Only ${keeper}, or an owner or admin`;
 }
 
-/** One memory with whose words it holds, as the members the panel reads name them. */
 interface ShownMemory {
   readonly memory: MemorySummary;
   readonly actor: Actor;
   readonly keeper: string;
 }
 
-/** The memories while they are read: the notes' own shapes, under a label a reader hears. */
 function MemoriesSkeleton({ label }: { label: string }): React.JSX.Element {
   return (
     <SkeletonRegion label={label}>
@@ -253,16 +183,13 @@ function MemoriesSkeleton({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** What a row chosen among several acts on: how many, and the bar's acts. */
 interface ChosenMemories {
   readonly count: number;
   readonly acts: readonly SelectionAct[];
 }
 
-/** A plain press on a memory, which has nothing to open: it only marks where a run of ⇧-clicks starts. */
 function anchorOnly(): void {}
 
-/** One memory's row: its note, and its ⋯ and right-click. */
 function MemoryRow({
   shown,
   place,
@@ -273,13 +200,9 @@ function MemoryRow({
   onCopy,
 }: {
   shown: ShownMemory;
-  /** Where the row stands in the run drawing only the rows near the view, which its item wears. */
   place: VirtualRowPlace;
-  /** The words the search asks for, lit where they landed. */
   found: readonly string[];
-  /** Whether a forget is out, which every Forget waits out. */
   locked: boolean;
-  /** The selection the row stands in among several, whose acts its menu offers; none otherwise. */
   chosen: ChosenMemories | undefined;
   onForget: () => void;
   onCopy: () => void;
@@ -295,7 +218,6 @@ function MemoryRow({
         danger: true,
         disabled: !memory.forgettable || locked,
         detail: memory.forgettable ? undefined : forgetterOf(memory, actor),
-        // Note that the detail names who may forget it, which masks the item's words with it.
         replayMasked: !memory.forgettable,
         onSelect: onForget,
       },
@@ -349,17 +271,14 @@ function MemoryRow({
   );
 }
 
-/** One keeper the Kept by filter offers: whom it files under, their name and face, and how many they kept. */
 interface Keeper {
   readonly key: string;
   readonly label: string;
   readonly face: ReactNode;
   readonly count: number;
-  /** Whether the label is a member's name rather than Me or the former members' words, kept masked in a screen recording. */
   readonly named: boolean;
 }
 
-/** The keepers of `listed`, the reader first as Me, then each by name, everyone who left last. */
 function keepersOf(listed: readonly ShownMemory[]): readonly Keeper[] {
   const byKey = new Map<string, Keeper>();
   for (const { memory, actor } of listed) {
@@ -382,14 +301,12 @@ function keepersOf(listed: readonly ShownMemory[]): readonly Keeper[] {
   );
 }
 
-/** Puts `key` in the set or takes it out. */
 function toggled(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
   const next = new Set(set);
   if (!next.delete(key)) next.add(key);
   return next;
 }
 
-/** The Tasks page's Filter: its glyph alone, named by its tooltip, a dot at its corner while it keeps anything, and Kept by its one field, its keepers listed under it in the menu itself. */
 function KeptByFilter({
   keepers,
   kept,
@@ -420,7 +337,6 @@ function KeptByFilter({
         <ActionMenu
           label={FILTER}
           menu={menu.drawn}
-          // Note that Kept by is the filter's one field, so its keepers stand in the menu itself under its heading rather than behind a submenu of their own.
           heading={KEPT_BY}
           groups={[people]}
           replayUnmasked
@@ -431,10 +347,8 @@ function KeptByFilter({
   );
 }
 
-/** The keeper a chip stands for, by which its chip leaves. */
 const keeperChipKey = (keeper: Keeper): string => keeper.key;
 
-/** The filter's chips and Clear, a chip lifted scaling out where it stood. */
 function KeptByLine({
   line,
   keepers,
@@ -446,7 +360,6 @@ function KeptByLine({
   kept: ReadonlySet<string>;
   onKept: (kept: ReadonlySet<string>) => void;
 }): React.JSX.Element | null {
-  // Note that the keepers are read again on every render, so the list the chips leave by is kept until another keeper is kept.
   const listed = keepers.filter((keeper) => kept.has(keeper.key));
   const [stable, setStable] = useState(listed);
   const same =
@@ -482,7 +395,6 @@ function KeptByLine({
   );
 }
 
-/** What the filter keeps, a chip for each keeper, its × lifting them, and Clear, under a motion that scales a chip in and out (`ListMotion`). */
 function KeptByChips(props: {
   keepers: readonly Keeper[];
   kept: ReadonlySet<string>;
@@ -496,7 +408,6 @@ function KeptByChips(props: {
   );
 }
 
-/** What Delete asks, of one memory or of several, and what it says of those the reader may not delete. */
 function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   const one = asked.length === 1;
   const them = one ? "it" : "them";
@@ -515,7 +426,6 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   };
 }
 
-/** What the list says where it holds nothing: a search or the filter that leaves nothing, or a workspace that has kept nothing yet. */
 function NothingShown({
   narrowed,
   onClear,
@@ -536,13 +446,6 @@ function NothingShown({
   return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;
 }
 
-/**
- * Memories forgotten in `workspaceId`, as Forget's question holds its own
- * mutation over them: one after another through the port, each sent once
- * the one before answered, the first refusal stopping the rest. Note that
- * the host draws a forget gone the moment it is asked and keeps it gone
- * until the read carries it, so the answer only says whether it was taken.
- */
 function memoriesForgetMutation(workspaceId: string) {
   return mutationOptions({
     mutationKey: [ACT_KIND.MEMORIES_FORGET, workspaceId],
@@ -566,21 +469,17 @@ function memoriesForgetMutation(workspaceId: string) {
   });
 }
 
-/** The memories as read: the search and the filter, the list, and the bar over what is chosen. */
 function MemoryList({
   readerId,
   memories,
   workspaceId,
 }: {
-  /** The signed-in account, whose own memories read as You and Me. */
   readerId: string | undefined;
   memories: readonly MemorySummary[];
-  /** The workspace the memories are kept in, whose forgets every Forget waits out. */
   workspaceId: string;
 }): React.JSX.Element {
   const forgets = memoriesForgetMutation(workspaceId);
   const forgettingAll = useMutation(forgets);
-  // Note that a forget out locks every Forget in its workspace until it answers.
   const forgetting = useIsMutating({ mutationKey: forgets.mutationKey }) > 0;
   const { members, former } = useMemberDirectory();
   const copy = useCopyToast();
@@ -599,7 +498,6 @@ function MemoryList({
   const listed = searched.filter(
     (each) => kept.size === 0 || kept.has(keeperKey(each.memory, each.actor)),
   );
-  // Note that a memory no longer drawn leaves the selection for good, as a task does, so one a search hid is not chosen again unasked.
   const drawn = new Set(listed.map((each) => each.memory.id));
   const standing: ReadonlySet<string> = new Set([...selected].filter((id) => drawn.has(id)));
   if (standing.size !== selected.size) setSelected(standing);
@@ -730,21 +628,15 @@ export function MemorySection({
   onRetryWorkspaces,
 }: {
   signedIn: boolean;
-  /** The workspace Settings shows, whose memories the page reads; absent before the workspaces are read. */
   workspace: Workspace | undefined;
-  /** The signed-in account, whose own memories read as You. */
   readerId: string | undefined;
-  /** Whether the read the workspaces arrive with failed, so no workspace will arrive until it is asked again. */
   workspacesFailed: boolean;
-  /** Asks for the workspaces again. */
   onRetryWorkspaces: (() => void) | undefined;
 }): React.JSX.Element {
   const workspaceId = workspace?.id;
-  // The memories as the host holds them, followed live while the page shows them, so a memory an agent keeps meanwhile draws as it lands.
   const memories = useQuery(memoriesQuery(signedIn ? workspaceId : undefined));
   const retryMemories = useMutation(memoriesRetryMutation());
   if (!signedIn) return <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>;
-  // Note that no workspace is a read not answered yet or one that failed, never a workspace-less account, which holds its own.
   if (workspace === undefined) {
     return workspacesFailed ? (
       <SettingsLine>
@@ -762,7 +654,6 @@ export function MemorySection({
   return (
     <div className={NO_CAPTURE}>
       {memories.data !== undefined ? (
-        // Note that the keepers are read in the workspace Settings shows, which may not be the one the window's tasks stand in.
         <MemberDirectory workspace={workspace} readerId={readerId}>
           <MemoryList readerId={readerId} memories={memories.data} workspaceId={workspace.id} />
         </MemberDirectory>

@@ -35,17 +35,6 @@ import { ToastHost } from "../toast.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
 
-/**
- * tasks-held-order.test.ts -- the Tasks page's List and Columns hold each
- * task in the group and the place it was first drawn in while the page is
- * shown, so a teammate's change moves nothing under the reader's eye, though
- * the row says its new value; hidden and shown again, or under another
- * grouping, each task stands where it is now, and a task the reader moved
- * here, by its chip or a rename, moves at once: the tab draws it at its new
- * value and waiting on the view (`pendingTasks`), as these draws do.
- * Synthetic throughout.
- */
-
 const DEAN = "user-dean";
 const CHARLES = "user-charles";
 
@@ -80,7 +69,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A task of Acme's, numbered `number`, standing in `status` at `priority`. */
 function task(
   number: number,
   name: string,
@@ -109,7 +97,6 @@ const TASKS = [
   task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
 ];
 
-/** How the page is drawn again: over which tasks, under which display, shown or not, kept drawn while hidden or not, and which tasks wait on a change made here. */
 interface Drawing {
   readonly display?: TasksDisplay;
   readonly filter?: TasksFilter;
@@ -118,7 +105,6 @@ interface Drawing {
   readonly pendingTasks?: ReadonlySet<string>;
 }
 
-/** The List or the Board over `tasks`, read by Dean, and a way to draw it again as an update or the reader would. */
 async function mountView(
   view: typeof TasksList | typeof TasksBoard,
   tasks: readonly TaskSummary[],
@@ -159,7 +145,6 @@ async function mountView(
           createElement(
             Fragment,
             null,
-            // The page kept drawn while the window is away from it, as the shell keeps it (`desktop-shell.tsx`).
             createElement(Activity, {
               mode: drawing.kept === true ? "hidden" : "visible",
               children: createElement(MemberDirectory, {
@@ -184,7 +169,6 @@ async function mountView(
   return { container, draw, sent, named };
 }
 
-/** Each of the List's groups, or the Board's columns: its name and its tasks' keys, in order. */
 function laidOut(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll<HTMLElement>(".tasks-list-group, [data-task-column]")].map(
     (group) => [
@@ -194,7 +178,6 @@ function laidOut(page: HTMLElement): [string, string[]][] {
   );
 }
 
-/** The task keyed `key`'s chip that changes its `standing`, Priority or Status. */
 function chipOf(page: HTMLElement, key: string, standing: string): HTMLButtonElement {
   const holder = [...page.querySelectorAll<HTMLElement>("li")].find(
     (each) => each.querySelector("[data-task-key]")?.textContent === key,
@@ -204,7 +187,6 @@ function chipOf(page: HTMLElement, key: string, standing: string): HTMLButtonEle
   return chip;
 }
 
-/** Presses the item of the open menu whose label is `label`. */
 function pick(label: string): void {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find(
     (each) => each.querySelector(".ui-menu-item-label")?.textContent === label,
@@ -212,7 +194,6 @@ function pick(label: string): void {
   act(() => (item ?? assert.fail(`no ${label} item`)).click());
 }
 
-/** The tasks with the one numbered `number` changed as `change` says. */
 function changed(number: number, change: Partial<TaskSummary>): TaskSummary[] {
   return TASKS.map((each) => (each.number === number ? { ...each, ...change } : each));
 }
@@ -334,7 +315,6 @@ test("in the List, a member picked on a row's Assignee chip is sent with the nam
   const { container, sent, named } = await mountView(TasksList, TASKS, DEFAULT_LIST_DISPLAY);
 
   act(() => chipOf(container, "ACME-41", "Assignee").click());
-  // Note that the members are offered once their read reaches its query.
   await vi.waitFor(() =>
     assert.equal(
       [...document.querySelectorAll(".ui-menu-item-label")].some(
@@ -413,7 +393,6 @@ test("in the List filtered to Todo, a task a teammate brings into Todo comes in,
   assert.deepEqual(laidOut(container), [["Todo", ["ACME-40", "ACME-39", "ACME-42", "ACME-41"]]]);
 });
 
-/** Whether the row or the card of the task keyed `key` wears an Assignee chip. */
 function wearsAssignee(page: HTMLElement, key: string): boolean {
   const holder = [...page.querySelectorAll<HTMLElement>("li")].find(
     (each) => each.querySelector("[data-task-key]")?.textContent === key,

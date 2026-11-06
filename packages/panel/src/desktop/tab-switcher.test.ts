@@ -26,21 +26,6 @@ import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { TabSwitcher } from "./tab-switcher.js";
 
-/**
- * tab-switcher.test.ts -- ⌃Tab as the window answers it: a stop is a whole
- * screen, so arriving on a task with both panes is one stop and a tab the
- * window chose by itself takes it in place; a quick tap goes to the screen
- * before through the task's own doors, both panes restored, and draws
- * nothing; a hold draws the cards, the screen here first and dimmed, each
- * named as Back's list names it; ⇧ steps back, Escape goes nowhere, a card
- * pressed is gone to, and a still of the work area left is kept for its
- * card, out of the session recording. The cards stand in a modal dialog
- * that holds focus while they show and hands it back to where it was as
- * they go, fading out on the exit token, or at once where motion is held.
- * A browser keeps ⌃Tab for its own tabs, so a window that is no desktop app
- * leaves it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -50,12 +35,9 @@ beforeAll(() => {
 });
 
 const TASK = DOCUMENT_TASK.id;
-/** A File tab of the task, the side panel's first. */
 const README = { file: "README.md" };
-/** A second File tab of the task, beside the first. */
 const NOTES = { file: "docs/notes.md" };
 
-/** A still as main answers one, synthetic. */
 const STILL = "data:image/jpeg;base64,AAAA";
 
 const roots: Root[] = [];
@@ -70,10 +52,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The cards' dialog, which the switcher draws in `@repo/ui`'s Dialog. */
 const DIALOG = '[role="dialog"]';
 
-/** What the switcher asked the window to show, in order. */
 interface Asked {
   readonly shown: string[];
   readonly places: string[];
@@ -81,7 +61,6 @@ interface Asked {
 
 const asked = (): Asked => ({ shown: [], places: [] });
 
-/** The window on the task, its panel on `tab` and its column on `column`, every door the switcher may use recorded in `told`. */
 function onTask(
   tab: SidePanelTab,
   told: Asked,
@@ -116,7 +95,6 @@ function onTask(
   };
 }
 
-/** The switcher over a window, drawn again on each place the test moves the window to. */
 async function mounted(room: ShellRoom = SHELL_ROOM.WIDE) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -160,7 +138,6 @@ const tab = (shift = false) =>
   key("keydown", { key: "Tab", code: "Tab", ctrlKey: true, shiftKey: shift });
 const letGo = () => key("keyup", { key: "Control", code: "ControlLeft" });
 
-/** A press of the pointer, as a tab chosen by hand is led by. */
 function press(): void {
   act(() => {
     document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -272,7 +249,6 @@ test("held, the cards show with the screen here first and dimmed; ⇧ steps back
   assert.deepEqual(told, asked());
 });
 
-/** A field that holds focus before ⌃Tab, and the window moved from one task tab to another so the cards have two screens. */
 async function heldOnField() {
   handCapabilities(DESKTOP_CAPABILITIES);
   const field = document.createElement("input");
@@ -453,7 +429,6 @@ test("the screen left is taken as a still of the work area for its card, drawn a
   tab();
   tab();
   assert.equal(cards()[0]?.querySelector("img"), null, "no still yet, so the glyph stands");
-  // Note that the mutation sends the capture a moment after the cards show, so the test answers it once it is sent.
   await vi.waitFor(() => assert.equal(taken.length, 1));
   act(() => answer(STILL));
   await vi.waitFor(() =>
@@ -725,7 +700,6 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
   assert.deepEqual(panel, ["full screen turned", "shut"]);
 });
 
-/** An agent with no task, listed in the window, as the sidebar lists it. */
 function listedAgent(status: TasklessAgent["status"]): TasklessAgent {
   return {
     id: "0a1b2c3d-0000-4000-8000-200000000001",
@@ -744,7 +718,6 @@ function listedAgent(status: TasklessAgent["status"]): TasklessAgent {
   };
 }
 
-/** The switcher's cards, held over the agent's page and then the Inbox, so the agent is the stop behind. */
 async function agentCardAfter(status: TasklessAgent["status"]): Promise<HTMLElement | undefined> {
   handCapabilities(DESKTOP_CAPABILITIES);
   const agent = listedAgent(status);

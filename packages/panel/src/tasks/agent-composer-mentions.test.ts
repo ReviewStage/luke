@@ -86,17 +86,6 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * `@` in an agent's message box and its transcript, on a task's page and
- * off it, over the real editor bundle: the word typed opens the list of the
- * description's sections and the repository's files, the row chosen is written
- * into the message as its link and drawn in the box as its chip, the link
- * is what is sent, and a sent message's mention is drawn as the chip that
- * opens it. Off a task's page an `@` is a letter, and a sent mention is
- * still its chip, opened through the window's own doors.
- * Synthetic description and repository.
- */
-
 const TASK_ID = "pl_1";
 
 const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
@@ -105,17 +94,14 @@ const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: 
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
-/** A file of the repository's tree. */
 function treeFile(name: string) {
   return { name, kind: TASK_TREE_ENTRY.FILE };
 }
 
-/** Sixty invitation files under `apps/web`, more than a narrowed list shows. */
 const INVITES = Array.from({ length: 60 }, (_, at) =>
   treeFile(`apps/web/invite-${String(at + 1).padStart(2, "0")}.ts`),
 );
 
-/** The paths each repository holds, as the plan's tree answers them. */
 const TREES = new Map([
   ["acme/relay", [treeFile("apps/web/rollout-store.ts")]],
   ["acme/next", [treeFile("apps/web/rollout-next.ts")]],
@@ -130,8 +116,6 @@ const TREES = new Map([
   ],
 ]);
 
-/** Linear connected, and every other integration unavailable. */
-// SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
 const LINEAR_CONNECTED = Object.fromEntries(
   INTEGRATION_PROVIDER_LIST.map((provider) => [
     provider,
@@ -141,10 +125,8 @@ const LINEAR_CONNECTED = Object.fromEntries(
   ]),
 ) as Record<IntegrationProvider, IntegrationStatus>;
 
-/** The workspace's task beside the plan, as the window lists it. */
 const BILLING = { id: "2b2b2b2b-0000-4000-8000-000000000000", name: "Billing" };
 
-/** An agent of the workspace as its list answers it. */
 function workspaceAgent(
   id: string,
   title: string,
@@ -164,7 +146,6 @@ function workspaceAgent(
   };
 }
 
-/** The workspace's agents beside the plan's own: one on another task, one on none, and one archived. */
 const BILLING_AGENT = {
   ...workspaceAgent("3c3c3c3c-0000-4000-8000-000000000000", "Bill by seat", BILLING.id),
   createdAt: 2_000,
@@ -176,29 +157,18 @@ const OLD_AGENT = workspaceAgent(
   BILLING.id,
   2_000,
 );
-/** An agent past the newest the workspace's list answers, which only a search finds. */
 const LEDGER = workspaceAgent("6f6f6f6f-0000-4000-8000-000000000000", "Old ledger", null);
 
-/** The newest agents the task list carries, archived ones left out. */
 const NEWEST_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER];
 
-/** Every agent of the workspace, which a search finds among, archived ones included. */
 const WORKSPACE_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
 
-/** The newest agents the task list carries now, beside the archived one. */
 let newest: readonly AgentSummary[] = NEWEST_AGENTS;
 
-/** Whether the task list failed before it carried the workspace's agents. */
 let listFailed = false;
 
-/** Lays the task list on the window again, as the host does once it reads it. */
 let deliverTasks: (next: TasksView) => void = () => undefined;
 
-/**
- * The task list as the host lays it: the newest agents and the archived
- * one, each on its task or on none, in the workspace the plan stands in,
- * or failed before it carried any.
- */
 function tasksView(): TasksView {
   if (listFailed) return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.FAILED };
   const listed = [...newest, OLD_AGENT].map((agent) => ({
@@ -216,7 +186,6 @@ function tasksView(): TasksView {
   };
 }
 
-/** The workspace's search as the service answers it: those whose title or task's name holds the words, as the store finds them. */
 function workspaceAnswer({ words = "" }: AgentWorkspaceListParams): readonly AgentSummary[] {
   const lower = words.toLowerCase();
   return WORKSPACE_AGENTS.filter(
@@ -226,7 +195,6 @@ function workspaceAnswer({ words = "" }: AgentWorkspaceListParams): readonly Age
   );
 }
 
-/** The workspace's members, as its Members list reads them: a teammate, then the reader. */
 const READER_ID = "u_reader";
 const DANA_ID = "u_dana";
 const MEMBERS: readonly WorkspaceMember[] = [
@@ -239,28 +207,22 @@ const MEMBERS: readonly WorkspaceMember[] = [
   },
 ];
 
-/** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
-/** The repository the task's tree is read from now. */
 let standing = "acme/relay";
 
-/** The kinds of act main refuses now, as it does while GitHub or the service cannot be reached. */
 const refusing = new Set<string>();
 
 const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
 
 const ignore = () => undefined;
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-/** What every connected server lists, three of them under names a mention cannot carry. */
 const LISTED_TOOLS = [
   { name: "list_issues", description: "List the team's issues." },
   { name: "get_issue", description: "Read one issue." },
@@ -269,7 +231,6 @@ const LISTED_TOOLS = [
   { name: "..", description: "A name an address resolves away." },
 ];
 
-/** What main answers the box's acts with on the act port, every one told. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   told.push(request);
   if (refusing.has(request.kind)) {
@@ -319,7 +280,6 @@ beforeEach(() => {
     requestAppState: () =>
       Promise.resolve(stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: tasksView() })),
   });
-  // Every connected server lists the same tools, three of them under names a mention cannot carry.
   const reads = handHostReads({});
   deliverTasks = reads.deliverTasks;
   holdIntegrationTools(reads.deliverTools, () => ({ tools: LISTED_TOOLS }));
@@ -333,7 +293,6 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -343,7 +302,6 @@ async function settle(): Promise<void> {
   await settleQueries(ticks);
 }
 
-/** Settles, then waits for an open @ list to stop reading, since it draws the repository's files only once their read lands. */
 async function listSettled(): Promise<void> {
   await settle();
   await vi.waitFor(() =>
@@ -351,7 +309,6 @@ async function listSettled(): Promise<void> {
   );
 }
 
-/** What a task's page hands its places, every mention a chip was asked to open kept. */
 function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
     holder: { taskId: TASK_ID },
@@ -369,10 +326,8 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
   };
 }
 
-/** The agent whose box is drawn. */
 const SELF_ID = "agent-1";
 
-/** A page an agent showed on the plan, and two of its agents, the box's own among them. */
 const PAGE = { id: "page-1", title: "Invites by week", version: 1, at: 1_000 };
 const STORE_AGENT = {
   id: "agent-2",
@@ -386,7 +341,6 @@ const STORE_AGENT = {
 } as const;
 const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
 
-/** The plan's page holding its pages and agents, as the task's list read them, every link a chip was asked to open kept. */
 function taskPage(opened: Mention[] = []): TaskMentionsValue {
   const store = {
     ...STORE_AGENT,
@@ -395,7 +349,6 @@ function taskPage(opened: Mention[] = []): TaskMentionsValue {
   return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, store] };
 }
 
-/** The box on the composer's own control, its sends answered by `sender`. */
 function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource }): ReactNode {
   const composer = useAgentComposer({
     agentId: SELF_ID,
@@ -406,7 +359,6 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }
 
-/** The node drawn on a task's page, or off any page where none is given, its atoms held by `registry`; `redraw` draws it on the page given. */
 function drawing(
   node: ReactNode,
   page: TaskMentionsValue | undefined,
@@ -431,12 +383,10 @@ function drawing(
   return { container, redraw };
 }
 
-/** The node drawn on a task's page, or off any page where none is given. */
 function drawn(node: ReactNode, page: TaskMentionsValue | undefined): HTMLElement {
   return drawing(node, page).container;
 }
 
-/** The box drawn, every message it sends written down. */
 async function box(page: TaskMentionsValue | undefined, skills: SkillSource = noSkills) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -448,14 +398,11 @@ async function box(page: TaskMentionsValue | undefined, skills: SkillSource = no
   return { container, sent, redraw };
 }
 
-/** The attribute that carries an address, other than those session replay masks (`../session-replay.ts`), if any element drawn holds one. */
-/** The name a chip is drawn by, without the words only a screen reader hears. */
 function chipName(chip: Element): string | null | undefined {
   return chip.querySelector(".ui-inline-ref-label")?.textContent;
 }
 
 function carryingTarget(container: HTMLElement): string | undefined {
-  // Note that an SVG glyph's own namespace is no address of a page.
   const masked = new Set([
     "title",
     "aria-label",
@@ -470,7 +417,6 @@ function carryingTarget(container: HTMLElement): string | undefined {
     .find((attribute) => !masked.has(attribute.name) && attribute.value.includes("://"))?.name;
 }
 
-/** The list's groups, each by its label with its rows' names. */
 function groupsListed(container: HTMLElement): [string | null, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label"),
@@ -478,14 +424,12 @@ function groupsListed(container: HTMLElement): [string | null, string[]][] {
   ]);
 }
 
-/** The rows the list draws, by name. */
 function listed(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
     (name) => name.textContent ?? "",
   );
 }
 
-/** How many rows the menu's one group lists, as a reader hears it, drawn near the view or not. */
 function listedCount(container: HTMLElement): number {
   return Number(
     container.querySelector(".mention-menu [role=option]")?.getAttribute("aria-setsize"),
@@ -528,7 +472,6 @@ test("a word that finds an agent and a file leads the @ list with the agent, whi
 });
 
 test("the @ list hangs at the caret, by the word's line, and narrows as the word is typed on while the caret stays in the box", async () => {
-  // Note that jsdom lays out nothing, so the word's letters stand where a line would put them, and the layer is laid in the page.
   vi.spyOn(Range.prototype, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: 120, y: 300, width: 8, height: 16 }),
   );
@@ -838,7 +781,6 @@ test("an @ whose read of the skills came back unread says they could not be read
 
 const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 
-/** Words pasted into the box's editor, as the system's clipboard hands them over. */
 function pasteInComposer(container: HTMLElement, words: string): void {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
@@ -1008,29 +950,24 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
   assert.equal(carryingTarget(container), undefined);
 });
 
-/** The plan's page, its workspace's agents read through the window's own reader, the box drawn on it. */
 function WorkspacePage({ children }: { children: ReactNode }): ReactNode {
   const readAgents = useMentionAgentsReader("workspace-1", [BILLING], undefined);
   return createElement(TaskMentions, { value: { ...taskPage(), readAgents }, children });
 }
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({
     initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
 }
 
-/** Longer than the typing rests before the service is searched for the words typed. */
 const PAST_SEARCH_PAUSE = "300 millis";
 
-/** The clock moved past the search's pause, and what the search answered drawn. */
 const rest = Effect.gen(function* () {
   yield* TestClock.adjust(PAST_SEARCH_PAUSE);
   yield* Effect.promise(settle);
 });
 
-/** The box on the plan's page that reads its workspace's agents, every message it sends written down, its waits on `registry`'s clock. */
 async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -1038,7 +975,6 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
     return new Promise<AgentAgentAnswer>(ignore);
   };
   const on = registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  // Note that the test's Query client is handed the bridge's document before the first frame, so the agents' list reads the task list from it rather than racing its read.
   writeAppState(stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), { tasks: tasksView() }));
   const { container } = drawing(
     createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
@@ -1049,7 +985,6 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
   return { container, sent };
 }
 
-/** The Agents group's rows, each by its name and its detail. */
 function agentsListed(container: HTMLElement): [string, string][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')].map(
     (row) => [
@@ -1059,7 +994,6 @@ function agentsListed(container: HTMLElement): [string, string][] {
   );
 }
 
-/** The searches of the workspace's agents the list asked, each as the act carried it. */
 function workspaceReads(): unknown[] {
   return told
     .filter((each) => each.kind === ACT_KIND.AGENTS_WORKSPACE_LIST)
@@ -1079,7 +1013,6 @@ test("an @ offers the workspace's agents after the task's own, each labeled by i
   ]);
 });
 
-/** What the open list says after its rows, and the press that reads again. */
 function listNote(container: HTMLElement): { words: string; retry: HTMLButtonElement | null } {
   const note = container.querySelector(".mention-menu .ui-combobox-note");
   return {
@@ -1150,7 +1083,6 @@ it.effect(
         ["Bill by seat", "Billing"],
         ["Old invoices", "Billing · Archived"],
       ]);
-      // The word was typed whole, so the one read asked the service to find it, archived agents among them.
       assert.deepEqual(workspaceReads(), [
         { workspaceId: "workspace-1", words: "billing", includeArchived: true },
       ]);
@@ -1259,7 +1191,6 @@ it.effect(
     }),
 );
 
-/** The box on the plan's page that reads its workspace's agents, among the workspace's members. */
 async function workspaceMemberBox() {
   const sender: MessageSender = () => new Promise<AgentAgentAnswer>(ignore);
   const { container } = drawing(
@@ -1327,7 +1258,6 @@ it.effect(
     }),
 );
 
-/** The card an @ row hangs once the pointer rests on it, as the list is drawn for the page given. */
 async function cardOfRow(page: TaskMentionsValue, typed: string, section: string) {
   const { container } = await box(page);
   typeInComposer(container, typed);
@@ -1386,7 +1316,6 @@ test("a sent mention of an agent of another task or none hangs its card's one re
     createElement(TranscriptWords, {
       text: `${mention("agent-7")} ${mention(BILLING_AGENT.id)} ${mention(SWEEPER.id)}`,
     }),
-    // The task page's doors answer the card of its own agent's tab, and none for an agent it has no tab of.
     {
       ...planPage([]),
       doors: {
@@ -1473,28 +1402,23 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   assert.deepEqual(sent, [`Build [@${PAGE.title}](${page}) on [@Agent](${agent}) in ${file}`]);
 });
 
-/** The repository with folders and more files than a narrowed list shows, as the plan's page names it. */
 const WIDE: MentionPlace = { workspace: "acme", repository: "acme/wide" };
 
-/** The box on a plan whose repository is the wide one. */
 async function wideBox() {
   standing = "acme/wide";
   return box(planPage([], "acme/wide"));
 }
 
-/** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
 function crumb(container: HTMLElement): string | undefined {
   return container.querySelector(".mention-menu-crumb-title")?.textContent ?? undefined;
 }
 
-/** The keys the list's foot names. */
 function footKeys(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".mention-menu .ui-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }
 
-/** The "Mention from" rows, each by its name and its detail. */
 function kindsListed(container: HTMLElement): [string, string][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
@@ -1504,7 +1428,6 @@ function kindsListed(container: HTMLElement): [string, string][] {
   ]);
 }
 
-/** ↓ pressed until the row named, in the group given, holds the highlight. */
 function highlightRow(container: HTMLElement, group: string, name: string): void {
   const held = () => {
     const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
@@ -1542,7 +1465,6 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
   assert.deepEqual(footKeys(container), ["↑↓Move", "⏎⇥Mention", "⌫All kinds", "EscClose"]);
 });
 
-/** The highlighted row, by its group and its name. */
 function highlighted(container: HTMLElement): [string | null, string] | undefined {
   const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
   if (row === null) return undefined;
@@ -1618,7 +1540,6 @@ test("pressing the crumb's back arrow widens the list again and keeps the caret 
   assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
 });
 
-/** The `count` letters before the caret deleted, as ⌫ pressed that many times would. */
 function eraseInComposer(container: ParentNode, count: number): void {
   const editor = composerEditor(container).editor ?? assert.fail("the box's editor is running");
   act(() => {
@@ -1734,7 +1655,6 @@ test("typing a server's provider and a colon narrows the list to that server, it
   assert.deepEqual(listed(container), ["Linear", "Linear · list_issues", "Linear · get_issue"]);
 });
 
-/** A pull request an agent of the task published, as GitHub holds it now. */
 function pullRequest(
   number: number,
   title: string,
@@ -1755,7 +1675,6 @@ function pullRequest(
 const SEATS = pullRequest(3059, "feat(billing): bill by seat", PULL_REQUEST_STATE.OPEN);
 const SWEEP = pullRequest(3061, "test: sweep flaky tests", PULL_REQUEST_STATE.MERGED);
 
-/** The task's page whose agents published two pull requests, one of them by an archived agent and one by two agents. */
 function publishedPage(): TaskMentionsValue {
   return {
     ...taskPage(),
@@ -1763,7 +1682,6 @@ function publishedPage(): TaskMentionsValue {
       agents: [BILLING_AGENT, LEDGER],
       archived: [OLD_AGENT],
       models: undefined,
-      // The ledger's agent pushed to the same pull request as the billing one.
       pullRequests: new Map([
         [OLD_AGENT.id, SWEEP],
         [LEDGER.id, SEATS],
@@ -1773,7 +1691,6 @@ function publishedPage(): TaskMentionsValue {
   };
 }
 
-/** The Pull requests group's rows, each by its name, its detail, and where its mark says it stands. */
 function pullRequestsListed(container: HTMLElement): [string, string, string | null][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
@@ -1841,7 +1758,6 @@ test("the task's pull requests are a kind of their own, narrowed to by their row
   );
 });
 
-/** The node drawn on a plan's page in a workspace whose members the window reads. */
 function amongMembers(node: ReactElement): ReactElement {
   return withPeopleRead(
     { workspace: { id: "workspace-1", memberCount: MEMBERS.length }, readerId: READER_ID },
@@ -1849,7 +1765,6 @@ function amongMembers(node: ReactElement): ReactElement {
   );
 }
 
-/** The box drawn on a plan's page among the workspace's members, every message it sends written down. */
 async function memberBox() {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -1865,7 +1780,6 @@ async function memberBox() {
   return { container, sent };
 }
 
-/** The People group's rows, each by its name, its detail, and its mark's kind. */
 function peopleListed(container: HTMLElement): [string, string, string | null][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
     (row) => [
@@ -1995,7 +1909,6 @@ test("an old Vespin issue page's link pasted into the box stays the words it is,
   assert.deepEqual(sent, [`Fix ${old}`]);
 });
 
-/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
 const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
 
 test("words after an @ that read as a date offer it first, said from today, and its pick is drawn from today and sent with the date in full", async () => {

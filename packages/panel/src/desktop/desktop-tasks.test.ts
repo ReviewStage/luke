@@ -82,18 +82,14 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The side panel shown on the description's comments beside it. */
-/** A File tab of the task, which the panel draws in these tests. */
 const NOTES = { file: "docs/notes.md" };
 
-/** The file the File tab shows, opened on the task. */
 const NOTES_OPENED = { path: NOTES.file, range: undefined, opened: 0, browsedOn: TASK.id };
 
 const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
@@ -134,7 +130,6 @@ test("a task the service will not hand the reader, as a link to another workspac
     container.textContent ?? "",
     /Not foundThis task doesn't exist, or you don't have access to it\./u,
   );
-  // The frame keeps the window's bar, which the words saying so stand under.
   const frame = container.querySelector("section[aria-label='Not found']");
   assert.equal(frame?.firstElementChild?.tagName, "HEADER");
   assert.deepEqual(left, [TASK.id]);
@@ -175,7 +170,6 @@ test("a task's comments are held from its open, so its first ready frame marks t
   fakeActPort({
     [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: (subject) => {
       held.push(subject);
-      // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() =>
         reads.deliverComments({
           [COMMENT_SUBJECT.DESCRIPTION]: { [TASK.id]: { rows: [thread] } },
@@ -305,10 +299,8 @@ test("a wide task's details with no agent offer New agent at their head, which o
   container.remove();
 });
 
-/** A draft agent's tab, which a page beside its side panel shows. */
 const DRAFT_TAB = { draft: "draft" };
 
-/** The task's page with the side panel open on `tab`, as markup. */
 function panelTab(): HTMLElement {
   const markup = renderToStaticMarkup(
     withQueryClient(
@@ -319,7 +311,6 @@ function panelTab(): HTMLElement {
           page: TASKS_PAGE.DOCUMENT,
           activeTaskId: TASK.id,
           region: { kind: DOCUMENT_REGION.READY, task: TASK },
-          // Note that the panel stands beside an agent's tab, since the task's details take its room.
           mainTabs: {
             ...tasksControl().mainTabs,
             tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
@@ -346,7 +337,6 @@ test("the panel's tab panel is labeled by its chosen tab, which controls it", ()
   assert.equal(others?.length, 0, "a tab with no panel standing names none");
 });
 
-/** The agent's message opening an item's thread, by the item's id, asking `ask` where it asks. */
 function agentMessage(itemId: string, at: number, ask?: InboxMessage["ask"]): InboxMessage {
   return {
     id: askOf(itemId),
@@ -357,12 +347,10 @@ function agentMessage(itemId: string, at: number, ask?: InboxMessage["ask"]): In
   };
 }
 
-/** The id of the agent's message opening an item's thread, by the item's id. */
 function askOf(itemId: string): string {
   return `e${itemId.slice(1)}`;
 }
 
-/** An approval as an ask, Approve or Decline, standing as `status` says. */
 function approvalAsk(status: InboxReadAsk["status"]): InboxMessage["ask"] {
   return {
     type: INBOX_ASK.DECIDE,
@@ -371,7 +359,6 @@ function approvalAsk(status: InboxReadAsk["status"]): InboxMessage["ask"] {
   };
 }
 
-/** An item of the plan's agent, open and asking for an approval, as the service answers one. */
 function approvalItem(id: string, title: string, at: number): InboxItem {
   return {
     id,
@@ -388,19 +375,14 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-/** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side, or as wide as given. */
 async function _narrowTaskInbox(
   items: readonly InboxItem[],
   width = 700,
-  /** What is pushed after the first push, where a test settles it; else nothing is. */
   later: Promise<AgentInboxAnswerView> = new Promise(() => undefined),
-  /** What the first push says, where a test holds it back until it settles; else the items given, once followed. */
   first?: Promise<AgentInboxAnswerView>,
-  /** The account reading, none where a test does not say, and where its answers go. */
   reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
     me: undefined,
   },
-  /** The account's feed, which the tab draws first where it holds the plan; one holding nothing yet unless given. */
   feed: AppHostRead<AppInboxItems> = UNREAD,
 ) {
   Object.defineProperty(window, "matchMedia", {
@@ -411,14 +393,11 @@ async function _narrowTaskInbox(
       removeEventListener: () => undefined,
     }),
   });
-  // The plan's held read holds `items` from the start, or what `first` says once it settles, and
-  // again what `later` says once it settles; one that fails after it answered keeps its rows, as the host keeps them.
   const heldOf = (read: AppHolderInbox): AppHolderInboxes => ({
     [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: read },
     [INBOX_SCOPE_KIND.AGENT]: {},
   });
   let standing: AppHolderInbox = first === undefined ? { rows: items } : UNREAD;
-  // Note that the window is a fresh one, so nothing a test before handed it stands.
   fakeAppBridge({});
   const reads = handHostReads({ items: feed, holders: heldOf(standing) });
   const pushed = (answer: AgentInboxAnswerView) => {
@@ -472,7 +451,6 @@ async function _narrowTaskInbox(
   vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ width, height: 800 }));
   act(() => relayout());
   return {
-    /** What a reader finds standing: the list or the item, and the item's title. */
     standing: () => [
       tab.querySelector(".inbox-tasks")?.hasAttribute("hidden") === false ? "list" : "",
       tab.querySelector(".inbox-view-items")?.hasAttribute("hidden") === false
@@ -480,7 +458,6 @@ async function _narrowTaskInbox(
         : "",
     ],
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
-    /** The list's head as a reader meets it: its name, and whether it offers a view's menu. */
     head: () => [
       tab.querySelector(".inbox-tasks .ui-pane-bar-title")?.textContent,
       tab.querySelector('button[aria-label="View options"]') !== null,
@@ -488,7 +465,6 @@ async function _narrowTaskInbox(
     rows: () =>
       [...tab.querySelectorAll(".inbox-tasks .ui-list-row-title")].map((row) => row.textContent),
     pager: () => tab.querySelector(".ui-pager-count")?.textContent ?? null,
-    /** What the list's foot says of a refresh that did not land, and whether it offers Retry. */
     refreshFailure: () => {
       const alert = tab.querySelector('.inbox-tasks [role="alert"]');
       const retry = [...tab.querySelectorAll(".inbox-tasks button")].some((button) =>
@@ -511,7 +487,6 @@ async function _narrowTaskInbox(
   };
 }
 
-/** An item of the plan's agent the developer approved, settled. */
 function _approvedItem(id: string, title: string, at: number): InboxItem {
   return {
     ...approvalItem(id, title, at),
@@ -529,13 +504,11 @@ function _approvedItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-/** A read the test settles by hand: the promise the Inbox awaits, and what settles it. */
 interface HeldAnswer {
   readonly promise: Promise<AgentInboxAnswerView>;
   readonly settle: (answer: AgentInboxAnswerView) => Promise<void>;
 }
 
-/** A read held open until the test settles it. */
 function _heldAnswer(): HeldAnswer {
   let settle: (answer: AgentInboxAnswerView) => void = () => undefined;
   const promise = new Promise<AgentInboxAnswerView>((resolve) => {
@@ -591,14 +564,12 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
       ),
     ),
   );
-  // Note that the plan's last editor is drawn once Plans reaches the page through the Query client.
   await vi.waitFor(() =>
     assert.match(container.querySelector(".description-byline")?.textContent ?? "", /Edited /u),
   );
   const body = container.querySelector(
     ".desktop-document .description-document-body .description-body",
   );
-  // A task from before statuses draws no standing chip.
   const path = body?.firstElementChild;
   const first = path?.nextElementSibling;
   const byline = first?.nextElementSibling;
@@ -845,7 +816,6 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       (each) => each.querySelector(".ui-inline-ref-label")?.textContent?.includes(name),
     );
 
-  // Note that the plan's chips are drawn once Plans reaches the page through the Query client.
   const own = await vi.waitFor(() => {
     const found = chip("relay#42");
     assert.ok(found, "the agent's pull request is its chip");
@@ -858,9 +828,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   ]);
   assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
 
-  // Another pull request of the task's repository opens in a Pull request tab of its own, by its number.
   act(() => chip("relay#7")?.click());
-  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens by its number too.
   act(() => chip("relay#9")?.click());
   assert.deepEqual(opened.slice(2), [
     { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
@@ -877,7 +845,6 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   container.remove();
 });
 
-/** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
 function panelPage(
   tab: SidePanelTab,
   overrides: Partial<TasksControl> = {},
@@ -963,7 +930,6 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
       sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
       pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
     },
-    // The summary stands pinned beside the document, since the rail draws the panel's kinds alone.
     { ...UNPINNED_SUMMARY, pinned: true },
   );
   act(() => relayout());
@@ -978,7 +944,6 @@ test("a summary row that opens a tab of the side panel hands the panel the keys,
   page.unmount();
 });
 
-/** The open task's page, standing In progress at High priority, whose changes of standing the service keeps or refuses as `keeps` says, and the changes it was sent. */
 function standingPageMounted(keeps: boolean) {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
@@ -1017,12 +982,10 @@ function standingPageMounted(keeps: boolean) {
       ),
     ),
   );
-  /** The chip named `label`, which says its value after its name. */
   const chip = (label: string) =>
     [...container.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
       each.getAttribute("aria-label")?.startsWith(`${label}:`),
     );
-  /** Picks `words` from the menu the `label` chip drops, and lets the answer land. */
   const pick = async (label: string, words: string) => {
     act(() => chip(label)?.click());
     const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>

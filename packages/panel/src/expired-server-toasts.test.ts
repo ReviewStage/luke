@@ -21,25 +21,13 @@ import { holdIntegrations, type IntegrationsHeld } from "./testing/app-state.js"
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 
-/**
- * expired-server-toasts.test.ts -- each MCP server whose sign-in expired is
- * said in a toast of its own with Reconnect, which begins its sign-in, says
- * the reconnect while it is under way, and leaves once the server is
- * connected again, the others standing; a reconnect that could not begin
- * says so with Retry. Synthetic throughout.
- */
-
-/** Where each offered provider stands at the service; every other is not offered. */
 let standing: Partial<Record<IntegrationProvider, IntegrationStatus>> = {};
-/** Whether the next Connect is refused, as a service that does not answer refuses it. */
 let refuseConnect = false;
-/** Every provider a Connect was asked for, in order. */
 let connects: IntegrationProvider[] = [];
 let integrations: IntegrationsHeld;
 let root: Root | undefined;
 let registry: AtomRegistry.AtomRegistry | undefined;
 
-// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
 const UNAVAILABLE = Object.fromEntries(
   INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
 ) as Record<IntegrationProvider, IntegrationStatus>;
@@ -48,7 +36,6 @@ beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   connects = [];
   refuseConnect = false;
-  // A Connect stands its provider pending at the service, answering once the host's read carries it.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       connects.push(payload.provider);
@@ -83,7 +70,6 @@ function Toasts(): null {
   return null;
 }
 
-/** The toasts, mounted as the window's root mounts them. */
 async function mount(): Promise<void> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -100,14 +86,12 @@ async function mount(): Promise<void> {
   await settle();
 }
 
-/** What each toast standing says, oldest first, leaving out those on their way out. */
 function said(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
 
-/** Presses `label` on the standing toast that says `words`. */
 async function press(words: string, label: string): Promise<void> {
   const offered = () => {
     const card = [...document.querySelectorAll(".ui-toast:not([data-leaving])")].find(

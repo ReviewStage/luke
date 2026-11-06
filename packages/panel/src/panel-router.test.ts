@@ -18,7 +18,6 @@ import { appStateFirstRead } from "./use-app-state.js";
 
 type PanelRouteId = RouteIds<PanelRouter["routeTree"]>;
 
-/** Where an address must land: the route it names, the ids that route reads from it, and its search where it has one. */
 interface Landing {
   readonly routeId: PanelRouteId;
   readonly params: Record<string, string>;
@@ -27,7 +26,6 @@ interface Landing {
 
 const W = "stage";
 
-/** Every address `linkOf` writes, one row per spelling of each place kind, beside the route a hand reading of its path names. */
 const LINKS: readonly (readonly [LinkPlace, Landing])[] = [
   [{ kind: LINK_PLACE.HOME }, { routeId: "/places/$workspace/", params: { workspace: W } }],
   [{ kind: LINK_PLACE.BOARD }, { routeId: "/places/$workspace/tasks", params: { workspace: W } }],
@@ -227,7 +225,6 @@ const LINKS: readonly (readonly [LinkPlace, Landing])[] = [
   ],
 ];
 
-/** The deepest route the router matches `address` to, read as a window's router reads the address it opens at. */
 function landingOf(address: string): Landing {
   const router = createPanelRouter(
     createMemoryHistory({ initialEntries: [address] }),
@@ -239,7 +236,6 @@ function landingOf(address: string): Landing {
   return { routeId: leaf.routeId, params: leaf.params, search: leaf.search };
 }
 
-/** A link's address as a window holds it: its path, query, and fragment. */
 function addressOf(link: string): string {
   const url = new URL(link);
   return `${url.pathname}${url.search}${url.hash}`;
@@ -295,7 +291,6 @@ describe("the panel's route tree", () => {
     "is made before the window's bridge stands without spoiling the window's first read",
     () =>
       Effect.gen(function* () {
-        // The desktop's entry makes its router as the module loads, before its root installs the bridge (`window-root.tsx`).
         landingOf("/app");
         const state = stateWith({}, {});
         fakeAppBridge({

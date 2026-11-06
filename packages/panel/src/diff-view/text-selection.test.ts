@@ -5,19 +5,10 @@ import { afterEach, test } from "vitest";
 import { DIFF_SELECTION_SIDE } from "./contract.js";
 import { pressedOnCode, selectedLines } from "./text-selection.js";
 
-/**
- * text-selection.test.ts -- code selected as text in a diff Pierre drew is
- * read as the lines it runs over: a changed row on the side it changed, an
- * unchanged one on its column's side, a drag ending at the start of a row
- * on the row before it, and a selection ending outside every row as none.
- */
-
-/** A row as Pierre writes one: its number, its kind, and its words. */
 function row(line: number, type: string, words: string): string {
   return `<div data-line="${line}" data-line-type="${type}"><span>${words}</span></div>`;
 }
 
-/** Draws `markup` and answers the element it stands in. */
 function drawn(markup: string): HTMLElement {
   const host = document.createElement("div");
   host.innerHTML = markup;
@@ -25,7 +16,6 @@ function drawn(markup: string): HTMLElement {
   return host;
 }
 
-/** The words of the row numbered `line` in `scope`, the text node a selection's end stands in. */
 function wordsOf(scope: ParentNode, line: number): Text {
   const text = scope.querySelector(`[data-line="${line}"] span`)?.firstChild;
   assert.ok(text instanceof Text, `row ${line} has words`);
@@ -140,7 +130,6 @@ test("only a press on a file's code begins a drag over it; one on its header or 
   const button = host.querySelector("button");
   assert.ok(button !== null);
 
-  // The path a press takes, from where it landed up through its ancestors.
   const pathFrom = (node: Node): Node[] =>
     node.parentNode === null ? [node] : [node, ...pathFrom(node.parentNode)];
 

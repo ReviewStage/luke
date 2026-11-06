@@ -19,10 +19,6 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { PendingComment } from "./pending-comments.js";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions.js";
 
-/**
- * held-review-words.test.ts -- the words of a GitHub thread's reply and of a pending comment's edit survive Esc: the reply or the edit opened again brings them back, and sending or saving lets them go. The box is the real one, from its bundle; GitHub is the act port's answer. Synthetic thread and comment.
- */
-
 const THREAD: ReviewThread = {
   path: "src/a.ts",
   line: 4,
@@ -53,7 +49,6 @@ const PENDING: PendingReviewComment = {
 };
 
 let root: Root | undefined;
-/** Every change the tab asked GitHub for, in order. */
 let changes: PullRequestActionRequest[] = [];
 
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -77,14 +72,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The thread's controls and a pending comment, under one tab's provider. */
 function draw(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -108,7 +101,6 @@ function draw(): HTMLElement {
   return container;
 }
 
-/** The button of the given words. */
 function button(container: HTMLElement, words: string): HTMLButtonElement {
   return (
     [...container.querySelectorAll("button")].find((each) => each.textContent === words) ??
@@ -116,7 +108,6 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-/** The open box of the given label. */
 function box(container: HTMLElement, label: string): TiptapEditorHTMLElement {
   return (
     container.querySelector<TiptapEditorHTMLElement>(`.ProseMirror[aria-label^="${label}"]`) ??
@@ -124,7 +115,6 @@ function box(container: HTMLElement, label: string): TiptapEditorHTMLElement {
   );
 }
 
-/** Presses Esc in the box. */
 async function esc(element: HTMLElement): Promise<void> {
   act(() => {
     element.dispatchEvent(
@@ -134,7 +124,6 @@ async function esc(element: HTMLElement): Promise<void> {
   await settle();
 }
 
-/** Types words at the end of the box, as its own input inserts them. */
 function typeAtEnd(element: TiptapEditorHTMLElement, words: string): void {
   const editor = element.editor ?? assert.fail("the box is running");
   act(() => {
@@ -208,7 +197,6 @@ test("Cancel, unlike Esc, lets a reply's words go", async () => {
   assert.equal(box(container, "Reply").textContent, "");
 });
 
-/** The kind of every change asked of GitHub so far. */
 function actionsSent(): string[] {
   return changes.map((change) => change.action);
 }

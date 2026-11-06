@@ -50,18 +50,10 @@ import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { useDescriptionWordsOwner, useDescriptionWordsUnsaved } from "./use-description-editing.js";
 
-/**
- * The editor itself is TipTap in a bundle of its own (`../description-editor/`),
- * tested beside it. Here the document mounts a stand-in for that bundle at
- * its one boundary, the bundle's importer, and the tests speak as the
- * editor would: the text it hands over, its finish, and its leaving up.
- */
-
 const BODY = DOCUMENT_TASK.document.body;
 
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
-/** Every editor the document mounted, newest last, with what it was handed, what it was asked to take, and where a press on its room put its caret. */
 const mounted: {
   props: DescriptionEditorProps;
   destroyed: boolean;
@@ -69,13 +61,10 @@ const mounted: {
   placed: DescriptionEditorPlacement[];
 }[] = [];
 
-/** Where the line of the words the stand-in opened on stands in the window, as a laid-out editor answers; none, as when the words were not found, unless a test lays it out. */
 let wordsLine: (() => number) | undefined;
 
-/** The words the stand-in's caret stands in as it closes, as a laid-out editor answers; none unless a test lays them out. */
 let caretOn: PlacedWords | undefined;
 
-/** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: DescriptionEditorModule = {
   mount: (_host, props) => {
     const took: [string, string][] = [];
@@ -115,7 +104,6 @@ const STAND_IN: DescriptionEditorModule = {
   mountComposer: () => assert.fail("the description document mounts no message box"),
 };
 
-/** The diagram bundle's stand-in: a picture named by the code and the appearance it was asked to draw. */
 const diagramPicture = (code: string, appearance: string) =>
   `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
 const DIAGRAM_STAND_IN: DiagramModule = {
@@ -125,7 +113,6 @@ const DIAGRAM_STAND_IN: DiagramModule = {
 
 let bundles: SideBundles;
 
-// Landed before any document renders, as both are once a description has been shown in this window.
 beforeAll(async () => {
   bundles = await Effect.runPromise(
     landedBundles({
@@ -140,7 +127,6 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  // A document arriving is drawn at once where motion is held still.
   holdMotion();
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
@@ -155,7 +141,6 @@ afterEach(async () => {
   caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a description left as it went answer before its atoms go.
   await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
@@ -168,13 +153,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/**
- * The document with an edit door that records each edit and answers from the
- * script, and the names it renamed to, beside the window's toasts and over
- * atoms of its own, as the window holds them; `render` draws another description,
- * through its own door where given.
- */
-/** A description comment thread on the description's first words, open or not. */
 function threadOn(
   id: string,
   status: DescriptionCommentThread["status"],
@@ -214,18 +192,15 @@ function commentsOver(threads: readonly DescriptionCommentThread[]): Description
   };
 }
 
-/** What the window tells its shell of the descriptions' words, drawn beside the description as a shell would read it. */
 function UnsavedWords(): ReactElement {
   return createElement("output", { "data-unsaved-words": String(useDescriptionWordsUnsaved()) });
 }
 
-/** The descriptions' words told which account is signed in, as the window tells them. */
 function WordsOwner(): null {
   useDescriptionWordsOwner();
   return null;
 }
 
-/** Main's document handed again with the account signed in now naming its id, as a refresh hands it. */
 function accountGainsId(): void {
   writeAppState(
     stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
@@ -240,7 +215,6 @@ function accountGainsId(): void {
   );
 }
 
-/** Main's document handed again with a teammate signed in, as an account switch hands it. */
 function signInTeammate(): void {
   writeAppState(
     stateWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
@@ -255,7 +229,6 @@ function signInTeammate(): void {
   );
 }
 
-/** Whether the window says a description holds words not saved. */
 function unsavedWords(container: HTMLElement): boolean {
   return (
     container.querySelector("[data-unsaved-words]")?.getAttribute("data-unsaved-words") === "true"
@@ -284,7 +257,6 @@ function mount(
     renamed.push(name);
     return Promise.resolve(true);
   };
-  // Note that a description with no comments control draws none, as a template does.
   const commented = (page: ReactElement) =>
     threads === undefined
       ? page
@@ -316,7 +288,6 @@ function mount(
         onRename,
       }),
     );
-  /** The description as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
   render(first);
@@ -327,10 +298,8 @@ function mount(
   return { container, sent, renamed, render, renderPage, unmount };
 }
 
-/** How a task's page saves a description's edit: by the task's id. */
 type TaskEdit = (taskId: string, request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
-/** The description as a task's page draws it, its edits saved through `edit` with the open task's id. */
 function TaskPage({
   task,
   edit,
@@ -359,7 +328,6 @@ function _press(element: Element, key: string): void {
   });
 }
 
-/** The editor open now, as the document handed it over. */
 function open(): DescriptionEditorProps {
   const editor = mounted.filter((held) => !held.destroyed).at(-1);
   assert.ok(editor, "an open editor");
@@ -399,7 +367,6 @@ test("the editor's preview of a Mermaid block is the picture the diagram bundle 
   act(() => block(container, "Goal").click());
   const draw = open().drawDiagram;
   assert.ok(draw, "the document hands the editor its diagrams");
-  // The element the editor stands under the block, inside its own host.
   const under = document.createElement("div");
   container.querySelector(".description-document-editor")?.append(under);
   const code = "flowchart LR\n  Invite --> Join";
@@ -410,7 +377,6 @@ test("the editor's preview of a Mermaid block is the picture the diagram bundle 
   });
   await settle();
 
-  // The window stands in its dark appearance, as `matchMedia` answers here.
   assert.equal(under.querySelector("img")?.getAttribute("src"), diagramPicture(code, "dark"));
   act(() => takeDown());
   assert.equal(under.querySelector("img"), null);
@@ -430,7 +396,6 @@ test("a press on a diagram's Show code shows its code and opens no editor", asyn
   act(() => toggle.click());
 
   assert.equal(container.querySelector(".description-diagram pre")?.textContent, `${code}\n`);
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".description-document-editor") === null, "no editor opened");
 });
 
@@ -444,7 +409,6 @@ test("a mouse's press on a diagram in a wide room, which enlarges nothing, opens
     },
   });
   await settle();
-  // A mouse: the window answers every query but a finger's.
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -478,7 +442,6 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   URL.createObjectURL = () => "blob:plan-recording";
   URL.revokeObjectURL = () => undefined;
-  // The window's playing and full screen, which jsdom does not implement.
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockReturnValue(undefined);
   const fullScreen = Object.getOwnPropertyDescriptor(Element.prototype, "requestFullscreen");
@@ -513,7 +476,6 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
       "the video plays in its section, under its caption",
     );
 
-    // The frame, the scrubber, Play, and Full screen, each as a mouse's press lands on it, then Expand.
     for (const pressed of [video, seek, play, fullScreen]) {
       act(() => {
         pressed.dispatchEvent(
@@ -523,7 +485,6 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
     }
     act(() => expand.click());
 
-    // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
     assert.ok(container.querySelector(".description-document-editor") === null, "no editor opened");
     assert.ok(document.querySelector(".attachment-viewer"), "the Expand opened the viewer");
 
@@ -585,7 +546,6 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
     await settle();
   }
 
-  // Note that the description is not drawn again here, so each tick is written over the text the one before it saved.
   const written = body.replace("  - [ ] Write", "  - [x] Write");
   assert.deepEqual(
     sent.map((request) => request.document),
@@ -598,7 +558,6 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
   assert.equal(newestToastSays(), "The description could not be saved.");
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".description-document-editor") === null, "no editor opened");
 });
 
@@ -619,7 +578,6 @@ test("a press on the label around a task's checkbox, which takes a finger's pres
     sent.map((request) => request.document),
     [{ base: body, value: body.replace("- [ ] Send", "- [x] Send") }],
   );
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".description-document-editor") === null, "no editor opened");
 });
 
@@ -804,21 +762,18 @@ test("a press on the name in a section's byline opens no editor, while a press o
   act(() => {
     name.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".description-document-editor") === null, "no editor opened");
 
   act(() => goal.click());
   assert.equal(open().markdown, BODY);
 });
 
-/** Where the text's words stand in the window, as a laid-out page draws them: from 100 to 300 down, and 50 to 650 across. */
 function layTextOut(): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: 50, y: 100, width: 600, height: 200 }),
   );
 }
 
-/** A press on `target` at the point given, as the pointer's button goes down and comes up; answers whether the press was taken. */
 function pressAt(target: Element, x: number, y: number): boolean {
   const down = new MouseEvent("mousedown", {
     bubbles: true,
@@ -1176,7 +1131,6 @@ test("a plan left twice while its first save is out stays unsaved work until bot
   };
   await editAndLeave(`${BODY}Mine.\n`);
   await editAndLeave(`${BODY}Mine again.\n`);
-  // Note that a plan's writes run one at a time, in order, so the newer waits its turn behind the first.
   await vi.waitFor(() => assert.equal(answers.length, 1, "the first save is out"));
   assert.equal(unsavedWords(container), true);
 
@@ -1333,7 +1287,6 @@ test("the toast's Retry over words a refused save left saves them to the descrip
   assert.equal(newestToastSays(), undefined);
 });
 
-/** A browser's answer to where a point stands in the page's words: `offset` into `words`, its line `top` down the window. */
 function pointLandsOn(words: Text, offset: number, top: number): void {
   const range = document.createRange();
   range.setStart(words, offset);
@@ -1346,7 +1299,6 @@ function pointLandsOn(words: Text, offset: number, top: number): void {
   });
 }
 
-/** The text node of `words` drawn in `within`, the `nth` (from 0) where several are. */
 function wordsNode(within: HTMLElement, words: string, nth = 0): Text {
   const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
   const found: Text[] = [];
@@ -1411,7 +1363,6 @@ test("the words a click opened the editor on stay under the finger, as it opens 
   const scroller = scrollerOf(container);
   scroller.scrollTop = 500;
   pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
-  // The words stand this far down the column in the editor: 59 lower than the text drew them, for a taller picture above.
   let wordsDown = 859;
   wordsLine = () => wordsDown - scroller.scrollTop;
   try {
@@ -1423,7 +1374,6 @@ test("the words a click opened the editor on stay under the finger, as it opens 
   }
   assert.equal(wordsLine(), 300, "the words stand where they were clicked as the editor opens");
 
-  // A diagram's preview above them lands later, 200 tall.
   wordsDown += 200;
   act(() => relayout());
   assert.equal(wordsLine(), 300, "and again once the preview has drawn");
@@ -1493,7 +1443,6 @@ test("the words the caret stood on stay where they stood as the editor closes, t
   act(() => block(container, "Goal").click());
   const scroller = scrollerOf(container);
   scroller.scrollTop = 500;
-  // The caret's line stands 300 down the window in the editor; the drawn text, with a shorter diagram above, draws it 57 down.
   caretOn = {
     section: 1,
     text: "Invites land by email.",
@@ -1542,7 +1491,6 @@ test("words left by an editor closed as another description opens move nothing i
     DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
   );
 
-  // Another description with the same words opens in its place.
   render({ ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" });
   await settle();
 
@@ -1550,7 +1498,6 @@ test("words left by an editor closed as another description opens move nothing i
   assert.equal(scroller.scrollTop, 500);
 });
 
-/** The description as a teammate's save left it: their text, saved after the one the page opened on, by them. */
 function savedBy(body: string, updatedAt: number, by = CHARLES): Task {
   return {
     ...DOCUMENT_TASK,
@@ -1594,19 +1541,16 @@ test("an open editor holding unsaved words keeps them as a teammate saves, saves
     act(() => block(container, "Goal").click());
     const [editor] = mounted;
     act(() => open().onDraft(mine));
-    // The editor hands its words over once the typing pauses.
     act(() => vi.advanceTimersByTime(200));
 
     render(savedBy(`${BODY}Charles's.\n`, 3), door);
     await settle();
     assert.deepEqual(editor?.took, [], "nothing is laid over words not yet saved");
 
-    // The words save a beat later, as a change from the text they were typed over, which the service lays over Charles's.
     act(() => vi.advanceTimersByTime(1_000));
     await settle();
     assert.deepEqual(sent, [{ document: { base: BODY, value: mine } }]);
 
-    // The host draws the description the save answered, the developer's last, before the save's answer arrives.
     render(savedBy(merged, 4, { userId: "user-me", name: "Me" }), door);
     answer({ saved: true });
     await settle();

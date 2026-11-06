@@ -75,100 +75,38 @@ import { focusSearchField, Highlighted } from "./search-field.js";
 import { settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
 import { experimentPages, settingsPageShown } from "./settings/settings-rows.js";
 
-/**
- * Searching the Settings tab.
- *
- * The pages hold more rows than anyone remembers the address of, so the
- * settings sidebar carries a search field above its list of pages, the way
- * macOS System Settings and an editor's settings do: typing turns the list
- * into the rows the query found, and clearing it turns the list back. The
- * search reads across every page wherever it is made from. The corpus is
- * everything the pages currently offer: the stored settings come from the same
- * descriptions their rows are drawn from — one description of each setting, so
- * the search and the row cannot drift apart — and each says for itself whether
- * its row is drawn, so nothing here restates a condition a page branches on.
- * The rows that are not settings (a permission, a shortcut, the ways out) are
- * declared here, gated by the same conditions that draw them. A row the pages
- * are not drawing right now is not offered, because a result that leads to a
- * page without its row is a promise the page cannot keep.
- *
- * Results read the way Linear's settings search reads them: each page found
- * stands with its glyph, by its own name or by the rows it holds, and those
- * rows stand nested under it. The field's keys walk them, each step showing
- * its page beside the list with the row lit, and pressing one opens its page
- * and takes the view to the row itself, by the anchor the row wears.
- * The search is read-only over names and descriptions the build already
- * fixed — a query narrows what is offered and never widens what can be done.
- */
-
-/** The word a Leave result opens with, before the workspace's name. */
 const LEAVE_WORD = "Leave";
 
-/** How the search field is found by the seek that lands Command-F's caret in it. */
 const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
-/** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
-  /**
-   * The row's own id: a setting's schema id, or a member of
-   * `SETTINGS_SEARCH_ROW`. It is what the landing seeks — as the anchor the
-   * row wears.
-   */
   id: string;
-  /** The row's own name, which is what the result draws. */
   label: string;
-  /** Where a person's words, a workspace's name, start in that name, kept masked from there on in a screen recording though the results show the app's own. */
   replayMaskedFrom?: number;
-  /** The page the row is drawn on, which is where the result leads. */
   page: SettingsView;
-  /** Every line the query is read against: the label, and words about it. */
   haystack: readonly string[];
 }
 
-/**
- * What the pages must answer before the corpus can say what they hold: the one
- * record the rows themselves are drawn from. The settings' own half is the
- * schema's — each entry says whether its row is drawn right now, judged from
- * this same record — so nothing here restates a condition a page branches on.
- * Beside it, the workspace the Workspace page shows, absent while it draws none.
- * An integration's tools are not here: the Integrations page's own filter
- * finds them (`settings/integrations-page.tsx`).
- */
 export type SettingsSearchInput = SettingsRowsInput & {
   workspace?: Workspace | undefined;
 };
 
-/**
- * The page named the way a group's head says it: the names the sidebar's own
- * list of pages uses, so a result's group and the row it opens agree. The
- * command palette names a setting's page beside it in the same words.
- */
 export function resultPageWord(page: SettingsView): string {
   return settingsPageOf(page).title;
 }
 
-/**
- * What an empty search says, the words module's miss line and then what to try,
- * because a miss that only says it missed leaves the reader nothing to do.
- */
 const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Appearance, or fewer words.`;
 
-/** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration";
 
-/** The words every experiment's row answers to beside its own name, the ones other apps call the same page by. */
 const EXPERIMENT_WORDS = "experiment preview beta labs early try";
 
-/** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
-/** The words the one Escape row answers to besides, which stands for every layer the key steps back from. */
 const ESCAPE_WORDS = "escape esc exit leave back";
 
-/** The words every writing chord and Markdown rule answers to besides. */
 const WRITING_WORDS = "format formatting markdown editor text";
 
-/** A key that answers in place, as the Keyboard shortcuts page lists it under `group`. */
 function inContextEntry(key: InContextKey, group: string): SettingsSearchEntry {
   const { label } = IN_CONTEXT_SHORTCUTS[key];
   const leaving = key === IN_CONTEXT_KEY.STEP_BACK ? ESCAPE_WORDS : "";
@@ -180,11 +118,6 @@ function inContextEntry(key: InContextKey, group: string): SettingsSearchEntry {
   };
 }
 
-/**
- * The rows that are not stored settings, each gated by the condition that
- * draws it. Declared as one table so a row added to a page has one place to
- * become findable.
- */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
     input.capabilities.includes(HOST_CAPABILITY.UPDATES)
@@ -220,7 +153,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["GitHub personal access token", "classic token PAT add manage"],
         }
       : undefined,
-    // Each experiment's row on Experimental, drawn once an account is signed in: found by its name, what it brings, and the pages it holds.
     ...EXPERIMENTS.map((entry) =>
       input.accountDrawn
         ? {
@@ -236,7 +168,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           }
         : undefined,
     ),
-    // Each integration's row on its page, drawn once an account is signed in and anchored by its provider.
     ...INTEGRATION_PROVIDER_LIST.map((provider) =>
       input.accountDrawn
         ? {
@@ -247,7 +178,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           }
         : undefined,
     ),
-    // The product MCP page's two groups, drawn once an account is signed in: the outside agents it let in, and how to connect one.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.MCP_CLIENTS,
@@ -270,7 +200,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The CLI page's two groups, drawn once an account is signed in: the command's install, and its sign-in.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CLI_INSTALL,
@@ -301,7 +230,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
-    // This Mac's microphone permission row, drawn wherever there is a microphone to ask for.
     input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
       ? {
           id: SETTINGS_SEARCH_ROW.MICROPHONE,
@@ -313,7 +241,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // What the workspace's agents remember, which is the workspace's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.MEMORY,
@@ -322,7 +249,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Memory", "remember recall forget facts conventions shared memory"],
         }
       : undefined,
-    // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.AGENT_MODEL,
@@ -347,7 +273,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Fast", "agent fast version speed quick model"],
         }
       : undefined,
-    // The harnesses' rows, each holding the account's plan and API key for it on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
@@ -370,7 +295,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The Hosts page's Add hosts button, drawn once an account is signed in, under the machines the service lists.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
@@ -379,9 +303,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Add hosts", "machine host server linux mac install vespin-host"],
         }
       : undefined,
-    // The Workspace page's groups, as it draws them for the workspace it
-    // shows: the invite form, under the members, only where the reader may
-    // invite, and the leave only where the reader may leave.
     input.workspace
       ? {
           id: SETTINGS_SECTION.MEMBERS,
@@ -418,7 +339,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The workspace's name, which an owner or an admin changes on the identity row, but not the account's first workspace, which its owner's account name names.
     input.workspace !== undefined &&
     managesWorkspace(input.workspace) &&
     input.workspace.personal !== true
@@ -429,7 +349,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Rename workspace", "rename name change workspace photo"],
         }
       : undefined,
-    // The workspace's link, which its owner alone changes from Change slug in the identity row's ⋯.
     input.workspace?.role === WORKSPACE_ROLE.OWNER
       ? {
           id: SETTINGS_SEARCH_ROW.WORKSPACE_SLUG,
@@ -438,7 +357,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Workspace link", "Change slug link address url workspace"],
         }
       : undefined,
-    // The Skills page's one standing row, drawn once the page has the workspace it lists the skills of: the skills themselves are read from the service and listed under it.
     input.workspace
       ? {
           id: SETTINGS_SEARCH_ROW.ADD_SKILL,
@@ -450,7 +368,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
     ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) => [
       ...group.commands.map((command) => ({
         id: command,
@@ -464,7 +381,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       })),
       ...group.keys.map((key) => inContextEntry(key, group.title)),
     ]),
-    // The writing chords and Markdown rules, listed under the window's, found by the rule typed too.
     ...WRITING_ACTIONS_LISTED.map((action) => {
       const { label, markdown }: WritingShortcut = WRITING_SHORTCUTS[action];
       return {
@@ -480,11 +396,9 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         ],
       };
     }),
-    // A link's ⌘K and the @ list's keys, after the writing chords.
     ...WRITING_KEYS_IN_CONTEXT.filter((key) => inContextShown(key, input.capabilities)).map((key) =>
       inContextEntry(key, WRITING_GROUP_TITLE),
     ),
-    // Files changed's own keys, listed under Writing.
     ...FILES_CHANGED_KEYS_LISTED.map((key) => ({
       id: key,
       label: FILES_CHANGED_SHORTCUTS[key].label,
@@ -495,7 +409,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         FILES_CHANGED_GROUP_TITLE,
       ],
     })),
-    // Chapters' own keys, after Files changed's.
     ...CHAPTERS_KEYS.map((key) => ({
       id: key,
       label: CHAPTERS_SHORTCUTS[key].label,
@@ -506,19 +419,11 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
 }
 
-/**
- * Everything a query can find right now, ordered by page the way the front
- * page orders them — the stored settings first within a page, then the rows
- * that are not settings. Each entry carries the page's own name in its
- * haystack, so a page's name finds everything the page holds.
- */
 export function settingsSearchEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const described = describedSettings(input.settings).flatMap((setting): SettingsSearchEntry[] => {
     const field = settingFieldForId(setting.id);
     if (!field) return [];
     if (!settingIdVisible(setting.id, input)) return [];
-    // A choice is found by what it offers as well as by its name, so "dark"
-    // finds the theme its row no longer has to describe.
     const offered = APP_SETTING_SCHEMA[field].control?.options(input) ?? [];
     return [
       {
@@ -548,14 +453,11 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     }));
 }
 
-/** Everything a query can find right now: the pages shown, by their names, and the rows they hold. */
 export interface SettingsSearchCorpus {
-  /** The pages the Settings sidebar lists, in its order. */
   pages: readonly SettingsView[];
   entries: readonly SettingsSearchEntry[];
 }
 
-/** The pages the sidebar lists and every row they draw, as a query reads them. */
 export function settingsSearchCorpus(input: SettingsSearchInput): SettingsSearchCorpus {
   return {
     pages: SETTINGS_PAGE_LIST.filter((page) =>
@@ -565,42 +467,21 @@ export function settingsSearchCorpus(input: SettingsSearchInput): SettingsSearch
   };
 }
 
-/** A row a query found, with the stretches of its name that say why. */
 export interface SettingsSearchResult extends SettingsSearchEntry {
   marks: readonly MatchRange[];
 }
 
-/** One page's matches: the page that heads the group, and the rows under it, best first. */
 interface SettingsSearchGroup {
   page: SettingsView;
-  /** The stretches of the page's own name the query found, absent where only its rows matched. */
   marks: readonly MatchRange[] | undefined;
   items: readonly SettingsSearchResult[];
 }
 
-/** What became of the query, reported so no narrowing is ever silent. */
 export interface SettingsSearchOutcome {
-  /** The kept pages, each with the rows it holds that the query kept, best first. */
   groups: readonly SettingsSearchGroup[];
-  /** How many pages and rows the query kept, across every group. */
   matched: number;
 }
 
-/**
- * The query read over the corpus by the one tiered scorer (`searchHit`), the
- * way ⌘K reads its rows: every word must land somewhere in an entry, its
- * name first and the words it is known by after, and a row whose name is the
- * query or begins with it ranks above one whose words are scattered, a row
- * found only by what its name does not say last. Letters typed in order
- * find nothing, so "thm" is not Theme. A blank query is no search at all.
- *
- * A page is found by its own name as well as through the rows it holds, so
- * "hosts" finds the Hosts page itself. The kept rows come back under their
- * page, because that is how the results are drawn, each page's rows best
- * first and equals in the corpus's order; and the pages come back best
- * first, each as good as the best of its own name and its rows, equals in
- * the sidebar's order, so the first result is the best one.
- */
 export function searchSettings(
   corpus: SettingsSearchCorpus,
   query: string,
@@ -623,14 +504,11 @@ export function searchSettings(
   return { groups, matched: kept.length + pagesNamed };
 }
 
-/** One result the keys step through: a page, or a row on it. */
 export interface SettingsSearchStop {
   page: SettingsView;
-  /** The row, absent where the stop is the page itself. */
   entry?: SettingsSearchResult | undefined;
 }
 
-/** The results in the order they are drawn and walked: each page, then the rows it holds. */
 export function settingsSearchStops(search: SettingsSearchOutcome): readonly SettingsSearchStop[] {
   return search.groups.flatMap((group) => [
     { page: group.page },
@@ -638,33 +516,13 @@ export function settingsSearchStops(search: SettingsSearchOutcome): readonly Set
   ]);
 }
 
-/**
- * Which stop Return opens before any is stepped to: the best page's own,
- * where its name was found, else its best row, since a page found only
- * through a row was asked for by that row.
- */
 export function bestSettingsStop(search: SettingsSearchOutcome): number {
   const first = search.groups[0];
   return first === undefined || first.marks !== undefined || first.items.length === 0 ? 0 : 1;
 }
 
-/** Whether the landing can hold the keyboard, or only be scrolled into view. */
 const FOCUSABLE = "button, select, input, textarea, [tabindex]";
 
-/**
- * Takes the view to the row a pressed result named, waiting out the page swap
- * the press asked for — the same frame-by-frame seek the session search field
- * needs, because the row is not drawn until React has answered. The row is
- * found by the anchor it wears, and is scrolled to the top of the view — the
- * scroller's own scroll padding keeps it clear of a pinned header — with a
- * control also taking the keyboard, without a second scroll of its own, and
- * the row lit for a moment, as every place landed on is (`land`), once more
- * each time it is landed on. It lands after the page's own header focus on
- * purpose: the result named a row, so the row is where the view belongs. A
- * row the page is not drawing is given up on quietly. A preview, the
- * search's keys stepping onto the row while the caret stays in the field,
- * lights the row and leaves the keyboard where it is (`keyboard: false`).
- */
 export function landOnSettingsRow(id: string, keyboard = true): () => void {
   return focusSeek({
     find: () =>
@@ -672,58 +530,21 @@ export function landOnSettingsRow(id: string, keyboard = true): () => void {
     ready: drawnVisibly,
     act: (element) => {
       element.scrollIntoView({ block: "start" });
-      // A row with one control anchors the control itself, which takes the
-      // keyboard; a row of several anchors the row and takes none, since
-      // choosing among its buttons is not the landing's to do.
       if (keyboard && element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
       land(element);
     },
   });
 }
 
-/** The results the field steers while a query found any: how many stops stand, which is lit, and what stepping onto one and choosing one do. */
 export interface SettingsSearchSteering {
-  /** How many stops the results draw, none while no query found anything. */
   count: number;
-  /** The lit stop, below zero for none. */
   active: number;
-  /** The id of the list the field steers. */
   listId: string;
-  /** The id of the lit stop's row, while one is lit. */
   activeId: string | undefined;
-  /** A key stepped onto a stop: it is lit, and its page shown with its row lit, the caret staying in the field. */
   onStep: (index: number) => void;
-  /** Return chose a stop, below zero where none was stepped to: its page opens and its row takes the keyboard. */
   onChoose: (index: number) => void;
 }
 
-/**
- * The search field at the head of the settings sidebar: a magnifier, the
- * field, and a clear button while a query stands. It stays drawn and keeps its
- * height whatever is typed, so neither the list under it nor the page beside
- * it moves as the query changes.
- *
- * Settings opens with the caret here, so the first keys typed search, but
- * under a finger, which types on no keys until it taps the field. A caret
- * the window already put somewhere, a row a link or the palette landed on,
- * keeps it. That caret is not counted as a search opened, because nobody
- * asked for it, and it holds no layer of its own: Escape in the field it left
- * untouched leaves Settings in one press, as it would with the caret nowhere.
- *
- * While a query found anything, the field steers the results under it as
- * Linear's settings search does, the caret staying in it: ↓ and Tab step to
- * the next result, ↑ and Shift-Tab to the one before, wrapping, and each step
- * shows the result's page beside the list with its row lit, so the page is
- * read before anything is chosen. Return opens the lit result, or the best
- * one where none is lit, and hands its row the keyboard.
- *
- * Otherwise Escape unwinds one layer at a time, the way it does everywhere
- * else in the window: a held query is cleared first, and only an empty field
- * lets go of the caret — both stopped here, so neither press falls through
- * and turns the page or the tab behind the field. Command-F lands here unless
- * the page beside it has a search of its own, as Integrations does, which is
- * the nearer question; the chord is printed in whichever field it lands in.
- */
 export function SettingsSearchField({
   query,
   onQueryChange,
@@ -733,15 +554,11 @@ export function SettingsSearchField({
 }: {
   query: string;
   onQueryChange: (query: string) => void;
-  /** The results the field steers. */
   results: SettingsSearchSteering;
-  /** Whether Command-F lands here: not while the page shows a search of its own. */
   find?: boolean;
-  /** Shows the field before Command-F lands in it, where it stands hidden, as a narrow room hides the page list behind a page. */
   onFind?: (() => void) | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
-  // Whether the caret stands where Settings put it as it opened, untouched since.
   const [placed, setPlaced, placedNow] = useStateWithRef(false);
   useAppCommand(
     APP_COMMAND.FIND,
@@ -751,7 +568,6 @@ export function SettingsSearchField({
           if (onFind === undefined) focusSearchField(SETTINGS_SEARCH_INPUT_ID);
           else {
             onFind();
-            // Note that the field waits to be shown, because a hidden one refuses the caret.
             focusSearchField(
               SETTINGS_SEARCH_INPUT_ID,
               (field) => field.closest("[hidden]") === null,
@@ -761,14 +577,10 @@ export function SettingsSearchField({
       : undefined,
   );
   useEffect(() => {
-    // Note that under a finger Settings opens with the caret nowhere, because a phone raises no
-    // keyboard for a caret it was not tapped into, and a focused field puts the places bar aside.
     if (coarsePointerNow()) return undefined;
     return focusSeek({
       find: () => field.current,
       act: (input) => {
-        // Note that a caret already in the window keeps it, because a link
-        // or a palette result that landed on a row put it there on purpose.
         const held = document.activeElement;
         if (held !== null && held !== document.body) return;
         setPlaced(true);
@@ -776,8 +588,6 @@ export function SettingsSearchField({
       },
     });
   }, [setPlaced]);
-  // The caret Settings placed on its own holds no layer, so its Escape is
-  // left to fall through to the window and leave Settings.
   const untouched = placed && query.length === 0;
   const steering = useComboboxField({
     open: results.count > 0,
@@ -789,8 +599,6 @@ export function SettingsSearchField({
     onChoose: results.onChoose,
     onEscape: () => onQueryChange(""),
     onKey: (event) => {
-      // Note that Tab walks the results rather than leaving the field, so the
-      // keys a hand already rests on step through them.
       if (event.key === "Tab" && results.count > 0) {
         if (event.metaKey || event.altKey || event.ctrlKey) return;
         event.preventDefault();
@@ -818,9 +626,6 @@ export function SettingsSearchField({
         if (event.target === field.current) setPlaced(false);
       }}
       onKeyDown={(event) => {
-        // Note that an Escape is stopped even mid-composition, because the
-        // input method spends that press dismissing its candidates, and the
-        // window's own Escape would turn the page behind the field.
         if (event.key === "Escape" && event.nativeEvent.isComposing) event.stopPropagation();
       }}
     >
@@ -843,7 +648,6 @@ export function SettingsSearchField({
   );
 }
 
-/** The marks of `ranges` that fall in `from`..`to`, counted from `from`. */
 function rangesWithin(ranges: readonly MatchRange[], from: number, to: number): MatchRange[] {
   return ranges
     .filter((range) => range.end > from && range.start < to)
@@ -853,7 +657,6 @@ function rangesWithin(ranges: readonly MatchRange[], from: number, to: number): 
     }));
 }
 
-/** A result's name, its matches marked, and a person's words in it masked in a screen recording. */
 function ResultLabel({ entry }: { entry: SettingsSearchResult }): React.JSX.Element {
   const from = entry.replayMaskedFrom;
   if (from === undefined) return <Highlighted text={entry.label} ranges={entry.marks} />;
@@ -868,28 +671,16 @@ function ResultLabel({ entry }: { entry: SettingsSearchResult }): React.JSX.Elem
   );
 }
 
-/** A row's own glyph, where it has one beside its page's: an integration's mark. */
 function resultIcon(entry: SettingsSearchResult): React.JSX.Element | undefined {
   if (entry.page !== SETTINGS_VIEW.INTEGRATIONS) return undefined;
   const provider = INTEGRATION_PROVIDER_LIST.find((each) => each === entry.id);
   return provider === undefined ? undefined : <ProviderMark provider={provider} />;
 }
 
-/** The id of the row drawing the stop at `index` of the list `listId`, which the field names active. */
 export function settingsSearchStopId(listId: string, index: number): string {
   return `${listId}-${index}`;
 }
 
-/**
- * What a query left, in the sidebar where the list of pages was, read as
- * Linear's settings search reads: each page the query found, or found rows
- * on, stands as a result of its own with its glyph, its name marked where the
- * query found it, and the rows it holds nested under it, each marking why it
- * matched and an integration's wearing its mark. The stop the field's keys
- * lit, or the one last pressed, is marked while its page is the one shown,
- * the way a list marks the page it opened. An emptied search says so quietly
- * rather than going blank.
- */
 export function SettingsSearchResults({
   search,
   listId,
@@ -898,13 +689,9 @@ export function SettingsSearchResults({
   onOpen,
 }: {
   search: SettingsSearchOutcome;
-  /** The list's id, which the field controls. */
   listId: string;
-  /** The lit stop, below zero for none. */
   active: number;
-  /** The page shown beside the results. */
   shown: SettingsView;
-  /** A pressed result, by its stop's index: its page opens and the view lands on its row. */
   onOpen: (index: number) => void;
 }): React.JSX.Element {
   if (search.matched === 0) {
@@ -914,7 +701,6 @@ export function SettingsSearchResults({
       </NoteLine>
     );
   }
-  // Each row's index among the stops, counted as they are drawn: each page, then its rows.
   let at = -1;
   const stop = (page: SettingsView) => {
     at += 1;

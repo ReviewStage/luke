@@ -14,14 +14,6 @@ import { agentEntries } from "./main-tabs.js";
 import { type PanelCards, panelEntries } from "./side-panel.js";
 import { type AddEntry, AddTabButton } from "./strip-tabs.js";
 
-/**
- * add-menu-rows.test.ts -- the "+" menus of the column and the side panel
- * draw each row's end mark and hang its card, as ⌘K and the task's summary
- * do: a failed agent is marked failed, an agent's row hangs its card while
- * the pointer rests on it, and a Terminal row wears its agent's failed mark.
- * Synthetic throughout.
- */
-
 const ignore = () => undefined;
 
 const roots: Root[] = [];
@@ -31,7 +23,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** An agent on the task, named by its title. */
 function agent(id: string, title: string, status: AgentSummary["status"]) {
   return {
     id,
@@ -48,7 +39,6 @@ function agent(id: string, title: string, status: AgentSummary["status"]) {
 const BROKEN = agent("agent-1", "Billing export", AGENT_STATUS.FAILED);
 const HEALTHY = agent("agent-2", "Invoice sweep", AGENT_STATUS.COMPLETED);
 
-/** A "+" drawn offering `entries`, pressed open; the options it lists, by their names. */
 async function opened(entries: readonly AddEntry[]): Promise<Map<string, HTMLElement>> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -80,7 +70,6 @@ async function opened(entries: readonly AddEntry[]): Promise<Map<string, HTMLEle
   return named;
 }
 
-/** The labels of the marks a row wears at its end. */
 function endMarks(option: HTMLElement | undefined): (string | null)[] {
   const end = option?.querySelector(".ui-combobox-option-hint");
   return [...(end?.querySelectorAll("[role='img']") ?? [])].map((mark) =>

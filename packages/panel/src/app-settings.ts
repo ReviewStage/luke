@@ -1,12 +1,3 @@
-/**
- * app-settings.ts -- what the window's Settings and its search are drawn from: the document's settings, account, and platform slices, read where they are drawn rather than by the window.
- *
- * The window hands Settings its doors, which a setting moving changes
- * none of, and the slices are read here, by the component that draws
- * Settings, so a setting that moves draws Settings again and leaves the
- * window, and the tasks it holds, as they were.
- */
-
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import type {
@@ -30,9 +21,7 @@ import {
   selectRun,
 } from "./use-app-state.js";
 
-/** What the window hands Settings: the page it shows, and the doors it answers through. */
 export interface SettingsDoors {
-  /** Which settings page is showing, held by the window because a shortcut or a link elsewhere turns it. */
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   onSignOut: () => Promise<void>;
@@ -40,20 +29,12 @@ export interface SettingsDoors {
   workspace: WorkspaceSettingsControl;
 }
 
-/** The update the window shows: the document's, or a fixture run's staged one. */
 const selectShownUpdate = (state: AppStateSnapshot) => fixtureUpdate(state.run, state.update);
 
-/** The update the window shows, redrawn only as the update or the run moves. */
 export function useShownUpdate(): UpdateControl["update"] | undefined {
   return useQuery({ ...appStateQuery, select: selectShownUpdate }).data;
 }
 
-/**
- * Settings as the document holds it, around the doors the window hands it;
- * none before the first read. The update row stands apart from the rest,
- * because the sidebar draws it too, and a setting moving is no reason to
- * draw the sidebar again.
- */
 export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | undefined {
   const { mutateAsync: checkForUpdate } = useMutation(actMutation(ACT_KIND.UPDATE_CHECK));
   const { mutate: installUpdate } = useMutation(pressMutation(ACT_KIND.UPDATE_INSTALL));
@@ -83,8 +64,6 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
         : {
             update,
             build: { packaged, ...(commit ? { commit } : undefined) },
-            // Answered rather than fire-and-forget so the row that asked redraws from
-            // the same snapshot the broadcast carries to every other window.
             onCheck: async () => {
               await checkForUpdate();
             },

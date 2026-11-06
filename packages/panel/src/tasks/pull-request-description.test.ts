@@ -39,18 +39,6 @@ import { agentsControl } from "../testing/tasks-control.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { PULL_REQUEST_VIEW } from "./use-side-panel.js";
 
-/**
- * pull-request-description.test.ts -- a pull request's description edited
- * in place from its Pull request tab: a click on GitHub's rendering opens
- * the description's editor on the Markdown where the member may edit it, and none
- * where they may not; Esc with nothing changed writes nothing; a change is
- * written to GitHub with the words it began from, and the description is
- * drawn again from the read that follows; and where the description changed
- * on GitHub meanwhile, the draft stays, saying so, until Reload, asked
- * first, opens GitHub's words in its place. The editor is the real one, from
- * its bundle; GitHub is the act port's answer. Synthetic pull request.
- */
-
 const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -64,10 +52,8 @@ const AGENT: AgentSummary = {
 
 const PAGE = "https://github.com/acme/relay/pull/42";
 
-/** The description as written, as github.com saves one edited on the web. */
 const BODY = "## Summary\r\n\r\nExpires invitations after seven days.\r\n";
 
-/** GitHub's rendering of a description, as the overview carries it. */
 function htmlOf(body: string): string {
   return body
     .split(/\r?\n\r?\n/u)
@@ -80,7 +66,6 @@ function htmlOf(body: string): string {
     .join("");
 }
 
-/** The pull request itself, as its overview's first read answers it, its description as GitHub holds it now. */
 function pullRequestOf(body: string, canEditDescription: boolean): AgentOverviewPullRequest {
   return {
     number: 42,
@@ -102,13 +87,9 @@ function pullRequestOf(body: string, canEditDescription: boolean): AgentOverview
 
 let root: Root | undefined;
 let bundles: SideBundles;
-/** The description as GitHub holds it, which each read answers anew and a change GitHub takes moves. */
 let onGitHub = BODY;
-/** Every change to the pull request the tab asked for, in order. */
 let changes: PullRequestActionRequest[] = [];
-/** How the service answers the next change asked for. */
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
-/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
 
 beforeAll(async () => {
@@ -154,16 +135,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The agent's Pull request tab, its reads answering the description as GitHub holds it, which the member may edit or not. */
 async function drawTab(canEditDescription = true): Promise<HTMLElement> {
-  // The host holds the tab's parts, its pull request read anew from what GitHub holds on each ask.
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.PULL_REQUEST]: () =>
       Promise.resolve({ pullRequest: pullRequestOf(onGitHub, canEditDescription) }),
@@ -229,7 +207,6 @@ async function drawTab(canEditDescription = true): Promise<HTMLElement> {
   return container;
 }
 
-/** The Description section of the tab. */
 function description(container: HTMLElement): HTMLElement {
   return (
     container.querySelector<HTMLElement>('section[aria-label="Description"]') ??
@@ -237,14 +214,7 @@ function description(container: HTMLElement): HTMLElement {
   );
 }
 
-/**
- * A click on the description's drawn words, as a member's on them, landing
- * `at` characters into them. Note that the page the browser would lay out
- * is answered here, since jsdom lays nothing out: the point lands on the
- * words clicked, and on no element of the editor's.
- */
 async function clickWords(container: HTMLElement, words: string, at = 0): Promise<void> {
-  // Note that the words stand once the pull request's read reaches its query.
   const target = await vi.waitFor(
     () =>
       [...description(container).querySelectorAll("p")].find(
@@ -267,12 +237,10 @@ async function clickWords(container: HTMLElement, words: string, at = 0): Promis
   await settle();
 }
 
-/** The description's open editor; none while it is drawn. */
 function editorIn(container: HTMLElement): TiptapEditorHTMLElement | null {
   return description(container).querySelector<TiptapEditorHTMLElement>(".ProseMirror");
 }
 
-/** A key pressed in the open editor. */
 async function press(element: HTMLElement, key: string): Promise<void> {
   act(() => {
     element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
@@ -280,7 +248,6 @@ async function press(element: HTMLElement, key: string): Promise<void> {
   await settle();
 }
 
-/** Words typed at the end of the open editor's text, as its own input inserts them. */
 function typeAtEnd(element: TiptapEditorHTMLElement, words: string): void {
   const editor = element.editor ?? assert.fail("the editor is running");
   act(() => {
@@ -289,7 +256,6 @@ function typeAtEnd(element: TiptapEditorHTMLElement, words: string): void {
   });
 }
 
-/** The button of the given words, wherever it is drawn. */
 function button(within: ParentNode, words: string): HTMLButtonElement {
   return (
     [...within.querySelectorAll("button")].find((each) => each.textContent === words) ??

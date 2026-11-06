@@ -18,61 +18,29 @@ import {
 } from "./contract.js";
 import { MENTION_NODE } from "./mention-node.js";
 
-/**
- * description-mentions.ts -- the description editor's `@`: the word the caret ends reported to the panel, the mention it picks written in its place, and a mention of a heading the developer renames named again with the new words.
- *
- * An `@` at the start of a word, outside code, opens the panel's list
- * (`onTrigger`): the word runs from the `@` to the caret, up to six words
- * of its own, since a section's heading has spaces in it, and a date's
- * range runs as long as `next fri at 3pm to 5pm`. A pick replaces the
- * word with the mention's node and a space (`chooseMention`), the caret
- * after the space. The keys the list takes are the panel's first
- * (`../description-editor.ts`'s `handleKeyDown`).
- *
- * A section is named by its heading's anchor, so renaming a heading in the
- * editor, or laying in one that a later heading's anchor now has to step
- * aside for, would leave the text's own mentions of it naming nothing, or
- * the wrong section. Each change that moves the text's headings hands the
- * panel the headings before and after it and which section each kept one
- * is now, its heading still the block it was, and the panel names every
- * mention of a section renamed or whose anchor moved again, target by
- * target and under the section's new heading (`retarget`), in the same
- * change, since only it reads a target. A
- * heading laid in by the app's merged answer replaces the block whole, so the
- * section it opened is none the change kept.
- */
-
-/** The heading levels that open a section, as `descriptionSections` counts them. */
 const SECTION_LEVELS = new Set([1, 2]);
 
-/** What a change that named mentions again is tagged with, so it names none of its own. */
 const RETARGETED_META = "plan-retargeted";
 
-/** The `@` word the caret ends: `@`, at the start of a word, then up to six words with no bracket, parenthesis, or `@` in them. */
 const MENTION_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,5})?)$/u;
 
-/** The character an inline node that is no text stands for in its block's words, one position wide as the node is. */
 const LEAF_CHARACTER = "￼";
 
-/** The rest of an `@` word after the caret, which a pick replaces too: up to a space, a bracket, a parenthesis, an `@`, or a chip, which is no word's. */
 const WORD_REST = /^[^\s@[\]()\uFFFC]*/u;
 
 const SPACE = " ";
 
-/** The `@` word the caret ends: the report, and the range a pick replaces. */
 interface TaskTrigger {
   readonly trigger: ComposerTrigger;
   readonly from: number;
   readonly to: number;
 }
 
-/** What the plugin holds between changes: the word last found, and the report last made. */
 interface MentionsState {
   found: TaskTrigger | undefined;
   reported: ComposerTrigger | undefined;
 }
 
-/** The `@` word the caret ends in plain text, outside code; nothing while the editor has no caret or the caret ends none. */
 function triggerAt(view: EditorView): TaskTrigger | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
@@ -91,7 +59,6 @@ function triggerAt(view: EditorView): TaskTrigger | undefined {
   )
     return undefined;
   const box = view.coordsAtPos(from);
-  // Note that a pick with the caret inside the word replaces the word through its end.
   const after = $from.parent.textBetween(
     $from.parentOffset,
     $from.parent.content.size,
@@ -106,7 +73,6 @@ function triggerAt(view: EditorView): TaskTrigger | undefined {
   };
 }
 
-/** The `@` word found again, and reported where it changed. */
 function reported(
   view: EditorView,
   state: MentionsState,
@@ -119,17 +85,10 @@ function reported(
   mentions.onTrigger(next);
 }
 
-/** Whether a top-level block opens a section. */
 function opensSection(node: PmNode): boolean {
   return node.type.name === "heading" && SECTION_LEVELS.has(Number(node.attrs.level));
 }
 
-/**
- * A heading's words as the description's text spells them, its formatting kept, as
- * `descriptionSections` knows a section by: the block's own source while it is the
- * block it opened as, so `_today_` stays `_today_`, else as the editor will
- * write it.
- */
 function headingWords(
   manager: MarkdownManager,
   sourceOf: (node: PmNode) => string | undefined,
@@ -144,7 +103,6 @@ function headingWords(
     .trim();
 }
 
-/** Where a position stands after every change, or nothing where the block after it went. */
 function mappedThrough(transactions: readonly Transaction[], position: number): number | undefined {
   let at = position;
   for (const tr of transactions) {
@@ -155,11 +113,6 @@ function mappedThrough(transactions: readonly Transaction[], position: number): 
   return at;
 }
 
-/**
- * The headings before the changes and after them, and which section each
- * kept heading opens now; nothing where the changes left the headings as
- * they were.
- */
 function headingsChange(
   manager: MarkdownManager,
   sourceOf: (node: PmNode) => string | undefined,
@@ -193,7 +146,6 @@ function headingsChange(
   return { before: was, after: is, kept };
 }
 
-/** The change naming each mention of a section whose anchor moved again; nothing where none names one. */
 function retargeted(
   state: EditorState,
   change: HeadingsChange,
@@ -213,7 +165,6 @@ function retargeted(
   return tr.docChanged ? tr : undefined;
 }
 
-/** The description editor's mentions: the `@` word reported as the editor's state moves and as it takes or loses the caret, and renamed headings' mentions named again. */
 export function descriptionMentions(
   manager: MarkdownManager,
   sourceOf: (node: PmNode) => string | undefined,
@@ -242,7 +193,6 @@ export function descriptionMentions(
       },
     },
   });
-  /** The `@` word the caret ends written as the mention chosen, a space after it unless one follows, the caret after the space. */
   const choose = (editor: Editor, mention: MentionNode): void => {
     const word = state.found;
     if (word === undefined) return;

@@ -42,47 +42,6 @@ import { keptKey, useKept } from "../use-kept.js";
 import { queuedLabel } from "./agent-model.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
-/**
- * merge-box.tsx -- the merge control at the end of an open pull request's title row, as stage-cli's merge status is: a chip saying what holds the merge up, and beside it the one press that may be made now.
- *
- * The chip is a status badge at the pill's size, in the tone of where the
- * merge stands, its glyph and its word: Checking, Conflicts, Behind,
- * Review required, Changes requested, Blocked, Ready. Its hint, and a
- * reader, have GitHub's fuller sentence ("A required review is missing").
- * It stands only where it says what nothing else on the page does: a pull
- * request ready to merge shows the press alone, a draft nothing, its pill
- * saying Draft, one in the merge queue only Remove from queue, its pill
- * saying Queued and its place, as stage-cli's does, one with auto-merge on
- * no chip of its own, Disable auto-merge saying it is on, and one held up by
- * its checks alone no chip, since the Checks tab under the
- * header says how they went in its glyph and its color. A narrow header draws the chip's glyph alone,
- * its word still read.
- *
- * The press is the one thing that may be done from where the pull request
- * stands (`mergeActionOf`), each a change the service makes on GitHub as
- * the member pressing it (`pull-request-writes.tsx`):
- *
- * - ready to merge, the method chosen as its words ("Squash and merge"), a
- *   split button whose chevron chooses among the methods the repository
- *   allows, merging at once, as stage-cli's does;
- * - on a base merged through a merge queue, Merge when ready, which turns
- *   auto-merge on with no method, so GitHub adds it to the queue once it is
- *   ready, as `gh pr merge --auto` does;
- * - with checks still running and auto-merge allowed, Enable auto-merge by
- *   the method chosen, its chevron choosing it too;
- * - with auto-merge on, Disable auto-merge;
- * - in the merge queue, Remove from queue, asked first, since leaving the
- *   queue may hold up the pull requests behind it.
- *
- * The method is kept per repository across launches, in this window's own
- * storage as the sidebar's folds are (`folded-groups.ts`); the first the
- * repository allows stands until one is chosen. A merge and auto-merge name
- * the head the overview read, so GitHub refuses either against a head
- * pushed since. While a change is out the press stands busy, and where
- * GitHub refuses it the tab's write note says why, in GitHub's words.
- */
-
-/** What the control offers from where the pull request stands. */
 const MERGE_ACTION = {
   MERGE: "merge",
   MERGE_WHEN_READY: "merge-when-ready",
@@ -93,28 +52,24 @@ const MERGE_ACTION = {
 
 type MergeAction = (typeof MERGE_ACTION)[keyof typeof MERGE_ACTION];
 
-/** Each method as the press says it, as GitHub's own merge button does. */
 const PRESS_WORDS = {
   [MERGE_METHOD.MERGE]: "Merge pull request",
   [MERGE_METHOD.SQUASH]: "Squash and merge",
   [MERGE_METHOD.REBASE]: "Rebase and merge",
 } as const satisfies Record<MergeMethod, string>;
 
-/** Each method as the chevron's menu offers it, as GitHub's own does. */
 const METHOD_WORDS = {
   [MERGE_METHOD.MERGE]: "Create a merge commit",
   [MERGE_METHOD.SQUASH]: "Squash and merge",
   [MERGE_METHOD.REBASE]: "Rebase and merge",
 } as const satisfies Record<MergeMethod, string>;
 
-/** Each method's word where it says how auto-merge will merge. */
 const METHOD_NOUNS = {
   [MERGE_METHOD.MERGE]: "merge commit",
   [MERGE_METHOD.SQUASH]: "squash",
   [MERGE_METHOD.REBASE]: "rebase",
 } as const satisfies Record<MergeMethod, string>;
 
-/** The control's own words. */
 const BOX_WORDS = {
   MERGE_WHEN_READY: "Merge when ready",
   ENABLE_AUTO_MERGE: "Enable auto-merge",
@@ -125,7 +80,6 @@ const BOX_WORDS = {
     method === null ? "Auto-merge is on" : `Auto-merge is on (${METHOD_NOUNS[method]})`,
 } as const;
 
-/** What the press says while a change it sent is out. */
 const BUSY_WORDS = {
   [PULL_REQUEST_ACTION.MERGE]: "Merging",
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Turning on auto-merge",
@@ -133,17 +87,14 @@ const BUSY_WORDS = {
   [PULL_REQUEST_ACTION.DEQUEUE]: "Removing from queue",
 } as const;
 
-/** The changes the control sends, whose answer it waits on busy. */
 type MergeWrite = keyof typeof BUSY_WORDS;
 
 function isMergeWrite(action: PullRequestAction | undefined): action is MergeWrite {
   return action !== undefined && action in BUSY_WORDS;
 }
 
-/** The states GitHub would merge in now: ready, or with checks nothing requires short of passing. */
 const MERGEABLE: ReadonlySet<MergeState> = new Set([MERGE_STATE.CLEAN, MERGE_STATE.UNSTABLE]);
 
-/** The one thing the control offers from where the pull request stands, or nothing. */
 function mergeActionOf(merge: MergeState, merging: PullRequestMerging): MergeAction | undefined {
   if (merging.queued !== null) return MERGE_ACTION.DEQUEUE;
   if (merging.autoMerge !== null) return MERGE_ACTION.DISABLE_AUTO_MERGE;
@@ -155,7 +106,6 @@ function mergeActionOf(merge: MergeState, merging: PullRequestMerging): MergeAct
   return merging.autoMergeAllowed && waiting ? MERGE_ACTION.ENABLE_AUTO_MERGE : undefined;
 }
 
-/** What a merge GitHub says is blocked waits on, where the reviews or checks say; none where neither does. */
 function blockedWords(merging: PullRequestMerging | undefined): string | undefined {
   if (merging === undefined) return undefined;
   if (merging.review === REVIEW_DECISION.CHANGES_REQUESTED) return "Changes were requested";
@@ -165,7 +115,6 @@ function blockedWords(merging: PullRequestMerging | undefined): string | undefin
   return undefined;
 }
 
-/** Whether the pull request would merge as it stands, as GitHub's own box under a pull request says it, its base named where it matters. */
 function mergeWords(merge: MergeState, base: string): string {
   switch (merge) {
     case MERGE_STATE.CLEAN:
@@ -185,11 +134,6 @@ function mergeWords(merge: MergeState, base: string): string {
   }
 }
 
-/**
- * GitHub's whole sentence for the merge, as the chip's hint and a reader
- * have it: what it waits on, or where the queue or auto-merge has it,
- * then the mergeability beside it where that says something else.
- */
 function sentenceOf(pullRequest: AgentOverviewPullRequest): string {
   const { merge, merging } = pullRequest;
   const line = mergeWords(merge, pullRequest.base);
@@ -209,10 +153,8 @@ const storedMethods = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Literals(Object.values(MERGE_METHOD))),
 );
 
-/** Where the method chosen is kept, by repository. */
 const KEPT = { METHODS: keptKey("app.pullRequestMergeMethods", storedMethods) } as const;
 
-/** The method chosen for the repository, kept across launches: the one last chosen where the repository still allows it, else the first it allows. */
 function useMergeMethod(
   repository: string | null,
   allowed: readonly MergeMethod[],
@@ -222,20 +164,17 @@ function useMergeMethod(
   const method = chosen !== undefined && allowed.includes(chosen) ? chosen : allowed[0];
   const choose = (next: MergeMethod) => {
     if (repository === null) return;
-    // Note that the record is read again before it is written, so another window's method for another repository is kept.
     change((held) => ({ ...held, [repository]: next }));
   };
   return [method, choose];
 }
 
-/** The chip's face: its word, its tone, and its glyph. */
 interface ChipFace {
   readonly label: string;
   readonly tone: StatusTone;
   readonly icon: ReactNode;
 }
 
-/** Each chip's glyph, saying its state again beside its word. */
 const CHIP_GLYPHS = {
   CHECKING: <SpinnerRing size={SPINNER_SIZE.SMALL} />,
   HELD: <CircleXIcon aria-hidden="true" />,
@@ -248,7 +187,6 @@ function chip(label: string, tone: StatusTone, icon: ReactNode): ChipFace {
   return { label, tone, icon };
 }
 
-/** What a merge GitHub says is blocked is held up by, as the chip says it; none where it waits on its checks, which the Checks tab says. */
 function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefined {
   if (merging?.review === REVIEW_DECISION.CHANGES_REQUESTED) {
     return chip("Changes requested", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
@@ -262,13 +200,6 @@ function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefi
   return chip("Blocked", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
 }
 
-/**
- * The chip for where the pull request stands and what the press offers, or
- * none where it would only say what the press, the pill, or the Checks tab
- * already does: a merge ready and offered, auto-merge on, a draft, one in the
- * merge queue, or one waiting on its checks. With auto-merge on, a chip
- * still says what holds the merge up.
- */
 function chipOf(
   pullRequest: AgentOverviewPullRequest,
   action: MergeAction | undefined,
@@ -294,7 +225,6 @@ function chipOf(
   }
 }
 
-/** The chip: its glyph and word in its tone, GitHub's sentence in its hint and for a reader. */
 function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): React.JSX.Element {
   return (
     <Tooltip label={sentence}>
@@ -308,7 +238,6 @@ function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): Re
   );
 }
 
-/** The chevron's menu of the methods the repository allows, the one chosen checked. */
 function methodItems(
   methods: readonly MergeMethod[],
   method: MergeMethod | undefined,
@@ -323,16 +252,10 @@ function methodItems(
   }));
 }
 
-/** A press as `Button` takes it busy: the ring and what it is doing, while its own change is out. */
 function busyProps(busyLabel: string | undefined) {
   return busyLabel === undefined ? {} : { busy: true, busyLabel };
 }
 
-/**
- * A press by the method chosen: a split button whose chevron opens the
- * methods the repository allows, the chosen one checked, where it allows
- * more than one; else the press alone.
- */
 function MethodPress({
   variant,
   words,
@@ -347,9 +270,7 @@ function MethodPress({
   words: string;
   methods: readonly MergeMethod[];
   method: MergeMethod | undefined;
-  /** Whether any change to the pull request is out. */
   busy: boolean;
-  /** What the press says while its own change is out. */
   busyLabel: string | undefined;
   onChoose: (method: MergeMethod) => void;
   onPress: () => void;
@@ -394,7 +315,6 @@ function MethodPress({
   );
 }
 
-/** The question Remove from queue asks first, as stage-cli's does. */
 const DEQUEUE_QUESTION: DialogQuestion = {
   title: "Remove from the merge queue?",
   body: QUEUE_WARNING,
@@ -404,12 +324,6 @@ const DEQUEUE_QUESTION: DialogQuestion = {
   replayUnmasked: true,
 };
 
-/**
- * The merge control for an open pull request or a draft, as its overview
- * read it: the chip, the press, and the question leaving the queue asks
- * first. Nothing for one merged or closed, or where neither a
- * chip nor a press has anything to say.
- */
 export function MergeControl({
   pullRequest,
   repository,
@@ -417,16 +331,13 @@ export function MergeControl({
   writes,
 }: {
   pullRequest: AgentOverviewPullRequest;
-  /** The agent's repository, which the method chosen is kept by. */
   repository: string | null;
-  /** Whether the panel the control stands in is on screen; a question asked goes with it. */
   shown: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element | null {
   const { merging } = pullRequest;
   const methods = merging?.methods ?? [];
   const [method, choose] = useMergeMethod(repository, methods);
-  // Whether Remove from queue is being asked about; the question goes once a read finds it out of the queue, so it never asks to dequeue what no longer stands in it.
   const [asked, setAsked] = useState(false);
   const inQueue = (merging?.queued ?? null) !== null;
   const confirm = useConfirmDialog(
@@ -434,7 +345,6 @@ export function MergeControl({
     writes.confirmAct({ action: PULL_REQUEST_ACTION.DEQUEUE }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DEQUEUE),
   );
-  // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
   if ((!shown || !inQueue) && asked && !confirm.busy) setAsked(false);
 
   const live =

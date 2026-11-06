@@ -4,22 +4,6 @@ import { InboxIcon } from "@repo/ui/icons";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { groupCount } from "./sidebar-fold.js";
 
-/**
- * sidebar-inbox-row.tsx -- the sidebar's Inbox row.
- */
-
-/**
- * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many threads Needs you lists at its end
- * (`useInboxWaiting`), in even figures and the needs-you tone the phone's
- * bar fills its badge with (`mobile-bar.tsx`), and
- * nothing at none. Its chord takes the count's place
- * while the row is hovered or reached from the keyboard, as New task's and
- * Search's show theirs. A press opens the window's Inbox
- * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
- * Note that it opens no menu: Mark all as read stands on the Inbox's own
- * head, where its reader looks for it.
- */
 export function SidebarInboxRow({
   waiting,
   current,

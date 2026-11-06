@@ -1,17 +1,5 @@
-/**
- * laid-length.ts -- a length as the stylesheets laid for jsdom (`container-width.ts`) say it, in pixels, and the room a phone's bar leaves between its way back and the page under it.
- *
- * jsdom lays nothing out and answers a `var()` as it is spelled, so a length
- * built from the tokens reads as its formula. `pixelsOf` reads each custom
- * property it names where the element stands and works the `calc()` out;
- * `wayBackGap` reads, from a bar and the box that opens the page under it,
- * how far below the way back the page's first line stands.
- */
-
-/** A custom property a length names. */
 const NAMED = /var\((--[\w-]+)\)/u;
 
-/** `sum`'s value: numbers under `+`, `-`, `*`, `/`, and brackets, as `calc()` takes them. */
 function arithmetic(sum: string): number {
   const tokens = sum.match(/\d+(?:\.\d+)?|[-+*/()]/gu) ?? [];
   let at = 0;
@@ -42,7 +30,6 @@ function arithmetic(sum: string): number {
   return terms();
 }
 
-/** `length` on `element` in pixels: each custom property it names read where the element stands, and its `calc()` worked out. */
 export function pixelsOf(element: Element, length: string): number {
   const style = getComputedStyle(element);
   let spelled = length;
@@ -56,12 +43,6 @@ export function pixelsOf(element: Element, length: string): number {
   return pixels;
 }
 
-/**
- * How far below the way back in `bar` the page's first line stands, where
- * `opening` is the box that opens the page under the bar: the room the bar's
- * row leaves under its way back, which it centers in the row, and the box's
- * own top padding.
- */
 export function wayBackGap(bar: HTMLElement, opening: HTMLElement): number {
   const back = bar.querySelector("button");
   if (back === null) throw new Error("the bar leads with no way back");

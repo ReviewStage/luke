@@ -58,58 +58,20 @@ import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/**
- * replay-card.tsx -- the card an agent started from another opens on after its brief: "Continued from" or "Forked from" the source agent, folded over the steps of the source's work it was handed.
- *
- * The card stands as the description's card does, at a sent message's measure over
- * the line naming who started the agent and when, as any line sent to the
- * agent is named: a teammate by their face and name, the reader's own by
- * the time alone, and its Copy, which copies the replay as it was handed. Its summary row names the source by the chip its tab
- * wears, which opens that tab and hangs its card, and how many of the
- * source's steps were replayed, of how many where the earliest were left
- * out. Opened, it says what it holds, our summary of the oldest steps
- * and how many steps were left out where either applies, then the newest
- * steps, each drawn as the live transcript draws it, a line over who sent
- * it, when, and Copy, and a call as a call of its tool, opening onto its
- * words exactly as the agent was handed them, under a row that draws the earlier ones a page at a time,
- * and a foot naming the branch and the pull request the source published,
- * where known. The source's whole transcript is a press of its chip away.
- * The model is `replay-card-model.ts`.
- */
-
-/**
- * Where an agent's replay card stands: the agents of its task, archived ones
- * among them, which its source is found among, and the doors to that source:
- * its chip's tile and card, its tab, a message of it, and what it published.
- */
 export interface ReplayPlace {
   readonly agents: readonly AgentSummary[];
-  /** Who started the agent, named under the card unless it is the reader. */
   readonly startedBy: AgentSummary["startedBy"];
-  /** The reader's own account id, whose start is named by its time alone (`lineSender`). */
   readonly readerId: string | undefined;
-  /** The tile an agent's tab wears; none where the place does not list it. */
   readonly tile: (agentId: string) => Actor | undefined;
-  /** The card an agent's tab hangs; none where the place hangs none. */
   readonly card: (agentId: string) => ReactNode;
-  /** Opens an agent's tab; none where nothing opens one. */
   readonly onOpen: ((agentId: string) => void) | undefined;
-  /** Each agent's pull request, of those that have one. */
   readonly pullRequests: ReadonlyMap<string, AgentPullRequest>;
-  /** Reads one agent by its id, as a page that lists only its own agent names the source; none where nothing reads one. */
   readonly readAgent: ((agentId: string) => Promise<AgentSummary | undefined>) | undefined;
   readonly openGitHub: (url: string) => void;
 }
 
-/** No agents listed yet, one array so a render before the first read hands down the same one. */
 const NO_AGENTS: readonly AgentSummary[] = [];
 
-/**
- * Where an agent's tab stands its replay card: the task's agents, archived
- * ones among them, and the doors its transcript's rows open an agent by,
- * the tile and card a call about an agent wears and the press that opens
- * its tab.
- */
 export function replayPlace(input: {
   agent: AgentSummary;
   control: Pick<AgentsControl, "agents" | "archived" | "pullRequests" | "readAgent" | "me">;
@@ -136,7 +98,6 @@ export function replayPlace(input: {
   };
 }
 
-/** The source agent named on a card, as its chip wears it, when the place does not list it: by its title and its harness's mark where a read found it, the mark of no known harness until then. */
 function unlistedActor(agentId: string, read: AgentSummary | undefined): Actor {
   return {
     kind: ACTOR_KIND.AGENT,
@@ -147,11 +108,6 @@ function unlistedActor(agentId: string, read: AgentSummary | undefined): Actor {
   };
 }
 
-/**
- * The source agent: as the place lists it, or, where it does not, as one
- * might be read on an agent's own page, which lists that agent alone, read
- * once; nothing until it answers, or where it cannot be read.
- */
 function useSource(agentId: string, place: ReplayPlace): AgentSummary | undefined {
   const listed = place.agents.find((each) => each.id === agentId);
   const [read, setRead] = useState<AgentSummary | undefined>(undefined);
@@ -172,13 +128,6 @@ function useSource(agentId: string, place: ReplayPlace): AgentSummary | undefine
   return listed ?? (read?.id === agentId ? read : undefined);
 }
 
-/**
- * Who sent a replayed line, as a transcript names a line's sender: a
- * member by their face and name, the app, an automation, GitHub's login, or
- * another agent by their own marks; nobody for the reader's own, as a
- * transcript names nobody over the reader's own lines; and by its name
- * alone where its step's marker named no sender the window can place.
- */
 function useLineSender(
   view: Extract<StepView, { kind: typeof STEP_VIEW.LINE }>,
   readerId: string | undefined,
@@ -188,7 +137,6 @@ function useLineSender(
   const actor =
     view.sentBy === undefined ? undefined : lineSender(view.sentBy, readerId, members, former);
   if (actor !== undefined) return <ActorRef actor={actor} />;
-  // A member's line the reader sent is theirs; one the window cannot place keeps its name.
   if (readerId !== undefined && view.sentBy?.userId === readerId) return undefined;
   return (
     <Text
@@ -202,12 +150,6 @@ function useLineSender(
   );
 }
 
-/**
- * A replayed line, drawn as a transcript draws a line sent to the agent: a
- * sent message, at the column's left under who sent it where it is anyone's
- * but the reader's, as a transcript's line is, then when, where its marker
- * said, and Copy.
- */
 function LineStep({
   view,
   readerId,
@@ -236,12 +178,6 @@ function LineStep({
   );
 }
 
-/**
- * A replayed call, drawn as a transcript draws a call of its tool: its
- * kind's icon or its integration's mark, its command's description, the
- * server it ran on, and the agent it is about by the chip that agent's tab
- * wears, hanging its card, folded onto its input and its result.
- */
 function CallStep({
   view,
   place,
@@ -285,19 +221,12 @@ function CallStep({
   );
 }
 
-/**
- * One step, drawn as a transcript draws the same: a line as a sent
- * message, its sender under it unless it is the reader's own; the agent's
- * words as its words; and a call as a call's row, folded onto its input
- * and its result, which run long.
- */
 function StepRow({
   step,
   todos,
   place,
 }: {
   step: ReplayStep;
-  /** The to-do list as it stood after the step, where it is one of Claude Code's task calls (`replayTaskTodos`). */
   todos: AgentTodos["todos"] | undefined;
   place: ReplayPlace;
 }): React.JSX.Element {
@@ -316,12 +245,6 @@ function StepRow({
   }
 }
 
-/**
- * The summary we wrote of the oldest steps the replay could not keep,
- * folded under one quiet line saying how many it stands for and whose
- * words they are, as a webhook's body folds inside a run's prompt; its
- * words drawn as a transcript's are, once opened.
- */
 function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.Element {
   return (
     <Disclosure data-replay-summary="">
@@ -338,15 +261,6 @@ function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.E
   );
 }
 
-/**
- * The steps the opened card draws: the newest page of them, under a row
- * drawing the page before as it is pressed, until every kept step is drawn.
- * The steps land under the row, so what stands above it holds still and the
- * panel stays where it was scrolled; once the last page lands the row goes,
- * and the keys land on the steps it drew rather than on nothing. While a
- * find bar is open every step is drawn, so the find covers the whole
- * replay, as a fold's closed body is drawn for it (`fold.tsx`).
- */
 function ReplaySteps({
   steps,
   place,
@@ -358,7 +272,6 @@ function ReplaySteps({
   const [shown, setShown] = useState(REPLAY_PAGE);
   const list = useRef<HTMLDivElement>(null);
   const page = replayPage(steps.length, finding ? steps.length : shown);
-  // Note that the replay's calls stand in its first message's words, which the transcript's own check for a server's call never reads.
   const callsServer = useMemo(() => replayCallsServer(steps), [steps]);
   const todos = useMemo(() => replayTaskTodos(steps), [steps]);
   const drawMore = () => {
@@ -366,7 +279,6 @@ function ReplaySteps({
     setShown(steps.length - page.from + page.next);
   };
   return (
-    // No ring: it is focused only by script, to keep the place when Show more is spent.
     <div
       ref={list}
       tabIndex={-1}
@@ -386,7 +298,6 @@ function ReplaySteps({
       )}
       <ConnectionNames needed={callsServer}>
         {steps.slice(page.from).map((step, index) => (
-          // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.
           <StepRow
             key={page.from + index}
             step={step}
@@ -399,7 +310,6 @@ function ReplaySteps({
   );
 }
 
-/** The foot: the branch and pull request the source published, where known, held by the host while the card's body is drawn (`pullRequestPublishedQuery`); nothing, rule and all, where neither is. */
 function ReplayFoot({
   agentId,
   place,
@@ -410,14 +320,12 @@ function ReplayFoot({
   const held = useQuery(pullRequestPublishedQuery({ agentId })).data;
   const published = held === undefined || "failure" in held ? undefined : held;
   const doors = useMentionDoors();
-  // Note that the task list's pull request stands first, since it moves without a read.
   const pullRequest = place.pullRequests.get(agentId) ?? published?.pullRequest;
   const branch = published?.branch ?? undefined;
   const words =
     pullRequest === undefined || pullRequest === null ? undefined : pullRequestLabelOf(pullRequest);
   if (branch === undefined && words === undefined) return null;
   return (
-    // The branch and the pull request, over a dashed rule.
     <div className="flex flex-wrap items-center gap-x-block-gap gap-y-tight-gap border-t border-dashed border-border pt-row-inset text-caption text-muted-foreground *:min-w-0">
       {branch === undefined ? null : (
         <span>
@@ -437,12 +345,6 @@ function ReplayFoot({
   );
 }
 
-/**
- * The card: the source's chip and how many steps on its summary row, and,
- * opened, our summary and the steps left out, the newest steps
- * a page at a time, and the foot; the line naming who started the agent and
- * when under it.
- */
 export function ReplayCard({
   replay,
   sentAt,
@@ -450,10 +352,8 @@ export function ReplayCard({
   taskId,
 }: {
   replay: Replay;
-  /** When the agent's first message was sent, named after who started it; none where the transcript does not know. */
   sentAt?: number | undefined;
   place: ReplayPlace;
-  /** The task the agents are of, under which a message of the source is opened; none where they are of none. */
   taskId: string | undefined;
 }): React.JSX.Element {
   const { agentId } = replay;
@@ -473,7 +373,6 @@ export function ReplayCard({
         );
   const openPlace = useOpenPlace();
   const open = place.onOpen;
-  // Note that a source the place does not list, as on an agent's own page, opens as a link to it would.
   const openSource =
     listed && open !== undefined
       ? () => open(agentId)
@@ -502,7 +401,6 @@ export function ReplayCard({
           <PlanIcon>
             <SplitIcon />
           </PlanIcon>
-          {/* Note that the head names the source in words, its chip standing beside the head, because the head is the card's summary, which holds no control. */}
           <OneLine
             className="flex min-w-0 flex-1 items-center gap-tight-gap overflow-hidden whitespace-nowrap"
             words={`${replayVerb(replay)} ${name} · ${replayCount(replay)}`}

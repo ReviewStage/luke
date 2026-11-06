@@ -7,19 +7,6 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 
-/**
- * annotation-card.test.ts -- the card every annotation on code stands on: its
- * faces and its words each keep one column, the head's and every comment's
- * alike; folded, it is its head alone, counting its comments rather than
- * previewing any; and a narrow card says the age to a reader alone and
- * counts without the word; its ⋯ stands beside its head, never in it.
- *
- * jsdom lays nothing out, so the window's stylesheets are laid for a card
- * of each width (`testing/container-width.ts`) and the columns are read
- * from the lengths they set, every custom property and sum among them
- * resolved here as the browser would.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +17,6 @@ const FIRST = "Can we use the constant in the resend copy too?";
 const REPLY = "Yes, in the copy PR.";
 
 const roots: Root[] = [];
-/** The presses the card's ⋯ took. */
 const pressed: string[] = [];
 let laid: HTMLStyleElement | undefined;
 
@@ -42,7 +28,6 @@ afterEach(() => {
   pressed.length = 0;
 });
 
-/** A card of two comments, its fold its own, starting as `open` says, inside a box as wide as given. */
 function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
   const [open, setOpen] = useState(startsOpen);
   return createElement(AnnotationCard, {
@@ -83,7 +68,6 @@ function draw(startsOpen: boolean, width = 900): HTMLElement {
   return container;
 }
 
-/** A length as the browser resolves it: every custom property it names read on `element`, then its sum, in pixels. */
 function pixels(element: Element, value: string): number {
   const style = getComputedStyle(element);
   let text = value.trim();
@@ -99,17 +83,14 @@ function pixels(element: Element, value: string): number {
   }, 0);
 }
 
-/** The parts of a shorthand, split at the spaces between them and never inside a function's brackets. */
 function parts(value: string): string[] {
   return value.trim().split(/\s+(?![^(]*\))/u);
 }
 
-/** A box's inline-start padding. */
 function paddingStart(element: Element): number {
   return pixels(element, getComputedStyle(element).paddingLeft);
 }
 
-/** Where a box's own start stands from the card's, by the paddings, gaps, and columns before it. */
 function columns(card: HTMLElement) {
   const head = card.querySelector(".annotation-card-fold > summary") ?? assert.fail("a head");
   const content = card.querySelector(".annotation-card-content") ?? assert.fail("a body");

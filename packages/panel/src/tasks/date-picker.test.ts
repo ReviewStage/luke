@@ -22,19 +22,6 @@ import { ToastHost } from "../toast.js";
 import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 
-/**
- * A date chip in the description's editor, pressed, opens its picker over the real
- * editor bundle: a day picked, an end date, a time, typed words, or Clear
- * change the chip in place once the picker closes, and the `@` list narrowed
- * to dates opens the same picker to write a new one. A date chip in the
- * description's words at rest opens the same picker with no editor opened, and a
- * date changed there saves the description with it written anew, or says it could
- * not where the save is refused. A date in words
- * that take no change opens nothing. Synthetic description; day-only dates
- * wherever the reader's zone would otherwise change what is written.
- */
-
-/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
 const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
 
 const TASK: Task = {
@@ -49,7 +36,6 @@ const TASK: Task = {
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
-/** A registry of the test's own, as the window's root provides one, so words a description left unsaved in one test are not the next one's. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
@@ -66,14 +52,12 @@ beforeEach(() => {
 
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a description left as it went answer before its atoms go.
   await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.useRealTimers();
 });
 
-/** The plan's page drawn, editable. */
 function drawn(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -101,7 +85,6 @@ function drawn(): HTMLElement {
   return container;
 }
 
-/** The plan's page drawn at rest beside the window's toasts, every save asked kept and refused, or saved where `saving`, and drawn again over a description written anew. */
 function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
   const saves: DescriptionEditRequest[] = [];
   const container = document.createElement("div");
@@ -143,14 +126,12 @@ function drawnAtRest(task: Task = TASK, editable = true, saving = false) {
   return { container, saves, draw };
 }
 
-/** The date chip in the description's words at rest. */
 function chipAtRest(container: HTMLElement): HTMLElement {
   const chip = container.querySelector<HTMLElement>('.description-unit [data-kind="date"]');
   assert.ok(chip, "the description's words hold a date chip");
   return chip;
 }
 
-/** The description's editor, opened on Rollout by Enter on its block. */
 async function opened(): Promise<{ container: HTMLElement; editor: Editor }> {
   const container = drawn();
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -164,7 +145,6 @@ async function opened(): Promise<{ container: HTMLElement; editor: Editor }> {
   return { container, editor };
 }
 
-/** The editor's date chip. */
 function chipIn(container: HTMLElement): HTMLElement {
   const chip = container.querySelector<HTMLElement>(
     ".description-document-text [data-mention-ref]",
@@ -173,12 +153,10 @@ function chipIn(container: HTMLElement): HTMLElement {
   return chip;
 }
 
-/** The picker, where it stands. */
 function picker(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** The chip pressed, and its picker as it opens. */
 async function pressChip(container: HTMLElement): Promise<HTMLElement> {
   act(() => chipIn(container).click());
   await act(async () => undefined);
@@ -187,21 +165,18 @@ async function pressChip(container: HTMLElement): Promise<HTMLElement> {
   return opening;
 }
 
-/** A control of the picker, by its role and name. */
 function control(dialog: HTMLElement, selector: string): HTMLElement {
   const found = dialog.querySelector<HTMLElement>(selector);
   assert.ok(found, `the picker holds ${selector}`);
   return found;
 }
 
-/** The words shown over a field of the picker, by what they say; nothing where none stand. */
 function labelOf(dialog: HTMLElement, name: string): HTMLLabelElement | undefined {
   return [...dialog.querySelectorAll<HTMLLabelElement>("label")].find(
     (label) => label.textContent === name,
   );
 }
 
-/** A field of the picker, by its name: the words shown over it, or a name of its own where none are. */
 function fieldOf(dialog: HTMLElement, name: string): HTMLInputElement {
   const label = labelOf(dialog, name);
   const found =
@@ -212,12 +187,10 @@ function fieldOf(dialog: HTMLElement, name: string): HTMLInputElement {
   return found;
 }
 
-/** A day of the picker's month pressed, by the name a reader hears. */
 function pickDay(dialog: HTMLElement, day: string): void {
   act(() => control(dialog, `button[aria-label="${day}"]`).click());
 }
 
-/** A key pressed where the picker's focus stands. */
 async function pressKey(dialog: HTMLElement, key: string): Promise<void> {
   const at = dialog.contains(document.activeElement) ? document.activeElement : dialog;
   act(() => {
@@ -226,7 +199,6 @@ async function pressKey(dialog: HTMLElement, key: string): Promise<void> {
   await act(async () => undefined);
 }
 
-/** Words typed into one of the picker's date fields, as the field's own input hands them over. */
 function typeWords(dialog: HTMLElement, name: string, words: string): void {
   const field = fieldOf(dialog, name);
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -236,7 +208,6 @@ function typeWords(dialog: HTMLElement, name: string, words: string): void {
   });
 }
 
-/** A time typed into one of the picker's time fields. */
 function typeTime(dialog: HTMLElement, name: string, time: string): void {
   const field = fieldOf(dialog, name);
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -246,7 +217,6 @@ function typeTime(dialog: HTMLElement, name: string, time: string): void {
   });
 }
 
-/** Each mention the editor holds, as the saved text writes it. */
 function mentionsIn(editor: Editor): { name: string; target: string }[] {
   const found: { name: string; target: string }[] = [];
   editor.state.doc.descendants((node) => {
@@ -257,7 +227,6 @@ function mentionsIn(editor: Editor): { name: string; target: string }[] {
   return found;
 }
 
-/** The offset the reader's zone stands at on `at`, as a mention spells one: `-07:00`, or `+00:00` in UTC. */
 function readerOffset(at: number): string {
   const named =
     new Intl.DateTimeFormat("en-US", { timeZoneName: "longOffset" })
@@ -322,7 +291,6 @@ test("End date switched on and closed at once writes the range it shows, to the 
   const start = fieldOf(dialog, "Start");
   const end = fieldOf(dialog, "End");
   const shown = [start.value, end.value];
-  // Note that each date stands in its field, under its name, so the row is the line the two fields share.
   const oneRow = start.closest(".ui-inline") === end.closest(".ui-inline");
   await pressKey(dialog, "Escape");
 
@@ -403,7 +371,6 @@ test("Include time puts a time on the day, spelled with the offset the reader's 
   );
 });
 
-/** Time zone's field pressed, and the page of zones it turns the picker to. */
 async function openZones(container: HTMLElement, dialog: HTMLElement): Promise<HTMLElement> {
   act(() => control(dialog, 'button[aria-label^="Time zone: "]').click());
   await act(async () => undefined);

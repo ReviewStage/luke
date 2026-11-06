@@ -66,22 +66,12 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
 
-/**
- * New task as the developer meets it: a card over the window whose head row
- * holds the repository chip, over the composer, whose words start a coding agent. Each test
- * stands the dialog in an owner that opens it and puts it away as the tab
- * does, so closing is read as the card leaving the window, on a registry
- * of its own, as one launch of the window holds.
- */
-
 const roots: Root[] = [];
 
-// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
 const UNAVAILABLE = Object.fromEntries(
   INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
 ) as Record<IntegrationProvider, IntegrationStatus>;
 
-/** The models the composer's chip offers: Opus, and its fast version. */
 const MODELS: readonly CatalogModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -97,13 +87,10 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-/** The models the chip offers in this test, `MODELS` unless it says otherwise. */
 let models: readonly CatalogModel[] = MODELS;
 
-/** The account's default model, as the host holds it for the composer's chip. */
 const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 
-// Landed before any card renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -111,9 +98,7 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
-  // Note that a card nothing pays for draws the harnesses' marks, which read the platform's assets.
   fakeAppPlatform(QUIET_PANEL);
-  // Note that the chip names the account's default as the host holds it.
   handHostReads({
     preferences: {
       rows: {
@@ -139,19 +124,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/**
- * The dialog open in its owner, a start answered by `answer` and each
- * start's name and repository written down, with the agent it asked for;
- * `preset` is what the press that opened it chose, a repository as a
- * repository group's + does; a start answered by a promise stays out until
- * the test settles it. An agent's start puts the card away as it is pressed
- * and a refusal opens it again on what it held, as the tab does.
- */
 async function mount(
   answer: string | Failure | undefined | Promise<Failure | undefined> = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> & {
-    /** What the service answers the chooser's workspace's repositories with, which the host holds for the chip. */
     readonly list?: () => Promise<RepositoriesRead>;
   } = {},
 ) {
@@ -197,7 +173,6 @@ async function mount(
           );
           const card = from?.card;
           if (from?.handed === undefined || card === undefined) return refused;
-          // An agent's start puts the card away as it is pressed, and a refusal opens it again on what it held, as the tab does.
           setOpen(false);
           return refused.then((note) => {
             if (note !== undefined) {
@@ -245,42 +220,33 @@ async function mount(
   };
   return {
     starts,
-    /** The workspace each start asked for. */
     startedIn,
-    /** The coding agent each start handed its words, where it asked for one. */
     agents,
-    /** Every Settings link the dialog's presses followed. */
     links,
     opener,
     dialog,
     field,
     button,
-    /** Words typed into the composer at its caret. */
     type: (words: string) => typeInComposer(document, words),
-    /** A key pressed in the composer's field. */
     key: async (key: string, held: KeyboardEventInit = {}) => {
       pressInComposer(document, key, held);
       await settle();
     },
     press,
-    /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
     rechoose: async (next: Partial<RepositoryChooser>) => {
       repositories = { ...repositories, ...next };
       act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
     },
-    /** Stands the dialog again once the workspaces are read, listing `workspaceId`. */
     list: async (workspaceId: string | undefined) => {
       listed = workspaceId;
       act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
     },
-    /** Opens New task again, as another press of it does. */
     reopen: async () => {
       act(() => openAgain());
       await settle();
     },
-    /** Stands the window again from what it stored, as a relaunch does, the card open. */
     relaunch: async () => {
       act(() => root.unmount());
       registry = AtomRegistry.make();
@@ -290,13 +256,10 @@ async function mount(
       await settle();
     },
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
-    /** What the composer asks for while its box is empty. */
     placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
-    /** The round Start agent button, by its place at the foot's end, since an empty box names it for what ⌘Return does there. */
     startButton: () =>
       document.querySelector<HTMLButtonElement>('.ui-composer-foot button[type="submit"]') ??
       assert.fail("the round Start agent button stands"),
-    /** The card's buttons in order, as a reader meets them. */
     controls: () =>
       [...(dialog()?.querySelectorAll("button") ?? [])]
         .filter((each) => getComputedStyle(each).display !== "none")
@@ -533,7 +496,6 @@ test("once a repository is chosen, an @ offers its files, read through the works
         ),
       ),
     );
-  // The card opens with no repository, and the words are begun before one is chosen.
   draw([]);
   await settle();
   typeInComposer(document, "Follow ");
@@ -836,12 +798,10 @@ test("the workspace first resolving keeps a repository picked before the workspa
   assert.deepEqual(dialog.starts, [["", "alice/private"]]);
 });
 
-/** What the GitHub row in the repository menu's list place ends with: its press, or whom a member asks. */
 function githubWay(): string | null | undefined {
   return document.querySelector(".ui-menu-note-row-end")?.textContent;
 }
 
-/** The button the GitHub row ends with, pressed. */
 function pressWay(buttons: readonly HTMLButtonElement[], words: string): void {
   const press =
     buttons.find((button) => button.textContent === words) ??
@@ -849,7 +809,6 @@ function pressWay(buttons: readonly HTMLButtonElement[], words: string): void {
   act(() => press.click());
 }
 
-/** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
   const chip =
     document.querySelector<HTMLButtonElement>(".ui-chip") ??
@@ -859,7 +818,6 @@ async function openChip(): Promise<HTMLButtonElement[]> {
   return [...document.querySelectorAll<HTMLButtonElement>("button")];
 }
 
-/** A read answering that no GitHub is connected to the workspace. */
 const NOWHERE_INSTALLED = () =>
   Promise.resolve({
     repositories: {
@@ -869,7 +827,6 @@ const NOWHERE_INSTALLED = () =>
     },
   });
 
-/** Where each of the GitHub row's presses lands: the workspace's GitHub repositories in Settings. */
 const WORKSPACE_GITHUB = {
   page: SETTINGS_VIEW.WORKSPACE,
   section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
@@ -906,7 +863,6 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   );
 });
 
-/** A read answering that the App is installed and gives us no repository. */
 const NOTHING_REACHED = () =>
   Promise.resolve({
     repositories: {
@@ -916,7 +872,6 @@ const NOTHING_REACHED = () =>
     },
   });
 
-/** A workspace's people as the host answers them: two to ask, a third owner past the names a note gives, and a plain member. */
 const PEOPLE: readonly WorkspaceMember[] = [
   { userId: "u-dean", name: "Dean", email: "dean@acme.test", role: WORKSPACE_ROLE.OWNER },
   { userId: "u-charles", name: "Charles", email: "charles@acme.test", role: WORKSPACE_ROLE.ADMIN },
@@ -955,7 +910,6 @@ test("an owner of a workspace whose GitHub reaches no repository is offered Choo
   assert.deepEqual(dialog.links, [WORKSPACE_GITHUB]);
 });
 
-/** How the GitHub row ends for a workspace with a GitHub connected whose read finds none installed. */
 async function lapsedWay(manages: boolean) {
   await mount(undefined, undefined, {
     scope: "workspace-acme",
@@ -1018,7 +972,6 @@ test("a recent default the workspace's GitHub turns out not to list gives way to
       },
     });
   const unlisted = await mount(undefined, undefined, { list: listing });
-  // Note that we wait for the listing to reach the chip, because it lands on Query's timing.
   await vi.waitFor(() =>
     assert.equal(document.querySelector(".repository-chip")?.textContent, "acme/api"),
   );

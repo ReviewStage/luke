@@ -26,24 +26,10 @@ import {
   useQueueEditing,
 } from "./use-agent-queue.js";
 
-/**
- * An agent's queue as its tab changes it; the host draws each change over
- * the queue its page carries (`@repo/host`'s `agent-queue-writes.ts`). The
- * message box's part: a message the queue refused comes back into the box,
- * an edit the queue did not save stays open with its new words, an edit of
- * a message the queue would not hold closes, an edit
- * steered is one change of that message, and an edit takes the message's
- * files into the box, read as its row draws them, which Save sends back with
- * its words. A message queued with files names the ids the window keeps
- * their bytes under, which stand, and are kept under the service's ids once
- * its queue names them.
- */
-
 const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-/** The tab as it stands after each draw: its box, its queue, and the edit. */
 let held:
   | {
       composer: AgentComposerControl;
@@ -53,7 +39,6 @@ let held:
     }
   | undefined;
 
-/** Every change the tab sent, the picture ids each named, and the answers still owed, answered in the order a test says. */
 let sent: AgentQueueChange[] = [];
 let pictures: (readonly string[] | undefined)[] = [];
 let owed: ((answer: AgentQueueAnswerView) => void)[] = [];
@@ -83,9 +68,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The oldest change still owed its answer, answered now. */
 async function answer(with_: AgentQueueAnswerView): Promise<void> {
-  // A change waits behind the box's own sends before it is asked, so it is owed once they settle.
   await settle();
   const next = owed.shift();
   assert.ok(next, "a change is owed its answer");
@@ -97,7 +80,6 @@ const refused: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED }
 
 const message = (id: string, text: string) => ({ id, text, queuedBy: "user-1" });
 
-/** An image a queued message carries, the id the queue reads it by, and a file the box takes on beside it. */
 const SHOT = { name: "flow.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data: "iVBORw0KGgo=" };
 const SHOT_ID = "3c1f5d0e-7a8b-4c9d-9e0f-1a2b3c4d5e6f";
 const SPEC = { name: "spec.pdf", mediaType: AGENT_ATTACHMENT_TYPE.PDF, data: "JVBERi0xLjQ=" };

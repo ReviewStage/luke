@@ -54,29 +54,17 @@ import { DraftAgentTab } from "./draft-agent-tab.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
 import type { AgentDraft, AgentsControl } from "./use-agents.js";
 
-/**
- * A draft agent's first message through the bridge the host answers: a
- * refused Start offers Retry; a Start refused for a repository out of reach
- * says why, naming the repository, and offers the press that mends it; and
- * the MCP popover's GitHub row connects the account's GitHub in place.
- */
-
 const TASK_ID = "plan-1";
 const RELAY = "Acme/Relay";
 
-/** Where the account's Slack connection stands at the service; every other provider but GitHub is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
-/** Where GitHub stands for the account, unavailable unless a test offers it. */
 let github: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 
-// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
 const UNAVAILABLE = Object.fromEntries(
   INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
 ) as Record<IntegrationProvider, IntegrationStatus>;
-/** Every integration a Connect was asked for on the act port, in order. */
 let connects: IntegrationProviderParams[] = [];
 
-/** The account's integrations as the host holds them for the window, laid again as the service's rows move. */
 let integrations: IntegrationsHeld;
 
 const DRAFT: AgentDraft = {
@@ -89,7 +77,6 @@ const DRAFT: AgentDraft = {
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -99,7 +86,6 @@ beforeEach(() => {
   connects = [];
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  // A Connect stands Slack pending at the service, and a Cancel disconnects it, each answering once the host's read carries it.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       connects.push(payload);
@@ -136,7 +122,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A failure's sentence alone: its alert's words without its presses'. */
 function sentence(alert: Element | null): string | undefined {
   if (alert === null) return undefined;
   return [...alert.children]
@@ -145,7 +130,6 @@ function sentence(alert: Element | null): string | undefined {
     .join("");
 }
 
-/** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
 function mount(
   answers: (Failure | undefined)[],
   draft: AgentDraft = DRAFT,
@@ -165,7 +149,6 @@ function mount(
     ...extra,
   });
   const github = { connects: 0 };
-  /** What each repository remedy's door was asked, in order. */
   const remedies: string[] = [];
   const doors: RepositoryRemedyDoors = {
     openWorkspaceGitHub: (taskId) => remedies.push(`workspace-github:${taskId}`),
@@ -180,7 +163,6 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Each tab reads the window's document from a registry of its own, so one test's account never answers another's.
   act(() =>
     root.render(
       onRegistry(
@@ -210,9 +192,6 @@ function mount(
       ),
     ),
   );
-  // A press is named by its words, or by the name it gives them (a Retry
-  // keeps its words in a span of their own, as a shared Button does); the
-  // mark before them carries a title of its own.
   const button = (words: string) =>
     [...container.querySelectorAll("button")].find(
       (each) =>
@@ -257,7 +236,6 @@ test("a refused Start offers Retry, which sends the message again", async () => 
   assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
 });
 
-/** A Start refused for the repository out of reach, as the host hears the service say why. */
 const unreachable = (unreached: RepositoryUnreached): Failure =>
   startFailureNote({ failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached }, TASK_ID);
 
@@ -362,7 +340,6 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
   assert.deepEqual(tab.remedies, []);
 });
 
-/** The servers popover opened from the box's + menu, its MCP servers row pressed. */
 function openServers(): void {
   const plus =
     document.querySelector<HTMLButtonElement>('button[aria-label="Add files and more"]') ??
@@ -429,7 +406,6 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
     };
   };
 
-  // Note that the popover stands beside the + menu, over the window, so its row's buttons are found there rather than in the tab.
   const pressRow = async (words: string) => {
     const found =
       [...document.querySelectorAll<HTMLButtonElement>(".agent-servers-list li button")].find(
@@ -445,7 +421,6 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
     buttons: ["Reopen", "Cancel"],
   });
 
-  // The browser came back without a grant: the service ends the sign-in, and the host's read moves with it.
   slack = INTEGRATION_STATUS.DISCONNECTED;
   act(() => integrations.lay());
   await settle();
@@ -605,7 +580,6 @@ test("a draft New task handed over after its agent was refused sends nothing by 
   );
 });
 
-/** The account's keys as the service holds them: a Claude plan, its default as given, and an Anthropic API key. */
 function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
   const kept = {
     provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
@@ -627,7 +601,6 @@ function plannedKeys(forAgents: boolean): ProviderKeysAnswer {
   };
 }
 
-/** A draft on the model given, the account's keys held as given; each Start's arguments written down. */
 async function plannedTab(options: { keys: ProviderKeysAnswer; model: string }) {
   const signedIn = signedInAs({ id: "user-dev", email: "dev@example.com", name: "Dev" });
   handState(

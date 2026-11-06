@@ -41,21 +41,6 @@ import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { TasksBoard } from "./tasks-board.js";
 
-/**
- * tasks-board.test.ts -- the Board lays the listed workspace's tasks out
- * on a column for each status, each card its key, priority, name, and
- * creator's face, the most pressing first; a press opens the task, a card
- * dragged onto another column is sent that column's status, or its
- * priority where the view stands columns by priority, and Canceled stands
- * once the view asks for it. A card is changed where it stands: its
- * Priority and Status chips send what is picked, and its ⋯ and a
- * right-click drop the task's own menu, whose Rename makes its name a
- * field, cards are chosen by their box and ⌘-click across columns for the
- * selection bar to act on them all, and its foot draws its agents at work and their pull requests,
- * each its mark and its number, and how many of its sub-tasks are finished. In a narrow room, a phone's, one column stands at a time, chosen
- * by its tab, and a card's Status chip, its mark alone before its name as on a wide board, moves it.
- */
-
 const DEAN = "user-dean";
 const CHARLES = "user-charles";
 
@@ -74,25 +59,18 @@ const MEMBERS: readonly WorkspaceMember[] = [
 
 const roots: Root[] = [];
 
-/** The tasks the board opened, in order. */
 let opened: string[] = [];
 
-/** Each rename the board sent, in order. */
 let renamed: [string, string][] = [];
 
-/** Each change of where a task stands the board sent, in order. */
 let sent: [string, TaskStanding][] = [];
 
-/** Whether the service keeps the changes sent. */
 let keeps = true;
 
-/** Each display the board asked for, in order. */
 let displayed: TasksDisplay[] = [];
 
-/** How many times the board was closed. */
 let closed = 0;
 
-/** The pages the board opened, in order. */
 let pages: string[] = [];
 
 beforeEach(() => {
@@ -122,7 +100,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A task of Acme's, numbered `number`, standing in `status` at `priority`, by `creator`. */
 function task(
   number: number,
   name: string,
@@ -156,13 +133,11 @@ const TASKS = [
   task(33, "Old onboarding copy", TASK_STATUS.CANCELED, TASK_PRIORITY.LOW),
 ];
 
-/** Draws the Board last mounted again under another display, as its View options would, its tab changed by `overrides` where given. */
 let redrawBoard: (
   display: TasksDisplay,
   overrides?: NonNullable<Parameters<typeof tasksControl>[0]>,
 ) => void = () => undefined;
 
-/** The Board over `tasks`, under `display`, read by Dean, once the workspace's members have answered. */
 async function mountBoard(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
@@ -230,7 +205,6 @@ async function mountBoard(
   return container;
 }
 
-/** Each column's name and its cards' keys, in order. */
 function columns(board: HTMLElement): [string, string[]][] {
   return [...board.querySelectorAll<HTMLElement>("[data-task-column]")].map((column) => [
     column.getAttribute("aria-label") ?? "",
@@ -238,7 +212,6 @@ function columns(board: HTMLElement): [string, string[]][] {
   ]);
 }
 
-/** The chip on a task's card that changes its `standing`, Priority or Status. */
 function chipOf(board: HTMLElement, taskId: string, standing: string): HTMLButtonElement {
   const chip = board.querySelector<HTMLButtonElement>(
     `li[data-task-id="${taskId}"] button[aria-label^="${standing}:"]`,
@@ -247,7 +220,6 @@ function chipOf(board: HTMLElement, taskId: string, standing: string): HTMLButto
   return chip;
 }
 
-/** Presses the item of the open menu whose label is `label`. */
 function pick(label: string): void {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find(
     (each) => each.querySelector(".ui-menu-item-label")?.textContent === label,
@@ -255,7 +227,6 @@ function pick(label: string): void {
   act(() => (item ?? assert.fail(`no ${label} item`)).click());
 }
 
-/** The card of a task, its press. */
 function cardOf(board: HTMLElement, taskId: string): HTMLButtonElement {
   const card = board.querySelector<HTMLButtonElement>(
     `li[data-task-id="${taskId}"] ${CARD_PRESS_SELECTOR}`,
@@ -292,7 +263,6 @@ test("each status has its column, its cards the most pressing first, each its ke
   assert.equal(card.querySelector(".actor-mark"), null, "the card wears no creator's face");
 });
 
-/** Presses `key` where the keyboard stands. */
 function pressHere(key: string): void {
   const target = document.activeElement ?? document.body;
   act(() => {
@@ -300,7 +270,6 @@ function pressHere(key: string): void {
   });
 }
 
-/** The id of the task whose card holds the keyboard, if one does. */
 function focusedTask(): string | null | undefined {
   return document.activeElement?.closest("li[data-task-id]")?.getAttribute("data-task-id");
 }
@@ -335,8 +304,6 @@ test("each column's cards are one Tab stop that ↓ and ↑ walk, and ← and �
 });
 
 test("End reaches the last card of a column taller than the window, though it is not drawn until then", async () => {
-  // Note that jsdom lays nothing out, so each card is taken at its estimate and the column's view at the
-  // window's 768px: a column of forty cards draws its first dozen or so, the latest moved first.
   const chores = Array.from({ length: 40 }, (_, at) =>
     task(at + 1, `Chore ${at + 1}`, TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE),
   );
@@ -466,12 +433,6 @@ test("a workspace with no task yet says so", async () => {
   assert.match(board.textContent ?? "", /No tasks yet/);
 });
 
-/**
- * The board laid out for a drag: each column 300px wide and 600px tall, side
- * by side from the window's left, each card 40px tall, 50px apart, from
- * 40px down its column. jsdom lays nothing out and captures no pointer, so
- * this answers the geometry and the capture the browser would.
- */
 function layCardsOut(board: HTMLElement): void {
   const COLUMN = 300;
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
@@ -489,12 +450,10 @@ function layCardsOut(board: HTMLElement): void {
   }
 }
 
-/** A pointer event at a point in the window, as the primary button makes one. */
 function pointer(type: string, x: number, y: number): PointerEvent {
   return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
 }
 
-/** Presses a task's card, drags it to a point, and lets it go there. */
 function dragCard(board: HTMLElement, taskId: string, to: { x: number; y: number }): void {
   const card = cardOf(board, taskId);
   const box = card.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
@@ -574,7 +533,6 @@ test("by priority, a card dragged onto Urgent's column is sent urgent", async ()
   assert.deepEqual(sent, [["t-39", { priority: TASK_PRIORITY.URGENT }]]);
 });
 
-/** A task of `TASKS` assigned to Charles. */
 function charles(taskId: string): TaskSummary {
   const held = TASKS.find((each) => each.id === taskId) ?? assert.fail(`no ${taskId}`);
   return { ...held, assignee: { userId: CHARLES, name: "Charles Pan" } };
@@ -615,7 +573,6 @@ test("in a narrow room grouped by assignee, a card keeps its Assignee chip, whic
   );
 
   act(() => chipOf(board, "t-40", "Assignee").click());
-  // Note that the members are offered once their read reaches its query.
   await vi.waitFor(() =>
     assert.equal(
       [...document.querySelectorAll(".ui-menu-item-label")].some(
@@ -662,13 +619,11 @@ test("a card dragged onto Done whose change the service refused says so", async 
   assert.match(newestToastSays() ?? "", /The task could not be changed\. Try again\./);
 });
 
-/** What a reader hears of a narrow board's tabs: their names, and the one chosen. */
 interface ColumnTabs {
   readonly names: readonly string[];
   readonly chosen: string | undefined;
 }
 
-/** The tabs choosing a narrow board's column, by their names, and the one chosen. */
 function columnTabs(board: HTMLElement): ColumnTabs {
   const tabs = [...board.querySelectorAll<HTMLElement>('[role="tablist"] [role="tab"]')];
   const name = (tab: HTMLElement) => tab.querySelector(".ui-choice-bar-label")?.textContent ?? "";
@@ -676,7 +631,6 @@ function columnTabs(board: HTMLElement): ColumnTabs {
   return { names: tabs.map(name), chosen: chosen === undefined ? undefined : name(chosen) };
 }
 
-/** Presses the narrow board's tab named `name`. */
 function pressTab(board: HTMLElement, name: string): void {
   const tab = [...board.querySelectorAll<HTMLElement>('[role="tab"]')].find(
     (each) => each.querySelector(".ui-choice-bar-label")?.textContent === name,

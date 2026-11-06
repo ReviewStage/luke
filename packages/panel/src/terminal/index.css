@@ -1,15 +1,5 @@
-/* The terminal bundle's stylesheet, loaded beside `terminal.js` the first
-   time a terminal is shown: xterm.js's own rules, then the host's. The
-   colors are not here, since the canvas reads them as values
-   (`terminal-theme.ts`); only the box is. */
 @import "@xterm/xterm/css/xterm.css";
 
-/* The host fills its box on the terminal's ground, and the screen stands in
-   from its edges as the code does. Note that the inset is the host's own
-   padding, because the screen paints every pixel of the box it is given, and
-   that the host is a content box, because the fit addon reads the host's
-   computed width and height, which a border box would give with the padding
-   in them, fitting columns into the right margin. */
 .terminal-surface {
   box-sizing: content-box;
   min-width: 0;
@@ -23,8 +13,6 @@
   height: 100%;
 }
 
-/* The rows fit the host's content box whole, so under the last of them a
-   strip of the viewport shows, which xterm's own sheet paints black. */
 .terminal-surface .xterm .xterm-viewport {
   background-color: var(--terminal-ground);
 }

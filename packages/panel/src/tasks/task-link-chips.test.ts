@@ -19,16 +19,7 @@ import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-men
 import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * task-link-chips.test.ts -- a link in the description's words is drawn as the
- * chip of what it names whoever wrote it, as a transcript draws one: the
- * task read on its page and a version's diff. A link that names nothing
- * stays a link, and code stays code.
- * Synthetic task and repository.
- */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/relay";
@@ -49,7 +40,6 @@ const TASK: Task = {
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -62,7 +52,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What a task's page hands its places. */
 const PAGE: TaskMentionsValue = {
   holder: { taskId: TASK_ID },
   taskName: "Invitations",
@@ -87,7 +76,6 @@ function drawn(node: ReactNode): HTMLElement {
   return container;
 }
 
-/** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
@@ -101,10 +89,8 @@ const THREE_CHIPS = [
   ["link", "ACME-142/fix-the-thing"],
 ];
 
-/** The same chips where the page's description is at hand, whose heading names the section now whatever its link was labeled. */
 const THREE_CHIPS_ON_PAGE = [["section", "Rollout"], ...THREE_CHIPS.slice(1)];
 
-/** Words drawn as Markdown with the page's mentions, as a version and a note draw them. */
 function PageWords({ words, marks }: { words: string; marks: MarkdownMark[] }): ReactNode {
   const link = useMentionLink();
   return createElement(MarkdownMessage, { words, link, edit: { marks } });

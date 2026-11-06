@@ -1,14 +1,3 @@
-/**
- * share-bars.tsx -- the Overview's activation funnel, feature reach, and agents
- * by origin, each a column of rows that read as a share of one base.
- *
- * A row is a name, a bar filled to its share of the base, the count, and the
- * share as a percentage. The bar is a plain track and fill rather than a chart
- * engine's, because a row of seven fixed categories needs no axis, and the
- * words beside it carry every figure, so a reader who cannot see the fill
- * loses nothing. A share of nobody draws an empty track and a dash.
- */
-
 import type { AdminFunnelStep, AdminOverview } from "@repo/features/admin-answer-wire";
 import {
   AGENT_ORIGIN,
@@ -22,7 +11,6 @@ import { formatCount, formatPercent } from "@repo/features/number-format";
 import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@repo/ui";
 import { AsideSkeleton, ChartEmpty, ChartFrame } from "./chart-frame.js";
 
-/** What each funnel step is called, in the words a maintainer reads it by. */
 const FUNNEL_LABEL = {
   [FUNNEL_STEP.SIGNED_UP]: "Signed up",
   [FUNNEL_STEP.GITHUB_CONNECTED]: "GitHub connected",
@@ -42,7 +30,6 @@ const REACH_LABEL = {
 
 const REACH_TITLE = "Feature reach · this week";
 
-/** What each origin is called, by who or what started the agent. */
 const ORIGIN_LABEL = {
   [AGENT_ORIGIN.AUTOMATION]: "Automation",
   [AGENT_ORIGIN.SLACK]: "Slack",
@@ -52,23 +39,19 @@ const ORIGIN_LABEL = {
 
 const ORIGINS_TITLE = "Agents started by origin · this week";
 
-/** The origins' aside: the base every share is of, and the pilots among it. */
 function originsAside(origins: AdminOverview["agentOrigins"]): string {
   const pilots = origins.pilots === 1 ? "1 pilot" : `${formatCount(origins.pilots)} pilots`;
   return `of ${formatCount(origins.agentsStarted)} agents started · ${pilots}`;
 }
 
-/** The funnel's heading, which names the window its accounts were created in. */
 function funnelTitle(windowDays: number): string {
   return `Activation · accounts created in the last ${windowDays} days`;
 }
 
-/** The bones standing for a row's count and share, about their figures' width. */
 const SKELETON_COUNT_WIDTH = "32px";
 
 const SKELETON_SHARE_WIDTH = "28px";
 
-/** The rows of one chart, a step apart. */
 function ShareList({
   label,
   children,
@@ -83,7 +66,6 @@ function ShareList({
   );
 }
 
-/** One row's frame: its name, its bar, its count, and its share, each in its column. */
 function ShareRowFrame({
   label,
   bar,
@@ -109,7 +91,6 @@ function ShareRowFrame({
   );
 }
 
-/** One row: its name, its bar, its count, and its share. */
 function ShareRow({
   label,
   count,
@@ -140,7 +121,6 @@ function ShareRow({
   );
 }
 
-/** One row while its figures are read: its name, which the chart knows, and bones for the rest. */
 function ShareRowSkeleton({ label }: { label: string }): React.JSX.Element {
   return (
     <ShareRowFrame
@@ -152,12 +132,6 @@ function ShareRowSkeleton({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/**
- * The window's new accounts, step by step: how many of them ever took each
- * step, and their share of everyone who signed up. Each step is counted on its
- * own, so a later step can stand taller than an earlier one: an account can
- * create a task before it ever connects GitHub.
- */
 export function FunnelChart({
   funnel,
   windowDays,
@@ -190,7 +164,6 @@ export function FunnelChart({
   );
 }
 
-/** The funnel while the window is read: its heading, and a row for every step by its name, with bones for its figures. */
 export function FunnelChartSkeleton({ windowDays }: { windowDays: number }): React.JSX.Element {
   return (
     <ChartFrame title={funnelTitle(windowDays)}>
@@ -203,7 +176,6 @@ export function FunnelChartSkeleton({ windowDays }: { windowDays: number }): Rea
   );
 }
 
-/** The share of this week's active developers who used each feature. */
 export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.JSX.Element {
   const title = REACH_TITLE;
   const aside = `of ${formatCount(reach.activeDevelopers)} active developers`;
@@ -230,7 +202,6 @@ export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.
   );
 }
 
-/** The reach while the week is read: a row for every feature, by its name, with bones for its figures. */
 export function ReachChartSkeleton(): React.JSX.Element {
   return (
     <ChartFrame title={REACH_TITLE} aside={<AsideSkeleton />}>
@@ -243,11 +214,6 @@ export function ReachChartSkeleton(): React.JSX.Element {
   );
 }
 
-/**
- * The week's agents started by how each started, every agent under one origin,
- * so the rows sum to the base; the pilots among them, whatever started them,
- * stand in the aside, since a pilot is what an agent is rather than an origin.
- */
 export function AgentOriginsChart({
   origins,
 }: {
@@ -277,7 +243,6 @@ export function AgentOriginsChart({
   );
 }
 
-/** The origins while the week is read: a row for every origin, by its name, with bones for its figures. */
 export function AgentOriginsChartSkeleton(): React.JSX.Element {
   return (
     <ChartFrame title={ORIGINS_TITLE} aside={<AsideSkeleton />}>

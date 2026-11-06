@@ -24,14 +24,6 @@ import {
   useHolderInboxItems,
 } from "./use-holder-inbox-items.js";
 
-/**
- * use-holder-inbox-items.test.ts -- the window's Inbox draws each listed
- * task's items from the account's feed in app state: pending until the feed
- * answers or catches up with main's word of a task, holding nothing of a
- * task the feed holds nothing of, saying the feed could not be read only
- * while it lists a task, and asking the host to read it again on Try again.
- */
-
 let root: Root | undefined;
 
 afterEach(() => {
@@ -77,7 +69,6 @@ const ITEM: InboxItem = {
   updatedAt: 1,
 };
 
-/** The account's feed holding the plans given, and no agent with no task. */
 function fed(plans: Readonly<Record<string, readonly InboxItem[]>>) {
   return { rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} } };
 }
@@ -102,7 +93,6 @@ test("each listed plan is pending until the account's feed first answers, then h
   await settle();
   const before = control()?.pending;
   deliver(fed({ "acme-plan": [ITEM] }));
-  // Note that the feed's rows stand once they reach its query.
   await vi.waitFor(() => assert.equal(control()?.pending, false));
 
   assert.equal(before, true);

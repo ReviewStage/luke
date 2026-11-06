@@ -38,76 +38,33 @@ import {
   type ViewedVersion,
 } from "./use-description-history.js";
 
-/**
- * version-view.tsx -- one version of a description, drawn read-only with what it changed marked, under a bar with its restore.
- *
- * The page beside a description's version history (`desktop-version-history.tsx`),
- * the way Google Docs shows a version in the page rather than in its narrow
- * list. Its bar names when the version was saved and offers Restore this
- * version, which the newest version, the description as it stands, holds unavailable
- * with a hint saying why: unavailable but still focusable, since a
- * disabled button takes no pointer and no focus, so its hint could never
- * show. The version is drawn whole against the version before it, which
- * shows what that revision changed: words written in wear the accent and
- * words struck out are struck, so neither reads by its color alone
- * (`description-history-model.ts`). A Mermaid fence draws as its diagram, and one
- * whose code the revision changed as its code with the changes marked,
- * since two diagrams side by side would hide what changed (`../description-diagram.tsx`).
- * A version is drawn under the plan's name, as
- * the description's own tab draws it. The first version has nothing before it, so
- * it is drawn with nothing marked. A section opened from its revision's
- * list is drawn alone, without the task's name over it, marked as the whole
- * version marks it, and a version still being read stands as
- * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks nothing:
- * a restore is itself a version the history keeps, so it happens at once
- * and its toast's Undo restores the one before it. Everything drawn is the description's words, so the root is left
- * out of the screen recording (`ph-no-capture`) as a second line behind the
- * recording's text masking. Standing alone on a phone, the page is headed as
- * a phone heads every page (`../desktop/phone-head.tsx`): the way back to the
- * versions, when the version was saved, and a ⋯ holding its restore.
- */
-
-/** A line over a version: what it is compared with, or why it is not drawn, in the body's muted type a group's gap over the version. */
 const VERSION_NOTE = "version-note mt-0 mb-section-gap text-body text-muted-foreground";
 
-/** What the view says over a version that changed nothing from the one before it. */
 const NO_CHANGE_LINE = "This version changed nothing from the one before it.";
 
-/**
- * The placeholder page's shape while a version is read: a section's heading
- * over its lines, twice, each as wide as its share of the column.
- */
 const PAGE_SKELETON = [
   { heading: "42%", lines: ["100%", "96%", "88%", "54%"] },
   { heading: "30%", lines: ["100%", "91%", "72%"] },
 ] as const;
 
-/** The level a description's section heading stands at (`##`), which a placeholder section's heading is drawn in. */
 const SECTION_LEVEL = "2";
 
-/** How wide the placeholder bar's moment and its restore stand: a day and a time in the title's type, and Restore this version. */
 const BAR_SKELETON = {
   MOMENT: "160px",
   RESTORE: "148px",
 } as const;
 
-/** What the toast says once a version is restored, and why its Undo did nothing. */
 const VERSION_RESTORED_NOTE = "Version restored";
 const RESTORE_UNDO_REFUSED_NOTE = "The restore could not be undone. Try again.";
 
-/** Why Restore this version is unavailable over the newest version. */
 const CURRENT_HINT = "This version is already current";
 
-/** What the version's restore says. */
 const RESTORE_LABEL = "Restore this version";
 
-/** What a phone's ⋯ over a version is called: "Version actions". */
 const VERSION_THING = "Version";
 
-/** What Restore this version says while its restore is under way. */
 const RESTORING = "Restoring";
 
-/** The class a unit wears by how it stands. */
 const CHANGE_CLASS = {
   [VERSION_CHANGE.SAME]: "",
   [VERSION_CHANGE.ADDED]: " version-added",
@@ -115,12 +72,10 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
-/** A version's text, as the description's own tab sets it: its units a section apart, in the body's type. */
 function VersionText({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <div className="description-body">{children}</div>;
 }
 
-/** A unit of the description in a note's own type, as `MarkdownMessage` sets one: its heading at a section's level over what follows it. */
 function NoteUnit({
   heading,
   children,
@@ -138,7 +93,6 @@ function NoteUnit({
   );
 }
 
-/** The version's text under the task's name, each unit drawn as it stands against what it is compared with. */
 function VersionBody({
   diff,
   title,
@@ -159,7 +113,6 @@ function VersionBody({
       {title === undefined || section !== undefined ? null : <TextTitle name={title} />}
       {units.map((unit, at) => (
         <MarkdownMessage
-          // A unit's heading may stand twice, struck and written again, so its place keys it.
           key={at}
           words={unit.words}
           className={`description-unit${CHANGE_CLASS[unit.change]}`}
@@ -174,12 +127,6 @@ function VersionBody({
   );
 }
 
-/**
- * The version's page as quiet blocks while it is read, in the text's own
- * frame: the task's name over it where the whole version will stand, then
- * sections in a note's own type, each heading at a section's level over its
- * lines, a section apart.
- */
 function VersionSkeleton({
   title,
   section,
@@ -203,10 +150,8 @@ function VersionSkeleton({
   );
 }
 
-/** What the page says where the version's read did not answer. */
 export const VERSION_FAILED = readFailedWords("the version");
 
-/** The version's content against the one before it, or the state standing in its place. */
 function VersionContent({
   viewing,
   title,
@@ -236,7 +181,6 @@ function VersionContent({
     );
   }
   const diff = versionDiff(read.previous, read.document);
-  // Note that the first version is compared with nothing, so it is never said to have changed nothing.
   const unchanged = read.previous !== null && !diff.changed;
   return (
     <>
@@ -244,7 +188,6 @@ function VersionContent({
       {task === undefined ? (
         <VersionBody diff={diff} title={title} section={section} task={task} />
       ) : (
-        // A version struck a picture as well as wrote one in, so both texts name the pictures it draws.
         <DescriptionPictures
           taskId={task.taskId}
           text={`${read.document.body}\n${read.previous?.body ?? ""}`}
@@ -256,22 +199,11 @@ function VersionContent({
   );
 }
 
-/** A version's restore as its controls press it: whether one is under way, and the press that restores the version `seq`, or the one chosen. */
 export interface VersionRestore {
   readonly busy: boolean;
   readonly onRestore: (seq?: number) => void;
 }
 
-/**
- * The restore of a version, which asks nothing and happens on the press:
- * held by the history around the page rather than the page itself, so a
- * version row's menu restores its own version in one press. `onRestored` is
- * what follows a restore that landed, whose toast offers Undo
- * (`sayRestored`); one refused says why in a toast. A press while one is
- * under way does nothing. Note that the press reads a ref rather than
- * `busy`, because a second press can land before the render that would
- * disable the button.
- */
 export function useVersionRestore(
   history: Pick<DescriptionHistoryControl, "onRestore">,
   onRestored: () => void,
@@ -301,11 +233,6 @@ export function useVersionRestore(
   return { busy, onRestore };
 }
 
-/**
- * Says in the window's toast that a restore landed, with its Undo where the
- * history names the version that stood before it: a restore of that
- * version, itself a restore, which says so where it is refused.
- */
 export function sayRestored(
   toast: (notice: ToastNotice) => void,
   undo: (() => Promise<Kept>) | undefined,
@@ -336,13 +263,6 @@ export function sayRestored(
   });
 }
 
-/**
- * The page a version stands on: its bar, led by `lead`, naming the version in
- * `title` with `actions` at its end, over the version's document. A phone's
- * header ends in a ⋯ holding `phoneGroups` where they are given, since its
- * Restore and ⌘F's Find are two and a corner holds one; in the same
- * `actions` where they are not, as while the version is read.
- */
 function VersionPageFrame({
   lead,
   title,
@@ -356,7 +276,6 @@ function VersionPageFrame({
   phoneGroups?: (() => readonly (readonly MenuEntry[])[]) | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
-  // Note that only a phone leads the bar with a way back, the version standing there alone.
   const titled = (
     <OneLine as={ONE_LINE_ELEMENT.H1} end={ONE_LINE_END.ELLIPSIS} className="ui-toolbar-title">
       {title}
@@ -387,10 +306,6 @@ function VersionPageFrame({
   );
 }
 
-/**
- * The version chosen in the version history, the page beside its list: the
- * bar with when it was saved and its restore, over the version itself.
- */
 export function VersionView({
   viewing,
   restore,
@@ -401,17 +316,11 @@ export function VersionView({
   onRetry,
 }: {
   viewing: ViewedVersion;
-  /** The restore, held by the history around the page (`useVersionRestore`). */
   restore: VersionRestore;
-  /** The task's name, which every version is drawn under. */
   title?: string | undefined;
-  /** The one unit of the version to draw, alone and without the task's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
-  /** The task the versions are of, which their mentions are read against; none while it is read. */
   task?: MentionedTask | undefined;
-  /** What leads the bar, as the way back to the list where the version stands alone. */
   lead?: React.ReactNode;
-  /** Reads the version again, from the Retry its failed read offers. */
   onRetry: () => void;
 }): React.JSX.Element {
   const { line } = viewing;
@@ -463,11 +372,6 @@ export function VersionView({
   );
 }
 
-/**
- * The page while the version it opens on is still found: its bar with
- * blocks where the moment and its restore will stand, over the version as
- * quiet blocks, so the page lands where they stood.
- */
 export function VersionPageSkeleton({
   lead,
   title,

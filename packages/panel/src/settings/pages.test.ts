@@ -5,13 +5,6 @@ import { test } from "vitest";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { shownSettingsView } from "./settings-rows.js";
 
-/**
- * The page Settings shows for the one chosen: a link to a page the platform
- * leaves out lands on Profile, so the title, the reset, the copied link, and
- * the history name the page on screen; a page the platform offers is shown,
- * and a page an experiment holds only while the account has it on.
- */
-
 test("a link to the Keyboard shortcuts page shows it on the desktop and Profile on a platform without the desktop app", () => {
   const browser = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP);
 

@@ -28,29 +28,12 @@ import { agentGlyphState, agentName, providerOf } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import type { AgentsControl } from "./use-agents.js";
 
-/**
- * edit-ref.tsx -- who wrote a description's edit, named on their own face wherever the window says it: the "Edited by" line over the description, each section's byline, and the task's ⋯ menu.
- *
- * The writer is read through `@repo/ui/actor-model`'s `editActor`, against
- * the workspace's members the task's directory holds (`member-directory.tsx`),
- * and named as one target that hangs its card. A person's card says what
- * they last did in the description, and the app's when and what it wrote, both read
- * off who last changed each section, which the window already holds. A
- * coding agent found among the task's agents wears its harness and where
- * its work stands, hangs its tab's card, and opens its tab on a press where
- * the place offers that; one the task's list does not hold is named alone.
- * A conflict over the developer's own edit names its writer the same way,
- * in its note and the button that takes their words.
- */
-
-/** The actor state an agent's tab glyph state stands for. */
 const ACTOR_OF_GLYPH = {
   [GLYPH_STATE.WORKING]: ACTOR_STATE.WORKING,
   [GLYPH_STATE.FAILED]: ACTOR_STATE.FAILED,
   [GLYPH_STATE.REST]: ACTOR_STATE.REST,
 } as const satisfies Record<GlyphState, ActorState>;
 
-/** The task's coding agents, among which an agent's edit is found, the window's across the workspace, and what opens one's tab where the place offers it. */
 export interface EditAgents {
   readonly control: Pick<
     AgentsControl,
@@ -59,22 +42,14 @@ export interface EditAgents {
   readonly onOpen: ((agentId: string) => void) | undefined;
 }
 
-/** Who reads a description's edits, as a place hands them over: the members are the directory's. */
 export type TaskReader = Pick<EditReader, "readerId">;
 
-/**
- * What a place knows to name a description's edits: who reads them, who last
- * changed each section, and its agents. Note that it holds no clock: a line
- * that says how long ago reads the minute itself, so the minute draws that
- * line again and not every section that names an edit.
- */
 export interface EditPlace {
   readonly reader: EditReader;
   readonly sections: readonly DescriptionSectionEdit[];
   readonly agents: EditAgents | undefined;
 }
 
-/** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
 function agentOf(
   edit: DescriptionLastEdit,
   agents: EditAgents | undefined,
@@ -88,7 +63,6 @@ function agentOf(
   );
 }
 
-/** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the description before history. */
 function writerOf(edit: DescriptionLastEdit, place: EditPlace): Actor | undefined {
   const agent = agentOf(edit, place.agents);
   const found: EditAgent | undefined =
@@ -98,30 +72,21 @@ function writerOf(edit: DescriptionLastEdit, place: EditPlace): Actor | undefine
   return editActor(edit, place.reader, found);
 }
 
-/** What a conflict over the developer's edit says, and the button that takes the other writer's words. */
 export interface ConflictWords {
   readonly note: string;
   readonly take: string;
 }
 
-/** A conflict whose writer the service named nobody for, as a service from before it answers. */
 const UNNAMED_CONFLICT: ConflictWords = {
   note: "This section changed while you were editing.",
   take: "Use theirs",
 };
 
-/** A conflict with the reader's own words saved elsewhere, as from another window. */
 const OWN_CONFLICT: ConflictWords = {
   note: "You changed this section elsewhere while you were editing.",
   take: "Use the other",
 };
 
-/**
- * What a conflict says, naming who wrote the text it met as the "Edited by"
- * line names them: "Charles Pan changed this section while you were
- * editing." and "Use Charles Pan’s"; the app; a coding agent as the task's list
- * names it, or its row where the list holds no such agent.
- */
 export function conflictWords(
   edit: DescriptionLastEdit | undefined,
   place: EditPlace,
@@ -140,7 +105,6 @@ export function conflictWords(
   };
 }
 
-/** What an actor last did in the description, in a card's line; none where no section's last change is theirs. */
 function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): string | undefined {
   const activity = latestActivity(place.sections, actor);
   if (activity === undefined) return undefined;
@@ -148,7 +112,6 @@ function latestLine(actor: Actor, place: EditPlace, now: number, ago: boolean): 
   return ago ? `${words} · ${agoText(activity.at, now)}` : words;
 }
 
-/** A person named in a line: their card says what they last did in the description; someone the window cannot name hangs their own. */
 function PersonRef({
   actor,
   place,
@@ -168,7 +131,6 @@ function PersonRef({
   return <ActorRef actor={actor} card={card} sentence={sentence} faceOnly={faceOnly} />;
 }
 
-/** The writer of an edit as one target in a line, or their face alone; nothing for the description before history, which nobody wrote. */
 function WriterRef({
   edit,
   place,
@@ -193,7 +155,6 @@ function WriterRef({
   if (actor.kind !== ACTOR_KIND.AGENT) {
     return <PersonRef actor={actor} place={place} sentence={sentence} faceOnly={faceOnly} />;
   }
-  // An agent the task's list does not hold is named alone, with no card to read and no tab to open.
   if (agent === undefined || place.agents === undefined) {
     return <ActorRef actor={actor} faceOnly={faceOnly} />;
   }
@@ -209,18 +170,12 @@ function WriterRef({
   );
 }
 
-/**
- * The reader with the members of the directory standing around the caller,
- * the same while neither changes, so a reader handed over afresh on each draw
- * leaves what is drawn from it as it was.
- */
 export function useEditReader(reader: TaskReader): EditReader {
   const { members, former } = useMemberDirectory();
   const { readerId } = reader;
   return useMemo(() => ({ readerId, members, former }), [readerId, members, former]);
 }
 
-/** Who last wrote each of `edits`, each once, in the order they stand, as a facepile draws them. */
 export function editorsOf(
   edits: readonly DescriptionLastEdit[],
   place: EditPlace,
@@ -228,14 +183,6 @@ export function editorsOf(
   return distinctActors(edits.flatMap((edit) => writerOf(edit, place) ?? []));
 }
 
-/**
- * Who wrote an edit: "[${PRODUCT_NAME}] ${PRODUCT_NAME}", "[Charles] Charles Pan". `sentence`
- * names the reader "you" inside a line that leads with other words. With
- * `faceOnly` it is the writer's face alone, their name said in the card it
- * hangs, for a section's byline, which keeps to a heading's end. Drawn
- * inside an `.actor-line`, whose words carry their own spaces. Nothing for
- * the description before history.
- */
 export function EditedBy({
   edit,
   place,

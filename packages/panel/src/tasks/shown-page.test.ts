@@ -12,12 +12,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { ReplyDoorProvider } from "./reply-to-selection.js";
 import { ShownPage } from "./shown-page.js";
 
-/**
- * shown-page.test.ts -- words selected in a page drawn in a transcript offer
- * Reply, whose press lays them into the message box and tells the page to
- * let them go, and offer nothing where no box takes them. Synthetic page.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const PAGE = "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f";
 const WORDS = "Signups fell 12% in week 3.";
@@ -32,7 +26,6 @@ afterEach(() => {
 
 beforeEach(() => fakeAppPlatform({ pageFrameUrl }));
 
-/** The page drawn, under a box's door where one is handed; answers its frame's window. */
 function drawPage(door: ((reply: string) => void) | undefined): Window {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -53,7 +46,6 @@ function drawPage(door: ((reply: string) => void) | undefined): Window {
   return framed;
 }
 
-/** The frame saying `WORDS` are selected in it. */
 function selectInFrame(framed: Window): void {
   const selected = {
     path: "body > p",

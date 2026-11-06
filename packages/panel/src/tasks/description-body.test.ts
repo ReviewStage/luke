@@ -33,16 +33,8 @@ import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import type { TaskLooks } from "./use-task-looks.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * description-body.test.ts -- the open task's document says who created it and who last wrote it,
- * under its title and on each section, each writer on their own face hanging
- * their card, and the time opening the version history. Synthetic people.
- */
 
 const TASK: Task = {
   ...DOCUMENT_TASK,
@@ -52,7 +44,6 @@ const TASK: Task = {
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const LEE = { userId: "user-lee", name: "Lee Park" };
-/** Who the workspace's work names but left, as the read of who left answers. */
 const LEE_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
 const FORMER = [{ ...LEE, pictureUrl: LEE_PICTURE }];
 
@@ -82,12 +73,6 @@ const AGENT: AgentSummary = {
   brief: AGENT_BRIEF.PROMPT,
 };
 
-/**
- * Every root a test drew into, latest last. Note that each is unmounted once
- * the test ends, not only the latest, because a root left standing stays
- * subscribed to the window's state and commits on a later delivery, after
- * the file's window is gone.
- */
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -98,7 +83,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A root over `container`, unmounted once the test ends. */
 function mountRoot(container: HTMLElement): Root {
   const root = createRoot(container);
   roots.push(root);
@@ -111,21 +95,16 @@ async function settle(): Promise<void> {
   });
 }
 
-/** What the document is drawn with beyond the description: who reads it, its looks, its agents, and the history's door. */
 interface Drawn {
   readonly readerId?: string;
   readonly looks?: TaskLooks;
   readonly agents?: EditAgents;
   readonly onShowHistory?: (save: number | undefined) => void;
-  /** The account signed in on this Mac, as main's document names it; none where the test names nobody. */
   readonly account?: { readonly id: string; readonly email: string; readonly name: string };
-  /** The task's own page, where each section and the title carry a ⋯. */
   readonly sectionLinks?: NonNullable<React.ComponentProps<typeof DescriptionBody>["sectionLinks"]>;
-  /** The account's experiments, Descriptions alone on where none are named. */
   readonly experiments?: ExperimentChoices;
 }
 
-/** The description drawn in a workspace whose people the host holds as `MEMBERS` and `FORMER`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
@@ -155,12 +134,10 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   return container;
 }
 
-/** `TASK` as last edited as `edit` says, now, over the document and on its Goal section. */
 function editedAs(edit: Omit<DescriptionLastEdit, "at">, at = Date.now()): Task {
   return { ...TASK, lastEdit: { ...edit, at }, sectionEdits: [{ section: "Goal", ...edit, at }] };
 }
 
-/** The words of the line over the document and of the Goal section's byline, as a screen reader reads them. */
 function editedLines(view: HTMLElement): (string | undefined)[] {
   return [
     lineWords(view.querySelector(".description-byline-edited")),
@@ -168,7 +145,6 @@ function editedLines(view: HTMLElement): (string | undefined)[] {
   ];
 }
 
-/** The words a line shows, what only a screen reader hears left out. */
 function shownWords(line: Element | null): string | undefined {
   const copy = line?.cloneNode(true);
   if (!(copy instanceof Element)) return undefined;
@@ -177,7 +153,6 @@ function shownWords(line: Element | null): string | undefined {
   return lineWords(copy);
 }
 
-/** The card hung once the first of `selector` in the Goal section's byline, or in `line`, is hovered. */
 function cardOf(
   view: HTMLElement,
   selector = "[data-actor-ref]",
@@ -198,7 +173,6 @@ test("the saved body is drawn as Markdown", () => {
 });
 
 test("under its title the description says who created the task and when, then when it was last edited, and a description nobody edited says only who created it", async () => {
-  // Note that only the date is fixed, so the description's minute reads `now` and nothing waits on a timer.
   const now = Date.UTC(2026, 9, 14, 12);
   vi.useFakeTimers({ now, toFake: ["Date"] });
   const day = 24 * 60 * 60 * 1000;
@@ -207,7 +181,6 @@ test("under its title the description says who created the task and when, then w
     ...started,
     lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, duringCall: false, by: DEAN, at: now },
   };
-  // A reader the members read does not list, signed in on this Mac, whose task the service names by its owner's id alone.
   const GRACE = { id: "user-grace", email: "grace@example.com", name: "Grace Hopper" };
   const { createdBy: _named, ...byOwnerAlone } = { ...started, ownerId: GRACE.id };
 

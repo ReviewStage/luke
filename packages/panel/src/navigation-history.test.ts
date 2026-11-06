@@ -58,7 +58,6 @@ const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
 
 const roots: Root[] = [];
 
-/** Takes down every window mounted so far, and the commands each offered. */
 function unmountAll(): void {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
@@ -70,12 +69,10 @@ beforeEach(() => fakeAppPlatform(QUIET_PANEL));
 
 afterEach(unmountAll);
 
-/** The leave ask a test stands while a page holds unsaved work, or nothing. */
 interface LeaveAskHolder {
   current: LeaveAsk | undefined;
 }
 
-/** The Tasks tab whose leave guard asks through whatever `ask` holds as a door is taken, and passes while it holds nothing. */
 function askingThrough(ask: LeaveAskHolder, base: TasksControl): TasksControl {
   return {
     ...base,
@@ -92,7 +89,6 @@ function askingThrough(ask: LeaveAskHolder, base: TasksControl): TasksControl {
   };
 }
 
-/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own under the window's router as a window's root mounts one, and its addresses written from the window's own Copy link, as the root wires it. */
 function mount(
   initial: TasksControl,
   held: TestWindowRouter = windowRouter(),
@@ -108,7 +104,6 @@ function mount(
   function Probe() {
     const [standing, setTasks] = useState(initial);
     restand = setTasks;
-    // The Board and a person's page stand where the router does, as the window's root reads them, and are left for the state's place.
     board = useBoardRoute({ onClose: () => history?.onLeaveRouted() });
     person = usePersonRoute({ onClose: () => history?.onLeaveRouted() });
     automations = useAutomationsRoute({ onClose: () => history?.onLeaveRouted() });
@@ -138,7 +133,6 @@ function mount(
               )?.id,
       },
     };
-    // Admin stands where the router does, as the window's root reads it.
     admin = useAdminRoute({
       listedSlug: () => tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug,
       onClose: () => undefined,
@@ -162,13 +156,11 @@ function mount(
       tasks,
     });
     useHistoryMouseButtons(history, true);
-    // The Tasks tab as the shell hands it on, its Escape through the history.
     shown = throughHistory(tasks, history.lists);
     return null;
   }
   const container = document.createElement("div");
   document.body.append(container);
-  // Each window reads its state under a registry of its own, as the window's root provides one.
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(held.provide(onRegistry(AtomRegistry.make(), createElement(Probe)))));
@@ -178,35 +170,24 @@ function mount(
       return history;
     },
     stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
-    /** Opens the Board of the workspace at `workspace` by the router, as the Board's own doors do. */
     openBoard: (workspace: string) => act(() => board?.onOpen(workspace)),
-    /** Opens a person's page by the router, as a press on their name does. */
     openPerson: (userId: string, name: string | undefined, workspace: string) =>
       act(() => person?.onOpen(userId, name, workspace)),
-    /** Opens an Automations page by the router, as its own doors do. */
     openAutomations: (to?: AutomationsPlace) => act(() => shown?.automationsView.onOpen(to)),
-    /** The name the person's page standing was opened with. */
     personName: () => person?.name,
-    /** Leaves the routed place standing for `tasks`, the place a door into the window's state opens, in one move as the door makes it. */
     leaveFor: (tasks: TasksControl) =>
       act(() => {
         history?.onLeaveRouted();
         restand?.(tasks);
       }),
-    /** Where the router's history stands. */
     at: () => held.history.location.pathname,
-    /** Opens an Admin view by the router, as Admin's own doors do. */
     openAdmin: (view: AdminView) => act(() => admin?.onOpen(view)),
-    /** Presses Escape where it reaches the Tasks tab, as the window's own listener hands it on. */
     escape: () => act(() => void shown?.back()),
-    /** The address of every entry the router's history holds, oldest first. */
     addresses: () => held.addresses(),
-    /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
     moveHistory: (delta: number) => act(() => held.history.go(delta)),
   };
 }
 
-/** Lets every promise settled so far run its continuations, the window's state among them. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -333,7 +314,6 @@ test("a move landing where the history no longer holds the window's step, while 
   assert.ok(task !== undefined);
 
   ask.current = (leave) => asked.push(leave);
-  // The home page's entry from a visit the trail no longer holds, as a browser lands on one long behind.
   act(() => held.history.push("/app", { step: { ...home, index: home.index + 10 } }));
   assert.deepEqual(homes, [], "the move waits on the ask");
   assert.deepEqual(
@@ -350,7 +330,6 @@ test("a move landing where the history no longer holds the window's step, while 
 
 test("a move landing on an entry holding no step opens Home, as a page loaded there does, and Home writes its step on it", () => {
   const homes: string[] = [];
-  // An entry no window wrote, as one the page first loaded on, behind the one the window opens on.
   const loaded = () =>
     createMemoryHistory({ initialEntries: ["/acme/inbox", "/app"], initialIndex: 1 });
   const held = windowRouter(loaded());
@@ -375,7 +354,6 @@ test("a move landing on an entry holding no step opens Home, as a page loaded th
   assert.ok(savesStep(home.history.location));
 });
 
-/** The window on the Inbox, or on the task `onTask` stands, each Inbox opened recorded in `inboxes` and each task left in `left`. */
 function inboxOrTask(
   onTask: boolean,
   inboxes: string[],
@@ -635,7 +613,6 @@ const PLATFORM = {
   github: null,
 };
 
-/** A task drawn in Acme, the workspaces as `workspaces` lists them, numbered `number` in it where given. */
 function onTask(workspaces: TasksControl["workspaces"], number?: number): TasksControl {
   const task = { ...DOCUMENT_TASK, workspaceId: ACME.id };
   return tasksControl({
@@ -806,7 +783,6 @@ test("an Inbox told no column of its own until an item stands alone in it takes 
   assert.equal(addresses.at(-1), `/acme/inbox/${ITEM.itemId}`);
 });
 
-/** A press of the pointer, as lands before whatever door it opens. */
 function press(): void {
   act(() => {
     globalThis.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
@@ -817,7 +793,6 @@ const AGENT_A = { agent: "agent-a" };
 const AGENT_B = { agent: "agent-b" };
 const AGENT_C = { agent: "agent-c" };
 
-/** The task open on the column's tab and the side panel's tab given, or the panel shut, its strips holding `agents`, every tab each strip is asked to show recorded in `shown`, and the panel shut as `side:shut`; `opened` counts the things a link opened in the panel. */
 function onTabs(input: {
   column: typeof AGENT_A | undefined;
   side?: SidePanelTab | undefined;
@@ -854,10 +829,8 @@ function onTabs(input: {
   });
 }
 
-/** Each step named as the window's root names the one it stands on (`stepTitle`). */
 const namedAsShown = (tasks: TasksControl): StepTitle | undefined => stepTitle(undefined, tasks);
 
-/** The task the window lists, under `name`, its row naming agent A under `agentTitle` where one is given. */
 function listedTask(name: string, agentTitle?: string): TaskSummary {
   const task: TaskSummary = {
     id: TASK_ID,
@@ -879,7 +852,6 @@ function listedTask(name: string, agentTitle?: string): TaskSummary {
   return { ...task, agents };
 }
 
-/** Agent A as the open task's agents read it, under `title`. */
 function openAgent(title: string): AgentSummary {
   return {
     id: AGENT_A.agent,
@@ -911,7 +883,6 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
     detail: "Token renewal",
   });
 
-  // The task's row no longer names the agent: its tab keeps the name it had.
   window.stand(tasksControl({ tasks: [listedTask("Auth rewrite")] }));
   assert.deepEqual(window.history().steps.back[0]?.title, {
     label: "Auth rewrite",
@@ -1087,7 +1058,6 @@ test("a step on a tab since closed is passed over by Back, which goes back to th
   window.stand(onTabs({ column: AGENT_B, shown }));
   press();
   window.stand(onTabs({ column: AGENT_C, shown }));
-  // Agent B's tab closed from the strip, leaving the column on C.
   window.stand(onTabs({ column: AGENT_C, agents: [AGENT_A, AGENT_C], shown }));
 
   act(() => window.history().onBack());
@@ -1139,11 +1109,9 @@ test("a task opened again before its agents are read keeps the column it was las
   window.stand(onTabs({ column: AGENT_B, shown }));
   press();
   window.stand(onTabs({ column: AGENT_C, shown }));
-  // Agent B's tab closed from the strip, then the window goes home.
   window.stand(onTabs({ column: AGENT_C, agents: [AGENT_A, AGENT_C], shown }));
   press();
   window.stand(tasksControl());
-  // The task opened again, its agents on their way.
   press();
   const unread = onTabs({ column: undefined, shown });
   window.stand({ ...unread, mainTabs: { ...unread.mainTabs, tabs: [], openAgents: undefined } });
@@ -1199,7 +1167,6 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
     "and the steps passed lie ahead, the nearest first",
   );
 
-  // Agent B's tab closed: its step is no longer listed.
   window.stand(onTabs({ column: AGENT_A, agents: [AGENT_A, AGENT_C], shown }));
   assert.deepEqual(
     window.history().steps.forward.map((step) => step.title?.detail),
@@ -1207,7 +1174,6 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
   );
 });
 
-/** Each step named as the window's root names the one it stands on. */
 function stepTitleOf(tasks: TasksControl): StepTitle | undefined {
   return stepTitle(undefined, tasks);
 }
@@ -1259,22 +1225,18 @@ test("each surface the window opens is counted once, by its kind and layout alon
   const window = mount(onTabs({ column: undefined }));
   assert.deepEqual(counted, [opened("task")]);
 
-  // The same place drawn again, as a render or a state patch does, counts nothing.
   window.stand(onTabs({ column: undefined }));
   assert.equal(counted.length, 1);
 
-  // The column keeps its plan while the side panel opens a file: one more surface, and only that.
   window.stand(onTabs({ column: undefined, side: file }));
   assert.deepEqual(counted.slice(1), [opened("files")]);
 
-  // The column moving to an agent opens it; the file stays open and is not counted again.
   window.stand(onTabs({ column: AGENT_A, side: file }));
   assert.deepEqual(counted.slice(2), [opened("agent")]);
 
   window.stand(tasksControl({ inboxView: { ...tasksControl().inboxView, open: true } }));
   assert.deepEqual(counted.slice(3), [opened("inbox")]);
 
-  // The task's Overview in the column and its Inbox in the side panel are two panes, each counted.
   window.stand(onTabs({ column: undefined, side: SIDE_PANEL_TAB.INBOX }));
   assert.deepEqual(counted.slice(4), [opened("task"), opened("inbox")]);
 });

@@ -8,22 +8,10 @@ import { installEditorLayout } from "../testing/composer.js";
 import type { EditorAnchors, DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * A comment thread's words in the real editor: marked as it opens with
- * nothing handed over and the text written as it was; reported where they
- * stand as words are typed before them; gone from the report, though still
- * carried, once deleted; back with their words on undo, and gone again on
- * redo; and all of it counted in a text saved with Windows line endings as
- * it was given. Threads opened and closed while the editor stands mark and
- * unmark their words with no remount, and a thread whose words were deleted
- * here stays carried while it is open. Synthetic description.
- */
-
 const THREAD = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
 
 const OPENED = "5c2d8e41-3b7a-4f09-8d6e-1a4b9c7f2e30";
 
-/** Words over emphasis, which a block re-printed rather than written as its source would spell otherwise. */
 const EMPHASIS = "The email follows the _mock_.";
 
 const WORDS = "Admins can withdraw an invite.";
@@ -39,7 +27,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text, with the thread's words anchored unless it opens with none, and every draft and report it handed over. */
 function mounted(text = TEXT, marked = true) {
   const drafts: { markdown: string; anchors: EditorAnchors | undefined }[] = [];
   const host = document.createElement("div");
@@ -60,7 +47,6 @@ function mounted(text = TEXT, marked = true) {
   const element = host.querySelector<TiptapEditorHTMLElement>(".description-document-text");
   const editor = element?.editor;
   assert.ok(editor, "the editor is running");
-  /** Where the words stand in the editor's document. */
   const spanOf = (words: string) => {
     let at: number | undefined;
     editor.state.doc.descendants((node, position) => {
@@ -80,7 +66,6 @@ function mounted(text = TEXT, marked = true) {
     assert.ok(draft, "a draft was handed over");
     return draft;
   };
-  /** The words the last draft reports the thread on, or nothing where it reports none. */
   const anchored = () => {
     const { markdown, anchors } = last();
     const anchor = anchors?.anchors.find((each) => each.thread === THREAD);
@@ -183,7 +168,6 @@ test("a thread opened while the editor stands marks its words, unsaved words typ
   handle.replaceAnchors(TEXT, [{ thread: OPENED, from, to: from + EMPHASIS.length }], [OPENED]);
 
   assert.equal(drafts.length, typed);
-  // Note that the mark is drawn in pieces either side of the emphasis it spans.
   const marked = [...host.querySelectorAll(`mark[data-threads~="${OPENED}"]`)];
   assert.equal(marked.map((mark) => mark.textContent).join(""), "The email follows the mock.");
   assert.equal(handle.markdown(), TEXT.replace("Approach", "Approach and scope"));

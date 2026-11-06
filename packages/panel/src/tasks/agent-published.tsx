@@ -36,60 +36,19 @@ import { useMentionDoors } from "./task-mentions.js";
 import { useLinkStanding } from "./use-link-standing.js";
 import { linkPressOf } from "./use-open-link.js";
 
-/**
- * agent-published.tsx -- what an agent published, on its tab: the pull request's row pinned over the box, or the branch's chip at the box's foot while no pull request stands.
- *
- * Once the agent has opened a pull request, its row stands over the box,
- * docked there the way the to-do list is (`agent-tab.tsx`), whether the
- * agent is still at work or has ended, and never in the transcript, so it
- * is always in reach and drawn once. The row wears the pull request's mark
- * (`pull-request-mark.tsx`) and says the number and title, that the checks
- * failed where they did, where the pull request stands only where that
- * changes what the developer would do, and the lines added and removed. A
- * press of it opens its Pull request tab in the side panel
- * (`agent-pull-request-tab.tsx`) where a panel takes it, and GitHub's page
- * otherwise; a right-click offers what a press does not: copying its
- * GitHub link, the branch's name, or the command that checks it out, and
- * the pull request on GitHub, where the press opened its tab. The pointer resting on it hangs the
- * card the pull request's chip hangs (`mention-chip.tsx`): its key and
- * state, size, who opened it and when, branches, labels, and counts, as
- * the workspace's GitHub App answers them (`use-link-standing.ts`).
- *
- * With a branch pushed and no pull request yet, the box's foot wears a
- * chip naming the branch instead, after the + and in the composer's pill
- * (`../chip.tsx`), its name in the code face: a press opens it compared on
- * GitHub, and its ⋯ and right-click offer the same copies and Open on GitHub. A composer too narrow
- * for its words draws the chip's mark alone, its hint and label still
- * naming it; the chip stands in a box of the composer's own that its ⋯
- * finds it by. Nothing here is drawn before the service has said what
- * stands, so a tab on an agent still reading the repository wears nothing
- * yet.
- */
-
-/** The doors the chip and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
 export interface PublishedDoors {
   openGitHub: (url: string) => void;
   copy: (words: string, label: string) => void;
-  /** Opens the agent's pull request in a tab of the side panel's own; none where the view stands in no panel. */
   openPullRequest?: (() => void) | undefined;
 }
 
 const MENU_LABEL = "Branch actions";
-/** What the branch's chip is, which names its ⋯. */
 const BRANCH_THING = "Branch";
-/** What the pull request's row is, which names its ⋯ and its menu. */
 const PUBLISHED_THING = "Pull request";
 const CHECKS_FAILING = "Checks failing";
 
-/** A pull request's state and lines, its mark first, a glyph's gap apart. */
 export const PUBLISHED_META_CLASS = "agent-published-meta inline-flex items-center gap-icon-gap";
 
-/**
- * What a ⋯ and right-click offer: the pull request's address on GitHub, its
- * Copy GitHub link, where one stands, and the branch's name and the command
- * that checks it out, each to the clipboard, where a branch is named; then
- * `opens`, a page of GitHub's, opened there.
- */
 function branchActions(
   branch: string | null,
   doors: PublishedDoors,
@@ -128,7 +87,6 @@ function branchActions(
   return [copies, open].filter((group) => group.length > 0);
 }
 
-/** What the box's foot wears while a branch stands with no pull request: the branch's chip, which opens it compared on GitHub, and its ⋯, which its right-click drops too, offering the copies; nothing otherwise, the pull request's row standing over the box instead. */
 export function BranchChip({
   published,
   doors,
@@ -136,7 +94,6 @@ export function BranchChip({
 }: {
   published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
-  /** Whether the composer is too narrow for the chip's words, so it draws its mark alone. */
   narrow?: boolean;
 }): ReactNode {
   const menu = useMenu(true);
@@ -144,7 +101,6 @@ export function BranchChip({
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
   if (pullRequest !== null || branch === null) return null;
-  // Note that the menu holds the copies alone, because the chip's own press already opens the branch on GitHub.
   const actions = branchActions(branch, doors, undefined, undefined);
   return (
     <>
@@ -180,7 +136,6 @@ export function BranchChip({
   );
 }
 
-/** The lines a change adds and removes, as GitHub counts them: green, then red. */
 export function LinesChanged({
   additions,
   deletions,
@@ -195,21 +150,18 @@ export function LinesChanged({
   );
 }
 
-/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click, a long press or the menu key offers the rest, a finger's row drawing no ⋯ so the title keeps its room, and the pointer resting on it hangs the pull request's chip's card, which names it whole. A phone's narrow row gives up its state's word, and any narrow row the checks', then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   branch,
   doors,
 }: {
   pullRequest: AgentPullRequest;
-  /** The branch the pull request is from, whose name and checkout its menu copies; none where it is not known. */
   branch: string | null;
   doors: PublishedDoors;
 }): ReactNode {
   const state = pullRequestStateWord(pullRequest);
   const coarse = useCoarsePointer();
   const inPanel = doors.openPullRequest;
-  // Note that Open on GitHub is offered only where a press opens the tab instead.
   const actions = branchActions(
     branch,
     doors,
@@ -238,7 +190,6 @@ export function PublishedRow({
   return (
     <div className="agent-published">
       <List label="Pull request" variant={LIST_VARIANT.CARD} fingerTall>
-        {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
         <RowHintOptions card={card}>
           <ListRow
             leading={<PullRequestMark pullRequest={pullRequest} />}

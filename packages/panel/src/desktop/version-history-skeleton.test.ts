@@ -16,12 +16,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
-/**
- * version-history-skeleton.test.ts -- while a description's versions are read, the
- * list stands its blocks in a version's own row and the page in its own
- * bar, so both land where their blocks stood. Synthetic description.
- */
-
 const ignore = (): void => undefined;
 
 const roots: Root[] = [];
@@ -38,7 +32,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The description's version history over the window, its list as `list` says. */
 function drawn(
   list: DescriptionHistoryControl["list"],
   room: ShellRoom = SHELL_ROOM.WIDE,

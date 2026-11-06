@@ -16,15 +16,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TranscriptTodosDock, TranscriptTool } from "./transcript-blocks.js";
 
-/**
- * fold-preview.test.ts -- a fold whose closed line previews what its body
- * says drops that preview while the body is drawn, opened or drawn hidden
- * by a find, and says it again once the body is gone: a read's path, a
- * search's pattern, a command, the description card's first line, and the to-do
- * dock's item. Words the body does not say, a command's description and a
- * written file's path, stay. Synthetic calls and a synthetic description.
- */
-
 const roots: Root[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -36,7 +27,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The element drawn into the document, under a find looking through it where `finding`. */
 function drawn(element: ReactElement, finding = false): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -52,17 +42,14 @@ function drawn(element: ReactElement, finding = false): HTMLElement {
   return container;
 }
 
-/** What the fold's line says now. */
 function line(drawing: HTMLElement): string {
   return drawing.querySelector("summary")?.textContent ?? assert.fail("No fold line");
 }
 
-/** Presses the fold's line, opening a closed fold or closing an open one. */
 function press(drawing: HTMLElement): void {
   act(() => drawing.querySelector<HTMLElement>("summary")?.click());
 }
 
-/** A finished call of `kind` about `subject`, its input `input`. */
 function call(kind: CallKind, subject: string, input: ToolBlock, description?: string) {
   return createElement(TranscriptTool, {
     kind,
@@ -145,7 +132,6 @@ test("an open row whose body says its subject drops its verb's colon, which its 
 
 const PLAN_LINE = "Refuse a withdrawn invite link the way a used one is refused";
 
-/** The description an agent was handed, as its transcript opens on it. */
 function handedDescription(text: string) {
   return createElement(AgentMessage, {
     message: { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] },

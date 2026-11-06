@@ -12,11 +12,6 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { OpenAddressesHere } from "./use-open-link.js";
 
-/**
- * pull-request-call.test.ts -- a pull request an agent was refused is a fold
- * that says it opened none and shows the reason.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => fakeAppPlatform(QUIET_PANEL));
@@ -32,7 +27,6 @@ const OPEN = {
   body: "Adds the export.",
 };
 
-/** The agent's turn holding the one `open_pull_request` call, drawn with the links its place opens recorded. */
 function drawn(output: WireRecord | undefined) {
   const message: AgentTranscriptMessage = {
     id: "turn",

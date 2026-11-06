@@ -26,19 +26,12 @@ import { sidebarProps } from "./testing/desktop-sidebar.js";
 import { keyPressed, reportEventTiming } from "./testing/event-timing.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
-/**
- * panel-spans.test.ts -- what the window times of its own start and of a key pressed in a timed box: its start to its first surface drawn and to the sidebar's first task list read, each once, and a keystroke to the paint after it, saying how long it waited and nothing of the key.
- *
- * The browser's Event Timing is answered by the test (`testing/event-timing.ts`); the clock is a fake date.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** The one task the sidebar's first read lists. */
 const INVITES: TaskSummary = {
   id: "0a1b2c3d-0000-4000-8000-100000000001",
   workspaceId: "0a1b2c3d-0000-4000-8000-000000000001",
@@ -50,7 +43,6 @@ const INVITES: TaskSummary = {
 
 const roots: Root[] = [];
 
-/** What the window recorded, each span as a caller reads it. */
 let spans: PanelSpan[] = [];
 let uninstall: () => void = () => undefined;
 
@@ -71,14 +63,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Lets an observer's report, and an effect's, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/** Each span recorded, by its name, how long it waited, and what it measured. */
 function recorded(): { name: string; startedAt: number; waited: number; measured: object }[] {
   return spans.map((span) => ({
     name: span.name,
@@ -88,7 +78,6 @@ function recorded(): { name: string; startedAt: number; waited: number; measured
   }));
 }
 
-/** The sidebar drawn over `tasks`, and what draws it again over the next. */
 async function sidebarOver(tasks: TasksControl): Promise<(next: TasksControl) => Promise<void>> {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -108,7 +97,6 @@ async function sidebarOver(tasks: TasksControl): Promise<(next: TasksControl) =>
   return draw;
 }
 
-/** A box whose keystrokes are timed under `name` while it stands. */
 function TimedBox({ name }: { name: Parameters<typeof useKeystrokeSpans>[0] }): React.JSX.Element {
   return createElement("div", { ref: useKeystrokeSpans(name) }, createElement("p"));
 }
@@ -240,7 +228,6 @@ test("a box gone, or one in a window that records nothing, times no key", () => 
   assert.deepEqual(recorded(), []);
 });
 
-/** The Inbox's two press spans, drawn over the rows the page holds and the thread it shows. */
 function InboxTimed({
   rows,
   shown,
@@ -254,7 +241,6 @@ function InboxTimed({
 }): null {
   useInboxOpenSpan(rows);
   const timeOpen = useInboxItemOpenSpan(shown, held);
-  // A press is made once, as the render that carries it commits.
   useEffect(() => {
     if (pressed !== undefined) timeOpen(pressed);
   }, [pressed, timeOpen]);

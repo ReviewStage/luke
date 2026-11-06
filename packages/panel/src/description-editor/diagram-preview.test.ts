@@ -8,15 +8,6 @@ import { installEditorLayout } from "../testing/composer.js";
 import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * diagram-preview.test.ts -- a Mermaid code block in the description editor stays
- * code, and the panel draws its diagram under it, out of the text: a block
- * in another language has none, the text saves as written, and a change to
- * the block's code asks for its diagram again, handing the code it held
- * before. The panel's drawing stands in as the code's own words. Synthetic
- * description.
- */
-
 const FLOW = "flowchart LR\n  Invite --> Join";
 
 const TEXT = `## Flow\n\n\`\`\`mermaid\n${FLOW}\n\`\`\`\n\n## Setup\n\n\`\`\`sh\npnpm install\n\`\`\`\n`;
@@ -30,7 +21,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text, each diagram drawn as the code it was asked for after the code it held before. */
 function mounted(markdown: string) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -54,7 +44,6 @@ function mounted(markdown: string) {
   return { host, handle, editor };
 }
 
-/** Each code block in the editor, its code, and what stands right under it. */
 function blocks(host: HTMLElement): [string | null, string | null][] {
   return [...host.querySelectorAll("pre")].map((pre) => [
     pre.textContent,

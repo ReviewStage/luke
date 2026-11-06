@@ -24,21 +24,16 @@ import { actMutation } from "../act-mutations.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
-/** What the toast says once a page's reset landed, by the group it reset. */
 const RESET_NOTES = {
   [SETTINGS_RESET_SCOPE.APPEARANCE]: "Appearance settings reset",
 } as const satisfies Record<SettingsResetScope, string>;
 
-/** What the page's reset says. */
 const RESET_LABEL = "Reset to defaults";
 
-/** What the toast says when an Undo could not write a setting back. */
 const UNDO_REFUSED_NOTE = "The settings could not be put back. Try again.";
 
-/** One setting as it stood, which an Undo writes back. */
 type HeldSetting = readonly [AppSettingField, AppSettingValue<AppSettingField>];
 
-/** Whether two readings of a setting say the same, a chord compared by its keys rather than by which object carries them. */
 function sameSetting(
   a: AppSettingValue<AppSettingField>,
   b: AppSettingValue<AppSettingField>,
@@ -46,14 +41,6 @@ function sameSetting(
   return a === b || JSON.stringify(a) === JSON.stringify(b);
 }
 
-/**
- * The group's settings the reset changed, as they stood before it: each
- * whose reading before differs from the store's answer after. Note that
- * the answer is what decides, not the defaults, because a setting the file
- * never held is read as what the launch resolved, and the reset leaves it
- * reading the same, so an
- * Undo writing it back would make it the file's own.
- */
 function changedBy(
   before: AppSettingsView,
   after: AppSettingsView,
@@ -61,19 +48,12 @@ function changedBy(
 ): readonly HeldSetting[] {
   return APP_SETTING_FIELDS.flatMap((field): HeldSetting[] => {
     if (APP_SETTING_SCHEMA[field].resetScope !== scope) return [];
-    // SAFETY: the value is the one this field holds, read from the settings by the field.
     const was = before[field] as AppSettingValue<AppSettingField>;
-    // SAFETY: as above, from the settings the reset left.
     const now = after[field] as AppSettingValue<AppSettingField>;
     return sameSetting(was, now) ? [] : [[field, was]];
   });
 }
 
-/**
- * Writes each setting back as it stood, one after another so a chord
- * written back is checked against the one before it, answering whether
- * every write was taken, with what refused the one that was not.
- */
 function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promise<Kept> {
   return held.reduce<Promise<Kept>>(
     (before, [field, value]) =>
@@ -92,25 +72,6 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
   );
 }
 
-/**
- * The one control that returns a whole page to its defaults, drawn only
- * while the page holds something to return — until then it could only offer
- * to change nothing, the same reason a shortcut's own reset waits for a
- * chord. It ends the page's title line, quiet as a note's own act is, since
- * the title is what names the group it resets. One press is one ask of the
- * store; the control rests until the store answers, and a refusal is said
- * in a toast held as a failure is, since the page's title line has no row
- * under it to say it in.
- * A reset that landed takes the control away with what it reset, so it is
- * said in a toast with an Undo, which writes back what the page held.
- * The control is `@repo/ui`'s quiet `Button`, its glyph in the button's icon
- * slot; on a phone, whose page ends its bar rather than its title line, it is
- * a glyph-alone `IconButton` in the bar's end corner, resting as the button would.
- *
- * The page resets only the rows it draws: it names the group's rows it
- * leaves out, Zoom in a browser, and the store keeps them inside the one
- * write, so nothing the reader could not see changes.
- */
 function ResetPageButton({
   scope,
   settings,
@@ -140,7 +101,6 @@ function ResetPageButton({
         });
         return result;
       }
-      // Note that a kept row never enters the Undo, because another window may have changed it since this page read it.
       const held = changedBy(before, appSettingsView(result.settings), asked).filter(
         ([field]) => !unseen.includes(field),
       );
@@ -159,9 +119,7 @@ function ResetPageButton({
       return result;
     });
   };
-  // Note that the reset is a mutation of the page's writes (`useSettingsWrites`), so the control rests while one by its key is out.
   const busy = useIsMutating({ mutationKey: actMutation(ACT_KIND.SETTINGS_RESET).mutationKey }) > 0;
-  // Note that a reset that never answered is said as a refused one is, since the control has no row to say it under.
   const run = (asked: SettingsResetScope) => {
     void reset(asked).catch((error: unknown) =>
       toast({
@@ -172,7 +130,6 @@ function ResetPageButton({
       }),
     );
   };
-  // Note that a phone's bar holds the reset as a glyph alone, since a ⋯ over its one item would only hide it.
   if (more !== undefined) {
     return (
       <IconButton
@@ -198,26 +155,20 @@ function ResetPageButton({
   );
 }
 
-/** Which page carries which group's reset. */
 const PAGE_RESET = {
   [SETTINGS_VIEW.APPEARANCE]: SETTINGS_RESET_SCOPE.APPEARANCE,
 } satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 
-/** The reset a page's title line carries, or a phone's ⋯ holding it; absent while the page stands at its defaults. */
 export function pageResetControl(
   view: SettingsView,
   settings: AppSettingsView | undefined,
   writes: SettingsWrites,
-  /** Which rows the page draws, so a change only to a row it leaves out, Zoom in a browser, offers no reset. */
   rows: SettingsRowsInput | undefined,
-  /** On a phone, whose bar ends with a ⋯ in its place, the page the ⋯ names ("Appearance actions"); none draws the button. */
   more?: string | undefined,
 ): React.JSX.Element | undefined {
   if (!(view in PAGE_RESET)) return undefined;
-  // SAFETY: `in` narrows the view to the pages the table names.
   const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
   if (!settings || !rows || !settingsScopeChanged(settings, scope, rows)) return undefined;
-  // Keyed to the page, so a press out on one page does not rest the next one's.
   return (
     <ResetPageButton
       key={scope}

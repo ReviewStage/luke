@@ -32,14 +32,6 @@ import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
 import { TasksPageHeld } from "./tasks-page-held.js";
 
-/**
- * tasks-list-select.test.ts -- the Tasks page's List chooses rows as a Mac's list does: ⌘-click two tasks and the bar's Mark done sets both Done at once, under one toast whose Undo puts both back where they stood; Set status and Move to section act on them all alike; a right-click on a chosen row offers the bar's acts on them all, one on a row not chosen its own menu; a finger's row draws no ⋯, its menu a long press away; and Esc lets the selection go.
- *
- * The List stands over the tasks tab itself (`useTasksTab`), so what a
- * press sends is what the service is asked, and what the rows draw is the
- * tab's own word.
- */
-
 const DEAN = "user-dean";
 
 const ACME = {
@@ -54,7 +46,6 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: DEAN, name: "Dean Stratakos", email: "dean@acme.dev", role: "owner" },
 ];
 
-/** A task of Acme's, numbered `number`, standing in `status`. */
 function task(number: number, name: string, status: TaskStatus): TaskSummary {
   return {
     id: `t-${number}`,
@@ -77,7 +68,6 @@ const TASKS = [
   task(36, "Self-hosting guide", TASK_STATUS.BACKLOG),
 ];
 
-/** Dean's one section in Acme. */
 const LAUNCH: TaskSection = {
   id: "section-launch",
   workspaceId: ACME.id,
@@ -85,7 +75,6 @@ const LAUNCH: TaskSection = {
   createdAt: 1,
 };
 
-/** Dean's sections, Launch holding the tasks given. */
 function sectionsHolding(taskIds: readonly string[]): TaskSections {
   return {
     sections: [LAUNCH],
@@ -94,7 +83,6 @@ function sectionsHolding(taskIds: readonly string[]): TaskSections {
   };
 }
 
-/** Acme's tasks as main holds them, read, and Dean's sections, Launch holding none. */
 function viewOf(
   tasks: readonly TaskSummary[],
   taskSections: TaskSections = sectionsHolding([]),
@@ -108,12 +96,10 @@ function viewOf(
   };
 }
 
-/** A status write's payload, read back as the act's own schema admits it. */
 const readStanding = Schema.decodeUnknownOption(
   Schema.Struct({ taskId: Schema.String, status: Schema.optionalKey(Schema.String) }),
 );
 
-/** A section write's payload, read back as far as a task's place goes. */
 const readPlaces = Schema.decodeUnknownOption(
   Schema.Struct({
     writes: Schema.Array(
@@ -122,21 +108,16 @@ const readPlaces = Schema.decodeUnknownOption(
   }),
 );
 
-/** A delete's payload, read back as far as its task goes. */
 const readDelete = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
 
 const roots: Root[] = [];
 
-/** Each status the service was asked to set, as task id and status, in order. */
 let asked: [string, string | undefined][] = [];
 
-/** Each place in a section the service was asked to put a task, as task id and section, in order. */
 let placed: [string, string | null][] = [];
 
-/** Each task the service was asked to delete, in order. */
 let deleted: string[] = [];
 
-/** The tasks the service refuses to delete. */
 const refusing = new Set<string>();
 
 beforeEach(() => {
@@ -159,29 +140,21 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the service's answers, and the redraws they cause, land. */
 async function settle(): Promise<void> {
   await act(async () => undefined);
   await act(async () => undefined);
 }
 
-/**
- * The Tasks page over the tasks tab, which reads `TASKS` as main holds them;
- * the service keeps every status asked of it. Answers how to hand the tab
- * the list main holds next, as the service's word reaches it.
- */
 async function mountPage(held?: TasksPageHeld): Promise<{
   page: HTMLElement;
   hold: (tasks: readonly TaskSummary[], taskSections?: TaskSections) => void;
 }> {
   let restand: ((view: TasksView) => void) | undefined;
-  /** A status the service keeps, written down. */
   const keepStanding = (payload: unknown) => {
     const standing = Option.getOrUndefined(readStanding(payload));
     if (standing !== undefined) asked.push([standing.taskId, standing.status]);
     return Promise.resolve(true);
   };
-  // Note that the status and section writes and deletes are sent on their mutations, which reach the act port, each answered as kept.
   fakeActPort({
     [ACT_KIND.TASKS_SET_STANDING]: keepStanding,
     [ACT_KIND.TASKS_WRITE_SECTION]: (payload) => {
@@ -241,7 +214,6 @@ async function mountPage(held?: TasksPageHeld): Promise<{
   };
 }
 
-/** Each group of the List: its name and its rows' keys, in order. */
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].map((group) => [
     group.getAttribute("aria-label") ?? "",
@@ -249,7 +221,6 @@ function groups(page: HTMLElement): [string, string[]][] {
   ]);
 }
 
-/** The press of the row of the task keyed `key`. */
 function pressOf(page: HTMLElement, key: string): HTMLButtonElement {
   const row = [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")].find(
     (each) => each.querySelector("[data-task-key]")?.textContent === key,
@@ -259,7 +230,6 @@ function pressOf(page: HTMLElement, key: string): HTMLButtonElement {
   return press;
 }
 
-/** ⌘-clicks the row of the task keyed `key`. */
 function commandClick(page: HTMLElement, key: string): void {
   act(() => {
     pressOf(page, key).dispatchEvent(
@@ -268,14 +238,12 @@ function commandClick(page: HTMLElement, key: string): void {
   });
 }
 
-/** The keys of the rows the List holds chosen, in the order drawn. */
 function chosen(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")]
     .filter((row) => row.querySelector('[data-card-press][data-selected="true"]') !== null)
     .map((row) => row.querySelector("[data-task-key]")?.textContent ?? "");
 }
 
-/** Presses the open menu's item named `name`. */
 function choose(name: string): void {
   const item = [
     ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
@@ -284,7 +252,6 @@ function choose(name: string): void {
   act(() => item.click());
 }
 
-/** Right-clicks the row of the task keyed `key`. */
 function rightClick(page: HTMLElement, key: string): void {
   act(() => {
     pressOf(page, key).dispatchEvent(
@@ -293,7 +260,6 @@ function rightClick(page: HTMLElement, key: string): void {
   });
 }
 
-/** The open menu's heading, and its items' labels, in order. */
 function openMenu(): { heading: string | undefined; items: string[] } {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
@@ -305,7 +271,6 @@ function openMenu(): { heading: string | undefined; items: string[] } {
   };
 }
 
-/** The selection bar's button named `name`. */
 function barButton(page: HTMLElement, name: string): HTMLButtonElement {
   const button = [...page.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button')].find(
     (each) => each.textContent?.trim() === name,
@@ -344,7 +309,6 @@ test("the page left and drawn again with what the shell holds for it keeps the t
   });
   const field = first.page.querySelector<HTMLInputElement>('input[aria-label="Find"]');
   assert.ok(field, "the find bar stands");
-  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "auth");
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -369,7 +333,6 @@ test("Status's Undo puts both tasks back at the status each stood at", async () 
   act(() => barButton(page, "Status").click());
   choose("Done");
   await settle();
-  // The service's word reaches the tab: both tasks now stand Done.
   hold(TASKS.map((each) => (each.number === 36 ? each : { ...each, status: TASK_STATUS.DONE })));
 
   const undo = newestToastAction();

@@ -22,28 +22,6 @@ import { keptLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 
-/**
- * page-review.tsx -- a member's review of a page: comments gathered on it and held in this window, unsent, until they send them together, and the section at the head of the page's comments column that lists, sends, and discards them.
- *
- * A comment on a page reaches the agent that wrote it the moment it is
- * posted, and each one wakes it again. A member with several things to say
- * instead starts a review (`PAGE_REVIEW_WORDS.START`), which holds the
- * comment here; while one is held, every comment on the page joins it
- * until it is sent or discarded. Held comments are the reader's alone, kept
- * for the account signed in, in the renderer's storage as drafts are
- * (`keptLines`), so a reload or a relaunch finds them; their files stay in
- * the window that attached them, as a draft's do. Each is pinned to its
- * element, dashed, until it is sent.
- *
- * Sending the review starts each comment's thread held (`held`), which
- * posts it for every member to read and hands it to no agent, then starts
- * the last naming the others along (`along`), which hands each agent in any
- * of them every thread in one message, so the agent revises the page once
- * (the service's `reviewHandedOver`). A start is taken once under its key,
- * so a send that stopped part way is simply sent again.
- */
-
-/** What the review's press, panel, and the field's presses say. */
 export const PAGE_REVIEW_WORDS = {
   TITLE: "Your review",
   START: "Start a review",
@@ -55,11 +33,9 @@ export const PAGE_REVIEW_WORDS = {
   PENDING: "Pending",
   WHOLE_PAGE: "Whole page",
   NOT_SENT: "Some comments could not be sent.",
-  /** A held pin's name. */
   pin: (count: number) => `${count} ${count === 1 ? "comment" : "comments"} in your review`,
 } as const;
 
-/** What Discard asks before it lets every held comment go. */
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard your review?",
   body: `This deletes every comment you held in it. ${IRREVERSIBLE_WORDS}`,
@@ -69,15 +45,11 @@ const DISCARD_QUESTION: DialogQuestion = {
   replayUnmasked: true,
 };
 
-/** One comment held in a member's review of a page, unsent. */
 export interface HeldComment {
   readonly planId: string;
   readonly pageId: string;
-  /** The key its thread is started under, which is its thread's id too. */
   readonly clientKey: string;
-  /** The version of the page it was written on. */
   readonly version: number;
-  /** The element it is on, as a thread being started names it; none for the whole page. */
   readonly element:
     | {
         readonly path: string;
@@ -90,7 +62,6 @@ export interface HeldComment {
   readonly attachments: readonly AgentAttachment[];
 }
 
-/** A held comment as the renderer's storage keeps it: all of it but its files. */
 const keptHeldSchema = Schema.Struct({
   planId: Schema.String,
   pageId: Schema.String,
@@ -107,7 +78,6 @@ const keptHeldSchema = Schema.Struct({
   words: Schema.String,
 });
 
-/** Every comment held in a review, the account signed in's alone, in the order they were held, kept across a relaunch but for their files. */
 const reviewAtom = keptLines<HeldComment, typeof keptHeldSchema.Type>({
   key: "app.pageReviews",
   kept: keptHeldSchema,
@@ -119,12 +89,10 @@ const reviewAtom = keptLines<HeldComment, typeof keptHeldSchema.Type>({
   idOf: (kept) => kept.clientKey,
 });
 
-/** Whether a held comment is the page's, on the plan named. */
 function heldOn(comment: HeldComment, planId: string | undefined, pageId: string): boolean {
   return comment.planId === planId && comment.pageId === pageId;
 }
 
-/** The start of a held comment's thread, under its key, which names the thread. */
 function startOf(comment: HeldComment): DescriptionCommentStart {
   return {
     id: comment.clientKey,
@@ -136,11 +104,6 @@ function startOf(comment: HeldComment): DescriptionCommentStart {
   };
 }
 
-/**
- * Sends a review: each comment but the last started held, in the order
- * held, then the last naming them all along. Answers whether every start
- * landed, stopping at the first that did not.
- */
 async function sendReview(
   control: DescriptionCommentsControl,
   comments: readonly HeldComment[],
@@ -149,7 +112,6 @@ async function sendReview(
   if (last === undefined) return true;
   const earlier = comments.slice(0, -1);
   for (const comment of earlier) {
-    // Note that each waits on the one before, so the threads stand in the order they were held.
     const answer = await control.start({ ...startOf(comment), held: true });
     if ("note" in answer) return false;
   }
@@ -161,21 +123,16 @@ async function sendReview(
   return !("note" in answer);
 }
 
-/** A page's review as its pane draws and presses it. */
 export interface PageReviewControl {
-  /** The comments held on the page, in the order they were held. */
   readonly held: readonly HeldComment[];
   readonly sending: boolean;
-  /** Whether the last send stopped part way, until the next. */
   readonly failed: boolean;
-  /** Holds a comment in the review, starting it where none was held. */
   readonly hold: (comment: Omit<HeldComment, "planId" | "pageId">) => void;
   readonly remove: (clientKey: string) => void;
   readonly discard: () => void;
   readonly send: () => void;
 }
 
-/** The review of one page of the plan the control holds, held in this window. */
 export function usePageReview(
   control: DescriptionCommentsControl | undefined,
   pageId: string,
@@ -218,19 +175,11 @@ export function usePageReview(
   };
 }
 
-/**
- * The reader's review at the head of a page's comments column, standing
- * while they hold comments on the page: each held comment as a comment card
- * marked Pending, with Remove (`cardOf`), then
- * Discard, which asks first, and Send. Once sent, the section goes with the
- * comments it held, which stand as threads in the list under it.
- */
 export function PageReviewSection({
   review,
   cardOf,
 }: {
   review: PageReviewControl;
-  /** A held comment drawn as a comment card, with its Remove; none while the review is on its way, since a start out may still post it. */
   cardOf: (comment: HeldComment, onRemove: (() => void) | undefined) => React.ReactNode;
 }): React.JSX.Element | null {
   const count = review.held.length;

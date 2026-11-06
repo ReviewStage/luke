@@ -31,20 +31,6 @@ import {
 import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
 import { appStateFirstRead, appStateNow } from "./use-app-state.js";
 
-/**
- * toast.test.ts -- the window's toasts against the window they stand in: a
- * window too short for three stands two, setting the oldest aside until
- * there is room again; one whose hold runs down with an action draws that
- * hold as its countdown; work under way settles into its own card in
- * place; an act's Undo toast takes the act back and stands for the Undo
- * hold, a row write's taken back once, as ⌘Z's entry, which the key then
- * finds gone; and a failure toast reports what failed to Sentry, which a recording
- * SDK stands in for, and copies the details of that report, but is not shown
- * where the connection already says why. jsdom lays nothing out, so the window's height is given. Synthetic
- * throughout.
- */
-
-/** The window's heights: its least, and one with room for three toasts. */
 const WINDOW = {
   SHORT: 520,
   TALL: 800,
@@ -60,25 +46,20 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   registry?.dispose();
-  // The window's one registry holds ⌘Z's lists, so the next test's window starts with none.
   rendererRegistry.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
-/** The trace a recording SDK says a report went in. */
 const TRACE_FIXTURE = "0af7651916cd43dd8448eb211c80319c";
 
-/** What a recording SDK answers of the trace standing: the scope's, with no span. */
 const TRACED: Pick<ShownFailureSentry, "getActiveSpan" | "getCurrentScope"> = {
   getActiveSpan: () => undefined,
   getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: TRACE_FIXTURE }) }),
 };
 
-/** An agent's Stop that we never heard back on, the fetch beneath it naming a credential. */
 function unheardStop(): ToastNotice {
-  // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
   const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
     status: 503,
     code: "sk-fixturecode01",
@@ -95,7 +76,6 @@ function unheardStop(): ToastNotice {
   };
 }
 
-/** A message the service refused as too long. */
 function refusedStart(): ToastNotice {
   return {
     words: "Messages are limited to 20,000 characters.",
@@ -109,14 +89,12 @@ function refusedStart(): ToastNotice {
   };
 }
 
-/** Hands the test the window's way of showing a toast. */
 function Shower(): null {
   show = useToast();
   work = useWorkingToast();
   return null;
 }
 
-/** The toasts, mounted as the window's root mounts them, in a window `height` tall. */
 function mount(height: number): void {
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
   const container = document.body.appendChild(document.createElement("div"));
@@ -133,7 +111,6 @@ function mount(height: number): void {
   );
 }
 
-/** A toast that stands until it is dismissed, as an agent's end does. */
 function persisting(words: string): ToastNotice {
   return {
     words,
@@ -143,21 +120,18 @@ function persisting(words: string): ToastNotice {
   };
 }
 
-/** What each toast standing says, oldest first, leaving out those on their way out. */
 function standing(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
 
-/** Lets `ms` pass on the faked clock the toasts' holds run down on. */
 function pass(ms: number): void {
   act(() => {
     vi.advanceTimersByTime(ms);
   });
 }
 
-/** The button a standing toast labels `label`. */
 function toastButton(label: string): HTMLButtonElement {
   const found = [
     ...document.querySelectorAll<HTMLButtonElement>(".ui-toast:not([data-leaving]) button"),
@@ -165,7 +139,6 @@ function toastButton(label: string): HTMLButtonElement {
   return found ?? assert.fail(`a toast button named ${label}`);
 }
 
-/** The window grown or shrunk to `height`, as a drag of its edge reports it. */
 function resizeTo(height: number): void {
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(height);
   act(() => window.dispatchEvent(new Event("resize")));
@@ -306,7 +279,6 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   act(() => show?.(refusedStart()));
   uninstall();
 
-  // A window whose document is not read yet says it is online and its account unread.
   const unexpected = {
     "failure.surface": "agent.stop",
     "failure.kind": "unexpected",
@@ -358,7 +330,6 @@ test("a failure toast reports what failed: an unexpected one as an error line an
     },
   });
   assert.equal(issue?.error.message, "No answer came back.");
-  // Sentry reads the causes beneath an issue's error too, so they go redacted, their frames among them.
   const beneath = issue?.error.cause;
   assert.ok(beneath instanceof Error);
   assert.equal(beneath.name, "TypeError");
@@ -434,7 +405,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       handState({}, { network: { online: true, reachable: false } });
-      // Note that we wait on the read itself, because it lands after a fiber's hops a busy runner can stretch past any one tick.
       yield* Effect.orDie(appStateFirstRead);
       assert.equal(appStateNow()?.network.reachable, false, "the window read the document");
       mount(WINDOW.TALL);
@@ -527,7 +497,6 @@ test("an Undo toast's Undo takes a row write back once, leaving ⌘Z nothing to 
   const pressed = pressRows(ROW_WRITE.TASK_PIN, { rows: () => drawn, send: sendPin }, [
     { id: taskId, after: { pinned: true, position: null } },
   ]);
-  // The pin is kept and drawn, as the host draws it.
   drawn = { ...IDLE_TASKS_VIEW, tasks: [{ ...task, pinnedAt: 3 }] };
   const undo = pressed.keep("Task pinned") ?? assert.fail("the pin's entry");
   act(() => show?.(undoToast("Task pinned", undo)));

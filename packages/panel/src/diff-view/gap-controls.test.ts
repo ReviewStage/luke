@@ -1,16 +1,5 @@
 // @vitest-environment jsdom
 
-/**
- * gap-controls.test.ts -- every gap between a file's hunks opens alike, as
- * Pierre draws it in Files changed: its words open all of it, short or long,
- * at the file's top, between two hunks, or at its foot, and its arrows the
- * next twenty lines; the trailing gap's words read the file first and open
- * it to its end; the keyboard presses each control as a click does; and a
- * gap that cannot open marks nothing. What a gap opens is read as the view
- * reads it to move a review thread onto its line (`./drawn-lines.ts`).
- * Synthetic files only.
- */
-
 import assert from "node:assert/strict";
 import {
   FileDiff,
@@ -25,40 +14,25 @@ import { GAP_CONTROL, GAP_CONTROL_ATTRIBUTE } from "./contract.js";
 import { drawnAmong } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
 
-/** A file of `length` lines, those numbered in `changed` changed. */
 function texts(length: number, changed: readonly number[]) {
   const lines = Array.from({ length }, (_line, at) => `const line${at + 1} = ${at + 1};`);
   const after = lines.map((line, at) => (changed.includes(at + 1) ? `${line} // changed` : line));
   return { before: `${lines.join("\n")}\n`, after: `${after.join("\n")}\n` };
 }
 
-/** `length` lines, `changed` changed, read whole, as a file Files changed has read for its gaps. */
 function changedFile(length: number, changed: readonly number[]): FileDiffMetadata {
   const { before, after } = texts(length, changed);
   return parseDiffFromFile({ name: "a.ts", contents: before }, { name: "a.ts", contents: after });
 }
 
-/**
- * A hundred and twenty lines, the thirtieth and the ninetieth changed: a
- * long gap at the top (1 to 25), one of two arrows between the hunks (35 to
- * 85), and a long one at the foot (95 to 120), each hunk holding four lines
- * around its change.
- */
 const LONG = { length: 120, changed: [30, 90] } as const;
 
-/**
- * Fifty lines, the fifteenth and the thirty-fifth changed: a short gap at
- * the top (1 to 10), one of one arrow between the hunks (20 to 30), and a
- * short one at the foot (40 to 50).
- */
 const SHORT = { length: 50, changed: [15, 35] } as const;
 
-/** Every line from `first` to `last`. */
 function run(first: number, last: number): number[] {
   return Array.from({ length: last - first + 1 }, (_line, at) => first + at);
 }
 
-/** The file drawn by Pierre as Files changed draws it, twenty lines a press, its gaps' controls marked. */
 function drawn(
   fileDiff: FileDiffMetadata,
   more: Pick<FileDiffOptions<string, undefined>, "loadDiffFiles"> = {},
@@ -77,7 +51,6 @@ function drawn(
   return { view, root };
 }
 
-/** The control of the gap before hunk `index` drawn in the gutter, where it is seen: its words, or its arrow opening `way`. */
 function control(root: ShadowRoot, index: number, which: "words" | "up" | "down" | "both") {
   const gap = `[data-gutter] [data-separator][data-expand-index="${index}"]`;
   const inner = which === "words" ? "[data-unmodified-lines]" : `[data-expand-${which}]`;
@@ -86,16 +59,13 @@ function control(root: ShadowRoot, index: number, which: "words" | "up" | "down"
   );
 }
 
-/** Clicks `element` as the pointer does. */
 function click(element: HTMLElement, shiftKey = false) {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, shiftKey }));
 }
 
-/** Lets the marks catch up with Pierre's drawing, which they follow as its rows change. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeAll(async () => {
-  // Note that the highlighter is loaded first, so Pierre draws each file at once.
   await getSharedHighlighter({
     themes: ["github-dark", "github-light"],
     langs: ["typescript"],
@@ -198,7 +168,6 @@ test("Enter or Space presses a control as a click does, and the focus stays on i
   assert.deepEqual(drawnAmong(view, run(35, 85)), run(35, 85));
 });
 
-/** The long file's patch alone, its first hunk, as Files changed reads it before a gap opens. */
 function patchOnly(): FileDiffMetadata {
   const patch = [
     "diff --git a/a.ts b/a.ts",

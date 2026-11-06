@@ -114,9 +114,7 @@ import {
   useTasksTab,
 } from "./use-tasks-tab.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
@@ -136,14 +134,8 @@ const OPEN: TasksView = {
   activeTaskId: TASK.id,
 };
 
-/** The descriptions the host holds for the window as a test's tab opens on them: the open task's, unless a test names others. */
 const HELD_DESCRIPTIONS: AppDescriptionDocuments = { [TASK.id]: { rows: { task: TASK } } };
 
-/**
- * Lays `descriptions` over whatever document the window was handed, as the host
- * holds them for it (`LIVE_READ.DESCRIPTION_DOCUMENT`), for a registry that reads
- * the document from here on.
- */
 function handDescriptions(descriptions: AppDescriptionDocuments): void {
   const handed = fakeAppBridgeCalls().requestAppState;
   fakeAppBridge({
@@ -154,7 +146,6 @@ function handDescriptions(descriptions: AppDescriptionDocuments): void {
     }),
   });
 }
-/** The shown act's payload, read back as the act's own schema admits it. */
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
@@ -169,28 +160,14 @@ interface Standing {
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxTask[];
   inboxTasks: readonly AppInboxTaskHolding[];
-  /** Whether an account is signed in to the window. */
   signedIn: boolean;
-  /** The signed-in account's email. */
   account: string;
-  /** The room the panel's stage gives. */
   room: ShellRoom;
-  /** Whether the window's history stands over the tab, as the panel's root keeps it. */
   history: boolean;
-  /** The descriptions the host holds for the window as the tab mounts (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
   descriptions: AppDescriptionDocuments;
-  /** Whether Admin stands over the tab, as the router stands it (`admin-route.ts`). */
   admin?: boolean;
 }
 
-/**
- * Mounts the hook alone over what the panel would hand it, and the descriptions the
- * host holds on the window's document, keeping every act it told, in order;
- * `answers` answers the acts it names, an act-port kind among them. A press is answered and kept as an asked act is, and stays
- * quiet, unless `press` hands the window's own press door, which goes out on
- * the act port the test installed.
- */
-/** The kinds the tab and its agents send on mutations or read through Query rather than their `acts`. */
 const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.AGENTS_START,
   ACT_KIND.AGENTS_STOP,
@@ -227,7 +204,6 @@ const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.TASKS_RESTORE,
   ACT_KIND.TASKS_START,
   ACT_KIND.TASKS_REFRESH,
-  // The reads asked through fetchQuery reach the act port too.
   ACT_KIND.TASKS_FIND,
   ACT_KIND.AGENTS_PAGE,
   ACT_KIND.AGENTS_INBOX_ITEM_HOME,
@@ -242,13 +218,9 @@ function mount(
   registry?: AtomRegistry,
 ) {
   const told: PortActKind[] = [];
-  /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
   const agentActs: PortActKind[] = [];
-  /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
-  /** Each time the tab opened Admin through its own door, by the view it named, none for its Overview. */
   const adminOpens: (AdminView | undefined)[] = [];
-  /** Each asked act's payload, unread until a test reads it as the act's schema would. */
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
   const record = (kind: PortActKind) => {
@@ -277,7 +249,6 @@ function mount(
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
   }
-  /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
   function WindowHistoryProbe({
     tasks,
     room,
@@ -299,7 +270,6 @@ function mount(
     });
     return null;
   }
-  /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
   function portAnswer<Kind extends PortActKind>(
     kind: Kind,
     ...args: unknown[]
@@ -310,14 +280,11 @@ function mount(
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
   }
-  // Note that the writes sent on mutations reach the act port, which answers them as the test's `acts` would.
   fakeActPort({
     ...fakeActPortCalls(),
-    // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
     ...(Object.fromEntries(
       SENT_ON_MUTATIONS.map((kind) => [kind, (payload: unknown) => portAnswer(kind, payload)]),
     ) as Partial<FakeActPort>),
-    // The one told payload the tests read, parsed as the boundary would, and answered as an asked one is.
     [ACT_KIND.AGENTS_SHOWN]: (payload) => {
       const shown = Option.getOrUndefined(readShown(payload));
       if (shown !== undefined) shownAgents.push(shown.agentId);
@@ -352,7 +319,6 @@ function mount(
         open: held.admin === true,
         onOpen: (view) => adminOpens.push(view),
       },
-      // The Board and a person's page are the router's, which the test's window router stands, each left for a place with no link.
       boardView: useBoardRoute({ onClose: leaveRouted }),
       personView: usePersonRoute({ onClose: leaveRouted }),
       automationsView,
@@ -367,11 +333,9 @@ function mount(
   }
   const container = document.createElement("div");
   document.body.append(container);
-  // The window's toast stands beside the tab, as the app draws it.
   const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
   const root = createRoot(container);
   roots.push(root);
-  // A fresh registry reads the document handed here, its descriptions among it, rather than one an earlier test handed.
   act(() => {
     root.render(
       windowRouter().provide(
@@ -385,13 +349,11 @@ function mount(
     shownAgents,
     adminOpens,
     payloads,
-    /** Every Settings link the tab followed, in order. */
     links,
     control: () => {
       assert.ok(control);
       return control;
     },
-    /** The window's history, where the tab was mounted with one. */
     history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
       standing = { ...standing, ...patch };
@@ -400,15 +362,8 @@ function mount(
   };
 }
 
-/**
- * Every root a test mounted. Note that each is unmounted inside `act` before
- * its page is cleared, because a root left standing keeps React's scheduler
- * working after the file ends, and its next tick, landing after the
- * environment is torn down, throws `window is not defined` outside any test.
- */
 const roots: Root[] = [];
 
-/** Takes down every tab mounted so far and clears the page: the window closed, as a quit or the test's end leaves it. */
 function closeWindow(): void {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -421,14 +376,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Lets the clipboard's answer, and the redraw it causes, land with no time passing. */
 const landed = Effect.promise(settle);
 
-/** Advances the clock the toast's hold waits on, then lets what fell due land. */
 const _advance = (millis: number) =>
   Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
 
-/** The newest toast's Undo. */
 function _undoButton(): HTMLButtonElement {
   const undo = newestToastAction();
   assert.ok(undo, "no Undo on the toast");
@@ -436,7 +388,6 @@ function _undoButton(): HTMLButtonElement {
   return undo;
 }
 
-/** One revision as the history lists it, written by the app on a call. */
 function revisionLine(seq: number) {
   return {
     seq,
@@ -448,10 +399,8 @@ function revisionLine(seq: number) {
 
 const _FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions: [] };
 
-/** A task other than the open one, which the host opens in its place. */
 const OTHER_TASK_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
-/** A task's row of the list, started at `createdAt`, with whatever pin it is given. */
 function _row(id: string, createdAt: number, marks: { pinnedAt?: number } = {}) {
   return {
     id,
@@ -464,7 +413,6 @@ function _row(id: string, createdAt: number, marks: { pinnedAt?: number } = {}) 
   };
 }
 
-/** A task's row of the list, started at `createdAt`, with whatever pin it is given. */
 function row(id: string, createdAt: number, marks: { pinnedAt?: number } = {}) {
   return {
     id,
@@ -493,7 +441,6 @@ const ACME = {
   github: null,
 };
 
-/** The account's tasks across its two workspaces: two of its own, and one of the team's. */
 const TWO_WORKSPACES: TasksView = {
   ...IDLE_TASKS_VIEW,
   listStatus: TASKS_READ.READY,
@@ -501,15 +448,12 @@ const TWO_WORKSPACES: TasksView = {
   tasks: [row("notes", 4), { ...row("alerts", 3), workspaceId: ACME.id }, row("billing", 2)],
 };
 
-/** A start's or a repository read's payload, read back as the acts' own schemas admit it. */
 const readWorkspaceNamed = Schema.decodeUnknownOption(
   Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
 );
 
-/** A pin's payload, read back as the act's own schema admits it. */
 const readPin = Schema.decodeUnknownOption(Schema.Struct({ pinned: Schema.Boolean }));
 
-/** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
   payloads: readonly { readonly kind: PortActKind; readonly payload: unknown }[],
   kind: PortActKind,
@@ -519,7 +463,6 @@ function namedIn(
     .map((asked) => Option.getOrUndefined(readWorkspaceNamed(asked.payload))?.workspaceId);
 }
 
-/** The workspace each start the tab asked for named. */
 const startedIn = (payloads: Parameters<typeof namedIn>[0]) =>
   namedIn(payloads, ACT_KIND.TASKS_START);
 
@@ -629,7 +572,6 @@ test("New task on Home opens no dialog over Home's own composer, asking it for t
   assert.equal(home.control().newTask.homeAsks, 1);
 });
 
-/** A start's payload, read back for whether it asked to open nothing. */
 const readQuiet = Schema.decodeUnknownOption(
   Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),
 );
@@ -696,13 +638,10 @@ test("with Open a task once it starts off, New task starts the task and its agen
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
-/** A line of a file of the task's repository, as a place names it to open. */
 const FILE_REF = { path: "src/invite.ts", startLine: 1, endLine: 1 };
 
-/** The File tab that line opens in. */
 const FILE = { file: FILE_REF.path };
 
-/** The panel as the developer sees it: shown or not, and on which tab. */
 function panelOf(tab: ReturnType<typeof mount>) {
   const { open, tab: shown } = tab.control().sidePanel;
   return { open, tab: shown };
@@ -710,7 +649,6 @@ function panelOf(tab: ReturnType<typeof mount>) {
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** The agent's Pull request tab, a tab of the side panel that stands again on its task. */
 const PULLS = { changes: AGENT_ID };
 
 const RUNNING_AGENT: AgentSummary = {
@@ -724,7 +662,6 @@ const RUNNING_AGENT: AgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -800,7 +737,6 @@ test("a task none of whose tabs was viewed shows its agents' last tab, opens on 
   assert.equal(again().tab, MAIN_TAB.OVERVIEW, "the tab viewed before it is shown");
 });
 
-/** The open task's row as the sidebar lists it, naming the agents given, and how many it has in all. */
 function namingRow(lines: readonly string[], total: number) {
   return {
     ...row(TASK.id, 1),
@@ -823,7 +759,6 @@ function namingRow(lines: readonly string[], total: number) {
 test("a task whose row settles its tab shows that agent's before its agents are read, and one with none viewed or whose row cannot say shows none until they are", async () => {
   const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
-  // The list carries none of the task's agents yet, so whatever the column shows, the row chose.
   const shownOn = async (
     lines: readonly string[],
     total: number,
@@ -924,7 +859,6 @@ test("a column whose last agent is archived opens a new agent's draft in its pla
   act(() => column().onChoose({ agent: AGENT_ID }));
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
-  // The host draws the archive on the list as it is asked.
   tab.stand({ tasks: withAgents([archived]) });
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
@@ -943,7 +877,6 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
-  // Note that a write reaches the act port a few steps after its press, as its mutation sends it.
   await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT));
   assert.equal(tab.control().boundFor, TASK.id);
 
@@ -978,7 +911,6 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
 
 test("a task opened from a list, gone back to from the sidebar, or named by a chip opens on the agent waiting on the developer, past the one at work", () => {
   const WAITING = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
-  // The row names one agent at work and one resting, the resting one's thread waiting on the developer.
   const named = namingRow([AGENT_ID, WAITING], 2);
   const waitingRow = {
     ...named,
@@ -1257,7 +1189,6 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
     "an archived agent of a task, whose tab is never drawn, opens on its page",
   );
 
-  // A link opened at once, to the open task's own agent, wins over an earlier read answering late.
   open({ kind: LINK_PLACE.AGENT, agentId: SLOW });
   open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
   const told = tab.told.length;
@@ -1303,7 +1234,6 @@ test("a Vespin link to a worker of an archived agent's task, opened before the l
       },
     }),
   );
-  // Note that the panel goes full screen while the read is out, and the worker's page keeps its panel shown, so only its answer reading the panel as it stands then has it give way.
   act(() => tab.control().sidePanel.onChoose(PULLS));
   act(() => tab.control().sidePanel.onToggleFullScreen());
   assert.equal(tab.control().sidePanel.fullScreen, true);
@@ -1323,9 +1253,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   fakeActs({
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
-  // Note that a panel's pages are held through the window's act port and laid on the document, as the host lays them.
   const asked = holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
-  // A fresh registry reads the document handed here, rather than one an earlier test handed.
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
@@ -1342,9 +1270,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   await settle();
 
   assert.equal(tab.control().agentView.agentId, AGENT_ID);
-  // Note that the open task's pages stay held beneath the agent's page.
   assert.deepEqual(asked, [{ taskId: TASK.id }, { agentId: AGENT_ID }]);
-  // Note that the agent's pages stand once they reach their query.
   await vi.waitFor(() => assert.deepEqual(tab.control().agentView.pages, [page]));
   assert.deepEqual(panelOf(tab), { open: true, tab: { page: page.id } });
 });
@@ -1355,7 +1281,6 @@ test("a Vespin link to a page of the task, as Open in browser lands on, opens th
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
   holdPages(handHostReads({}).deliverPages, () => ({ rows: [page] }));
-  // A fresh registry reads the document handed here, rather than one an earlier test handed.
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
@@ -1417,7 +1342,6 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
     changedFiles: 2,
   };
   const archived = { ...EARLIER, archivedAt: 5 };
-  // Both agents' rows keep the pull request they share, which the list carries beside them.
   const sharing = (agents: readonly AgentSummary[]): TasksView => ({
     ...withAgents(agents),
     agentPullRequests: agents.map((agent) => ({
@@ -1445,7 +1369,6 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: EARLIER.id } });
   assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
 
-  // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
   tab.stand({ tasks: sharing([archived, RUNNING_AGENT]) });
   await act(() => tab.control().agents.onArchive(EARLIER.id, true));
   await settle();
@@ -1613,7 +1536,6 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const unknownId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
-  // The service finds the first item, and then not the second.
   const homes = [
     { agentId: AGENT_ID, planId: alerts, workspaceId: ACME.id },
     { failure: AGENT_CALL_FAILURE.NOT_FOUND },
@@ -1650,7 +1572,6 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
   assert.deepEqual(tab.control().inboxView.chosen, { itemId: unknownId, opened: true });
 });
 
-/** The task the Inbox is narrowed to, as a surface drawing it reads it now. */
 function inboxTaskNow(): () => string | undefined {
   let seen: string | undefined;
   const Reader = () => {
@@ -1923,7 +1844,6 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-/** A third task, which neither tab was closed on. */
 const THIRD_TASK_ID = "4e6a8c0e-2a4c-4e6a-8c0e-2a4c6e8a0c2e";
 
 test("a tab its strip no longer draws, its page gone since, is passed over for the tab closed before it", async () => {
@@ -1937,10 +1857,8 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
-  // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
   const reads = handHostReads({});
   const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
-  // A fresh registry reads the document handed here, rather than one an earlier test handed.
   const tab = mount(
     { shown: true, tasks: OPEN },
     {},
@@ -1948,14 +1866,12 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
-  // Note that each read of the pages reaches their query one notify tick later, which lands before the tabs move.
   await vi.waitFor(() => assert.equal(tab.control().pages?.length, 1));
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(PULLS));
   act(() => panel().onClose(PULLS));
   act(() => panel().onChoose({ page: page.id }));
   act(() => panel().onClose({ page: page.id }));
-  // The page is gone since: the task's pages, read again, hold none.
   act(() =>
     reads.deliverPages({ [PAGE_OWNER.TASK]: { [TASK.id]: { rows: [] } }, [PAGE_OWNER.AGENT]: {} }),
   );
@@ -2045,7 +1961,6 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   );
 });
 
-/** A task's inbox waiting on the developer: `count` open items, each asked by one agent. */
 function waitingIn(taskId: string, count: number): AppInboxTask {
   return {
     taskId,
@@ -2137,7 +2052,6 @@ test("a person's page is theirs in the workspace it opened in: another listed in
   act(() => tab.control().personView.onOpen("user-charles", "Charles Pan"));
   const opened = tab.control().personView.userId;
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  // The page gives way through the router, whose move lands once the page's own has.
   await act(async () => undefined);
   const afterSwitch = tab.control().personView.userId;
   act(() => tab.control().personView.onOpen("user-maya", "Maya Okafor", PERSONAL.id));
@@ -2173,7 +2087,6 @@ test("a person's page opened in another workspace lists it without reopening its
   assert.equal(tab.control().personView.userId, "user-maya");
 });
 
-/** The tasks each open the tab asked of main named, in order. */
 function opensAsked(
   payloads: readonly { readonly kind: PortActKind; readonly payload: unknown }[],
 ) {
@@ -2184,7 +2097,6 @@ function opensAsked(
 
 const readOpened = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
 
-/** Main's answers: every open lands, and every leave. */
 const OPENS = {
   [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
   [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve(undefined),
@@ -2309,7 +2221,6 @@ test("a remembered plan that moved to another workspace since, or would not open
 
 test("a workspace chosen is listed at once, and a reopen answered after another was chosen leaves the newer choice standing", async () => {
   const three = [PERSONAL, ACME, PLATFORM];
-  // The first reopen waits on main until the test answers it.
   const answers: ((opened: boolean) => void)[] = [];
   const held = new Promise<boolean>((answer) => answers.push(answer));
   const tab = mount(
@@ -2498,7 +2409,6 @@ test("Settings' GitHub row is the connection main's view holds, its Connect and 
 
   assert.deepEqual(tab.control().github, { connected: true, login: null });
   assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
-  // The test leaves Disconnect unanswered, a failure on the way to the service rather than a refusal.
   assert.equal(newestToastSays(), ACT_UNREACHED_WORDS);
 });
 
@@ -2557,7 +2467,6 @@ test("the repository chip's list for a workspace with GitHub connected is its re
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   };
-  // Note that the tab and the chip stand on one registry over the document the lists are laid on, so the document each writes into the test's client is the same one.
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => listed);
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const tab = mount(
@@ -2596,7 +2505,6 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   await vi.waitFor(() =>
     assert.deepEqual(
       [
-        // A row names the repository, then its owner after it.
         [...menu.querySelectorAll('[role="option"]')].map((row) =>
           [".ui-combobox-option-detail", ".ui-combobox-option-label"]
             .map((part) => row.querySelector(part)?.textContent)
@@ -2723,7 +2631,6 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   );
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
-  // Note that the move is sent a step after the press, as its mutation sends it, and the workspaces land and one is chosen while it is out.
   await vi.waitFor(() => assert.equal(answers.length, 1));
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
@@ -2761,7 +2668,6 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
 });
 
 test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", async () => {
-  // The window is drawn once the synthetic tasks have landed (`App`).
   await loadTasksFixture();
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
   const staged = fixture.control().listed.tasks.map((task) => task.name);
@@ -2777,14 +2683,12 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
 });
 
 test("an agent profile opens its task on the agent it stages, beside the agent's tab it names, where the tasks profile's task holds no agent", async () => {
-  // The window is drawn once the synthetic tasks have landed (`App`).
   await loadTasksFixture();
   const run = { shown: true, fixtureMode: true };
   const tasks = mount({ ...run, profile: RUN_PROFILE.TASKS });
   const checks = mount({ ...run, profile: RUN_PROFILE.AGENT_CHECKS });
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
-  // Note that the page profile's page is held on the open task's pages, as its fixture run's document lays it (`fixtureAppState`).
   handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE },
   });
@@ -2807,24 +2711,20 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   );
   assert.deepEqual(file.control().sidePanel.tab, { file: "src/members/invite.ts" });
   assert.deepEqual(terminal.control().sidePanel.tab, { terminal: FIXTURE_AGENT_ID });
-  // Note that the page is held on the task's pages, whose read reaches its query a moment after the document.
   await vi.waitFor(() =>
     assert.deepEqual(page.control().sidePanel.tab, { page: FIXTURE_IDS.PAGE }),
   );
 });
 
-/** The task as the list names it. */
 function listed(): TasksView["tasks"][number] {
   const { document: _document, ...summary } = TASK;
   return summary;
 }
 
-/** The task listed and open, its agents as the list followed live carries them. */
 function withAgents(agents: readonly AgentSummary[]): TasksView {
   return { ...OPEN, tasks: [listed()], taskAgents: agents.map((agent) => listedAgent(agent)) };
 }
 
-/** The view once the list is read with nothing open, holding `plans`. */
 function listRead(tasks: TasksView["tasks"]): TasksView {
   return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks };
 }
@@ -2893,7 +2793,6 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
         }),
     },
   );
-  /** Each pin the tab asked of main, in order, as `pinned`. */
   const asked = () =>
     tab.payloads
       .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
@@ -2904,7 +2803,6 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
     tab.control().onPinAgent("agent-1", false);
   });
   const first = asked();
-  // The first is answered as refused, which is no matter to the order the second is asked in.
   await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
 
   assert.deepEqual(first, [true]);
@@ -2977,7 +2875,6 @@ test("a drag's changes to the sections go to main as one ask, and a refused one 
   assert.equal(newestToastSays(), "Your sections could not be changed. Try again.");
 });
 
-/** A pin's payload, read back as the act's own schema admits it. */
 const readTaskPin = Schema.decodeUnknownOption(
   Schema.Struct({ taskId: Schema.String, pinned: Schema.Boolean }),
 );
@@ -3016,7 +2913,6 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
     { [ACT_KIND.TASKS_PIN]: () => Promise.resolve(false) },
   );
   await act(async () => undefined);
-  // The list read again asks no second time: the tab's pin waits for the next launch.
   refused.stand({ tasks: listRead([{ ...listed(), updatedAt: 9 }, pinnedAlready]) });
   await act(async () => undefined);
   assert.deepEqual(asked(refused), [{ taskId: TASK.id, pinned: true }]);
@@ -3027,7 +2923,6 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
   );
 });
 
-/** An agent pin's payload, read back as the act's own schema admits it. */
 const readAgentPin = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.String,
@@ -3055,7 +2950,6 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
       .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
   const live = { ...listRead([listed()]), taskAgents: [listedAgent(RUNNING_AGENT)] };
   const carriedPin = [{ agent: AGENT_ID, task: TASK.id, position: "a3" }];
-  /** A launch over the kept pin, the service answering its pin as `answer` does. */
   const launch = async (
     tasks: TasksView,
     answer: () => Promise<PortActResult<typeof ACT_KIND.AGENTS_PIN>>,
@@ -3079,7 +2973,6 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
   assert.deepEqual(storedPins(), [], "nor does it stay on this Mac");
   closeWindow();
 
-  // The service answers so as well for an agent the account cannot see just now.
   const refused = await launch(live, () =>
     Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
   );
@@ -3100,7 +2993,6 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
   assert.deepEqual(storedPins(), []);
 });
 
-/** A start's agent, read back where it names one. */
 const readAgentNamed = Schema.decodeUnknownOption(
   Schema.Struct({
     planning: Schema.optionalKey(Schema.Boolean),
@@ -3115,10 +3007,8 @@ const readAgentNamed = Schema.decodeUnknownOption(
   }),
 );
 
-/** The task New task's Agent mode starts, as the host opens it once started. */
 const AGENT_TASK: TasksView = { ...OPEN, activeTaskId: OTHER_TASK_ID };
 
-/** The descriptions the host holds once Agent mode's task started: the started task's beside the open one's. */
 const AGENT_DESCRIPTIONS: AppDescriptionDocuments = {
   ...HELD_DESCRIPTIONS,
   [OTHER_TASK_ID]: {
@@ -3126,10 +3016,8 @@ const AGENT_DESCRIPTIONS: AppDescriptionDocuments = {
   },
 };
 
-/** The key New task's card minted for its agent's start. */
 const AGENT_KEY = "5b7e2c1a-9d4f-4a3b-8e6c-2f1d0a9b8c7e";
 
-/** Agent mode's start pressed with the words and the chip's model, answering why the card holds it, then the task standing open. */
 async function startAgentTask(tab: ReturnType<typeof mount>) {
   const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
   const prompt = "Make the sidebar keep its folds.";
@@ -3231,7 +3119,6 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
   act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 
-  // The host draws the archive on the list as it is asked, and takes it back as the service refuses it.
   await act(async () => {
     void tab.control().agents.onArchive(AGENT_ID, true);
   });
@@ -3499,7 +3386,6 @@ test("an agent refused as New task's Agent mode started its task opens the task 
           planId: OTHER_TASK_ID,
           agentStart: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         }),
-      // The host answers a Start once the list carries the agent its own Start made.
       [ACT_KIND.AGENTS_START]: () => {
         tab.stand({
           tasks: {
@@ -3537,7 +3423,6 @@ test("an agent refused as New task's Agent mode started its task opens the task 
     "nothing is sent again by itself",
   );
 
-  // The draft tab's Retry sends what the draft holds.
   await act(async () => {
     await tab.control().agents.startPrompt(draft.id, draft.prompt, draft.choice, draft.attachments);
   });
@@ -3554,12 +3439,10 @@ test("an agent refused as New task's Agent mode started its task opens the task 
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 });
 
-/** The payload of every act of `kind` the tab asked, in order. */
 function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[] {
   return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
 }
 
-/** Opens a new agent's draft on the open task as the column's "+" does, and answers it. */
 function openDraft(tab: ReturnType<typeof mount>) {
   act(() => {
     const control = tab.control();
@@ -3594,7 +3477,6 @@ test("a task with no agent opens on a new agent's draft, which closes once left 
   assert.equal(tab.control().agents.draft, undefined, "the empty draft left is let go");
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
 
-  // Left for another task, the task opens on a new agent's draft again on coming back, its details let go.
   openDraft(tab);
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   await settle();
@@ -3605,7 +3487,6 @@ test("a task with no agent opens on a new agent's draft, which closes once left 
   assert.deepEqual(column().tab, { draft: back.id }, "the task opens on it, not on its details");
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { draft: back.id }], "one draft alone");
 
-  // And one left for another place, as Settings hides the tasks, from the details it was opened over.
   act(() => column().onChoose(MAIN_TAB.OVERVIEW));
   await settle();
   openDraft(tab);
@@ -3715,7 +3596,6 @@ test("a task opened is timed from the press to its document drawn ready, and one
   vi.setSystemTime(2_000_650);
   tab.stand({ tasks: OPEN });
 
-  // The task open already is no wait; another refused is no span.
   act(() => tab.control().onSelect(TASK.id));
   opens = false;
   act(() => tab.control().onSelect(OTHER_TASK_ID));
@@ -3740,7 +3620,6 @@ test("a task opened is timed from the press to its document drawn ready, and one
   );
 });
 
-/** A status write's payload, read back as the act's own schema admits it. */
 const readStanding = Schema.decodeUnknownOption(
   Schema.Struct({ taskId: Schema.String, status: Schema.optionalKey(Schema.String) }),
 );
@@ -3754,7 +3633,6 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
   };
   let answered = 0;
   const tab = mount({ tasks: view }, {
-    // The Mark done is kept, and the status chosen after it waits on the service.
     [ACT_KIND.TASKS_SET_STANDING]: () => {
       answered += 1;
       return answered === 1 ? Promise.resolve(true) : new Promise(() => undefined);
@@ -3773,13 +3651,6 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
   assert.deepEqual(written, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
 });
 
-/**
- * A registry whose atoms count on this clock, as the window's count on its
- * own. Note that the host's holds, the task's cloud Browser tabs among them,
- * are answered quietly with nothing laid, because a hold refused is opened
- * again on a backoff, and a day passed on this clock would run every one of
- * those waits.
- */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   fakeActPort({});
   return registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), [
@@ -3788,20 +3659,17 @@ function registryOn(clock: Clock.Clock): AtomRegistry {
   ]);
 }
 
-/** Lets `span` pass on the test's clock, then lets what fell due land. */
 const passing = (span: Duration.Input) => Effect.andThen(TestClock.adjust(span), landed);
 
 const FINISHED_ID = "4f6e2a1b-7c3d-4e5f-8a9b-0c1d2e3f4a5b";
 const UNSEEN_ID = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d";
 
-/** Two agents beside the running one: one whose turn ended and was seen, and one whose turn ended unseen. */
 const IDLE_AGENTS: readonly AgentSummary[] = [
   RUNNING_AGENT,
   { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: AGENT_STATUS.COMPLETED },
   { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: AGENT_STATUS.COMPLETED },
 ];
 
-/** An item waiting in the open task's Inbox, posted by the agent given. */
 function waitingFrom(agentId: string): AppInboxTask {
   return {
     taskId: TASK.id,
@@ -3899,7 +3767,6 @@ it.effect(
       const pulls = { changes: AGENT_ID };
       const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
-      // Note that another agent's Pull request tab is shown last, so the first is not the one shown.
       const shown = { changes: "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32" };
       act(() => first.control().sidePanel.onChoose(pulls));
       act(() => first.control().sidePanel.onChoose(shown));
@@ -3995,7 +3862,6 @@ it.effect(
       yield* passing(Duration.minutes(50));
       tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
-      // The panel filling the window over the column keeps the tab from being viewed again on return, the task opened on its tab as a pin opens it.
       act(() => tab.control().sidePanel.onChoose(PULLS));
       act(() => tab.control().sidePanel.onToggleFullScreen());
 

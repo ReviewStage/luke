@@ -52,72 +52,29 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { IntegrationsSection } from "./integrations-page.js";
 
-/**
- * Settings › Integrations over a bridge answering where every provider
- * stands as the service would: a provider the deployment offers the
- * account has a row, and one it does not, which the service answers as
- * unavailable, has none; an account offered none is told so, and a read
- * that fails still offers to read again. A row's button is for a problem
- * alone: a connection that works stands quiet, keeping Reconnect in its ⋯
- * beside Disconnect, and one expired or refused shows Reconnect on the row.
- * GitHub, which the account's own GitHub grants, says what it is for, is
- * connected in place through the account's GitHub connect, stands among the
- * rows by its name, and once connected keeps the same ⋯ as the rest, its
- * Disconnect the account's own GitHub disconnect. A Connect stands its
- * provider pending at the service until the test settles it, as the browser
- * would, or a Cancel ends it, each reaching the host's read of where they
- * stand, which the test lays again as the service's rows move. A connected
- * provider's server lists the tools the bridge holds for it, which its row
- * opens onto in place. The page's own search keeps the rows it finds under
- * Connected and Not connected, opens a row onto the tools it found, says
- * when it finds nothing, takes Command-F, and gives way to Escape.
- */
-
-/** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
 let withheld: readonly IntegrationProvider[] = [];
-/** Whether the host's read of where they stand fails, never having answered. */
 let refuseRead = false;
-/** Whether the account's own GitHub is connected, which is where GitHub stands. */
 let githubConnected = false;
-/** Whether the account's GitHub disconnect is refused, its refusal the window's toast rather than the page's. */
 let refuseGitHubDisconnect = false;
-/** Whether a rename is refused, its refusal the row's own line. */
 let refuseRename = false;
-/** Where a provider stands where it is not disconnected, GitHub's own aside. */
 const standing = new Map<IntegrationProvider, IntegrationStatus>();
-/** What a provider's server answered when asked for its tools, over the tools it lists. */
 const toolReads = new Map<IntegrationProvider, IntegrationToolsView>();
-/** One call the page made on the act port, by its kind, with what it carried. */
 type PortCall = {
   [Kind in PortActKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[PortActKind];
-/** Every act the page sent on the act port, in order. */
 let sent: (AnyAct | PortCall)[] = [];
-/** Every Settings link the page's presses followed. */
 let links: SettingsLink[] = [];
-/** How many times the account's GitHub connect was begun. */
 let githubConnects = 0;
-/** How many times the account's GitHub disconnect was asked. */
 let githubDisconnects = 0;
-/** Whether another window begins the sign-in again while the next Cancel is out, so the Cancel finds it pending. */
 let reopenedDuringCancel = false;
-/** Where the service stands a provider a Connect or a Cancel has touched, over where it would otherwise. */
 const touched = new Map<IntegrationProvider, IntegrationStatus>();
-/** The tools each provider's server lists; one absent here is never answered. */
 const listed = new Map<IntegrationProvider, readonly IntegrationTool[]>();
-/** The sign-in failures the host's next read carries, each named once as the service ends it. */
 let signInFailures: IntegrationSignInFailure[] = [];
-/** The accounts the host's read names, past a provider's own word. */
 let accounts: IntegrationAccount[] = [];
-/** The providers the host's read says another account may be added at. */
 let addable: IntegrationProvider[] = [];
-/** The name the service gives an account added. */
 let addedConnection = "notion-3";
-/** Whether the host has read nothing of where they stand yet, as while its first read is out. */
 let holdReads = false;
-/** The account's integrations as the host holds them for the window, laid again as the service's rows move. */
 let integrations: IntegrationsHeld;
-/** Where a Cancel leaves an account the service holds by connection name, past a provider's own word. */
 const canceled = new Map<string, IntegrationStatus>();
 
 const roots: Root[] = [];
@@ -125,9 +82,7 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 
 const GRANOLA = INTEGRATION_PROVIDER.GRANOLA;
 
-/** Where every provider stands at the service. */
 function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
-  // SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
   return Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [
       provider,
@@ -141,7 +96,6 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
-/** Where every provider and account stands as the host's read holds it now: none while it has read nothing, failed while refused. */
 function heldRead(): AppHostRead<IntegrationStatusesAnswer> | undefined {
   if (holdReads) return undefined;
   if (refuseRead) return { failed: true };
@@ -177,7 +131,6 @@ beforeEach(() => {
   addable = [];
   reopenedDuringCancel = false;
   fakeAppBridge({});
-  // What the service answers an act the page sends on the act port; a Connect and a Cancel each answer once the host's read carries them.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload });
@@ -188,7 +141,6 @@ beforeEach(() => {
       integrations.lay();
       return Promise.resolve({ opened: true });
     },
-    // A Cancel ends a sign-in still pending; one that finished first stays connected.
     [ACT_KIND.INTEGRATIONS_CANCEL]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CANCEL, payload });
       const { provider } = payload;
@@ -201,7 +153,6 @@ beforeEach(() => {
       integrations.lay();
       return Promise.resolve({ status: account ?? serviceStatuses()[provider] });
     },
-    // A rename names the account anew, which the host draws over its read on the press.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
       if (refuseRename) return Promise.resolve({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
@@ -215,7 +166,6 @@ beforeEach(() => {
       return Promise.resolve({ account: renamed });
     },
   });
-  // A server whose tools the test holds none of is one the service never answered, as before tools were drawn.
   holdIntegrationTools(handHostReads({}).deliverTools, (server) => {
     const read = toolReads.get(server.provider);
     if (read !== undefined) return read;
@@ -232,12 +182,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Lets every answer the bridge gave, and the redraws they cause, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  // Note that the reads the host lays reach their queries a tick after they land, so the page is read once none still stands out, bar one the test holds.
   await vi.waitFor(() => {
     const text = document.body.textContent ?? "";
     assert.equal(
@@ -247,11 +195,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/**
- * The signed-in page once where every provider stands has been read, its
- * atoms under `registry` where one is given, else under one of its own, as
- * the window's root provides its own, and under its title in a settings page's frame where `framed`.
- */
 async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -269,7 +212,6 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
             githubConnects += 1;
             return Promise.resolve(true);
           },
-          // A disconnect answers once the host has asked GitHub's standing again, which its read then holds.
           disconnect: () => {
             githubDisconnects += 1;
             if (!refuseGitHubDisconnect) githubConnected = false;
@@ -288,24 +230,20 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
   );
   act(() => root.render(onRegistry(registry ?? ownRegistry(), page)));
   await settle();
-  // Note that a test holding the read back reads its placeholder, so only a read let through is waited on.
   if (!holdReads) await vi.waitFor(() => assert.equal(readSettled(container), true));
   return container;
 }
 
-/** Whether the page has drawn where the providers stand, or that it could not read it, rather than its placeholder. */
 function readSettled(page: HTMLElement): boolean {
   return !(page.textContent ?? "").includes("Reading the integrations");
 }
 
-/** A registry of the page's own, as the window's root provides, so nothing one test's page shared reaches the next. */
 function ownRegistry(): AtomRegistry.AtomRegistry {
   const registry = AtomRegistry.make();
   registries.push(registry);
   return registry;
 }
 
-/** A registry whose atoms wait on this clock, as the window's would on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   const registry = AtomRegistry.make({
     initialValues: [
@@ -317,7 +255,6 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return registry;
 }
 
-/** Granola's row as the page draws it. */
 function granolaRowOf(page: HTMLElement): Element {
   return (
     [...page.querySelectorAll(".ui-settings-row")].find(
@@ -326,14 +263,11 @@ function granolaRowOf(page: HTMLElement): Element {
   );
 }
 
-/** A row as the developer reads it: its lines, one under another, and the labels of the buttons it offers. */
 interface RowRead {
   readonly line: string | undefined;
   readonly buttons: readonly string[];
 }
 
-/** Granola's row: its line, and the labels of the buttons it offers. */
-/** A row's state lines as a reader reads them, each on its own line; none where it draws none. */
 function stateLines(row: Element): string | undefined {
   const lines = [...row.querySelectorAll(".ui-settings-row-state")].map(
     (line) => line.textContent ?? "",
@@ -351,7 +285,6 @@ function granolaRow(page: HTMLElement): RowRead {
   };
 }
 
-/** Presses the button on Granola's row that says `label`. */
 async function pressOnGranola(page: HTMLElement, label: string): Promise<void> {
   const button =
     [...granolaRowOf(page).querySelectorAll("button")].find((each) => each.textContent === label) ??
@@ -360,7 +293,6 @@ async function pressOnGranola(page: HTMLElement, label: string): Promise<void> {
   await settle();
 }
 
-/** The service's rows moved, which the host's read of where every provider stands carries. */
 async function readMoves(): Promise<void> {
   act(() => integrations.lay());
   await settle();
@@ -368,32 +300,27 @@ async function readMoves(): Promise<void> {
 
 const WAITING = { line: "Waiting for Granola in your browser…", buttons: ["Reopen", "Cancel"] };
 
-/** A row's name as it reads: its provider's, and the account's words beside it where it draws them. */
 function nameOf(label: Element | null): string | undefined {
   const beside = label?.nextElementSibling;
   const account = beside?.classList.contains("ui-account-words") ? beside.textContent : undefined;
   return account ? `${label?.textContent} · ${account}` : (label?.textContent ?? undefined);
 }
 
-/** The providers the page draws a row for, by name. */
 function rowNames(page: HTMLElement): (string | undefined)[] {
   return [...page.querySelectorAll('[id$="label"]')].map(nameOf);
 }
 
-/** The words of the buttons standing on a row, its ⋯ and its tools' toggle aside. */
 function rowButtons(row: Element): (string | null)[] {
   return [...row.querySelectorAll("button")]
     .filter((button) => !button.hasAttribute("aria-expanded"))
     .map((button) => button.textContent);
 }
 
-/** What a row's ⋯ offers, and the line it stands under. */
 interface MenuRead {
   readonly items: readonly (string | null)[];
   readonly heading: string | undefined;
 }
 
-/** A row's ⋯ opened and closed again; nothing where it draws no ⋯. */
 function menuOf(row: Element): MenuRead {
   const ellipsis = row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
   if (ellipsis === null) return { items: [], heading: undefined } satisfies MenuRead;
@@ -404,7 +331,6 @@ function menuOf(row: Element): MenuRead {
   return { items, heading } satisfies MenuRead;
 }
 
-/** Chooses `words` in a row's ⋯, and lets what it asked settle. */
 async function choose(row: Element, words: string): Promise<void> {
   const ellipsis =
     row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? assert.fail("no ⋯");
@@ -419,7 +345,6 @@ async function choose(row: Element, words: string): Promise<void> {
   await settle();
 }
 
-/** Answers the confirm dialog standing with `verb`, and lets it settle; answers what the dialog then says. */
 async function confirm(verb: string): Promise<string | null> {
   const dialog =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
@@ -745,7 +670,6 @@ test("a sign-out leaves nothing of one account's integrations to the next accoun
     for (const listener of listeners) listener({ ...deliveryOf(next), version: 2 });
   });
   await settle();
-  // Note that the page draws the last account's sign-in until the next account reaches its query.
   await vi.waitFor(() =>
     assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] }),
   );
@@ -774,7 +698,6 @@ test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retr
       buttons: ["Retry"],
     }),
   );
-  // The service names a failure once; the next read leaves the line as it stood.
   await readMoves();
   assert.equal(granolaRow(page).line, "You canceled connecting Granola. · Retry");
 });
@@ -897,7 +820,6 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
   }),
 );
 
-/** Vercel and Linear connected, their servers listing these tools, Vercel's annotated as a server may. */
 function connectVercelAndLinear(): void {
   touched.set(INTEGRATION_PROVIDER.VERCEL, INTEGRATION_STATUS.CONNECTED);
   touched.set(INTEGRATION_PROVIDER.LINEAR, INTEGRATION_STATUS.CONNECTED);
@@ -913,7 +835,6 @@ function connectVercelAndLinear(): void {
   listed.set(INTEGRATION_PROVIDER.LINEAR, [{ name: "list_issues", description: "Lists issues." }]);
 }
 
-/** The row named `name`, as the page draws it. */
 function rowNamed(page: HTMLElement, name: string): Element {
   return (
     [...page.querySelectorAll(".ui-settings-row")].find(
@@ -922,21 +843,18 @@ function rowNamed(page: HTMLElement, name: string): Element {
   );
 }
 
-/** Each tool the page shows opened: its name and its badge, where it wears one. */
 function shownTools(page: HTMLElement) {
   return [...page.querySelectorAll('.integration-tools-panel ul[aria-label$=" tools"] > li')].map(
     (tool) => [toolName(tool), tool.querySelector(".ui-quiet-words")?.textContent ?? undefined],
   );
 }
 
-/** A tool's name as its row draws it: beside its title, or in the title's place where it has none. */
 function toolName(tool: Element | null | undefined): string | null | undefined {
   return (
     tool?.querySelector(".integration-tool-id") ?? tool?.querySelector(".integration-tool-title")
   )?.textContent;
 }
 
-/** Opens `name`'s row onto its tools. */
 function openRow(page: HTMLElement, name: string): void {
   act(() =>
     (
@@ -946,7 +864,6 @@ function openRow(page: HTMLElement, name: string): void {
   );
 }
 
-/** The tool an opened row holds, by the row its list draws current and the title of the page beside it. */
 function held(page: HTMLElement) {
   return [
     toolName(
@@ -958,7 +875,6 @@ function held(page: HTMLElement) {
   ];
 }
 
-/** A key pressed wherever the focus stands, as a keyboard's lands, answering whether anything took it. */
 function keyAtFocus(name: string): boolean {
   const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
   act(() => {
@@ -967,7 +883,6 @@ function keyAtFocus(name: string): boolean {
   return event.defaultPrevented;
 }
 
-/** The page's search field. */
 function searchField(page: HTMLElement): HTMLInputElement {
   return (
     page.querySelector<HTMLInputElement>('input[aria-label="Search integrations and tools"]') ??
@@ -975,7 +890,6 @@ function searchField(page: HTMLElement): HTMLInputElement {
   );
 }
 
-/** Types `query` over whatever the page's search field holds, as the developer would. */
 async function searchFor(page: HTMLElement, query: string): Promise<void> {
   const field = searchField(page);
   act(() => {
@@ -985,7 +899,6 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
   await settle();
 }
 
-/** The sections the page draws, each its heading and the names of its rows. */
 function sections(page: HTMLElement) {
   return [...page.querySelectorAll(".ui-settings-section")].map((group) => [
     group.querySelector("h2")?.textContent,
@@ -1039,7 +952,6 @@ test("a query finds an integration by what it is for, keeping its section", asyn
 
   assert.deepEqual(sections(page), [["Not connected", ["Neon", "Notion", "Supabase"]]]);
 
-  // The line a row says of what it gives agents finds it too.
   await searchFor(page, "invitations");
 
   assert.deepEqual(sections(page), [["Not connected", ["Google Calendar"]]]);
@@ -1074,7 +986,6 @@ test("while where the providers stand is read, the search stands usable above pl
   const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
   assert.equal(status.textContent, "Reading the integrations");
   assert.equal(status.querySelectorAll(".ui-settings-section-card").length, 2);
-  // Note that the field is checked as a yes or no, because a failure's diff of an element would print the whole document.
   assert.equal(searchField(page).closest('[aria-busy="true"]') === null, true);
   await searchFor(page, "linear");
   assert.equal(searchField(page).value, "linear");
@@ -1171,7 +1082,6 @@ test("an opened row holds its first tool, whose page stands beside the list, and
   openRow(page, "Vercel");
 
   assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
-  // Note that in Settings a pressed tool takes the focus, as a button does, so the arrows reach it next.
   const pressStart = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   page.querySelector('ul[aria-label$=" tools"] > li > button')?.dispatchEvent(pressStart);
   assert.equal(pressStart.defaultPrevented, false);
@@ -1236,11 +1146,9 @@ test("the arrows scroll an opened row's tool list, and only it, to keep the held
   connectVercelAndLinear();
   const page = await mount();
   openRow(page, "Vercel");
-  // Note that the list's scroller is the area its rows stand in.
   const list =
     page.querySelector<HTMLElement>(".integration-tools-list")?.parentElement ??
     assert.fail("the tool list");
-  // Note that jsdom lays nothing out, so the list shows one 30px row and each row stands 30px under the last, less what the list has scrolled.
   const ROW = 30;
   const rows = () => [...list.querySelectorAll<HTMLElement>('ul[aria-label$=" tools"] > li')];
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
@@ -1413,7 +1321,6 @@ test("two accounts at a provider stand as two rows named by their labels, each o
     connects.map((request) => request.payload),
     [{ provider: notion, add: true }],
   );
-  // The new account stands pending under the name the service gave it, as a row of its own.
   assert.ok(
     [...page.querySelectorAll('[id$="label"]')].some(
       (name) => nameOf(name) === "Notion · Account 3",
@@ -1550,7 +1457,6 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
 
-  // The service ended the refused sign-in and deleted its row, naming the failure once.
   signInFailures = [
     {
       provider: notion,
@@ -1638,7 +1544,6 @@ test("an added account whose first sign-in is canceled leaves its row, so the ne
     [...page.querySelectorAll(".ui-settings-row")].find(
       (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 2",
     ) ?? assert.fail("the pending account has a row");
-  // The service deletes the canceled first sign-in's account, so its next read lists Acme alone.
   accounts = accounts.slice(0, 1);
   act(() =>
     (
@@ -1675,7 +1580,6 @@ test("a canceled sign-in that held a provider's last place frees it at once, off
     ) ?? assert.fail(`Notion · ${label} has a row`);
   assert.ok(!menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
 
-  // The service's next read counts four accounts, so the provider is addable again.
   accounts = accounts.slice(0, 4);
   addable = [notion];
   act(() =>
@@ -1731,18 +1635,14 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
   );
 });
 
-/** How tall a row is drawn, in the layout given. */
 const ROW = 40;
 
-/** How much taller a row opened onto its tools stands, in the layout given. */
 const TOOLS = 200;
 
-/** How tall a moving row stands: a row's height, and its tools' under it where it opened onto them. */
 function heightOf(row: Element): number {
   return row.querySelector(".integration-tools-panel") === null ? ROW : ROW + TOOLS;
 }
 
-/** Each row standing under the rows before it on the page, as a layout would; jsdom lays nothing out. */
 function layRowsInOrder(page: HTMLElement): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -1754,7 +1654,6 @@ function layRowsInOrder(page: HTMLElement): void {
   });
 }
 
-/** What a row moves as, the box its motion follows, by the row's name. */
 function movingRow(page: HTMLElement, name: string): HTMLElement {
   return (
     rowNamed(page, name).closest<HTMLElement>("[data-motion-key]") ??
@@ -1762,7 +1661,6 @@ function movingRow(page: HTMLElement, name: string): HTMLElement {
   );
 }
 
-/** Granola, Linear, and Mercury offered, none of them connected. */
 function offerThree(): void {
   const offered: readonly IntegrationProvider[] = [
     GRANOLA,
@@ -1800,7 +1698,6 @@ test("with motion held still, an integration that connects takes its place and n
   }
 });
 
-/** Every element laid one row tall under the one before it in the document, so what a change inserts moves what follows it, in a window tall enough to show them all, since the list motion plays only what the reader can see. */
 function layInDocumentOrder(): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -1813,7 +1710,6 @@ function layInDocumentOrder(): void {
   );
 }
 
-/** The chevron on a row's tools press, and whether it stands turned. */
 function toolsChevron(page: HTMLElement, name: string): HTMLElement {
   return (
     rowNamed(page, name).querySelector<HTMLElement>(
@@ -1822,7 +1718,6 @@ function toolsChevron(page: HTMLElement, name: string): HTMLElement {
   );
 }
 
-/** The motions played on `element`, by their keyframes. */
 function motionsOn(
   motions: ReturnType<typeof playListMotions>,
   element: Element | null | undefined,
@@ -1832,7 +1727,6 @@ function motionsOn(
 
 test("a row's tools unroll under one chevron that turns, and roll up as it turns back", async () => {
   const motions = playListMotions();
-  // Note that the arrival's fade and stagger are tokens the list motion's helper leaves unset.
   for (const [name, value] of [
     ["--ui-duration-quick", "140ms"],
     ["--ui-row-stagger", "32ms"],
@@ -1856,7 +1750,6 @@ test("a row's tools unroll under one chevron that turns, and roll up as it turns
       { clipPath: "inset(0 0 100% 0)" },
       { clipPath: "inset(0)" },
     ]);
-    // Note that the row under it glides down with the clip's foot, rather than jumping under the tools.
     assert.equal(motionsOn(motions, under).length > 0, true);
 
     openRow(page, "Linear");

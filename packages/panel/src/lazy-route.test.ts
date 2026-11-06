@@ -24,10 +24,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A page whose module is handed over when `land` is called. */
 function pageOnDemand() {
   const Page = ({ name }: { name: string }) => createElement("p", null, `Page of ${name}`);
-  // Note that the module is held back until the test lands it, as a slow chunk would be.
   const chunk = Promise.withResolvers<typeof Page>();
   const route = lazyRoute<{ name: string }>(() => chunk.promise);
   return { route, land: () => chunk.resolve(Page) };
@@ -57,12 +55,10 @@ test("a route prefetched before its draw stands the page at once", async () => {
   await act(async () => {
     land();
   });
-  // Note that the draw is not awaited, so a page that suspended once more would still stand its fallback here.
   act(() => root.render(routeIn(route)));
   assert.equal(host.textContent, "Page of Ada");
 });
 
-/** The Reload a route's failure stands with, once it stands. */
 function reloadButton(): HTMLButtonElement {
   const reload = [...host.querySelectorAll("button")].find(
     (button) => button.textContent === "Reload",
@@ -75,7 +71,6 @@ function reloadButton(): HTMLButtonElement {
 }
 
 test("a route whose chunk failed says so with Reload, which reloads the window to read the chunk again", async () => {
-  // Note that React says the failure its boundary caught on the console, as it would in the window.
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   const chunk = Promise.withResolvers<() => React.JSX.Element>();
   const reloads: string[] = [];

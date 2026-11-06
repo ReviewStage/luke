@@ -79,23 +79,6 @@ import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
 import { OpenFileTabProvider } from "./open-file-tab.js";
 
-/**
- * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
- * every file as one list, in the tree's order, each file's patch headed as
- * git writes one, a filter narrowing it, deleted files and lockfiles
- * folded, each fold and all of them turned by its controls and stage-cli's
- * keys, which J and K step through only inside the view; and how the File
- * tabs' settings draw it: unified with its changed words marked until told
- * otherwise, split once Split is chosen in its View settings, tinted whole
- * once Changed words is Off, each choice kept for the next view, its ⋯
- * holding actions alone; a diff too narrow to split is drawn unified, its
- * layout saying so, the choice kept for a wider one. The settings are the app's own, read off the
- * document main hands the window and written back through it
- * (`handSettings`). The bundle, a chunk of its own the panel imports, is
- * stood in for at its importer, which records what it was handed. Synthetic
- * files only.
- */
-
 const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -117,7 +100,6 @@ const PATCH = [
 
 const PAGE = "https://github.com/acme/relay/pull/7";
 
-/** A changed file of the pull request, modified with the seats patch unless told otherwise. */
 function changed(path: string, overrides: Partial<AgentChangedFile> = {}): AgentChangedFile {
   return {
     path,
@@ -131,30 +113,22 @@ function changed(path: string, overrides: Partial<AgentChangedFile> = {}): Agent
   };
 }
 
-/** The commits the service names for a pull request's changed files to be read whole at, each where it named one. */
 interface ReadCommits {
   readonly headSha?: string;
   readonly baseSha?: string;
 }
 
-/** The commits the service names for the pull request's changed files to be read whole at; none unless a test names them. */
 let commits: ReadCommits = {};
 
-/** The pull request's files, in the order GitHub lists them, which is not the tree's. */
 let files: AgentChangedFile[] = [changed("src/seats.ts")];
-/** Whether the read stopped short of every file; it did not unless a test says so. */
 let truncated = false;
 
-/** How the service answers the read of the member's viewed marks; unanswered unless a test answers it. */
 let viewedAnswer: AgentPullRequestViewedAnswerView = {
   failure: AGENT_CALL_FAILURE.UNANSWERED,
 };
-/** How many times the marks were read. */
 let viewedReads = 0;
-/** What the next read of the marks waits on, where a test holds it; none answers at once. */
 let viewedHeld: Promise<void> | undefined;
 
-/** The agent's changes as the service answers them: the pull request's files as the test set them. */
 const readChanges = (): Promise<AgentChangesAnswerView> =>
   Promise.resolve({
     pullRequest: {
@@ -167,7 +141,6 @@ const readChanges = (): Promise<AgentChangesAnswerView> =>
     },
   });
 
-/** How the act port answers the changes this test, the service's answer unless a test stands another in. */
 let answerChanges: typeof readChanges = readChanges;
 
 const control = agentsControl({
@@ -176,11 +149,8 @@ const control = agentsControl({
   models: [],
 });
 
-/** What the stand-in bundle was handed, mount first, each draw after it. */
 let drawn: DiffListProps[] = [];
-/** The files the list was scrolled to, in order. */
 let revealed: string[] = [];
-/** How wide the box the diff is drawn in lays out, in pixels. */
 let boxWidth = 900;
 let root: Root | undefined;
 
@@ -205,16 +175,11 @@ const standIn: DiffViewModule = {
   },
 };
 
-/** The doors each tree the view mounted opens a chosen file through, the latest last. */
 let treeOpens: Array<(path: string, newTab: boolean) => void> = [];
-/** What each tree the view mounted was handed, the latest last. */
 let treeProps: FileTreeProps[] = [];
-/** The marks the trees were handed, the latest last. */
 let treeMarks: Array<readonly FileMark[]> = [];
-/** The files the trees marked as the one shown, in order. */
 let treeRevealed: string[] = [];
 
-/** The tree bundle, stood in for: it draws nothing and keeps the doors and the marks it is handed. */
 const treeStandIn: FileTreeModule = {
   mount: (_host, props) => {
     treeOpens.push(props.onOpen);
@@ -244,7 +209,6 @@ beforeAll(async () => {
   );
 });
 
-/** The member's viewed marks held by the host over the window's settings, read as the test's service answers them. */
 function holdViewedReads(): void {
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.VIEWED]: () => {
@@ -294,44 +258,34 @@ afterEach(() => {
   document.body.style.removeProperty("--ui-duration-pane");
 });
 
-/** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
 function InboxBeside({ onNext }: { onNext: () => void }): null {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, onNext);
   return null;
 }
 
-/** One registry for the tests' draws, so a draw again keeps the view's state as the panel would. */
 let registry = AtomRegistry.make();
 
-/** How a test draws the view: its threads, its tree, what stands beside it, the task's repository, and the agents as the panel holds them. */
 interface DrawOptions {
   readonly threads?: ChangesThreads;
   readonly treeOpen?: boolean;
-  /** The tree as the panel holds it, in `treeOpen`'s place: its toggle and its width. */
   readonly tree?: TreeShown;
   readonly beside?: ReactElement;
   readonly repository?: string;
   readonly control?: typeof control;
-  /** Whether a find looks through the tab, which draws its folds' closed bodies hidden. */
   readonly finding?: boolean;
-  /** Whether the view is the Pull request tab's chosen one; it is unless told. */
   readonly shown?: boolean;
-  /** The side panel's door to a file's own File tab, as its tab hands it; none outside a side panel. */
   readonly openTab?: (path: string) => void;
 }
 
-/** The reads the view was last drawn with, which the Pull request tab's Refresh reads again. */
 let heldReads: ChangesReads | undefined;
 
-/** Reads the changes again as the Pull request tab's Refresh does, the one Refresh its screen offers, with the review threads. */
 async function refreshAsTheTab(threads?: ChangesThreads): Promise<void> {
   const landed = heldReads?.count ?? 0;
   act(() => {
     heldReads?.ask();
     threads?.refresh?.();
   });
-  // Note that the changes land through a query, so the refresh is done once its answer has, or it failed.
   await vi.waitFor(() =>
     assert.equal(
       heldReads?.out === false && ((heldReads.count ?? 0) > landed || heldReads.refreshFailed),
@@ -341,13 +295,11 @@ async function refreshAsTheTab(threads?: ChangesThreads): Promise<void> {
   await flush();
 }
 
-/** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
   await render(options);
   return lastDrawn();
 }
 
-/** Draws the view in the root standing, without asking what it drew. */
 async function render(options: DrawOptions = {}): Promise<void> {
   const { ChangesTabReading } = await import("../testing/changes-tab.js");
   const tab = createElement(ChangesTabReading, {
@@ -382,23 +334,19 @@ async function render(options: DrawOptions = {}): Promise<void> {
   await flush();
 }
 
-/** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
 async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   act(() => root?.unmount());
   document.body.innerHTML = "";
   registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  // Note that the reads waited on are this tab's own, never the last test's.
   heldReads = undefined;
   await render(options);
-  // Note that the changes land through a query, so the view is read once its read has settled.
   await vi.waitFor(() => assert.equal(heldReads?.answer !== undefined && !heldReads.out, true));
   await flush();
   return lastDrawn();
 }
 
-/** Draws the tab as `drawTab` does, then waits for the member's marks to be read, which reach the view a notify tick after their read answers. */
 async function drawMarked(options: DrawOptions = {}): Promise<void> {
   await drawTab(options);
   await vi.waitFor(() => viewedBox(files[0]?.path ?? assert.fail("a file is changed")));
@@ -408,30 +356,25 @@ function lastDrawn(): DiffListProps {
   return drawn.at(-1) ?? assert.fail("the files are drawn");
 }
 
-/** The paths the list was last drawn with, each marked folded or not. */
 function folds(): Array<[string, boolean]> {
   return lastDrawn().files.map((file) => [file.path, file.collapsed]);
 }
 
-/** Presses a key on `target`, answering whether something took it. */
 function press(target: Element, init: KeyboardEventInit): boolean {
   const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
   act(() => target.dispatchEvent(event));
   return event.defaultPrevented;
 }
 
-/** The box the list is drawn in, inside the view. */
 function listBox(): HTMLElement {
   return document.querySelector<HTMLElement>(".diff-list") ?? assert.fail("the list is drawn");
 }
 
-/** The header the view drew for a file, as the bundle stands it at the head of the file. */
 function header(path: string): HTMLElement {
   const slot = lastDrawn().renderHeader(path);
   return slot.querySelector<HTMLElement>(".diff-list-head") ?? assert.fail(`${path} has a header`);
 }
 
-/** Types into the tree's search field as the developer would. */
 function typeSearch(words: string): void {
   const field =
     document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
@@ -443,7 +386,6 @@ function typeSearch(words: string): void {
   });
 }
 
-/** The ⋯'s items, the menu opened. */
 function menuItems(): readonly HTMLButtonElement[] {
   const options = document.querySelector<HTMLButtonElement>(
     'button[aria-label="Files changed actions"]',
@@ -452,14 +394,12 @@ function menuItems(): readonly HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
 }
 
-/** Lets the document a settings write sends back land and be drawn. */
 async function flush(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** Picks a value of a View settings pop-up by its row's name, and lets it be drawn. */
 async function pick(popover: HTMLElement, row: string, value: string): Promise<void> {
   const trigger =
     [...popover.querySelectorAll<HTMLButtonElement>("[aria-haspopup]")].find((each) =>
@@ -474,7 +414,6 @@ async function pick(popover: HTMLElement, row: string, value: string): Promise<v
   await flush();
 }
 
-/** How a diff is drawn until told otherwise: today's File tab look, and stage-cli's for what is new. */
 const DEFAULT_LOOK = {
   layout: "unified",
   indicators: "bars",
@@ -489,9 +428,7 @@ const DEFAULT_LOOK = {
   ligatures: false,
 };
 
-/** Opens the bar's View settings, the window in the appearance given, answering the popover. */
 function openSettings(appearance: "light" | "dark" = "light"): HTMLElement {
-  // The popover opens on the window's appearance, which the test's window does not answer.
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes(appearance) }));
   const button = document.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   act(() => button?.click());
@@ -500,7 +437,6 @@ function openSettings(appearance: "light" | "dark" = "light"): HTMLElement {
   );
 }
 
-/** The popover's control of a name: a segment by its words, or a switch by its label. */
 function settingControl(popover: HTMLElement, selector: string, name: string): HTMLButtonElement {
   const found = [...popover.querySelectorAll<HTMLButtonElement>(selector)].find(
     (each) => each.textContent === name || each.getAttribute("aria-label") === name,
@@ -667,7 +603,6 @@ test("a file chosen with ⌘ where no side panel offers a File tab is scrolled t
   assert.deepEqual(revealed, ["README.md"]);
 });
 
-/** A tree as the panel holds it, open as given, counting its toggles and keeping the widths asked for. */
 function heldTree(open: boolean, width = 300) {
   const widths: number[] = [];
   const held = { toggles: 0, widths };
@@ -901,15 +836,12 @@ test("a key typed into the tree's search is the field's", async () => {
   assert.deepEqual(revealed, []);
 });
 
-/** A press of a chord as the keyboard sends it: the key's character and place, Shift where the chord holds it. */
 function chordPress(chord: ShortcutChord): KeyboardEventInit {
   return { key: chord.key.key, code: chord.key.code, shiftKey: chord.shift === true };
 }
 
-/** `?` as a US keyboard sends it: ⇧ on the slash key. */
 const QUESTION_MARK: KeyboardEventInit = { key: "?", code: "Slash", shiftKey: true };
 
-/** The sheet of the view's keys, where it stands. */
 function keysSheet(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
 }
@@ -921,7 +853,6 @@ test("every key of Files changed's table answers inside the view", async () => {
   await drawMarked();
 
   const unanswered = FILES_CHANGED_KEYS.filter((key) => {
-    // Each key is pressed with a file stood on, which Escape needs.
     press(listBox(), { key: "j" });
     return !press(listBox(), chordPress(FILES_CHANGED_SHORTCUTS[key].chord));
   });
@@ -1008,7 +939,6 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
   const groups = [...popover.querySelectorAll<HTMLElement>("section")].map((group) => [
     group.querySelector("h2")?.textContent,
     [...group.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
-      // A pop-up's name ends with the value it names, which is not the row's.
       (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
   ]);
@@ -1148,7 +1078,6 @@ test("a setting is drawn as written while its write is out, so a press reads the
   const popover = openSettings();
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
 
-  // Note that the write is drawn once its mutation hands it to React, a tick after the press.
   await vi.waitFor(() =>
     assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back"),
   );
@@ -1156,7 +1085,6 @@ test("a setting is drawn as written while its write is out, so a press reads the
   assert.equal(lastDrawn().look.ligatures, true);
 });
 
-/** Holds every settings write unanswered, and the window's document unchanged, until a test refuses one with its sentence. */
 function holdSettingWrites(): Array<(sentence: string) => void> {
   const held: Array<(sentence: string) => void> = [];
   fakeActPort({
@@ -1177,7 +1105,6 @@ test("a write answered while a later one to the same setting is out leaves the l
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
   act(() => settingControl(popover, '[role="radio"]', "Unified").click());
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
-  // Note that the first write reaches the act port a few steps after its press, as its mutation sends it.
   await vi.waitFor(() => assert.ok(held.length > 0));
   held[0]?.("Not in this test.");
   await flush();
@@ -1187,7 +1114,6 @@ test("a write answered while a later one to the same setting is out leaves the l
 });
 
 test("a refused write flips the switch back and is said in a toast, and the switch can be pressed again", async () => {
-  // Note that the toasts read the window's own registry, beside the tab's, on the one Query client the tab stands on.
   await drawTab({
     beside: createElement(
       RegistryContext.Provider,
@@ -1206,7 +1132,6 @@ test("a refused write flips the switch back and is said in a toast, and the swit
       "the switch flips before the write answers",
     ),
   );
-  // Note that the write reaches the act port a few steps after the press, as its mutation sends it.
   await vi.waitFor(() => assert.equal(held.length, 1));
   held[0]?.("Could not save that setting.");
   await vi.waitFor(() => assert.equal(newestToastSays(), "Could not save that setting."));
@@ -1217,7 +1142,6 @@ test("a refused write flips the switch back and is said in a toast, and the swit
   assert.equal(lastDrawn().look.ligatures, false);
 });
 
-/** A review thread on the seats file, on its new side's line, or outdated where its line is gone. */
 function seatsThread(line: number | null, words: string) {
   return {
     path: "src/seats.ts",
@@ -1265,7 +1189,6 @@ test("a review thread is drawn under its line in its file, and one a push outdat
 test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
   let failing = false;
   answerChanges = () => (failing ? Promise.reject(new Error("offline")) : readChanges());
-  /** The alert that says the refresh did not land, none while it did. */
   const refreshNote = () =>
     [...document.querySelectorAll('[role="alert"]')].find((each) =>
       each.textContent?.includes("Could not refresh"),
@@ -1309,13 +1232,10 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
   );
 });
 
-/** What an intersection observer is told of an element coming into view, as far as the view reads it. */
 type InView = (entries: readonly { readonly isIntersecting: boolean }[]) => void;
 
-/** Every element an intersection observer watches, with the observer's callback, as the window would report one coming into view. */
 const watched = new Map<Element, InView>();
 
-/** An intersection observer that reports an element in view only once something calls `comeIntoView`, and only an element a document holds. */
 class StandInIntersectionObserver {
   readonly #callback: InView;
   constructor(callback: InView) {
@@ -1330,7 +1250,6 @@ class StandInIntersectionObserver {
   }
 }
 
-/** Reports every watched element a document holds as in view, as Pierre standing its file near the view would. */
 function comeIntoView(): void {
   for (const [target, callback] of [...watched]) {
     if (!target.isConnected) continue;
@@ -1338,7 +1257,6 @@ function comeIntoView(): void {
   }
 }
 
-/** The images the service was asked for, by address, each answered with a picture of its own. */
 function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
   fakeAppBridge({});
@@ -1354,7 +1272,6 @@ function answerImages(refusing: Set<string> = new Set()): string[] {
   return asked;
 }
 
-/** Stands what a file draws in the place of its lines where Pierre would, in the document near the view, and lets its pictures be read. */
 async function standNearView(path: string): Promise<HTMLElement> {
   const file = lastDrawn().files.find((each) => each.path === path);
   assert.equal(file?.lead, true, `${path} is drawn as its lead`);
@@ -1362,7 +1279,6 @@ async function standNearView(path: string): Promise<HTMLElement> {
   document.body.append(slot);
   comeIntoView();
   await flush();
-  // Note that a picture's read reaches React a tick after it lands, as the window's queries hand it on.
   await vi.waitFor(() =>
     assert.equal((slot.textContent ?? "").includes("Reading the picture"), false),
   );
@@ -1582,7 +1498,6 @@ test("after a Refresh an image far from the view reads nothing until it comes ne
   await drawTab();
   const slot = await standNearView("logo.png");
   assert.equal(asked.length, 1);
-  // Pierre takes the file's place away as it scrolls far from the view.
   slot.remove();
 
   commits = { headSha: "c".repeat(40) };
@@ -1598,7 +1513,6 @@ test("after a Refresh an image far from the view reads nothing until it comes ne
   );
 });
 
-/** The viewed marks the service names: the seats file viewed, the plan viewed and changed since, the readme not. */
 const MARKED: AgentPullRequestViewedAnswerView = {
   outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
   files: [
@@ -1608,7 +1522,6 @@ const MARKED: AgentPullRequestViewedAnswerView = {
   ],
 };
 
-/** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
   fakeAppBridge({});
@@ -1624,7 +1537,6 @@ function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionReq
   return asked;
 }
 
-/** The Viewed box in a file's header. */
 function viewedBox(path: string): HTMLInputElement {
   return (
     header(path).querySelector<HTMLInputElement>('.diff-list-viewed input[type="checkbox"]') ??
@@ -1728,7 +1640,6 @@ test("V marks the file the keys stand on viewed and steps on to the next, and is
   assert.equal(viewedBox("a.ts").checked, true);
 });
 
-/** The marks the tree was last handed, by path. */
 function lastMarks(): ReadonlyMap<string, FileMark> {
   return new Map((treeMarks.at(-1) ?? []).map((mark) => [mark.path, mark]));
 }
@@ -1809,7 +1720,6 @@ test("the marks are read again with the files on a Refresh, so the two describe 
   assert.equal(viewedReads, 2);
 });
 
-/** Every mark asked of the service, each held until the test answers it. */
 function holdMarks(): Array<{
   readonly request: PullRequestActionRequest;
   readonly answer: (answer: PullRequestWriteAnswer) => void;
@@ -1866,7 +1776,6 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   files = [changed("c.ts")];
   await drawMarked();
 
-  // A refresh's read stays out while the member marks the file and GitHub takes it.
   const reading = Promise.withResolvers<void>();
   viewedHeld = reading.promise;
   await refreshAsTheTab();
@@ -1944,7 +1853,6 @@ test("a last press GitHub was never asked for is sent even where the press befor
   act(() => viewedBox("c.ts").click());
   held[0]?.answer(REFUSED);
   await flush();
-  // The last press, a mark GitHub was never asked for, is taken where GitHub answers it.
   held.at(-1)?.answer(DONE);
   await flush();
 
@@ -1975,7 +1883,6 @@ test("a refused mark leaves a fold chosen since, as Collapse all chose it", asyn
 });
 
 test("I turns Minimize inline comments on and off inside Files changed, each line's threads then one chip that a find still reads and opens", async () => {
-  // Each thread drawn as a resolved one is, folded closed under its head.
   const threads: ChangesThreads = {
     list: [seatsThread(2, "why-42")],
     draw: (thread) =>
@@ -1991,7 +1898,6 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   assert.equal(note().querySelector(".drawn-thread")?.textContent, "why-42");
 
   press(listBox(), { key: "i" });
-  // Note that the setting is drawn once its write's mutation hands it to React, a tick after the press.
   await vi.waitFor(() =>
     assert.equal(note().querySelector(".diff-thread-chip-row > summary") === null, false),
   );
@@ -2007,13 +1913,11 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
     "outside the view, I is not the view's",
   );
 
-  // A find looking through the tab reads the put-away thread's words, and opens the line it brings into view.
   await redraw({ threads, finding: true });
   const slot = note();
   document.body.append(slot);
   const [match] = findRanges(slot, "why-42");
   assert.ok(match, "the find reads the minimized thread");
-  // Note that jsdom lays nothing out, so a range is measured where the find scrolls it into view as standing nowhere.
   Range.prototype.getBoundingClientRect = () => new DOMRect();
   act(() => reveal(match, slot));
   await flush();
@@ -2059,7 +1963,6 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
-/** The seats patch and a second hunk far below it, so a long gap stands between them, its line 30 the same line on both sides but one. */
 const GAPPED_PATCH = [
   PATCH,
   "@@ -59,3 +60,3 @@",
@@ -2092,7 +1995,6 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
   assert.deepEqual(onLines(), []);
   assert.equal(aboveWords(), "in-gapwas-3");
 
-  // The gap's arrow opened over line 30, as the list tells it.
   act(() => lastDrawn().onDrawn?.("src/seats.ts", [30]));
   await flush();
   assert.deepEqual(onLines(), [[`${PAGE}#in-gap`, "additions", 30]]);
@@ -2102,7 +2004,6 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
   );
   assert.equal(aboveWords(), "was-3", "the outdated thread stays above");
 
-  // Minimized, the thread that moved is its line's chip.
   press(listBox(), { key: "i" });
   const gapChip = () =>
     lastDrawn()
@@ -2114,7 +2015,6 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
   press(listBox(), { key: "i" });
   await vi.waitFor(() => assert.equal(gapChip() === null, true));
 
-  // The gap closed again, its patch read anew.
   act(() => lastDrawn().onDrawn?.("src/seats.ts", []));
   await flush();
   assert.deepEqual(onLines(), []);
@@ -2201,17 +2101,14 @@ test("a press anywhere on a header's row folds its file, and \u2325 with a press
   );
 });
 
-/** The seats file at the pull request's head, ten lines, its fifth changed, and its patch as GitHub sends it. */
 const HEAD_TEXT = `${["1", "2", "3", "4", "five", "6", "7", "8", "9", "10"].join("\n")}\n`;
 const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
-/** Answers each read of a file whole as given, by its path and the commit it is read at, keeping every such read asked. */
 function answerFileReads(answer: (path: string, ref?: string) => TasksFileAnswer): AnyAct[] {
   const asked: AnyAct[] = [];
   fakeActs({
     act: (request: AnyAct) => {
-      // Note that the changes are still the service's, as the test set them.
       if (request.kind === ACT_KIND.AGENTS_CHANGES) {
         return answerChanges().then(
           (value): FakeActAnswer => ({ status: FAKE_ANSWER.DONE, value }),
@@ -2392,7 +2289,6 @@ test("a gap's control under the pointer or the keyboard's focus hangs its hint, 
 test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
   commits = { headSha: "a".repeat(40) };
   const listedAs = await blobShaOf(HEAD_TEXT);
-  // The same hunks, with a line far from them changed by a later push.
   const pushed = HEAD_TEXT.replace("10", "ten");
   files = [
     changed("src/seats.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
@@ -2474,7 +2370,6 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
   const held: Array<() => void> = [];
   fakeActs({
     act: (request: AnyAct) => {
-      // Note that the changes are still the service's, as the test set them.
       if (request.kind === ACT_KIND.AGENTS_CHANGES) {
         return answerChanges().then(
           (value): FakeActAnswer => ({ status: FAKE_ANSWER.DONE, value }),
@@ -2492,7 +2387,6 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
             }
           : undefined;
       const outcome: FakeActAnswer = { status: FAKE_ANSWER.DONE, value };
-      // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));
       }
@@ -2606,12 +2500,10 @@ test("a file whose diff was too large to send draws it from Load diff, its texts
   );
 });
 
-/** The tree's pane over the list, as it floats where the panel has no room for it beside, named as the view names it. */
 function floatedTree(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[aria-label="Changed files"]');
 }
 
-/** The toggle that floats the tree, which the stylesheet draws in a narrow panel alone. */
 function overToggle(): HTMLButtonElement {
   return (
     document.querySelector<HTMLButtonElement>('.file-tree-toggle[data-place="over"] button') ??
@@ -2619,7 +2511,6 @@ function overToggle(): HTMLButtonElement {
   );
 }
 
-/** A narrow panel with the tree's toggle pressed, the pane's slide left to play out. */
 async function narrowTreeOpened(): Promise<void> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);

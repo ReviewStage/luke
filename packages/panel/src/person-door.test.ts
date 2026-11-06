@@ -15,13 +15,6 @@ import { DESKTOP_LINKS, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 
-/**
- * A press on a person goes where the window can take it: a member's page,
- * the page of someone who left, or a GitHub account's own page on GitHub;
- * a card is read, never a door. Outside the window,
- * where nobody provides the opener, a person opens nothing. Synthetic people.
- */
-
 const DANA: Actor = {
   kind: ACTOR_KIND.PERSON,
   userId: "user-dana",
@@ -39,11 +32,8 @@ const DEPENDABOT: Actor = { kind: ACTOR_KIND.GITHUB, login: "dependabot[bot]", b
 const NOBODY: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
 
 let root: Root | undefined;
-/** Every page the window was asked to open, and every address handed to GitHub. */
 let opened: string[] = [];
-/** The name each page was opened with, where the place knew one. */
 let names: (string | undefined)[] = [];
-/** The workspace each page was opened in, where the place named one. */
 let workspaces: (string | undefined)[] = [];
 let github: string[] = [];
 
@@ -87,7 +77,6 @@ function draw(element: ReactElement, inWindow = true): HTMLElement {
   return container;
 }
 
-/** The actor's card, hung by resting on its name. */
 function cardOf(view: HTMLElement): Element {
   const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");
   restOn(named);

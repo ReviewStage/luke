@@ -58,7 +58,6 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 const ignore = () => undefined;
 const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-/** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
     status: ACCOUNT_STATUS.SIGNED_IN,
@@ -99,7 +98,6 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
-  // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -117,15 +115,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
 const routed = shellRouterEachTest();
 
-/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
 function underRouter(shell: ReactElement, standing?: string): ReactElement {
   return routed().under(shell, standing);
 }
 
-/** The shell's props over `plans`, every other door ignored, the sidebar folded unless patched. */
 function shellProps(
   tasks: TasksControl,
   tab: PanelTab,
@@ -170,11 +165,6 @@ function shellProps(
   };
 }
 
-/**
- * The window's shell with no task open and the sidebar folded, the Inbox
- * open over it or not, New task opening its dialog and Cancel putting it
- * away as the tab does.
- */
 function mount(
   inboxOpen: boolean,
   overrides: Partial<TasksControl> = {},
@@ -220,7 +210,6 @@ function mount(
   return container;
 }
 
-/** The buttons beside the traffic lights, by name. */
 function titleBarButtons(page: HTMLElement): string[] {
   const controls = page.querySelector(".title-bar-controls:not([data-edge])");
   assert.ok(controls, "the title bar's buttons stand");
@@ -232,7 +221,6 @@ function titleBarButtons(page: HTMLElement): string[] {
 test("while Settings is still loading its frame stands, a page of placeholder sections under the one bar Settings stands under beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", async () => {
   const tabs: PanelTab[] = [];
   const page = mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
-  // The router goes to Settings, whose frame stands while its chunk is read.
   await act(async () => {
     await Promise.resolve();
   });
@@ -258,7 +246,6 @@ test("while Settings is still loading its frame stands, a page of placeholder se
   assert.deepEqual(tabs, [PANEL_TAB.TASKS]);
 });
 
-/** The shell on the tasks with its tab chosen from outside, so a test can open Settings and leave it. */
 async function mountSwitching(): Promise<(tab: PanelTab) => Promise<void>> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -278,7 +265,6 @@ async function mountSwitching(): Promise<(tab: PanelTab) => Promise<void>> {
         ),
       ),
     );
-    // The router goes where the tab stands, Settings or the places, and draws it once its chunk is read.
     await act(() => routed().settled());
   };
   await draw(PANEL_TAB.TASKS);
@@ -363,12 +349,6 @@ test("leaving Settings does not hand the keyboard to the one control left of a n
   assert.ok(document.activeElement === document.body, "the keyboard is with the window");
 });
 
-/**
- * The shell in a narrow room on `tab` over `overrides`, Settings standing on
- * its list or its page as `listed` says, over a history whose Back goes to
- * the Inbox, drawn once and not waited on, so a page still loading stands
- * its frame; every way out and back to a list written down.
- */
 function drawLoadingNarrow(
   tab: PanelTab,
   overrides: Partial<TasksControl>,
@@ -413,7 +393,6 @@ async function mountLoadingNarrow(
   listed: boolean,
 ): Promise<{ page: HTMLElement; went: string[] }> {
   const drawn = drawLoadingNarrow(tab, overrides, listed);
-  // The router goes to the place, whose frame stands while its chunk is read.
   await act(async () => {
     await Promise.resolve();
   });
@@ -485,7 +464,6 @@ test("an account with no plan raises New task from the title bar over the window
   );
 });
 
-/** The sidebar's row named `name`: the button whose first words a reader hears are it. */
 function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefined {
   return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) =>
@@ -494,12 +472,10 @@ function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefin
   );
 }
 
-/** The sidebar's row named `name`, where one stands. */
 function placeRow(page: HTMLElement, name: string): HTMLButtonElement | undefined {
   return rowNamed(page.querySelector("aside.desktop-sidebar") ?? page, name);
 }
 
-/** The sidebar's Home row. */
 function homeRow(page: HTMLElement): HTMLButtonElement {
   return placeRow(page, "Home") ?? assert.fail("the Home row stands");
 }
@@ -609,7 +585,6 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
   assert.equal(unreadOnOpen(true), "true");
 });
 
-/** A second plan beside `DOCUMENT_PLAN`, saved after it. */
 const NOTES_TASK: Task = {
   ...DOCUMENT_TASK,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
@@ -618,11 +593,6 @@ const NOTES_TASK: Task = {
   updatedAt: 5,
 };
 
-/**
- * The shell with the sidebar unfolded on `listed`, each carrying the read
- * mark the account keeps of it, redrawn over whichever plan `open` names
- * next and the home page for none, the same shell throughout.
- */
 function mountListing(listed: readonly Task[]): (open: Task | undefined) => void {
   const container = document.createElement("div");
   document.body.append(container);
@@ -643,7 +613,6 @@ function mountListing(listed: readonly Task[]): (open: Task | undefined) => void
   };
 }
 
-/** The sidebar's row for the plan of this name. */
 function sidebarRow(name: string): HTMLButtonElement {
   const row = [
     ...document.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
@@ -652,19 +621,16 @@ function sidebarRow(name: string): HTMLButtonElement {
   return row;
 }
 
-/** Whether the plan's row is drawn in the unread weight. */
 function rowUnread(name: string): string | null {
   return String(sidebarRow(name).textContent?.includes("(unread)") === true);
 }
 
-/** The read mark the row's right-click menu offers, chosen when `choose` says so. */
 function rowReadMark(name: string, choose = false): string | undefined {
   act(() => {
     sidebarRow(name).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
   });
   const menu = document.querySelector('[role="menu"]');
   assert.ok(menu, `${name}'s menu opens`);
-  // Note that the item is read by its words, since its U is drawn beside them.
   const words = (each: Element) => each.querySelector(".ui-menu-item-label")?.textContent ?? "";
   const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
     /^Mark as (un)?read$/u.test(words(each)),
@@ -705,7 +671,6 @@ test("a task's row reads unread by the mark its row carries, the one open only w
   assert.equal(rowUnread(NOTES_TASK.name), "true", "a mark by hand reads unread even while open");
 });
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -714,7 +679,6 @@ async function settle(): Promise<void> {
 
 test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
-  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
   await writeHandedAppState();
   mount(false);
   await settle();
@@ -728,7 +692,6 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   mount(false, {}, PANEL_TAB.TASKS, (tab) => tabs.push(tab));
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
-  // Note that choosing the page is what opens Settings on it, so no tab change makes a second step before it.
   assert.deepEqual(tabs, []);
 });
 
@@ -748,7 +711,6 @@ test("the Tasks row pressed while the Board stands leaves nothing, the Board bei
   assert.ok(row);
   act(() => row.click());
 
-  // Note that leaving would stand the window's state over the Board, which opening the Board standing does not undo.
   assert.deepEqual(tabs, []);
   assert.deepEqual(opened, ["board"]);
 });
@@ -774,7 +736,6 @@ test("the sidebar offers no Issues row, with every experiment on, since Vespin k
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-/** The shell in a narrow room, a phone's, over `overrides`, the sidebar patched as given. */
 async function mountNarrow(
   overrides: Partial<TasksControl>,
   sidebarPatch: Partial<SidebarCollapse> = {},
@@ -800,12 +761,10 @@ async function mountNarrow(
   return container;
 }
 
-/** The places bar's items by their words, where the bar stands. */
 function barItems(page: HTMLElement): HTMLButtonElement[] {
   return [...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Places"] button')];
 }
 
-/** What a bar item is named: its words, or its label where it is a glyph alone, as New task is. */
 function barName(item: HTMLButtonElement): string {
   return item.getAttribute("aria-label") ?? item.textContent ?? "";
 }
@@ -864,7 +823,6 @@ test("on a phone the places bar stands over the Tasks page though the task left 
   assert.deepEqual(barItems(page).map(barName), ["Inbox", "Tasks", "Search", "New task"]);
 });
 
-/** What a reader hears an item named: its words, less what is drawn for the eye alone. */
 function spokenName(item: HTMLElement): string {
   const heard = item.cloneNode(true) as HTMLElement;
   for (const unheard of heard.querySelectorAll('[aria-hidden="true"]')) unheard.remove();
@@ -872,7 +830,6 @@ function spokenName(item: HTMLElement): string {
 }
 
 test("on a phone the bar's Inbox wears the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
-  // Note that main lists the three questions it counts, as its read of the account does.
   const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
     tasks: [DOCUMENT_TASK],
@@ -1018,7 +975,6 @@ test("while the Automations pages are still loading their frame stands the list 
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  // Note that the window's state has landed in the registry, so Automations opens within one render, before their chunk can.
   const page = mount(
     false,
     { workspaces: [ACME], workspace: ACME, automationsView: { ...automationsView, open: true } },
@@ -1027,7 +983,6 @@ test("while the Automations pages are still loading their frame stands the list 
     {},
     registry,
   );
-  // The router goes to the pages, whose frame stands while their chunk is read.
   await act(async () => {
     await Promise.resolve();
   });
@@ -1072,7 +1027,6 @@ test("while a version history's chunk is still loading, its Back row and Escape 
   assert.deepEqual(closed, ["closed", "closed"]);
   act(() => root?.unmount());
 
-  // Note that the chunk is still on its way, so the phone's frame is drawn in the same turn.
   const phone = drawLoadingNarrow(PANEL_TAB.TASKS, { history: { ...history, listed: true } }, true);
   assert.deepEqual(readPhoneHead(phone.page, "version-log"), {
     start: ["Back"],
@@ -1109,7 +1063,6 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   assert.deepEqual(closed, [], "nothing closes it");
 });
 
-/** Every place in the window the developer can stand, as the shell is handed it. */
 const PLACE = {
   HOME: "Home",
   OTHER_TASK: "another plan",
@@ -1124,10 +1077,8 @@ const PLACE = {
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
-/** A draft agent's tab, which the column shows beside a panel. */
 const DRAFT_TAB = { draft: "draft" };
 
-/** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
   const control = tasksControl();
   const onTask = {
@@ -1141,11 +1092,9 @@ function placed(place: Place) {
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
     [PLACE.PERSON_PAGE]: { personView: { ...control.personView, userId: "user-charles" } },
     [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
-    // Note that the panel fills the window over an agent's tab, since the task's details take its room.
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
       ...onTask,
       mainTabs: { ...control.mainTabs, tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB], tab: DRAFT_TAB },
-      // The panel fills the window on a File tab of the plan.
       sidePanel: {
         ...control.sidePanel,
         open: true,
@@ -1166,13 +1115,11 @@ function placed(place: Place) {
   };
 }
 
-/** The shell standing in a place. */
 function PlacedShell({
   place,
   patch,
 }: {
   place: Place;
-  /** What the tasks' state holds beyond the place's own. */
   patch?: Partial<TasksControl>;
 }): React.JSX.Element {
   const placedIn = placed(place);
@@ -1215,10 +1162,8 @@ function PlacedShell({
   });
 }
 
-/** Every act the window sent over the bridge, by kind, in order. */
 let sentActs: string[] = [];
 
-/** The port kinds this window's fake refuses rather than answers with nothing. */
 const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...ACCOUNT_ACT_KIND,
   ...AGENT_ACT_KIND,
@@ -1231,12 +1176,6 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...WINDOW_SURFACE_ACT_KIND,
 }).filter((kind) => kind !== AGENT_ACT_KIND.AGENTS_SHOWN);
 
-/**
- * The bridge as the window meets it, every act written down, and the chunks
- * of Settings and of the pages drawn on demand
- * (`pages-on-demand.ts`) already loaded, as each is once it has opened once,
- * so each stands within a settle.
- */
 async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
   await Promise.all([
     import("./desktop-settings.js"),
@@ -1251,7 +1190,6 @@ async function handBridge(experiments: ExperimentChoices = {}): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, or its coding agents, or their Inbox, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });
@@ -1356,11 +1294,9 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     [PLACE.HOME]: true,
     [PLACE.OTHER_TASK]: true,
     [PLACE.INBOX]: true,
-    // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
     [PLACE.AGENT_PAGE]: false,
     [PLACE.PERSON_PAGE]: true,
     [PLACE.AUTOMATIONS]: true,
-    // Note that the panel filling the window holds the keys, and finds in the tab it shows.
     [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
     [PLACE.SETTINGS]: false,
     [PLACE.VERSION_HISTORY]: true,
@@ -1402,7 +1338,6 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
   handState({}, { access: { admin: false } });
-  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
   await writeHandedAppState();
   mount(false, { adminView });
   await settle();
@@ -1421,7 +1356,6 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
 test("Admin stands in the plan's place beside the sidebar, its row marked and no row of the place under it, the Inbox under it kept but hidden, with no way back of its own, and the Inbox's row leaves it", async () => {
   handState({}, { access: { admin: true } });
   const tabs: PanelTab[] = [];
-  // Note that the Inbox stands under Admin, as the window's state holds it while Admin stands over it.
   const page = mount(
     true,
     { adminView: { ...tasksControl().adminView, open: true } },
@@ -1430,7 +1364,6 @@ test("Admin stands in the plan's place beside the sidebar, its row marked and no
   );
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
-  // Note that the account's access lands through the app-state query, so its row is read once drawn.
   await vi.waitFor(() =>
     assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page"),
   );
@@ -1453,7 +1386,6 @@ test("Admin stands in the plan's place beside the sidebar, its row marked and no
   assert.deepEqual(tabs, [PANEL_TAB.TASKS], "the Inbox's row leaves Admin for the Inbox");
 });
 
-/** The offline status in the title bar beside the traffic lights, if one stands. */
 function titleBarOffline(page: HTMLElement): Element | null {
   return page.querySelector('.title-bar-controls .offline-mark[aria-label="Offline"]');
 }
@@ -1472,7 +1404,6 @@ test("with the sidebar folded, the Mac offline says so in the title bar beside N
   await vi.waitFor(() => assert.equal(titleBarOffline(online) === null, true));
 });
 
-/** What a strip right under a phone's header says, if one stands there. */
 function stripUnderPhoneHead(page: HTMLElement): string | undefined {
   const under = page.querySelector('header.ui-toolbar[data-look="phone"]')?.nextElementSibling;
   return under?.classList.contains("ui-banner") === true ? (under.textContent ?? "") : undefined;
@@ -1604,7 +1535,6 @@ test("on a phone an open task, which draws no sidebar toggle, still answers the 
   assert.equal(toggled, 1);
 });
 
-/** A finger's swipe from `from` to `to` across the screen, at the height of the page's middle. */
 function fingerSwipe(target: HTMLElement, from: number, to: number, pointerType = "touch"): void {
   const at = (type: string, x: number) =>
     new PointerEvent(type, {
@@ -1685,7 +1615,6 @@ test("on a phone no page draws the title bar's controls over its own head, an ag
 
 test("a find on the Tasks page stands as it was after a visit to Admin over it", async () => {
   handState({}, { access: { admin: true } });
-  // The Tasks page is a chunk of its own, read the first time it is drawn.
   await import("./tasks-page.js");
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -1702,7 +1631,6 @@ test("a find on the Tasks page stands as it was after a visit to Admin over it",
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
-  // The Board is the router's place, which the window stands at before Admin and comes back to after it.
   act(() =>
     root?.render(
       onRegistry(AtomRegistry.make(), underRouter(createElement(Shell), SHELL_AT.BOARD)),
@@ -1717,7 +1645,6 @@ test("a find on the Tasks page stands as it was after a visit to Admin over it",
     container.querySelector<HTMLInputElement>('[role="search"][aria-label="Find"] input');
   const input = field();
   assert.ok(input, "the find bar stands");
-  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "auth");
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1738,7 +1665,6 @@ test("a find on the Tasks page stands as it was after a visit to Admin over it",
   assert.equal(field()?.value, "auth", "the find stands as it was");
 });
 
-/** Whether a reader is shown `element`: nothing over it hides it, as a box drawn with `display: none` is hidden from the screen and the accessibility tree alike. */
 function shownToReader(element: Element): boolean {
   for (let at: Element | null = element; at !== null; at = at.parentElement) {
     if (at.hasAttribute("hidden") || getComputedStyle(at).display === "none") return false;
@@ -1763,7 +1689,6 @@ test("the Inbox left stays drawn, hidden from a reader, and comes back as it sto
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
-  // The Board is the router's place, which the window moves to as it opens and off as it is left.
   const stand = async (open: { inbox: boolean; board: boolean }) => {
     act(() => {
       setOpen(open);
@@ -1777,7 +1702,6 @@ test("the Inbox left stays drawn, hidden from a reader, and comes back as it sto
     container.querySelector<HTMLInputElement>('.inbox-tasks input[aria-label="Search inbox"]');
   const input = search();
   assert.ok(input, "the Inbox's search stands");
-  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "zzz");
     input.dispatchEvent(new Event("input", { bubbles: true }));

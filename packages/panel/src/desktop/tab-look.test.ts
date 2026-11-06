@@ -33,14 +33,6 @@ import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-
 import { DesktopTasks } from "./desktop-tasks.js";
 import { taskCardOf } from "./task-card.js";
 
-/**
- * tab-look.test.ts -- a tab wears one look wherever it is offered: the
- * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, the Plan tab is the task's own name and
- * status, the task's own tab hangs the task's card, and a page's tab hangs a
- * card previewing the page.
- */
-
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
@@ -76,7 +68,6 @@ const SUMMARY: TaskSummary = {
   },
 };
 
-/** An agent on the task, standing where `status` says. */
 function agent(id: string, title: string, status: AgentSummary["status"]): AgentSummary {
   return {
     id,
@@ -95,7 +86,6 @@ const DONE = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Expiry job", AGENT_S
 
 const DRAFT = "draft-1";
 
-/** A page an agent showed on the plan, at its third version. */
 const FUNNEL: PageLine = {
   id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
   title: "Invite funnel",
@@ -119,17 +109,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Waits out the few microtasks the window's document takes to arrive after the first draw. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/**
- * The task open on its working agent's tab, or the tab given, a draft's beside
- * it, and the side panel open with the done agent's Changes tab, the working agent's Terminal tab, and a page's tab.
- */
 async function mount(
   shown: { body?: string; tab?: SidePanelTab; listed?: TaskSummary; main?: MainTab } = {},
 ): Promise<HTMLElement> {
@@ -181,7 +166,6 @@ async function mount(
       ]),
     }),
   });
-  // The window's tasks' cards, as the shell hands them to everything it holds.
   const chipCards = {
     taskCard: (taskId: string, now: number) => {
       const task = tasks.tasks.find((each) => each.id === taskId);
@@ -204,13 +188,11 @@ async function mount(
   return container;
 }
 
-/** A tab or a menu row as a reader sees it: its glyph's markup and its name. */
 interface Look {
   glyph: string | undefined;
   label: string | null | undefined;
 }
 
-/** Each tab of the strip in `column`, by its name. */
 function tabLooks(column: Element): Map<string, Look> {
   return new Map(
     [...column.querySelectorAll('[role="tab"]')].map((tab) => {
@@ -220,7 +202,6 @@ function tabLooks(column: Element): Map<string, Look> {
   );
 }
 
-/** Each row of the "+" menu in `column`, opened, by its name. */
 function rowLooks(column: Element): Map<string, Look> {
   const add = column.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
@@ -276,7 +257,6 @@ test("the side panel's + offers an agent's Pull request in the look its tab wear
 });
 
 test("the task's topbar names the task, as the list names it now, over a strip of its agents alone, and the side panel offers no Plan", async () => {
-  // Note that the list renamed the task before its document was read again, so the topbar follows the list.
   const container = await mount({
     listed: { ...SUMMARY, name: "Expire invites after a week" },
     main: { agent: WORKING.id },
@@ -298,7 +278,6 @@ test("the task's topbar names the task, as the list names it now, over a strip o
 
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {
   const url = "https://github.com/acme/relay/pull/42";
-  // Note that the task's details stand in the panel's place, so the tab is read beside an agent and the links on the details.
   const beside = await mount();
   const tab = [...beside.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === "#42 Expire invitations",

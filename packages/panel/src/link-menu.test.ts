@@ -14,13 +14,6 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platfor
 import { onRegistry } from "./testing/copy-feedback.js";
 import { TextLink } from "./text-link.js";
 
-/**
- * link-menu.test.ts -- a right-click on a link anywhere in the window hangs
- * Open link and Copy link, and Open in browser for an agent's page: on a
- * link in words and on a row that opens an address alike, never over a menu
- * of the clicked thing's own, and never on what is no link.
- */
-
 const ADDRESS = "https://github.com/ReviewStage/luke/pull/42";
 
 const roots: Root[] = [];
@@ -32,7 +25,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** `element` drawn beside the window's link menu, a clipboard taking every copy into the list answered. */
 function mount(element: ReactElement): string[] {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -45,7 +37,6 @@ function mount(element: ReactElement): string[] {
   return copied;
 }
 
-/** A right-click on `element` at a point in the window, as the system sends one. */
 function rightClick(element: Element): void {
   act(() => {
     element.dispatchEvent(
@@ -54,14 +45,12 @@ function rightClick(element: Element): void {
   });
 }
 
-/** The items of the menu standing open, by label; none where no menu stands. */
 function menuItems(): string[] | undefined {
   const menu = document.querySelector('[role="menu"]:not([data-leaving])');
   if (menu === null) return undefined;
   return [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? "");
 }
 
-/** Chooses the standing menu's item named `label`. */
 function choose(label: string): void {
   const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
     (button) => button.textContent === label,
@@ -140,7 +129,6 @@ test("a right-click on a row naming an agent's page offers Open in browser, whic
   assert.deepEqual(opened, [`${page}?stay=web`]);
 });
 
-/** Words being edited, as a description's body holds them, with a link in them. */
 function EditedWords(): React.JSX.Element {
   const host = useEditedLinksHost();
   return createElement(
@@ -215,7 +203,6 @@ test("a chip the editor holds fixed in words being edited opens through its own 
   assert.deepEqual(pressed, [ADDRESS]);
 });
 
-/** A row hanging a menu of its own on a right-click, as a task's row does, around a link. */
 function RowWithMenu(): React.JSX.Element {
   const { contextMenu, open } = useMenu(true);
   return createElement(

@@ -1,75 +1,24 @@
-/**
- * The renderer's Effect edge: the browser runtime the atoms' own work runs on,
- * and the registry that holds them.
- *
- * There is one of each per window: every window is its own document loading
- * the one renderer bundle, so each instantiates this module once, provides
- * its own registry from the root, and holds the one browser `ManagedRuntime`
- * the factory builds inside it. No two windows share one. Nothing here
- * may reach a layer that reaches `node:` — the renderer is a sandboxed browser
- * context, and a runtime is exactly the place a Node-reaching service would
- * arrive unnoticed.
- */
-
 import { scheduleTask } from "@effect/atom-react/RegistryContext";
 import { Cause, type Context, Duration, Effect, Exit, Layer } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
-/**
- * No service stands yet: what the runtime is for is holding the fibers the
- * atoms fork, and a layer arrives here when a surface needs one. It is kept
- * alive because it is the bundle's one edge: a runtime the registry disposed
- * between two readings would be a second runtime to whatever it handed out.
- */
 export const rendererRuntime = Atom.keepAlive(Atom.runtime(Layer.empty));
 
-/**
- * The registry the root provides, so a hook reading an atom and a callback
- * reading the same atom outside React read the one value rather than two.
- * Its `scheduleTask` is the React binding's own, which is what batches a
- * delivery's redraws into one.
- */
 export const rendererRegistry = AtomRegistry.make({ scheduleTask });
 
-/**
- * The services that runtime was built over, for work that is a fiber of its
- * own rather than an atom's, so a fiber outside the atoms still stands on the
- * one set of services this bundle has. The layer is built
- * synchronously, so there is nothing to wait for.
- */
 export const rendererServicesNow = (): Context.Context<never> =>
   AsyncResult.getOrThrow(rendererRegistry.get(rendererRuntime));
 
-/**
- * A pause of the milliseconds handed, as a fiber of its own on the
- * renderer's services, for a promise-shaped caller that waits between tries
- * (`settings/add-skill-dialog.tsx`): each pause stands alone, so one never cuts
- * another short.
- */
 export const rendererPause = (ms: number): Promise<void> =>
   Effect.runPromiseWith(rendererServicesNow())(Effect.sleep(Duration.millis(ms)));
 
-/**
- * An effect run as a fiber of its own on the renderer's services, for a
- * caller that holds it from a React effect (`act-stream.ts`'s followed
- * streams): the stop handed back interrupts it, and returns without waiting
- * on its finalizers, as a cleanup must.
- */
 export const rendererFork = (effect: Effect.Effect<void>): (() => void) => {
   const fiber = Effect.runForkWith(rendererServicesNow())(effect);
   return () => fiber.interruptUnsafe();
 };
 
-/**
- * An effect run to a promise on the renderer's services, for a caller that
- * awaits one: a TanStack Query `queryFn` (`use-app-state.ts`'s
- * `appStateQuery`, `live-reads.ts`'s reads), interrupted as `signal`
- * aborts where it is handed one. Note that a failure rejects with `Cause.squash` of its
- * cause, so the caller holds the failure the effect raised rather than a
- * fiber's own wrapping of it.
- */
 export const rendererPromise = <A, E>(
   effect: Effect.Effect<A, E>,
   signal?: AbortSignal,

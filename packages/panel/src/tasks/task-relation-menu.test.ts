@@ -15,13 +15,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import type { TaskRelationAsk, TaskRelationDoor } from "./task-relation-menu.js";
 import { TaskStandingChips } from "./task-standing.js";
 
-/**
- * task-relation-menu.test.ts -- the add menu, as the task's head opens it on
- * an ask from the task's menus or ⌘K: a pick is sent as the relation its kind
- * names, the task and the one picked each on their own side, and a task that
- * cannot take the kind is listed dimmed with why.
- */
-
 const TASK: Task = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   workspaceId: "workspace-acme",
@@ -36,7 +29,6 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-/** A task of the workspace beside it, by id, name, and repository. */
 function summary(
   id: string,
   name: string,
@@ -71,7 +63,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws the task's head with its relations' door, answering each ask as it stands; drawing again hands the head the next ask. */
 function head(door: TaskRelationDoor, task: Task = TASK): (ask: TaskRelationAsk) => void {
   const host = document.createElement("div");
   document.body.append(host);
@@ -89,7 +80,6 @@ function head(door: TaskRelationDoor, task: Task = TASK): (ask: TaskRelationAsk)
     );
 }
 
-/** The menu's row for the task `name`. */
 function row(name: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
@@ -122,7 +112,6 @@ test("a pick on Parent sets the task's parent to it, and on Sub-task sets its pa
   ]);
 });
 
-/** The pinned New task row, named for the task it makes, which opens New task related to this task. */
 function newTaskRow(name: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(

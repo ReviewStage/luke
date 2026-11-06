@@ -14,12 +14,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 
-/**
- * open-github-refused.test.ts -- a person who presses a branch's "Open on
- * GitHub" chip is told in a toast when the host refuses the open, in the
- * host's own words, rather than the press doing nothing. Synthetic repository.
- */
-
 const BRANCH_ONLY = {
   repository: "acme/relay",
   branch: "luke/expiry-job",
@@ -35,7 +29,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The branch's chip over the doors the desktop's window hands it, beside the window's toasts. */
 async function mountChip(): Promise<HTMLAnchorElement> {
   fakeAppPlatform(DESKTOP_LINKS);
   const doors: PublishedDoors = {
@@ -61,7 +54,6 @@ async function mountChip(): Promise<HTMLAnchorElement> {
   return container.querySelector("a") ?? assert.fail("the branch's chip stands as a link");
 }
 
-/** What each toast standing says, oldest first. */
 function toasts(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
@@ -86,7 +78,6 @@ test("an Open on GitHub the host takes raises no toast", async () => {
     },
   });
   const chip = await mountChip();
-  // The window's toast registry outlives a test, so a toast a test before left standing is not this press's.
   const before = toasts();
 
   await act(async () => chip.click());

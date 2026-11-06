@@ -1,63 +1,22 @@
-/* Our app window: a sidebar of places on the left, the chosen work on the
-   right, and the confirm and feedback dialogs over it. Last in index.css, so a rule here wins over a panel rule of equal
-   weight. */
-
 :root {
-  /* A tab's own bar under a tab strip and its hairline: a control's height
-     with --ui-space-4 above and below it. Every tab that leads with a bar, in
-     the side panel or in a task's column, stands it this tall, so moving
-     between tabs never moves the content under the bar. */
   --secondary-bar-height: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px);
-  /* The spacing scale, one control's box, corner, and glyph, the gaps
-     between controls, list items, and sections, a page's inset and measure, a
-     menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
-     and the window's sidebar, well, and workspace hues are the desktop
-     profile's roles in `@repo/ui` (`tokens/profiles.css`, `palettes.css`),
-     read here by their own names (`--ui-space-8`, `--ui-control-height`,
-     `--ui-color-identity-1`, …). Every
-     padding, margin, and gap in the window is one of those steps or a name
-     built from them, below or in shell.css (docs/DESIGN.md). */
-  /* A row's own small act at its end (a sidebar plan's Pin, a version's ⋯). */
   --sidebar-plan-mark: var(--ui-space-24);
-  /* The window's zoom as a factor, which the page draws every pixel at and
-     the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
-  /* The margin a comment thread stands in beside the reading width, and the
-     gap between them (`tasks/description-comments.tsx`, which mirrors both). */
   --comment-card-width: 288px;
   --comment-margin-gap: var(--ui-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
-  /* The floating layers are `--ui-z-*`. Nothing inside the window's stage
-     reaches them, since the stage is one stacking context under them all. */
 }
 
-/* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
-   `main/window/zoom.ts`), which only the desktop's window has: where the
-   green one ends, its x plus the three lights' 61px on macOS 26, and the
-   height their middle sits at, its y plus half a 14px light. The lights never
-   scale with the page, so their width is divided by the zoom; main moves them
-   down with it instead, so their middle stays where it is drawn here. */
 :root[data-ui-profile="desktop"] {
   --traffic-lights-end: calc(79px / var(--zoom));
   --traffic-lights-middle: 25px;
   --title-bar-middle: var(--traffic-lights-middle);
-  /* The title bar's own buttons beside them, each a toolbar icon button and
-     the first this far past the green light: about what the lights leave
-     between themselves. The buttons stand edge to edge, so each glyph is as
-     far from the next as the first is from the light, and the row reads as one. */
   --title-bar-inset: var(--ui-space-8);
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
-  /* Where the lights end below, half a light under their middle, and where a
-     card the window's size starts (`@repo/ui`'s Dialog): a gap under them. */
   --traffic-lights-bottom: calc(var(--traffic-lights-middle) + 7px);
   --ui-dialog-window-top: calc(var(--traffic-lights-bottom) + var(--ui-space-16));
 }
 
-/* In full screen macOS hides the traffic lights, so the title bar's buttons
-   stand at the window's edge, as far in from it as the side panel's toggle
-   stands from the other, every row that clears them starts that much
-   sooner, and a card the window's size takes its own margin at its top
-   (`window-full-screen.ts`). */
 :root[data-full-screen="true"] {
   --title-bar-left: var(--column-inset);
   --ui-dialog-window-top: initial;
@@ -69,31 +28,11 @@ body,
   background: var(--ui-color-ground);
 }
 
-/* The Mac panel window's page is clear under the shell, whose frame tint and
-   solid sheet paint everything there is, so the window's sidebar material
-   (`panel-manager.ts`) frosts through the frame. */
 :root[data-ui-profile="desktop"]:has(.desktop-shell),
 :root[data-ui-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
   background: transparent;
 }
 
-/* Scrollbars ---------------------------------------------------------------- */
-
-/* Every scroller in the window draws the one scrollbar a Mac app does: a thin
-   rounded thumb in the muted `--ui-color-scrollbar` ink and no track at all, shown
-   while the pointer is over the scroller or focus is in it. Note that the
-   track is named transparent rather than left to the engine, because macOS
-   set to always show scroll bars (or a mouse attached) draws Chromium's
-   classic bar, whose default track is the gray band behind the thumb. Where
-   macOS overlays its bars instead it shows them as a scroll moves and fades
-   them after, as it does in any Mac app. No scroller sets its own: the
-   color inherits, so it reaches into Pierre's tree through its shadow root
-   too, where it stands in for that tree's own `::-webkit-scrollbar` thumb.
-   In the `base` layer with the element resets (base.css). Note that the
-   thumb is not faded in, because a transition on every element starts one
-   on each element whose hover or focus changes, and a commit that moves
-   focus (opening a task) then pays for all of them on every style read:
-   seconds on a long agent's task. */
 @layer base {
   * {
     scrollbar-color: transparent transparent;
@@ -108,35 +47,16 @@ body,
 
 .app-stage[data-surface="desktop"] {
   position: fixed;
-  /* The stage stands over what is seen of the window: from where a phone
-     panned it to, down to where the on-screen keyboard begins, so what
-     stands at its foot, a composer first of all, stays above the keyboard.
-     The panel writes the top, the inset, and the visible height on the root
-     (`use-visual-viewport.ts`); where it writes nothing, the stage fills the
-     window and what is measured by the stage's height is measured by
-     `100vh` (`@repo/ui`'s `tokens/viewport.css`). It is fixed, as the
-     dialog's backdrop is, because the top and the inset are measured in the
-     layout viewport, which a fixed box is placed in, and because an editor's
-     reveal of its caret (ProseMirror's) scrolls every box up to the first
-     fixed one, and past an absolute stage it would scroll the window, by a
-     window it measures without the pan, on every key. It keeps off a phone's
-     notch and home indicator too, where its page is drawn under them
-     (`viewport-fit=cover`); everywhere else those insets are zero. */
   top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px) + var(--viewing-as-height, 0px));
   right: env(safe-area-inset-right, 0px);
   bottom: max(var(--ui-keyboard-inset), env(safe-area-inset-bottom, 0px));
   left: env(safe-area-inset-left, 0px);
-  /* Its edges size it, not base.css's whole-window measure. */
   width: auto;
   height: auto;
   color: var(--ui-color-text);
   font-size: var(--ui-type-body-size);
 }
 
-/* The Viewing as strip (`viewing-as.tsx`) stands across the top of what is
-   seen of the window, where the stage begins, and the stage starts under it
-   by the height the strip writes on the root (`--viewing-as-height`), so it
-   covers nothing. Its ground is the window's, under the banner's tint. */
 .viewing-as {
   position: fixed;
   top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px));
@@ -151,13 +71,6 @@ body,
   inset: 0;
 }
 
-/* A narrow room shows a screen's list or the item chosen in it, one at a
-   time, the other hidden (`shell-room.ts`'s `hiddenColumns`): Settings' page
-   list or its page and a version history's versions or the version, each the
-   shell's one column. Settings and a version history do the
-   same by their own width as well as a narrow room's (`column-split.ts`),
-   their list or its item the screen's one column. The one shown stands
-   alone, so no edge parts it from the other. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell:not([data-sidebar-collapsed]),
 :where(:root)[data-ui-room="narrow"] :is(.desktop-settings, .desktop-version-history),
 :is(.desktop-settings, .desktop-version-history)[data-single="true"] {
@@ -178,35 +91,20 @@ body,
   border-right: 0;
 }
 
-/* Settings' list standing alone leads with its one way back, Back to the
-   tasks; the history's Back and Forward beside it would be a second. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .settings-pages > .title-bar-controls {
   display: none;
 }
 
-/* A narrow room is a phone's, whose keyboard takes half the screen: a box's
-   field stops growing at a smaller share of what is seen
-   (`--ui-stage-height`) than the two fifths every room keeps (tasks.css),
-   short of its eight lines, and scrolls past it, so the words written to and
-   the box writing them both keep a part of the screen. New task's card keeps
-   its own minimum under the cap (`.new-task-composer`). New task's dialog portals out
-   of the shell, so it reads the shell's room off the document's root
-   (`stage-room.ts`), and its Start stays in the card above the keyboard. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .agent-composer-field,
 [data-ui-room="narrow"] .new-task .agent-composer-field {
   --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.3);
 }
 
-/* A thread opened over a narrow room's description spans the column rather than
-   standing a margin card's width at its right over the words, so its reply
-   box has the column's room. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .comment-float {
   left: calc(var(--ui-space-6) * -1);
   width: auto;
 }
 
-/* Where the pointer peeks the folded sidebar out: a strip at the window's
-   left edge, under the title bar so the traffic lights keep their presses. */
 .sidebar-peek-edge {
   position: absolute;
   z-index: 2;
@@ -216,11 +114,6 @@ body,
   width: var(--ui-space-6);
 }
 
-/* The floating sidebar's title-bar row, claimed back from the drag strips of
-   the work under it (`desktop-shell.tsx`), since the work comes after the
-   sidebar and a later drag region wins: without it a press on Back or
-   Forward drags the window instead. It stands over the work and under the
-   sidebar, so the sidebar still takes every press there. */
 .sidebar-float-claim {
   position: absolute;
   z-index: 1;
@@ -234,18 +127,15 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* Note that the side panel of the Inbox kept hidden between visits (`desktop-shell.tsx`) stands nowhere. */
 .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
-  .side-panel[data-full-screen="true"]:not([data-inbox-shown="false"] > [data-page="inbox"] *)
-) .title-bar-controls:not([data-edge]),
+    .side-panel[data-full-screen="true"]:not([data-inbox-shown="false"] > [data-page="inbox"] *)
+  )
+  .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel:not([data-inbox-shown="false"] > [data-page="inbox"] *))
   .title-bar-controls[data-edge="end"] {
   --title-bar-ground: var(--ui-color-well);
 }
 
-/* Every page stands its top row on the frame (shell.css), so the toggle at
-   the right and, while the sidebar is folded, the buttons at the left rest
-   on the frame as those rows do, with no ground of their own. */
 :where(:root):not([data-ui-room="narrow"]) .desktop-shell .title-bar-controls[data-edge="end"],
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]
@@ -253,10 +143,6 @@ body,
   --title-bar-ground: transparent;
 }
 
-/* Where the side panel's toggle stands in from the window's right edge: at
-   the sheets' own edge, so it ends on one line with the panel's sheet below
-   it, or the page's while the panel is shut. Only a page with tabs draws
-   the toggle. */
 .desktop-shell {
   --panel-toggle-right: var(--sheet-gap);
 }
@@ -268,24 +154,12 @@ body,
   background: var(--title-bar-ground);
 }
 
-/* Back and forward at the right of the left column's title-bar row, the
-   plans' sidebar or Settings' page list, as far in from the column's edge as
-   its rows are. They stand in the column, so they keep to its right edge as
-   it is dragged and slide away with it, and nothing passes beneath them but
-   the column's own ground. At the column's least width they still end short
-   of the sidebar toggle's cluster. */
 .title-bar-controls[data-edge="column"] {
   --title-bar-ground: var(--ui-color-sidebar);
   right: var(--column-inset);
   left: auto;
 }
 
-/* An automation's mark at a page's head draws its glyph's ink across the
-   whole share, as GitHub's and Sentry's marks, which fill their drawing,
-   already do. Note that Lucide's glyphs ink 22 of their 24 units and the
-   working mark's grid 13 of its 16 pixels, so at a page's 48px each would
-   otherwise stand a few pixels short inside its box; a row's small mark
-   keeps them as drawn, level with the Lucide glyphs of the rows around it. */
 .actor-mark[data-kind="automation"][data-size="page"] .state-glyph > svg.lucide {
   scale: calc(24 / 22);
 }
@@ -294,10 +168,6 @@ body,
   scale: calc(16 / 13);
 }
 
-/* A line that names an actor: its words and the actor in one row centered on
-   the disc, so the disc never rides above the words' baseline. Note that
-   its spaces stand inside its words, because a row drops a run that is
-   spaces alone, and that it keeps them as typed. */
 .actor-line {
   display: flex;
   min-width: 0;
@@ -305,10 +175,6 @@ body,
   white-space: pre;
 }
 
-/* The plans while the list is first read: each row a row's room around
-   one block in the name's type, as far apart as the rows, so the rows land
-   where the blocks stood. A skeleton's own boxes are its sheet's, never
-   utilities (`anti-slop/skeleton-through-components`). */
 .sidebar-skeleton {
   display: flex;
   flex-direction: column;
@@ -321,9 +187,6 @@ body,
   line-height: var(--ui-type-label-leading);
 }
 
-/* A row's transform is a drag's (use-row-drag.ts): sliding aside for a row
-   dragged past it on the motion tokens, and put back home the same way, so
-   reduced motion and a capture run hold it still. */
 .sidebar-tasks > li {
   position: relative;
   transition:
@@ -332,17 +195,11 @@ body,
     opacity var(--ui-duration-quick) var(--ui-motion-exit);
 }
 
-/* A row being dragged stays in its list as its own placeholder, faded, and
-   slides to where it would land, while its copy follows the pointer. */
 .sidebar-tasks > li[data-dragging="true"],
 .sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
   opacity: 0.4;
 }
 
-/* The layer a dragged row's copy is carried in (use-row-drag.ts): fixed over
-   the whole window, above both panes and under the menus, at the row's
-   place and width, and moved only by its transform, frame for frame, so it
-   eases nothing and takes no pointer. */
 [data-carried="true"] {
   --carried-ground: var(--ui-color-sidebar);
   position: fixed;
@@ -351,10 +208,6 @@ body,
   pointer-events: none;
 }
 
-/* The copy itself, lifted: the open row's fill made opaque on the ground it
-   was dragged from, ringed so it reads over either pane, and a shadow
-   beneath. The sidebar's rows and its sections share it; a board's card is
-   a card (`Card`), whose copy keeps the card's own frame. */
 [data-lifted="true"]:not(.ui-card) {
   border-radius: var(--ui-control-radius);
   background:
@@ -365,22 +218,15 @@ body,
   transition: none;
 }
 
-/* While a row is dragged, the pointer says it is holding one. */
 .sidebar-tasks[data-dragging="true"] {
   cursor: grabbing;
 }
 
-/* A repository's plans under a `GroupHeader`, a group a section's gap
-   below the one before it. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository {
   margin-top: var(--ui-control-gap);
 }
 
-/* A group leaving is laid over the place it held as it slides out
-   (`ListMotion`), so the room above the group after it counts only the
-   groups still in the layout, and that group's glide ends where it stands
-   once the leaving one is gone rather than a margin short. */
 .sidebar-group > .sidebar-repository[data-leaving] + .sidebar-repository {
   margin-top: 0;
 }
@@ -389,9 +235,6 @@ body,
   margin-top: var(--ui-control-gap);
 }
 
-/* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
-   Each is dragged among the others by its header, on the rows' own timing,
-   and carried as a copy while held as a row is. */
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
   transition:
@@ -407,9 +250,6 @@ body,
   cursor: grabbing;
 }
 
-/* The section, or Tasks, a row is carried over is washed while it is, and a
-   line stands where the row would land among a section's tasks. A board's
-   column is a card (`Card`), which rings and washes itself. */
 [data-row-drop][data-drop-target="true"]:not(.ui-card) {
   border-radius: var(--ui-radius-8);
   background: var(--ui-color-fill-hover);
@@ -434,10 +274,6 @@ body,
   bottom: -2px;
 }
 
-/* A sidebar too narrow for the pill's word beside a name that reads folds
-   the pill to its glyph alone in a round, so the name keeps the room. The
-   button's name and its hint still say what it does. */
-/* off-scale: 280px, where the update pill's word stops fitting beside a name as long as "Ada Lovelace", which would otherwise end faded short at the default sidebar's 264px; the offline pill folds at the same width */
 @container sidebar-foot (width < 280px) {
   .sidebar-update {
     --ui-fold: folded;
@@ -466,7 +302,6 @@ body,
   display: none;
 }
 
-/* Note that the room follows the pill drawn, not the network, so it stands until the pill has faded out. */
 .desktop-shell[data-sidebar-collapsed="true"]:has(.title-bar-controls .offline-mark) {
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
@@ -486,7 +321,6 @@ body,
   display: none;
 }
 
-/* off-scale: 280px, where the offline pill's word stops fitting beside "Not signed in" or a name as long as it, which would otherwise end cut short at the default sidebar's 264px */
 @container sidebar-foot (width < 280px) {
   .offline-mark {
     aspect-ratio: 1;
@@ -499,17 +333,6 @@ body,
   }
 }
 
-/* Work column ------------------------------------------------------------- */
-
-/* The work column and its toolbar's row are the shared shell's (shell.css);
-   what follows restages them for the window's own screens. */
-
-/* What a top row at the sheet's right edge leaves past its last control for
-   the side panel's toggle: the toggle, where it stands in from the window's
-   edge, and a row's gap between its items. Note that it is declared on the
-   sheet and less the sheet's own gap, because the toggle stands on the
-   window while the row stands in the sheet, a gap in from the window's edge
-   wherever the sidebar is open. */
 .desktop-main {
   --panel-toggle-clearance: calc(
     var(--panel-toggle-right) +
@@ -519,16 +342,10 @@ body,
   );
 }
 
-/* Beneath the side panel's toggle, at the window's top right, the toolbar
-   stops short of it (`--ui-toolbar-end-at`). Only a plan's page draws the
-   toggle, so Settings' rows end as far in as they start. */
 .desktop-shell[data-panel-toggle="true"] .desktop-main {
   --ui-toolbar-end-at: var(--panel-toggle-clearance);
 }
 
-/* With the panel beside it, the toolbar ends at the panel's edge rather than
-   the window's, and the panel's own row leaves the toggle its room. On the
-   frame its last control ends on one line with its sheet's edge below. */
 .desktop-shell .desktop-task[data-panel-open="true"] {
   --ui-toolbar-end-at: var(--column-inset);
 }
@@ -537,11 +354,6 @@ body,
   --ui-toolbar-end-at: 0px;
 }
 
-/* A task's page stands its topbar across the work, clear of the title bar's
-   buttons at either end (`main-tabs.tsx`'s `TaskTopbar`), and its column's
-   tabs and its side panel's on one row under it, on the frame: each starts
-   and ends on one line with its sheet's edge below it, however the sidebar
-   stands and whether or not the panel is open. */
 :where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
   --ui-toolbar-start-at: 0px;
   --ui-toolbar-end-at: 0px;
@@ -556,10 +368,6 @@ body,
   padding-left: 0;
 }
 
-/* While no title bar button stands over its start, the topbar starts on the
-   column's edge, as the agents' tabs under it do, so the task's name, laid
-   as a tab is (`Toolbar`'s title press), stands its mark and words over the
-   first tab's. */
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell:not([data-sidebar-collapsed="true"])
   > .desktop-main
@@ -567,12 +375,6 @@ body,
   --ui-toolbar-start-at: 0px;
 }
 
-/* The agents' tabs and the side panel's stand on one row tucked under the
-   topbar, at a control's full height, flush with the topbar's own room under
-   the task's name and as much room again under them: the room the title bar
-   keeps above and below its controls (`--title-bar-middle`), so the name, the
-   tabs, and the card stand one even step apart, 8px on the web and 10px by
-   the Mac's traffic lights. The sheets under the row start where it ends. */
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
@@ -610,8 +412,6 @@ body,
   top: var(--task-tabs-height);
 }
 
-/* The task's details stand across the page with no bar of their own, so
-   their sheet starts right under the topbar. */
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
@@ -620,8 +420,6 @@ body,
   top: 0;
 }
 
-/* The way back to the agents stays at the details' card's top left, on the
-   card's ground, as the details scroll beneath it. */
 .desktop-task[data-barless="true"] .desktop-document {
   position: relative;
 }
@@ -635,10 +433,6 @@ body,
   background: var(--ui-color-ground);
 }
 
-/* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
-   controls give way before its tabs do: where the column is narrowest the
-   agents' Retry draws its glyph alone (`FoldingButton`). */
-/* off-scale: 320px, the column's narrowest */
 @container ui-toolbar (width < 320px) {
   .main-tabs {
     --ui-fold: folded;
@@ -653,11 +447,6 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* Buttons --------------------------------------------------------------------- */
-
-/* A glyph of `@repo/ui`'s own drawn outside a button, at the control's
-   glyph size; in the `base` layer, so a shared component holding one sizes
-   it as its own. */
 @layer base {
   .icon-button-glyph {
     width: var(--ui-control-icon);
@@ -666,13 +455,6 @@ body,
   }
 }
 
-/* Plan actions ---------------------------------------------------------- */
-
-/* The window's own menu is `@repo/ui`'s `Menu` (`action-menu.tsx`), its
-   looks drawn by `@repo/ui/styles.css`. What stays here is the window's own:
-   the layer it stands on over everything, or over a modal it was opened
-   from, and its presses claimed back from the toolbar's drag strip it sits
-   over. */
 .ui-menu {
   z-index: var(--ui-z-menu);
 }
@@ -685,26 +467,12 @@ body,
   z-index: calc(var(--ui-z-dialog) + 1);
 }
 
-/* Empty and waiting states ---------------------------------------------- */
-
-/* A notice about the whole plan (`task-banner.tsx`), `@repo/ui`'s strip:
-   the workspace it names reads at the line's own weight. */
 .task-banner-words .workspace-ref {
   max-width: none;
   color: var(--ui-color-text);
   font-weight: var(--ui-weight-medium);
 }
 
-/* The document ------------------------------------------------------------- */
-
-/* An agent's or the draft's tab in the plan's column: its transcript, its
-   docked to-do list, and its composer, each keeping to the document's
-   measure in the middle of the column, as they keep to it in a wide side
-   panel, so the list's card and the composer's share both edges. The
-   Inbox's pane is laid out the same way, its thread at that measure, the
-   box flowing at the thread's end, and what stands docked under it too.
-   The thread's log is named by both its classes, so it keeps this inset
-   over the one a side panel gives a transcript's log. */
 .desktop-agent,
 .desktop-inbox {
   --reading-room: calc((100% - var(--ui-page-measure)) / 2);
@@ -724,42 +492,23 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* A line written again where it stands (`edit-composer.tsx`) is already in the
-   transcript's measure, so its box takes no inset of its own, and opens out of
-   the bubble's corner as a card the window opens in place does. */
 .transcript-message.is-user[data-editing] .agent-composer {
   padding: 0;
 }
 
-/* What a transcript opens on, the description, an automation's prompt, or a
-   worker's task, stands as a sent message does, at the right over the line
-   naming who sent it and when, its card across the message's whole measure,
-   so it lines up with a long sent message's left edge rather than a width of
-   its own: the measure is the sent message's (`Message`'s `is-user`), and a
-   card folded or open spans all of it, the frame around a card whose head
-   holds a control beside it among them. */
 .agent-origin > :is([data-origin-description], [data-replay-card], :has(> [data-replay-card])) {
   width: 100%;
 }
 
-/* What GitHub said on the agent's pull request (`line-cards.tsx`) stands at
-   the left as another's line does, its card across the received message's
-   whole measure, as an opening card spans the sent one's. Its head holds
-   chips, so the card is its frame (`Disclosure`'s `actions`). */
 .transcript-message.is-received > :is([data-github-line], :has(> [data-github-line])) {
   width: 100%;
 }
 
-/* Who sent it can name an automation, an issue, and a runner: too narrow
-   for all three on one line, it breaks between them rather than cutting
-   each name to its first letters. */
 .agent-origin > .ui-message-line > .ui-message-line-sender > .actor-words {
   flex-wrap: wrap;
   row-gap: var(--ui-list-gap);
 }
 
-/* A teammate's call at its divider: their mark and name, then when it
-   started, centered on the mark, every space kept. */
 .call-caller {
   display: flex;
   min-width: 0;
@@ -767,15 +516,11 @@ body,
   white-space: pre;
 }
 
-/* The transcript's way back to its newest line, and an Inbox thread's,
-   stands on the column's own ground rather than the panel's. */
 .desktop-agent .conversation-scroll,
 .desktop-inbox .conversation-scroll {
   --ui-button-ground: var(--ui-color-ground);
 }
 
-/* A unit only one side holds is drawn whole: one written in on the green
-   wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .description-unit.version-added {
   padding-left: var(--ui-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--ui-color-complete) 70%, transparent);
@@ -789,23 +534,11 @@ body,
   text-decoration-color: color-mix(in srgb, var(--ui-color-danger) 60%, transparent);
 }
 
-/* Its column is a `ScrollArea` with nothing scrolling sideways, since
-   nothing in a description is wider than the column (its code and tables scroll on
-   their own), and a stable gutter, so where macOS draws a bar that takes
-   room the column does not shift sideways on the line the app writes that
-   first makes it scroll. This is the block inside it. */
 .desktop-document .description-document-body {
   padding: var(--ui-page-inset);
-  /* Room for the last line to scroll clear of what floats over the column's foot. */
-  padding-bottom: 140px; /* off-scale */
+  padding-bottom: 140px;
 }
 
-/* A description's comment counts and a block's comment button stand in the gutter
-   past the column's end (tasks.css), which the desktop's 48px inset holds.
-   The web's 24px holds neither, so its documents end a finger's target and a
-   hair either side of it short of the column, whether or not a thread stands
-   yet, as the desktop's inset does, so the words never move when the first
-   comment lands, and a description and its versions keep one width. */
 .desktop-document {
   --comment-gutter: var(--ui-page-inset);
 }
@@ -818,9 +551,6 @@ body,
   padding-right: var(--comment-gutter);
 }
 
-/* Under 480px of room the document gives back half its inset at its start,
-   as every page does (`CollectionPage`, `DetailPage`, `SettingsPage`), and
-   keeps its end's, which holds the comment gutter, as the web's does. */
 @container description-document (width < 480px) {
   .desktop-document .description-document-body {
     padding-left: var(--ui-page-inset-narrow);
@@ -841,18 +571,10 @@ body,
   line-height: var(--ui-type-reading-leading);
 }
 
-/* A description is a document rather than a message, so its sections breathe: its
-   blocks, and the sections of a text drawn inside one block, stand a
-   section's gap apart, wherever it is drawn, the side panel's plan tab
-   included. Note that the gap is the body's children's rather than
-   `.description-unit`'s own, because a unit is drawn inside a wrapper where it
-   carries a byline. */
 .desktop-document .description-body > * + * {
   margin-top: 1.5em;
 }
 
-/* A task's key stands tight over its title, and its status and priority
-   chips close under it, as one head rather than three blocks. */
 .desktop-document .description-body > .plan-task-key + * {
   margin-top: var(--ui-list-gap);
 }
@@ -865,25 +587,11 @@ body,
   color: var(--ui-color-text);
 }
 
-/* Each section is named by a heading with room above it rather than a rule
-   under it; a description's title is its page's header (`PageHeader`), not a
-   heading of the text. Note that the headings keep prose's own scale and
-   weight (`@repo/ui`'s prose.css), so a description's h1, h2 and h3 read as three
-   steps, as they do in every other note. An h3 that follows a block inside
-   a section stands the same room above it, so it never sits on the list or
-   paragraph before it; one straight under a heading stays close to it. */
 .desktop-document .ui-markdown-heading:is([data-level="1"], [data-level="2"]),
 .desktop-document :not(.ui-markdown-heading) + .ui-markdown-heading[data-level="3"] {
   margin-top: 1.6em;
 }
 
-/* The repository chip ------------------------------------------------------ */
-
-/* An integration whose brand publishes its one-color mark in named inks
-   wears them by the ground: Executor's, Notion's, and Resend's pure white on
-   dark and pure black on light, Sentry's white on dark and its dark blurple on light,
-   Neon's two greens, and Mercury's near-white on dark and near-black on
-   light (`@repo/ui`'s `marks/provider-mark.tsx`). */
 :root {
   --integration-ink-executor: light-dark(#000, #fff);
   --integration-ink-mercury: light-dark(#272735, #f4f5f9);
@@ -917,15 +625,11 @@ body,
   color: var(--integration-ink-sentry);
 }
 
-/* A tool's page reached from its server's list leads its head with the way
-   back, folded to its glyph (`integration-tool-list.tsx`). */
 .integration-tool-detail-head:has(.ui-button) {
   --ui-fold: folded;
   padding-left: var(--ui-item-gap);
 }
 
-/* What a tool does, rendered as markdown: its emphasis, headings, and code
-   in the full ink, its headings at the words' own size. */
 .integration-tool-description-whole :is(strong, .ui-markdown-heading, code) {
   color: var(--ui-color-text);
 }
@@ -935,7 +639,6 @@ body,
   font-size: 1em;
 }
 
-/* off-scale: 440px, where a tool parameter's name and values fit side by side */
 @container (width >= 440px) {
   .integration-tool-parameter {
     display: grid;
@@ -949,21 +652,10 @@ body,
   }
 }
 
-/* Inbox ---------------------------------------------------------------------- */
-
-/* Split beside the item, the list's bar ends at the item's edge rather than
-   the window's, so it keeps its own inset though the side panel's toggle
-   stands at the window's top right. */
 .inbox-view[data-columns="both"] .inbox-tasks {
   --ui-toolbar-end-at: var(--column-inset);
 }
 
-/* While the sidebar is folded the window's Inbox's list is its first column, so its
-   name stands centered over the list, as a sidebar's title does, rather than
-   pushed past the title bar's buttons (`Toolbar`'s centered title): the room
-   kept for the buttons is what the bar's start stands at. The list standing
-   alone is a page rather than a column, so its name leads its bar past the
-   title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
   > .desktop-task
@@ -982,12 +674,6 @@ body,
   --ui-toolbar-center: off;
 }
 
-/* A task's own Inbox draws in the side panel (`inboxBody` reaches `SidePanel`
-   alone), under its tab strip and clear of the title bar's buttons at either
-   end, so its item's bar keeps the column's own inset whether the sidebar is
-   folded or the panel's toggle is drawn. Under the strip, the item's bar is
-   the tab's own bar, as tall as every other tab's (`PaneBar`) and on its
-   ground, rather than a top row. */
 .side-panel-content .inbox-view {
   --ui-toolbar-start-at: var(--column-inset);
   --ui-toolbar-end-at: var(--column-inset);
@@ -996,9 +682,6 @@ body,
   --ui-toolbar-ground: var(--ui-color-fill-hover);
 }
 
-/* A group's room above it counts only the groups still in the layout, so a
-   group stands as it will once the one leaving before it is gone, and its
-   glide ends there rather than a margin short. */
 .inbox-tasks-body > [data-leaving] + .sidebar-repository {
   margin-top: 0;
 }
@@ -1009,16 +692,10 @@ body,
   margin-top: var(--ui-control-gap);
 }
 
-/* A comment holding a form's composer field lets what stands over the
-   field, its @ and / lists, run past its top and foot, clipping only what
-   runs long across, as every comment does. */
 .inbox-comment-body:has(.inbox-field-composer) {
   overflow-y: visible;
 }
 
-/* A form's text field is the composer's own field (`inbox-form-text.tsx`) in
-   a field's frame, its line at the field's insets, growing a line at a time
-   to eight. */
 .inbox-field-composer .agent-composer-field {
   --agent-composer-field-block: calc(2 * var(--ui-item-gap));
 }
@@ -1027,16 +704,10 @@ body,
   padding: var(--ui-item-gap) var(--ui-control-inset);
 }
 
-/* The reader's draft reply, the thread's last comment: the box stands in
-   its body edge to edge. */
 .inbox-comment[data-inbox-comment="draft"] .agent-composer {
   padding: 0;
 }
 
-/* Only the column's bar meets the folded sidebar's toggle, so the items' bar
-   keeps its own inset then. An item standing alone in the window's Inbox is
-   its first column, so its bar, led by the way back, leaves the title bar's
-   buttons their room. */
 .inbox-view-items {
   --ui-toolbar-start-at: initial;
 }
@@ -1050,24 +721,11 @@ body,
   --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-/* Automations ---------------------------------------------------------------- */
-
-/* A narrow room's row says when it runs next in the line under its name,
-   a failure's mark leading the line as it leads an agent's end line. Note
-   that the mark stands inside the line's replay mark, a box of its own in
-   the tree though not on the screen, so it is reached as a descendant. */
 .automation-group .ui-list-row-description .failed-mark {
   margin-right: var(--ui-tight-gap);
-  vertical-align: -3px; /* off-scale: centers a 14px mark on 12px words */
+  vertical-align: -3px;
 }
 
-/* An automation's page's toolbar stands in a box of its own whose width the
-   query reads (`automation-editor.tsx`), since the toolbar's own padding
-   leaves the traffic lights their room or not as the sidebar folds. Too
-   narrow for every act's words beside a readable name, the acts fold to
-   their glyphs, each named by its pill, and the draft's state goes, since
-   Save says it already; the crumb back folds to its glyph alike. */
-/* off-scale: 880px, where the editor's acts stop fitting beside its name */
 @container automation-toolbar (width < 880px) {
   .automation-toolbar > * {
     --ui-fold: folded;
@@ -1078,19 +736,12 @@ body,
   }
 }
 
-/* The Automations list's toolbar: where its two acts' words would crowd the
-   title, Create with an agent folds to its glyph and New automation keeps
-   its words (`automation-list-frame.tsx`). */
-/* off-scale: 600px, where the Automations toolbar's acts stop fitting */
 @container automations-toolbar (width < 600px) {
   .automations-acts {
     --ui-fold: folded;
   }
 }
 
-/* The prompt's placeholder, the height of its field at the rows it stands
-   (`--automation-prompt-rows`, the editor's `PROMPT_ROWS`), its insets and
-   its border (`text-field.css`). */
 .automation-prompt-skeleton {
   height: calc(
     var(--automation-prompt-rows) *
@@ -1101,9 +752,6 @@ body,
   );
 }
 
-/* The runs standing alone beside a folded sidebar stand under the title
-   bar's row, so its buttons stand over the row rather than over their way
-   back. */
 .desktop-shell[data-room="wide"][data-sidebar-collapsed="true"] .automation-runs-screen::before {
   content: "";
   flex: 0 0 auto;
@@ -1116,11 +764,6 @@ body,
   -webkit-app-region: drag;
 }
 
-/* Settings ------------------------------------------------------------------- */
-
-/* An item standing alone at the window's edge stands under the title bar's
-   row, as the list beside it does, so the traffic lights stand over the
-   row rather than over its way back. */
 .desktop-shell
   > :is(.desktop-settings, .desktop-version-history)[data-single="true"]
   > :is(.settings-page, .version-page) {
@@ -1137,13 +780,6 @@ body,
   -webkit-app-region: drag;
 }
 
-/* Find in a tab --------------------------------------------------------- */
-
-/* The tab a find searches holds its bar at its top right (`find-in-tab.tsx`),
-   as a browser's find bar stands over the page. It answers its own width, so
-   a column too narrow for the bar's own width spans the bar across it, inset
-   alike at both sides, and the field takes what the buttons leave it. */
-/* off-scale: 400px, where the column is too narrow for the find bar's own width */
 @container find-scope (width < 400px) {
   .find-scope > .find-bar {
     left: var(--column-inset);
@@ -1156,18 +792,12 @@ body,
   }
 }
 
-/* Narrower still, the tally gives the field its room and is said rather
-   than drawn (`SearchField`'s fold); the matches stay marked in the tab. */
-/* off-scale: 300px, where the find bar's tally gives the field its room */
 @container find-scope (width < 300px) {
   .find-scope > .find-bar {
     --ui-fold: folded;
   }
 }
 
-/* A page standing in the plan's place finds as one scope (`PageFind`): it
-   fills the place as the page did, and its bar stands under the page's
-   toolbar, clear of the toolbar's own buttons. */
 .page-find > .find-bar {
   top: calc(var(--desktop-bar-height) + var(--ui-space-8));
 }
@@ -1176,16 +806,10 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* Over a File tab the bar stands just under the file's own bar
-   (`tasks.css`), whose controls it would otherwise cover: that bar's
-   buttons, its padding, and its hairline. The side panel holds its tab in
-   `.side-panel-keeps`, which lays nothing out but stands between the scope
-   and the tab, so the tab is looked for there too. */
 .find-scope:has(> .file-view, > .side-panel-keeps > .file-view) > .find-bar {
   top: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px + var(--ui-space-8));
 }
 
-/* Each match, then the one the find is at over it (`find-matches.ts`). */
 ::highlight(find-match) {
   background-color: var(--ui-color-find-match);
 }
@@ -1195,17 +819,10 @@ body,
   color: var(--ui-color-on-find-current);
 }
 
-/* Version history ------------------------------------------------------------ */
-
-/* The view's title heads the versions' pane rather than the column, so it
-   slides away with them and the sections' own head stands in its place. */
 .version-log-pane {
   transition: transform var(--ui-duration-pane) var(--ui-motion-pane);
 }
 
-/* The sections' pane is a scroller of the sidebar's kind, its reach already
-   the track's, so it fills its cell rather than standing past it, and its
-   area's body pads the reach in rather than the pane. */
 .version-log-track > .sidebar-section {
   margin-inline: 0;
   padding-inline: 0;
@@ -1215,36 +832,20 @@ body,
   transform: translateX(-100%);
 }
 
-/* Nothing stands below a version, so it needs no room under its last line. */
 .version-page .desktop-document .description-document-body {
   padding-bottom: var(--ui-page-inset);
 }
 
-/* The side panel ----------------------------------------------------------- */
-
-/* What the open description keeps beside the side panel: the panel is
-   dragged no wider than the plan's area less this (side-panel.tsx reads it,
-   which is why it is registered as a length), and drawn no wider either.
-   Beside the open sidebar it is the panel's own least width, so neither pane
-   is dragged narrower than the other. */
 @property --document-reserve {
   syntax: "<length>";
   inherits: true;
   initial-value: 280px;
 }
 
-/* With the sidebar folded the document's toolbar starts clear of the title
-   bar's buttons, so the document keeps that much more, and the plan's tab the
-   same room beside Copy description and the plan's menu. */
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-task {
   --document-reserve: calc(280px + var(--sidebar-toggle-clearance) - var(--column-inset));
 }
 
-/* Hidden, not removed, while the panel fills the window: it keeps its layout
-   beneath the panel, and is hidden only once the panel has grown over it. An
-   agent's page and the window's Inbox beside their panel are hidden alike.
-   Note that its endless loops pause, because a page hidden by `visibility`
-   still asks the window for every frame a loop moves in. */
 .desktop-task-main[hidden],
 .desktop-task > .agent-page[hidden],
 .desktop-task > .page-find[hidden] {
@@ -1253,25 +854,12 @@ body,
   transition: visibility 0s linear var(--ui-duration-pane);
 }
 
-/* The run's bar under an automation's agent's bar (`automation-agent-run.tsx`)
-   is a tab's (`PaneBar`), but it stands under the page's toolbar rather than
-   a tab strip, so it starts its glyph a column's inset further in, on one
-   line with the toolbar's first crumb. */
 .agent-page > .ui-pane-bar {
   padding-inline: calc(var(--column-inset) + var(--ui-list-inset));
 }
 
-/* The plan's summary (`task-summary.tsx`) ----------------------------------- */
-
-/* What the column shows, beside the plan's summary: under the toolbar, which
-   spans the column. The room the summary takes is said once here. */
 .desktop-task-main {
   --summary-width: 240px;
-  /* The rail stands its controls a column's inset in from its edges, so at
-     the window's right edge its glyphs stand on one line with the side
-     panel's toggle above it, as far in from that edge, and beside an open
-     panel on one line with the toolbar's last button, as far in from the
-     panel's. */
   --summary-rail-width: calc(var(--ui-control-height) + 2 * var(--column-inset));
 }
 
@@ -1285,14 +873,6 @@ body,
   gap: var(--ui-list-gap);
 }
 
-/* The pinned summary's chevron and the card's stand on the rail's own, and
-   show while the pointer is on the summary, and the pinned one while the keys
-   are in it too. The pinned one stands where the rail's does, over the
-   area's corner as far in as the body's padding, and stays there as the
-   summary scrolls: it takes no room of its own, so the first heading stands
-   level with it, and stands on the summary's ground, so a row scrolled under
-   it never shows through. The card's is in from the card's outer edges as
-   far as the rail's padding, less the card's border. */
 .task-summary[data-mode="column"] > .task-summary-chevron,
 .task-summary-collapse {
   opacity: 0;
@@ -1312,7 +892,6 @@ body,
   background-color: var(--ui-button-ground);
 }
 
-/* Each chevron's box is its button alone, which carries its look. */
 .task-summary-chevron,
 .task-summary-collapse {
   display: flex;
@@ -1320,7 +899,6 @@ body,
 
 .task-summary-collapse {
   position: absolute;
-  /* The card's own border, 1px, stands between its outer edge and this. */
   top: calc(var(--column-inset) - 1px);
   right: calc(var(--column-inset) - 1px);
 }
@@ -1337,8 +915,6 @@ body,
   }
 }
 
-/* A screen with no hover shows both chevrons at rest, since no pointer rests
-   on the summary to bring them and each still takes a press. */
 @media (hover: none) {
   .task-summary[data-mode="column"] > .task-summary-chevron,
   .task-summary-collapse {
@@ -1346,8 +922,6 @@ body,
   }
 }
 
-/* The first heading stands level with the chevron, so its fold's hover ends
-   short of the chevron rather than running under it. */
 .task-summary[data-mode="column"]
   .task-summary-body
   > .task-summary-section:first-of-type
@@ -1356,7 +930,6 @@ body,
   margin-right: calc(var(--ui-control-height) + var(--ui-tight-gap));
 }
 
-/* Full screen, the panel covers the document as well as its own room. */
 .side-panel[data-full-screen="true"] {
   position: absolute;
   z-index: 1;
@@ -1365,7 +938,6 @@ body,
   border-left: 0;
 }
 
-/* Shutting, it gives the document its room at once and slides out over it. */
 .side-panel[data-leaving="close"] {
   position: absolute;
   z-index: 1;
@@ -1374,10 +946,6 @@ body,
   bottom: 0;
 }
 
-/* A drag the edge's snap took away from under the pointer is still the
-   edge's (`@repo/ui`'s ResizeEdge marks the root), so the whole window wears
-   its cursor and selects nothing. Note that this stays out of the layers,
-   so it wins over every cursor the window draws. */
 :root[data-edge-drag] {
   cursor: col-resize;
   user-select: none;
@@ -1387,12 +955,6 @@ body,
   cursor: inherit;
 }
 
-/* A finger takes an edge across both columns' gutters, centered on the strip
-   it draws, which keeps its width and its place. Note that the edge stops at
-   the gutters rather than reaching a finger's full width, because past them
-   it would stand over the rows and controls either column holds there, and
-   a press on one would start a drag instead. The gutters are the panel's,
-   so this stays here beside them rather than in `@repo/ui`'s ResizeEdge. */
 @media (pointer: coarse) {
   .ui-resize-edge::before {
     position: absolute;
@@ -1405,9 +967,6 @@ body,
   }
 }
 
-/* The panel's top row, level with the plan's toolbar and, like it, the
-   window's drag handle wherever no control stands. It runs to the window's
-   right edge, so its full-screen button stops short of the toggle there. */
 .side-panel-bar {
   display: flex;
   flex: 0 0 auto;
@@ -1418,8 +977,6 @@ body,
   padding: var(--ui-row-inset) var(--panel-toggle-clearance) var(--ui-row-inset) var(--column-inset);
 }
 
-/* On the frame its first tab starts on one line with its sheet's edge
-   below, as the plan's does. */
 :where(:root):not([data-ui-room="narrow"]) .desktop-shell .side-panel-bar {
   padding-left: 0;
 }
@@ -1428,15 +985,10 @@ body,
   -webkit-app-region: drag;
 }
 
-/* Full screen with the sidebar folded, the row starts where the plan's
-   toolbar would: clear of the traffic lights and the sidebar toggle. */
 .desktop-shell[data-sidebar-collapsed="true"] .side-panel[data-full-screen="true"] .side-panel-bar {
   padding-left: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
-/* Where no toggle is drawn, the side panel's "+" menu asked for with
-   nothing to show hangs from the window's top right, where the toggle would
-   stand (`side-panel.tsx`'s `ToggleOffers`). */
 .panel-offers-corner {
   position: fixed;
   z-index: var(--ui-z-menu);
@@ -1451,35 +1003,16 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* The plan's tab, kept mounted while another tab is shown, laid out still
-   but not drawn, as the document once was in the column. */
 .side-panel-content[hidden] {
   display: none;
 }
 
 .side-panel-content {
-  /* What the panel leaves either side of a column at each measure, read
-     where it is spent: a percentage there is of the box's frame, which is
-     the panel's width. */
   --reading-room: calc((100% - var(--ui-page-measure)) / 2);
   position: relative;
-  /* The container every tab answers its width from (`@container
-     side-panel`, tasks.css), so one width lays out every tab narrow; it
-     is the tab's find scope too, so it keeps that name (`.find-scope`). */
   container: side-panel find-scope / inline-size;
 }
 
-/* Every tab but the Board and a File tab keeps to a column centered in the
-   panel, however wide it is drawn, as the document keeps to its own: words
-   at the document's measure, the Code feed's cards at code's. Each scroller
-   still spans the panel, so its bar stays at the panel's edge, and pads in
-   to the column, never by less than the column's text inset
-   (`--content-inset`), so a tab keeps its edge moving between the two. An agent's
-   composer and its docked to-do list pad in to the same column as its
-   transcript, so the two cards, the chips, and the transcript line up; the
-   sticky call headers and the way back to the newest line already keep to
-   the log's column. A File tab spans the panel as an editor does: a file's
-   lines are read across all the width the developer gave the panel. */
 .side-panel-content .conversation-log,
 .side-panel-content .agent-log-skeleton,
 .side-panel-content .agent-todos-dock,
@@ -1491,23 +1024,6 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* Tabs ------------------------------------------------------------------------ */
-
-/* The window's one strip is `@repo/ui`'s Tabs (tab-strip.tsx), drawn alike
-   in the plan's column and the side panel, folding as the room says. */
-
-/* A narrow room's bars have no room beside their buttons for their tabs,
-   so a strip and its "+" take a row of their own under them, as a phone's
-   browser stands its tabs under its address bar: the task's column's
-   (`Toolbar`'s tabs look, told where its edges stand) and the side panel's,
-   standing full screen, alike. The top row keeps its actions at its end,
-   both rows clear of the title bar's buttons at either edge, and the row
-   beneath reaches past that clearance to the column's own inset, its whole
-   width; the strip scrolls along in it as it does anywhere, its chosen tab
-   pinned in view. Under a task's page head (`phone-head.tsx`), which stands
-   in the title bar's buttons' place, the column's bar starts and ends at the
-   column's own inset, and the side panel draws no bar at all, the row
-   standing for it. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell .desktop-task-main {
   --ui-toolbar-wrap-start: var(--sidebar-toggle-clearance);
   --ui-toolbar-wrap-end: var(--panel-toggle-clearance);
@@ -1542,21 +1058,10 @@ body,
   display: none;
 }
 
-/* Start ------------------------------------------------------------------ */
-
-/* Feedback dialog ------------------------------------------------------------ */
-
-/* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
-   Home's sections, headed by their face at the page's size beside their
-   name and who they are here, and each block a section's gap under the
-   head. */
 .person-top ~ * {
   margin-top: var(--ui-page-section-gap);
 }
 
-/* New task's chips are Settings pickers (`settings/picker-row.tsx`)
-   standing alone at the head of their lines, not in a column, so each is as
-   wide as its value and gives way, ellipsized, to a long one. */
 .new-task .settings-picker {
   min-width: 0;
   flex-shrink: 1;
@@ -1566,16 +1071,10 @@ body,
   padding: 0;
 }
 
-/* The words field stands at least five lines tall, so a task's prompt has
-   room before it is written; it still grows to the agent box's eight. */
 .new-task-composer .agent-composer-input {
   min-height: calc(5 * var(--ui-type-body-leading) + var(--agent-composer-field-block));
 }
 
-/* In the dialog, which does not scroll, a window too short for five lines,
-   as a small one zoomed in, has the minimum yield to a quarter of the
-   window, so the card's foot and its Start stay in view. Home scrolls, so
-   its composer keeps the five lines but in a narrow room (below). */
 .new-task .new-task-composer .agent-composer-input {
   min-height: min(
     calc(5 * var(--ui-type-body-leading) + var(--agent-composer-field-block)),
@@ -1583,98 +1082,63 @@ body,
   );
 }
 
-/* A narrow room's card, a phone's, stands its empty field two lines tall
-   rather than five, so Home's Inbox stays in view under it; it still grows
-   to the cap as the words are written. */
 :where(:root)[data-ui-room="narrow"] .new-task-composer .agent-composer-input {
   min-height: calc(2 * var(--ui-type-body-leading) + var(--agent-composer-field-block));
 }
 
-/* The foot stands on one row however narrow the card: the Runs on chip and
-   the model chip draw their marks alone at the box's own steps
-   (`agent-composer.tsx`'s `FOLD_WIDTH`), and between them the model chip's
-   words give way, cut short, rather than the row wrapping. */
 .new-task-composer .agent-composer-actions {
   margin-left: auto;
 }
 
-/* Where the Runs on chip draws its glyph alone, the foot's left, the "+"
-   and that glyph, stands whole, so the model chip's words give way first. */
-/* off-scale: 520px, the card under which the Runs on chip draws its glyph alone (`agent-composer.tsx`'s `FOLD_WIDTH.PUBLISHED`) */
 @container composer (width < 520px) {
   .new-task-composer .ui-composer-foot-tools {
     flex-shrink: 0;
   }
 }
 
-/* A card too narrow for its placeholder on one line, as on a phone, wraps
-   it, since its field stands at least two lines tall; the agent's one-line
-   box cuts its own short instead, which would otherwise run over its foot. */
 @container composer (width < 480px) {
   .new-task-composer .agent-composer-placeholder {
     white-space: normal;
   }
 }
 
-/* The foot's short chips stand whole, so the repository's name is what
-   gives way, ellipsized, where the card is narrow. */
 .new-task-composer .agent-model-chip {
   display: flex;
   flex-shrink: 0;
 }
 
-/* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: the model chip's words are what give way, cut short. */
-/* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
   .new-task-composer .agent-composer-actions .agent-model-chip {
     flex-shrink: 1;
   }
 }
 
-/* The card holding the keyboard, or whose menu is open, stands over its
-   neighbors, so its ring and its menu are drawn over the next card. */
 .tasks-board-card:has(:focus-visible),
 .tasks-board-card[data-menu-open="true"],
 .tasks-board-card:has([aria-expanded="true"]) {
   z-index: 2;
 }
 
-/* A card being dragged stays in its column as its own placeholder, faded,
-   while its copy follows the pointer. */
 .tasks-board-cards > li[data-dragging="true"] {
   opacity: 0.4;
 }
 
-/* The creator's face, a press of its own that hangs their card
-   (`CreatorFace`), stands over the card's press. */
 .tasks-board-card-head [data-task-creator] {
   position: relative;
   z-index: 1;
 }
 
-/* The status's mark before the name, on the name's first line, standing
-   over the card's press as its pills do; the name wraps beside it. The
-   press holds the name alone, its reach still covering the whole card. */
 .tasks-board-card-title > .ui-chip {
   position: relative;
   z-index: 1;
-  /* off-scale: centers the compact chip on the name's first line */
   margin-block: calc((var(--ui-type-label-leading) - var(--ui-space-20)) / 2);
 }
 
-/* The mark that leads the name and the one that leads the pills, the
-   status's and the priority's (or the assignee's face where no priority is
-   drawn), stand on one column: each chip is drawn out past the card's
-   inset as far, so the two marks stand one above the other. */
 .tasks-board-card-title > .ui-chip,
 .tasks-board-card-pills > .ui-chip[data-icon-only="true"]:first-child {
   margin-left: calc(-1 * var(--ui-space-4));
 }
 
-/* A column's quick add (`quick-add.tsx`): its draft is the card it is
-   about to be, its title bare in the name's place; an add still out stands
-   muted until its card draws, and a refusal stands under the draft. */
 .tasks-board-draft[data-pending="true"] .tasks-board-name {
   color: var(--ui-color-text-muted);
 }
@@ -1683,8 +1147,6 @@ body,
   padding: 0 var(--ui-list-inset);
 }
 
-/* The draft's title fills the name's room, so the caret's line reaches the
-   column's edge as a plan's line reaches its page's. */
 .tasks-board-draft .tasks-board-name {
   display: flex;
   overflow: visible;
@@ -1709,9 +1171,6 @@ body,
   box-shadow: inset 0 -1px var(--ui-color-focus-ring);
 }
 
-/* A row being dragged stays in its group as its own placeholder, faded,
-   while its copy follows the pointer; the copy, out of the grid, lays its
-   cells out on a line of its own. */
 .tasks-list-rows > li[data-dragging="true"] {
   opacity: 0.4;
 }
@@ -1727,7 +1186,6 @@ body,
   flex: 1;
 }
 
-/* The line a row would land at in Pinned or a section. */
 .tasks-list-rows > li[data-drop-before="true"] {
   box-shadow: inset 0 2px 0 var(--ui-color-focus-ring);
 }
@@ -1736,9 +1194,6 @@ body,
   box-shadow: inset 0 -2px 0 var(--ui-color-focus-ring);
 }
 
-/* A row's creator's face (`task-row-parts.tsx`) is a press of its own,
-   hanging its card, standing over the row's press in a cell that lets the
-   pointer through, so a press beside it still opens the task. */
 .ui-task-row-cell [data-task-creator] {
   position: relative;
   z-index: 1;

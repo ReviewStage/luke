@@ -19,17 +19,9 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { settingsPageOf } from "./pages.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
-/**
- * Settings' Account page as the panel draws it: its own groups and no list of
- * the other pages, which the Settings sidebar alone lists; This Mac saying
- * where macOS has the app's notifications off; and no page's buttons end their
- * words with an ellipsis.
- */
-
 const ignore = () => undefined;
 const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
     status: ACCOUNT_STATUS.SIGNED_IN,

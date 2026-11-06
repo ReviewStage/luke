@@ -32,18 +32,9 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
 
-/**
- * shell-room.test.ts -- the window on a stage as narrow as a phone's stands
- * as one pane at a time: the sidebar a drawer its toggle opens and a press
- * outside puts away, and the side panel only full screen, with no edge to
- * drag and a toggle that reads Close. A stage as wide as the desktop's
- * window keeps both as they were. Synthetic task, no account of anyone's.
- */
-
 const ignore = () => undefined;
 const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
     status: ACCOUNT_STATUS.SIGNED_IN,
@@ -80,26 +71,20 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The task open in the window. */
 const OPEN_TASK = { id: DOCUMENT_TASK.id, holds: {} };
 
-/** The task's agent, whose Pull request tab the panel was left open on, so it has a tab to show. */
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** The desktop's window at its usual width. */
 const WIDE = 1280;
 
-/** A phone's width. */
 const PHONE = 390;
 
 let root: Root | undefined;
 
-/** How wide the panel's stage is laid out, which jsdom, laying out nothing, leaves to the test. */
 let stageWidth = 0;
 
 beforeEach(() => {
   window.localStorage.clear();
-  // The panel left open on an earlier launch, since a first launch leaves it shut.
   window.localStorage.setItem(
     "app.sidePanel",
     JSON.stringify({
@@ -131,21 +116,17 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
 const routed = shellRouterEachTest();
 
-/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
 function underRouter(shell: ReactElement, standing?: string): ReactElement {
   return routed().under(shell, standing);
 }
 
-/** Resizes the panel's stage, as a phone turned or a browser window dragged does. */
 function resizeStage(width: number): void {
   stageWidth = width;
   act(() => relayout());
 }
 
-/** The window as the panel's root draws it: the stage measured, its room, and the real sidebar and side panel over the task open on its page, or the page it rests on with none. */
 function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
@@ -158,10 +139,8 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
     onTabChange: setTab,
     tasks: tasksControl({
       page: onTask ? TASKS_PAGE.DOCUMENT : TASKS_PAGE.HOME,
-      // An account with a task, so Home rests on its own page rather than a new account's welcome.
       tasks: [DOCUMENT_TASK],
       region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-      // Note that the panel stands beside a draft agent's tab, since the task's details take its room.
       mainTabs: {
         ...tasksControl().mainTabs,
         tabs: [MAIN_TAB.OVERVIEW, { draft: "draft" }],
@@ -189,7 +168,6 @@ function Window({ onTask }: { onTask: boolean }): React.JSX.Element {
   return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
 }
 
-/** The window on a stage of a width, the open task's page drawn, or the page it rests on with none. */
 function mount(width: number, onTask = true): HTMLElement {
   stageWidth = width;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -211,12 +189,10 @@ function mount(width: number, onTask = true): HTMLElement {
   return container;
 }
 
-/** The room the shell stands in, as the stylesheet reads it. */
 function roomOf(page: HTMLElement): string | null | undefined {
   return page.querySelector(".desktop-shell")?.getAttribute("data-room");
 }
 
-/** The sidebar's toggle at the window's top left, by whatever it is called now. */
 function sidebarToggle(page: HTMLElement): HTMLButtonElement {
   const button = page.querySelector<HTMLButtonElement>(
     ".title-bar-controls:not([data-edge]) button",
@@ -225,12 +201,10 @@ function sidebarToggle(page: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-/** Opens a phone's drawer by the sidebar's chord, as a keyboard does where no title bar's toggle stands. */
 function openDrawer(): void {
   act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
 }
 
-/** The side panel's toggle at the window's top right, by whatever it is called now. */
 function panelToggle(page: HTMLElement): HTMLButtonElement {
   const button = page.querySelector<HTMLButtonElement>(
     '.title-bar-controls[data-edge="end"] button',
@@ -239,7 +213,6 @@ function panelToggle(page: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-/** The side panel as it is drawn: whether it fills the window, can be dragged, and offers full screen. */
 function panelOf(page: HTMLElement) {
   const aside = page.querySelector<HTMLElement>("aside.side-panel");
   assert.ok(aside, "the panel is drawn");
@@ -252,14 +225,12 @@ function panelOf(page: HTMLElement) {
   };
 }
 
-/** The tasks' sidebar, folded or not. */
 function sidebarOf(page: HTMLElement): HTMLElement {
   return (
     page.querySelector<HTMLElement>("aside.desktop-sidebar") ?? assert.fail("the sidebar is drawn")
   );
 }
 
-/** How the sidebar stands: `away` out of reach, `drawer` floating over the work, or `pinned` beside it. */
 function sidebarStanding(page: HTMLElement): string {
   const shell = page.querySelector(".desktop-shell");
   if (shell?.getAttribute("data-sidebar-collapsed") === "false") return "pinned";
@@ -282,11 +253,6 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
-/**
- * The desktop's least window, 760 wide, as the stage measures it once zoom
- * shrinks the CSS pixel: 760 / 1.25 at 125%, and 760 / 2 at 200%. Under a
- * mouse, as `beforeEach` leaves the pointer.
- */
 const ZOOMED_LEAST_WINDOW = [
   { zoom: 125, width: 608 },
   { zoom: 200, width: 380 },
@@ -325,7 +291,6 @@ for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
   });
 }
 
-/** The way back that leads the phone's task header. */
 function headBack(page: HTMLElement): HTMLButtonElement {
   const back = page.querySelector<HTMLButtonElement>(".task-head .ui-toolbar-lead button");
   assert.ok(back, "the task's header leads with its way back");
@@ -335,7 +300,6 @@ function headBack(page: HTMLElement): HTMLButtonElement {
 test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, the task's header standing for its toggle and the sidebar's", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
-  // The panel left open, which the narrow stage holds full screen.
   assert.deepEqual(panelOf(page), { fullScreen: true, resizable: false, fullScreenButton: false });
   assert.equal(
     page.querySelector('.title-bar-controls[data-edge="end"]'),
@@ -347,7 +311,6 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     null,
     "the header's way back stands for the sidebar's toggle and New task",
   );
-  // Note that the panel opens on the board, a tab pushed over the column's draft, which its way back names.
   assert.equal(headBack(page).getAttribute("aria-label"), "Back to New agent");
 
   resizeStage(WIDE);
@@ -361,7 +324,6 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
 
   resizeStage(PHONE);
   act(() => headBack(page).click());
-  // Note that the panel is asked for as a boolean, since an element a failed assertion prints is the whole document's.
   assert.equal(
     page.querySelector("aside.side-panel") === null,
     true,
@@ -440,7 +402,6 @@ test("beside the work an open floating sidebar leaves the work answering, as it 
   assert.equal(main.hasAttribute("inert"), false);
 });
 
-/** Whether the column's Back and Forward stand. */
 function historyArrows(page: HTMLElement): boolean {
   return page.querySelector('.title-bar-controls[data-edge="column"]') !== null;
 }
@@ -460,7 +421,6 @@ test("Escape puts a phone's drawer away and gives the keyboard back to the work 
     this: HTMLElement,
     options?: FocusOptions,
   ) {
-    // As a browser does, which jsdom does not: an inert element takes no focus.
     if (this.closest("[inert]") !== null) return;
     focus.call(this, options);
   });

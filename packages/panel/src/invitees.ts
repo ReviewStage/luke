@@ -7,22 +7,9 @@ import { useState } from "react";
 import { actMutation } from "./act-mutations.js";
 import { appStateQuery, selectAccount } from "./use-app-state.js";
 
-/**
- * invitees.ts -- the addresses a form invites, as setup's team step, New workspace, and Settings' Invite hold them: typed or pasted into chips, checked as the service reads them, and marked as each is sent.
- *
- * An address the service would not read as one, or the reader's own, is
- * marked as it is typed and stays out of what is sent until it is edited
- * or lifted, and is simply never sent, as Slack leaves one: its chip says
- * why, and nothing waits on it. Each address is
- * known by its lower case, as the service knows it, so one typed twice
- * stands once.
- */
-
-/** Why an address typed is not sent, its chip's hint. */
 const NOT_AN_ADDRESS = "Not an email address";
 const YOURS = "That's you";
 
-/** One address and where it stands. */
 interface Invitee {
   readonly email: string;
   readonly words: string;
@@ -31,39 +18,23 @@ interface Invitee {
   readonly reason?: string | undefined;
 }
 
-/** What a press sends, once what was typed stands as chips: the addresses to send. */
 export interface InviteesCommitted {
   readonly pending: readonly string[];
 }
 
-/** The addresses a form holds, the chips they draw, the words still being typed, and the writes that move them. */
 export interface Invitees {
   readonly chips: readonly EmailChip[];
-  /** The words typed and not yet a chip. */
   readonly typed: string;
   readonly onTyped: (typed: string) => void;
-  /** The addresses a press would send: the chips to send, then each address in the words typed. */
   readonly pending: readonly string[];
   readonly add: (typed: string) => void;
   readonly remove: (id: string) => void;
-  /** Lets every address go, as a form opened again starts empty. */
   readonly clear: () => void;
-  /** Keeps only `emails` of the addresses still to send, as a run that stopped leaves the rest, and every chip not to send as it stands. */
   readonly keep: (emails: readonly string[]) => void;
-  /**
-   * Turns the words typed into chips, as a press reads them, and answers
-   * what the press sends at once, before the chips are drawn.
-   */
   readonly commit: () => InviteesCommitted;
-  /**
-   * Sends each of `emails` to `workspaceId` in turn as a member, marking it
-   * on its way and then sent or refused, and answers the refusals, each with
-   * its address; one refused does not stop the rest.
-   */
   readonly send: (workspaceId: string, emails: readonly string[]) => Promise<readonly string[]>;
 }
 
-/** Who is signed in, by the address invitations go to and the name their face is drawn by; nothing while signed out. */
 export function useSignedIn(): { readonly email: string; readonly name: string } | undefined {
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   if (account?.status !== ACCOUNT_STATUS.SIGNED_IN) return undefined;
@@ -74,7 +45,6 @@ function keyOf(email: string): string {
   return email.toLowerCase();
 }
 
-/** The invitees `typed` adds to `now`, each address once, the reader's own (`yours`) marked as theirs. */
 function joined(
   now: readonly Invitee[],
   typed: string,
@@ -101,12 +71,6 @@ function pendingOf(invitees: readonly Invitee[]): readonly string[] {
   return invitees.filter((one) => one.state === EMAIL_CHIP_STATE.DRAFT).map((one) => one.email);
 }
 
-/**
- * The addresses a form invites, the reader's own (`yours`) marked as theirs.
- * Note that the words still being typed are held here beside the chips,
- * because a press reads them too: an address typed and never ended by a
- * comma is still one the form sends.
- */
 export function useInvitees(yours: string | undefined): Invitees {
   const { mutateAsync: sendWorkspaceInvite } = useMutation(actMutation(ACT_KIND.WORKSPACE_INVITE));
   const [invitees, setInvitees] = useState<readonly Invitee[]>([]);

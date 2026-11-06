@@ -29,29 +29,6 @@ import {
 } from "../live-reads.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 
-/**
- * use-description-comments.ts -- a description's comment threads, or one of its task's pages', as one control: held by the host while the surface shows them, and each write on its way back.
- *
- * The host follows the subject's threads while a surface holds them
- * (`LIVE_READ.DESCRIPTION_COMMENTS`) and lays them on app state, so a teammate's
- * comment or an agent's reply lands in every open window, and a surface
- * drawn again draws them in its first frame. A read that did not answer
- * says so, with Try again.
- *
- * Every write is drawn by the host over the held threads the moment it is
- * asked (`@repo/host`'s `description-comment-writes.ts`), a thread started among
- * them under the id its caller minted, and stands until the read carries
- * it, so nothing here waits on one. A thread is started, and each comment
- * posted, under a key the caller keeps for as long as its words stand, so a
- * write sent again after a lost answer is taken once. A write that did not
- * land is taken back by the host: a reply's is said on its thread, its words
- * kept by its field, and any other's in a toast, since what it was pressed
- * on may have closed or gone meanwhile, an edit's words kept as its draft. Posting a comment reaches the agents
- * in its thread, the page's writer among them on a page, and one it
- * mentions, and is said on its thread where one in it could not take it.
- */
-
-/** What a write to a thread did not do, said on the thread. */
 const COMMENT_NOTE = {
   NOT_POSTED: "The comment could not be posted.",
   NOT_CHANGED: "The comment could not be changed.",
@@ -64,16 +41,13 @@ const COMMENT_NOTE = {
 
 const UNANSWERED = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** No threads, while a read has not answered. */
 const NO_THREADS: readonly DescriptionCommentThread[] = [];
 
-/** What a comment's answer says of the agents its mentions asked who could not take the thread; nothing where every one did. */
 function unsentWords(answer: TasksCommentAnswer): string | undefined {
   const unsent = "thread" in answer ? (answer.unsent ?? []) : [];
   return unsent.length === 0 ? undefined : COMMENT_NOTE.AGENT_AWAY;
 }
 
-/** Where a write's refusal is reported, by what it did. */
 function surfaceOf(action: DescriptionCommentActionRequest["action"]): FailureSurface {
   switch (action) {
     case DESCRIPTION_COMMENT_ACTION.REPLY:
@@ -90,7 +64,6 @@ function surfaceOf(action: DescriptionCommentActionRequest["action"]): FailureSu
   }
 }
 
-/** The words a refusal is said in on its thread. */
 function refusalWords(refusal: DescriptionCommentRefusal): string {
   switch (refusal) {
     case DESCRIPTION_COMMENT_REFUSAL.TOO_MANY:
@@ -106,11 +79,6 @@ function refusalWords(refusal: DescriptionCommentRefusal): string {
   }
 }
 
-/**
- * The description's comments, or one of its task's pages' where the subject names
- * one, held while a subject is named: the threads, and the doors that write
- * them, each answered as the service holds the thread after it.
- */
 export function useDescriptionComments(
   subject: CommentSubject | undefined,
 ): DescriptionCommentsControl | undefined {
@@ -123,7 +91,6 @@ export function useDescriptionComments(
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
   const planId = subject?.taskId;
 
-  /** Says in a toast that a write the host drew was taken back, and why. */
   const takenBack = useCallback(
     (words: string, surface: FailureSurface, answer: TasksCommentAnswer) =>
       toast({
@@ -184,10 +151,8 @@ export function useDescriptionComments(
           : reply
             ? COMMENT_NOTE.NOT_POSTED
             : COMMENT_NOTE.NOT_CHANGED;
-      // Note that a reply's refusal is said under its field, which its words go back into.
       if (reply) note(threadId, words);
       else takenBack(words, surfaceOf(action.action), answer);
-      // Note that an edit's field closed as it was sent, so its words go back to its draft, which Edit opens on.
       if (action.action === DESCRIPTION_COMMENT_ACTION.EDIT) {
         drafts.update(
           {
@@ -205,7 +170,6 @@ export function useDescriptionComments(
 
   const rows = read.data;
   const { isSuccess, isError } = read;
-  // Note that Try again moves with the subject alone, as the read's own did, since a render builds it anew.
   const pageId = subject?.pageId;
   const retry = useCallback(() => {
     if (planId === undefined) return;

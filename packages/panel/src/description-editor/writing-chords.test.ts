@@ -11,19 +11,10 @@ import { installEditorLayout } from "../testing/composer.js";
 import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * writing-chords.test.ts -- the description editor's writing chords against the
- * window's own: a chord the editor answers while it has the caret is the
- * editor's alone, and a chord it no longer answers reaches the window as
- * before. Synthetic text.
- */
-
-// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
 vi.hoisted(() => {
   Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
 });
 
-/** Every editor mounted and every root drawn, taken down after each test. */
 const mounted: DescriptionEditorHandle[] = [];
 const roots: Root[] = [];
 
@@ -40,7 +31,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's commands that share a key with a writing chord or the editor's Enter, each run recorded. */
 function KeyedWindow({ ran }: { ran: string[] }): ReactElement | null {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, () => ran.push("toggle sidebar"));
@@ -49,7 +39,6 @@ function KeyedWindow({ ran }: { ran: string[] }): ReactElement | null {
   return null;
 }
 
-/** The window's keymap answering, with the description editor open on `markdown` and every word of its first line selected. */
 function mount(markdown: string) {
   const ran: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -74,7 +63,6 @@ function mount(markdown: string) {
   return { ran, handle, element };
 }
 
-/** A key on the US layout a chord ends in: what it types alone, the character Shift makes of it, and its place. */
 const KEYS = {
   b: { key: "b", shifted: "B", code: "KeyB", keyCode: 66 },
   c: { key: "c", shifted: "C", code: "KeyC", keyCode: 67 },
@@ -84,7 +72,6 @@ const KEYS = {
   "8": { key: "8", shifted: "*", code: "Digit8", keyCode: 56 },
 } as const;
 
-/** Presses Command and `key` on `target`, with Shift or Option where asked, as a Mac keyboard spells the press: Option turns the character into another. */
 function press(
   target: EventTarget,
   key: keyof typeof KEYS,

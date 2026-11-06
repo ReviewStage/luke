@@ -11,13 +11,6 @@ import { type AdminDoors, AdminDoorsProvider, type AdminReads } from "./admin-do
 import { UsersScreen } from "./screens/users.js";
 import { WorkspacesScreen } from "./screens/workspaces.js";
 
-/**
- * admin-search-and-star.test.ts -- the Users and Workspaces pages as a reader
- * meets them once read: a search finds each word it holds wherever the row
- * keeps it, an empty table says whether a search emptied it, and a star the
- * service refuses says so and goes back. Synthetic accounts.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const JANE = {
@@ -67,7 +60,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `screen` with the box already holding `search`, over `reads`, beside the window's toasts. */
 async function draw(
   screen: React.ReactElement,
   reads: Partial<AdminReads>,
@@ -111,14 +103,12 @@ async function draw(
       ),
     ),
   );
-  // Note that the read lands after the act that drew it, as Query tells its observers on a timer of its own.
   await vi.waitFor(() =>
     expect(page.querySelector('[role="status"][aria-busy="true"]')).toBeNull(),
   );
   return page;
 }
 
-/** The names the accounts table lists, in order. */
 function listedNames(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("tbody tr"), (row) => row.textContent ?? "");
 }

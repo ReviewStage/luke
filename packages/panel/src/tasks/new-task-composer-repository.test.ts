@@ -26,16 +26,6 @@ import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
 
-/**
- * New task's repository chip in a workspace whose GitHub App is on another
- * owner: a repository the picker lists on a member's own GitHub token stays
- * picked once chosen, and a preset the workspace's GitHub does not reach is
- * not started on before the picker's read lands. The first pick replaces
- * the repository the card chose, one checked after it travels beside the
- * task's with the agent the card starts, and unchecking the task's own makes
- * the next pick the task's; a sub-task's card holds its parent's first. Synthetic throughout.
- */
-
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -69,7 +59,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A read listing `octo/tools` on a member's token. */
 const TOKEN_LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
@@ -89,7 +78,6 @@ const TOKEN_LISTING = (): Promise<RepositoriesRead> =>
     },
   });
 
-/** The card in Acme over the repositories `read` answers each list the host holds, by its key, opened on `preset`, each start's repository written down. */
 async function mount(
   read: (workspace: string) => Promise<RepositoriesRead>,
   preset?: string,
@@ -137,12 +125,10 @@ async function mount(
     );
   act(draw);
   await settle();
-  /** Draws the card again, as the workspaces resolving does. */
   const redraw = async () => {
     act(draw);
     await settle();
   };
-  /** The host asking every list held again, as a window coming forward asks it. */
   const comeForward = async () => {
     await act(again);
     await settle();
@@ -152,7 +138,6 @@ async function mount(
 
 test("with no recent task, the chip stands on the first repository the read lists", async () => {
   const { container } = await mount(TOKEN_LISTING);
-  // Note that the chip stands on the repository once the read that lists it reaches its query.
   await vi.waitFor(() => {
     const chip =
       container.querySelector<HTMLButtonElement>(".ui-chip") ??
@@ -191,7 +176,6 @@ test("the repository chip hangs the repository's card while the pointer rests on
 
 test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
-  // Note that the chip stands on the repository once the read that lists it reaches its query.
   await vi.waitFor(() => {
     const chip =
       container.querySelector<HTMLButtonElement>(".ui-chip") ??
@@ -202,7 +186,6 @@ test("a preset on a token repository the picker lists stands chosen once the rea
 
 test("a preset the workspace's GitHub does not reach is not started on while the host's read is out", async () => {
   const { container, starts } = await mount(() => new Promise(() => undefined), "alice/private");
-  // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
@@ -250,7 +233,6 @@ test("a preset survives a read made before the workspace resolved and stands onc
   );
   scope.id = ACME.id;
   await redraw();
-  // Note that the chip stands on the repository once the read that lists it reaches its query.
   await vi.waitFor(() => {
     const chip =
       container.querySelector<HTMLButtonElement>(".ui-chip") ??
@@ -281,7 +263,6 @@ test("a recent default a read does not list is let go, so a later read listing i
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
-  // Note that the first read, which lists nothing, reaches the chip before the window comes forward.
   await vi.waitFor(() => assert.equal(chip.textContent, "No repository"));
   await comeForward();
 
@@ -289,7 +270,6 @@ test("a recent default a read does not list is let go, so a later read listing i
   assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
 });
 
-/** A read listing three repositories the workspace's App reaches, and one reached only on a member's token. */
 const SEVERAL_LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
@@ -318,7 +298,6 @@ const SEVERAL_LISTING = (): Promise<RepositoriesRead> =>
     },
   });
 
-/** The chip's menu's row naming `name`, where it lists one. */
 function row(name: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
@@ -334,7 +313,6 @@ test("the first pick replaces the repository the card chose, later ones check be
     assert.fail("the card draws the repository chip");
   act(() => chip.click());
   await settle();
-  // The default stands in, so a row the service would refuse beside it may still replace it.
   assert.equal(row("tools").getAttribute("aria-disabled"), null);
   act(() => row("web").click());
   await settle();
@@ -389,7 +367,6 @@ test("a sub-task's card holds its parent's repository first and checks another b
   pressInComposer(container, "Enter");
   await settle();
 
-  // Note that a tree's start names no repository, since the service gives it the parent's.
   assert.deepEqual(starts, [null]);
   assert.deepEqual(also, [["acme/web"]]);
 });

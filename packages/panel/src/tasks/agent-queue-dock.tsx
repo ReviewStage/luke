@@ -32,28 +32,6 @@ import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
 import { KeptFileChips } from "./agent-pictures.js";
 import { SentWords } from "./skill-chip.js";
 
-/**
- * agent-queue-dock.tsx -- the messages queued behind an agent's running turn, docked over its message box, under its to-do list and its pull request.
- *
- * One row a message, its words drawn as its bubble draws them once sent
- * (`SentWords`), chips and all, on one line, fading out where they run
- * past it, and its files under them as the bubble draws its own
- * (`KeptFileChips`), an image as its thumbnail, leading with the queue's
- * glyph, which gives way to the handle it is dragged by as the row is
- * hovered (`tasks.css`) where another row stands to move it past; on
- * hover, Steer sends it into the turn now, the pencil takes it into the
- * message box to edit (`agent-composer.tsx`), and
- * the trash deletes it, asking first, since nothing brings its words and
- * files back. A message being edited stays in its place, muted, the queue
- * stopping at it, with Cancel on its row in every window of the agent's
- * starter, so one left standing by a window gone is canceled from any
- * other. A reader who did not start the agent finds no press.
- * A queue standing paused says why
- * over its rows, after a Stop in the quiet tone and after a refusal in the
- * danger one, with Resume. Nothing is drawn while none is queued.
- */
-
-/** What the dock says. */
 const WORDS = {
   LIST: "Queued messages",
   STEER: "Steer",
@@ -67,7 +45,6 @@ const WORDS = {
   PAUSED: "Queue paused",
 } as const;
 
-/** A queued message's files as a line's chips: each by its name, read by the id the queue names it under where it names one. */
 function queuedFileChips(message: QueuedMessage) {
   return (message.files ?? []).map((file) => ({
     name: file.name,
@@ -77,7 +54,6 @@ function queuedFileChips(message: QueuedMessage) {
   }));
 }
 
-/** What asking to delete a queued message says. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete queued message?",
   body: `It will not be sent, and any files it carries go with it. ${IRREVERSIBLE_WORDS}`,
@@ -87,7 +63,6 @@ const DELETE_QUESTION: DialogQuestion = {
   replayUnmasked: true,
 };
 
-/** Why a refused hand-off did not go, by the service's word for it, where the dock has words for it. */
 const REFUSAL_WORDS: Readonly<Record<string, string>> = {
   "agent-plan-limit-reached": "your plan's usage limit was reached",
   "agent-credential-missing": "the agent's credential is missing",
@@ -96,7 +71,6 @@ const REFUSAL_WORDS: Readonly<Record<string, string>> = {
   unavailable: "Could not reach the agent",
 };
 
-/** What the paused header says. */
 function pausedWords(paused: QueuePaused): string {
   if (paused.because === QUEUE_PAUSE.STOPPED) return WORDS.STOPPED;
   if (paused.because === QUEUE_PAUSE.TURN_FAILED) return WORDS.TURN_FAILED;
@@ -104,7 +78,6 @@ function pausedWords(paused: QueuePaused): string {
   return why === undefined ? WORDS.REFUSED : `${WORDS.PAUSED}: ${why}`;
 }
 
-/** The dock: the paused header where the queue stands paused, then a row per queued message. */
 export function AgentQueueDock({
   messages,
   controls,
@@ -118,23 +91,18 @@ export function AgentQueueDock({
   onResume,
 }: {
   messages: readonly QueuedMessage[];
-  /** Whether the reader may change the queue: the agent's starter alone may. */
   controls: boolean;
   paused: QueuePaused | undefined;
-  /** The message the box is editing, by its id; none while none is. */
   editing: string | undefined;
-  /** Gives up the edit of the message on its row, this box's own or one another window left standing. */
   onCancelEdit: (message: QueuedMessage) => void;
   onMove: (from: number, to: number) => void;
   onSteer: (message: QueuedMessage) => void;
   onEdit: (message: QueuedMessage) => void;
-  /** Deletes the message once the dialog's Delete is pressed, answering how that went. */
   onDelete: (message: QueuedMessage) => Promise<ActionResult>;
   onResume: () => void;
 }): React.JSX.Element | null {
   const drag = useRowDrag(onMove, { handle: "[data-queue-handle]" });
   const [doomed, setDoomed] = useState<QueuedMessage>();
-  // The question goes with its message, which a hand-off may send while it is asked.
   const asked = doomed !== undefined && messages.some((message) => message.id === doomed.id);
   const confirm = useConfirmDialog(
     { subject: asked, surfaceOpen: true },
@@ -144,7 +112,6 @@ export function AgentQueueDock({
     confirmFailure(FAILURE_SURFACE.AGENT_QUEUE_DELETE),
   );
   if (messages.length === 0) return null;
-  // Note that a lone message has nowhere to move, so it offers no handle.
   const movable = controls && messages.length > 1;
   return (
     <div className={`agent-queue-dock ${COMPOSER_DOCK_CLASS}`}>
@@ -205,7 +172,6 @@ export function AgentQueueDock({
                 muted={edited}
                 actionsAt={edited ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
                 actions={
-                  // Note that a reader who did not start the agent may change nothing of its queue.
                   !controls ? undefined : edited ? (
                     <Button
                       size={BUTTON_SIZE.COMPACT}

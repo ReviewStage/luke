@@ -45,70 +45,8 @@ import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useS
 import type { MentionNode } from "../description-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
 
-/**
- * date-picker.tsx -- a date mention picked or changed in place, as Notion's date picker does: the date as written, a month to pick from, an end date, a time, and Clear, hung from the chip or the `@` word.
- *
- * A date chip in words that take a change (the description's editor, an agent's
- * box, a comment's) opens this picker when pressed, and the `@` list
- * narrowed to dates opens it from its "Pick a date" row to write a new
- * one. It is drawn as the window's other popovers with settings in them
- * are (`view-settings.tsx`): a card under its title and ×, its switches the
- * Settings rows' own (`../settings/switch-row.tsx`) at their compact
- * density, and its one action, Clear, a row at its ruled foot lit as a
- * menu's row is, its word lined up with the fields and the rows' names
- * above it. Top
- * to bottom it holds a field for each end's date, as Notion's does, each
- * read as an `@` word is read (`dateOfWords`, so `next fri 3pm` works) as
- * Enter or leaving the field takes it, and beside each, while Include
- * time is on, the end's time. Each end stands under its name, Start or End,
- * as a form's field does (`@repo/ui`'s `FormField`), and words that name no
- * date are kept, the field marked, with a line under it saying what to
- * write, so the field says so in words and not by its shake alone, which
- * reduced motion holds still. Under the fields stand the month the date's
- * start falls in (`@repo/ui`'s `Calendar`); End date, after which the next
- * pick sets the range's end; Include time; while it is on, Time zone, the
- * zone the times are read in; and Clear.
- *
- * Time zone opens on the reader's own zone, and its field turns the card to
- * a page of every zone the runtime knows, searched as the window's other
- * long lists are (`@repo/ui`'s `SearchableMenu`), hung from the same place
- * the card was, so focus never leaves the picker. A zone picked, or
- * Escape, turns back to the card, focus on the field. A zone picked keeps
- * the times as written, as Notion's does: 3:00 PM stays 3:00 PM, now in
- * the zone picked, and the date is written with that zone's offset and
- * named in its words. A date holds an offset rather than a zone's name,
- * so a date opened again opens on the reader's zone, its times as that
- * zone reads them.
- *
- * What the developer changes is held here until the picker closes, as
- * Notion applies a change: Escape, Enter in its words, a press outside, or
- * Clear. Its owner then writes it, once, so undo takes the change back
- * whole: a chip is named anew in place, or taken out by Clear; a pick from
- * the list is written as a new chip. A press outside leaves the caret where
- * it landed; any other close hands it back to the words.
- *
- * An owner that asks for one moment rather than a date to write, as a
- * reminder does (`inbox-remind.tsx`), opens it with `moment`: the card is
- * titled as the owner names it and holds one date and its time, always
- * timed, with no End date, no Include time, and no Clear; a range typed
- * keeps only its start. Its foot holds Cancel and the owner's act
- * (`@repo/ui`'s `DialogActions`), and only the act, or Enter in its words,
- * closes it as `DATE_PICKER_CLOSE.CONFIRM`; every other close is a cancel.
- *
- * The picker stands in the room the `@` list stands in, over the editor
- * rather than inside it, so a box that scrolls its words cuts none of it,
- * and the editor reads none of its keys. It hangs from its chip or its `@`
- * word as the `@` list does (`@repo/ui`'s `RectFloat`), at the popover's
- * narrow width, following the chip as its words scroll. Nothing of the date rides on an
- * attribute: the recording masks words and not attributes
- * (`mention-chip.tsx`'s header), so every date is said in a text node or a
- * field's value.
- */
-
-/** Every zone the runtime knows, as Time zone lists them. */
 const TIME_ZONES = Intl.supportedValuesOf("timeZone");
 
-/** Which page of the picker stands: the date's card, or the zones Time zone picks from. */
 const DATE_PICKER_PAGE = {
   DATE: "date",
   ZONE: "zone",
@@ -116,7 +54,6 @@ const DATE_PICKER_PAGE = {
 
 type DatePickerPage = (typeof DATE_PICKER_PAGE)[keyof typeof DATE_PICKER_PAGE];
 
-/** How the picker closed: a key (Escape, or Enter in its words), focus leaving it, Clear, or a moment's act. */
 export const DATE_PICKER_CLOSE = {
   KEY: "key",
   LEAVE: "leave",
@@ -126,28 +63,23 @@ export const DATE_PICKER_CLOSE = {
 
 type DatePickerClose = (typeof DATE_PICKER_CLOSE)[keyof typeof DATE_PICKER_CLOSE];
 
-/** What the picker hands its owner as it closes: the date it holds, the zone its times were read in, whether the developer changed it, and how it closed. */
 export interface DatePicked {
   readonly date: DateSpan | undefined;
   readonly zone: string;
-  /** Whether a zone other than the reader's was picked, which names the date anew even where its moment stands, as at a zone of the same offset. */
   readonly zonePicked: boolean;
   readonly changed: boolean;
   readonly how: DatePickerClose;
 }
 
-/** Where the picker hangs from: a chip's element, or an `@` word's place in the window. */
 type DatePickerAnchor =
   | Element
   | { readonly left: number; readonly top: number; readonly bottom: number };
 
-/** A picker that asks for one moment: what its card is titled, and the word of the act that confirms it. */
 export interface DatePickerMoment {
   readonly title: string;
   readonly verb: string;
 }
 
-/** One opening of the picker: where it hangs, the date it opens on, none for a new one, whether it asks for one moment, and who hears it close. */
 export interface DatePickerOpening {
   readonly at: DatePickerAnchor;
   readonly date: DateSpan | undefined;
@@ -155,26 +87,20 @@ export interface DatePickerOpening {
   readonly onClose: (picked: DatePicked) => void;
 }
 
-/** The picker of one place: what it draws in the place's room while it stands, and what opens it. */
 export interface DatePicker {
   readonly popover: ReactNode;
   readonly open: (opening: DatePickerOpening) => void;
 }
 
-/** The time each end takes when Include time is switched on. */
 const DEFAULT_TIME = { START: "09:00", END: "10:00" } as const;
 
-/** The day's last hour, after which an end an hour on falls on the next day. */
 const LAST_HOUR = 23;
 
 const WORDS = {
   TITLE: "Date",
-  /** The date fields', named apart from the End date switch. */
   START_DATE: "Start",
   END_DATE: "End",
-  /** A moment's one date field, and its time. */
   DATE: "Date",
-  /** Under a date field whose words name no date; its example a fixed day, so the words never read the clock. */
   UNREAD: "Write a date, such as Oct 24.",
   END: "End date",
   TIME: "Include time",
@@ -188,7 +114,6 @@ const WORDS = {
   CLOSE: "Close",
 } as const;
 
-/** Which end of the date a field writes. */
 const DATE_END = {
   START: "start",
   END: "end",
@@ -196,18 +121,12 @@ const DATE_END = {
 
 type DateEnd = (typeof DATE_END)[keyof typeof DATE_END];
 
-/** Words typed into one end's date field and not yet read, and whether they were read as no date. */
 interface Typing {
   readonly end: DateEnd;
   readonly words: string;
   readonly invalid: boolean;
 }
 
-/**
- * What the picker holds while it stands: the date's ends, whether the next
- * pick sets the end, words typed into a date field and not yet read, and
- * whether anything changed.
- */
 interface Draft {
   readonly wall: DateWall;
   readonly pickingEnd: boolean;
@@ -215,10 +134,8 @@ interface Draft {
   readonly changed: boolean;
 }
 
-/** The last day a date mention spells, whose year is the last of four digits. */
 const LAST_DAY = "9999-12-31";
 
-/** The day after `day`, both `YYYY-MM-DD`; nothing after the last day a mention spells. */
 function dayAfter(day: string): string | undefined {
   if (day >= LAST_DAY) return undefined;
   const next = new Date(`${day}T00:00:00.000Z`);
@@ -226,12 +143,6 @@ function dayAfter(day: string): string | undefined {
   return next.toISOString().slice(0, 10);
 }
 
-/**
- * The end End date puts after `start`, always after it, so what the picker
- * shows is the range it writes: a day's the next day, and a time's an hour
- * later, past midnight onto the next day where it must be; nothing where no
- * day follows.
- */
 function endAfter(start: DateWallMoment): DateWallMoment | undefined {
   if (start.time === undefined) {
     const day = dayAfter(start.day);
@@ -245,23 +156,14 @@ function endAfter(start: DateWallMoment): DateWallMoment | undefined {
   return day === undefined ? undefined : { day, time: `00:${minute}` };
 }
 
-/** A draft whose ends the developer changed, its fields the date's own words again. */
 function changedTo(wall: DateWall, pickingEnd: boolean): Draft {
   return { wall, pickingEnd, typing: undefined, changed: true };
 }
 
-/** A moment as it orders against another: its day, then its time. */
 function orderOf(moment: DateWallMoment): string {
   return `${moment.day}T${moment.time ?? ""}`;
 }
 
-/**
- * A day picked: the start of a single day; on a range, its end where the
- * next pick sets the end, an end before the start becoming the start so the
- * range stays in order, and one on a day-only start's own day leaving the
- * start alone, since it names no range; and else its start, the end after
- * it next, the end moved on where the start passed it.
- */
 function dayPicked(draft: Draft, day: string): Draft {
   const { start, end } = draft.wall;
   if (end === undefined) return changedTo({ start: { ...start, day } }, false);
@@ -270,7 +172,6 @@ function dayPicked(draft: Draft, day: string): Draft {
       return changedTo({ start: { ...start, day }, end: { ...end, day: start.day } }, false);
     }
     const picked = { ...end, day };
-    // Note that an end at the start's own moment names no range, and one earlier on its day swaps with it.
     if (orderOf(picked) === orderOf(start)) return changedTo({ start }, false);
     const wall =
       orderOf(picked) < orderOf(start) ? { start: picked, end: start } : { start, end: picked };
@@ -282,10 +183,6 @@ function dayPicked(draft: Draft, day: string): Draft {
   return changedTo({ start: moved, end: after }, after !== undefined);
 }
 
-/**
- * Ends kept in order after one was typed: an end before its start swaps
- * with it, and one at its start's own moment moves on just after it.
- */
 function ordered(wall: DateWall): DateWall {
   const { start, end } = wall;
   if (end === undefined || orderOf(start) < orderOf(end)) return wall;
@@ -293,12 +190,6 @@ function ordered(wall: DateWall): DateWall {
   return { start, end: endAfter(start) };
 }
 
-/**
- * A moment typed into one end's date field: its day, and its time where
- * the words named one or Include time is on, the end's own time kept where
- * they named none. Note that words naming a time switch Include time on,
- * the other end taking its default time, as the switch gives it.
- */
 function typedInto(draft: Draft, which: DateEnd, moment: DateWallMoment): Draft {
   const { start, end } = draft.wall;
   const timed = start.time !== undefined || moment.time !== undefined;
@@ -319,13 +210,6 @@ function typedInto(draft: Draft, which: DateEnd, moment: DateWallMoment): Draft 
   return changedTo(ordered(wall), false);
 }
 
-/**
- * The draft with its typed words read as `dateOfWords` reads an `@` word,
- * and the day they named, whose month the calendar then shows: words
- * naming a range set both ends, unless the picker asks for one moment
- * (`single`), and words naming one moment set the end typed into; nothing
- * where they name no date.
- */
 function wordsRead(
   draft: Draft,
   now: number,
@@ -342,16 +226,13 @@ function wordsRead(
   return { draft: typedInto(draft, typing.end, wall.start), day: wall.start.day };
 }
 
-/** End date switched: on, an end just after the start (`endAfter`), which the next pick moves; off, the start alone. */
 function endSwitched(draft: Draft, on: boolean): Draft {
   const { start } = draft.wall;
   if (!on) return changedTo({ start }, false);
-  // Note that the last day a mention spells has no day after it, so its switch stays off.
   const end = endAfter(start);
   return end === undefined ? draft : changedTo({ start, end }, true);
 }
 
-/** Include time switched: on, a time on each end; off, the days alone. */
 function timeSwitched(draft: Draft, on: boolean): Draft {
   const { start, end } = draft.wall;
   const timed = (moment: DateWallMoment, time: string) => ({
@@ -367,24 +248,20 @@ function timeSwitched(draft: Draft, on: boolean): Draft {
   );
 }
 
-/** A zone as Time zone names it, its underscores read as spaces. */
 function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
 }
 
-/** A zone as its field says it in the card's narrow room: its place, the last of its name, `Los Angeles`. */
 function zonePlace(zone: string): string {
   return zoneLabel(zone.slice(zone.lastIndexOf("/") + 1));
 }
 
-/** The offset `zone` stands at `now`, as its short name says it: `GMT-7`; nothing where the runtime names none. */
 function zoneOffset(zone: string, now: number): string | undefined {
   return new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" })
     .formatToParts(now)
     .find((part) => part.type === "timeZoneName")?.value;
 }
 
-/** Every zone as Time zone lists them, `zone` among them where the runtime lists it under no name of its own, each with its offset now, which a search matches too. */
 function zoneRows(zone: string, now: number): MenuRow[] {
   const zones = TIME_ZONES.includes(zone) ? TIME_ZONES : [zone, ...TIME_ZONES];
   return zones.map((each) => {
@@ -397,7 +274,6 @@ function zoneRows(zone: string, now: number): MenuRow[] {
   });
 }
 
-/** A mention of `date` as the editor holds one: its words in full in `zone`, the reader's where none is named, and its link. */
 export function dateMentionNode(
   date: DateSpan,
   place: MentionPlace,
@@ -409,12 +285,10 @@ export function dateMentionNode(
   };
 }
 
-/** An end's day as its field says it: in full, as a date mention writes it. */
 function dayWords(moment: DateWallMoment): string {
   return dateLabel({ start: moment.day });
 }
 
-/** An end's time of day, written in the zone the picker reads its times in. */
 function TimeField({
   label,
   time,
@@ -436,7 +310,6 @@ function TimeField({
   );
 }
 
-/** The wall a picker opens on: `date`'s, or today's; a moment's always timed. */
 function openingWall(
   date: DateSpan | undefined,
   zone: string,
@@ -448,13 +321,6 @@ function openingWall(
   return { start: { day: wall.start.day, time: wall.start.time ?? DEFAULT_TIME.START } };
 }
 
-/**
- * The picker itself, opened on `date`, or on today for a new one, handing
- * what it holds to `onClose` once. Its fields stand as Notion's: each end's
- * date, and beside it, while Include time is on, its time, the end's row
- * under the start's; with no time the two dates share a row. Opened for a
- * `moment`, it holds the start alone, timed, and closes on its act.
- */
 function DatePickerPanel({
   open,
   date,
@@ -462,7 +328,6 @@ function DatePickerPanel({
   onClose,
   onExited,
 }: {
-  /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
   open: boolean;
   date: DateSpan | undefined;
   moment: DatePickerMoment | undefined;
@@ -471,13 +336,10 @@ function DatePickerPanel({
 }): React.JSX.Element | null {
   const single = moment !== undefined;
   const now = useMinute();
-  // Note that the zone is kept beside its state too, because the picker closes reading it in the same event that may change it.
   const chosenZone = useRef(readerZone());
   const [zone, setZone] = useState(chosenZone.current);
   const [page, setPage] = useState<DatePickerPage>(DATE_PICKER_PAGE.DATE);
-  // Note that a page turned takes its focused control away, and the leave that may hear is no leave of the picker's.
   const turning = useRef(false);
-  // The page last turned from, so the card turned back to hands the focus to the field that turned it.
   const [from, setFrom] = useState<DatePickerPage | undefined>(undefined);
   const zoneMenu = useRef<HTMLElement | null>(null);
   const zoneField = useRef<HTMLButtonElement>(null);
@@ -491,7 +353,6 @@ function DatePickerPanel({
     typing: undefined,
     changed: false,
   }));
-  // Note that the draft is kept beside its state too, because a field's blur reads its words just before a press outside closes the picker, in the same event.
   const latest = useRef(draft);
   const [month, setMonth] = useState(() => draft.wall.start.day.slice(0, 7));
   const { start, end } = draft.wall;
@@ -522,7 +383,6 @@ function DatePickerPanel({
     setFrom(page);
     setPage(next);
   };
-  // A zone picked keeps the times as written, read now in the zone picked.
   const zonePicked = (picked: string) => {
     if (picked !== chosenZone.current) {
       chosenZone.current = picked;
@@ -531,11 +391,9 @@ function DatePickerPanel({
     }
     turnTo(DATE_PICKER_PAGE.DATE);
   };
-  // The page turned has taken the focus by now, its own effects run before this one.
   useEffect(() => {
     turning.current = false;
   }, [page]);
-  // Note that the zones' menu, which takes no `open`, goes at once as the picker closes from it, so it is gone as soon as it is closed.
   useEffect(() => {
     if (!open && page === DATE_PICKER_PAGE.ZONE) onExited();
   }, [open, page, onExited]);
@@ -543,7 +401,6 @@ function DatePickerPanel({
     () => (page === DATE_PICKER_PAGE.ZONE ? zoneRows(zone, now) : []),
     [page, zone, now],
   );
-  // Typed words are read as the field is left, the month shown moving to the end they set; words that name no date are marked and kept.
   const read = (): boolean => {
     const typing = latest.current.typing;
     if (typing === undefined) return true;
@@ -576,7 +433,6 @@ function DatePickerPanel({
       />
     );
   };
-  // Each end under its label, its time beside its date while Include time is on, and under both the line saying its words named no date.
   const endField = (which: DateEnd, moment: DateWallMoment) => (
     <FormField
       label={single ? WORDS.DATE : which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
@@ -724,7 +580,6 @@ function DatePickerPanel({
                 verb: moment.verb,
                 tone: DIALOG_TONE.PRIMARY,
                 running: moment.verb,
-                // Note that words naming no date hold the act back, as Enter in them does, so it never confirms the date they replaced.
                 onPress: () => {
                   if (read()) finish(DATE_PICKER_CLOSE.CONFIRM);
                 },
@@ -737,7 +592,6 @@ function DatePickerPanel({
   );
 }
 
-/** Where `at` stands in the window, as the layer it hangs from reads it; none once a chip has left the words, so the layer stays where it stood. */
 function boxOf(
   at: DatePickerAnchor,
 ):
@@ -747,13 +601,7 @@ function boxOf(
   return at.isConnected ? at.getBoundingClientRect() : undefined;
 }
 
-/**
- * The date picker of a place whose words stand in `room`: one opening at a
- * time, hung from where it was opened, a new opening taking the place of
- * the last.
- */
 export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
-  // Note that an opening is kept past its close, `standing` false, until its picker has faded out, so the card leaves as the other popovers do.
   const [opened, setOpened] = useState<
     | { readonly opening: DatePickerOpening; readonly key: number; readonly standing: boolean }
     | undefined
@@ -766,7 +614,6 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
   };
   const popover =
     opened === undefined ? null : (
-      // Note that the layer stands while the panel fades, because the panel's own fade is what tells the owner it is gone.
       <RectFloat open anchor={() => boxOf(opened.opening.at)} width={POPOVER_WIDTH.NARROW}>
         <DatePickerPanel
           key={opened.key}

@@ -16,15 +16,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { installScrollTo, wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { FileTab } from "./file-tab.js";
 
-/**
- * file-tab-wait.test.ts -- a File tab says it is reading its file until the
- * file's lines are drawn, never standing blank between the diff bundle
- * landing and Pierre drawing the lines, as a first file the window opens
- * does while its highlighting first loads. A file of its own, because the
- * bundle and its highlighting load once a process, so only the first File
- * tab a process opens meets the gap. Synthetic repository.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -42,7 +33,6 @@ beforeEach(() => {
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
   }));
-  // jsdom paints no highlights and lays nothing out, as the find and Pierre's scroll would ask.
   vi.stubGlobal("CSS", { highlights: new Map() });
   vi.stubGlobal("Highlight", Set);
   Range.prototype.getBoundingClientRect = () => new DOMRect();
@@ -59,7 +49,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The service, as the tab reads through it: the file's first line, then its whole text. */
 const read = (request: TaskFileRequest): Promise<TasksFileAnswer> => {
   const place = { path: PATH, repository: "acme/relay", branch: "main" };
   const answer: TasksFileAnswer =
@@ -77,7 +66,6 @@ const read = (request: TaskFileRequest): Promise<TasksFileAnswer> => {
   return Promise.resolve(answer);
 };
 
-/** Whether the page says it is reading the file. */
 function reading(): boolean {
   return [...document.querySelectorAll('[role="status"]')].some((status) =>
     status.textContent?.includes("Reading the file"),
@@ -85,7 +73,6 @@ function reading(): boolean {
 }
 
 test("a File tab says it is reading the file until its lines are drawn, never standing blank once the bundle lands", async () => {
-  // Each state the page passes through as it changes: whether it says it is reading, and how many lines it draws.
   const states: { reading: boolean; lines: number }[] = [];
   const observer = new MutationObserver(() =>
     states.push({ reading: reading(), lines: wholeFileLines(document.body).length }),

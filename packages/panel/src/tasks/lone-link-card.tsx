@@ -26,39 +26,12 @@ import { useKnownNames } from "./use-known-names.js";
 import { useLinkStanding, useNumberedTaskId } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 
-/**
- * lone-link-card.tsx -- a link standing alone in its paragraph of words drawn as a document, as its one-line card: a pull request's, a page's, or the lines of a file at a commit as an inbox item's code card.
- *
- * What a link earns a card is the link's own (`@repo/features/lone-link`);
- * how each card is drawn is decided here. A pull request is a card of one
- * row as the agent's tab pins its own over the box (`agent-published.tsx`):
- * its mark for where it stands and its number and title, as the
- * workspace's GitHub App answers them (`use-link-standing.ts`), where it
- * stands where that matters, and its lines added and removed; until it
- * answers, or where it never does, the row says what the address says. A
- * page an agent showed is a row of its tab's glyph and its name. Either
- * hangs the card its chip hangs (`mention-chip.tsx`): a pull request's its
- * key, state, size, opener, branches, labels, and counts, and a page's
- * the page's own card, a preview of it (`page-card.tsx`), where the window
- * holds the page, or, for a page of an agent on no task, where the agent's
- * pages read as the card is hung hold it (`chip-cards.tsx`). Either opens what it names as its chip does.
- * Where the place hands its doors, an Inbox thread, a page's row has the
- * page itself under it, live at its newest version (`shown-page.tsx`). Lines
- * of a file are the card an Inbox code block draws (`inbox-code-card.tsx`),
- * read through the doors the place drawing the words hands
- * (`LoneLinkCards`); where it hands none, the link stays its chip. Any
- * link that earns no card stays the paragraph it was, its chip or its
- * link inside.
- */
-
-/** What the cards under the words reach: the code doors their lines are read and opened through. */
 export interface LoneLinkDoors {
   readonly code: InboxCodeDoors;
 }
 
 const LoneLinkDoorsContext = createContext<LoneLinkDoors | undefined>(undefined);
 
-/** Hands the cards under it the doors they read through. */
 export function LoneLinkCards({
   doors,
   children,
@@ -69,18 +42,15 @@ export function LoneLinkCards({
   return <LoneLinkDoorsContext.Provider value={doors}>{children}</LoneLinkDoorsContext.Provider>;
 }
 
-/** What a pull request's or a page's row is named for a reader moving between lists. */
 const CARD_LABEL = {
   PULL_REQUEST: "Pull request",
   PAGE: "Page",
 } as const;
 
-/** The words a link was written with, without an `@`; none where it was written as its own address. */
 function writtenWords(target: string, words: string): string | undefined {
   return isBareLink(words, target) ? undefined : mentionName(words.trim());
 }
 
-/** A card of one row, as a list of one in a card. */
 function OneRowCard({
   label,
   kind,
@@ -99,7 +69,6 @@ function OneRowCard({
   );
 }
 
-/** A pull request's row: its mark, its number and title, where it stands, and its lines; a press opens it on GitHub. */
 function PullRequestRowCard({
   pullRequest,
   mention,
@@ -118,7 +87,6 @@ function PullRequestRowCard({
     workspace: doors.place.workspace,
   });
   const known = standing?.pullRequest;
-  // Note that the row is named as its chip is, so the two never disagree.
   const named =
     githubName(mention, standing) ?? writtenWords(target, words) ?? `#${pullRequest.number}`;
   const state = known === undefined ? undefined : pullRequestStateWord(known);
@@ -159,7 +127,6 @@ function PullRequestRowCard({
           }
           hint={{ Hint: RowHint, label: named }}
           onPress={(event) => {
-            // Note that the press stops here, as a chip's does, because a click into a section opens its editor.
             event.stopPropagation();
             openLink(target);
           }}
@@ -170,7 +137,6 @@ function PullRequestRowCard({
   );
 }
 
-/** A page's row: its tab's glyph and its name, hanging the page's own card where the window holds the page; a press opens its tab. */
 function PageRowCard({
   page,
   target,
@@ -189,7 +155,6 @@ function PageRowCard({
       : ({ kind: LINK_PLACE.PAGE, agentId: page.agentId, pageId: page.pageId } as const);
   const { name } = placeChipLook(place, writtenWords(target, words), known);
   const glyph = <AppWindowIcon aria-hidden="true" />;
-  // Note that the page is named from the link as the bar read it, because a page's link the window reads, one ending in a slash or a fragment, may be no mention's.
   const mention =
     "taskId" in page
       ? ({ kind: MENTION_KIND.PAGE, taskId: page.taskId, pageId: page.pageId } as const)
@@ -222,12 +187,6 @@ function PageRowCard({
   );
 }
 
-/**
- * A page's row, and under it the page itself, live at its newest version,
- * where `live`. A link may name the page's task by its number in the
- * workspace rather than its id, which both are read by, so the number is
- * found among the tasks the window lists first, as a chip finds it.
- */
 function PageCards({
   page,
   target,
@@ -258,18 +217,12 @@ function PageCards({
   );
 }
 
-/**
- * A link standing alone in its paragraph: the card of what it names where
- * it earns one, and `fallback`, the paragraph as it was, where it earns
- * none, or where its card's doors are not handed here.
- */
 export function LoneLinkCard({
   target,
   words,
   fallback,
 }: {
   target: string;
-  /** The words the link was written with. */
   words: string;
   fallback: ReactNode;
 }): ReactNode {

@@ -21,39 +21,8 @@ import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
 import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 
-/**
- * agent-place.tsx -- the chip an agent's message box wears saying where the agent runs: its device by name, or the cloud.
- *
- * It is a start's Runs on chip as the agent keeps it (`runs-on.tsx`): the
- * same toolbar chip, the same glyph by the device's platform, and the same
- * name every list of machines gives it (`machine-name.ts`), This Mac among
- * them, so an agent reads alike before and after it starts. Since where an
- * agent runs is set as it starts, the chip ends in no chevron and
- * takes no press (`StaticChip`); a rest on it, or a tap under a finger,
- * hangs a card saying where the agent runs and whether the
- * device is online, and a reader hears "Runs on:" before its words. An
- * agent in a sandbox says "Cloud" beside the cloud glyph.
- *
- * While a device has not beaten lately, asleep or with the app closed,
- * judged from how long ago the service says it last beat, the label adds
- * that it is offline ("Charles's MacBook Pro · Offline"), as the Runs on
- * chips do, its glyph in the attention tone, since the agent's messages
- * wait for it to come back. The beat comes from the window's shared presence
- * read (`device-presence.ts`), so a device that keeps beating never reads
- * offline for want of a read; where that read fails and the beat held is
- * old, the label says it cannot check rather than that the device is away.
- * A device the read does not name is a teammate's, which the window cannot
- * speak for, so its label is its name alone. Nothing is drawn for an agent
- * on a device the service no longer names, since it is neither in the cloud
- * nor anywhere that can be named. In a box too narrow for its words, where
- * the branch's chip draws its mark alone too, the chip draws its glyph alone
- * in a square and keeps the words for a reader and its hint.
- */
-
-/** What a reader hears before the name, which the glyph says to the eye. */
 const RUNS_ON = "Runs on: ";
 
-/** The label's words, by where the device stands. */
 function macWords(name: string, standing: DeviceStanding | undefined): string {
   if (standing === undefined || standing === DEVICE_STANDING.ONLINE) return name;
   if (standing === DEVICE_STANDING.CHECKING) return name;
@@ -62,7 +31,6 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
     : `${name} · Can't check status`;
 }
 
-/** What the card says under its head of the agent, in the cloud or on a device. */
 const SHARED_NOTE = {
   CLOUD: "This agent runs in a cloud sandbox. Set when it was started.",
   DEVICE: "This agent runs on this device. Set when it was started.",
@@ -73,7 +41,6 @@ export function AgentPlace({
   narrow = false,
 }: {
   agent: Pick<AgentSummary, "mac" | "machine">;
-  /** Whether the box is too narrow for the chip's words, so it draws its glyph alone. */
   narrow?: boolean;
 }): React.JSX.Element | null {
   if (agent.machine !== AGENT_MACHINE.DEVICE) {
@@ -91,7 +58,6 @@ export function AgentPlace({
   return <MacChip mac={agent.mac} narrow={narrow} />;
 }
 
-/** The chip and its card: the glyph, the words a reader hears after "Runs on:", and the card's head and note. */
 function PlaceChip({
   glyph,
   words,
@@ -126,7 +92,6 @@ function PlaceChip({
   );
 }
 
-/** The chip of an agent on a device, held against the window's clock, so a Mac that goes quiet reads offline without another read. */
 function MacChip({
   mac,
   narrow,
@@ -136,7 +101,6 @@ function MacChip({
 }): React.JSX.Element {
   const presence = useDevicePresence(true);
   const thisMac = useThisMac();
-  // Note that the clock only redraws the label as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
   const standing = presenceStanding(presence, mac.deviceId);
   const quiet =

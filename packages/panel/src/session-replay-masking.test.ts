@@ -5,10 +5,6 @@ import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import { afterEach, expect, test, vi } from "vitest";
 import { sessionReplay } from "./session-replay.js";
 
-/**
- * session-replay-masking.test.ts -- what a recording masks, read as the recorder is told it: every attribute but the ones the replay lays out by is asterisked, a link's address goes unless it is a stylesheet's or an icon's symbol, and an id goes unless it is one an icon draws through.
- */
-
 type Mask = (name: string, value: string, element?: Element) => string;
 
 const client = vi.hoisted(() => ({
@@ -26,7 +22,6 @@ afterEach(() => {
   delete window.__PosthogExtensions__;
 });
 
-/** Starts a recording through the controller and answers the attribute mask the recorder was handed. */
 async function mask(): Promise<Mask> {
   window.__PosthogExtensions__ = { initSessionRecording: () => undefined };
   sessionReplay({

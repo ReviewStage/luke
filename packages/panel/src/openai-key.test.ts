@@ -23,15 +23,6 @@ import { fakeActPort, quietHold } from "./testing/app-bridge.js";
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 
-/**
- * Dictation runs on the account's own OpenAI API key, so an account known to
- * have none is offered no Dictate: it says to add the key in settings, and
- * its press opens Codex's row in Settings › Agents, where the OpenAI key is
- * saved. Until the keys are read, when a read fails, and while no one is
- * signed in, nothing is known and it stands as it always has. Synthetic
- * account and keys.
- */
-
 const HINT = "Add an OpenAI key in Settings";
 const NO_EDITOR = { current: undefined };
 const NO_KEYWORDS: readonly string[] = [];
@@ -55,13 +46,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A composer's Dictate, as any box draws it. */
 function Presses(): React.JSX.Element {
   const dictation = useDictation({ editor: NO_EDITOR, keywords: NO_KEYWORDS, onNote: ignore });
   return createElement(DictateButton, { dictation, disabled: false });
 }
 
-/** The presses drawn for `account`, the keys held as `held` stands, recording what the presses opened and how often the keys were held. */
 async function mount(held: AppHostRead<AppProviderKeyList>, signedIn = true) {
   const account = signedIn ? "dev@example.com" : undefined;
   handState(

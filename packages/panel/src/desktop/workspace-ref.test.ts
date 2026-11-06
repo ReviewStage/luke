@@ -10,19 +10,11 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref.js";
 
-/**
- * workspace-ref.test.ts -- a workspace named is its tile and its name as one
- * object: its letter on its hue until its photo loads and the photo after,
- * the name as text a reader hears, a row's line under the name where one is
- * hung, and its card saying who shares it. Synthetic workspaces throughout.
- */
-
 const PHOTO_URL = "data:image/png;base64,iVBORw0KGgo=";
 
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // Note that the host holds the photo of the workspace a test draws with one.
   handState(
     {},
     {
@@ -38,7 +30,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the window's document, and the redraw it causes, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -53,7 +44,6 @@ function draw(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** What a reader hears of a ref: its words, the tile being hidden from a screen reader. */
 function heard(node: Node): string {
   if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
@@ -81,7 +71,6 @@ test("a workspace with a photo is named by the photo once it loads, and the name
     }),
   );
   await settle();
-  // Note that the photo is asked for once the host's read of it reaches its query.
   const image = await vi.waitFor(
     () => view.querySelector("img") ?? assert.fail("the photo is asked for"),
   );

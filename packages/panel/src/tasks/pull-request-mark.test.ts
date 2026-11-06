@@ -17,13 +17,6 @@ import { PublishedRow } from "./agent-published.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { PullRequestCard } from "./pull-request-card.js";
 
-/**
- * pull-request-mark.test.ts -- a pull request reads the same wherever the
- * window draws it: a sidebar task's card, the row pinned over its agent's
- * box, and its own card each wear one mark saying the words a
- * reader who cannot see it hears.
- */
-
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -35,7 +28,6 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-/** A pull request standing as `state`, its checks as `checks`. */
 function pullRequest(
   state: AgentPullRequest["state"],
   checks: AgentPullRequest["checks"],
@@ -52,7 +44,6 @@ function pullRequest(
   };
 }
 
-/** Every place the window draws the pull request, each rendered on its own. */
 function places(drawn: AgentPullRequest): ReadonlyMap<string, ReactElement> {
   const ignore = (): void => undefined;
   return new Map<string, ReactElement>([
@@ -87,7 +78,6 @@ function places(drawn: AgentPullRequest): ReadonlyMap<string, ReactElement> {
   ]);
 }
 
-/** The words the pull request's mark says as a place draws it. */
 function markOf(place: ReactElement): string | null | undefined {
   const page = new DOMParser().parseFromString(
     renderToStaticMarkup(withQueryClient(place)),

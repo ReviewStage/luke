@@ -28,30 +28,8 @@ import type { ViewerAction } from "./attachment-viewer.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
 
-/**
- * add-to-description.tsx -- a picture or a recording an agent showed, added to its task's description: kept on the description as one of its own and written at the end of its text, as the developer's edit, with Undo.
- *
- * The picture is the agent's, read from its transcript, so it is kept on the
- * description again, as a picture pasted from another description is, and the description's
- * readers see it on the description's own terms. The Mac re-encodes a picture to
- * the description's bound first (`encodeImage`), since an agent's picture may be
- * larger than a description's may. A recording is kept as it is, never re-encoded,
- * where it is no larger than a video sent to the description may be
- * (`PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES`), and the description plays it in place. The line is written at the end of the description's text, a paragraph
- * of its own, through the same edit a developer's save is; an edit that
- * meets the text moved on is written again on the text as it stands. Note
- * that it is never written at the editor's caret, because the description's editor
- * closes as focus leaves it, and the press that adds the picture is in the
- * agent's tab. The toast says the adding is under way from the press, since
- * re-encoding, keeping, and writing can take a moment, and turns in place
- * into what came of it. Undo takes the line back out where it still stands alone;
- * the kept picture goes with the description.
- */
-
-/** What the press is called. */
 const ADD_LABEL = "Add to description";
 
-/** What each outcome says in the window's toast. */
 const ADD_WORDS = {
   ADDING: "Adding to the description…",
   ADDED: "Added to the description",
@@ -64,17 +42,14 @@ const ADD_WORDS = {
   NOT_UNDONE: "The description changed since, so the picture stays in it.",
 } as const;
 
-/** How many times an edit is written again on the text as it stands before it gives up. */
 const EDIT_TRIES = 3;
 
-/** The file's own bytes, read from its `data:` URL. */
 function fileOf(chip: FileChip): File {
   const base64 = chip.url.slice(chip.url.indexOf(",") + 1);
   const bytes = Uint8Array.from(atob(base64), (letter) => letter.charCodeAt(0));
   return new File([bytes], chip.name, { type: chip.mediaType });
 }
 
-/** Why a keep failed, in the toast's words. */
 const KEEP_FAILED_WORDS = {
   [PICTURE_KEEP_FAILURE.TOO_MANY]: ADD_WORDS.TOO_MANY,
   [PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS]: ADD_WORDS.TOO_MANY_VIDEOS,
@@ -82,11 +57,6 @@ const KEEP_FAILED_WORDS = {
   [PICTURE_KEEP_FAILURE.UNANSWERED]: ADD_WORDS.NOT_SAVED,
 } as const;
 
-/**
- * The `data:` URL the file is kept on the description as, or why it cannot be: a
- * recording as it is, within a sent video's bound, and a picture re-encoded
- * within a picture's.
- */
 async function keptUrlOf(chip: FileChip): Promise<{ url: string } | { refused: string }> {
   if (isVideoDataUrl(chip.url)) {
     return fileOf(chip).size > PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES
@@ -98,13 +68,11 @@ async function keptUrlOf(chip: FileChip): Promise<{ url: string } | { refused: s
   return { url: `data:${encoded.mediaType};base64,${encoded.base64}` };
 }
 
-/** A picture's words: the name the viewer saves it by, without its extension. */
 function wordsOf(chip: FileChip): string {
   const dot = chip.name.lastIndexOf(".");
   return dot > 0 ? chip.name.slice(0, dot) : chip.name;
 }
 
-/** The description's text after an edit written on whatever it stands as now; what refused it where no edit saved: the answer that refused it, or the condition where nothing more was said. */
 async function edited(
   save: (base: string, value: string) => Promise<TasksEditAnswer>,
   change: (text: string) => string | undefined,
@@ -122,11 +90,6 @@ async function edited(
   return { refused: FAILURE_CONDITION.CONFLICT };
 }
 
-/**
- * The viewer's Add to description, for a transcript drawn on a plan's page; none
- * where it is drawn off one, as an agent with no plan's is, nor while the
- * account has Descriptions off.
- */
 export function useAddToDescription(): ViewerAction | undefined {
   const descriptionsOn =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
@@ -173,10 +136,6 @@ export function useAddToDescription(): ViewerAction | undefined {
         workspace,
       );
       const line = taskPictureLine(wordsOf(chip), address);
-      // Note that the edit is written on the description's words as the page last read
-      // them, and a conflict answers the text as it stands for the next.
-      // Note that what was added is kept from the edit that saved, since a
-      // retry on a moved text may add other line breaks than the first try.
       let addition = "";
       const saved = await edited(
         save,

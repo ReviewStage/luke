@@ -1,28 +1,7 @@
-/**
- * highlight-pool.ts -- the pool of workers Files changed highlights a list's files in, or none, where the list highlights on the window's own thread.
- *
- * Coloring a pull request's files is most of what a scroll through
- * Files changed costs the window's thread, so the diff bundle hands it to
- * Pierre's own pool of workers (`@pierre/diffs/worker`). The pool is
- * started from a door that starts one worker, which the bundle makes from
- * the worker's text the build carried; with no door, as where the build
- * carried no worker, there is no pool. A pool whose workers cannot start,
- * a door that throws or a worker that fails as it loads, is told nothing
- * is wrong with the window, and Pierre highlights on the window's own
- * thread instead, so a list is never left without its colors. What the
- * pool settles in, its workers or the window's own thread, is said once it
- * has started or failed to.
- *
- * Both color with Pierre's Highlights (`@pierre/highlights`), its lexers
- * hand-written in one WebAssembly module, where the window may compile
- * WebAssembly, and with Shiki's JavaScript engine where it may not.
- */
-
 import { canUseWASM, type HighlighterTypes } from "@pierre/diffs";
 import { WorkerPoolManager } from "@pierre/diffs/worker";
 import type { DiffLook } from "./contract.js";
 
-/** Where a list's files are highlighted: in the pool's workers, or on the window's own thread. */
 export const HIGHLIGHT_MODE = {
   POOL: "pool",
   MAIN_THREAD: "main-thread",
@@ -30,53 +9,23 @@ export const HIGHLIGHT_MODE = {
 
 type HighlightMode = (typeof HIGHLIGHT_MODE)[keyof typeof HIGHLIGHT_MODE];
 
-/** What a diff is colored with: Pierre's Highlights, on WebAssembly, or Shiki on its JavaScript regex engine. */
 export const HIGHLIGHTER = {
   HIGHLIGHTS: "highlights",
   SHIKI_JS: "shiki-js",
 } as const satisfies Record<string, HighlighterTypes>;
 
-/**
- * How many workers highlight at once: two, so a file scrolled into view is
- * not held behind a long one, while each worker's own copy of the grammars
- * and themes is kept to two.
- */
 const HIGHLIGHT_WORKERS = 2;
 
-/**
- * How many results the pool keeps on the window's thread, for each of its
- * file and diff caches: Pierre's own `totalASTLRUCacheSize`. Note that a
- * list's file scrolled out of view lets its colors go with its drawing, and
- * one scrolled back takes them from this cache by its read's name, or is
- * colored anew, drawn plain and then again in color, so a cache of a few
- * files makes every scroll back up a long pull request color it again.
- */
 export const HIGHLIGHT_CACHE_ENTRIES = 100;
 
-/**
- * The most characters a diff or file may hold, both sides counted, to be
- * colored on the window's own thread rather than in a worker, where it
- * colors with Highlights: Pierre's advice, since Highlights colors a file
- * that size faster than a worker's round trip, and a file colored at once
- * is drawn once, rather than plain and then again in color. Shiki's
- * JavaScript engine colors every file in the workers.
- */
 const MAIN_THREAD_MAX_CHARACTERS = 100_000;
 
-/**
- * What a list highlights with: the pool to hand Pierre, none for the
- * window's own thread, where it settles once started, and the door that
- * hands its workers a look, since a pool kept across lists holds the look
- * it was last handed, not the one a list is drawn in, settling once they
- * hold it.
- */
 export interface Highlighting {
   readonly pool: WorkerPoolManager | undefined;
   readonly settled: Promise<HighlightMode>;
   readonly follow: (drawn: DiffLook) => Promise<void>;
 }
 
-/** What the pool's workers highlight with, read off the look: its themes and how a changed line is marked, up to the longest line marked. */
 function poolRenderOptions(drawn: DiffLook, maxLineDiffLength: number) {
   return {
     theme: drawn.themes,
@@ -85,22 +34,10 @@ function poolRenderOptions(drawn: DiffLook, maxLineDiffLength: number) {
   } as const;
 }
 
-/**
- * The highlighter every diff in this window is colored with: Highlights
- * where the window may compile WebAssembly (its policy names
- * `'wasm-unsafe-eval'`), Shiki's JavaScript engine where it may not. Note
- * that every caller asks this one door, because Pierre keeps one
- * highlighter for a window's life and refuses a second of another kind.
- */
 export function preferredHighlighter(): HighlighterTypes {
   return canUseWASM() ? HIGHLIGHTER.HIGHLIGHTS : HIGHLIGHTER.SHIKI_JS;
 }
 
-/**
- * The pool started through `startWorker`, in the look given, on the
- * highlighter the window's own thread colors with; none where there is
- * no door to start a worker through.
- */
 export function startHighlighting(
   startWorker: (() => Worker) | undefined,
   drawn: DiffLook,
@@ -121,7 +58,6 @@ export function startHighlighting(
       ...(preferredHighlighter() === HIGHLIGHTER.HIGHLIGHTS
         ? { mainThreadMaxCharacters: MAIN_THREAD_MAX_CHARACTERS }
         : {}),
-      // Note that a worker failing to start is no error of the window's, since the list then highlights on its own thread.
       onWorkerError: (event) => event.preventDefault(),
     },
     {
@@ -133,7 +69,6 @@ export function startHighlighting(
     () => (pool.isWorkingPool() ? HIGHLIGHT_MODE.POOL : HIGHLIGHT_MODE.MAIN_THREAD),
     () => HIGHLIGHT_MODE.MAIN_THREAD,
   );
-  // Note that a look not taken, the pool having failed, leaves the list on the window's own thread in its own look.
   const follow = (next: DiffLook) =>
     pool.setRenderOptions(poolRenderOptions(next, maxLineDiffLength)).catch(() => undefined);
   return { pool, settled, follow };

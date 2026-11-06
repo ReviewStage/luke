@@ -12,18 +12,10 @@ import { handState, signedInAs } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ViewingAs } from "./viewing-as.js";
 
-/**
- * viewing-as.test.ts -- the Viewing as strip stands while a maintainer is
- * signed in as the member on a shell that can end it, naming the member, and
- * its Stop ends the sign-in for that member; an account no maintainer opened
- * is drawn nothing, and so is one on a shell that cannot end it, the Mac app.
- */
-
 const MEMBER = { id: "member-ada", email: "ada@example.test", name: "Ada Lovelace" };
 
 const roots: Root[] = [];
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks; the strip is never resized. */
 class StillResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -41,7 +33,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The strip for the member, opened by a maintainer or not, on a shell that ends the sign-in or not. */
 async function mount(
   impersonated: boolean,
   stopImpersonating: AppPlatform["stopImpersonating"],
@@ -60,7 +51,6 @@ async function mount(
   return container;
 }
 
-/** The strip's Stop, where it stands. */
 function stopButton(view: HTMLElement): HTMLButtonElement | undefined {
   return [...view.querySelectorAll("button")].find((button) => button.textContent === "Stop");
 }
@@ -76,7 +66,6 @@ test("a maintainer signed in as the member reads whom they view as, and Stop end
     assert.match(view.textContent ?? "", /Viewing as Ada Lovelace \(ada@example\.test\)/u),
   );
   act(() => stopButton(view)?.click());
-  // Note that the stop reaches its call a few steps after the press, as its mutation sends it.
   await vi.waitFor(() => assert.deepEqual(stopped, [MEMBER.id]));
 });
 

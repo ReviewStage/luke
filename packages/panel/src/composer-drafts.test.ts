@@ -66,17 +66,6 @@ import {
   UNPINNED_SUMMARY,
 } from "./testing/tasks-control.js";
 
-/**
- * A draft as the developer meets it: words typed in one task's agent's box
- * wait there while another task is open and while the agent's tab is away,
- * which its task's sidebar row marks with the Draft pencil while another
- * task is open, and only then, and its own tab while another of the open
- * task's tabs is chosen, outlast a reload of the window, and go with the message that sends them;
- * and an inbox card's answer, kept the same way, until the agent changes
- * the item it answers.
- */
-
-/** A task with one agent of its own, open on its agent's tab. */
 function task(id: string, name: string, agentId: string) {
   const summary: Task = {
     id,
@@ -113,7 +102,6 @@ const BILLING = task(
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -135,19 +123,16 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A signed-in identity: its id, where it was stored with one, and its address. */
 interface Identity {
   readonly id?: string;
   readonly email: string;
 }
 
-/** The account signed in to the window, as the panel's root hands it the drafts. */
 function SignedIn({ account }: { account: Identity | undefined }): null {
   useDraftsOwner(account);
   return null;
 }
 
-/** The developer moving to another window, which takes the focus from this one, as a window's own blur says. */
 function leaveWindow(): void {
   act(() => {
     window.dispatchEvent(new Event("blur"));
@@ -157,14 +142,8 @@ function leaveWindow(): void {
 const DEAN = { id: "user-dean", email: "dean@example.com" } as const;
 const SAM = { id: "user-sam", email: "sam@example.com" } as const;
 
-/** Sends nothing anywhere: every message stays out, unanswered. */
 const NEVER_ANSWERED: MessageSender = () => new Promise(() => undefined);
 
-/**
- * The window on one registry, as one launch of it holds: the sidebar's row
- * of each task beside the plan's column, open on `open`'s agent's tab, or on
- * its plan's own where `onPlan`, its messages sent through `send`.
- */
 function windowOn(registry: AtomRegistry.AtomRegistry) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -228,7 +207,6 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     );
     await settle();
   };
-  /** The sidebar's row of a task. */
   const row = (name: string) =>
     [...container.querySelectorAll<HTMLElement>("ul > li")].find((each) =>
       each.textContent?.includes(name),
@@ -236,12 +214,9 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   return {
     container,
     show,
-    /** The words the open agent's box shows. */
     box: () => composerEditor(container).textContent,
-    /** Whether a task's sidebar row wears the Draft pencil. */
     rowDrafted: (name: string) =>
       row(name).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
-    /** Whether an agent's tab in the plan's column wears the Draft pencil. */
     tabDrafted: (label: string) => {
       const tab =
         [...container.querySelectorAll<HTMLElement>(".ui-tab")].find(
@@ -287,17 +262,14 @@ test("an agent's tab wears the Draft pencil while another of its task's tabs is 
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
 });
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({
     initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
 }
 
-/** Longer than the typing rests before the drafts are written to storage. */
 const PAST_STORE_PAUSE = "300 millis";
 
-/** The words storage keeps, draft by draft. */
 function keptWords(): readonly string[] {
   const kept: { text: string }[] = JSON.parse(
     window.localStorage.getItem("app.composerDrafts") ?? "[]",
@@ -305,7 +277,6 @@ function keptWords(): readonly string[] {
   return kept.map((entry) => entry.text);
 }
 
-/** Every write of the drafts to storage from here on, by the words it kept. */
 function draftWrites(): () => readonly (readonly string[])[] {
   const writes: (readonly string[])[] = [];
   const write = Storage.prototype.setItem;
@@ -517,13 +488,11 @@ test("the drafts an account kept under its address are its own still once its id
   assert.equal(app.rowDrafted(INVITES.plan.name), true);
 });
 
-/** A draft as storage keeps it: an agent's words on a plan, by the account that wrote them. */
 function keptEntry(accountId: string, taskId: string, agentId: string, text: string) {
   return { accountId, place: { kind: "agent", planId: taskId, agentId }, text };
 }
 
 test("past the most drafts kept, the oldest written goes, whosever it is, and the window lets go of it as storage does", async () => {
-  // Dean's draft on Teammate invitations is the oldest; Sam's on Billing export the newest.
   const filler = Array.from({ length: 198 }, (_, at) =>
     keptEntry(DEAN.id, `plan-${at}`, `agent-${at}`, `Draft ${at}`),
   );
@@ -650,7 +619,6 @@ test("where the id's own later words win a place its address held a picture at, 
     box().update((was) => ({ ...was, text: "See old screenshot", attachments: [picture] })),
   );
   leaveWindow();
-  // Another window, already knowing the id, writes the same place later.
   const kept = JSON.parse(window.localStorage.getItem("app.composerDrafts") ?? "[]");
   window.localStorage.setItem(
     "app.composerDrafts",
@@ -662,7 +630,6 @@ test("where the id's own later words win a place its address held a picture at, 
   assert.deepEqual(box().draft.attachments, []);
 });
 
-/** The window's motion as a Mac with none reduced answers it. */
 function answerMotion(): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -674,10 +641,6 @@ function answerMotion(): void {
   });
 }
 
-/**
- * The sidebar itself, open on `open`'s agent's tab from the tab pinned to it
- * where `pinned`, which the sidebar then marks in place of the task's row.
- */
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
   fakeAppBridge({});
@@ -735,10 +698,8 @@ test("a task opened from a tab pinned to the sidebar is open still, so its row w
   assert.equal(away(INVITES.plan.name), true);
 });
 
-/** The workspace New task starts its tasks in. */
 const WORKSPACE = "workspace-personal";
 
-/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one, as a build from before the app kept no issues kept them. */
 function newTaskEntry(workspaceId: string, issueId?: string) {
   return {
     accountId: null,
@@ -747,7 +708,6 @@ function newTaskEntry(workspaceId: string, issueId?: string) {
   };
 }
 
-/** Whether the sidebar's New task row wears the Draft pencil, drawn over `tasks` with the drafts storage holds. */
 async function newTaskDrafted(tasks: TasksControl): Promise<boolean> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -811,21 +771,12 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
   );
 });
 
-/** The key the Teammate invitations task's draft agent starts under. */
 const DRAFT_KEY = "draft-invites";
 
-/** The account's feed holding each plan's items as given, which the window's inboxes draw first. */
 function feedOf(plans: Record<string, readonly InboxItem[]>): AppHostRead<AppInboxItems> {
   return { rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} } };
 }
 
-/**
- * The window open on the Teammate invitations task with `tabs` beside its
- * plan's, `chosen` among them, its agent standing as `agent` says, the draft
- * agent's under `DRAFT_KEY` holding `opening`, its inbox holding one open
- * item (`approval`), and its sidebar row beside the column; the drafts are
- * what storage holds.
- */
 async function columnOn(
   tabs: readonly MainTab[],
   chosen: MainTab | undefined,
@@ -887,12 +838,10 @@ async function columnOn(
   await settle();
   const pencil = `[role="img"][aria-label="${DRAFT_WORD}"]`;
   return {
-    // Note that the task's row is the one in the list drawn first, since the column's Inbox draws rows of its own that may wear a pencil.
     rowDrafted: () => container.querySelector(`:scope > ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".ui-tab")].find(
-          // Note that the label's own words are read apart from what follows them, the Inbox's count.
           (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === label,
         ) ?? assert.fail(`the column draws ${label}'s tab`)
       ).querySelector(`.ui-tab-end-mark ${pencil}`) !== null,
@@ -947,7 +896,6 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
   assert.equal(marked.rowDrafted(), false);
 });
 
-/** An item of the Teammate invitations agent's, open and asking for an approval, at `revision`. */
 function approval(revision: number): InboxItem {
   return {
     id: "a1b2c3d4-0000-4000-8000-000000000001",
@@ -976,14 +924,11 @@ function approval(revision: number): InboxItem {
   };
 }
 
-/** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
 function tasklessItem(agentId: string, id: string, revision: number): InboxItem {
   return { ...approval(revision), id, agentId };
 }
 
-/** An agent's own inbox with no task, followed as the Inbox page follows it, pushed as `items`. */
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
-  // Another window opening takes the focus from those before it.
   leaveWindow();
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND.AGENT]: { [agentId]: items } },
@@ -1082,7 +1027,6 @@ test("a draft on an item the account's feed leaves out stands while the feed dra
     first.onDraft(older, { choices: [], values: [], note: "Reply later", attachments: [] }),
   );
 
-  // The feed holds only the newer item, as it leaves out one settled past its bound; the agent's own read is still out.
   leaveWindow();
   const reads = handHostReads({
     items: {
@@ -1114,7 +1058,6 @@ test("a draft on an item the account's feed leaves out stands while the feed dra
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
-  // Note that the feed draws once its rows reach its query.
   await vi.waitFor(() => assert.equal(control?.drawn, true));
   assert.equal(control?.draftOf(older).note, "Reply later", "the feed drawing first drops nothing");
 
@@ -1148,7 +1091,6 @@ test("words another panel's window writes for a box reach this window's box as t
   typeInComposer(app.container, "Fix login");
   await settle();
 
-  // The other window's write, as storage hands it to this one.
   window.localStorage.setItem(
     "app.composerDrafts",
     JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
@@ -1189,7 +1131,6 @@ test("words another window writes for a box this window let go a moment before s
   const box = () => held ?? assert.fail("the box is drawn");
   act(() => box().box.update((was) => ({ ...was, text: "Fix login" })));
   leaveWindow();
-  // The message sent lets the words go, and before the typing's pause ends the other window writes anew.
   act(() =>
     box().writer.drop(
       (each) => each.kind === DRAFT_PLACE.AGENT && each.agentId === INVITES.agent.id,
@@ -1227,7 +1168,6 @@ test("files attached in this window stay as its draft when another window lets t
   act(() => box().setDraft("Review this"));
   act(() => box().setAttachments((held) => [...held, notes]));
 
-  // The other window, where the developer went, let the words go, which is all of the draft storage holds.
   leaveWindow();
   window.localStorage.setItem("app.composerDrafts", JSON.stringify([]));
   act(() => {

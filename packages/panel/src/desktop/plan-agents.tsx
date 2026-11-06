@@ -32,61 +32,15 @@ import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
-/**
- * plan-agents.tsx -- the open task's agents at the head of its description, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
- *
- * The agents stand under a group head, Agents and how many, which folds
- * them, folded where the page asks, the same shape every group of
- * the head takes, a `GroupHeader` over a dense `List`. Each row is the
- * task's agent as its "+" row and the summary draw it (`agentEntries`): its
- * tab's glyph, which gives way to the working mark while it works, its
- * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, each
- * agent's own, the failed mark at its end once its
- * turn failed, and the card its tab hangs. Its pull request, where it opened
- * one, stands after it as a chip of GitHub's mark in GitHub's color for
- * where it stands and its number (`pull-request-chip.tsx`), hanging the
- * pull request's one card as its Pull request tab does, the agent whose it
- * is and who it names among what the card says (`pull-request-card.tsx`).
- * A row's press is the page's to answer (`onOpenAgent`): the side panel's
- * plan opens the agent as its tab's own press does. The chip opens the pull
- * request as the agent's own pull request chip does, in its Pull request
- * tab; it is still a link to its page, so a right-click offers its address.
- * An agent with a thread waiting on the developer is marked as that
- * thread's Inbox row is: the attention mark at its end, before where it
- * runs, and the thread's title, a question before a notice, as its
- * description, on a line of its own under the name, the group's rows then
- * compact rather than dense, so a task opened on its plan says what waits
- * and on which agent, with no pill or word beside the mark for the eye.
- * Those agents come first, then those at work, then the newest started; an
- * archived agent is not listed. New agent follows them at every width, as
- * the strip's "+" offers it (`newAgentStarts`), so the group stands even on a
- * task with no agent, a fresh plan's one next step; a task that starts none
- * of its own, an archived or a pilot one, with no agent, draws no group.
- *
- * On a phone, Overview is the task's one page, with no strip, summary, or
- * Inbox tab beside it (`task-pane-switcher.tsx`), so the group holds the rest
- * of what those offer: the agents' read again where it never landed, the
- * archived agents folded under them as the summary folds them
- * (`ArchivedAgents`), and, after the group, the task's Inbox counting what
- * waits on the developer that no listed agent's row marks already, such as
- * an archived agent's thread, only while something does.
- */
-
-/** A phone's additions to the group; see the module's head. */
 interface PlanAgentsPhone {
-  /** The archived agents' fold (`ArchivedAgents`), which draws nothing while none is archived. */
   readonly archived: React.ReactNode;
-  /** Opens the window's Inbox narrowed to the task. */
   readonly onOpenInbox: () => void;
 }
 
-/** What the group is called, and its list for a reader moving between lists. */
 const AGENTS_LIST = "Agents";
 
-/** What the group's count counts, said to a reader beside the figure. */
 const AGENTS_NOUN = { one: "agent", many: "agents" } as const;
 
-/** The agents in the order the list draws them: those waiting on the developer first, then those still writing, then the newest started, each group's order otherwise kept. */
 function listedOrder(
   entries: readonly AddEntry[],
   waiting: ReadonlyMap<string, readonly InboxItem[]>,
@@ -103,14 +57,12 @@ function listedOrder(
   );
 }
 
-/** The title of the thread a waiting agent's row names: its first question, else its first notice. */
 function waitingTitle(items: readonly InboxItem[] | undefined): string | undefined {
   return items === undefined
     ? undefined
     : (items.find((item) => !awaitsNod(item)) ?? items[0])?.title;
 }
 
-/** One agent's row: its tab's look, the thread it waits on the developer in, where it runs, its failed mark, and its pull request's chip where it opened one. */
 function PlanAgentRow({
   entry,
   waitingOn,
@@ -121,7 +73,6 @@ function PlanAgentRow({
   onOpenPullRequest,
 }: {
   entry: AddEntry;
-  /** The title of the thread it waits on the developer in, where one waits. */
   waitingOn: string | undefined;
   pullRequest: AgentPullRequest | undefined;
   agents: AgentsControl;
@@ -191,13 +142,6 @@ function PlanAgentRow({
   );
 }
 
-/**
- * The task's agents at the head of its description, under their group's head,
- * those waiting on the developer first, then those at work, then the
- * newest, and what `starts` offers after them; nothing for a task with
- * neither. A row's press is handed to `onOpenAgent` by its agent's id, and
- * `onOpenPullRequest` opens an agent's pull request as its own chip does.
- */
 export function PlanAgents({
   agents,
   held,
@@ -210,22 +154,15 @@ export function PlanAgents({
   phone,
 }: {
   agents: AgentsControl;
-  /** What the tabs hold, which each row's card reads as its tab's does. */
   held: HeldTranscripts;
-  /** The column's chosen tab, whose agent's card follows its run. */
   tab: MainTabsControl["tab"];
-  /** Whether the group starts folded. */
   folded: boolean;
-  /** The task's Inbox items waiting on the developer, by the agent that posted each (`waitingByAgent`). */
   waiting: ReadonlyMap<string, readonly InboxItem[]>;
   onOpenAgent: (agentId: string) => void;
   onOpenPullRequest: (agentId: string) => void;
-  /** What the group offers after its agents: New agent (`newAgentStarts`), and on a phone the agents' read again too (`phoneAgentStarts`). */
   starts: readonly MenuAction[];
-  /** A phone's additions; none elsewhere. */
   phone?: PlanAgentsPhone | undefined;
 }): React.JSX.Element | null {
-  // Note that an entry's pick chooses its agent's tab, which a row hands the page as that agent's id.
   const entries = agentEntries(
     {
       tab,
@@ -236,10 +173,8 @@ export function PlanAgents({
     agents,
     held,
   );
-  // Note that a phone's group stands for its archived agents too, on a task whose every agent is archived, which starts none.
   const archived = phone === undefined ? 0 : (agents.archived?.length ?? 0);
   const grouped = entries.length > 0 || starts.length > 0 || archived > 0;
-  // Note that a phone's Inbox row counts only what no listed agent's row marks already.
   const listed = new Set(entries.map((entry) => entry.row.id));
   const marked = entries.some((entry) => waiting.has(entry.row.id));
   let unmarked = 0;
@@ -247,14 +182,12 @@ export function PlanAgents({
   const inboxRow = phone !== undefined && unmarked > 0 ? phone : undefined;
   if (!grouped && inboxRow === undefined) return null;
   return (
-    // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
       {grouped ? (
         <ReplayUnmask>
           <GroupHeader
             heading={GROUP_HEADING.NONE}
             label={AGENTS_LIST}
-            // Note that a group over no agent, standing for New agent, counts none.
             count={
               entries.length === 0
                 ? undefined

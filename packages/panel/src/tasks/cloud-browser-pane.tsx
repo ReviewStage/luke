@@ -87,82 +87,37 @@ import {
 } from "./cloud-browser-tabs.js";
 import { FILE_VIEW_HISTORY_CLASS } from "./file-view.js";
 
-/**
- * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
- *
- * Whose browser the tab lives in, which it never leaves, its strip tab
- * says with the agent's glyph and its card in words (`side-panel.tsx`), and
- * a draft's body says too. The bar's steps and its address steer the page over the live view whoever drives it: the
- * relay takes a tab nobody drives over for the member first, and refuses a
- * step while another member holds it, which the line under the bar says.
- * A draft (`cloud-browser-tabs.ts`'s `startCloudDraft`) draws the same bar
- * with its address focused: Enter opens the tab through the service, which
- * resumes the agent's sandbox where it stopped and takes the tab over for
- * the member, and the panel lands on it; Escape discards the draft.
- *
- * The page runs in the agent's own sandbox and arrives as frames over the
- * live view (`cloud-browser-live.ts`), drawn on a canvas sized to the page's
- * shape inside the pane, which is the viewport every point the member sends
- * is in. The pane opens its view while it is shown and its window's page is
- * visible, and closes it while either is not, so a hidden or minimized
- * window holds no socket and no sandbox; it opens a new one each time it is
- * shown again, or Watch again pressed, after the relay closed it; until
- * the page first paints, and while it reconnects, the window's spinner
- * stands over it, and a view closed as idle
- * offers Watch again. While the member drives the tab, the mouse, the
- * wheel, and the keys pressed on the canvas go to the page, and a paste goes
- * as text; a Command chord the window answers (`chordIsWindows`) stays the
- * window's, though off a Mac every Ctrl chord is the page's
- * (`surfaceKeepsPress`), and one the page edits text with
- * is sent as Control, since the page runs on Linux. What the page shows is
- * the agent's and its members', so the pane is left out of the screen
- * recording (`ph-no-capture`), whose canvas recording is off in any case,
- * and no frame, address, or title is kept past the drawn tab. The agent's
- * pointer is drawn over the canvas, never in its frame, while the agent has
- * the tab (`cloud-browser-cursor.tsx`).
- */
-
-/** Who has the tab, or why a step was refused, in a quiet line under the bar, Take over or Hand back at its end, so the address keeps the bar. */
 const STANDING_CLASS =
   "cloud-browser-standing flex min-w-0 flex-none items-center justify-between gap-control-gap border-b border-border px-column-inset py-tight-gap";
 
-/** The body, the page drawn on a canvas of the page's own shape, centered on the well. */
 const BODY_CLASS = "browser-view-body cloud-browser-body items-center justify-center bg-well";
 
-/** A quiet line over the body while no page stands to drive, or while a draft waits on an address; only its words and presses take the pointer. */
 const NOTICE_CLASS =
   "cloud-browser-notice pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-control-gap *:pointer-events-auto";
 
-/** The most characters one text message carries; a longer paste goes in pieces. */
 const TEXT_PIECE_CHARS = 4_096;
 
-/** The keys a Command chord edits text with on the page, sent there as Control. */
 const PAGE_EDIT_KEYS: ReadonlySet<string> = new Set(["a", "c", "x", "z"]);
 
-/** A view that never opens, for a pane not on screen. */
 const RESTING = Atom.make<AsyncResult.AsyncResult<CloudBrowserView>>(AsyncResult.initial());
 
-/** The mouse buttons, by a DOM event's `button`. */
 const BUTTON_OF = [
   BROWSER_LIVE_MOUSE_BUTTON.LEFT,
   BROWSER_LIVE_MOUSE_BUTTON.MIDDLE,
   BROWSER_LIVE_MOUSE_BUTTON.RIGHT,
 ] as const;
 
-/** The live view's mouse action, by the surface's. */
 const MOUSE_ACTION = {
   [REMOTE_POINTER_ACTION.DOWN]: BROWSER_LIVE_MOUSE_ACTION.DOWN,
   [REMOTE_POINTER_ACTION.UP]: BROWSER_LIVE_MOUSE_ACTION.UP,
   [REMOTE_POINTER_ACTION.MOVE]: BROWSER_LIVE_MOUSE_ACTION.MOVE,
 } as const;
 
-/** The live view's key action, by the surface's. */
 const KEY_ACTION = {
   [REMOTE_KEY_ACTION.DOWN]: BROWSER_LIVE_KEY_ACTION.DOWN,
   [REMOTE_KEY_ACTION.UP]: BROWSER_LIVE_KEY_ACTION.UP,
 } as const;
 
-/** The modifier bits held, as the live view counts them. */
 function modifiersOf(held: RemoteModifiers): number {
   return (
     (held.alt ? BROWSER_LIVE_MODIFIER.ALT : 0) |
@@ -172,36 +127,30 @@ function modifiersOf(held: RemoteModifiers): number {
   );
 }
 
-/** Hears the window's page shown or hidden. */
 function onVisibilityChange(changed: () => void): () => void {
   document.addEventListener("visibilitychange", changed);
   return () => document.removeEventListener("visibilitychange", changed);
 }
 
-/** Whether the window's page is visible: not while the window is hidden or minimized, or its browser tab is in the background. */
 function usePageVisible(): boolean {
   return useSyncExternalStore(onVisibilityChange, () => document.visibilityState !== "hidden");
 }
 
-/** The largest box of the page's shape that fits the body, or the body itself before the shape is known. */
 function fitted(body: CloudBrowserViewport, aspect: number | undefined): CloudBrowserViewport {
   if (aspect === undefined || body.width < 1 || body.height < 1) return body;
   const width = Math.min(body.width, body.height * aspect);
   return { width: Math.floor(width), height: Math.floor(width / aspect) };
 }
 
-/** Whose browser a cloud Browser tab lives in: its agent's name, and the glyph its strip tab and its card wear. */
 export interface CloudBrowserOwner {
   readonly name: string;
   readonly icon: React.JSX.Element;
 }
 
-/** What a browser is called by whose it is: "Invite expiry's browser", and "Invite emails' browser" for a name that ends in an s. */
 export function browserOf(name: string): string {
   return name.endsWith("s") ? `${name}' browser` : `${name}'s browser`;
 }
 
-/** Why a draft did not open, in words, naming the agent where the reason is its. */
 function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string {
   switch (failure) {
     case BROWSER_TAB_OPEN_FAILURE.INVALID_ADDRESS:
@@ -221,15 +170,6 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
   }
 }
 
-/**
- * A cloud Browser tab's bar: back, forward, and reload where `onStep` takes
- * them, else off with `whyOff` said by their hints, which the keyboard
- * reaches too, and the address,
- * which opens what is typed as a browser's address bar reads it, then
- * whatever the caller hands it. What is typed is put back on a blur, unless
- * `holdTyped`; Escape answers `onEscape` where given, once what is typed has
- * been cleared, and leaves the bar otherwise.
- */
 function CloudBrowserBar({
   address,
   onStep,
@@ -243,7 +183,6 @@ function CloudBrowserBar({
 }: {
   address: string;
   onStep: ((step: BrowserLiveHistory) => void) | undefined;
-  /** Why the steps are off, which their hints say. */
   whyOff: string;
   onOpen: (address: string) => void;
   onEscape?: (() => void) | undefined;
@@ -253,7 +192,6 @@ function CloudBrowserBar({
   children?: React.ReactNode;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null);
-  // What the bar holds while it is being typed into, none while it shows the page's address.
   const [typed, setTyped] = useState<string | undefined>(undefined);
   const go = () => {
     const opened = browserAddressOf(typed ?? "");
@@ -264,7 +202,6 @@ function CloudBrowserBar({
     }
     onOpen(opened);
   };
-  // Note that an `onEscape` ends the whole tab, so the first Escape clears the words and only one on an empty field answers it.
   const leave = () => {
     if (onEscape === undefined) {
       setTyped(undefined);
@@ -274,10 +211,7 @@ function CloudBrowserBar({
     if ((typed ?? address) === "") onEscape();
     else setTyped("");
   };
-  // Note that a step's hint is its name while it works, and the name with the reason while it is off.
   const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
-  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯,
-  // and the page's address copied or opened in a browser of the reader's own after them.
   const phone = usePhoneRoom();
   const copyWithToast = useCopyToast();
   useTabActions(
@@ -376,7 +310,6 @@ function CloudBrowserBar({
   );
 }
 
-/** Whether the agent acted at `lastActedAt` within `CLOUD_BROWSER_AGENT_RECENT` of now, and false again once that span has passed. */
 function agentLately(lastActedAt: number): Stream.Stream<boolean> {
   const span = Duration.toMillis(CLOUD_BROWSER_AGENT_RECENT);
   return Stream.fromEffect(Clock.currentTimeMillis).pipe(
@@ -390,7 +323,6 @@ function agentLately(lastActedAt: number): Stream.Stream<boolean> {
   );
 }
 
-/** `agentLately` for a component: the words it draws go on the clock's own edge, so nothing else need redraw the bar. */
 function useAgentLately(lastActedAt: number): boolean {
   const atom = useMemo(() => rendererRuntime.atom(agentLately(lastActedAt)), [lastActedAt]);
   return AsyncResult.getOrElse(
@@ -399,13 +331,11 @@ function useAgentLately(lastActedAt: number): boolean {
   );
 }
 
-/** What the bar says of who has the tab: the member, another member, its agent lately, or nothing. */
 function standingOf(input: {
   view: CloudBrowserView;
   tab: AgentBrowserTab;
   owner: CloudBrowserOwner;
   memberName: (userId: string) => string | undefined;
-  /** Whether the agent acted within `CLOUD_BROWSER_AGENT_RECENT`, as `useAgentLately` reads it. */
   lately: boolean;
 }): string | undefined {
   const { view, tab, owner, memberName, lately } = input;
@@ -415,12 +345,10 @@ function standingOf(input: {
   return lately ? `${owner.name} is using this tab` : undefined;
 }
 
-/** What stands over the body while no page stands to drive: a wait, drawn as the window's spinner, or words. */
 type Notice =
   | { readonly waiting: true; readonly label: string }
   | { readonly waiting: false; readonly words: string };
 
-/** What stands over the body while no page stands to drive, or none once one does. */
 function noticeOf(view: CloudBrowserView): Notice | undefined {
   if (view.phase === CLOUD_BROWSER_PHASE.ENDED) {
     const words =
@@ -435,7 +363,6 @@ function noticeOf(view: CloudBrowserView): Notice | undefined {
   return view.painted ? undefined : { waiting: true, label: "Waiting for the page" };
 }
 
-/** Why the bar's steps are off while the view is not live, the wait or the act that brings them back. */
 function stepsOffOf(view: CloudBrowserView): string {
   if (view.phase === CLOUD_BROWSER_PHASE.ENDED) {
     return view.ended === BROWSER_LIVE_CLOSE_REASON.GONE
@@ -446,38 +373,22 @@ function stepsOffOf(view: CloudBrowserView): string {
   return "the browser is not live yet";
 }
 
-/** Paints a decoded frame over the canvas, scaled to it whole. */
 function paint(canvas: HTMLCanvasElement | null, image: HTMLImageElement | undefined): void {
   if (canvas === null || image === undefined) return;
   canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
 }
 
-/**
- * The relative luminance (WCAG 2, linear light) under which the page beneath
- * the agent's pointer reads as dark, which draws it in `--agent-pointer-on-dark`,
- * the dark mode's brighter amber, rather than `--agent-pointer`; its white edge
- * holds it apart from the page on either side of the line.
- */
 const DARK_PAGE_LUMA = 0.32;
 
-/** One sRGB channel byte in linear light, as WCAG 2's relative luminance reads it. */
 function linearOf(byte: number): number {
   const channel = byte / 255;
   return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }
 
-/** The side of the square of canvas pixels the page beneath the pointer is read across. */
 const GROUND_SAMPLE = 8;
 
-/** How far into the arrow's body from its tip the page beneath it is read, in CSS pixels. */
 const GROUND_INSET = 4;
 
-/**
- * Whether the drawn page is dark beneath the pointer's tip, given in CSS
- * pixels of the canvas; none where the canvas cannot be read. Only a few
- * pixels are read, and only to choose the pointer's amber: nothing read is
- * kept.
- */
 function darkBeneath(
   canvas: HTMLCanvasElement | null,
   point: { readonly x: number; readonly y: number },
@@ -505,12 +416,6 @@ function darkBeneath(
   return luma / (data.length / 4) < DARK_PAGE_LUMA;
 }
 
-/**
- * A cloud Browser tab: its bar, then the page live. `owner` names whose
- * browser it is in, the agent's name; `shown` is whether the panel
- * is on screen and staying, which the view stands open under, while the
- * window's page is visible too.
- */
 export function CloudBrowserPane({
   tab,
   owner,
@@ -520,20 +425,17 @@ export function CloudBrowserPane({
   tab: AgentBrowserTab;
   owner: CloudBrowserOwner;
   shown: boolean;
-  /** A member's name by their account's id; none for one not known. */
   memberName: (userId: string) => string | undefined;
 }): React.JSX.Element {
   const body = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [bodySize, setBodySize] = useState<CloudBrowserViewport>({ width: 0, height: 0 });
   const [aspect, setAspect] = useState<number | undefined>(undefined);
-  // Each new view of the tab Watch again opens once the relay closed it as idle.
   const [generation, setGeneration] = useState(0);
   const size = fitted(bodySize, aspect);
   const viewport = useRef<CloudBrowserViewport | undefined>(undefined);
   viewport.current = size.width > 0 && size.height > 0 ? size : undefined;
 
-  // Where the agent's pointer stands on the drawn page, and whether the page is dark beneath it.
   const placed = tab.cursor === undefined ? undefined : cursorPlacement(tab.cursor, size);
   const pointer = useRef(placed);
   pointer.current = placed;
@@ -547,7 +449,6 @@ export function CloudBrowserPane({
     if (placed !== undefined) readGround();
   }, [readGround, placed?.x, placed?.y]);
 
-  // The last frame drawn, kept only to paint it again once the canvas changes size, which clears it.
   const shownFrame = useRef<HTMLImageElement | undefined>(undefined);
   const onFrame = useCallback(
     (frame: CloudBrowserFrame) => {
@@ -565,10 +466,8 @@ export function CloudBrowserPane({
     [readGround],
   );
 
-  // Note that the view stands only while someone can see it, because a socket left open in a hidden window holds its agent's sandbox.
   const visible = usePageVisible();
   const watched = shown && visible;
-  // A pane shown again opens a new view, since the one before closed as it was hidden, or as idle meanwhile.
   const live = useMemo(
     () =>
       cloudBrowserLive({
@@ -593,7 +492,6 @@ export function CloudBrowserPane({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  // The viewport goes again each time the canvas changes size, and the page is painted again on it.
   useLayoutEffect(() => {
     if (size.width < 1 || size.height < 1) return;
     paint(canvas.current, shownFrame.current);
@@ -630,7 +528,6 @@ export function CloudBrowserPane({
   const keyInput = (input: RemoteKey): boolean => {
     const { key, modifiers: held } = input;
     const chord = { key, meta: held.meta, shift: held.shift, alt: held.alt, control: held.control };
-    // A chord the window answers is left to it, but off a Mac a Ctrl chord, which is the page's; ⌘V, or Control-V off a Mac, arrives as the paste it is.
     const keptHere = surfaceKeepsPress({ ctrlKey: held.control, metaKey: held.meta });
     if (!keptHere && chordIsWindows(chord)) return false;
     if ((held.meta || held.control) && !held.alt && key.toLowerCase() === "v") return false;
@@ -658,7 +555,6 @@ export function CloudBrowserPane({
     }
   };
 
-  // A view the relay closed as idle opens again on a press; one whose tab closed does not.
   const resumable =
     view.phase === CLOUD_BROWSER_PHASE.ENDED && view.ended === BROWSER_LIVE_CLOSE_REASON.IDLE;
   const notice = noticeOf(view);
@@ -667,14 +563,12 @@ export function CloudBrowserPane({
   const address = view.page?.address ?? tab.address;
   const driver = view.driver?.driver ?? tab.driver;
   const driven = driver !== null;
-  // A refusal says why first, then who has the tab.
   const refusal = view.takeoverRefused
     ? "Only whoever started this agent can drive its tab."
     : view.stepRefused
       ? `${(driver === null ? undefined : memberName(driver.userId)) ?? "A teammate"} is driving this tab. Wait until they hand it back.`
       : undefined;
   const said = refusal ?? standing;
-  // Note that who has the tab is said politely as it changes, and a refusal as an alert, since it answers a press.
   useAnnounce(ANNOUNCE.POLITE, refusal === undefined ? (standing ?? "") : "");
   useAnnounceShown(ANNOUNCE.ALERT, refusal ?? "");
   useAnnounceShown(ANNOUNCE.POLITE, notice?.waiting === false ? notice.words : "");
@@ -763,14 +657,6 @@ export function CloudBrowserPane({
   );
 }
 
-/**
- * A draft of a tab in a coding agent's browser: the bar, its address
- * focused and its steps idle, over a line saying where the tab will open.
- * Enter opens it through the service, which may first wake the agent's
- * sandbox, and hands the tab, taken over by the member, to `onOpened`; a
- * refusal stays, said under the bar as a failure, the address kept so Enter
- * tries again. Escape clears the address, then discards the draft.
- */
 export function CloudBrowserDraftPane({
   place,
   draft,
@@ -778,14 +664,12 @@ export function CloudBrowserDraftPane({
   onOpened,
   onDiscard,
 }: {
-  /** The holder whose panel the draft stands on, which lists the tab it opens until a read does. */
   place: BrowserTabsPlace;
   draft: CloudBrowserDraft;
   owner: CloudBrowserOwner;
   onOpened: (tab: AgentBrowserTab) => void;
   onDiscard: () => void;
 }): React.JSX.Element {
-  // Note that the draft stays opening once a tab answers, because `onOpened` replaces it with that tab.
   const opened = useMutation({
     ...actMutation(ACT_KIND.TASKS_BROWSER_TAB_OPEN),
     onSuccess: (answer) => {

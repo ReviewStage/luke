@@ -148,101 +148,19 @@ import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-re
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
-/**
- * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
- *
- * The files are read from GitHub afresh by the service on each ask, so
- * nothing here reads on a clock. The Pull request tab holds the reads, the
- * files and the member's viewed marks with them (`useChangesReads`), so its
- * own Files changed tab counts the lines left to review by the marks drawn
- * here; it asks as the view first comes on screen,
- * when the developer presses Retry or the tab's Refresh, and the moment the
- * agent ends, since that is when what it published has settled. A refresh
- * leaves the files drawn standing until its answer lands; a read that
- * failed says so with a retry, as a File tab's does; an agent with no pull
- * request yet, or one whose pull request changes nothing, says that. The
- * panel keys the tab by its agent, so one agent's answer is never drawn in
- * another's tab.
- *
- * Who opened the pull request and its reviewers stand in the Pull request
- * tab's header above it, and what the reviews said in its overview's
- * conversation, so the view leads with its files.
- *
- * The tab is a File view (`file-view.tsx`) over its files' diffs,
- * every file in one list as stage-cli draws them (`diff-list.tsx`), each
- * under a header of its own that folds it, names it, with the letter of
- * what became of it and the lines it adds and removes, and stays at the top
- * while its lines scroll by; a file with no hunks says why under its header.
- * Its bar holds the pull request's files on GitHub, the diff
- * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
- * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
- * saved, and the changes read again), and the tree's toggle, which shows
- * and hides the tree for every File and Changes tab alike. A view a host
- * draws inside its own page, as a chapter is (`agent-chapters-tab.tsx`),
- * draws no bar of its own: the host's bar holds its diff settings,
- * Collapse all, and the tree's toggle (`ChangesBarHost`), and nothing that
- * acts on the whole pull request, and its closed tree leaves no strip. The tree is a File
- * tab's own pane (`file-tree-pane.tsx`) narrowed to the changed files,
- * every folder open, each row lettered A, M, D, or R, and ending, as
- * stage-cli's do, in how many review threads stand on its file, the lines
- * it adds and removes where the tree has room, and a Viewed toggle that
- * marks it as its header's box does, its row dimmed once viewed; its search the
- * list's filter, narrowing the list to the files whose path holds it as it
- * narrows the rows, said over the list while the tree is hidden; choosing
- * a file there scrolls the list to it. stage-cli's keys walk the list
- * (`changes-list.tsx`), and `?` opens a sheet listing them
- * (`files-changed-keys.tsx`). The diffs are
- * drawn by Pierre's diffs in a bundle of its own (`../diff-view/`), on the
- * File tab's ground, in its type and colors, unified or split, numbered
- * and wrapped as the File tabs' settings say, their numbers left out of the
- * find and of a copy as a File tab's are; what is a diff's alone is the
- * tint of a line added or removed, the words a changed line changed, and
- * the count of unchanged lines between two hunks, which open twenty at a
- * time or all at once, read from the file at the pull request's head the
- * first time one of its gaps is opened (`useFileTexts`). A review thread
- * on a line between hunks moves onto its line as a gap opened over it draws
- * it, and back above the diff as the gap closes again (`useOpenedLines`).
- *
- * Where the Pull request tab lets the member comment, lines picked with
- * the gutter's +, or code selected as text over them, open a comment under
- * the last of them (`line-comment.tsx`), several at once across lines and
- * files, each keeping its words while it is scrolled out of the list
- * (`useListCommenting`). The pointer resting on a review thread lights the
- * lines it is on (`useThreadHover`), over those of the comment written in
- * last.
- * Every name and line here is the repository's, so the tab is left out of
- * the screen recording (`ph-no-capture`).
- */
-
-/** A read that threw rather than answered, drawn as any other failed read. */
 const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
-/** What the bar's ⋯ says. */
 const CHANGES_MENU_WORDS = {
   COPY_PATCH: "Copy patch",
   DOWNLOAD_PATCH: "Download patch",
   PATCH_COPIED: "Patch copied",
-  /** Why the patch is not offered where the read stopped short of every file. */
   TRUNCATED: "This pull request has more files than were read",
-  /** Why the patch is not offered where no file has lines to copy. */
   NO_PATCH: "No file has lines to copy",
 } as const;
 
-/**
- * The bar's ⋯ over the diffs, named Files changed, which acts on the whole
- * pull request since the bar names no file: its patch copied or saved, every
- * file the read holds in the list's order (`pullRequestPatch`). The patch is
- * not offered, and says why, where the read stopped short of every file,
- * since it would not be the pull request's. A file's own path is copied from
- * its header (`FileHead`). `PaneBar` draws it as its ⋯. Note that it offers
- * no Refresh, because the Pull request tab the view stands in hands its own
- * to the same screen's ⋯, which reads these changes again too, and one
- * screen offers one Refresh.
- */
 function useChangesMenu({
   pullRequest,
 }: {
-  /** The pull request read; none, while there is none to act on, draws no ⋯. */
   pullRequest: {
     readonly url: string;
     readonly truncated: boolean;
@@ -287,10 +205,8 @@ function useChangesMenu({
   };
 }
 
-/** What a phone's ⋯ calls Files changed's own Open on GitHub, told from the pull request's beside it. */
 const OPEN_FILES_ON_GITHUB = "Open files on GitHub";
 
-/** Collapse all or Expand all as an item of a phone's ⋯, as the bar's button is. */
 function foldAllAction(list: ChangesList): MenuAction {
   return {
     label: list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL,
@@ -304,20 +220,12 @@ function foldAllAction(list: ChangesList): MenuAction {
   };
 }
 
-/** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
 export interface ChangesThreads {
   readonly list: readonly ReviewThread[];
-  /** Draws one, under its line or above the diff, where it names the lines it is on. */
   readonly draw: (thread: ReviewThread, place: ThreadPlace) => ReactNode;
-  /** Reads the threads again, as Retry reads the files again, so the two describe the same push. */
   readonly refresh?: (() => void) | undefined;
 }
 
-/**
- * An ask to bring one review thread into view on its file, as its link or
- * View in Files changed asks: counted, so each ask is its own; told once
- * the thread took the focus, or that its file is not among the changes.
- */
 export interface ChangesReveal {
   readonly thread: ReviewThread;
   readonly ask: number;
@@ -325,7 +233,6 @@ export interface ChangesReveal {
   readonly onGone: (ask: number) => void;
 }
 
-/** Where a review thread is drawn in a file's diff: under the line it stands on, or above the diff, which draws no row for it. */
 export const THREAD_PLACE = {
   ON_LINE: "on-line",
   ABOVE: "above",
@@ -333,23 +240,15 @@ export const THREAD_PLACE = {
 
 export type ThreadPlace = (typeof THREAD_PLACE)[keyof typeof THREAD_PLACE];
 
-/**
- * The key each side's review threads with no drawn row stand above a
- * file's first hunk by, in a list of their own; a review thread's note is
- * keyed by its page, which neither is.
- */
 const ABOVE_KEY = {
   [DIFF_SELECTION_SIDE.DELETIONS]: "above-deletions",
   [DIFF_SELECTION_SIDE.ADDITIONS]: "above-additions",
 } as const satisfies Record<DiffSelection["side"], string>;
 
-/** The key of the line saying why a file's gaps could not be opened; a review thread's note is keyed by its page, which this never is. */
 const REFUSED_KEY = "gaps-refused";
 
-/** The key of what stands in the place of the lines of a file that draws none; a review thread's note is keyed by its page, which this never is. */
 const LEAD_KEY = "lead";
 
-/** A file's review threads that stand above its lines, as one list. */
 function AboveThreads({
   above,
   draw,
@@ -372,12 +271,6 @@ function AboveThreads({
   );
 }
 
-/**
- * What lights the lines review threads are on while the pointer rests on
- * them, and lets them go as it leaves: one thread, or the chip a line's
- * threads are minimized to, the whole group, told apart by `group`, since
- * the chip and a thread under it share their first thread's key.
- */
 type ThreadHover = (
   key: string,
   group: boolean,
@@ -385,12 +278,6 @@ type ThreadHover = (
   resting: boolean,
 ) => void;
 
-/**
- * Review threads on their line, one or a minimized chip's, which light the
- * lines they are on while the pointer rests on them or the keyboard is in
- * them, as stage-cli's threads do; drawn as they are where nothing lights
- * them.
- */
 function ThreadLines({
   hoverKey,
   group = false,
@@ -400,7 +287,6 @@ function ThreadLines({
 }: {
   hoverKey: string;
   group?: boolean;
-  /** The lines the threads are on, as the list lights them (`threadLines`). */
   lines: DiffListSelection | undefined;
   hover: ThreadHover | undefined;
   children: ReactNode;
@@ -413,8 +299,6 @@ function ThreadLines({
       onMouseEnter={() => hover(hoverKey, group, lines, true)}
       onMouseLeave={() => hover(hoverKey, group, lines, false)}
       onFocus={(event) => {
-        // Note that only the keyboard's focus lights them, as a hint shows on it, so a card a link lands on and focuses lights nothing it did not ask for;
-        // and only the threads nearest the focus, since a minimized chip's threads stand inside the chip's own.
         const nearest =
           event.target instanceof Element ? event.target.closest(".diff-thread-lines") : null;
         if (nearest !== event.currentTarget) return;
@@ -422,7 +306,6 @@ function ThreadLines({
           hover(hoverKey, group, lines, true);
       }}
       onBlur={(event) => {
-        // Note that the focus moving within the thread keeps its lines lit.
         if (!event.currentTarget.contains(event.relatedTarget))
           hover(hoverKey, group, lines, false);
       }}
@@ -432,20 +315,11 @@ function ThreadLines({
   );
 }
 
-/** Which of a file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one line's. */
 interface FileMinimized {
   readonly shown: (side: DiffSelection["side"], line: number) => boolean;
   readonly show: (side: DiffSelection["side"], line: number, shown: boolean) => void;
 }
 
-/**
- * A file's threads on their lines while Minimize inline comments is on, as
- * stage-cli draws them: each line's threads as one chip at the line's end
- * (`MinimizedThreads`), standing in a row of no height, and under it, once
- * the chip shows them, the threads as they are drawn otherwise. A line a
- * comment is being written on always shows its threads, since the comment
- * stands among them.
- */
 function minimizedNotes(
   file: AgentChangedFile,
   placed: ReturnType<typeof threadsOn>["placed"],
@@ -473,7 +347,6 @@ function minimizedNotes(
       ));
       const [first] = threads;
       if (first === undefined) return [];
-      // A line a comment is being written on shows its threads as they are, the comment among them.
       const writing = comments.some((comment) => comment.side === side && comment.line === line);
       return writing
         ? threads.map((each, at) => ({ key: each.key, side, line, content: drawn[at] }))
@@ -483,7 +356,6 @@ function minimizedNotes(
               side,
               line,
               content: (
-                // The chip lights the lines its threads stand on, as each thread does once shown.
                 <ThreadLines
                   hoverKey={first.key}
                   group
@@ -508,44 +380,24 @@ function minimizedNotes(
   );
 }
 
-/**
- * A file of the list as the bundle is handed it: its patch, its fold, its
- * header, and its notes: each review thread under its line, and those its
- * diff draws no row for above the first hunk (`threadsOn`), on the side
- * each counts on, as GitHub's split diff has them. A file with no hunks to
- * draw, or a changed image drawn as its pictures (`image-diff.tsx`), stands
- * as what is drawn in the place of its lines alone (`lead`), across its
- * width: why it has none, or the pictures, and every one of its review
- * threads. Each comment being written on its lines stands under the last
- * of them, and each thread on a line lights its lines while the pointer
- * rests on it.
- */
 function entryOf(
   file: AgentChangedFile,
   list: ChangesList,
-  /** The review threads on this file, and the door that draws one. */
   threads: readonly ReviewThread[],
   draw: ChangesThreads["draw"] | undefined,
   images: ImageSides | undefined,
   comments: readonly DiffNote[],
-  /** Whether the lines between its hunks may be opened, and why they could not be where a read was refused. */
   gaps: { readonly open: boolean; readonly refused: ExpansionRefusal | undefined },
-  /** Which of the file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one; none while it is off. */
   minimized: FileMinimized | undefined,
   hover: ThreadHover | undefined,
-  /** The file drawn whole, where it is, whether it may be, and the door that draws it so or back to its changes. */
   whole: FileWhole,
-  /** The lines of its new side between its hunks it draws now, its gaps opened over them; none where it draws none. */
   opened: ReadonlySet<number> | undefined,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
-  // An SVG with lines to draw is text as well as a picture: its lines are drawn while its source is asked for.
   const source = fileNotice(file) === undefined && list.asSource(path);
   const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
-  // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
-  // A file drawn whole draws every one of its lines, so its threads are placed on them.
   const drawnWhole = pictured === undefined && !emptyWhole(whole.texts) ? whole.texts : undefined;
   const { placed, above } = threadsOn(threads, drawnAs, drawnWhole, opened);
   const notes: DiffNote[] =
@@ -561,7 +413,6 @@ function entryOf(
           ),
         }))
       : minimizedNotes(file, placed, draw, minimized, comments, hover);
-  // The threads above the diff, as one list, or minimized to a chip of their own.
   const aboveOf = (unplaced: typeof above, side: DiffSelection["side"]) => {
     const list = <AboveThreads above={unplaced} draw={draw} />;
     if (minimized === undefined) return list;
@@ -576,10 +427,7 @@ function entryOf(
       </MinimizedThreads>
     );
   };
-  // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
-  // A file that only moved, drawn whole, shows its lines rather than saying it only moved.
   const notice = drawnWhole === undefined ? fileNotice(file) : undefined;
-  // A file that only moved offers its lines, and one too large to diff its diff, from what it says, its read waiting for the press.
   const offer =
     !whole.offered || whole.texts !== undefined
       ? undefined
@@ -597,7 +445,6 @@ function entryOf(
         </TextButton>
       </>
     );
-  // Note that a file too large to diff whose texts could not be read says why after its notice, since it draws no hunk to say it above.
   const loadRefused =
     file.omitted === PATCH_OMITTED.TOO_LARGE && gaps.refused !== undefined
       ? ` ${DIFF_LOAD_REFUSED_WORDS[gaps.refused]}`
@@ -656,7 +503,6 @@ function entryOf(
     lead: lead !== undefined,
     expandable: lead === undefined && gaps.open,
     whole: lead === undefined ? whole.texts : undefined,
-    // The lines its threads wait on between its hunks, asked for only where a gap may open over them.
     hidden:
       lead === undefined && gaps.open && drawnWhole === undefined
         ? gapLines(threads, file)
@@ -688,7 +534,6 @@ function entryOf(
   };
 }
 
-/** What a file's entry is drawn from, in a fixed order: the entry stands while each is the same. */
 function entryInputs(
   file: AgentChangedFile,
   list: ChangesList,
@@ -712,24 +557,15 @@ function entryInputs(
     images,
     comments.length,
     ...comments,
-    // Note that the door drawing a thread matters only to a file a thread is on.
     threads.length === 0 ? undefined : draw,
     ...threads,
   ];
 }
 
-/** Whether two lists of inputs are the same, each by identity. */
 function sameInputs(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((each, at) => Object.is(each, b[at]));
 }
 
-/**
- * Each kept file's entry, the one drawn last kept while nothing it is drawn
- * from changed, so a draw of the view for a key or a scroll builds and
- * reconciles only the files that changed: the file stood on and the one
- * before it, not every file of the pull request. A file's header and notes
- * are then the very elements drawn last, which React leaves as they stand.
- */
 function useEntries(
   list: ChangesList,
   threads: ChangesThreads | undefined,
@@ -785,29 +621,18 @@ function useEntries(
   return entries;
 }
 
-/** A file drawn whole: its texts where it is, whether it may be, and the door that draws it whole or back to its changes. */
 interface FileWhole {
   readonly texts: DiffFileTexts | undefined;
   readonly offered: boolean;
   readonly toggle: () => void;
 }
 
-/** Whether a file drawn whole has no line to draw, which keeps saying what it is rather than drawing nothing. */
 function emptyWhole(texts: DiffFileTexts | undefined): boolean {
   return texts !== undefined && texts.before === "" && texts.after === "";
 }
 
-/** No file drawn whole. */
 const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
 
-/**
- * Which files are drawn whole, as stage-cli's Expand full file draws one:
- * a file's texts read as its gaps read them (`FileTexts`'s door, once and
- * kept), every unchanged line then drawn among its changes, until Collapse
- * to changes; every file back to its changes with a new answer. A file whose
- * gaps never open is never offered, and one whose read is refused stays as
- * it is, its refusal said as a gap's is.
- */
 function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole {
   const { read, refused, whole, wholeable } = texts;
   const [held, setHeld] = useState<{
@@ -828,7 +653,6 @@ function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole 
     }
     read?.(path).then(
       (whole) => {
-        // Note that a read of an earlier answer is dropped, which would draw that answer's files over this one's.
         if (whole !== undefined && latest.current.read === read) {
           held(new Map(latest.current.files).set(path, whole));
         }
@@ -848,26 +672,15 @@ function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole 
   };
 }
 
-/** The lines between each file's hunks the list draws now, as it last told them: by file. */
 type OpenedLines = ReadonlyMap<string, ReadonlySet<number>>;
 
-/** No line between hunks drawn. */
 const NONE_OPENED: OpenedLines = new Map();
 
-/** Which lines between each file's hunks the list draws, and the door the list tells them through. */
 interface ListOpened {
   readonly openedOf: (path: string) => ReadonlySet<number> | undefined;
   readonly onDrawn: (path: string, lines: readonly number[]) => void;
 }
 
-/**
- * Which of the lines between each file's hunks that its threads wait on
- * the list draws now, as the list tells them (`DiffListProps.onDrawn`):
- * a gap opened over one draws it, and a gap closed again, its patch read
- * anew, draws it no more. Each file's answer is the same set until the list
- * tells otherwise, so the files whose gaps stood keep their entries; the
- * door stays the same, as the list holds it.
- */
 function useOpenedLines(): ListOpened {
   const [opened, setOpened] = useState<OpenedLines>(NONE_OPENED);
   const onDrawn = useCallback((path: string, lines: readonly number[]) => {
@@ -881,19 +694,10 @@ function useOpenedLines(): ListOpened {
   return { openedOf: (path) => opened.get(path), onDrawn };
 }
 
-/** The lines that show their threads while Minimize inline comments is on: by file, by side, by line. */
 type ShownLines = ReadonlyMap<string, ReadonlyMap<DiffSelection["side"], ReadonlySet<number>>>;
 
-/** No line showing its threads. */
 const NONE_SHOWN: ShownLines = new Map();
 
-/**
- * Which lines show their threads while Minimize inline comments is on,
- * each file's answer the same object while none of its lines was shown or
- * hidden since, so the files whose lines did not change keep their entries;
- * none while it is off, and every line minimized again each time it is
- * turned on, as stage-cli does.
- */
 function useMinimizedLines(minimize: boolean): (path: string) => FileMinimized | undefined {
   const [shown, setShown] = useState<{ readonly of: boolean; readonly lines: ShownLines }>({
     of: minimize,
@@ -932,21 +736,13 @@ function useMinimizedLines(minimize: boolean): (path: string) => FileMinimized |
   };
 }
 
-/** No comment being written on a file's lines. */
 const NO_NOTES: readonly DiffNote[] = [];
 
-/** Where the lines a comment is on are lit and its note drawn: under the last of them, on the side that one counts on. */
 const COMMENT_SIDE = {
   [DIFF_SIDE.LEFT]: DIFF_SELECTION_SIDE.DELETIONS,
   [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
 } as const;
 
-/**
- * The lines review threads ending on one line of `file` are on now, as the
- * list lights them: the widest of their ranges, the one whose first line's
- * row the diff draws first, a first line out of the patch before any, which
- * holds every other; none for threads on no line of the head.
- */
 function threadLines(
   threads: readonly ReviewThread[],
   file: AgentChangedFile,
@@ -955,7 +751,6 @@ function threadLines(
     if (thread.line === null) return [];
     const side = COMMENT_SIDE[thread.startSide ?? thread.side];
     const start = thread.startLine ?? thread.line;
-    // Note that an undrawn first line precedes drawn rows, because the threads share a drawn end.
     const place = rowPlace(file, side, start) ?? Number.NEGATIVE_INFINITY;
     const selection = { start, side, end: thread.line, endSide: COMMENT_SIDE[thread.side] };
     return [{ place, lines: { path: thread.path, selection } }];
@@ -965,12 +760,6 @@ function threadLines(
   )[0]?.lines;
 }
 
-/**
- * What the list is handed of commenting: what opens a comment on lines
- * picked, what those lines are called where GitHub would take a comment on
- * them, each file's comments being written, and the lines of the one
- * opened or written in last, lit.
- */
 interface ListCommenting {
   readonly open: (picked: DiffListSelection) => void;
   readonly commentOn: (picked: DiffListSelection) => string | undefined;
@@ -978,18 +767,11 @@ interface ListCommenting {
   readonly lit: DiffListSelection | undefined;
 }
 
-/** How Files changed comments on lines, where its Pull request tab lets it: the member's pending review, which names the offers, and what reads the tab again once GitHub answered. */
 export interface LineComments {
   readonly pending: PendingReview;
   readonly onWritten: ReadAgain;
 }
 
-/**
- * A line comment whose words the drafts store keeps as they are typed, by
- * where the comment stands (`lineCommentPlace`), so they outlast the tab
- * and the window. Note that each comment reads its own draft, so a word
- * typed in one draws no other comment of the list.
- */
 function DraftedLineComment({
   draft,
   ...comment
@@ -1007,15 +789,6 @@ function DraftedLineComment({
   );
 }
 
-/**
- * The comments being written on lines of the files, several at once
- * across lines and files, held above the list (`comment-drafts.ts`) for
- * as long as the tab stands, with their words in the drafts store, so one
- * scrolled out of the list and back, or left with the tab, loses nothing; one opens where the gutter's + or a
- * selection of code picks lines GitHub would take a comment on
- * (`commentLines`). A comment whose lines a read of the files no longer
- * holds is not drawn.
- */
 function useListCommenting(
   agentId: string,
   files: readonly AgentChangedFile[],
@@ -1024,7 +797,6 @@ function useListCommenting(
   onRefresh: () => void,
 ): ListCommenting | undefined {
   const [drafts, setDrafts] = useState<CommentDrafts>(NO_DRAFTS);
-  // Each comment's own key, counted, which its note stands under.
   const opened = useRef(0);
   const linesOf = useCallback(
     (picked: DiffListSelection) => {
@@ -1086,21 +858,12 @@ function useListCommenting(
   return { open, commentOn, notes, lit };
 }
 
-/** The lines of the thread the pointer rests on, and the door that sets them. */
 interface RestingThread {
   readonly lines: DiffListSelection | undefined;
   readonly hover: ThreadHover;
 }
 
-/**
- * The lines of the review thread the pointer rests on, which the list
- * lights over those of the comment being written while it does, and the
- * door that sets them; the door stays the same, so a file's entry is kept.
- */
 function useThreadHover(): RestingThread {
-  // Note that what the pointer rests on stands as a stack, a thread on top of
-  // the chip it opened from, so leaving the thread for its chip lights the
-  // chip's lines again.
   const [resting, setResting] = useState<
     readonly { key: string; group: boolean; lines: DiffListSelection }[]
   >([]);
@@ -1114,13 +877,11 @@ function useThreadHover(): RestingThread {
   return { lines: resting.at(-1)?.lines, hover };
 }
 
-/** Where a thread revealed stands in its file's list entry: on a line, its file scrolled to the line, or above its lines, its file scrolled to its header; and the chip line a minimized one is shown on. */
 interface RevealedPlace {
   readonly at: DiffListReveal["at"];
   readonly chip: { readonly side: DiffSelection["side"]; readonly line: number };
 }
 
-/** Where `thread` stands in `file`'s entry, drawn as `lead` (its threads above all), whole (`whole`), or with gaps opened over lines (`opened`), as `entryOf` places it. */
 function revealedPlace(
   thread: ReviewThread,
   file: AgentChangedFile,
@@ -1140,10 +901,8 @@ function revealedPlace(
   return { at: undefined, chip: { side: above[0]?.side ?? fileWide.side, line: FILE_NOTE_LINE } };
 }
 
-/** A reveal as the list takes it: the ask, and the file its thread is on, which the changes hold. */
 type ListReveal = ChangesReveal & { readonly file: AgentChangedFile };
 
-/** A thread being landed on in the list: the ask, the thread by its id, and its file, whose entry places it once the list holds it. */
 interface ListLanding {
   readonly ask: number;
   readonly threadId: string;
@@ -1151,19 +910,14 @@ interface ListLanding {
   readonly file: AgentChangedFile;
 }
 
-/** The thread being landed on in the list, and what its cards are handed to land on it. */
 interface ListLandingControl {
-  /** The file and line to scroll to, once its entry places the thread. */
   readonly reveal: DiffListReveal | undefined;
-  /** The lines lit for the thread, until its ring ends. */
   readonly lines: DiffListSelection | undefined;
   readonly provided: ThreadLanding | undefined;
 }
 
-/** How many frames a thread revealed in the list is waited for, Pierre's scroll to it among them. */
 const LANDING_FRAMES = 240;
 
-/** Whether a thread card stands inside the list's box, where Pierre has scrolled it, and a landing may end on it. */
 function standsIn(box: HTMLElement | null, card: HTMLElement): boolean {
   if (box === null || !landable(card)) return false;
   const area = box.getBoundingClientRect();
@@ -1171,13 +925,6 @@ function standsIn(box: HTMLElement | null, card: HTMLElement): boolean {
   return top >= area.top && top < area.bottom;
 }
 
-/**
- * The thread a reveal asks for, landed on in the list: its file opened, a
- * filter that leaves it out cleared, a minimized line's chip shown; then,
- * once the list holds the file open, the list scrolled to the thread's
- * line or its file's header, its lines lit, and its card ringed and
- * focused (`ThreadLandingProvider`), the lines let go as the ring ends.
- */
 function useListLanding(
   reveal: ListReveal | undefined,
   list: ChangesList,
@@ -1191,7 +938,6 @@ function useListLanding(
   const latest = useRef({ reveal, list });
   latest.current = { reveal, list };
   const ask = reveal?.ask;
-  // A new ask opens the file at once, clearing a filter that leaves it out, so its entry is drawn.
   useEffect(() => {
     const { reveal, list } = latest.current;
     const threadId = reveal?.thread.id;
@@ -1199,7 +945,6 @@ function useListLanding(
     list.expand(reveal.file.path);
     setLanding({ ask: reveal.ask, threadId, thread: reveal.thread, file: reveal.file });
   }, [ask]);
-  // Note that the thread is placed by its file's entry as drawn, a picture's threads above it, as `entryOf` places them.
   const entry =
     landing === undefined ? undefined : entries.find((each) => each.path === landing.file.path);
   const place =
@@ -1212,7 +957,6 @@ function useListLanding(
           wholeOf(landing.file).texts,
           openedOf(landing.file.path),
         );
-  // A minimized line's chip is shown once the thread is placed, each ask once.
   const chipShown = useRef<number | undefined>(undefined);
   const latestPlace = useRef({ landing, place, minimizedOf });
   latestPlace.current = { landing, place, minimizedOf };
@@ -1248,7 +992,6 @@ function useListLanding(
   };
 }
 
-/** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */
 function ViewedBox({
   viewed,
   onToggle,
@@ -1270,7 +1013,6 @@ function ViewedBox({
   );
 }
 
-/** A file's turn between its changes alone and the whole file, at the end of its header, as stage-cli's is. */
 function WholeToggle({
   whole,
   onToggle,
@@ -1292,7 +1034,6 @@ function WholeToggle({
   );
 }
 
-/** An SVG's turn between its picture and its source's lines, at the end of its header. */
 function SourceToggle({
   source,
   onToggle,
@@ -1313,11 +1054,6 @@ function SourceToggle({
   );
 }
 
-/**
- * Where a pull request's changed images are read: its repository, named by
- * its page on GitHub, and the commits the service named; none where the
- * page names no repository.
- */
 function imagesOf(
   agentId: string,
   pullRequest: { readonly url: string; readonly headSha?: string; readonly baseSha?: string },
@@ -1336,7 +1072,6 @@ function imagesOf(
   };
 }
 
-/** The repository a pull request's page on GitHub names, as `owner/name`; none where it names none. */
 function repositoryOf(url: string): string | undefined {
   const [owner, name] = URL.canParse(url)
     ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
@@ -1344,47 +1079,24 @@ function repositoryOf(url: string): string | undefined {
   return owner === undefined || name === undefined ? undefined : `${owner}/${name}`;
 }
 
-/** What a refusal of the service's read says of a file's gaps: not text, and anything else that it could not be read just now. */
 function expansionRefusalOf(refusal: TaskFileRefusal): ExpansionRefusal {
   return refusal === TASK_FILE_REFUSAL.NOT_TEXT
     ? EXPANSION_REFUSAL.NOT_TEXT
     : EXPANSION_REFUSAL.UNAVAILABLE;
 }
 
-/** How Files changed opens the lines between a file's hunks: whether a file's may be, the door that reads one whole, and why any could not be. */
 interface FileTexts {
   readonly expandable: (file: AgentChangedFile) => boolean;
-  /** Whether a file is the answer's own, every hunk of it drawn, rather than one a chapter cut down, which is never read whole. */
   readonly whole: (file: AgentChangedFile) => boolean;
-  /** Whether a file can be drawn whole: one `wholeable`, or one too large to diff whose text before stands at a commit the service named. */
   readonly wholeable: (file: AgentChangedFile) => boolean;
   readonly read: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   readonly refused: ReadonlyMap<string, ExpansionRefusal>;
 }
 
-/** A file's text at a commit as the service read it raw, or why it could not be. */
 type RawRead = { readonly text: string } | { readonly refused: ExpansionRefusal };
 
-/** A file's texts on both sides, or why they could not be read. */
 type TextsRead = { readonly texts: DiffFileTexts } | { readonly refused: ExpansionRefusal };
 
-/**
- * How Files changed reads a changed file whole, for the lines between its
- * hunks: its text at the pull request's head, read as a File tab reads one
- * (`TASKS_FILE`, raw, at that commit) the first time a gap of it is
- * opened, and kept for the answer's life, and its text before turned back
- * from that text and its patch (`textsOf`), so one read stands for both.
- * A file whose patch was too large to send has no patch to turn back, so
- * its Load diff reads its text before as well, at the merge base the
- * service named (`tooLargeToDiff`), and the diff bundle diffs the two.
- * None where the read could not be promised to reach the pull request's own
- * files: an agent on no task, a head the service did not name, or a task
- * whose repository is not the one the pull request is in, since the read
- * is the task's. A file not changed in place, or a secret one, which the
- * service never reads, offers no gap (`expandable`); and a file whose read
- * the service refused, or whose text is not the one its patch was made
- * against, offers none from then on, and says why.
- */
 function useFileTexts(
   taskId: string | null,
   repository: string | null,
@@ -1401,10 +1113,8 @@ function useFileTexts(
     readonly of: unknown;
     readonly refused: ReadonlyMap<string, ExpansionRefusal>;
   }>({ of: pullRequest, refused: new Map() });
-  // Note that a new answer offers every gap again, since a push may have mended what was refused.
   const refused = refusals.of === pullRequest ? refusals.refused : NONE_REFUSED;
   const baseSha = pullRequest?.baseSha;
-  // Note that a file too large to diff that stood before is drawn only where the merge base it stood at was named.
   const drawable = useCallback(
     (file: AgentChangedFile) =>
       wholeable(file) ||
@@ -1482,7 +1192,6 @@ function useFileTexts(
       return reading;
     };
   }, [queryClient, taskId, repository, pullRequest, files, baseSha, drawable]);
-  // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
   const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
   const whole = useCallback((file: AgentChangedFile) => own.has(file), [own]);
   const offered = useCallback(
@@ -1493,13 +1202,6 @@ function useFileTexts(
   return { expandable: offered, wholeable: drawable, read, refused, whole };
 }
 
-/**
- * A file's texts from its text after, where that text is the very
- * contents GitHub listed the file's patch against: the object it names
- * (`blobSha`), where the service named one, since a push between the
- * service's reads could leave a text whose hunks match its patch but whose
- * lines between them do not; and its hunks at their places (`textsOf`).
- */
 async function checkedTextsOf(
   file: AgentChangedFile,
   after: string,
@@ -1508,10 +1210,8 @@ async function checkedTextsOf(
   return textsOf(file, after);
 }
 
-/** No file's gaps refused. */
 const NONE_REFUSED: ReadonlyMap<string, ExpansionRefusal> = new Map();
 
-/** Collapse all or Expand all, for the files the filter keeps, in the bar. */
 function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   const label = list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL;
   return (
@@ -1532,7 +1232,6 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   );
 }
 
-/** The file the list stands on, or its first where it stands on none. */
 function shownFileOf(
   files: readonly AgentChangedFile[],
   current: string | undefined,
@@ -1540,7 +1239,6 @@ function shownFileOf(
   return files.find((file) => file.path === current) ?? files[0];
 }
 
-/** The list of files, or the words saying the filter keeps none, and over it the filter where the tree that holds it is hidden. */
 function FilesList({
   list,
   threads,
@@ -1556,21 +1254,14 @@ function FilesList({
 }: {
   list: ChangesList;
   threads: ChangesThreads | undefined;
-  /** Where the pull request's changed images are read, drawn as pictures; none draws them as binary files. */
   images: ImageSides | undefined;
-  /** The comments being written, and what opens one; none offers no +. */
   commenting: ListCommenting | undefined;
-  /** How the lines between a file's hunks are opened, and why a file's could not be. */
   texts: FileTexts;
-  /** Whether the tree, whose search is the filter, is drawn, so the filter is in sight. */
   filterShown: boolean;
   roomy: boolean;
   boxRef: (element: HTMLDivElement | null) => void;
-  /** The review thread to bring into view, once, and its file; none brings none. */
   reveal: ListReveal | undefined;
-  /** The lines to bring into view and light a moment, once; none lights none. */
   flash: DiffListFlash | undefined;
-  /** Whether a swipe past the list's end is handed on to the box the tab stands in. */
   overscroll: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
@@ -1639,48 +1330,26 @@ function FilesList({
   );
 }
 
-/** The pull request a changes answer names, with its files; none where it names none. */
 type ChangesPullRequest = Extract<AgentChangesAnswerView, { pullRequest: unknown }>["pullRequest"];
 
-/**
- * The Files changed view's reads, held by the Pull request tab rather than
- * the view, so the tab's own row can count the lines left to review by the
- * same marks the view draws: the changes as last answered, whether a read
- * is out, the door that reads them again, how many answers have landed, and
- * the member's viewed marks, read with each answer.
- */
 export interface ChangesReads {
-  /** The changes as last answered, a good answer standing over any failure after it; a failure only where none has landed. */
   readonly answer: AgentChangesAnswerView | undefined;
-  /** Whether the latest read failed after a good one landed, which leaves the good one drawn. */
   readonly refreshFailed: boolean;
   readonly out: boolean;
   readonly ask: () => void;
-  /** How many answers have landed, which a changed image is drawn anew on. */
   readonly count: number;
-  /** The pull request the latest answer names; none before one lands, where it failed, or where there is none. */
   readonly pullRequest: ChangesPullRequest;
   readonly viewedFiles: ViewedFiles;
 }
 
-/**
- * The agent's changes and the member's viewed marks on them, read as the
- * view first comes on screen (`shown`), again as the agent ends, on Refresh,
- * and as the app reaches the service again after one failed or went out;
- * the marks with each answer of the changes, so the two describe the same
- * push.
- */
 export function useChangesReads(
   agentId: string,
   source: PullRequestSource,
   shown: boolean,
 ): ChangesReads {
-  // Note that the query is read on the tab's own asks alone, as the docs' lazy query is, so it reads when the tab
-  // first shows and as the agent ends, never because another surface drew the same changes.
   const changes = useQuery({ ...agentChangesQueryOptions(agentId, source.number), enabled: false });
   const { refetch, isFetching: out, data: good, error } = changes;
   const ask = useCallback(() => void refetch(), [refetch]);
-  // The agent's standing the last read on its own was asked for, none before the tab first showed.
   const readFor = useRef<{ readonly agentId: string; readonly ended: boolean } | undefined>(
     undefined,
   );
@@ -1690,14 +1359,11 @@ export function useChangesReads(
     readFor.current = { agentId, ended: source.ended };
     ask();
   }, [shown, agentId, source.ended, ask]);
-  // A read that failed, or is still out and may have been sent while the connection was gone, is asked again.
   const failure =
     error instanceof ChangesFailed ? error.answer : error === null ? undefined : UNANSWERED;
   useRegained(() => {
     if (shown && (out || failure !== undefined)) ask();
   });
-  // Note that a good answer stands over a failure after it, as the cache keeps it beside the error, because a
-  // read that fails again must not take the files drawn away; the count follows what is drawn.
   const answer: AgentChangesAnswerView | undefined = good ?? failure;
   const refreshFailed = good !== undefined && failure !== undefined;
   const reads = useRef<{ readonly of: unknown; readonly count: number }>({
@@ -1714,27 +1380,15 @@ export function useChangesReads(
   return { answer, refreshFailed, out, ask, count: reads.current.count, pullRequest, viewedFiles };
 }
 
-/** A file to bring into view in the list, as a chapter's key change asks: counted, so each ask is its own. */
 export interface FileReveal {
   readonly path: string;
   readonly ask: number;
-  /** Its lines to scroll to and light a moment, each one the list draws (`drawnLines`); none scrolls to its header. */
   readonly lines?: DiffLineSpan | undefined;
 }
 
-/**
- * A bar of the host's that draws the view's tools in place of its own
- * (`FileViewBar`), as a chapter's header does: its diff settings and Collapse
- * all, drawn into `tools`, and the tree's toggle, drawn into `end`, at the
- * bar's very end past its ⋯, as every tab's bar stands it; the view's pull
- * request on GitHub and its ⋯ over the whole pull request left to the host, and no strip standing in the closed tree's place.
- */
 export interface ChangesBarHost {
-  /** The box in the host's bar the tools are drawn into; none until it is drawn. */
   readonly tools: HTMLElement | null;
-  /** The box at the host's bar's very end the tree's toggle is drawn into; none until it is drawn. */
   readonly end: HTMLElement | null;
-  /** The host's view, which holds that bar and the list alike and resizes with the panel, the tree's toggles read in it; none until it is drawn. */
   readonly view: HTMLElement | null;
 }
 
@@ -1754,29 +1408,17 @@ export function AgentChangesTab({
   host,
 }: {
   agentId: string;
-  /** Where the tab reads the pull request, whose task its files' texts are read through. */
   source: PullRequestSource;
-  /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The task's repository, which the agent works in, and whose files a gap between hunks is read from; none opens no gap. */
   repository: string | null;
-  /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: TreeShown;
-  /** The pull request's review threads, drawn on their lines in each file's diff; none draws none. */
   threads?: ChangesThreads | undefined;
-  /** How a comment on lines is made, where the tab lets one be; none offers no comment. */
   lineComments?: LineComments | undefined;
-  /** A review thread to bring into view on its file; told it is gone where its file is not among the changes. */
   reveal?: ChangesReveal | undefined;
-  /** The changes and the viewed marks, read by the Pull request tab as the view first comes on screen (`useChangesReads`). */
   reads: ChangesReads;
-  /** The files drawn in the place of every file the read answered, as a chapter draws its own (`chapterPatches`); none draws them all. */
   files?: readonly AgentChangedFile[] | undefined;
-  /** A file to bring into view, once, among those drawn. */
   fileReveal?: FileReveal | undefined;
-  /** Whether a swipe past the list's end is handed on to the box the tab stands in, as a chapter's is to the Pull request tab; it stops at the end where none is named. */
   overscroll?: ScrollOverscroll | undefined;
-  /** The host's bar the view's tools are drawn into in place of its own; none draws its own. */
   host?: ChangesBarHost | undefined;
 }): React.JSX.Element {
   const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
@@ -1784,8 +1426,6 @@ export function AgentChangesTab({
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
-  // Note that the lists are kept while the answer and the files given are the same, because
-  // fresh ones would have the tree draw itself anew.
   const changed = useMemo(() => {
     const drawn = files ?? pullRequest?.files ?? [];
     const paths = drawn.map((file) => file.path);
@@ -1800,23 +1440,17 @@ export function AgentChangesTab({
     [changed.files, threads?.list, list.viewed],
   );
   const answered = reads.count;
-  // Note that the images are named afresh only with an answer, because every changed image's entry is drawn from them.
   const images = useMemo(
     () => (pullRequest === null ? undefined : imagesOf(agentId, pullRequest, answered)),
     [agentId, pullRequest, answered],
   );
   const { closeOver } = room;
   const { hideKeys } = list;
-  // The sheet of the view's keys goes with the view: a Dialog stands over the
-  // whole window from document.body, so it would outlast the view's panel
-  // being hidden for another of the Pull request tab's views.
   useEffect(() => {
     if (!shown) hideKeys();
   }, [shown, hideKeys]);
   const { go, expand } = list;
   const openTab = useOpenFileTab();
-  // A file chosen with ⌘ or Ctrl opens in a File tab of its own, as a File tab's tree opens one,
-  // where the panel offers one; a file chosen in the tree floating over the list takes the tree down, to show the file.
   const choose = useCallback(
     (path: string, newTab: boolean) => {
       if (newTab && openTab !== undefined) return openTab(path);
@@ -1825,7 +1459,6 @@ export function AgentChangesTab({
     },
     [closeOver, go, openTab],
   );
-  // A file asked for is opened and scrolled to, each ask once; one asked for at its lines is stood on, and the list scrolls to them once it draws the file open.
   const latestFileReveal = useRef({ fileReveal, expand, go, stand: list.stand });
   latestFileReveal.current = { fileReveal, expand, go, stand: list.stand };
   useEffect(() => {
@@ -1846,8 +1479,6 @@ export function AgentChangesTab({
   };
   const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
-  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown;
-  // a host's own bar offers nothing that acts on the whole pull request.
   const phone = usePhoneRoom();
   const url = pullRequest?.url;
   useTabActions(
@@ -1876,7 +1507,6 @@ export function AgentChangesTab({
     lineComments,
     refresh,
   );
-  // A thread on a file the changes no longer hold is said gone once they are read; one on a file they hold is landed on in the list.
   const revealAsk = reveal?.ask;
   const revealPath = reveal?.thread.path;
   const revealFile = changed.files.find((file) => file.path === revealPath);
@@ -1887,11 +1517,9 @@ export function AgentChangesTab({
     const standing = latestReveal.current;
     if (revealGone && standing !== undefined) standing.onGone(standing.ask);
   }, [revealGone, revealAsk]);
-  // A failure with nothing drawn gives way to the wait as soon as it is asked again; files drawn stand until the answer lands, and a failure after them is a line over them.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
-  // Where the good answer drew no files (no pull request, none changed), a refresh that failed has nothing to keep drawn and stands as the failure.
   const unkept = refreshFailed && !out && (pullRequest === null || shownFile === undefined);
   if ("failure" in answer || unkept) {
     return (
@@ -1916,7 +1544,6 @@ export function AgentChangesTab({
     return <EmptyState icon={<GLYPH.PULL_REQUEST_CHANGES />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   return (
-    // The view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.
     <Fill
       className="file-view ph-no-capture"
       {...room.root}

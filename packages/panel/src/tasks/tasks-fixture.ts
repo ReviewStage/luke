@@ -64,28 +64,6 @@ import {
 } from "./use-side-panel.js";
 import type { AutomationsPlace } from "./use-tasks-tab.js";
 
-/**
- * tasks-fixture.ts -- the synthetic tasks a fixture run's Tasks tab draws in place of the service's.
- *
- * A fixture run signs in to nothing and reads no task, so the Tasks tab
- * would show only its signed-out line. It draws the synthetic list instead,
- * which is what the expanded capture in `scripts/evidence.sh` shows now that
- * the panel opens on Tasks, and under the tasks profile it also opens the
- * fixture task, a drafted description with its version history, which is what the
- * tasks capture shows; under the tasks-comments profile its description
- * holds comment threads, answered as the service answers a read of them.
- * Every name and repository here is invented; nothing is read from an
- * account.
- */
-
-/**
- * The fixture account's workspaces: its first one, named for the account as
- * the service names it, which the sidebar lists, with the account's own
- * GitHub connected, and Acme, a team's it administers, whose GitHub organization is connected, so the captures
- * draw the sidebar's switcher with every item. Each workspace's tasks are
- * about repositories its own GitHub reaches, as the service keeps them, so
- * no task here is one stranded in a workspace that cannot reach it.
- */
 const FIXTURE_FIRST: Workspace = {
   id: FIXTURE_IDS.WORKSPACE,
   name: "Ada Lovelace",
@@ -103,16 +81,8 @@ const FIXTURE_TEAM: Workspace = {
 };
 const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
 
-/** The fixture's workspaces by id, which their automations' reads are held by. */
 export const FIXTURE_WORKSPACE_IDS: readonly string[] = FIXTURE_WORKSPACES.map(({ id }) => id);
 
-/**
- * The reference journey's task partway through its conversation: the
- * context, the goal, an approach with the pending-membership design settled,
- * its interfaces, one alternative weighed, one hard part, what it leaves
- * out, its first test, an open question, and its assumptions, as a draft
- * shows it.
- */
 const FIXTURE_SECTIONS = [
   "## Context",
   "Only an admin can add someone to a workspace, by creating their account by hand, so " +
@@ -151,18 +121,10 @@ const FIXTURE_SECTIONS = [
 
 const FIXTURE_TEXT = FIXTURE_SECTIONS.join("\n\n");
 
-/**
- * When the fixture's call stands, from which every task's times are counted:
- * a fixed instant, never the clock, so each picture draws the same dates.
- * Its tasks were started over the few days before it, and the call's own
- * task was last saved during it, just before its coding agent began
- * (`agent-fixture.ts`).
- */
 const CALL_AT = Date.parse("2026-10-07T16:40:00Z");
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 
-/** The reference journey's task, by the id the host's staged call (`@repo/host/fixture-stage`) names it by too. */
 export const FIXTURE_TASK_ID = FIXTURE_IDS.TASK;
 
 const FIXTURE_TASK: Task = {
@@ -179,23 +141,10 @@ const FIXTURE_TASK: Task = {
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
 
-/**
- * The fixture task's description as it stood after its first `sections` sections,
- * each a heading and its words, as a revision partway through drafting saved it.
- */
 function draftOf(sections: number): DescriptionDocument {
   return { body: `${FIXTURE_SECTIONS.slice(0, sections * 2).join("\n\n")}\n`, assumptions: [] };
 }
 
-/**
- * The fixture task's version history, newest first, each revision beside the
- * description it saved: its member and a teammate of its workspace by hand, the app on
- * its call, and a coding agent, over the two days before the call, so the
- * version history shows real versions by more than one writer rather than
- * waiting on a read main answers with nothing. Note that the agent's revision
- * names no agent id, because no profile but the agent ones stands an agent on
- * the task, and an id would offer an Open into a tab that has none.
- */
 const FIXTURE_HISTORY: readonly {
   readonly line: DescriptionRevisionLine;
   readonly document: DescriptionDocument;
@@ -272,7 +221,6 @@ const FIXTURE_HISTORY: readonly {
   },
 ];
 
-/** A page of the fixture task's history, newest first, before the revision `before` names where it names one. */
 function historyPage(before: number | undefined): DescriptionRevisionsAnswer {
   return {
     revisions: FIXTURE_HISTORY.filter(({ line }) => before === undefined || line.seq < before).map(
@@ -281,13 +229,6 @@ function historyPage(before: number | undefined): DescriptionRevisionsAnswer {
   };
 }
 
-/**
- * What the fixture task's version history reads, answered here in place of
- * main under every profile: a page of its history, and one revision beside
- * the one before it. Its history as the version history holds it is staged
- * on main's document instead (`fixtureAppState`). Any other task's reads go
- * to main, as do a restore and every other act.
- */
 function historyActAnswer(
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
@@ -333,7 +274,6 @@ const FIXTURE_OTHER_TASKS: readonly TaskSummary[] = [
   },
 ];
 
-/** A repository a fixture workspace's GitHub reaches, as the service would list it. */
 function fixtureRepository(owner: string, name: string, updatedAt: string) {
   return {
     owner,
@@ -345,7 +285,6 @@ function fixtureRepository(owner: string, name: string, updatedAt: string) {
   };
 }
 
-/** The repositories each fixture workspace's GitHub reaches: the ones its tasks are about. */
 const FIXTURE_REPOSITORIES = new Map([
   [
     FIXTURE_FIRST.id,
@@ -357,7 +296,6 @@ const FIXTURE_REPOSITORIES = new Map([
   [FIXTURE_TEAM.id, [fixtureRepository("acme", "relay", "2026-10-06T11:00:00Z")]],
 ]);
 
-/** The repositories a fixture run's chips list, as the host holds them for each fixture workspace, the first's standing for every workspace's; read from nowhere. */
 const FIXTURE_REPOSITORY_LISTS: AppRepositoryLists = Object.fromEntries(
   [...FIXTURE_WORKSPACE_IDS, EVERY_WORKSPACE].map((workspace) => [
     workspace,
@@ -373,7 +311,6 @@ const FIXTURE_REPOSITORY_LISTS: AppRepositoryLists = Object.fromEntries(
   ]),
 );
 
-/** Main's document with the fixture workspaces' repositories held, beside any a staged profile laid; one object across deliveries where nothing moved. */
 const STAGED_LISTS = new WeakMap<AppRepositoryLists, AppRepositoryLists>();
 
 function repositoriesAppState(state: AppStateSnapshot): AppStateSnapshot {
@@ -402,17 +339,14 @@ const FIXTURE_TASK_LIST: TasksView = {
   listStatus: TASKS_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
   github: { connected: true, login: null },
-  // Every task's agents as the list followed live carries them: none, where no profile stages one.
   taskAgents: [],
 };
 
-/** The open task, whose description main's document holds as read (`fixtureAppState`). */
 const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
 };
 
-/** One thread's comment, written by `writer` at `at`. */
 function comment(
   id: string,
   writer: DescriptionCommentWriter,
@@ -422,18 +356,12 @@ function comment(
   return { id, kind: DESCRIPTION_COMMENT_ENTRY.COMMENT, writer, words, at };
 }
 
-/** A member of the fixture's first workspace as an entry's writer. */
 function memberWrote(
   by: (typeof FIXTURE_PERSON)[keyof typeof FIXTURE_PERSON],
 ): DescriptionCommentWriter {
   return { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by };
 }
 
-/**
- * A thread on `quote`, words of the fixture's description under `section`, its
- * anchor where those words stand in the description's text as the service keeps it,
- * and its times from its entries.
- */
 function thread(input: {
   readonly id: string;
   readonly scope: DescriptionCommentThread["scope"];
@@ -454,13 +382,6 @@ function thread(input: {
   };
 }
 
-/**
- * The comment threads on the fixture's description, oldest first, as the host
- * holds them: one on a whole block, one its coding agent
- * started, one answered by a member and by the app, and one resolved, which
- * only the description's comments list shows. The open ones stand in the description's first
- * sections, so the window's first screen of it shows their marks.
- */
 const FIXTURE_THREADS: readonly DescriptionCommentThread[] = [
   thread({
     id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e61",
@@ -550,15 +471,8 @@ const FIXTURE_THREADS: readonly DescriptionCommentThread[] = [
   }),
 ].sort((older, newer) => older.createdAt - newer.createdAt);
 
-/** Main's held comments with the fixture task's description's threads among them, one object for each of main's. */
 const STAGED_COMMENTS = new WeakMap<AppDescriptionComments, AppDescriptionComments>();
 
-/**
- * Main's document as the tasks-comments profile draws it: the fixture
- * task's description's threads held as the window's read of them holds them
- * (`LIVE_READ.DESCRIPTION_COMMENTS`), none on its pages. The same document, the
- * very object, under any other profile.
- */
 function commentsAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (state.run.profile !== RUN_PROFILE.TASKS_COMMENTS) return state;
   const held = state[LIVE_READ.DESCRIPTION_COMMENTS];
@@ -576,7 +490,6 @@ function commentsAppState(state: AppStateSnapshot): AppStateSnapshot {
   return { ...state, [LIVE_READ.DESCRIPTION_COMMENTS]: staged };
 }
 
-/** The side panels the fixture profiles open their task with: open, for an agent profile to stage a tab in, or shut. */
 const FIXTURE_OPEN_PANEL: SidePanelState = {
   open: true,
   tabs: SIDE_PANEL_TABS,
@@ -584,14 +497,6 @@ const FIXTURE_OPEN_PANEL: SidePanelState = {
 };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_OPEN_PANEL, open: false };
 
-/**
- * The tasks a fixture run draws: the list with its first task open under the
- * tasks profiles, that task holding its coding agent under the agent
- * profiles (`agent-fixture.ts`), the list alone under any other, its
- * workspaces as Settings shows them under the Settings profiles
- * (`settings-fixture.ts`), and nothing for a live run, which draws what the
- * host read.
- */
 export function fixtureTasksView(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
@@ -605,12 +510,6 @@ export function fixtureTasksView(run: {
   return settingsTasksView(run.profile, FIXTURE_TASK_LIST) ?? FIXTURE_TASK_LIST;
 }
 
-/**
- * The side panel a fixture run opens its task with: on the tab each agent
- * profile names, and shut under any other, the tasks profiles' among them,
- * whose description the column's Overview shows. Nothing for a live run, which
- * opens the panel as the developer last left it.
- */
 export function fixtureSidePanel(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
@@ -619,11 +518,6 @@ export function fixtureSidePanel(run: {
   return agentSidePanel(run.profile, FIXTURE_OPEN_PANEL, FIXTURE_TASK_ID) ?? FIXTURE_CLOSED_PANEL;
 }
 
-/**
- * The tab a fixture run's task column opens on: the one each agent profile
- * names, its agent's or Overview; none under any other profile, whose task
- * opens on its Overview as one never opened does. Nothing for a live run.
- */
 export function fixtureColumnTab(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
@@ -631,12 +525,6 @@ export function fixtureColumnTab(run: {
   return run.fixtureMode ? agentColumnTab(run.profile) : undefined;
 }
 
-/**
- * What a fixture run reads of a task's agents where no profile stages
- * more, as a mention's card reads them: none. Note that main answers a
- * fixture run's service reads with nothing, which the card would wait on
- * in its placeholder for good.
- */
 function emptyTaskAnswer(
   kind: PortActKind,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
@@ -644,15 +532,6 @@ function emptyTaskAnswer(
   return undefined;
 }
 
-/**
- * What a fixture run answers an act with in place of main (`act.ts`), boxed
- * so an act that answers nothing is told from one left to main: the
- * fixture task's version history under every profile, its agent
- * profiles' tabs' reads, its signed-in profiles' pages' reads (an
- * Automations profile's are laid on its document instead), every other
- * profile's task as one with no agents, and nothing else, which goes to
- * main as it would.
- */
 export function fixtureActAnswer(
   run: { readonly profile: string },
   kind: PortActKind,
@@ -666,12 +545,9 @@ export function fixtureActAnswer(
   );
 }
 
-/** Main's held descriptions with the fixture's task's description held, one object for each of main's. */
 const STAGED_DESCRIPTIONS = new WeakMap<AppDescriptionDocuments, AppDescriptionDocuments>();
-/** Main's held histories with the fixture's task's history held, one object for each of main's. */
 const STAGED_HISTORIES = new WeakMap<AppHistories, AppHistories>();
 
-/** `held` with the fixture's task's read laid as `rows`, one object for each of main's, kept in `staged`. */
 function stagedOn<Rows>(
   staged: WeakMap<AppHeldById<Rows>, AppHeldById<Rows>>,
   held: AppHeldById<Rows>,
@@ -684,13 +560,6 @@ function stagedOn<Rows>(
   return laid;
 }
 
-/**
- * Main's document with the fixture's task's description and its history held as the
- * window's reads of them hold them (`LIVE_READ.DESCRIPTION_DOCUMENT`,
- * `LIVE_READ.HISTORY`), under the profiles that open the task
- * (`fixtureTasksView`), so it opens on its description and its version history on
- * its versions; the very document under any other.
- */
 function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (fixtureTasksView(state.run)?.activeTaskId !== FIXTURE_TASK_ID) return state;
   return {
@@ -710,18 +579,6 @@ function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
   };
 }
 
-/**
- * Main's document as a fixture run draws it (`use-app-state.ts`): the
- * fixture's task's description and history held under the profiles that open it,
- * with the fixture workspaces' members held under every profile, and the
- * synthetic account signed in under the profiles that stage one
- * (`settings-fixture.ts`), the open task's pages held with the page its
- * agent showed under the agent profiles (`agent-fixture.ts`), the
- * workspaces' automations and runs held under the Automations profiles
- * (`automations-fixture.ts`), its description's comment threads held under the
- * tasks-comments profile, and the fixture workspaces' repositories held
- * under every profile, which main holds as it does under any other.
- */
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
   return repositoriesAppState(
     commentsAppState(
@@ -733,16 +590,11 @@ export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
   );
 }
 
-/**
- * Where a fixture run's window opens at launch, past the Tasks tab it opens
- * on otherwise: a page of Settings, the Admin place, or an Automations page.
- */
 export type FixturePlace =
   | { readonly settings: SettingsLink }
   | { readonly admin: true }
   | { readonly automations: AutomationsPlace };
 
-/** The place a fixture run's profile opens the window on; none for a live run, or a profile that opens the Tasks tab. */
 export function fixturePlace(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;

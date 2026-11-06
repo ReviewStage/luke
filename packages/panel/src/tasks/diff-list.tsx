@@ -53,90 +53,44 @@ import {
 import { failureShown } from "../failure-report.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 
-/**
- * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.
- *
- * The bundle is loaded the first time a diff is shown and the list mounted
- * once; new files, a file collapsed or expanded, and a change of setting
- * draw the same list again rather than mounting another. Each file's header
- * and each note are drawn here, into an element kept for the list's life by
- * the file's path and the note's key, which the bundle stands at the head of
- * the file and under its line, so a header and a note are this window's own
- * React and stylesheets. The view is told the file whose header stands at
- * the top as the list scrolls, and scrolls the list to a file through
- * `door`, to a review thread's line (`reveal`), or to a key change's lines,
- * lit a moment (`flash`). Where the view comments on lines, the gutter's + tells it the
- * lines picked (`onComment`), and the lines it is commenting on stand lit
- * (`selected`). Code selected as text on lines a comment may be on
- * (`commentOn`) is offered a comment too, by a Comment press floating over
- * the selection, as stage-cli offers one; the press opens the comment on
- * those lines and lets the selection go. A press anywhere else, or a
- * scroll, lets the offer go, since it stands where the selection stood.
- */
-
-/** A note drawn in a file of the list, a review thread's under its line or what stands above the file's first hunk: where it stands, and what it says. */
 export interface DiffNote extends DiffAnnotation {
   readonly content: ReactNode;
 }
 
-/** One file of the list as the view hands it: its path, its patch, whether it is collapsed, whether its notes stand in the place of its lines, its header, and its notes. */
 export interface DiffListEntry {
   readonly path: string;
   readonly patch: string;
   readonly collapsed: boolean;
   readonly lead: boolean;
-  /** Whether the lines between its hunks may be opened. */
   readonly expandable: boolean;
-  /** Its whole text before and after, where it is drawn whole. */
   readonly whole?: DiffFileTexts | undefined;
-  /** The lines of its new side between its hunks a note waits on, which the view is told of as a gap opens over them (`onDrawn`). */
   readonly hidden?: readonly number[] | undefined;
   readonly header: ReactNode;
   readonly notes: readonly DiffNote[];
 }
 
-/** What the view does to the list once it is drawn: scrolls it to a file's header. */
 export interface DiffListDoor {
   readonly reveal: (path: string) => void;
 }
 
-/**
- * An ask to scroll the list to a file, a review thread's: to the line its
- * thread stands under, on the side it counts on, or to the file's header,
- * where its threads stand above its lines; counted, so each ask is its own.
- */
 export interface DiffListReveal {
   readonly ask: number;
   readonly path: string;
   readonly at?: { readonly side: DiffSelection["side"]; readonly line: number } | undefined;
 }
 
-/** An ask to scroll the list to a run of a file's lines and light them a moment, a chapter's key change's; counted, so each ask is its own. */
 export interface DiffListFlash {
   readonly ask: number;
   readonly range: DiffLineRange;
 }
 
-/** The hint over a gap's control under the pointer or the keyboard's focus: the control, and what it opens. */
 interface GapHint {
   readonly anchor: HTMLElement;
   readonly label: string;
 }
 
-/**
- * Room over a list's first file, in pixels, for what stands over the list's
- * top while it is scrolled there: a phone's pull request header, which
- * folds away over the list as it scrolls (`agent-pull-request-tab.tsx`).
- * None where nothing stands over it.
- */
 export const DiffListTopRoomContext = createContext(0);
 
-/**
- * The hint for the control of a gap the pointer or the focus arrived on,
- * inside a file's shadow root, where the event's path leads: its words,
- * which open the whole gap, or an arrow, which opens the next lines; each
- * named by the bundle for what it opens. None for anything else.
- */
 function gapHintOf(path: readonly EventTarget[]): GapHint | undefined {
   const anchor = path.find(
     (target): target is HTMLElement =>
@@ -146,20 +100,15 @@ function gapHintOf(path: readonly EventTarget[]): GapHint | undefined {
   return anchor === undefined || label == null ? undefined : { anchor, label };
 }
 
-/** What the floating Comment press says it does. */
 const OFFER_WORDS = {
   COMMENT: "Comment",
-  /** Its name, naming the lines it comments on. */
   on: (lines: string) => `Comment on ${lines}`,
 } as const;
 
-/** How far from the box's ends the floating press's middle stands at least, in pixels, so it is never cut by them. */
 const OFFER_INSET = 64;
 
-/** How far below the box's top a selection must stand for the press to float above it rather than under it, in pixels. */
 const OFFER_ROOM = 40;
 
-/** The floating press over code selected as text: the lines it comments on, what they are called, and where it stands in the box. */
 interface TextOffer {
   readonly picked: DiffListSelection;
   readonly lines: string;
@@ -168,7 +117,6 @@ interface TextOffer {
   readonly below: boolean;
 }
 
-/** Where the press over a selection stands in `box`: above the words' middle, or under them where the box's top leaves no room above. */
 function offerAt(selected: DiffTextSelection, lines: string, box: DOMRect): TextOffer {
   const { rect } = selected;
   const middle = (rect.left + rect.right) / 2 - box.left;
@@ -183,19 +131,12 @@ function offerAt(selected: DiffTextSelection, lines: string, box: DOMRect): Text
   };
 }
 
-/** A note's place alone, which is all the bundle is handed of it. */
 function placeOf({ key, side, line }: DiffAnnotation): DiffAnnotation {
   return { key, side, line };
 }
 
-/**
- * Each entry as the bundle is handed it, made once for the entry, so a
- * draw that keeps an entry hands the bundle the very file it was handed
- * before, which is the same at a glance.
- */
 const LIST_FILES = new WeakMap<DiffListEntry, DiffListFile>();
 
-/** An entry as the bundle is handed it: its place, patch, fold, and its notes' places. */
 function listFileOf(entry: DiffListEntry): DiffListFile {
   const kept = LIST_FILES.get(entry);
   if (kept !== undefined) return kept;
@@ -213,7 +154,6 @@ function listFileOf(entry: DiffListEntry): DiffListFile {
   return file;
 }
 
-/** Whether two lists of files draw alike: the same files in the same order, each with the same patch, fold, and notes. */
 function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): boolean {
   return (
     a.length === b.length &&
@@ -235,13 +175,10 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
   );
 }
 
-/** No lines. */
 const NO_LINES: readonly number[] = [];
 
-/** The class of the element a file's header is drawn in, which Pierre stands in the list once it draws the file. */
 const HEAD_SLOT = "diff-list-head-slot";
 
-/** The element kept by `key` in `held`, made with `className` the first time it is asked for. */
 function keptElement(held: Map<string, HTMLDivElement>, key: string, className: string) {
   const kept = held.get(key);
   if (kept !== undefined) return kept;
@@ -251,14 +188,6 @@ function keptElement(held: Map<string, HTMLDivElement>, key: string, className: 
   return element;
 }
 
-/**
- * The files of `entries` drawn as one list in `look`, in a `ScrollArea`
- * that fills the File tab's place and scrolls up and down, each file's
- * unwrapped lines scrolling sideways in Pierre's own way; while the bundle
- * loads the place says the changes are still being read, as the tab does
- * while it reads them, and stands busy until Pierre has drawn the first of
- * its files; where it failed to load it says so.
- */
 export function PierreDiffList({
   entries,
   look,
@@ -276,41 +205,26 @@ export function PierreDiffList({
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
-  /** Filled with what scrolls the list once it is drawn, emptied when it is taken down. */
   door: RefObject<DiffListDoor | null>;
-  /** Told the path of the file whose header stands at the top of the list as it scrolls. */
   onTopFile: (path: string) => void;
-  /** Handed the box the list is drawn in, which the view measures for a split's room; a door that stays the same, as a state's setter does. */
   boxRef: (element: HTMLDivElement | null) => void;
-  /** Told the lines a press of the gutter's + picked; none offers no +. */
   onComment?: ((picked: DiffListSelection) => void) | undefined;
-  /** What the lines picked are called where a comment may be on them, as its head names them; none where GitHub would take none there, which offers none over code selected on them. */
   commentOn?: ((picked: DiffListSelection) => string | undefined) | undefined;
-  /** The lines being commented on, lit. */
   selected?: DiffListSelection | undefined;
-  /** Reads a file whole, the first time the lines between its hunks are asked for; none offers none. */
   readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
-  /** The file, and the line of it, to scroll to once the list draws it open; each ask once. */
   reveal?: DiffListReveal | undefined;
-  /** Told which of a file's hidden lines it draws, each time that changes; a door that stays the same. */
   onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
-  /** The lines to scroll to and light a moment once the list draws their file open; each ask once. */
   flash?: DiffListFlash | undefined;
-  /** Whether a swipe past the list's end stops there or is handed on to the box it stands in; it stops where none is named. */
   overscroll?: ScrollOverscroll | undefined;
 }): React.JSX.Element {
   const { diffView } = useSideBundles();
   const loaded = useAtomValue(diffView);
   const retry = useAtomRefresh(diffView);
-  // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
-  // The pill is drawn through its exit as it last stood, so letting the hint go fades it rather than snapping it away.
   const [hintDrawn, setHintDrawn] = useState<GapHint | undefined>(hint);
   if (hint !== undefined && hint !== hintDrawn) setHintDrawn(hint);
   const pill = useDisclosure(hint !== undefined);
-  // Note that the hint waits the window's rest before it is drawn, as every
-  // other hint does, so the pointer crossing the gaps mounts nothing.
   const { rest, stop } = useHintRest();
   const aimed = useRef<HTMLElement | undefined>(undefined);
   const hang = useCallback(
@@ -339,7 +253,6 @@ export function PierreDiffList({
     },
     [boxRef],
   );
-  // The press floating over code selected as text, where a comment may be on its lines.
   const [offer, setOffer] = useState<TextOffer | undefined>(undefined);
   const offerBox = useRef<HTMLDivElement>(null);
   const commentable = useRef(commentOn);
@@ -354,9 +267,6 @@ export function PierreDiffList({
     );
   }, []);
   const handle = useRef<DiffListHandle | undefined>(undefined);
-  // Note that each header and note is drawn into an element of its own, kept
-  // for the list's life, because Pierre stands the same element again when
-  // a file scrolls back into view.
   const headers = useRef(new Map<string, HTMLDivElement>());
   const notes = useRef(new Map<string, Map<string, HTMLDivElement>>());
   const renderHeader = useCallback(
@@ -395,7 +305,6 @@ export function PierreDiffList({
     onDrawn,
     topRoom,
   };
-  // What the list was last drawn with; the mount reads the latest, so it is mounted once.
   const drawn = useRef(props);
   const latest = useRef(props);
   latest.current = props;
@@ -413,9 +322,6 @@ export function PierreDiffList({
     };
   }, [module, door]);
 
-  // Note that Pierre draws the files a beat after the list is mounted, its
-  // highlighter readied, so the list is said to be busy until the first
-  // file's header stands in the scroller, rather than standing empty.
   const [filesDrawn, setFilesDrawn] = useState(false);
   useEffect(() => {
     const element = host.current;
@@ -447,7 +353,6 @@ export function PierreDiffList({
     handle.current.update(latest.current);
   });
 
-  // Note that a reveal waits for the list to hold its file open, and runs after the draw above handed Pierre that file, so Pierre lays out what the view asked for before it scrolls.
   const revealed = useRef<number | undefined>(undefined);
   useEffect(() => {
     const mounted = handle.current;
@@ -459,7 +364,6 @@ export function PierreDiffList({
     else mounted.revealLine(reveal.path, reveal.at.side, reveal.at.line);
   });
 
-  // The keyboard's focus on a gap's control hangs its hint, and a key pressed lets it go, since a control pressed is drawn anew, or gone with its gap; the focus hangs it again on the one drawn anew.
   useEffect(() => {
     const element = box.current;
     if (element === null) return undefined;
@@ -473,7 +377,6 @@ export function PierreDiffList({
     };
   }, [hang, letGoHint]);
 
-  // Note that lines are lit as a reveal waits, for their file drawn open; a file drawn as its notes alone has no lines to light, so its header is scrolled to.
   const flashed = useRef<number | undefined>(undefined);
   useEffect(() => {
     const mounted = handle.current;
@@ -485,7 +388,6 @@ export function PierreDiffList({
     else mounted.revealLines(flash.range);
   });
 
-  // A press anywhere but on the offer lets it go; one in the list the bundle tells of itself.
   usePressAway(offerBox, () => undefined, {
     onPressAway: offer === undefined ? undefined : () => setOffer(undefined),
   });
@@ -504,9 +406,6 @@ export function PierreDiffList({
       </ErrorState>
     );
   }
-  // Note that the area holds no React of its own, because Pierre draws the
-  // list into it as the scroller it virtualizes over and empties it when
-  // taken down; the headers and notes reach their slots through portals.
   return (
     <Fill
       ref={holdBox}
@@ -517,7 +416,6 @@ export function PierreDiffList({
       onPointerLeave={letGoHint}
       onPointerDown={letGoHint}
     >
-      {/* Note that the wait stands in the scroller's place, which is drawn in the same commit the bundle lands in, before the mount reads it. */}
       {module === undefined ? (
         <SpinnerRegion delay label={CHANGES_WORDS.READING} />
       ) : (

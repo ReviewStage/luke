@@ -13,15 +13,6 @@ import {
   skillGroups,
 } from "./skills-model.js";
 
-/**
- * Settings › Skills judged without drawing: the workspace's skills before
- * the account's own, each saying where its files came from and who
- * installed it; the scopes the dialog offers by role and workspace; every
- * refusal said in words that name the skill; what each row's ⋯ holds;
- * and how View fences a skill's text. Synthetic names and
- * ids.
- */
-
 const READER = "user-ada";
 const SHA = "3f9c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5";
 
@@ -141,7 +132,6 @@ test("every failure is said in words, a refused skill named where the service na
   );
 });
 
-/** The one row a skill draws, wherever its group puts it. */
 function rowOf(one: InstalledSkillSummary) {
   const groups = skillGroups([one], READER, []);
   return [...groups.workspace, ...groups.personal][0] ?? assert.fail("no row");

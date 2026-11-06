@@ -15,16 +15,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { AgentPicturesProvider } from "./agent-pictures.js";
 import { AgentQueueDock } from "./agent-queue-dock.js";
 
-/**
- * The queue's presses as a reader finds them: a message offers Steer, Edit,
- * and Delete, one being edited Cancel alone, in any of the starter's
- * windows, and a reader who did not start the agent finds none at all,
- * Resume among them, since the service lets its starter alone change the
- * queue. A row's words are drawn
- * as a sent message's are, a mention as its chip, and its files as a sent
- * message's, an image as its thumbnail, read through the agent's pictures.
- */
-
 const ignore = () => undefined;
 
 const TWO: readonly QueuedMessage[] = [
@@ -32,14 +22,12 @@ const TWO: readonly QueuedMessage[] = [
   { id: "k2", text: "Open the pull request", queuedBy: "" },
 ];
 
-/** An image a queued message carries, as the agent's pictures answer it under the id the queue names it by. */
 const SHOT = {
   name: "flow.png",
   base64: "iVBORw0KGgo=",
   id: "7b2e4c1a-9d3f-4e5a-8b6c-0d1e2f3a4b5c",
 };
 
-/** The agent's pictures, which answer the one image. */
 const PICTURES = {
   owner: "agent-queue-dock-test",
   read: (_owner: string, id: string) =>
@@ -50,7 +38,6 @@ const PICTURES = {
     ),
 };
 
-// A row's words are drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
@@ -60,7 +47,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The dock drawn over `messages` for a reader who `controls` the queue or not; answers its presses by name, and its words, row by row. */
 function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -97,7 +83,6 @@ function drawn(controls: boolean, messages: readonly QueuedMessage[] = TWO) {
   return {
     row: (index: number) => presses(rows[index]),
     words: (index: number) => rows[index]?.querySelector(".ui-one-line")?.textContent ?? "",
-    /** Whether a reader reaches the row's files, which no hidden region holds back. */
     filesReached: (index: number) => {
       const files = rows[index]?.querySelector('[aria-label="Attached files"]');
       return (

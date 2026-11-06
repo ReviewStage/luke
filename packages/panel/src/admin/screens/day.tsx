@@ -36,13 +36,10 @@ import { ADMIN_TAB, dayReadQuery } from "../routing.js";
 
 const DAY_ERROR = readFailedWords("this day");
 
-/** How many accounts the table's skeleton stands a row for, about a quiet day's. */
 const ACCOUNT_SKELETON_ROWS = 5;
 
-/** The day's account column, the one whose cell is an account's. */
 const ACCOUNT_COLUMN = "account";
 
-/** Each per-account count's column heading, in the order the columns stand. */
 const DAY_ACCOUNT_COUNT_LABEL = {
   [DAY_ACCOUNT_COUNT.TASKS_CREATED]: "Tasks",
   [DAY_ACCOUNT_COUNT.DESCRIPTION_REVISIONS]: "Description revisions",
@@ -51,15 +48,10 @@ const DAY_ACCOUNT_COUNT_LABEL = {
   [DAY_ACCOUNT_COUNT.AUTOMATION_RUNS]: "Automation runs",
 } satisfies Record<DayAccountCount, string>;
 
-/** What a card under the day says while the day is still filling, and nothing once it is past. */
 function soFarToday(stillFilling: boolean): (() => string) | undefined {
   return stillFilling ? () => "so far today" : undefined;
 }
 
-/**
- * The day's live cards: its active developers, then one per feature the
- * Overview's chart stacks, each the segment of the bar that opened the page.
- */
 function activityStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>[] {
   const hint = soFarToday(stillFilling);
   return [
@@ -82,7 +74,6 @@ function activityStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>
 
 const activeAccountColumn = createDataTableColumnHelper<AdminDayActiveAccount>();
 
-/** The live table's columns: who acted, then how many of each kind. */
 function activeAccountColumns(
   onOpen: (id: string) => void,
 ): DataTableColumns<AdminDayActiveAccount> {
@@ -103,10 +94,6 @@ function activeAccountColumns(
   ]);
 }
 
-/**
- * The retired hosted tier's two cards, each saying under its figure that the
- * day is still filling where it is today.
- */
 function hostedStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>[] {
   const soFar = soFarToday(stillFilling);
   return [
@@ -127,7 +114,6 @@ function hostedStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>[]
 
 const dayAccountColumn = createDataTableColumnHelper<AdminDayAccount>();
 
-/** The day's two columns: who called, and how many times. */
 function dayAccountColumns(onOpen: (id: string) => void): DataTableColumns<AdminDayAccount> {
   return dayAccountColumn.columns([
     dayAccountColumn.display({
@@ -144,12 +130,6 @@ function dayAccountColumns(onOpen: (id: string) => void): DataTableColumns<Admin
   ]);
 }
 
-/**
- * The day's active accounts, busiest first as the endpoint orders them. The
- * shared `AccountsTable` draws windowed columns a single day does not have,
- * so the day page keeps tables of its own over the same account cell: the
- * row for the pointer, the anchor on the name for a keyboard.
- */
 function ActiveAccountsTable({
   accounts,
   onOpen,
@@ -171,7 +151,6 @@ function ActiveAccountsTable({
   );
 }
 
-/** The day's hosted-tier accounts, busiest first, under the retired heading. */
 function DayAccountsTable({
   accounts,
   onOpen,
@@ -193,13 +172,6 @@ function DayAccountsTable({
   );
 }
 
-/**
- * The day's sections under its toolbar, drawn from `detail` once it is read
- * and as their skeletons until then: its live activity first, then the
- * retired hosted tier's two, headed retired. Whether the day is still
- * filling is known from `day` before the answer, by the clock, and from the
- * answer's own instant once it lands.
- */
 function DaySections({
   day,
   detail,
@@ -294,7 +266,6 @@ export function DayScreen({
   onSignOut: () => Promise<void>;
   onBack: () => void;
   onOpenAccount: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();

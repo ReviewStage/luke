@@ -92,16 +92,12 @@ import { pointerCross } from "../testing/pointer-cross.js";
 import { waitingOf } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-// The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-/** Where the window's Inbox kept its Needs you button's press before the tabs that stood before its scopes. */
 const EARLIER_SHOW_KEY = "app.inboxWaitingOnly";
 
-/** What the row of the item so titled says of its task's status; none where it wears no status. */
 function rowStatus(page: HTMLElement, title: string): string | undefined {
   return (
     rowNamed(page, title).closest("li")?.querySelector(".inbox-row-task-status")?.textContent ??
@@ -109,11 +105,6 @@ function rowStatus(page: HTMLElement, title: string): string | undefined {
   );
 }
 
-/**
- * The list's head as a reader meets it: the Inbox's name, then each scope
- * its View options offers, the one shown in brackets; the menu is closed
- * again on the scope shown.
- */
 function scopes(page: HTMLElement): string[] {
   openViewOptions(page);
   const offered = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].filter(
@@ -137,7 +128,6 @@ test("the list holds every task's items in one run, the latest changed first, ea
   ]);
 });
 
-/** ⌘-clicks the row of the item so titled, as a Mac's list chooses a row in or out. */
 function commandClick(page: HTMLElement, title: string): void {
   act(() => {
     rowNamed(page, title).dispatchEvent(
@@ -146,19 +136,16 @@ function commandClick(page: HTMLElement, title: string): void {
   });
 }
 
-/** The titles of the rows the list holds chosen, in the order drawn. */
 function picked(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main")]
     .filter((row) => heardOf(row.getAttribute("aria-describedby")).startsWith("Selected, "))
     .map(titleOf);
 }
 
-/** The selection's acts in the list's head, named by how many are chosen, or none while nothing is. */
 function selectionBar(page: HTMLElement): HTMLElement | null {
   return page.querySelector<HTMLElement>(".inbox-tasks .ui-selection-toolbar");
 }
 
-/** The selection's button named `name`, a glyph named by its label. */
 function barButton(page: HTMLElement, name: string): HTMLButtonElement {
   const button = [
     ...(selectionBar(page) ?? assert.fail("the bar stands")).querySelectorAll<HTMLButtonElement>(
@@ -169,7 +156,6 @@ function barButton(page: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
-/** Whether the row of the item so titled says to a reader that it is unread. */
 function rowUnread(page: HTMLElement, title: string): boolean {
   return [...rowNamed(page, title).querySelectorAll(".ui-visually-hidden")].some(
     (each) => each.textContent === "Unread",
@@ -217,7 +203,6 @@ test("an agent changing an item the bar's Resolve asks about withdraws the quest
   await settle();
   assert.ok(document.querySelector('[role="alertdialog"]'), "Resolve asks first");
 
-  // The agent asks again under the same key, and main says the plan moved.
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
   act(() =>
     world.setHolding([
@@ -227,7 +212,6 @@ test("an agent changing an item the bar's Resolve asks about withdraws the quest
   );
   await settle();
 
-  // Note that the item's change reaches its query one notify tick later.
   await vi.waitFor(() =>
     assert.equal(
       document.querySelector('[role="alertdialog"]') === null,
@@ -358,7 +342,6 @@ test("a plan main says changed is read again, so an item answered on another Mac
     ]),
   );
   await settle();
-  // Note that the plan's change stands once it reaches its read's query.
   await vi.waitFor(() =>
     assert.deepEqual(
       listed(page),
@@ -387,7 +370,6 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything);
 });
 
-/** The number the window's sidebar draws on its Inbox row; none where it draws none. */
 function sidebarInboxCount(page: HTMLElement): number | undefined {
   const row =
     [...page.querySelectorAll<HTMLElement>(".sidebar-places .ui-nav-item")].find(
@@ -397,7 +379,6 @@ function sidebarInboxCount(page: HTMLElement): number | undefined {
   return count === undefined ? undefined : Number(count);
 }
 
-/** How many rows the list draws. */
 function toDoRows(page: HTMLElement): number {
   return listed(page).length;
 }
@@ -425,12 +406,10 @@ test("the sidebar's Inbox counts the questions and the update waiting on you, ne
   const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
   world.inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }, NOTE, THEIRS]);
-  // Note that main counts each task's one open ask, never the notice, which the sidebar counts from main's open items.
   const holding: readonly AppInboxTaskHolding[] = [
     { taskId: BILLING.id, items: 3, toDo: 1, updatedAt: 4_500 },
     { taskId: INVITES.id, items: 3, toDo: 1, updatedAt: 4_000 },
   ];
-  // Main lists the open items that wait on the reader, the notice among them, as the service's read does.
   const waiting: readonly AppInboxTask[] = [
     { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
     { taskId: INVITES.id, items: [waitingOf(EXPIRY), { ...waitingOf(NOTE), asking: false }] },
@@ -517,8 +496,6 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   );
 });
 
-// Note that this test mounts the Inbox eight times, about 1 s on an idle machine but near 5 s on a
-// CI runner whose other workers run the shard's other files, so it is given 10 s.
 test("a tab kept before the scopes opens the Inbox on the scope that lists what it did, Needs you and Unread on Open and All open and Everything on All, and the Needs you press kept before the tabs on Open where pressed and All where not; a scope chosen since is kept in its place", async () => {
   const kept = [
     [SHOW_KEY, "needs-you", "[Open]"],
@@ -622,7 +599,6 @@ test("the list is resized from its edge between its bounds, and keeps its width 
   assert.equal(width(), 340, "no wider than leaves the item its room");
 });
 
-/** The empty state a column stands, as it reads: its line, or none where the column stands none. */
 function emptyStateIn(page: HTMLElement, column: string): string | null {
   const shown = page.querySelector(column);
   assert.ok(shown, "the column is drawn");
@@ -630,7 +606,6 @@ function emptyStateIn(page: HTMLElement, column: string): string | null {
   return empty === null || shown.hasAttribute("hidden") ? null : (empty.textContent ?? "");
 }
 
-/** The way on an empty state in `column` offers, by its words. */
 function emptyStateAction(page: HTMLElement, column: string): HTMLButtonElement | null {
   return page.querySelector<HTMLButtonElement>(`${column} .ui-empty-state button`);
 }
@@ -698,7 +673,6 @@ test("while the account's feed is first read, the list stands placeholder rows i
   world.feedUnread = false;
   act(() => pushAgain());
   await settle();
-  // Note that the feed's rows stand once they reach its query.
   await vi.waitFor(() => assert.equal(list.querySelector('[aria-busy="true"]') === null, true));
   assert.deepEqual(listed(page), [
     "How is a failed email retried?",
@@ -739,7 +713,6 @@ test("an Inbox opened before the account's task list is read stands placeholder 
   ]);
 });
 
-/** The list's empty state as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
 function listEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
   const empty = page.querySelector(".inbox-tasks:not([hidden]) .ui-empty-state");
   if (empty === null) return null;
@@ -765,7 +738,6 @@ test("with only settled items, read, Needs you lists no row, the item read still
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
-  // One column wide, the item read stands alone with nothing to page to, and its way back, choosing nothing, reaches the empty list.
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
   assert.equal(pagerOf(page), null);
@@ -832,7 +804,6 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
   window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_THRESHOLD, room: SHELL_ROOM.NARROW });
   await settle();
-  // Open is chosen as a phone chooses it: the ⋯'s View options opens the list's own menu where the ⋯ stood.
   const more = () =>
     page.querySelector<HTMLButtonElement>('.inbox-head button[aria-label="Inbox actions"]') ??
     assert.fail("the ⋯ stands");
@@ -857,7 +828,6 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
   assert.ok(document.activeElement === more(), "the keyboard is on the head's ⋯");
 });
 
-/** Gives the window the list's motion tokens beside the pane's, and an engine that records what is played; answers what was played. */
 function playListMotions() {
   const motions = playMotions();
   const root = document.documentElement.style;
@@ -876,7 +846,6 @@ function playListMotions() {
   return motions.played;
 }
 
-/** Answers the Invites item on another Mac, as main hears of it. */
 async function answerExpiryElsewhere(): Promise<void> {
   world.inboxes.set(INVITES.id, [
     { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
@@ -897,7 +866,6 @@ test("on Needs you, an item answered on another Mac slides out from where its ro
   await settle();
   showScope(page, "Open");
   await answerExpiryElsewhere();
-  // The settled row Needs you held leaves with it.
   const leaving = [...page.querySelectorAll<HTMLElement>("[data-leaving]")];
   assert.deepEqual(
     leaving
@@ -927,13 +895,11 @@ test("on Needs you, an item answered on another Mac slides out from where its ro
   assert.equal(page.querySelector("[data-leaving]"), null);
 });
 
-/** A read the test answers when it chooses. */
 interface PendingRead {
   readonly promise: Promise<ReadOutcome>;
   readonly settle: (value: AgentInboxAnswerView) => void;
 }
 
-/** A read held until the test settles it. */
 function pending(): PendingRead {
   let settle: PendingRead["settle"] = () => undefined;
   const promise = new Promise<ReadOutcome>((resolve) => {
@@ -1050,7 +1016,6 @@ test("no row draws the attention mark, which an open item nearly always would: t
   ]);
 });
 
-/** Whether a row reads as unread: its blue dot, its title in the unread weight, and "Unread" said to a reader, each `?` where only some stand. */
 function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const row = rowNamed(page, title);
   const marks = [
@@ -1064,8 +1029,6 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   return marks.some(Boolean) ? "?" : false;
 }
 
-/** The mark a row's hover offers over its time. */
-/** The row of the item so titled as a reader hears it: its name, then its description. */
 function heardRow(page: HTMLElement, title: string): [string, string] {
   const row = rowNamed(page, title);
   return [
@@ -1074,7 +1037,6 @@ function heardRow(page: HTMLElement, title: string): [string, string] {
   ];
 }
 
-/** Expire after 7 days? as an unread notice whose message shows its code under its first line. */
 const CODED: InboxItem = {
   ...EXPIRY,
   unread: true,
@@ -1159,7 +1121,6 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const retry = "How is a failed email retried?";
-  // Note that U acts only on the chosen item, so another row's menu does not name it.
   assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread", "Remind me"]);
   act(() => menuItem("Mark as unread").click());
   await settle();
@@ -1236,7 +1197,6 @@ test("a mark the service refuses is let go, and the dot stands as the reads hold
 
 test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as read marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread ⌘K offers it no more", async () => {
   world.listedWorkspace = ACME;
-  // Note that the unread answered item is a teammate's, so the item standing chosen is the one that needs you, and nothing is read before the mark.
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
   world.inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }]);
   const { page } = mount([], { chosen: ON_THRESHOLD });
@@ -1286,7 +1246,6 @@ test("Mark all as read sends one write and asks no task or agent again, since ea
   assert.deepEqual(world.agentReads.slice(agentsBefore), []);
 });
 
-/** The chip over the list saying whose items it holds, as a reader meets it: its words and its ×'s name; none where none stands. */
 function whoseChip(page: HTMLElement): readonly (string | null | undefined)[] | null {
   const chip = page.querySelector(".inbox-tasks-chips .ui-chip");
   if (chip === null) return null;
@@ -1352,7 +1311,6 @@ test("the Addressed to chip scales in as a teammate is chosen and out as its × 
   world.listedWorkspace = SHARED_WORKSPACE;
   world.members = SHARED_MEMBERS;
   const played = playListMotions();
-  // Note that a chip arriving rides the quick beat, which the list's tokens leave out.
   document.documentElement.style.setProperty("--ui-duration-quick", "140ms");
   onTestFinished(() => {
     document.documentElement.style.removeProperty("--ui-duration-quick");
@@ -1481,7 +1439,6 @@ test("an item marked read as it opened stays read once another plan's item is ch
   await settle();
   await vi.waitFor(() => assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`]));
   await vi.waitFor(() => assert.equal(unreadOf(page, "Alert at 80%?"), false));
-  // The plan's inbox is pushed on the mark, as the host hears it, holding the item read.
   await act(async () =>
     world.main.push(
       { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id },
@@ -1509,7 +1466,6 @@ test("a mark another window makes later on the same item stands once the plan's 
   await settle();
   await vi.waitFor(() => assert.deepEqual(world.readMarks, [`read:${THRESHOLD.id}`]));
   assert.equal(unreadOf(page, "Alert at 80%?"), false);
-  // The plan's inbox is pushed as the test says: its own mark heard, then another window's.
   const billing = { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id };
   await act(async () =>
     world.main.push(billing, { items: [{ ...THRESHOLD, unread: false }, RETRY] }),
@@ -1589,7 +1545,6 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   );
   assert.equal(needsYouMark(rowNamed(page, CHOSEN.title)), "", "an answered ask waits on nobody");
 
-  // A step ticked in the item's box is counted on its row once another item is chosen.
   act(() => rowNamed(page, STEPS.title).click());
   await settle();
   act(() => itemPane(page).querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
@@ -1597,7 +1552,6 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "2 steps left · Add the secret"]);
 
-  // Mark done pressed in the box ticks every step on the row, as the box shows them.
   act(() => rowNamed(page, STEPS.title).click());
   await settle();
   act(() => askPress(itemPane(page), "Mark done").click());
@@ -1606,13 +1560,11 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
 });
 
-/** Types `words` into the list's search, as a reader's keys put them in its field. */
 function searchList(page: HTMLElement, words: string): void {
   const input = page.querySelector<HTMLInputElement>(
     '.inbox-tasks input[aria-label="Search inbox"]',
   );
   assert.ok(input, "the search stands open");
-  // Note that the value goes in through the prototype's setter, because React tracks the field's own.
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(input, words);
@@ -1620,7 +1572,6 @@ function searchList(page: HTMLElement, words: string): void {
   });
 }
 
-/** The title of the item the pane shows. */
 function paneTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
 }
@@ -1639,7 +1590,6 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
   );
   assert.ok(input, "the search stands before anything is pressed");
 
-  // Note that the retry question is found by its answer's note, which only its thread holds.
   searchList(page, "on-call");
   assert.deepEqual(listed(page), ["How is a failed email retried?"]);
   assert.equal(paneTitle(page), "Alert at 80%?", "the pane keeps the item open");

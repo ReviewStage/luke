@@ -37,13 +37,6 @@ import {
 } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
-/**
- * inbox-call-item.test.ts -- in a task's column, the chip on the row of an
- * agent's post to the inbox opens the item it posted, the thread its answer
- * names under its key of that agent's, though another agent posted under
- * the same key. Synthetic throughout.
- */
-
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
@@ -67,7 +60,6 @@ const AGENT: AgentSummary = {
 
 const OTHER_AGENT = "4d2f1c7e-9a3b-4e8d-b1c6-2f7a8e9d0b13";
 
-/** An open item asking a decision, posted by `agentId` under `key` at `at`. */
 function item(id: string, agentId: string, key: string, title: string, at: number): InboxItem {
   return {
     id,
@@ -96,14 +88,12 @@ function item(id: string, agentId: string, key: string, title: string, at: numbe
   };
 }
 
-/** Newest first: another of the agent's items, the other agent's under the same key, then the one the row posted. */
 const ITEMS: readonly InboxItem[] = [
   item("a1b2c3d4-0000-4000-8000-000000000001", AGENT.id, "smtp", "Which SMTP host?", 30),
   item("a1b2c3d4-0000-4000-8000-000000000002", OTHER_AGENT, "invite-ttl", "Someone else's", 20),
   item("a1b2c3d4-0000-4000-8000-000000000003", AGENT.id, "invite-ttl", "Invite TTL", 10),
 ];
 
-/** The agent's turn: one post to the inbox under the key `invite-ttl`, answered with the agent's threads, the one it posted on among them. */
 const POSTED: AgentTranscriptMessage = {
   id: "turn",
   role: MESSAGE_ROLE.ASSISTANT,
@@ -133,7 +123,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The task's page, the agent's tab in its column and the Inbox in its side panel, wide enough for the list and the item side by side. */
 async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -146,7 +135,6 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ width: 1200, height: 800 }),
   );
-  // The account's feed holds the task's items, which its Inbox tab draws from.
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: ITEMS }, [INBOX_SCOPE_KIND.AGENT]: {} },
   });

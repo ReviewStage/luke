@@ -8,12 +8,6 @@ import { afterEach, test } from "vitest";
 import { pointerCross } from "../testing/pointer-cross.js";
 import { PANE_FLOAT, type PaneFloat, useFloatDismiss, useHoverPane } from "./hover-pane.js";
 
-/**
- * A pane that floats as the sidebar does, drawn through the module's two
- * hooks alone: its toggle opens it, its edge peeks it, and its one row is
- * a choice. A menu it raised stands outside it, through a portal, and the
- * work beside it holds a button of its own.
- */
 function Floating({ opensOn }: { opensOn: PaneFloat }): React.JSX.Element {
   const [state, onState] = useState<PaneFloat>(opensOn);
   const float = { state, onState };
@@ -46,7 +40,6 @@ function Floating({ opensOn }: { opensOn: PaneFloat }): React.JSX.Element {
         onKeyDown: pane.onKeyDown,
       },
       createElement("button", { type: "button", className: "row", onClick: choose }, "Row"),
-      // A menu the pane raised, drawn outside it through a portal, as the sidebar's are.
       createPortal(createElement("div", { role: "menu", className: "menu" }), document.body),
     ),
     createElement(
@@ -173,7 +166,6 @@ test("a pane opened from away holds the keyboard against Tab until Escape hands 
   const toggle = part(page, ".toggle");
   toggle.focus();
   act(() => toggle.click());
-  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
   act(() => {
     part(page, ".row").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     part(page, ".work").focus();

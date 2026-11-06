@@ -15,13 +15,6 @@ import { ToastHost } from "../toast.js";
 import { pageResetControl } from "./reset.js";
 import type { SettingsWrites } from "./writes.js";
 
-/**
- * reset.test.ts -- a page's reset that the store refuses says why in a
- * failure's toast, announced as an alert, and the reset stands pressable
- * again; a page offers its reset only for a change to a row it draws, and
- * resets only the rows it draws.
- */
-
 const REFUSED = "The settings could not be reset. Try again.";
 
 const roots: Root[] = [];
@@ -31,10 +24,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page's settings as they stand: the theme moved off its default, so the page offers its reset. */
 const settings = settingsView({ theme: THEME.DARK });
 
-/** Which rows a platform offering `capabilities` draws for `shown`, with the account standing. */
 function rowsOn(shown: typeof settings, capabilities: readonly HostCapability[]) {
   return { settings: shown, accountDrawn: true, capabilities };
 }
@@ -102,7 +93,6 @@ test("a zoom changed in a browser, which draws no Zoom row, offers no reset on A
   );
 });
 
-/** A store holding `start`, whose reset returns the Appearance group to its defaults in one write but for the fields it is asked to keep, as the host's does. */
 function appearanceStore(start: typeof settings) {
   let held = start;
   const writes: SettingsWrites = {
@@ -166,7 +156,6 @@ test("Undo after a browser's reset puts back the theme it reset and leaves the z
   const start = settingsView({ theme: THEME.DARK, zoom: 125 });
   const store = appearanceStore(start);
   const browser = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP);
-  // Another window saves a zoom just before the reset reaches the store.
   const reset = store.writes.reset;
   store.writes.reset = (scope, kept) =>
     store.writes.setting("zoom", 150).then(() => reset(scope, kept));
@@ -190,7 +179,6 @@ test("Undo after a browser's reset puts back the theme it reset and leaves the z
   );
   assert.ok(press, "the page offers its reset");
   await act(async () => press.click());
-  // The newest toast's Undo: an earlier test's toast may still stand in the shared host.
   const undo = [...document.querySelectorAll("button")]
     .filter((button) => button.textContent === "Undo")
     .at(-1);

@@ -12,21 +12,10 @@ import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-plat
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ModelMenu } from "./model-menu.js";
 
-/**
- * model-menu.test.ts -- a model no subscription or API key of the account's
- * pays for is never a dead row: its pick lands on its harness's row in
- * Settings › Agents rather than choosing it, and where an automation's
- * choice is such a model, as a stored Claude default is once no Claude
- * credential pays for it, the menu says it cannot run and offers the same Connect; a
- * running agent's chip, which its starter's credentials pay for, says
- * nothing of it. Synthetic catalog.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** Claude's models with nothing connected to pay for them, and a GPT model an OpenAI key pays for. */
 const MODELS: readonly CatalogModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -46,7 +35,6 @@ const MODELS: readonly CatalogModel[] = [
 const OPUS: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 const GPT: ModelChoice = { model: "openai/gpt-6.1", effort: "high" };
 
-/** Where Claude's Connect lands: its harness's row on Agents. */
 const CLAUDE_ROW: SettingsLink = {
   page: SETTINGS_VIEW.AGENTS,
   section: SETTINGS_SECTION.CLAUDE,
@@ -68,15 +56,12 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What owns the menu: an automation, whose choice a new agent starts on, or a running agent's chip, which shows its plan. */
 const OWNER = { START: "start", CHIP: "chip" } as const;
 
 type Owner = (typeof OWNER)[keyof typeof OWNER];
 
-/** The words a ChatGPT-paid agent's chip hands the menu's last line. */
 const PLAN_NOTE = "Using ChatGPT plan";
 
-/** The menu open on `chosen` under `owner`, recording where Settings opened, what it chose, and whether it asked to close. */
 function open(
   chosen: ModelChoice,
   owner: Owner = OWNER.START,
@@ -120,12 +105,10 @@ function open(
   return { menu, opened, chose, closed: () => closes };
 }
 
-/** The menu's last line, under the pinned rows; empty where it has none. */
 function lastLine(menu: HTMLElement): string {
   return menu.querySelector(".ui-searchable-menu-last-line")?.textContent ?? "";
 }
 
-/** The listed row whose words begin with `name`. */
 function row(menu: HTMLElement, name: string): HTMLElement {
   const found = [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
     (each.textContent ?? "").startsWith(name),

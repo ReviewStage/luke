@@ -1,22 +1,3 @@
-/**
- * settings-fixture.ts -- the synthetic account a fixture run's Settings, Admin, and Automations profiles sign in as, and the answers its pages read in place of the service's.
- *
- * A fixture run signs in to nothing, so Settings draws its signed-out line on
- * every page that reads the account, and Admin and Automations stand nowhere.
- * Under one of these profiles the window's document holds a synthetic
- * account instead, the owner of the fixture's first workspace and an admin of
- * Acme, signed in and an admin of the service, with the experiments its pages stand
- * behind turned on; the window opens on the page the profile names; and each
- * read those pages ask is answered here, through the act door (`act.ts`), as
- * main would answer it with the service behind it. The workspaces' members
- * are held under every profile, laid on the document as the host lays them,
- * since the window reads them wherever it stands, and a task names its
- * creator from the same people. Every person, address,
- * and repository here is invented, and no credential, token, or key is: a
- * stored key is drawn by its hint alone, as the service only ever answers it,
- * and an expired sign-in by its status, which carries nothing secret.
- */
-
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AdminMetrics, AdminRetentionCohort } from "@repo/features/admin-answer-wire";
 import {
@@ -90,16 +71,13 @@ import {
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 
-/** When the fixture stands, from which every instant here is counted: a fixed one, never the clock. */
 const NOW = Date.parse("2026-10-24T09:00:00Z");
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** The fixture's workspaces, by the ids `tasks-fixture.ts` gives them. */
 const WORKSPACE = { PERSONAL: "workspace-personal", ACME: "workspace-acme" } as const;
 
-/** The account signed in: the owner of the fixture's first workspace, which is named for it. */
 const ACCOUNT_ID = "user-ada";
 const ACCOUNT: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
@@ -109,17 +87,14 @@ const ACCOUNT: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
-/** An admin of the service, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
-/** The experiments the staged pages stand behind: Hosts' page, Skills', and Memory's. */
 const STAGED_EXPERIMENTS = {
   [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
   [EXPERIMENT.SKILLS]: true,
   [EXPERIMENT.MEMORY]: true,
 } as const;
 
-/** The staged hosts, by id. */
 const FIXTURE_HOST = {
   ONLINE: "7d3c2a10-0000-4000-8000-000000000001",
   OLD: "7d3c2a10-0000-4000-8000-000000000002",
@@ -131,7 +106,6 @@ const FIXTURE_HOST = {
   UPDATE_FAILED: "7d3c2a10-0000-4000-8000-000000000009",
 } as const;
 
-/** The staged hosts that beat just now, so they read online: every one but the one staged offline. */
 const BEATING_HOSTS = [
   FIXTURE_HOST.ONLINE,
   FIXTURE_HOST.OLD,
@@ -142,10 +116,8 @@ const BEATING_HOSTS = [
   FIXTURE_HOST.UPDATE_FAILED,
 ] as const;
 
-/** Where the staged install commands fetch their script. */
 const STAGED_INSTALL_SCRIPT = "https://app.test/install.sh";
 
-/** The page each Settings profile opens on, and the workspace it shows where that is not the sidebar's first. */
 const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, SettingsLink>([
   [RUN_PROFILE.SETTINGS_ACCOUNT, { page: SETTINGS_VIEW.ACCOUNT }],
   [RUN_PROFILE.SETTINGS_WORKSPACE, { page: SETTINGS_VIEW.WORKSPACE, workspaceId: WORKSPACE.ACME }],
@@ -157,7 +129,6 @@ const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, Settin
   [RUN_PROFILE.SETTINGS_MEMORY, { page: SETTINGS_VIEW.MEMORY, workspaceId: WORKSPACE.ACME }],
 ]);
 
-/** Every profile the account is signed in under: Settings', Admin's, and Automations'. */
 const SIGNED_IN_PROFILES: ReadonlySet<string> = new Set<string>([
   ...SETTINGS_LINKS.keys(),
   RUN_PROFILE.ADMIN,
@@ -166,15 +137,8 @@ const SIGNED_IN_PROFILES: ReadonlySet<string> = new Set<string>([
   RUN_PROFILE.AUTOMATIONS_RUNS,
 ]);
 
-/* ----- Settings › Workspace ----- */
-
-/** Someone by id and name, as a task names its creator and a member is listed. */
 type Person = Pick<WorkspaceMember, "userId" | "name">;
 
-/**
- * The fixture's people, by id and the name their account holds, as a task
- * names who created it: the account, and the teammates its workspaces share.
- */
 export const FIXTURE_PERSON = {
   ADA: { userId: ACCOUNT_ID, name: "Ada Lovelace" },
   MAYA: { userId: "user-maya", name: "Maya Okafor" },
@@ -182,19 +146,16 @@ export const FIXTURE_PERSON = {
   PRIYA: { userId: "user-priya", name: "Priya Raman" },
 } as const satisfies Record<string, Person>;
 
-/** A member of a fixture workspace, with no picture, as the service answers one who signed in without one. */
 function member(person: Person, role: WorkspaceMember["role"]): WorkspaceMember {
   return { ...person, email: `${person.userId.replace("user-", "")}@example.com`, role };
 }
 
-/** The account's own workspace: the account, and two teammates it brought in. */
 const PERSONAL_MEMBERS: readonly WorkspaceMember[] = [
   member(FIXTURE_PERSON.ADA, WORKSPACE_ROLE.OWNER),
   member(FIXTURE_PERSON.THEO, WORKSPACE_ROLE.MEMBER),
   member(FIXTURE_PERSON.PRIYA, WORKSPACE_ROLE.MEMBER),
 ];
 
-/** Acme's team, whose owner is someone else and whose admin the account is. */
 const ACME_MEMBERS: readonly WorkspaceMember[] = [
   member(FIXTURE_PERSON.MAYA, WORKSPACE_ROLE.OWNER),
   member(FIXTURE_PERSON.ADA, WORKSPACE_ROLE.ADMIN),
@@ -202,16 +163,11 @@ const ACME_MEMBERS: readonly WorkspaceMember[] = [
   member(FIXTURE_PERSON.PRIYA, WORKSPACE_ROLE.MEMBER),
 ];
 
-/** Each workspace's members: the account's own and Acme's team. */
 const MEMBERS: ReadonlyMap<string, readonly WorkspaceMember[]> = new Map([
   [WORKSPACE.PERSONAL, PERSONAL_MEMBERS],
   [WORKSPACE.ACME, ACME_MEMBERS],
 ]);
 
-/**
- * The workspaces as the Settings profiles list them, from the list the tasks
- * profiles draw: each counting its members.
- */
 export function settingsTasksView(profile: string, list: TasksView): TasksView | undefined {
   if (!SETTINGS_LINKS.has(profile)) return undefined;
   return {
@@ -223,12 +179,10 @@ export function settingsTasksView(profile: string, list: TasksView): TasksView |
   };
 }
 
-/** Each workspace's members as the host holds them read (`LIVE_READ.WORKSPACE_MEMBERS`), one object for every delivery. */
 const HELD_MEMBERS: AppWorkspaceMembers = Object.fromEntries(
   [...MEMBERS].map(([workspaceId, members]) => [workspaceId, { rows: { members } }]),
 );
 
-/** Each workspace's pending invitations as the host holds them read (`LIVE_READ.WORKSPACE_INVITATIONS`): one in Acme, none elsewhere, one object for every delivery. */
 const HELD_INVITATIONS: AppWorkspaceInvitations = Object.fromEntries(
   [...MEMBERS.keys()].map((workspaceId) => [
     workspaceId,
@@ -249,9 +203,6 @@ const HELD_INVITATIONS: AppWorkspaceInvitations = Object.fromEntries(
   ]),
 );
 
-/* ----- Settings › Integrations ----- */
-
-/** Where each account stands: GitHub, Notion's two, and Sentry connected; Linear's and Slack's sign-ins expired. */
 const INTEGRATION_ACCOUNTS: readonly IntegrationAccount[] = [
   integrationAccount(INTEGRATION_PROVIDER.GITHUB, "github", INTEGRATION_STATUS.CONNECTED, "ada"),
   integrationAccount(INTEGRATION_PROVIDER.LINEAR, "linear", INTEGRATION_STATUS.EXPIRED, "Acme"),
@@ -275,7 +226,6 @@ function integrationAccount(
   return { provider, connection, status, label };
 }
 
-/** Each provider's first account's word, which a provider with none answers disconnected. */
 function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
   const statuses = Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.DISCONNECTED]),
@@ -286,7 +236,6 @@ function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
   return statuses;
 }
 
-/** The tools a connected server lists, a few of each, as its server describes them. */
 const TOOLS = [
   {
     name: "search",
@@ -302,9 +251,6 @@ const TOOLS = [
   },
 ] as const;
 
-/* ----- Settings › Agents ----- */
-
-/** The models the service offers, Claude's and Codex's. */
 const MODELS: readonly CatalogModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -327,20 +273,16 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-/** Every connected staged server's tools, as the host holds them for the windows. */
 const STAGED_TOOLS: AppIntegrationTools = Object.fromEntries(
   INTEGRATION_ACCOUNTS.filter((account) => account.status === INTEGRATION_STATUS.CONNECTED).map(
     (account) => [account.connection, { rows: { tools: TOOLS } }],
   ),
 );
 
-/* ----- Settings › Skills ----- */
-
 function skillId(n: number): string {
   return `5d2b7c1e-4a3f-4e8b-9c6d-${String(n).padStart(12, "0")}`;
 }
 
-/** A workspace's skills as its members see them: its own, then the account's. */
 function skills(workspaceId: string): InstalledSkillSummary[] {
   return [
     {
@@ -395,7 +337,6 @@ function skills(workspaceId: string): InstalledSkillSummary[] {
   ];
 }
 
-/** One staged skill read whole: its `SKILL.md`, its frontmatter naming it, and its one file; none for an id no staged skill has. */
 function skillContent(id: string) {
   const skill = skills("").find((each) => each.id === id);
   if (skill === undefined) return undefined;
@@ -412,8 +353,6 @@ function skillContent(id: string) {
   ].join("\n");
   return { id, skillFile, files: [{ path: "SKILL.md", bytes: skillFile.length }] };
 }
-
-/* ----- Settings › Memory ----- */
 
 function memory(
   n: number,
@@ -435,7 +374,6 @@ function memory(
 
 const { ADA, MAYA, THEO } = FIXTURE_PERSON;
 
-/** The workspace's memories, the most recently kept first. */
 const MEMORIES: readonly MemorySummary[] = [
   memory(1, "Migrations are generated with `pnpm db:generate`, never written by hand.", MAYA, 1),
   memory(2, "Invite links expire after 7 days; an accepted one is never reused.", ADA, 2),
@@ -444,22 +382,17 @@ const MEMORIES: readonly MemorySummary[] = [
   memory(5, "Feature flags live in `src/flags.ts`, one constant per flag.", null, 30),
 ];
 
-/* ----- Admin ----- */
-
-/** The `days` UTC days up to the fixture's day, oldest first, as YYYY-MM-DD. */
 function trailingDays(days: number): readonly string[] {
   return Array.from({ length: days }, (_, index) =>
     new Date(NOW - (days - 1 - index) * DAY).toISOString().slice(0, 10),
   );
 }
 
-/** A count that rises over the window and dips at weekends, so a chart of it reads as a real one. */
 function wave(index: number, base: number, step: number): number {
   const weekend = index % 7 === 5 || index % 7 === 6;
   return Math.round((base + index * step) * (weekend ? 0.4 : 1) + ((index * 7) % 5));
 }
 
-/** Six weekly cohorts, each retained a little less week on week, the newest still accruing. */
 function cohorts(): AdminRetentionCohort[] {
   const weeks = 6;
   return Array.from({ length: weeks }, (_, cohort) => {
@@ -481,7 +414,6 @@ function cohorts(): AdminRetentionCohort[] {
   });
 }
 
-/** One of the most active accounts, its numbers counted over the window. */
 function topAccount(id: string, name: string, activeDays: number, admin = false) {
   return {
     id,
@@ -497,24 +429,15 @@ function topAccount(id: string, name: string, activeDays: number, admin = false)
   };
 }
 
-/** How many of the fixture's accounts are admins, whom the Overview leaves out unless asked for everyone. */
 const ADMIN_ACCOUNTS = 3;
 
-/** Every other account, more than a quarter's signups add up to, so no window counts more new accounts than there are. */
 const NON_ADMIN_ACCOUNTS = 640;
 
-/**
- * The Overview's numbers over the window the read asks for, the last 30 days
- * where it names none, and over every account or every account but the
- * admins, as its Hide admins asks: a window's counts scaled to its length,
- * and the admins left out of the totals and the most active accounts.
- */
 function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
   const windowDays =
     adminMetricsWindow(query[ADMIN_METRICS_WINDOW_PARAM]) ?? ADMIN_METRICS_WINDOW_DEFAULT;
   const adminsHidden =
     adminMetricsScope(query[ADMIN_METRICS_SCOPE_PARAM]) !== ADMIN_METRICS_SCOPE.ALL;
-  // A month's active days scaled to the window, at least one and never more than the window holds.
   const activeIn = (monthly: number) =>
     Math.min(windowDays, Math.max(1, Math.round((monthly * windowDays) / 30)));
   const days = trailingDays(windowDays);
@@ -527,7 +450,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     [FUNNEL_STEP.OPENED_PR, 19],
     [FUNNEL_STEP.MERGED_PR, 14],
   ] as const;
-  // The signups are the daily series summed, as the service counts them, so the total and the funnel's base agree with the bars.
   const dailySignups = days.map((day, index) => ({ day, count: wave(index, 1, 0.08) }));
   const signedUp = dailySignups.reduce((sum, day) => sum + day.count, 0);
   const reach = [
@@ -584,7 +506,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
         trend: { days: 7, recent: 1840, prior: 1622 },
       },
       funnel: funnel.map(([step, monthly]) => {
-        // Each step keeps its month's share of the signups, so no step outnumbers the one before it.
         const accounts = Math.round((signedUp * monthly) / 64);
         return { step, accounts, share: signedUp === 0 ? null : accounts / signedUp };
       }),
@@ -603,9 +524,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
   };
 }
 
-/* ----- Acme's Slack bot ----- */
-
-/** The repositories Acme's GitHub reaches, which the Slack bot's pickers list. */
 const ACME_REPOSITORIES = ["relay", "web", "api"].map((name, index) => ({
   owner: "acme",
   name,
@@ -615,7 +533,6 @@ const ACME_REPOSITORIES = ["relay", "web", "api"].map((name, index) => ({
   updatedAt: Date.parse("2026-10-06T11:00:00Z") - index * 86_400_000,
 }));
 
-/** Acme's Slack bot as the staged page last changed it: connected, a default repository, and the team's channels. */
 let acmeSlackBot: WorkspaceSlackBot = {
   configured: true,
   team: { id: "T0ACME", name: "Acme" },
@@ -630,15 +547,11 @@ let acmeSlackBot: WorkspaceSlackBot = {
   ],
 };
 
-/* ----- The act door ----- */
-
 type StagedAnswer<Kind extends PortActKind> = (
   payload: PortActPayload<Kind>,
 ) => PortActResult<Kind>;
 
-/** Every read the staged pages ask, answered as the service would answer it for this account. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  // A box waiting on its code, as a pairing's link opened over Settings › Hosts reads it.
   [ACT_KIND.HOSTS_PAIRING_READ]: () => ({
     name: "fra-02",
     platform: DEVICE_PLATFORM.LINUX,
@@ -660,7 +573,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       if (channel.id !== channelId) return channel;
       const { repository: _named, ...plain } = channel;
       const joined = member ?? channel.member;
-      // A channel the bot left keeps no repository, as the service forgets it.
       const kept = !joined || repository === null ? undefined : (repository ?? channel.repository);
       return kept === undefined
         ? { ...plain, member: joined }
@@ -671,7 +583,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   },
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
-  // The command-line tool installed on this Mac, as Settings' MCP page's Install asks, without running the install script: a fixture run reaches no network and installs nothing.
   [ACT_KIND.CLI_INSTALL]: () => ({
     outcome: CLI_INSTALL_OUTCOME.INSTALLED,
     version: "0.1.0",
@@ -683,15 +594,10 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       : { refused: ADMIN_UNANSWERED },
 };
 
-/**
- * The page a Settings profile opens Settings on at launch, with the
- * workspace it shows where that is not the sidebar's; none under any other.
- */
 export function settingsLaunchLink(profile: string): SettingsLink | undefined {
   return SETTINGS_LINKS.get(profile);
 }
 
-/** The clients the account allowed: an outside agent on this computer that refreshed lately, one on the web that never has, and the vespin command, signed in. */
 const STAGED_MCP_CLIENTS: AppMcpClients = {
   [ACCOUNT_ID]: {
     rows: {
@@ -711,7 +617,6 @@ const STAGED_MCP_CLIENTS: AppMcpClients = {
           allowedAt: NOW - 9 * DAY,
           lastRefreshedAt: null,
         },
-        // The vespin command, signed in, which Settings › CLI shows and Connected leaves out.
         {
           clientId: FIRST_PARTY_OAUTH_CLIENT_ID.CLI,
           name: `${PRODUCT_NAME} CLI`,
@@ -724,7 +629,6 @@ const STAGED_MCP_CLIENTS: AppMcpClients = {
   },
 };
 
-/** The account's staged credentials, as the host holds them: no API key, Claude's plan connected, and the ChatGPT sign-in OpenAI no longer honors. */
 const STAGED_KEYS: AppProviderKeys = {
   [ACCOUNT_ID]: {
     rows: {
@@ -753,10 +657,8 @@ const STAGED_KEYS: AppProviderKeys = {
   },
 };
 
-/** The models the staged account is offered, as the host holds them. */
 const STAGED_MODELS: AppModels = { [ACCOUNT_ID]: { rows: { models: MODELS } } };
 
-/** The staged account's preferences row, as the host holds it: Opus on high, chapters on Sonnet, and Slack notifications on. */
 const STAGED_PREFERENCES: AppAccountPreferences = {
   [ACCOUNT_ID]: {
     rows: {
@@ -767,7 +669,6 @@ const STAGED_PREFERENCES: AppAccountPreferences = {
   },
 };
 
-/** Each staged workspace's repositories as the host holds them, Acme's its three and every other workspace's none. */
 const STAGED_REPOSITORIES: AppRepositoryLists = Object.fromEntries(
   [WORKSPACE.PERSONAL, WORKSPACE.ACME, EVERY_WORKSPACE].map((workspace) => [
     workspace,
@@ -781,7 +682,6 @@ const STAGED_REPOSITORIES: AppRepositoryLists = Object.fromEntries(
   ]),
 );
 
-/** The account's staged hosts, as the host holds them for Settings › Hosts: a Mac, a box on each update phase, and one gone quiet. */
 const STAGED_HOSTS: AppHosts = {
   [ACCOUNT_ID]: {
     rows: {
@@ -800,7 +700,6 @@ const STAGED_HOSTS: AppHosts = {
   },
 };
 
-/** The account's staged GitHub token, as the host holds it: a made-up hint, never a token. */
 const STAGED_GITHUB_TOKEN: AppGitHubTokens = {
   [ACCOUNT_ID]: {
     rows: {
@@ -816,7 +715,6 @@ const STAGED_GITHUB_TOKEN: AppGitHubTokens = {
   },
 };
 
-/** Each staged workspace's token repositories, as the host holds them: one a teammate added to Acme, and none in the personal workspace. */
 const STAGED_TOKEN_REPOSITORIES: AppTokenRepositories = {
   [WORKSPACE.ACME]: {
     rows: [
@@ -831,18 +729,10 @@ const STAGED_TOKEN_REPOSITORIES: AppTokenRepositories = {
   [WORKSPACE.PERSONAL]: { rows: [] },
 };
 
-/** The staged workspace's memories, as the host holds them for Settings › Memory; one object across deliveries. */
 const STAGED_MEMORIES: AppMemories = { [WORKSPACE.ACME]: { rows: MEMORIES } };
 
-/** The staged workspace's skills and the account's own, as the host holds them for Settings › Skills; one object across deliveries. */
 const STAGED_SKILLS: AppInstalledSkills = { [WORKSPACE.ACME]: { rows: skills(WORKSPACE.ACME) } };
 
-/**
- * The staged workspaces' own integrations, as the host holds them for
- * Settings › Workspace and an automation's editor: Acme's Sentry installed
- * and its Slack bot connected as the staged page first draws it, and the
- * personal workspace's offered with neither; one object across deliveries.
- */
 const STAGED_WORKSPACE_INTEGRATIONS: AppWorkspaceIntegrations = {
   [WORKSPACE.ACME]: {
     rows: {
@@ -872,19 +762,16 @@ const STAGED_WORKSPACE_INTEGRATIONS: AppWorkspaceIntegrations = {
   },
 };
 
-/** Acme's Slack channels, as the host holds Slack's list of them for an owner's Settings › Workspace; one object across deliveries. */
 const STAGED_SLACK_CHANNELS: AppSlackChannels = {
   [WORKSPACE.ACME]: {
     rows: (acmeSlackBot.channels ?? []).map(({ repository: _repository, ...channel }) => channel),
   },
 };
 
-/** The staged hosts' beats, every one but the one staged offline beating as the window first stages them, so they read online; one object across deliveries. */
 let stagedBeats: AppDevicePresences | undefined;
 
 function beatsStaged(): AppDevicePresences {
   if (stagedBeats !== undefined) return stagedBeats;
-  // Note that the beats are aged on the window's own clock, which no staged instant stands still for, so they beat as staging begins.
   const at = Date.now();
   stagedBeats = {
     [ACCOUNT_ID]: {
@@ -894,7 +781,6 @@ function beatsStaged(): AppDevicePresences {
   return stagedBeats;
 }
 
-/** The staged integrations as the host holds them for the account signed in, one object across deliveries. */
 const STAGED_INTEGRATIONS: AppIntegrations = {
   [ACCOUNT_ID]: {
     rows: {
@@ -905,20 +791,6 @@ const STAGED_INTEGRATIONS: AppIntegrations = {
   },
 };
 
-/**
- * Main's document as these profiles draw it: the fixture workspaces'
- * members held read, and under the signed-in profiles the account signed
- * in, an admin of the service, with the staged pages' experiments on, the
- * staged hosts beating, and its integrations, credentials, GitHub token,
- * servers' tools, the staged workspaces' token repositories, invitations,
- * own integrations, and Acme's Slack channels, and the staged workspace's
- * memories and skills held. The members are held under every profile rather
- * than only the signed-in ones, because ⌘K's People, a task's assignee and
- * creator faces, and the person page read them wherever the window stands.
- * Each slice laid over is one object across deliveries, but the settings,
- * which carry main's own, so a delivery that moves nothing of them draws
- * nothing again.
- */
 export function settingsAppState(profile: string, state: AppStateSnapshot): AppStateSnapshot {
   const held = { ...state, [LIVE_READ.WORKSPACE_MEMBERS]: HELD_MEMBERS };
   if (!SIGNED_IN_PROFILES.has(profile)) return held;
@@ -946,7 +818,6 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
   };
 }
 
-/** Main's settings with the staged experiments on, one object for each of main's. */
 const STAGED_SETTINGS = new WeakMap<
   NonNullable<AppStateSnapshot["settings"]>,
   NonNullable<AppStateSnapshot["settings"]>
@@ -962,18 +833,12 @@ function stagedSettings(
   return staged;
 }
 
-/**
- * What these profiles answer an act with, in place of main, held in a box so
- * an act that answers nothing is told from one left to main; none for a kind
- * their pages do not read, and under any other profile.
- */
 export function settingsActAnswer(
   profile: string,
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   if (!SIGNED_IN_PROFILES.has(profile)) return undefined;
-  // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its result.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;
   return answer === undefined ? undefined : { answer: answer(payload) };
 }

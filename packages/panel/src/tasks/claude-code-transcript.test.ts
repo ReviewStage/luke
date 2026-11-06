@@ -14,16 +14,6 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { newestTodos, taskTodos } from "./agent-todos.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
-/**
- * claude-code-transcript.test.ts -- a coding agent on Claude Code stores its
- * calls under the CLI's own tool names, with the CLI's own input and the text
- * the model read as the answer (`claude-code-moments.ts`), and its tab draws
- * each on the renderer our own tool of that kind draws on: its row's verb
- * and subject, and its input and answer once opened. A call to our own MCP
- * server is stored under our tool's name and its answer as that tool's
- * JSON, and is drawn as our tool always is. Synthetic paths and words.
- */
-
 const ESCAPE = String.fromCharCode(27);
 
 const roots: Root[] = [];
@@ -35,7 +25,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One part as the events route stores a Claude Code call: answered where `output` is given, still running where not. */
 function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRecord {
   return {
     type: `tool-${tool}`,
@@ -46,7 +35,6 @@ function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRe
   };
 }
 
-/** The parts drawn as one turn of the agent's, every target a row opens recorded, and its to-do lists placed as the tab places them where asked. */
 function drawn(part: WireRecord | readonly WireRecord[], todos = false) {
   const message: AgentTranscriptMessage = {
     id: "turn",
@@ -81,7 +69,6 @@ function drawn(part: WireRecord | readonly WireRecord[], todos = false) {
   return { container, opened };
 }
 
-/** What a row says on its line, and everything it shows once its fold is opened. */
 function opened(part: WireRecord): { readonly line: string; readonly body: string } {
   const { container } = drawn(part);
   const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
@@ -96,9 +83,7 @@ const CLI_CALLS: readonly {
   readonly tool: string;
   readonly input: WireRecord;
   readonly output: WireValue;
-  /** What the row's line says. */
   readonly line: readonly string[];
-  /** What its opened body shows, of its input and its answer. */
   readonly body: readonly string[];
 }[] = [
   {
@@ -249,7 +234,6 @@ test("Claude Code's Agent is drawn as a subagent's row, named by its description
   }).container;
   const line = settled.querySelector<HTMLElement>("[data-subagent-row]") ?? assert.fail("a row");
   act(() => line.click());
-  // With no worker's tab to read it in, the task and the answer fold open under the row.
   assert.ok(settled.textContent?.includes("Find every caller of invoiceTotal"));
   assert.ok(settled.textContent?.includes("Two callers round"));
 });
@@ -330,7 +314,6 @@ test("Claude Code's task calls are drawn as the agent's to-do list as it stood a
     ],
     true,
   );
-  // The newest list stands folded on a row of its own; the calls before it fold with the turn, as a whole list's writes do.
   const lines = [...container.querySelectorAll("summary")];
   const newest = lines.at(-1) ?? assert.fail("the newest list is a fold's line");
   assert.ok(newest.textContent?.includes("1 of 2 done"), newest.textContent ?? "");

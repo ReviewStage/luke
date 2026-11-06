@@ -1,8 +1,3 @@
-/* The byline's people (`DocumentByline`) each take a press a finger's
-   height on a coarse pointer, and at least as wide, centered on what they
-   draw; its lines part a little further there (`pointer-coarse:`), so one
-   line's press does not cover the next's words. The time is drawn whole
-   (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
 @media (pointer: coarse) {
   .description-byline [data-actor-ref] {
     position: relative;
@@ -20,13 +15,6 @@
   }
 }
 
-/* Who last changed a section, and when: the writer's face and a few
-   letters at the end of its heading's row (`description-body.tsx`'s `bylineOf`).
-   `--description-byline-room` holds a face and the widest of those letters, a date
-   such as "Sep 30"; `--description-unit-row-room` is what the row takes of the
-   column with its ⋯, which hangs `--ui-space-6` past the column's edge.
-   The theme reads both (`description-byline-room`, `description-unit-row`), and so does
-   the heading's room below. */
 .description-body {
   --description-byline-room: 64px;
   --description-unit-row-room: calc(
@@ -37,15 +25,10 @@
   );
 }
 
-/* A description's task item the developer can tick from the drawn description says so. */
 .description-unit li.task-list-item input[type="checkbox"]:enabled {
   cursor: var(--ui-cursor-press);
 }
 
-/* A section's heading wraps short of the row at its end, so the byline and
-   the ⋯ never stand over its words, however long it runs. The room is kept
-   whether or not they are shown, and in the editor too, so no heading
-   rewraps as the pointer comes and goes or as the text opens to be edited. */
 .description-unit-attributed > .description-unit > .ui-markdown-heading:first-child,
 .description-document-editor
   .description-unit
@@ -53,26 +36,14 @@
   padding-right: var(--description-unit-row-room);
 }
 
-/* Where a section has no ⋯, its byline's row (`description-body.tsx`'s
-   `attributed`) keeps the ⋯'s room, so every byline ends at one edge. */
 .description-unit-row:not(:has(.description-unit-more)) {
   padding-right: calc(var(--ui-control-height) + var(--ui-space-4));
 }
 
-/* A section's ⋯ (`description-body.tsx`'s `UnitMenu`) stays drawn while its menu
-   stands, as every ⋯ does. */
 .description-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
 }
 
-/* A chip held with its punctuation (`.link-glued`, `@repo/ui`'s prose.css) is capped
-   by its length alone, because the box it stands in is the one held to the
-   column, and the chip in it already gives way before it would push its
-   comma past the edge. Note that a share of the column would not do: the
-   box takes its width from the chip, so the share has nothing to resolve
-   against while it does, Chromium reads the cap as none, and the box keeps
-   the room of the whole name as a gap after the chip it then cuts, washed
-   where a version's change mark holds the chip. */
 .link-glued [data-mention-ref] {
   max-width: var(--ui-inline-ref-pill-width);
 }
@@ -81,40 +52,24 @@
   max-width: var(--ui-inline-ref-pill-stated-width);
 }
 
-/* A narrowed list stands under its kind's crumb, as an MCP server's page
-   stands under its own; a kind typed with its colon has no back arrow, so
-   its glyph keeps the rows' inset. */
 .mention-menu-crumb:not(:has(button)) {
   padding-left: calc(var(--row-inset) + var(--ui-menu-inset));
 }
 
-/* The text open in its editor, in the document's own type, so the words do
-   not jump as it opens or closes. */
 .description-document-editor > * + * {
   margin-top: 0.5em;
 }
 
-/* The space between two sections, resolved at the text's own size so a
-   heading's own size does not scale it, as the drawn sections' gap is. */
 @property --description-section-gap {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
 
-/* The whole text in its editor (`description-editor/description-editor.ts`), over the read
-   view's classes. TipTap draws a heading and a paragraph as elements of
-   their own, where the read view draws every block as a margin-less
-   paragraph, so these give them the read view's box; a heading keeps the
-   read view's class and level, and a section's heading the gap the drawn
-   sections stand apart by. The margins are cleared at no weight of their
-   own (`:where`), so the spacing the two views share between a block's
-   children, a quote's paragraphs apart as the read view draws them, still
-   stands over the clearing. */
 .description-document-text {
   --description-section-gap: 1.5em;
   caret-color: var(--accent);
-  outline: none; /* no ring: a document, or a well that rings for it */
+  outline: none;
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -123,29 +78,17 @@
   margin: 0;
 }
 
-/* Note that the first three levels keep prose's sizes (`@repo/ui`'s
-   prose.css), as the read view does, so a heading does not shrink to the
-   text's size as its section opens. */
 .description-document-text :is(h4, h5, h6),
 .description-document-text p {
   font-size: inherit;
 }
 
-/* Note that a drawn section's heading margin collapses with the gap above
-   its section, so the larger of the two stands: the heading's own (desktop.css),
-   since it is measured at the heading's larger size. A heading in the editor
-   stands that larger one, so opening the text does not pull each section up
-   onto the one before it. An h3 after a block keeps its own margin, as it
-   does drawn, from desktop.css. */
 .desktop-document
   .description-document-text
   > .ui-markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
   margin-top: max(var(--description-section-gap), 1.6em);
 }
 
-/* A link the read view draws as a mention's chip wears the chip's light look
-   while its section is edited, so opening the section does not turn its
-   chips into underlined words; its glyph is the read view's alone. */
 .description-document-text a.description-mention-link {
   padding: 0 var(--ui-tight-gap);
   color: inherit;
@@ -156,9 +99,6 @@
   box-decoration-break: clone;
 }
 
-/* What the empty block under the caret says, drawn before its words: the
-   empty description's own words, an empty line how to open the `/` menu, an empty
-   heading its level's name (`description-editor.ts`'s `placeholderOf`). */
 .description-document-text > .is-empty::before {
   float: left;
   height: 0;
@@ -167,22 +107,14 @@
   pointer-events: none;
 }
 
-/* A task item as TipTap draws it: its box, which the panel draws as the read
-   view does and which stands in the read view's own place by its rules
-   (`@repo/ui`'s prose.css), and its words in a block of their own after it,
-   which start on the box's line. */
 .description-document-text li[data-checked] > div {
   margin-top: 0;
 }
 
-/* A loose task list, its items a blank line apart, opens as a list per item,
-   which stand an item's gap apart, as the read view's one list does. */
 .description-document-text ul[data-type="taskList"] + ul[data-type="taskList"] {
   margin-top: 0.25em;
 }
 
-/* What the editor keeps byte for byte but does not draw as its own: inline
-   HTML, a footnote, a link's definition, a block of HTML. */
 .description-raw-block {
   margin: 0;
   color: var(--ui-color-text-muted);
@@ -190,21 +122,10 @@
   white-space: pre-wrap;
 }
 
-/* What stands under the editor (`markdown-editor.tsx`'s
-   `EDITOR_NOTE_CLASS`) opens its own gap over it. Note that it is a rule
-   here rather than a utility, because it has to outrank the editor's own gap
-   between its children above, which a utility's layer never would. */
 .description-editor-note {
   margin: var(--ui-item-gap) 0 0;
 }
 
-/* The rhythm of a transcript's log (../ai-elements/conversation.tsx) and of
-   a message's blocks (../ai-elements/message.tsx): its lines a step apart,
-   and a message's blocks a control's gap. They sit in the components layer,
-   under every utility and every surface's own rule, so a line's own margin
-   (a working line's, a finished turn's) still says the last word, and a
-   message's weighs nothing at all, so a block's own margin wins wherever it
-   is set. */
 @layer components {
   .conversation-log > :not(:last-child) {
     margin-block-end: var(--ui-block-gap);
@@ -215,34 +136,23 @@
   }
 }
 
-/* A message's actions, their glyphs the control icon whichever way each is
-   drawn, a copy's glyph inside its own swap. */
 .ui-message-actions svg {
   width: var(--ui-control-icon);
   height: var(--ui-control-icon);
 }
 
-/* A crumb's tree (file-breadcrumbs.tsx), hung under the crumb on a menu's
-   surface, is a place the desktop's window is not dragged by; it holds the
-   keyboard itself only until the tree takes it, or where the tree has no row
-   to, which shows no ring, and its tree floats on the menu's ground. */
 [data-ui-profile="desktop"] .file-crumb-tree {
   -webkit-app-region: no-drag;
 }
 
 .file-crumb-tree:focus {
-  outline: none; /* no ring: the tree's own row carries it */
+  outline: none;
 }
 
 .file-crumb-tree .file-tree-host {
   --trees-bg-override: var(--ui-color-overlay);
 }
 
-/* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
-   shells, stands there while the panel holds it open or it slides out; it
-   may be drawn for its place over the tab alone, which a wide panel does
-   not show (`usePaneRoom`). Note that each rule here and under the query
-   names one selector, so each weighs only its own. */
 .file-view[data-pane-beside="false"] :is(.file-tree-pane, .terminal-shells) {
   display: none;
 }
@@ -251,10 +161,6 @@
   display: none;
 }
 
-/* While Files changed's tree is hidden, a strip stands in its place
-   (changes-strip.tsx, `@repo/ui`'s MarkStrip); the pointer resting on it
-   peeks the tree out over the list, as a pane floats where the panel is too
-   narrow for it (below). This says when it is drawn and its edge. */
 .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
   display: flex;
   width: var(--ui-space-12);
@@ -262,21 +168,10 @@
   border-left: 1px solid var(--ui-color-border);
 }
 
-/* The tree peeked from the strip, or opened over the list, floats on the
-   window's floating surface (`OverPane`): its host takes that ground. */
 .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-host {
   --trees-bg-override: var(--ui-color-overlay);
 }
 
-/* A panel too narrow for a tab and its pane side by side floats the pane
-   over the tab's right edge instead (`usePaneRoom`, `OverPane`): its toggle
-   moves to the place that opens it, and the strip gives way. Each pane folds
-   at its own width: a tree below a 550px panel, where its share of the panel
-   would fall under its least width (`FILE_TREE_WIDTH.MIN`), so at the
-   panel's default width (`SIDE_PANEL_WIDTH.DEFAULT`) the code or diff has
-   the whole tab and the tree is a hover away. A Terminal tab's shells fold
-   at their own width (below). */
-/* off-scale: 550px, where 40% of the panel is the tree's least width, 220px */
 @container side-panel (width < 550px) {
   .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
     display: none;
@@ -291,8 +186,6 @@
   }
 }
 
-/* A narrow room, a phone's, floats the tree the same way whatever it held
-   for the desktop (`usePaneRoom`, `OverPane`). */
 :where(:root)[data-ui-room="narrow"]
   .desktop-shell
   .file-view[data-pane-beside="false"]
@@ -312,9 +205,6 @@
   display: flex;
 }
 
-/* A Terminal tab's shells float the same way below a 480px panel (`OverPane`),
-   so the screen beside them never falls under forty columns: at the panel's
-   default width the screen has the whole tab, the shells a hover away. */
 @container side-panel (width < 480px) {
   .terminal-tab .file-tree-toggle[data-place="beside"] {
     display: none;
@@ -325,8 +215,6 @@
   }
 }
 
-/* A narrow panel counts a page's versions without words between the steps
-   (page-pane.tsx), leaving the page's title its room. */
 .page-view-version-count {
   display: none;
 }
@@ -341,11 +229,6 @@
   }
 }
 
-/* A page's comments (page-pane.tsx) stand in a pane beside the page, as
-   wide as it was last dragged and never over half the row, past a
-   hairline; sliding out, it stands over the page's right edge, its resize
-   edge gone. In a panel too narrow for both, the pane stands over the page
-   instead, undragged, and steps aside while the page is picked in. */
 .page-comments-column {
   position: relative;
   display: flex;
@@ -385,11 +268,6 @@
   }
 }
 
-/* A page's comments over the page (description-comments.tsx's PageCommentLayer):
-   the layer takes no press but its own; each pin's pointed corner, its
-   upper right one, touches its element's top left corner, the pin beside it,
-   or inside the corner where the room has none beside it, the line comment mode says stands over the page's
-   top, and a card by an element is a comment card's width. */
 .page-comment-layer {
   position: absolute;
   inset: 0;
@@ -426,10 +304,6 @@
   max-width: 100%;
 }
 
-/* The threads open by an element stand no taller than the room their side
-   of it leaves (`--ui-popover-room`, which their float measures), so a
-   card's entries scroll inside it with its reply field in view under them,
-   as an open card over the description does, and several scroll together. */
 .page-comment-threads {
   display: flex;
   max-height: var(--ui-popover-room);
@@ -443,35 +317,16 @@
   flex-direction: column;
 }
 
-/* The sheet rounds its corners without clipping what it holds (shell.css), so
-   a page's white, or a file's ground in a theme of its own, would stand to a
-   square corner at the rounded sheet's. A page's room, its frame or its
-   source, and a file view's body clip their own bottom corners to the
-   sheet's radius, which a narrow room, full bleed, does not have. */
 :where(:root):not([data-ui-room="narrow"]) :is(.page-view-room, .file-view-body) {
   overflow: clip;
   border-radius: 0 0 var(--sheet-radius, 0) var(--sheet-radius, 0);
 }
 
-/* A cloud Browser tab's quiet line over its page (cloud-browser-pane.tsx)
-   keeps to a readable measure. */
 .cloud-browser-body > .cloud-browser-notice > .ui-text {
   max-width: 32em;
   text-align: center;
 }
 
-/* The agent's pointer over a cloud Browser tab (cloud-browser-cursor.tsx):
-   an arrow over the drawn page, never in its frame, taking no pointer
-   events. It stands at the agent's point, scaled onto the page by the
-   component, and glides to each new one over --ui-duration-fast on
-   --ui-spring-fast, about the beat its action waits; a still pointer jumps.
-   While the agent is active it rocks about its tip, and fades once it is
-   not. A click presses it once it has arrived, with a ripple at the point;
-   typing bobs it, with a glow of its amber under it. It is a compact
-   arrowhead in the accent, the dark mode's brighter amber over a dark page,
-   with a white edge and a small shadow, so it reads on any page, an accent
-   button included. The rock and the bob are endless loops held by
-   --ui-loop-motion, so their periods may be literals (docs/DESIGN.md). */
 .cloud-browser-cursor {
   position: absolute;
   top: 0;
@@ -496,8 +351,6 @@
   transform-origin: 0 0;
 }
 
-/* Near the page's right or bottom edge the arrow is mirrored about its tip,
-   so its body stays on the page; the rock turns it with `rotate` alone. */
 .cloud-browser-cursor[data-flip-x] .cloud-browser-cursor-rock {
   scale: -1 1;
 }
@@ -539,8 +392,6 @@
   border-color: var(--agent-pointer-on-dark);
 }
 
-/* The glow behind the arrowhead while the agent types, centered a little
-   inside it from the tip, in the arrow's own amber. */
 .cloud-browser-cursor-halo {
   position: absolute;
   top: calc(var(--ui-space-6) - var(--ui-space-40) / 2);
@@ -632,9 +483,6 @@
   }
 }
 
-/* The Comment press floating over code selected as text (diff-list.tsx),
-   on `@repo/ui`'s toolbar: above the words' middle, or under them where the
-   list's top leaves no room, at the point the list measured. */
 .diff-list-offer {
   position: absolute;
   z-index: 3;
@@ -647,30 +495,18 @@
   transform: translate(-50%, var(--ui-space-4));
 }
 
-/* Pierre's own container, which it draws the files into inside the scroller. */
 [data-diff-list-scroller] > :first-child {
   padding-inline: var(--ui-list-inset);
 }
 
-/* A file's letter in its header stands at least a step wide. Note that this
-   stays a rule, because the summary it stands in gives each of its children
-   `min-w-0` through a child selector, which outranks a utility here. */
 .diff-list-head .file-view-status {
   min-width: var(--ui-space-16);
 }
 
-/* The file stage-cli's keys stand on is marked as a selected card is: the
-   card's own edge, Pierre's file element the header stands in, drawn in the
-   selected edge's ink, around the folded header or the whole open file. It
-   says which file the keys act on, not where the focus is: the keyboard's
-   focus rings the control in the header that holds it, as every control is
-   ringed (base.css), so the card never wears a second border or a ring. */
 .diff-list diffs-container:has(.diff-list-head[data-standing]) {
   border-color: var(--ui-color-border-selected);
 }
 
-/* A changed image's pictures (image-diff.tsx), each on a checkerboard that
-   shows what is transparent, held to the list's column. */
 .image-diff-picture,
 .image-diff-stack {
   max-width: 100%;
@@ -684,10 +520,6 @@
   object-fit: contain;
 }
 
-/* The two sides stand in one cell of a grid, as large as the larger, the
-   after over the before: each fills the cell, scaled to fit, on a
-   checkerboard of its own, so the after at full strength or swiped all the
-   way hides the before however their sizes differ. */
 .image-diff-stack {
   display: grid;
 }
@@ -700,17 +532,6 @@
   background-color: var(--ui-color-code-ground);
 }
 
-/* Pierre's tree draws in a shadow root of its own, which inherits these:
-   the panel's words, its fills, and its focus ring, so the tree reads as
-   the panel's own list, beside a File tab and under a crumb alike. The ring
-   is the window's width drawn inside the row, because the tree's scroller
-   lays its rows edge to edge with no room for one outside. Its ground is
-   the opaque ground it stands on, never transparent, because the tree
-   cuts a long name in its middle by painting the cut over in that ground:
-   a transparent one drew both halves of the name over one another. The
-   open file's row is drawn as every list draws its open row (`@repo/ui`'s
-   ListRow `current`): the work sheet's ground here, its hairline and
-   shadow in the tree's own sheet (`row-marks.ts`). */
 .file-tree-host {
   --trees-bg-override: var(--ui-color-well);
   --trees-bg-muted-override: var(--ui-color-fill-hover);
@@ -731,9 +552,6 @@
   --trees-git-renamed-color-override: var(--ui-color-working);
 }
 
-/* The tree rings whichever row holds focus, a pressed one too, so until the
-   keyboard has moved focus its ring is drawn in no color at all, as every
-   other control's is drawn not at all (base.css). */
 :root:not([data-keyboard="true"]) .file-tree-host {
   --trees-focus-ring-color-override: transparent;
   --trees-selected-focused-border-color-override: transparent;
@@ -745,9 +563,6 @@
   flex: 1;
 }
 
-/* Each tree the pane may show draws in a frame of its own, the one not
-   standing hidden; the host itself is hidden while words stand in the
-   tree's place (file-tree-pane.tsx's `FileTreeStage`). */
 .file-tree-view {
   display: flex;
   min-height: 0;
@@ -759,54 +574,21 @@
   display: none;
 }
 
-/* A reviewer's standing at a face's corner in a facepile
-   (`pull-request-people.tsx`'s `FaceBadge`): its glyph cut from the disc at
-   the badge's size. */
 .actor-stack-badge > .review-face-badge > svg {
   width: 7px;
   height: 7px;
   stroke-width: 4;
 }
 
-/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
-   as few rows as it can, the pull request's standing as a pill in its own
-   color beside its title, over the page read top to bottom in one
-   scroller, its sections each under a quiet heading.
-
-   It keeps to the panel's top row's two edges, so the tab reads down from
-   the strip above it: whatever is boxed or edged (the pill, the merge
-   control, the checks, a comment) stands at the row's inset, where a tab's
-   chip does, and every word and glyph at the content inset, where a tab's
-   glyph does, a box holding its own at a row's inset within; each row's
-   last control ends where the row's last control ends, as every tab's
-   bar's does (`PaneBar`). A boxed thing's hairline counts toward its inset
-   (`--boxed-inset`), so what it holds lands on the content inset to the
-   pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
-  /* The band a section's heading sticks at in the Conversation, never
-     shorter than the controls it holds, so a finger's 44px filter on the
-     web stands inside it rather than over what scrolls beneath. */
   --pull-request-band: max(var(--ui-scroll-band), var(--ui-control-height));
-  /* Note that the tab isolates its stacking, so its header, raised over its
-     own rows, rises over nothing outside the tab; and answers its own width,
-     so its tabs' row folds by the room the tab has wherever it stands. */
   isolation: isolate;
   container: pull-request-tab / inline-size;
 }
 
-/* The Chapters view (agent-chapters-tab.tsx): the chapters' rail docked at
-   its left, as Files changed's tree docks at its right, and the chapter
-   chosen beside it, its head over its own Files changed list. The rail is
-   as wide as the tree stands by default, slides in past the view's left
-   edge and out over the chapter (`usePaneSlide`), so the body clips what
-   stands past it, with `clip` rather than `hidden`, and leaves a strip of
-   one mark a chapter while hidden. */
 .chapters-view {
   --chapter-rail-width: calc(var(--ui-space-64) * 4);
-  /* The least the chapter reads at: its bar, three lines of its brief, and
-     the least of its files (below). Its strip is as wide as keeps each mark
-     clear of the edge it stands at, a window's or the panel's. */
   --chapter-brief-least: calc(3 * var(--ui-type-body-leading) + var(--ui-list-inset));
   --chapter-reading-least: calc(
     2 *
@@ -817,18 +599,11 @@
   --chapter-strip-width: var(--ui-space-20);
 }
 
-/* Note that the body never stands shorter than the chapter's least, so a
-   window too short for it lets the Pull request tab scroll (below) rather
-   than slicing the brief or pushing its files out past the body's clip. */
 .chapters-body {
   position: relative;
   min-height: var(--chapter-reading-least);
 }
 
-/* A window too short for the header, the tabs and the chapter's least
-   scrolls the Pull request tab as one while Chapters is shown, the header
-   leaving the top, so every part of the chapter reads whole. Any view
-   with no least of its own fills the room as before and never scrolls it. */
 .pull-request-tab:has(> .pull-request-view:not([hidden]) > .chapters-view) {
   overflow-y: auto;
 }
@@ -842,8 +617,6 @@
   border-right: 1px solid var(--ui-color-border);
 }
 
-/* Which model told the chapters, quiet under the rail's rows at its foot,
-   its words where a row's title stands. */
 .chapter-rail-credit {
   flex: none;
   padding: var(--ui-tight-gap) calc(var(--ui-list-inset) + var(--ui-row-inset)) var(--ui-list-inset);
@@ -857,17 +630,12 @@
   background: var(--ui-color-well);
 }
 
-/* Note that the rail hidden beside the chapter is hidden only where it can
-   stand beside it, so a panel narrowed since still floats it when asked. */
 @container side-panel (width >= 640px) {
   .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
     display: none;
   }
 }
 
-/* While the rail is hidden, a strip stands in its place (`MarkStrip`), one
-   mark for each chapter in its risk's color, as Files changed's strip
-   stands for its tree; this box says when it is drawn and its edge. */
 .chapter-strip {
   display: none;
 }
@@ -887,17 +655,11 @@
   display: none;
 }
 
-/* The chapter's files under the brief keep at least a bar's height of
-   the diff, so in a short window the brief gives way to them rather than
-   squeezing them out past the body, and whatever they still cannot fit is
-   cut at their own edge, never drawn over it. */
 .chapter-reading > .file-view {
   min-height: var(--ui-pane-bar-height);
   overflow: clip;
 }
 
-/* The chapter's bar holds its list's own tools (`ChangesBarHost`), spaced
-   as the bar's actions are, and nothing while the chapter draws no list. */
 .chapter-list-tools {
   display: flex;
   align-items: center;
@@ -908,10 +670,6 @@
   display: none;
 }
 
-/* The brief lines up with the chapter's bar over it: its fold's chevron
-   under the rail toggle's glyph, which stands a control's inset in from the
-   bar's edge, and its heading and its words under the chapter's title,
-   which stands a control's gap past the toggle. */
 .chapter-brief {
   --chapter-glyph-inset: calc((var(--ui-control-height) - var(--ui-control-icon)) / 2);
   --chapter-words-gap: calc(var(--chapter-glyph-inset) + var(--ui-control-gap));
@@ -932,9 +690,6 @@
   );
 }
 
-/* A panel too narrow for the rail beside the chapter floats it over the
-   chapter's left edge instead (`OverPane`), away until its toggle or its
-   strip opens it; the strip always stands for it. */
 @container side-panel (width < 640px) {
   .chapters-view .chapter-strip {
     display: flex;
@@ -952,20 +707,12 @@
   }
 }
 
-/* A Pull request tab as narrow as a phone's folds the chapter's risk chip
-   away, so its title keeps room beside Viewed, the pager, and the list's
-   tools; the rail's row still marks the risk in its color and says it. */
-/* off-scale: 480px, where the bar's controls leave the title no room beside the chip */
 @container pull-request-tab (width < 480px) {
   .chapter-risk {
     display: none;
   }
 }
 
-/* The list's tree toggle in the chapter's bar moves to the place that opens
-   the tree as the File view's own does (above): over the list below a 550px
-   panel, and in a narrow room. */
-/* off-scale: 550px, the File view's own fold for its tree */
 @container side-panel (width < 550px) {
   .chapter-list-tools .file-tree-toggle[data-place="beside"] {
     display: none;
@@ -990,63 +737,34 @@
   display: flex;
 }
 
-/* The tabs' row under the header, Review at its end while the pull request
-   is open, gives way in steps as the tab narrows, so every tab keeps its
-   name for as long as it can and none is named while the others are not:
-   first Review folds to a square around its glyph, which wears its count,
-   its word left to its hint; then the tabs take in their room; and only once their names no
-   longer fit do they fold, every one to its glyph at once
-   (`CHOICE_BAR_FOLD.TOGETHER`), about 480px with counts of a usual size. */
-/* off-scale: 650px, where Review's word stops fitting beside the tabs */
 @container pull-request-tab (width < 650px) {
   .pull-request-tab > .ui-pane-bar .pull-request-review {
     --ui-fold: folded;
   }
 }
 
-/* off-scale: 560px, where the tabs' room is taken in */
 @container pull-request-tab (width < 560px) {
   .pull-request-tab > .ui-pane-bar {
     --ui-fold: tight;
   }
 }
 
-/* The fixed header: the pill, the title, and the merge control in one
-   row, the pull request's Refresh and Open on GitHub in the side panel's
-   own ⋯ above it, then the branches, who opened it and its reviewers in one line,
-   standing put while the tab under it scrolls. It answers its own width,
-   so a narrow header shortens the merge control's words. It and the row of
-   tabs under it span the whole panel at the strip's own inset, however
-   wide, so the merge control and Review stand at the panel's edge; only the
-   views under them keep to the reading measure. */
 .pull-request-header {
   container: pull-request-header ui-room / inline-size;
 }
 
-/* The title's row: the pill at the row's inset, the title taking the room
-   between, wrapping beside the controls rather than under them, and the
-   controls at the row's end, each level with the title's first line rather
-   than centered on a title wrapped to two. The title's first line stands the
-   controls' height, so one of a single line reads level with them. */
 .pull-request-title-row {
   display: flex;
   min-width: 0;
   align-items: flex-start;
   gap: var(--ui-control-gap);
-  /* Note that Tab walks a roomy row as it is drawn, the pill before the
-     title's pencil, where the browser reads `reading-flow`, as the
-     desktop's does; a narrow row is drawn in the markup's order (below). */
   reading-flow: flex-visual;
 }
 
 .pull-request-state {
   display: flex;
   flex: none;
-  /* Note that the pill is drawn ahead of the title it follows in the
-     markup, where a screen reader names the title first. */
   order: -1;
-  /* The pill, a badge's height, stands centered in a control's height, the
-     height of the title's first line and of the controls. */
   margin-block: calc((var(--ui-control-height) - var(--ui-space-20)) / 2);
 }
 
@@ -1065,11 +783,6 @@
   margin-inline-start: auto;
 }
 
-/* A narrow header, a phone's or the side panel's at its least, gives the
-   title a line of its own over the pill and the controls, which stand
-   under it at the row's two ends; beside them it would wrap a word to a
-   line. The row is then drawn in the markup's order, the title first. */
-/* off-scale: 520px, kept inclusive, as the side panel at its least still draws the title on its own line */
 @container pull-request-header (width <= 520px) {
   .pull-request-title-row {
     flex-wrap: wrap;
@@ -1086,9 +799,6 @@
     padding-block: 0;
   }
 
-  /* Note that Preview, Run, and the merge control together may outgrow the
-     side panel at its least, so they wrap onto lines of their own, held to
-     the row's end, rather than run past an edge that clips them. */
   .pull-request-title-actions {
     min-width: 0;
     flex: 0 1 auto;
@@ -1097,16 +807,6 @@
   }
 }
 
-/* On a phone the header would hold half the screen over the view under it,
-   so it folds away over the view as the view scrolls, at the finger's own
-   pace, to its title's one line, and back as the view returns to its top
-   (`useHeaderFold`, which writes the properties read here on the tab's
-   root). The header and the tabs under it stand over the view's top by the
-   room the header folds away (`--pull-request-fold-room`), and slide up by
-   as far as the view is scrolled (`--pull-request-fold`), so they uncover
-   what the view holds rather than moving it. Note that the header is cut at
-   its own top as it slides, so it never passes over what stands above the
-   tab, while the merge control's panel hung from its foot stands whole. */
 .pull-request-tab[data-header-fold] > .pull-request-header,
 .pull-request-tab[data-header-fold] > .ui-pane-bar {
   translate: 0 calc(-1 * var(--pull-request-fold, 0px));
@@ -1118,8 +818,6 @@
   clip-path: inset(var(--pull-request-fold, 0px) -100vmax -100vmax);
 }
 
-/* Note that the tabs' own fill is translucent, so it is laid over the
-   panel's ground, or what scrolls under them would show through. */
 .pull-request-tab[data-header-fold] > .ui-pane-bar {
   position: relative;
   z-index: 2;
@@ -1128,11 +826,6 @@
     var(--ui-color-well);
 }
 
-/* The room stands at the top of what the shown view's scroller holds where
-   that scroller leads its view, and scrolls away under the header; the diff
-   list takes it as its own (`DiffListTopRoomContext`). Note that it is a box
-   of its own rather than the scroller's padding, because a heading stuck to
-   the scroller's top sticks inside its padding. */
 .pull-request-tab[data-header-fold][data-fold-lead] > .pull-request-view > .ui-scroll-area::before,
 .pull-request-tab[data-header-fold][data-fold-lead]
   > .pull-request-view
@@ -1142,17 +835,10 @@
   content: "";
 }
 
-/* Where something stands over the scroller, a chapter's bar or a notice,
-   the view itself opens with the room and gives it up as the header folds,
-   so what stands there is never under the header. */
 .pull-request-tab[data-header-fold]:not([data-fold-lead]) > .pull-request-view {
   padding-top: calc(var(--pull-request-fold-room, 0px) - var(--pull-request-fold, 0px));
 }
 
-/* The title's one line, over the header's foot, fading in as the full
-   title passes under it (`CompactTitle`). Once folded, what stands under it
-   is hidden, so neither the keyboard nor a press reaches a control it
-   covers. */
 .pull-request-compact {
   position: absolute;
   inset-inline: 0;
@@ -1167,28 +853,14 @@
   visibility: hidden;
 }
 
-/* The Conversation's scroller ends a page's inset short of the foot. */
 .pull-request-page {
   padding-bottom: var(--ui-page-inset);
 }
 
-/* On the web, the Conversation's scroller (`.pull-request-page`) stands at
-   the wider column a web `DetailPage` does, so the Conversation and the
-   Checks wrap alike there too. */
 [data-ui-profile="web"] .pull-request-page {
-  --pull-request-page-measure: 1040px; /* off-scale: detail-page.css's web measure */
+  --pull-request-page-measure: 1040px;
 }
 
-/* A section's heading that folds it, and the comment box's, stuck to the
-   scroller's top while its section is in view, on the panel's own ground so
-   nothing shows through; the next section's heading pushes it off, since a
-   sticky box stands only inside its own section. It is held at the
-   scroller's band (`SCROLL_FADE_INSET.BAND`), because the fade begins
-   beneath that band: taller,
-   it would slice what passes under its foot, and shorter, it would fade
-   its own. The whole row presses as a `DisclosureSummary` does: the chevron
-   leading at its inset and the row filled under the pointer; what stands at
-   its end stands beside it (`DisclosureFrame`), on the same band. */
 .pull-request-section-fold > .ui-disclosure-summary,
 .pull-request-page .pull-request-comment-box > .pull-request-heading {
   position: sticky;
@@ -1214,12 +886,6 @@
   white-space: nowrap;
 }
 
-/* The fill under the pointer, a disclosure row's (disclosure.css) at the
-   control's height and corner, drawn inside the band rather than on it, so
-   the band stays opaque to its corners while what scrolls passes under it.
-   Note that it sits under the row's words, the band being a stacking
-   context of its own, and lights only while the pointer is on the row,
-   since what stands at its end stands beside it. */
 .pull-request-section-fold > .ui-disclosure-summary::before {
   position: absolute;
   z-index: -1;
@@ -1248,8 +914,6 @@
   }
 }
 
-/* The cell beside the heading's row holding what stands at its end, on
-   the band and held with it. */
 .pull-request-section > .ui-disclosure-frame > .ui-disclosure-actions {
   position: sticky;
   top: 0;
@@ -1261,14 +925,10 @@
   background: var(--ui-color-well);
 }
 
-/* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under
-   the row, so its first section adds none. */
 .pull-request-section:first-child {
   margin-top: 0;
 }
 
-/* A foot inside the frame (`reply-form.tsx`) reaches the frame's own edge
-   rather than the words' inset, as it does in every other frame. */
 .comment-editor-frame > .ui-composer-foot {
   margin-inline: calc(-1 * var(--ui-control-inset));
 }
@@ -1277,8 +937,6 @@
   padding-inline-end: calc(var(--ui-control-height) + var(--ui-space-4));
 }
 
-/* A suggested change is GitHub's ```suggestion block, drawn under its name
-   rather than as code in a language, as the transcript heads one. */
 .comment-editor-text pre:has(> code.language-suggestion)::before {
   display: block;
   margin-bottom: var(--ui-tight-gap);
@@ -1289,20 +947,14 @@
   font-weight: var(--ui-weight-medium);
 }
 
-/* Who opened it and when, one phrase after their face. */
 .pull-request-branch-row > .pull-request-branches {
   flex: 0 1 auto;
 }
 
-/* The labels at the end of the header's line of people, after the
-   pickers: they keep to that line while they fit, and wrap onto the next
-   as one compact group where they do not. */
 .changes-people.pull-request-people > .pull-request-labels {
   min-width: 0;
 }
 
-/* The words that stand on the page rather than in a box, at the content
-   inset. */
 .pull-request-title,
 .changes-people.pull-request-people {
   padding-inline: var(--row-inset);
@@ -1313,13 +965,6 @@
   user-select: text;
 }
 
-/* The title edited in place (`pull-request-writes.tsx`): its pencil stands
-   faint after the number until the title is hovered or the pencil focused,
-   the two wrapping as one. The pencil takes no room on the line, so it
-   never wraps onto a line of its own: it overhangs the title's end into its
-   inset and the header's own (`--column-inset`), the title keeping just
-   enough of an inset that the two hold it. The field takes the title's own
-   type and room. */
 .pull-request-title.pull-request-title-editable {
   padding-inline-end: max(
     var(--row-inset),
@@ -1327,9 +972,6 @@
   );
 }
 
-/* Beside the pill, the title starts at the row's gap, and the controls
-   after it take the pencil's overhang, so it keeps the pencil's room
-   itself. */
 .pull-request-title-row > .pull-request-title {
   padding-inline-start: 0;
 }
@@ -1363,8 +1005,6 @@
   }
 }
 
-/* A finger has no hover to bring the pencil, and an unseen one still takes
-   a tap at the title's end, so a touch screen shows it at rest. */
 @media (hover: none) {
   .pull-request-title-edit {
     opacity: 1;
@@ -1380,12 +1020,6 @@
   font-weight: var(--ui-weight-regular);
 }
 
-/* Its branches, who opened it, its reviewers and its labels, one line
-   standing on the page rather than across it, wrapping under the title
-   row, its edge the pill's. A hairline stands in the gap between each two
-   groups; one that would lead a wrapped line falls outside the row's box,
-   which clips it, while a focus ring or a face's badge at a line's start
-   stays within the room the clip leaves. */
 .changes-people.pull-request-people {
   --people-gap: var(--ui-space-16);
   gap: var(--ui-item-gap) var(--people-gap);
@@ -1411,21 +1045,10 @@
   content: "";
 }
 
-/* The merge control at the title row's end (`merge-box.tsx`), as
-   stage-cli's merge status stands: a status chip at the pill's size saying
-   what holds the merge up, then the one press. A narrow header draws the
-   chip's glyph alone, its word still read, so the press keeps its words and
-   nothing runs past the row. It stands a control's height with or without
-   a press, so a chip alone is level with the title's first line too. */
 .pull-request-section {
   margin-top: var(--ui-space-20);
 }
 
-/* A part of the overview still being read: its blocks in the type its
-   words will stand in, at the content inset. The title, the people line,
-   the checks, and the conversation stand theirs in their own boxes
-   (`agent-pull-request-tab.tsx`). A part whose read failed says so in the
-   same place, with its Retry. */
 .pull-request-skeleton {
   padding-inline: var(--row-inset);
 }
@@ -1438,8 +1061,6 @@
   margin-top: var(--ui-item-gap);
 }
 
-/* A description with no words, where the member may write them, says so
-   where the editor's placeholder will, in its type. */
 .pull-request-description-text.description-document-text > * {
   margin-block: 0;
 }
@@ -1468,15 +1089,11 @@
   padding-left: 0;
 }
 
-/* A task item open in the description's editor stands its box before its
-   words' block, the box apart from them by its own margin, as drawn below. */
 .pull-request-description-text.description-document-text li[data-checked] {
   display: flex;
   align-items: baseline;
 }
 
-/* A task list stands as GitHub draws one: its boxes, the shared read-only
-   `Checkbox` (`@repo/ui/markdown`), in the bullets' place. */
 .pull-request-words ul:has(> li > .ui-markdown-task) {
   padding-left: 0;
   list-style: none;
@@ -1487,9 +1104,6 @@
   vertical-align: middle;
 }
 
-/* A picture GitHub's rendering names, read through the service: as wide as
-   the words around it at most, at its own shape, and a quiet box of a
-   screenshot's shape while it is read. */
 .pull-request-picture-skeleton {
   display: inline-block;
   width: min(100%, 240px);
@@ -1502,35 +1116,18 @@
   white-space: nowrap;
 }
 
-/* A Conversation thread's card answers its own width, as one on a line does. */
 .pull-request-thread-slot {
   min-width: 0;
   container: annotation ui-room / inline-size;
 }
 
-/* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
-   InlineThread): Pierre stands it under its line, in the diff's light DOM,
-   so the window's own type and card draw it, inset from the code's edges
-   as GitHub's are; one the diff draws no row for stands in a list above it. */
 .diff-note {
-  /* Note that a percentage padding is read against the row's width, so the
-     note keeps the code's inset and comes in to the pane's narrower one
-     where the row is under 440px (`annotation-card.tsx`), with no query
-     on a container the note itself would have to be inside. */
   padding: var(--ui-space-8) clamp(var(--ui-space-8), (100% - 440px) * 999, var(--ui-space-12));
   font-family: var(--ui-font-sans);
   white-space: normal;
   container: annotation ui-room / inline-size;
 }
 
-/* A line's review threads minimized to one chip (minimized-threads.tsx), as
-   stage-cli draws them: the chip, its fold's summary, stands up over the end
-   of the line in a row of no height while closed, so the diff reads as if the
-   line held no comments, and a note holding the fold alone keeps no padding
-   of its own. Open, the chip stands at the end of its own row over the
-   threads it shows; so does the chip of threads on no line, above the diff
-   or under a file's picture, which has no line to float over. The chip may
-   stand in the hover that lights its threads' lines (`ThreadLines`). */
 .diff-note:has(> .diff-thread-chip-row:only-child:not([open], [data-above])),
 .diff-note:has(
   > .diff-thread-lines:only-child > .diff-thread-chip-row:only-child:not([open], [data-above])
@@ -1538,9 +1135,6 @@
   padding-block: 0;
 }
 
-/* The fold lays its chip, `@repo/ui`'s chip summary, at the end of its
-   row: closed, in a row of no height, its foot just over the line's own;
-   open, over the threads it shows. */
 .diff-thread-chip-row:not([open], [data-above]) {
   height: 0;
   flex-direction: row;
@@ -1552,13 +1146,6 @@
   margin-inline-start: calc(-1 * var(--ui-space-4));
 }
 
-/* One card for what is written on lines of code (`annotation-card.tsx`): a
-   review thread in Files changed and the Conversation, and the app's note in a
-   File tab. The review thread's quiet card (`@repo/ui`'s Card), as wide as
-   its words up to a reading measure. Its columns are the custom properties below: the head's
-   chevron in a file header's 24px slot at its inset, the faces' column
-   after it, and the words' column after the faces, which the head's face
-   and name and every comment's face and words read alike. */
 .annotation-card {
   --annotation-inset: var(--ui-space-4);
   --annotation-turn: var(--ui-space-24);
@@ -1571,8 +1158,6 @@
   );
 }
 
-/* The head: one line that never wraps, the name giving way first, its whole
-   row folding the card under the fill a disclosure row wears. */
 .annotation-card-fold > .ui-disclosure-summary {
   display: flex;
   min-width: 0;
@@ -1588,8 +1173,6 @@
   transition: background-color var(--ui-duration-hover) var(--ui-motion-exit);
 }
 
-/* The head's fill reaches the ⋯ beside it (`DisclosureFrame`), which
-   stands at the head's inset. */
 @media (hover: hover) {
   .annotation-card
     .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
@@ -1607,8 +1190,6 @@
   padding-inline-end: var(--ui-row-inset);
 }
 
-/* A narrow card's presses draw closer, at the pane's inset. */
-/* off-scale: 440px, where a card's age is drawn closer (annotation-card.tsx) */
 @container annotation (width < 440px) {
   .pull-request-thread-actions {
     padding-inline: var(--ui-row-inset);
@@ -1619,14 +1200,6 @@
   }
 }
 
-/* What a read left on GitHub, counted as a press in the caption's type. */
-/* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
-   selectable, breaking a long path anywhere rather than widening the
-   column. Its headings are a note's, a step above the words around them and
-   no more, and its lists keep to the column's own indent. These stand
-   outside every layer, as the utilities they replaced won over Streamdown's
-   own spacing between blocks; its first block's top margin and its last
-   block's bottom one are still none. */
 .transcript-markdown {
   overflow-wrap: anywhere;
   user-select: text;
@@ -1648,26 +1221,14 @@
   margin-bottom: 0;
 }
 
-/* Where a transcript line's words start: past a call's line inset, its 16px
-   icon seat, and the gap after it. What opens under a line (a call's body,
-   a model's reasoning, a todo list, a subagent's failure, a call's pictures)
-   is set in to it, so it stands under the words rather than the icon. */
 :root {
   --transcript-gutter: calc(var(--ui-space-4) + 16px + var(--ui-icon-gap));
 }
 
-/* A tool call's chip (../ai-elements/tool.tsx) is held to the pill's own
-   widest, because its width otherwise comes from the whole name while the
-   pill inside is cut, which left a gap after the pill and pushed the preview
-   to the line's end; and with a preview after it, it keeps to half the line,
-   so a long name never takes the preview's room. */
 .tool-chip:has(+ .tool-subject) {
   max-width: min(50%, var(--ui-inline-ref-pill-width));
 }
 
-/* A chip that opens its agent from a line that folds open: lifted with the
-   line's hover as an inert one is, and pressed on its own hover, so it reads
-   as the one target inside the line. */
 summary:focus-visible button[data-tool-agent-ref] {
   background: var(--ui-color-fill-selected);
 }
@@ -1688,20 +1249,10 @@ summary button[data-tool-agent-ref]:focus-visible {
   }
 }
 
-/* The subject takes what is left of the line and fades where the line cuts
-   it, over the last `--ui-label-fade` as a cut label's (`@repo/ui`'s OneLine).
-   Note that it is drawn without measuring the words, unlike a label's,
-   because the subject's box takes the line's whole rest whatever it holds,
-   so words that stop short end before the fade begins, and words still
-   streaming in reach it without a resize to measure. */
 .tool-subject {
   mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
 }
 
-/* An inline span of code, in a transcript, a to-do's step, a pull request's
-   description, or a card's branches, is the prose's (`.ui-prose code`, `@repo/ui`'s
-   prose.css) in its padding, tint, face and size, and the corner role nearest
-   its own, so code reads the same wherever words carry it. */
 .transcript-inline-code,
 .pull-request-description-text :not(pre) > code,
 .card-code {
@@ -1712,22 +1263,12 @@ summary button[data-tool-agent-ref]:focus-visible {
   font-size: 0.9em;
 }
 
-/* A transcript's table: no box, a hairline under each row, the header in
-   the muted ink at the label's weight, the outer columns flush with the
-   words around it, in the body's type. A table wider than the column
-   scrolls sideways inside its own box, fading each edge it hides columns
-   past as a note's table does (`@repo/ui`'s prose.css). A cell keeps the
-   alignment its column's rule gave it, which it carries as its own style. */
 .transcript-table {
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
 
-/* On a phone a table too wide for the column would otherwise squeeze each
-   column to its longest word, a word to a line; each cell keeps room for a
-   few words instead, and the table scrolls inside its own box, its edges
-   fading where it hides columns (below). */
 :where(:root)[data-ui-room="narrow"]
   .desktop-shell
   :is(.ui-markdown, .transcript-table)
@@ -1735,13 +1276,6 @@ summary button[data-tool-agent-ref]:focus-visible {
   min-width: 7.5em;
 }
 
-/* A transcript's table fades the edges it hides columns past, as a note's
-   does, on the window's one scroll fade (`@repo/ui`'s `ScrollArea`). Its
-   mask multiplies with the faded scroller it stands in, a document's or a
-   log's, and neither reads the other's depths, which do not inherit. On a
-   phone, whose scroll bars stay hidden until a swipe, a code block's lines
-   cut at its edge fade the same way, so a line cut short reads as one to
-   scroll. */
 .transcript-table,
 :where(:root)[data-ui-room="narrow"] .desktop-shell :is(.ui-markdown pre, .ui-code-card-body) {
   mask-image: linear-gradient(
@@ -1795,14 +1329,6 @@ summary button[data-tool-agent-ref]:focus-visible {
   border-bottom: 0;
 }
 
-/* An agent's tab: a frame the log fills, its rows drawn by the one set of
-   blocks (../tasks/transcript-blocks.tsx over ../ai-elements/). What
-   follows is its own: the app's mark beside a note of its, drawn at the row's
-   16px in his voice's color; the agent's composer; a worker's line. */
-/* An agent's tab while its transcript or the agent is read
-   (`agent-tab-skeleton.tsx`): the log's last exchange stands at its foot,
-   where the newest lines draw, on the log's own inset, its turns a turn's
-   room apart, over the composer's card. */
 .agent-log-skeleton-wait {
   display: flex;
   min-height: 0;
@@ -1818,27 +1344,14 @@ summary button[data-tool-agent-ref]:focus-visible {
   padding: var(--ui-section-gap) var(--ui-space-16) var(--ui-space-20);
 }
 
-/* Coding agents --------------------------------------------------------- */
-
-/* A line the agent refused for good or for now (`undelivered-mark.tsx`): its
-   bubble and files faded, as words that did not go, beside the red alert and
-   over the "Not delivered" that say so, which keep their full ink. Note that
-   the line says so itself (`data-undelivered`)
-   rather than being found by a `:has()` of its note, because a `:has()`
-   whose subject is any child makes the browser restyle the whole window for
-   every element added under it. */
 .is-user[data-undelivered] > :not(.message-beside, .ui-message-line),
 .is-user[data-undelivered] > .message-beside > .message-content {
   opacity: 0.6;
 }
 
-/* A queued message's row leads with the queue's glyph, which gives way to the
-   handle it is dragged by while the row is hovered, dragged, or lifted, where
-   it may be dragged at all, which a lone message may not (`agent-queue-dock.tsx`). */
 .agent-queue-lead {
   display: inline-flex;
 }
-/* Note that the row sizes only a glyph that is its leading mark itself, so the two inside this one take the same size. */
 .agent-queue-lead > svg {
   width: var(--ui-control-icon);
   height: var(--ui-control-icon);
@@ -1857,32 +1370,18 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   opacity: 0.4;
 }
 
-/* A finished turn's line (`working-time.tsx`) breaks between how long it
-   worked and when it ended, never inside either. */
 [data-worked] > :is([data-worked-length], time) {
   white-space: nowrap;
 }
 
-/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot), the line
-   under every message: how long it worked as its lead, then its Copy and
-   Copy link to the right of it, the lead giving up its width before them. */
 .agent-turn-foot [data-worked] {
   min-width: 0;
 }
 
-/* A message's Forked to trail (fork-action.tsx) stands a list's gap under
-   its foot. */
 [data-forked-to] {
   margin-top: var(--ui-list-gap);
 }
 
-/* A forked draft's chip over its box: what it forks, the message's opening
-   words, and the × that lets the fork go, docked on the composer's own
-   inset as the to-do list is and drawn as its card is (`@repo/ui`'s tinted
-   Card): one line, at least the card's 32px head and as tall as the
-   profile's × where that stands taller, the glyph in the muted ink, the
-   source's chip and the quote cut short rather than wrapped, and the × held
-   to the line's end by its seat (fork-action.tsx). */
 .draft-fork-dock {
   container: fork-dock / inline-size;
   padding: 0 var(--ui-space-16) var(--ui-row-inset);
@@ -1907,10 +1406,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   margin-inline-end: calc(var(--ui-icon-gap) - var(--ui-space-4));
 }
 
-/* The words around the chips, Fork of and at, keep whole. The source's
-   chip stands whole where the line has room for it and a few words of the
-   quote, which takes what is left; on a narrower line both give way, each
-   cut short on its own ellipsis. */
 .draft-fork-chip > span:not([data-actor-ref], .draft-fork-quote, .draft-fork-drop) {
   flex-shrink: 0;
 }
@@ -1932,9 +1427,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   margin-left: auto;
 }
 
-/* A narrow dock, a side panel at its narrowest, says Fork of or Continue
-   of by its glyph alone, the words still read to assistive tech, so the
-   source's name keeps the room they took. */
 @container fork-dock (width < 360px) {
   .draft-fork-lead {
     position: absolute;
@@ -1948,31 +1440,14 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* An agent's log runs right up to the card's top edge and its words
-   dissolve over `--ui-scroll-fade` just above it (its `ScrollArea`'s end
-   fade), rather than being sliced short of the card. Its foot pads past the
-   fade, so the newest line, scrolled to or followed, stands whole above it;
-   the area's own scroll padding brings a control focused from below in
-   past the fade as well. */
 .agent-log-over-composer {
   padding-bottom: calc(var(--ui-scroll-fade) + var(--ui-space-4));
 }
 
-/* A to-do list's glyphs (transcript-blocks.tsx's `TodoItems`) stand at 14px
-   in their 16px seat, as a call's line's do. */
 .todo-items {
   --state-glyph-size: 14px;
 }
 
-/* The list opens upward, since the composer under it holds the card's foot
-   down. Opening, the card's top edge rises from where it stood to where the
-   open card puts it, and its line and the list under it rise with that edge
-   as one sheet, the list fading in as it comes up out of the card's foot;
-   closing, the sheet sinks back the same way, on the same beat. The distance
-   is the list's height, measured as the press lands (`--disclosure-rise`,
-   `use-disclosure.ts`). Note that the list travels with the line rather than
-   standing still under it, because the card's ground is translucent and a
-   line passing over a list would show it through. */
 [data-todos-dock][data-disclosure="opening"] {
   animation: todos-dock-unroll var(--ui-duration-pane) var(--ui-motion-pane) backwards;
 }
@@ -1989,13 +1464,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   animation: todos-dock-sink var(--ui-duration-pane) var(--ui-motion-pane) forwards;
 }
 
-/* Note that the list's fade is what the fold waits on before it lets the list go, so it runs as long as the sheet sinks, or the sink would be cut off. */
 [data-todos-dock][data-disclosure="closing"] > .ui-disclosure-body {
   animation: ui-disclosure-leave var(--ui-duration-pane) var(--ui-motion-pane) forwards;
 }
 
-/* Note that each clip names both ends, because a clip cannot be interpolated
-   to or from none: it would flip halfway through instead. */
 @keyframes todos-dock-unroll {
   from {
     clip-path: inset(var(--disclosure-rise) 0 0 round var(--radius-lg));
@@ -2026,14 +1498,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* The box's field (`composer-field.tsx`): its editor in the body type, one
-   line to eight and then scrolling, with no space between its paragraphs,
-   as a textarea's lines stand, and the placeholder the field draws at the
-   editor's own insets while the words are empty, dimmed with the editor
-   while the box is held. In every room it stops growing short of two fifths
-   of what is seen (`--ui-stage-height`), so a short window, a laptop's
-   with a dock, is not filled by its composer; a narrow room's keyboard
-   takes a smaller share (desktop.css). */
 .agent-composer-field {
   position: relative;
   --agent-composer-field-cap: calc(var(--ui-stage-height) * 0.4);
@@ -2058,7 +1522,7 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   color: var(--ui-color-text);
   font-size: var(--ui-type-body-size);
   line-height: var(--ui-type-body-leading);
-  outline: none; /* no ring: the caret marks the field */
+  outline: none;
   user-select: text;
 }
 
@@ -2066,10 +1530,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   opacity: 0.6;
 }
 
-/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
-   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
-   chosen chip is followed by stands at the end of a line rather than
-   collapsing, and the caret is drawn after it, not against the chip. */
 .composer-editor {
   overflow-wrap: break-word;
   white-space: pre-wrap;
@@ -2099,12 +1559,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   opacity: 0.6;
 }
 
-/* The composer answers its card's width, not the window's, so it holds in
-   the main column and the side panel alike (`agent-composer.tsx`). The
-   presses never give way, the model chip's words do first, and the ⋯
-   stands only once it has something to take in. The card is a `ui-room`
-   too, so the badge saying where the agent runs gives up its words under
-   it (`agent-place.tsx`) rather than under a room around the box. */
 .agent-composer > form {
   container: composer ui-room / inline-size;
 }
@@ -2113,20 +1567,11 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   flex: none;
 }
 
-/* The foot's end, which stands whole in every other box, gives way where it
-   holds these presses, so the model chip's words are cut short before the
-   row runs past the card. */
 .ui-composer-foot-end:has(> .agent-composer-actions) {
   flex-shrink: 1;
   min-width: 0;
 }
 
-/* Too narrow for every press: the ⋯ takes in the context ring and the
-   microphone, but only where the ring stands, since a ⋯ holding the
-   microphone alone is one press behind two. The ring's box stays, out of
-   the row at its right end, so the popover the ⋯ opens for it hangs where
-   the ⋯ stands. */
-/* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
   .agent-composer .agent-context-button,
   .agent-composer
@@ -2148,9 +1593,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* The narrowest: the + goes into the ⋯ too, its menu's rows with it, and
-   the microphone with them, leaving what the agent published, the model,
-   the ⋯, and Send. */
 @container composer (width < 240px) {
   .agent-composer .agent-composer-attach,
   .agent-composer > form:not(.inbox-answer) .dictate-button {
@@ -2162,18 +1604,12 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* A clip still being read as a call begins shares the foot's bar with the
-   call's controls (`agent-composer.tsx`, `ComposerFoot`'s strip and call):
-   side by side where the card has room for the strip's words, and the
-   controls on a line of their own under it where it has not, so Cancel and
-   End call both stay within the card. */
 .ui-composer-foot-bar:has(> .ui-composer-foot-strip + .ui-composer-foot-call) {
   flex-wrap: wrap;
   row-gap: var(--ui-tight-gap);
 }
 
 .ui-composer-foot-strip:has(+ .ui-composer-foot-call) {
-  /* Room for the strip's spinner, its word, and Cancel. */
   flex-basis: 160px;
 }
 
@@ -2181,42 +1617,26 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   margin-inline-start: auto;
 }
 
-/* Reply over words selected in an agent's message: one press on the menus'
-   surface, centered over the selection, or under it where the window's top
-   leaves no room. */
 [data-ui-profile="desktop"] .reply-to-selection {
   -webkit-app-region: no-drag;
 }
 
-/* The files on a message: a row of chips (`@repo/ui`'s AttachmentChip) over
-   the developer's bubble in the transcript, at its right as the bubble is;
-   and the pictures a call answered (`agent-pictures.tsx`), on the same
-   chips. A box's own files stand in its foot (`ComposerFoot`). */
 .is-user > .attached-files {
   justify-content: flex-end;
 }
 
-/* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
-   bar naming the agent and where the connection stands in words, over the
-   terminal's screen on the terminal's own ground. A state with an action
-   lays one slim mono bar over the screen; the screen under any state
-   without a shell connected is dimmed, never blanked: in its colors, by the
-   terminal (`terminal-theme.ts`), so the line it prints stays legible. */
 .terminal-tab-title [data-agent-ref] {
   flex: 0 1 auto;
   color: var(--ui-color-text);
   font-weight: var(--ui-weight-semibold);
 }
 
-/* A narrow panel leaves out the word "sandbox" the tab's name already
-   implies, so the agent's name keeps more of the bar. */
 @container side-panel (width < 360px) {
   .terminal-tab-sandbox {
     display: none;
   }
 }
 
-/* A dot while a command runs in the shell, centered where the × steps in. */
 .terminal-shells-foot [data-agent-ref] .ui-harness-mark {
   width: var(--ui-control-icon);
   height: var(--ui-control-icon);
@@ -2226,9 +1646,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   --ui-working-mark-size: var(--ui-control-icon);
 }
 
-/* A bar for a state that often heals at once, a dropped connection the host
-   is already making again, shows only once it has held a second, so a blip
-   is never seen. */
 .terminal-bar[data-late="true"] {
   animation: terminal-bar-late 0s linear var(--ui-late-delay) both;
 }
@@ -2242,18 +1659,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* Why a connected server lists no tools, after its name in the attention
-   tint at the count's size, cut where the row's buttons begin; a long name
-   gives way first past most of the line, so the reason stays in sight. */
 .agent-servers-name:has(~ .agent-servers-problem) {
   max-width: 60%;
 }
 
-/* A tool's page, in the server page's place: its body as tall as the list
-   and the field above it together, at most, so stepping in and back keeps
-   the popover's size where the list is full, and never grows past the
-   room the window leaves. The page is a grid so the body's `ScrollArea`
-   fills that row under the head. */
 .agent-servers-tool-page .integration-tool-detail {
   display: grid;
   flex: none;
@@ -2261,11 +1670,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   grid-template-rows: auto clamp(200px, var(--ui-stage-height) - 280px, 440px);
 }
 
-/* A pull request's color for where it stands, in GitHub's colors: open in
-   the success green, a draft in the muted ink, merged in the merged purple,
-   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
-   chip naming it wears the shared palette's tone for it
-   (`PULL_REQUEST_TONE`). Its checks never change its color. */
 [data-pull-request-state="open"] {
   --pull-request-tone: var(--ui-color-complete);
 }
@@ -2282,8 +1686,6 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   --pull-request-tone: var(--ui-color-danger);
 }
 
-/* An open pull request GitHub holds in its merge queue, as its Pull request
-   tab's pill says it: in the attention orange, with the merge's glyph. */
 [data-pull-request-state="queued"] {
   --pull-request-tone: var(--ui-color-attention);
 }
@@ -2294,15 +1696,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   flex: 0 0 auto;
 }
 
-/* Keyed on the mark's own attributes as well, so a place sizing it by a
-   class of its own (`.task-mark-glyph`) does not take its color too. */
 .pull-request-mark[data-pull-request-state] {
   color: var(--pull-request-tone);
 }
 
-/* A GitHub issue's mark in GitHub's colors (`issue-mark.tsx`): open in the
-   success green, closed as done in the merged purple, and closed as not
-   planned in the muted ink. */
 .issue-mark {
   width: var(--ui-icon-12);
   height: var(--ui-icon-12);
@@ -2321,21 +1718,10 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   color: var(--ui-color-text-muted);
 }
 
-/* The pull request's row pinned over the composer, a card of one row
-   (`@repo/ui`'s List). The lines it adds and removes read in the success
-   green and the danger red, in tabular numerals so a count does not shift as
-   it grows. The row answers its own width, as the composer does, so it holds
-   in the main column and the side panel alike. */
 .agent-published {
   container: published-row / inline-size;
 }
 
-/* As narrow as a phone's, on a phone: where it stands is drawn nowhere, so
-   the title has the room, and still read to assistive tech, since the row
-   hides its mark from it; the mark's color, the hint's card, and the Pull
-   request tab still show it. Note that the narrow room scopes it, because a
-   desktop's side panel draws the card as narrow and has the room for it. */
-/* off-scale: 420px, a phone's widest card */
 @container published-row (width < 420px) {
   :where(:root)[data-ui-room="narrow"] .agent-published-state {
     position: absolute;
@@ -2350,43 +1736,28 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
   }
 }
 
-/* Too narrow for the checks' word: it goes, and the mark's words for a
-   reader who cannot see it and the Pull request tab still say they failed. */
 @container published-row (width < 360px) {
   .agent-published-checks {
     display: none;
   }
 }
 
-/* Too narrow for the lines as well: they go, so the title keeps a few
-   words beside the number. The Changes tab and GitHub still count them. */
-/* off-scale: 260px, where the published row's lines stop fitting */
 @container published-row (width < 260px) {
   .agent-published-lines {
     display: none;
   }
 }
 
-/* Lucide's glyphs, which the AI Elements components draw with, at the
-   stroke every glyph of our own is drawn at in its 24 box (glyphs.tsx), so
-   the transcripts read at the weight of the rest of the window. */
 svg.lucide {
   stroke-width: 1.9;
 }
 
-/* Too narrow for the job beside the model and effort: they go first, as
-   the subagent's card still names them, and the working mark and its
-   count stay. */
-/* off-scale: 320px, where a worker's model and effort stop fitting beside its job */
 @container subagent-row (width < 320px) {
   .subagent-pair {
     display: none;
   }
 }
 
-/* A narrow side panel gives a subagent's job two lines before it
-   cuts it, so the time and marks beside it leave more than a word of it;
-   its row, pressed or not, grows around them. */
 @container side-panel (width < 360px) {
   .subagent-job {
     display: -webkit-box;
@@ -2398,21 +1769,6 @@ svg.lucide {
   }
 }
 
-/* Inbox ----------------------------------------------------------------------- */
-
-/* Pictures standing alone in a paragraph of words drawn as a document
-   (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
-   by side, sharing the column's width, so a before and an after read as a
-   pair, and wrapping where more would leave each too narrow for a video's
-   bar (`grid-cols-picture-row`). Note that each picture of several fills its
-   cell at a shape between 3:4 and 2:1, cut from its top and center past
-   either, rather than hugging its own shape, because a whole page or a
-   phone's screenshot shrunk to the row's height is a sliver beside a
-   screenshot's wide box; a press still opens it whole. A picture alone in
-   its row is drawn as one in words is, whole at its own size up to the
-   column's width and a screenful's height, because filling the column would
-   blow a small picture up past its own pixels and cut it. A video keeps its
-   player's own shape. */
 .transcript-pictures > .picture-block {
   min-width: 0;
   margin: 0;
@@ -2429,8 +1785,6 @@ svg.lucide {
   width: 100%;
 }
 
-/* The frame holds the 3:4 bound, and the picture its own screenful's worth
-   (`max-h-picture-most`) under it. */
 .transcript-pictures > .picture-block:not(:only-child) .picture-frame:has(> .picture-image) {
   max-height: calc(100cqw * 4 / 3);
   overflow: clip;
@@ -2443,10 +1797,6 @@ svg.lucide {
   object-position: top;
 }
 
-/* A picture in the description's editor (`editor-pictures.tsx`): the read view's
-   block, ringed while selected, its tools hung above it from its left edge.
-   The block's top margin is the wrapper's, so the wrapper's top is the
-   picture's own and the tools are measured from it. */
 .editor-picture-drawn > .picture-block {
   margin-top: 0;
 }
@@ -2456,10 +1806,6 @@ svg.lucide {
   outline-offset: 2px;
 }
 
-/* A version's changes (`version-view.tsx`, `markdown-message.tsx`'s change
-   marks): words written in on a green wash, words struck out struck on a red
-   one and dimmed, so neither reads by its color alone. The washes are the
-   palette's finished green and its one red, which each appearance restates. */
 .markdown-inserted {
   border-radius: var(--ui-radius-6);
   background: color-mix(in srgb, var(--ui-color-complete) 24%, transparent);
@@ -2475,15 +1821,10 @@ svg.lucide {
   text-decoration-color: color-mix(in srgb, var(--ui-color-danger) 70%, transparent);
 }
 
-/* Words struck out and the words written in their place stand side by side,
-   a hair apart, so the two read as two. */
 .markdown-deleted + .markdown-inserted {
   margin-left: 0.2em;
 }
 
-/* A version's change to a picture: written in on the green edge, struck out
-   dimmed behind the red, as its words would be (`markdown-message.tsx`'s
-   change marks); the mark lends it no wash of its own. */
 .markdown-inserted:has(> .picture-block),
 .markdown-deleted:has(> .picture-block) {
   display: block;
@@ -2503,13 +1844,8 @@ svg.lucide {
   outline-offset: 2px;
 }
 
-/* Comments on the description (`description-comments.tsx`) -------------------------------- */
-
-/* The words a thread is on, a block's whole or a few of them alike: a wash
-   under them and an edge beneath, stronger while its thread is open or the
-   pointer is on them. */
 .description-comment-mark {
-  padding-bottom: 1px; /* off-scale: the edge sits a hair under the words, as an underline does */
+  padding-bottom: 1px;
   border-bottom: 1.5px solid var(--comment-mark-edge);
   border-radius: 2px;
   background: var(--comment-mark);
@@ -2530,25 +1866,16 @@ svg.lucide {
   }
 }
 
-/* Words under two threads in the editor stand in a mark inside another,
-   which the read view draws as one mark; the inner one adds nothing, so they
-   read the same in both. An open thread's mark keeps its wash and edge
-   inside another's, so the open thread reads open whether its mark is the
-   inner or the outer one. */
 .description-comment-mark .description-comment-mark:not([data-active="true"]) {
   padding-bottom: 0;
   border-bottom: 0;
   background: none;
 }
 
-/* The body is the room its comments are measured and stood in. */
 .desktop-document .description-body {
   position: relative;
 }
 
-/* Everything the comments draw over the body, one box laid over it whole, so the
-   gap the body opens between its children opens none here, and only what is
-   drawn in it takes the pointer. */
 .desktop-document .description-body > .comment-layer {
   position: absolute;
   inset: 0;
@@ -2564,15 +1891,11 @@ svg.lucide {
   animation: ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) backwards;
 }
 
-/* A card leaving fades out where it last stood, out of reach, as the cards below take its room. */
 .comment-slot[data-leaving="true"] {
   animation: ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   pointer-events: none;
 }
 
-/* The button stands in the gutter past the column's end, centered on its
-   block's first line as a folded line's count is on its words' first line,
-   which stands in its place on a line holding threads. */
 .comment-block-button {
   position: absolute;
   left: calc(100% + var(--ui-space-2));
@@ -2591,25 +1914,12 @@ svg.lucide {
   }
 }
 
-/* A screen with no hover shows the button at rest, by the block last
-   pressed, since a press is what names the block there. */
 @media (hover: none) {
   .comment-block-button {
     opacity: 1;
   }
 }
 
-/* Where the margin folds: a line's comments counted at its end, in the
-   gutter past the column where the block's button stands, a quiet button
-   lit while its threads stand under it; the open thread floats under it.
-   The count, a glyph and its figures, is drawn tighter than a toolbar's
-   button, and a web gutter is a finger's target across (desktop.css), which
-   it fills; its press still takes the whole target on a touch screen, inside
-   the column. It ends a scrollbar's room short of the scroller's edge, so a
-   scrollbar drawn over the page, macOS's, never stands under it, and a count
-   of more figures grows in toward the words rather than out under it. It
-   stands centered on the first line its words stand on, wherever they go on
-   from there, so every count reads as the line it starts. */
 .comment-count {
   --ui-control-inset: var(--ui-space-6);
   --ui-icon-gap: var(--ui-space-4);
@@ -2619,8 +1929,6 @@ svg.lucide {
   translate: 0 -50%;
 }
 
-/* The open thread ends a gap short of the column's end, where the counts in
-   the gutter start, so it never stands over a count or against one. */
 .comment-float {
   position: absolute;
   z-index: 3;
@@ -2631,33 +1939,23 @@ svg.lucide {
   flex-direction: column;
 }
 
-/* The description's comments listed in the margin's place (`DescriptionCommentList`): the
-   choice of open or resolved over the threads, each a step from the next. */
 .comment-list {
   display: flex;
   flex-direction: column;
   gap: var(--ui-tight-gap);
 }
 
-/* Over the words, where the margin folds, the list stands no taller than
-   the scroller it opens in, its threads scrolling under the choice. */
 .comment-list-float {
   min-height: 0;
   max-height: var(--comment-card-room);
 }
 
-/* The threads on a folded line, the open one among those at rest, which
-   scroll together where the float has no room for them all. */
 .comment-float-cards {
   display: flex;
   flex-direction: column;
   gap: var(--ui-tight-gap);
 }
 
-/* An open card over the description stands no taller than the scroller it opens
-   in (`--comment-card-room`, which the layer measures), so its entries
-   scroll inside it and the field that answers them stays in view under
-   them. */
 .comment-layer .comment-card[data-open="true"] {
   display: flex;
   min-height: 0;
@@ -2665,14 +1963,10 @@ svg.lucide {
   flex-direction: column;
 }
 
-/* On a phone narrower than a card and the web's gutter, the open thread
-   gives way to the column rather than start past its other edge. */
 [data-ui-profile="web"] .comment-float {
   max-width: calc(100% - var(--ui-space-8));
 }
 
-/* A thread at rest is one press (`CardPress`) over its words and replies,
-   which reaches its whole card and rings it from the keyboard. */
 .comment-time {
   color: var(--ui-color-text-muted);
   font-size: var(--ui-type-caption-size);
@@ -2681,7 +1975,6 @@ svg.lucide {
   white-space: nowrap;
 }
 
-/* A comment's tools stand at its corner under the pointer or the keyboard. */
 .comment-tools {
   position: relative;
   z-index: 1;
@@ -2702,25 +1995,18 @@ svg.lucide {
   }
 }
 
-/* A screen with no hover stands the tools at rest. */
 @media (hover: none) {
   .comment-tools {
     opacity: 1;
   }
 }
 
-/* A finger's press on each tool stands a touch target across (button.css),
-   so on a coarse pointer the tools stand apart enough that Resolve's and
-   the ⋯'s never overlap. */
 @media (pointer: coarse) {
   .comment-tools {
     gap: var(--ui-space-20);
   }
 }
 
-/* What happened to a thread, a line drawn as a comment's head: its writer
-   level with every name above it, what they did in the quiet ink, and the
-   time at the row's end. */
 .comment-gone {
   display: flex;
   align-items: center;
@@ -2736,45 +2022,29 @@ svg.lucide {
   height: 13px;
 }
 
-/* The field that answers a thread, or starts one, on `@repo/ui`'s
-   `ComposerFrame`: a reply as every box in the window is, an edit in the
-   card's well, a first comment bare on the card. What stands here lays out
-   what it holds. */
 .comment-field {
   --comment-field-inline: var(--ui-space-8);
-  /* The plain field's insets and height (`PlainCommentText`), the editor's below. */
   --ui-text-area-inset-start: var(--ui-space-8);
   --ui-text-area-inset-inline: var(--comment-field-inline);
   --ui-text-area-inset-end: var(--ui-space-2);
-  --ui-text-area-least: 36px; /* off-scale: one line and its padding, as the editor stands */
+  --ui-text-area-least: 36px;
   margin-top: var(--ui-control-gap);
 }
 
-/* The agent box's editor as a comment's field, its placeholder and its
-   paragraphs at the comment field's padding. */
 .comment-field .agent-composer-placeholder {
   padding: var(--ui-row-inset) var(--comment-field-inline) 0;
 }
 
 .comment-field .agent-composer-field {
-  --agent-composer-field-lines: calc(
-    8 *
-    1.45em +
-    10px
-  ); /* off-scale: eight lines and the padding */
+  --agent-composer-field-lines: calc(8 * 1.45em + 10px);
 }
 
 .comment-field .agent-composer-input {
-  min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
+  min-height: 36px;
   padding: var(--ui-row-inset) var(--comment-field-inline) var(--ui-space-2);
   line-height: 1.45;
 }
 
-/* A field's foot, a reply's `ComposerFoot` and an edit's Cancel and Save,
-   holds its tools a size under a page's, at the field's padding; a
-   dictation's strip stands at their height. A finger keeps the page's size,
-   so on a coarse pointer the tools stand a touch target tall and Dictate's
-   press never reaches Reply. */
 .comment-field-foot,
 .comment-field .ui-composer-foot {
   padding: var(--ui-space-2) var(--ui-item-gap) var(--ui-item-gap);
@@ -2783,26 +2053,22 @@ svg.lucide {
 @media not all and (pointer: coarse) {
   .comment-field-foot,
   .comment-field .ui-composer-foot {
-    --ui-control-height: 26px; /* off-scale: a field's foot holds its tools a size under a page's */
+    --ui-control-height: 26px;
   }
 }
 
-/* The files over a reply's words (`ComposerBody`) stand at its foot's inset. */
 .comment-field .ui-composer-files {
   padding: var(--ui-item-gap) var(--ui-item-gap) 0;
 }
 
 .comment-field-foot {
   display: flex;
-  min-height: 26px; /* off-scale: as its tools */
+  min-height: 26px;
   align-items: center;
   justify-content: space-between;
   gap: var(--ui-item-gap);
 }
 
-/* A thread's first comment is the card itself (`COMPOSER_LOOK.BARE`): its
-   words on the card's own surface, no well inside it, its tools along the
-   card's foot. */
 .comment-field[data-variant="first"] {
   --comment-field-inline: 0;
   margin-top: 0;
@@ -2813,19 +2079,10 @@ svg.lucide {
   padding-left: 0;
 }
 
-/* One of an agent's log's rows (`agent-tab.tsx`, drawn only near the view
-   by `ConversationRows`): a message with what stands with it, a call's
-   divider, the lines said ahead of it, a replay's card, a step apart as the
-   log's own lines are. */
 .agent-log-row > :not(:last-child) {
   margin-block-end: var(--ui-block-gap);
 }
 
-/* A row of an agent's log after its first stands a step from the one
-   before it, inside the row, where the run measures it (`virtual-rows.tsx`):
-   the log's own step between lines, or, for a piece of a long turn that goes
-   on with the rows the piece before it cut (`turn-pieces.ts`), the step
-   between a message's blocks, so a cut turn reads as one. */
 .agent-log-row-next {
   padding-block-start: var(--ui-block-gap);
 }

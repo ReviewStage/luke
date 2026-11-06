@@ -41,46 +41,12 @@ import { cloneElement, createContext, type ReactNode, type RefObject, useContext
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
 
-/**
- * integration-tool-list.tsx -- one integration's tools as a list draws them, and one tool's page, in the MCP popover and in Settings › Integrations alike.
- *
- * The list is the tools in the order its owner hands them
- * (`integration-tool-model.ts`'s alphabetical one). Each row is one line:
- * the tool's title where its server gave one, with its name beside it in
- * the code face, else its name alone, the badge its server's annotations
- * earn it, and the first sentence of what it does under them; the words a
- * search landed on are marked. One row is the owner's current one, drawn
- * highlighted, and a press on a row opens it; where the owner keeps the
- * keys in a field of its own, as the MCP popover's filter does, a press
- * keeps the focus there (`keepFocus`), and otherwise the list is one stop
- * for Tab that ↑↓ walk (`List`), the owner following the focus. The list
- * draws only the rows near the view of its owner's scroller (`List`'s
- * `run`), so a server of hundreds of tools draws as quickly as one of a
- * few; the owner brings a row it moves to into view through `handle`. Where the owner opens
- * nothing, each row is its words alone, with no press and no chevron.
- *
- * A tool's page is its head, the title and the name in the code face after
- * a back where its owner offers one, then every hint its server sent,
- * then what it does rendered as the markdown its server wrote, selectable,
- * the words a search landed on marked in it, then its parameters, those a
- * call must give first, each its name, its
- * type, what it is, and the values it takes as chips, its default outlined.
- * The badge and the hints are quiet words (`@repo/ui`'s QuietWords), after
- * the failure glyph in the danger ink for what destroys.
- * A page whose server said nothing of its tool says so. The page's body is
- * its one scroller, which the owner may hand the focus to, so the arrows
- * scroll it. Where either is drawn, and what the keys do, is the owner's.
- */
-
-/** A value a parameter takes, as a chip in the code face, its default outlined. */
 const PARAMETER_VALUE =
   "rounded-ui-6 bg-fill-strong px-tight-gap font-mono text-caption text-muted-foreground data-[default=true]:text-foreground data-[default=true]:shadow-tool-default";
 
-/** A tool's page's title, in the head's weight, given way before the name after it. */
 const DETAIL_TITLE =
   "integration-tool-detail-title m-0 flex-initial text-section font-ui-semibold text-foreground";
 
-/** Keeps a row inside its scroller's view, scrolling only the scroller (the renderer's rule against `scrollIntoView`). */
 export function keepInView(list: HTMLElement | null, row: Element | null): void {
   if (list === null || !(row instanceof HTMLElement)) return;
   const top = row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
@@ -89,14 +55,8 @@ export function keepInView(list: HTMLElement | null, row: Element | null): void 
     list.scrollTop = top + row.offsetHeight - list.clientHeight;
 }
 
-/** What makes a row's tool the current one, where its owner moves the highlight to the pointer. */
 const RowHighlight = createContext<(() => void) | undefined>(undefined);
 
-/**
- * The pointer coming onto a row makes its tool the current one, as a
- * menu's highlight follows the pointer. Note that it rides the row's hint
- * slot, the one door to its press's pointer handlers, and raises no words.
- */
 const PointerHighlight: ListRowHint = ({ children }) => {
   const highlight = useContext(RowHighlight);
   return cloneElement(children, {
@@ -107,7 +67,6 @@ const PointerHighlight: ListRowHint = ({ children }) => {
   });
 };
 
-/** The words a tool wears on its row, after the failure glyph where it destroys. */
 function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
@@ -118,17 +77,10 @@ function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | nul
   );
 }
 
-/** The mark a hint's words follow: the failure glyph for what destroys, none for the rest. */
 function hintMark(hint: ToolHint): QuietMark | undefined {
   return hint === TOOL_HINT.DESTRUCTIVE ? QUIET_MARK.FAILED : undefined;
 }
 
-/**
- * A tool's own words, its name, what it does, and its parameters', as its
- * server wrote them: shown in a screen recording where the owner says the
- * server is a catalog integration's, masked otherwise, since a server a
- * member set up may name their company's own things.
- */
 function ToolWords({
   shown,
   children,
@@ -143,7 +95,6 @@ function ToolWords({
   );
 }
 
-/** A hint's words, the integration's name among them masked in a screen recording where it carries the account's label. */
 function HintWords({
   words,
   server,
@@ -164,10 +115,8 @@ function HintWords({
   );
 }
 
-/** How tall a tool's row is taken to stand before it is measured, its name over a line of what it does, in pixels. */
 const TOOL_ESTIMATE_PX = 48;
 
-/** Whether a tool's name stands beside its title, which it does only where the title is not the name. */
 function namedApart(tool: IntegrationTool): boolean {
   return toolTitle(tool) !== tool.name;
 }
@@ -187,31 +136,18 @@ export function IntegrationToolList({
   keepFocus = false,
   rowRef,
 }: {
-  /** The element that scrolls the list, which its rows stand in. */
   scroller: RefObject<HTMLElement | null>;
-  /** What the owner asks of the list's run, bringing in a row not drawn. */
   handle?: RefObject<VirtualRowsHandle | null> | undefined;
-  /** The integration's name, which the badges' titles and the list's name say. */
   server: string;
-  /** Whether its tools' names and words are a catalog integration's, which a screen recording shows as they read; a server a member set up keeps them masked. */
   toolWordsShown?: boolean;
-  /** The tools, in the order they are drawn. */
   tools: readonly IntegrationTool[];
-  /** The words a search asks for, marked where they landed. */
   tokens: readonly string[];
-  /** The name of the row drawn highlighted. */
   current: string | undefined;
-  /** The id a row is drawn with, so an owner can find it. */
   idOf?: (tool: IntegrationTool) => string;
-  /** The pointer came to rest on a row, where resting there moves the highlight. */
   onCurrent?: (tool: IntegrationTool) => void;
-  /** A row was pressed; none where a row opens nothing, and is drawn as its words alone. */
   onOpen?: ((tool: IntegrationTool) => void) | undefined;
-  /** A key on a row, where the rows hold the focus themselves. */
   onKeyDown?: (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => void;
-  /** Whether a pointer's press on a row leaves the focus where it is: where the owner keeps the keys in a field of its own. */
   keepFocus?: boolean;
-  /** Each row's press as it is drawn and taken away, so an owner can hand it the focus. */
   rowRef?: (tool: IntegrationTool, press: HTMLElement | null) => void;
 }): React.JSX.Element {
   const row = (index: number, place: VirtualRowPlace) => {
@@ -288,7 +224,6 @@ export function IntegrationToolList({
   );
 }
 
-/** A tool's parameters, those a call must give first. */
 function Parameters({
   tool,
   shown,
@@ -296,7 +231,6 @@ function Parameters({
   tool: IntegrationTool;
   shown: boolean;
 }): React.JSX.Element | null {
-  // A tool whose input schema its server's answer could not say is drawn with no parameters at all, rather than as taking none.
   if (tool.parameters === undefined) return null;
   return (
     <section className="integration-tool-parameters @container" aria-label="Parameters">
@@ -357,7 +291,6 @@ function Parameters({
   );
 }
 
-/** The values a parameter takes as chips, its default outlined among them or said after them. */
 function ParameterValues({
   values = [],
   fallback,
@@ -403,23 +336,15 @@ export function IntegrationToolDetail({
   bodyRef,
   onBodyKeyDown,
 }: {
-  /** The integration's name, which the hints and the badge's title say. */
   server: string;
-  /** Whether that name carries an account's label, a person's words, kept masked in a screen recording; a catalog integration's bare name shows. */
   serverReplayMasked?: boolean;
-  /** Whether its tools' names and words are a catalog integration's, which a screen recording shows as they read; a server a member set up keeps them masked. */
   toolWordsShown?: boolean;
   tool: IntegrationTool;
-  /** The words a search asks for, marked where they landed in what it does. */
   tokens: readonly string[];
-  /** The place the back leads to, as a sentence names it ("Linear tools"), where the owner offers one; it stands only where both are given. */
   backPlace?: string;
   onBack?: () => void;
-  /** Whether a pointer's press on the back leaves the focus where it is, in a field of the owner's. */
   keepFocus?: boolean;
-  /** The page's scroller, which the owner may hand the focus to. */
   bodyRef?: React.Ref<HTMLDivElement>;
-  /** A key while the scroller holds the focus. */
   onBodyKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
 }): React.JSX.Element {
   const hints = toolHints(tool.annotations);
@@ -457,7 +382,6 @@ export function IntegrationToolDetail({
           </OneLine>
         ) : null}
       </header>
-      {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
       <ScrollArea ref={bodyRef} tabIndex={-1} onKeyDown={onBodyKeyDown}>
         <div className="integration-tool-detail-body flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
           {hints.length > 0 ? (

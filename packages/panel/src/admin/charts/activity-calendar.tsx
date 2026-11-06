@@ -9,11 +9,6 @@ import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react"
 import { ChartFrame, ChartFrameSkeleton } from "./chart-frame.js";
 import { USAGE_CHART } from "./usage-chart.js";
 
-/**
- * What a calendar counts: its tooltip row's name and hue, and the noun its
- * cells and legend say. An account's meaningful actions are its live
- * activity; the retired hosted tier's calls keep a calendar of their own.
- */
 export const CALENDAR_MEASURE = {
   ACTIONS: {
     label: "Meaningful actions",
@@ -29,18 +24,8 @@ export const CALENDAR_MEASURE = {
 
 type CalendarMeasure = (typeof CALENDAR_MEASURE)[keyof typeof CALENDAR_MEASURE];
 
-/**
- * The floor under a day cell's fill, the retention grid's own: a one-call day
- * beside a busy account's peak would otherwise round to a fill too faint to
- * read as a mark.
- */
 const CALENDAR_FILL_FLOOR_PERCENT = 8;
 
-/**
- * A day cell's corner, a quarter of its edge, as a small workspace tile's
- * is: the cell is too small for a radius token, whose smallest would round
- * it into a dot.
- */
 const CALENDAR_CELL_RADIUS = "25%";
 
 function calendarCellFill(total: number, maxTotal: number, color: string): string {
@@ -48,7 +33,6 @@ function calendarCellFill(total: number, maxTotal: number, color: string): strin
   return `color-mix(in oklab, ${color} ${fill}%, transparent)`;
 }
 
-/** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */
 const CALENDAR_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function CalendarDayCell({
@@ -81,8 +65,6 @@ function CalendarDayCell({
       }}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
-        // A move straight onto a sibling cell fires that cell's enter next,
-        // which slides the shared tooltip over; clearing first would blink it.
         if (
           event.relatedTarget instanceof HTMLElement &&
           event.relatedTarget.dataset.calendarDay !== undefined
@@ -95,34 +77,20 @@ function CalendarDayCell({
   );
 }
 
-/** The clearance between a day cell and the tooltip riding above or below it. */
 const CALENDAR_TOOLTIP_GAP_PX = 6;
 
-/**
- * The calendar's one cell size, at every viewport. 12px with a 3px gap keeps
- * the original 1rem-cell, 4px-gap proportion while letting the full 53-week
- * trailing year fit the desktop card beside the expanded sidebar; a narrower
- * surface shows fewer weeks rather than smaller cells.
- */
 const CALENDAR_CELL_PX = 12;
 
 const CALENDAR_GAP_PX = 3;
 
-/**
- * The grid's height: its month-label row, a caption's line, over the seven
- * day rows, each a gap under the row above it.
- */
 const CALENDAR_GRID_HEIGHT = `calc(var(--ui-type-caption-leading) + ${DAYS_PER_WEEK * (CALENDAR_CELL_PX + CALENDAR_GAP_PX)}px)`;
 
-/** What the calendar's cells say, under the grid. */
 function calendarLegend(measure: CalendarMeasure): string {
   return `Each cell is one UTC day, whatever the window. A deeper fill is more ${measure.noun} against the busiest day shown, and the dashed cell is today, still filling.`;
 }
 
-/** The weekday-label column's fixed width, which is what makes the fit exact. */
 const CALENDAR_WEEKDAY_COLUMN_PX = 28;
 
-/** How many whole week columns fit beside the weekday labels, one at least. */
 function calendarWeeksThatFit(availableWidth: number): number {
   return Math.max(
     1,
@@ -134,37 +102,11 @@ function calendarWeeksThatFit(availableWidth: number): number {
 
 interface CalendarTooltipAnchor {
   day: AdminDailyCount;
-  /** The cell's edges in the card's own coordinates, where the tooltip lives. */
   centerX: number;
   top: number;
   bottom: number;
 }
 
-/**
- * The account's trailing year — the server's own calendar series, apart from
- * the window the bars above are read at — folded into an intensity calendar:
- * columns are UTC weeks keyed by their Sunday (this calendar's own
- * convention; the retention grid stays Monday-keyed), rows the seven
- * weekdays Sunday to Saturday, and each cell's fill is that day's share of
- * the busiest day shown. The bars carry magnitude; this
- * grid carries the pattern they hide — weekday rhythms, weekend gaps, a
- * streak breaking. The cells keep one fixed, readable size at every
- * viewport; what flexes is how many trailing weeks are shown — the last N
- * whole columns the card's measured width can hold, the full year on a
- * desktop and a few months on a phone, refit live as the window resizes, so
- * nothing scrolls and no partial column is cut. The heading, the month
- * labels, and the fill scale all describe the shown span alone: a deeper
- * fill is that day's share of the busiest day visible, not of a busiest day
- * a narrow surface may have cropped away. A day the span does not cover
- * draws nothing, a covered day with none keeps the faintest neutral
- * fill so absence still reads as an observed day, and today — always in the
- * last column, since the slice keeps the newest weeks — wears the retention
- * grid's dashed border, because a fade here would pose as a quiet day. A
- * hovered or focused cell answers at once with the charts' own tooltip —
- * one element the whole grid shares, anchored to the card and clamped to
- * its edges. The weekday and month labels are captions, as the other
- * charts' axis ticks are.
- */
 export function ActivityCalendar({
   daily,
   measure,
@@ -175,8 +117,6 @@ export function ActivityCalendar({
   generatedAt: number;
 }): React.JSX.Element {
   const allWeeks = calendarWeeks(daily);
-  // Undefined until the pre-paint measure below lands, so the first frame
-  // never paints a grid at a guessed width.
   const [fitCount, setFitCount] = useState<number | undefined>(undefined);
   const gridAreaRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -189,11 +129,6 @@ export function ActivityCalendar({
     return () => observer.disconnect();
   }, []);
   const weeks = fitCount === undefined ? [] : lastWeeks(allWeeks, fitCount);
-  // Labels are set on the whole year and sliced with the weeks, so a column
-  // is labeled only where a month opens inside the visible span: openings sit
-  // four or more columns apart, which is what keeps labels from ever
-  // colliding, where labeling a slice's mid-month first column would put two
-  // labels one column apart.
   const months = monthLabels(allWeeks).slice(allWeeks.length - weeks.length);
   const partialDay = partialDayKey(daily, generatedAt);
   const shownDays = weeks.flatMap((week) => week.days.filter((day) => day !== undefined));
@@ -218,8 +153,6 @@ export function ActivityCalendar({
     });
   }, []);
   const hideTooltip = useCallback(() => setAnchor(undefined), []);
-  // The tooltip's own size is what the clamp needs, so the placement waits
-  // for the render that gives it one, still before the frame paints.
   useLayoutEffect(() => {
     const card = cardRef.current;
     const tooltip = tooltipRef.current;
@@ -306,11 +239,6 @@ export function ActivityCalendar({
   );
 }
 
-/**
- * The calendar while its year is read: a bone for its heading, whose span
- * the fit decides, over a block as tall as the grid, and its legend as
- * itself, so the card is as tall as the one that replaces it.
- */
 export function ActivityCalendarSkeleton({
   measure,
 }: {

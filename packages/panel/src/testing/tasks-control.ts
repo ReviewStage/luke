@@ -52,10 +52,8 @@ import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-stat
 
 const ignore = () => undefined;
 
-/** The workspace an agent the task list carries stands in where a test names none. */
 const LISTED_WORKSPACE_ID = "workspace-listed";
 
-/** An agent as the task list carries it: with the workspace and repository its own row names, a test's own where given, else one workspace and no repository. */
 export function listedAgent(
   agent: AgentSummary,
   place: Partial<Pick<ListedAgent, "workspaceId" | "repository">> = {},
@@ -67,8 +65,6 @@ export function listedAgent(
   };
 }
 
-/** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
-/** A page as the host pushes it: caught up where it came back with nothing on it, unless it says otherwise. */
 export function pushedPage(
   page: AgentMessagesAnswerView | AgentTranscriptPage,
 ): AgentTranscriptPage {
@@ -76,17 +72,8 @@ export function pushedPage(
   return { ...page, caughtUp: page.messages.length === 0 };
 }
 
-/** A page a test's host tells of a transcript, as the service answers one or as the host's follow tells it. */
 export type ToldPage = AgentMessagesAnswerView | AgentTranscriptPage;
 
-/**
- * A transcript as a test's host holds it once `pages` were told on it in
- * turn: each readable page's messages joined on by id, or a newest page
- * that does not meet them, or was read at another rewind, in their place;
- * its word on the agent the last's, and each counted; a page that could not
- * be read standing beside what was held, and one the account does not reach
- * in its place.
- */
 export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTranscript> {
   let held: AppTranscript = { messages: [], pages: 0 };
   for (const page of pages.map(pushedPage)) {
@@ -104,7 +91,6 @@ export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTrans
       newest === true &&
       (held.messages.length === 0 || !meets || word.rewound !== held.word?.rewound);
     const { failure: _failure, before: heldBefore, ...standing } = held;
-    // Note that a newest page naming no older page holds the whole transcript, so nothing stands below it.
     const below =
       replaces || (newest === true && before === undefined) ? before : (heldBefore ?? before);
     held = {
@@ -119,19 +105,10 @@ export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTrans
   return { rows: held };
 }
 
-/**
- * Answers the window's holds on transcripts as the host would, beside the
- * document and acts handed by now: the pages `pagesOf` names for a
- * transcript, told on it in turn and laid once it is held; or, where `held`
- * names one of them, the pages before it, and the rest once its release
- * lands, where a window still holds it. Answers with how the test's host
- * lays a transcript anew, and the holds asked and let go.
- */
 export function pushedTranscripts(
   pagesOf: (transcript: AgentTranscriptKey) => readonly ToldPage[],
   held?: { readonly page: number; readonly release: Promise<void> },
 ): TranscriptsHeld {
-  /** Whether the release has landed, after which a hold is laid every page. */
   let released = held === undefined;
   void held?.release.then(() => {
     released = true;
@@ -141,7 +118,6 @@ export function pushedTranscripts(
     (transcript) => {
       const pages = pagesOf(transcript);
       if (!released) {
-        // Note that a transcript let go reads nothing more, so the rest lands only while a window holds it.
         void held?.release.then(() => {
           if (heldNow(told, transcript)) told.lay(transcript, transcriptTold(pages));
         });
@@ -153,30 +129,24 @@ export function pushedTranscripts(
   return told;
 }
 
-/** Whether a window holds `transcript` now: it asked for it more often than it let it go. */
 function heldNow(held: TranscriptsHeld, transcript: AgentTranscriptKey): boolean {
   const same = (other: AgentTranscriptKey) =>
     other.agentId === transcript.agentId && other.callId === transcript.callId;
   return held.asked.filter(same).length > held.closed.filter(same).length;
 }
 
-/** A test's host telling a transcript's pages as it reads them, and the holds the window asked of it, in order. */
 export interface TranscriptsTelling {
-  /** Tells `page` on what the host holds of `transcript`, laid on the document at once. */
   readonly tell: (transcript: AgentTranscriptKey, page: ToldPage) => void;
-  /** Lays an older page before the messages the host holds of `transcript`, as the host lays one a window read. */
   readonly layOlder: (transcript: AgentTranscriptKey, older: AgentOlderAnswer) => void;
   readonly asked: readonly AgentTranscriptKey[];
   readonly closed: readonly AgentTranscriptKey[];
 }
 
-/** What a test's host was told of one transcript: its pages, and the older pages laid before them, in turn. */
 interface Told {
   readonly pages: readonly ToldPage[];
   readonly older: readonly AgentOlderAnswer[];
 }
 
-/** A transcript as a test's host holds it once `told`: its pages told in turn, each older page laid before them. */
 function heldOf({ pages, older }: Told): AppHostRead<AppTranscript> {
   const { rows = { messages: [], pages: 0 } } = transcriptTold(pages);
   return {
@@ -192,14 +162,7 @@ function heldOf({ pages, older }: Told): AppHostRead<AppTranscript> {
   };
 }
 
-/**
- * Answers the window's holds on transcripts as the host would, beside the
- * document and acts handed by now, laying only what the test told: each
- * page told on what the host holds of its transcript, laid as the window
- * holds it, and at once while it does, as a page the host read lands.
- */
 export function tellingTranscripts(): TranscriptsTelling {
-  /** What was told of each transcript, by its agent and then its worker's call or the agent's own. */
   const told = new Map<string, Map<string | undefined, Told>>();
   const toldOf = (transcript: AgentTranscriptKey) =>
     told.get(transcript.agentId)?.get(transcript.callId);
@@ -227,7 +190,6 @@ export function waitingOf(item: InboxItem): AppInboxWaitingItem {
   return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
 }
 
-/** The task's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = {
   pinned: false,
   onToggle: ignore,
@@ -235,7 +197,6 @@ export const UNPINNED_SUMMARY: SummaryPin = {
   onMeasured: ignore,
 };
 
-/** A task whose version history is shut, its history still being read, no version chosen, every press ignored. */
 function versionHistoryControl(
   overrides: Partial<VersionHistoryControl> = {},
 ): VersionHistoryControl {
@@ -263,7 +224,6 @@ function versionHistoryControl(
   };
 }
 
-/** A repository chip's chooser for no workspace in particular, whose list the host holds (`LIVE_READ.REPOSITORY_LISTS`). */
 const NO_REPOSITORIES = {
   recent: [],
   openGitHub: ignore,
@@ -271,7 +231,6 @@ const NO_REPOSITORIES = {
   manages: true,
 } as const satisfies TasksControl["repositories"];
 
-/** A task with no agents and no repository, every press ignored. */
 export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsControl {
   const onArchive: AgentsControl["onArchive"] =
     overrides.onArchive ??
@@ -281,7 +240,6 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     agents: [],
     archived: [],
     agentIds: [],
-    // A task with no archived agent holds exactly the agents given.
     heldIds: overrides.agentIds ?? [],
     keywords: [],
     readSkills: undefined,
@@ -329,14 +287,12 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
       ),
     },
     onArchive,
-    // A question's archive is the same archive, as the test answers it.
     archiveAgent: agentArchiveMutation(({ agentId, archived, asked }) =>
       onArchive(agentId, archived, asked === undefined ? {} : { asked }),
     ),
     deleteAgent: agentDeleteMutation(() =>
       Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause: undefined }),
     ),
-    // An agent read again stands as the control's list has it.
     readAgent: (agentId) =>
       Promise.resolve(
         [...(overrides.agents ?? []), ...(overrides.archived ?? [])].find(
@@ -355,11 +311,6 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
   };
 }
 
-/**
- * Each agent the open items of agents with no task name, once, as main lists
- * the agents holding items: how many of them it holds, how many ask, and
- * when the latest changed, named as its latest item names it.
- */
 export function agentHoldingsOf(
   taskless: readonly AppInboxTasklessItem[],
 ): readonly AppInboxAgentHolding[] {
@@ -383,7 +334,6 @@ export function agentHoldingsOf(
   return [...held.values()];
 }
 
-/** Admin as a window not standing on it holds it, every door ignored. */
 export const ADMIN_AWAY: AdminViewControl = {
   open: false,
   view: { kind: "dashboard" },
@@ -392,7 +342,6 @@ export const ADMIN_AWAY: AdminViewControl = {
   onPreload: ignore,
 };
 
-/** The Board's route standing nowhere, for a tasks tab drawn with no router to stand it. */
 export const BOARD_AWAY: BoardRoute = {
   open: false,
   standingIn: undefined,
@@ -402,7 +351,6 @@ export const BOARD_AWAY: BoardRoute = {
   onPreload: ignore,
 };
 
-/** The Automations route standing nowhere, for a tasks tab drawn with no router to stand it. */
 export const AUTOMATIONS_AWAY: AutomationsRoute = {
   open: false,
   place: { kind: AUTOMATIONS_PAGE.LIST },
@@ -416,7 +364,6 @@ export const AUTOMATIONS_AWAY: AutomationsRoute = {
   onTurn: ignore,
 };
 
-/** A person's route standing nowhere, for a tasks tab drawn with no router to stand it. */
 export const PERSON_AWAY: PersonRoute = {
   userId: undefined,
   name: undefined,
@@ -426,12 +373,6 @@ export const PERSON_AWAY: PersonRoute = {
   onPreload: ignore,
 };
 
-/**
- * A signed-in Tasks tab on screen on Home with no tasks, every
- * press ignored, bound for whichever task it is given as open; the agents
- * holding items, where none are given, those its open items of agents with
- * no task name (`agentHoldingsOf`), as main lists both from one read.
- */
 export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
   const onMoveTask: TasksControl["onMoveTask"] =
     overrides.onMoveTask ?? (() => Promise.resolve(false));
@@ -460,7 +401,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onOpenWorkspaceSettings: ignore,
     onOpenWorkspaceGitHub: ignore,
     onMoveTask,
-    // A question's move and delete are the same move and delete, as the test answers them.
     moveTask: taskMoveMutation(({ taskId, workspaceId, quiet }) =>
       onMoveTask(taskId, workspaceId, { quiet }),
     ),
@@ -668,7 +608,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     deleteTask: taskDeleteMutation((taskId) => onDeleteTask(taskId)),
     deleteTasks: tasksDeleteMutation((taskId) => onDeleteTask(taskId)),
     back: () => false,
-    // No page asks before it is left, so every way out goes at once.
     leaveGuard: {
       stand: () => ignore,
       pass: (leave) => leave(),

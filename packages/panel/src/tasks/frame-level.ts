@@ -1,11 +1,3 @@
-/**
- * frame-level.ts -- how loud one frame of a capture is, which the dictation strip's meter draws.
- */
-
-/**
- * One frame's loudness from the analyzer's time-domain samples, in the unit
- * interval, scaled so ordinary speech fills the meter.
- */
 export function frameLevel(samples: Uint8Array): number {
   let energy = 0;
   for (const sample of samples) {

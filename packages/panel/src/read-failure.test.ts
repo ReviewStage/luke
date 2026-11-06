@@ -43,14 +43,6 @@ import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 
-/**
- * A read that did not land says so alike on every surface that reads: the
- * sidebar's tasks, the Inbox's list, a side panel tab, and a Settings
- * page's card each draw one alert, a sentence of the shape "The inbox
- * could not be read.", and one Retry, whose press reads again. Synthetic
- * tasks and keys.
- */
-
 const ignore = () => undefined;
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
@@ -67,7 +59,6 @@ beforeEach(() => {
   installScrollIntoView();
   fakeAppPlatform(QUIET_PANEL);
   window.localStorage.clear();
-  // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({ matches: false, addEventListener: ignore, removeEventListener: ignore }),
@@ -85,7 +76,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws a surface into the page and lets every read it asked for answer. */
 async function mount(surface: React.ReactElement): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -96,21 +86,18 @@ async function mount(surface: React.ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The surface's one read failure as a reader meets it: its words and its presses. */
 function readFailure(page: HTMLElement) {
   const alerts = [...page.querySelectorAll<HTMLElement>('[role="alert"]')];
   assert.equal(alerts.length, 1, "one alert says the read failed");
   const [alert] = alerts;
   assert.ok(alert);
   const presses = [...alert.querySelectorAll<HTMLButtonElement>("button")];
-  // The alert's words are what it says with its presses taken out, however it nests them.
   const said = alert.cloneNode(true);
   assert.ok(said instanceof HTMLElement);
   for (const press of said.querySelectorAll("button")) press.remove();
@@ -122,14 +109,12 @@ function readFailure(page: HTMLElement) {
   };
 }
 
-/** Asserts the failure is said as every other is: one sentence of the shape, one Retry. */
 function assertSaidAlike(failure: ReturnType<typeof readFailure>, words: string): void {
   assert.equal(failure.words, words);
   assert.match(failure.words, /^[A-Z][^.]* could not be read\.$/u);
   assert.deepEqual(failure.presses, ["Retry"]);
 }
 
-/** The sidebar over `tasks`, expanded, for an account signed in. */
 function sidebarOver(tasks: TasksControl): React.ReactElement {
   return createElement(DesktopSidebar, {
     sidebar: {
@@ -199,12 +184,10 @@ test("the sidebar's tasks that could not be read again while the app is offline 
   handState({}, { network: { online: false, reachable: true } });
   const page = await mount(sidebarOver(tasksControl({ listFailed: true, tasks: [TASK] })));
   assert.ok(page.textContent?.includes(TASK.name), "the task held still stands");
-  // Note that the window reads as connected until the document saying it is offline reaches its query.
   await vi.waitFor(() => assert.equal(page.querySelector('[role="alert"]') === null, true));
 });
 
 test("the Inbox's list says its feed could not be read as the sidebar does, and Retry lists what the plan holds", async () => {
-  // The account's feed could not be read until it is read again, then holds nothing of the plan.
   const deliver = handInboxItems({ failed: true });
   fakeActPort({
     ...fakeActPortCalls(),
@@ -232,7 +215,6 @@ test("the Inbox's list says its feed could not be read as the sidebar does, and 
       }),
     }),
   );
-  // Note that the failure, and then the feed read again, stand once they reach the feed's query.
   const failure = await vi.waitFor(() => readFailure(page));
   assertSaidAlike(failure, "The inbox could not be read.");
   failure.retry();
@@ -262,7 +244,6 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
       tree: { open: false, onToggle: ignore },
     }),
   );
-  // Note that the changes land through a query, so the failure is read once it is drawn.
   await vi.waitFor(() => assert.equal(page.querySelector('[role="alert"]') !== null, true));
   const failure = readFailure(page);
   assertSaidAlike(failure, "The changes could not be read.");
@@ -277,7 +258,6 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
 });
 
 test("Settings says a page's failed read alike in its card's place, the keys and the workspaces both, and Retry reads again", async () => {
-  // The host's read of the keys failed before it ever answered, and answers on Try again.
   const { deliverKeys } = handHostReads({ keys: { failed: true } });
   fakeActPort({
     ...fakeActPortCalls(),
@@ -287,7 +267,6 @@ test("Settings says a page's failed read alike in its card's place, the keys and
     },
   });
   const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
-  // Note that the failure, and then the keys read again, stand once they reach the keys' query.
   const keysFailure = await vi.waitFor(() => readFailure(keys));
   assertSaidAlike(keysFailure, "Your keys could not be read.");
   keysFailure.retry();
@@ -321,7 +300,6 @@ test("Settings says a page's failed read alike in its card's place, the keys and
   assert.equal(retried, 1);
 });
 
-/** The Inbox page as the tests draw it: open, nothing chosen. */
 const INBOX_VIEW = {
   open: true,
   chosen: undefined,
@@ -359,7 +337,6 @@ const REVISION: DescriptionRevisionLine = {
   changes: 2,
 };
 
-/** The description's version history whose chosen version could not be read, its sections open where `sections` says. */
 async function versionNotRead(sections: boolean, onRetryVersion: () => void): Promise<HTMLElement> {
   const base = tasksControl();
   const history = {
@@ -408,7 +385,6 @@ async function versionNotRead(sections: boolean, onRetryVersion: () => void): Pr
   );
 }
 
-/** The Retry in a region's alert, which reads the version again. */
 function retryIn(region: Element | null): HTMLButtonElement | undefined {
   const alert = region?.querySelector('[role="alert"]');
   return [...(alert?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(

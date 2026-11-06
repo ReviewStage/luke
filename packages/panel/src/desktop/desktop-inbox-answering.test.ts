@@ -106,18 +106,14 @@ import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-// The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-/** Whether the row of the item so titled is drawn gray, its item done with. */
 function rowMuted(page: HTMLElement, title: string): boolean {
   return rowNamed(page, title).closest("li")?.getAttribute("data-muted") === "true";
 }
 
-/** The shown settled item's question filled in as answered, its controls standing read-only. */
 function answeredControls(page: HTMLElement): HTMLElement {
   return (
     page.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) [data-inbox-answered]") ??
@@ -125,7 +121,6 @@ function answeredControls(page: HTMLElement): HTMLElement {
   );
 }
 
-/** Each option of the shown settled item's question, by its label, and whether the answer picked it. */
 function answeredOptions(page: HTMLElement): [string | null | undefined, boolean][] {
   return [
     ...answeredControls(page).querySelectorAll<HTMLButtonElement>(
@@ -137,14 +132,12 @@ function answeredOptions(page: HTMLElement): [string | null | undefined, boolean
   ]);
 }
 
-/** The picks the shown item's answer carries, as its question draws them checked. */
 function answeredPicks(page: HTMLElement): (string | null | undefined)[] {
   return answeredOptions(page)
     .filter(([, picked]) => picked)
     .map(([label]) => label);
 }
 
-/** A waiting item's options as a reader meets them: each row's words, its label, its Recommended badge where it wears one, and its detail. */
 function optionHeads(page: HTMLElement): (string | null)[] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
@@ -393,7 +386,6 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
       "the item is gone",
     ),
   );
-  // Note that the item standing again shows what was kept of its draft, since its row and its box went with it.
   world.inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
   act(() => pushAgain());
   await settle();
@@ -404,7 +396,6 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
 });
 
 test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
-  // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
   const bundles = sideBundles({
     descriptionEditor: () => {
@@ -514,7 +505,6 @@ test("Enter on a focused option sends the reply carrying the pick and never pres
     sent.map(({ answers }) => answers),
     [{ ask: askIdOf(THRESHOLD.id), reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] }],
   );
-  // The answer stands at once, as sent: the pick Enter was on, never pressed off.
   assert.deepEqual(answeredPicks(page), ["Retry once"], "Enter left the pick standing");
 });
 
@@ -559,7 +549,6 @@ test("a waiting choice of several is a checkbox list whose box counts nothing on
     sent.map(({ answers }) => answers),
     [{ ask: askIdOf(THRESHOLD.id), reply: INBOX_REPLY.CHOSE, choices: ["Pager", "Email"] }],
   );
-  // The answer stands at once, as sent: every pick, Enter's own among them.
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
@@ -597,11 +586,9 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
     "the keyboard is taken to the field missing",
   );
 
-  // Note that the composer types each newline as Shift+Enter, so the line in the value sent is Shift+Enter's.
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
   assert.equal(footWords(pane), "", "a field filled lets the line go");
-  // Note that the repository's paths land through a query, so Enter is pressed once the @ list holds them.
   const listed = () =>
     [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
       (name) => name.textContent,
@@ -662,7 +649,6 @@ test("in a form of three fields Enter on a focused option sends the form and pic
     pane.querySelector<HTMLInputElement>('[data-inbox-field-label="Retries"] input') ??
     assert.fail("no Retries input");
   act(() => retries.focus());
-  // Note that Safari's last composing key comes as code 229 with isComposing already false.
   keyOn(retries, "Enter", { keyCode: 229 });
   await settle();
   assert.deepEqual(sent, [], "an input method's Enter sends nothing");
@@ -807,12 +793,6 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   );
 });
 
-/**
- * Each field of a form filled in as answered, in order: its kind, its name,
- * and what it holds as a reader meets it, a select's pick, a text field's
- * words, a number's figure, and a yes or no checked or not; each control
- * stands read-only.
- */
 function answeredFields(within: Element): (string | null | undefined)[][] {
   return [...within.querySelectorAll<HTMLElement>("[data-inbox-answered-field]")].map((field) => {
     const kind = field.dataset.inboxAnsweredField;
@@ -834,7 +814,6 @@ function answeredFields(within: Element): (string | null | undefined)[][] {
   });
 }
 
-/** Threshold as the service answers it once the reader's reply carrying its pick was taken. */
 const THRESHOLD_ANSWERED: InboxItem = {
   ...answeredBy(THRESHOLD, READER, "Retry 3 times over an hour", "Use 90%", 6_000),
   updatedAt: 6_000,
@@ -858,7 +837,6 @@ test("an answer leaves Needs you the moment it is sent, its row staying where it
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
 });
 
-/** The list as drawn, each row by its title alone, what marks a row left out, so a row that moves is told from one that only changes its marks. */
 function placesOf(page: HTMLElement): string[] {
   return listed(page).map((line) => line.replace(/^(▸ )?\*?/u, ""));
 }
@@ -913,10 +891,8 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
     ...answeredBy(EXPIRY, TEAMMATE, "Retry once", "Keep 7 days", 6_000),
     updatedAt: 6_000,
   };
-  // The invites plan's change is pushed, as an answer from another Mac would be.
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }, { items: [answered] });
   await settle();
-  // Note that the push reaches the hidden Inbox's read one notify tick later, which lands before it is shown again.
   await vi.waitFor(() => assert.deepEqual(listed(page), ["*Alert at 80%?"]));
   act(() => world.setInboxOpen(true));
   await settle();
@@ -936,7 +912,6 @@ test("on To do, an answered item a link or Back chooses stands its row, gray, un
   const { page } = mount();
   await settle();
 
-  // A link opens the answered item, a link in it opens another task's item, and Back chooses the answered one again.
   act(() => world.chooseFromOutside(onRetry));
   await settle();
   const linked = listed(page);
@@ -1003,7 +978,6 @@ test("an answer no reply came back for is taken as sent once its thread holds a 
   await settle();
   assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
 
-  // A message in the same words under no key of this send's is not its answer, which may not have landed.
   const [reply, ...rest] = THRESHOLD_ANSWERED.thread ?? [];
   const lookalike = rest.at(-1) ?? assert.fail("the answered item ends with its answer");
   world.main.push(
@@ -1013,7 +987,6 @@ test("an answer no reply came back for is taken as sent once its thread holds a 
   await settle();
   assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
 
-  // The service wrote the answer and handed it on all the same, and the plan's push names it by its key.
   const clientKey = sent[0]?.clientKey ?? assert.fail("the answer went under a key");
   const landed: InboxItem = {
     ...THRESHOLD_ANSWERED,
@@ -1073,7 +1046,6 @@ test("an item its agent posts again after it was answered needs you again once a
   await settle();
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
 
-  // The agent asks again under the same key, and main says the plan moved.
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
   act(() =>
     world.setHolding([
@@ -1104,7 +1076,6 @@ test("a message the service took stays the last word on its item's row once anot
   assert.equal(rowLines(page, "How is a failed email retried?")[1], said);
 });
 
-/** The answered ask's controls heading a reply, as a reader hears it: their words alone, standing in the reply's body beside its words with no card around them and no head over them; none where the reply carries none. */
 function answeredCard(reply: Element): string | null | undefined {
   const card = reply.querySelector("[data-inbox-answered]");
   if (card === null) return undefined;
@@ -1129,7 +1100,6 @@ test("picking an option in the draft reply stands it picked and lights Send, the
   assert.equal(sendHeld(pane), true, "and Send stands held again");
   assert.equal(footWords(pane), "", "nothing says the ask stays open");
 
-  // The number keys still pick, from wherever in the Inbox the reader stands.
   keyOn(document.body, "2");
   assert.deepEqual(checkedOptions(pane), ["7 days"]);
   typeInComposer(pane, "Most teams asked for it.");
@@ -1486,7 +1456,6 @@ test("a to-do with every step ticked by hand stands marked done and Send sends i
   );
 });
 
-/** Each line of a mounted thread but the draft reply, as the kind of comment it is and what its writer did, where it says. */
 function threadLines(pane: Element): (readonly [string | null, string | null])[] {
   return [...pane.querySelectorAll(".inbox-thread > li:not([data-inbox-comment='draft'])")].map(
     (line) => [
@@ -1733,10 +1702,8 @@ test("a settled ask keeps the controls its type offered: a to-do its steps, none
   );
 });
 
-/** The reader's reply answering the ask the thread opens with, as the service keeps it. */
 const ANSWER_ID = "e1b2c3d4-0000-4000-8000-000000000030";
 
-/** An item whose opening ask the reader answered with `answers` and `text`, the item answered and the ask so, then any `after` it. */
 function answeredThread(
   ask: InboxAsk,
   answers: Omit<NonNullable<InboxMessage["answers"]>, "ask">,
@@ -1756,7 +1723,6 @@ function answeredThread(
   );
 }
 
-/** The answered ask's card's controls, as the answer left them, heading the reply that answered it. */
 function answeredBox(pane: HTMLElement): HTMLElement {
   return (
     pane.querySelector<HTMLElement>(
@@ -1765,7 +1731,6 @@ function answeredBox(pane: HTMLElement): HTMLElement {
   );
 }
 
-/** Each press of an answered box, by its words, whether it was the one given, and its glyph's tone where it wears one; every one read-only. */
 function answeredPresses(box: HTMLElement): (string | boolean | undefined)[][] {
   return [...box.querySelectorAll<HTMLButtonElement>(".inbox-ask-presses button")].map((press) => {
     assert.equal(press.getAttribute("aria-disabled"), "true", "a press given takes no press");

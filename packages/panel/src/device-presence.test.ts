@@ -11,11 +11,6 @@ import { fakeActPort } from "./testing/app-bridge.js";
 import { handBeats } from "./testing/app-state.js";
 import { onRegistry, writeHandedAppState } from "./testing/copy-feedback.js";
 
-/**
- * device-presence.test.ts -- the shared presence judges each device by how long ago its beat was on this machine's clock, and says it cannot check, not offline, where its read failed.
- * Synthetic ids.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -34,16 +29,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The id of the nth synthetic device. */
 const deviceOf = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-/** What a surface draws of each device it names: its standing as the shared book says it, or nothing where the book does not name it. */
 function Standings({ ids }: { ids: readonly string[] }): React.JSX.Element {
   const book = useDevicePresence(true);
   return createElement("p", null, ids.map((id) => presenceStanding(book, id) ?? "none").join(","));
 }
 
-/** Draws the devices `ids` name under one registry and lets the read land. */
 async function draw(ids: readonly string[]): Promise<HTMLElement> {
   await writeHandedAppState();
   const registry = AtomRegistry.make();
@@ -53,7 +45,6 @@ async function draw(ids: readonly string[]): Promise<HTMLElement> {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(registry, createElement(Standings, { ids }))));
-  // Note that the read lands once it reaches the beats' query, until when every device reads checking.
   await vi.waitFor(() =>
     assert.equal(container.textContent?.includes(DEVICE_STANDING.CHECKING), false),
   );
@@ -70,7 +61,6 @@ test("a beat delayed by 25 seconds still reads online, and a device quiet for fo
 
 test("a device a read found online is not called offline because the next read is late, only once a read that landed lately finds it quiet", async () => {
   fakeActPort({});
-  // The read 31 seconds ago found the beat 50 seconds old, so the window alone reckons it 81 seconds old now.
   handBeats({ [deviceOf(1)]: 81_000 }, { askedAgoMs: 31_000 });
   assert.equal((await draw([deviceOf(1)])).textContent, DEVICE_STANDING.UNKNOWN);
 

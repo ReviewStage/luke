@@ -1,9 +1,3 @@
-/**
- * failure-rates-chart.tsx -- the Reliability screen's daily failure rates,
- * one line per kind of work, each the share of that day's ended work that
- * failed.
- */
-
 import type { AdminReliabilityDay } from "@repo/features/admin-answer-wire";
 import { formatPercent } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -20,11 +14,6 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { retiredTitle } from "../chrome/notes.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
-/**
- * The three rates, in the order the legend names them: the live kinds of
- * work first, and the app's own turns last, retired since every conversation
- * the service starts is an agent's.
- */
 const FAILURE_RATES_CHART = {
   agentRuns: { label: "Agent runs", color: "var(--ui-color-chart-2)" },
   automationRuns: { label: "Automation runs", color: "var(--ui-color-chart-3)" },
@@ -33,15 +22,12 @@ const FAILURE_RATES_CHART = {
 
 type FailureSeries = keyof typeof FAILURE_RATES_CHART;
 
-// SAFETY: `Object.keys` widens the config's own keys to string.
 const SERIES = Object.keys(FAILURE_RATES_CHART) as FailureSeries[];
 
 const FAILURE_RATES_TITLE = "Failure rate per day";
 
-/** The plot's height, which the chart and its skeleton both stand. */
 const FAILURE_RATES_PLOT_HEIGHT = "14rem";
 
-/** The three kinds of work by their line's ink, in the config's order. */
 function FailureRatesLegend(): React.JSX.Element {
   return (
     <SeriesLegend
@@ -54,11 +40,6 @@ function FailureRatesLegend(): React.JSX.Element {
   );
 }
 
-/**
- * The window's daily failure rates. A day nothing of a kind ended on is a
- * gap in that kind's line rather than a zero, and a window where nothing
- * ended at all says so instead of drawing three empty lines.
- */
 export function FailureRatesChart({
   daily,
   generatedAt,
@@ -125,7 +106,6 @@ export function FailureRatesChart({
   );
 }
 
-/** The chart while the window is read: its heading and legend, which it knows, over its plot's block. */
 export function FailureRatesChartSkeleton(): React.JSX.Element {
   return (
     <ChartFrameSkeleton

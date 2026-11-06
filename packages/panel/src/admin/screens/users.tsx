@@ -45,16 +45,10 @@ const USERS_ERROR = readFailedWords("users");
 
 const ACCOUNT: Noun = { one: "account", many: "accounts" };
 
-/** What the roster says when no account answers the search, and when it holds none. */
 function usersEmpty(searched: boolean): string {
   return searched ? noMatchWords(ACCOUNT) : noneYetWords(ACCOUNT);
 }
 
-/**
- * The roster's own columns beside the shared ones: when the account joined
- * and when it last touched the service, fields the most-active rows do not
- * carry.
- */
 const ROSTER_DETAIL_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] = [
   {
     key: ACCOUNTS_SORT_KEY.JOINED,
@@ -70,25 +64,17 @@ const ROSTER_DETAIL_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] =
   },
 ];
 
-/** The roster's column after Active days: the day of the account's latest meaningful action. */
 const ROSTER_TRAILING_COLUMNS: readonly AccountsDetailColumn<AdminUserListRow>[] = [
   {
     key: ACCOUNTS_SORT_KEY.LAST_ACTIVE,
     label: "Last active",
     cell: (row) => (row.lastActiveDay === null ? "—" : formatDayTick(row.lastActiveDay)),
-    // Note that an ISO date's lexicographic order is its chronological one.
     sortValue: (row) => row.lastActiveDay,
   },
 ];
 
-/** How many accounts the roster's skeleton stands a row for, enough to fill a window. */
 const ROSTER_SKELETON_ROWS = 10;
 
-/**
- * The roster's sections under its filters, drawn from `list` once it is read
- * and as their skeletons until then: the table of `rows`, the answer's rows
- * the search keeps, and the sign-in methods under it.
- */
 function UsersSections({
   list,
   rows,
@@ -99,13 +85,11 @@ function UsersSections({
 }: {
   list: AdminUserList | undefined;
   rows: readonly AdminUserListRow[];
-  /** Whether the box holds a search, which is what an empty table is worded by. */
   searched: boolean;
   windowDays: number;
   onOpenAccount: (id: string) => void;
   onToggleFavorite: (id: string, favorite: boolean) => void;
 }): React.JSX.Element {
-  // Note that the star's column is rebuilt only when its press changes, so the table keeps its columns as TanStack Table asks.
   const favorite = useMemo(
     () => ({ starred: (row: AdminUserListRow) => row.favorite, onToggle: onToggleFavorite }),
     [onToggleFavorite],
@@ -119,7 +103,6 @@ function UsersSections({
     sortable: true,
     favorite,
   };
-  // Note that a miss may lie past a truncated roster's rows, so its note stays.
   const truncatedTo =
     list !== undefined && list.total > list.rows.length ? list.rows.length : undefined;
   return (
@@ -132,8 +115,6 @@ function UsersSections({
         )}
         <RosterNote truncatedTo={truncatedTo} searched={list?.search !== undefined} />
       </AdminSection>
-      {/* Note that the methods describe every account the scope keeps, so a
-      search that narrows the rows, or finds none, leaves the chart standing. */}
       <AdminSection title="Sign-in methods">
         {list === undefined ? (
           <SignInMethodsChartSkeleton />
@@ -162,20 +143,10 @@ export function UsersScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  // What the box holds and what the service was asked to search for, apart:
-  // the query redraws on every keystroke and filters the loaded rows at once,
-  // while the read's own debounce commits it into the address the roster is
-  // refetched under, so the whole account table is not scanned per keystroke.
-  // Typing is kept where the mount keeps an address, in place, so on the web
-  // page a searched roster is shareable without the back button walking
-  // keystrokes.
   const { reads, gate, address } = useAdminDoors();
   const [query, setQuery] = useState(address.search);
-  // Note that the query is held to the service's own bound, as a field's
-  // `maxLength` would, so a pasted run past it never reaches the read.
   const changeQuery = (typed: string) => {
     const next = typed.slice(0, ADMIN_USERS_SEARCH_MAX_LENGTH);
     setQuery(next);
@@ -188,14 +159,10 @@ export function UsersScreen({
   const withdraw = useAdminSignOut(onSignOut);
   const signOut = () => withdraw.mutate();
 
-  // The star answers the press at once, while its write carries the press to
-  // the service and redraws its outcome.
   const favorite = useFavoriteMutation(reads);
   const toggleFavorite = (id: string, starred: boolean) =>
     favorite.mutate({ id, favorite: starred });
 
-  // The title, its controls, and the search stand the same on the loading
-  // page and the loaded one, so the box takes typing before the first answer.
   const page = (
     content: Pick<
       React.ComponentProps<typeof AdminCollectionPage>,
@@ -258,17 +225,12 @@ export function UsersScreen({
       }),
     failed: (error) => page({ filters: search, state: COLLECTION_STATE.ERROR, error }),
     ready: (list, refreshed) => {
-      // The service searches the whole roster once the debounce settles; until
-      // that answer lands, the same needle filters the rows already loaded, so
-      // the box stays instant between refetches.
       const tokens = searchTokens(query);
       const rows =
         tokens.length > 0
           ? list.rows.filter((row) => matchesTokens([row.name, row.email], tokens))
           : list.rows;
       return page({
-        // Note that the count stands beside the field rather than in it, so a
-        // narrow page wraps it under the field instead of crowding the query.
         filters: (
           <>
             {search}
@@ -278,9 +240,6 @@ export function UsersScreen({
             </Text>
           </>
         ),
-        // An empty answer stands where the table stands, in the table's own
-        // frame under the filters, rather than centered in the page apart
-        // from them, so the page keeps its line whatever the search finds.
         state: COLLECTION_STATE.READY,
         children: refreshed(
           <UsersSections

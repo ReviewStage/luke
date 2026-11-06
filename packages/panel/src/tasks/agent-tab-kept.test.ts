@@ -26,20 +26,6 @@ import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
 
-/**
- * agent-tab-kept.test.ts -- a running agent's tab draws again only the
- * messages a page touched: a page that rewrites the reply still being
- * written leaves every other message's rows as they were drawn, and so
- * does the window drawing the tab again with new presses; inside the reply,
- * a page that adds a call draws that call alone. The messages it
- * keeps still hang the cards the window hands now, and say where their
- * workers stand as the newest page reads it.
- *
- * Which rows were drawn is read off the cards the tab is handed: each row
- * that opens a tab asks for that tab's card as it is drawn, so a card
- * door that records what it was asked for records exactly the rows drawn.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -75,21 +61,18 @@ function listed(id: string, title: string): AgentSummary {
 
 const AGENT = listed(AGENT_ID, "Planning stack");
 
-/** The agent's own transcript, which its tab holds. */
 const TRANSCRIPT: AgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
 
 function tool(tool: string, callId: string, input: WireRecord, output: WireRecord): WireRecord {
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
 
-/** The description the agent was handed, which its transcript opens on as the task's card. */
 const DESCRIPTION: AgentTranscriptMessage = {
   id: "plan",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Wire the retry audit." }],
 };
 
-/** The agent's first turn, finished: a message to another agent, one refused, and a worker it started. */
 const EARLIER: AgentTranscriptMessage = {
   id: "earlier",
   role: MESSAGE_ROLE.ASSISTANT,
@@ -115,7 +98,6 @@ const EARLIER: AgentTranscriptMessage = {
   finishedAt: 2_000,
 };
 
-/** The turn the agent is still writing, as a page reads it: a message to a third agent, then its words so far. */
 function newest(words: string): AgentTranscriptMessage {
   return {
     id: "newest",
@@ -157,8 +139,6 @@ function page(
   };
 }
 
-/** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
-/** What a row's card says: its name, its corner, and whether its tile wears the working mark. */
 function cardOn(row: HTMLElement | null): readonly (string | boolean | null | undefined)[] {
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
@@ -173,7 +153,6 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   ];
 }
 
-/** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
   const telling = tellingTranscripts();
@@ -205,7 +184,6 @@ function runningTab() {
           control,
           shown: true,
           cards,
-          // As the window does, each draw hands the tab presses of its own.
           onOpenSubagent: () => undefined,
           onOpenTarget: () => undefined,
           onHeld: () => undefined,
@@ -252,7 +230,6 @@ test("a message a page did not touch hangs the card the window hands now, and it
   tab.openEarlierFold();
   const row = (callId: string) =>
     tab.container.querySelector<HTMLElement>(`button[data-call-id="${callId}"]`);
-  // A message folds its words open, so its card hangs from its chip, the row's way to the agent.
   const messageChip = () =>
     tab.container.querySelector<HTMLElement>('[data-call-id="call-message"] [data-tool-agent-ref]');
   assert.equal(cardOn(messageChip())[0], "Invoice export");
@@ -261,12 +238,10 @@ test("a message a page did not touch hangs the card the window hands now, and it
   assert.match(refused(), /Invoice export/u);
   assert.equal(cardOn(row(DELEGATE_CALL))[2], true, "the worker's tile wears the working mark");
 
-  // The window draws again with the other agent renamed, and no page has touched the earlier turn.
   act(() => drawOver("Invoice export, retried"));
   assert.equal(cardOn(messageChip())[0], "Invoice export, retried");
   assert.match(refused(), /Invoice export, retried/u);
 
-  // A page touches the newest turn alone, and says the worker has finished.
   await tab.answer(page([newest("Reading the retry audit.")], AGENT_STATUS.COMPLETED, "1:2"));
   assert.match(
     tab.container.querySelector('[data-message-id="newest"]')?.textContent ?? "",
@@ -326,7 +301,6 @@ test("a page that adds a call to a running turn draws that call alone, the calls
   });
   const telling = tellingTranscripts();
   telling.tell(TRANSCRIPT, page([DESCRIPTION, messaged(5)], AGENT_STATUS.RUNNING, "1:1"));
-  // Each call about an agent asks for that agent's card as its row is drawn, so the cards asked for are the rows drawn.
   const asked: string[] = [];
   const cards: TranscriptCards = {
     target: (target) => {

@@ -29,13 +29,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
-/**
- * whole-parts.test.ts -- a command's output and a thought its page carried
- * cut are drawn closed as any other, read whole only once their fold opens,
- * and drawn whole under it once read, the wait said while the read is under
- * way. Synthetic throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 
 const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 1 };
@@ -65,7 +58,6 @@ const COMMAND = {
 const WHOLE_OUTPUT = "compiled the first file\ncompiled the middle file\ncompiled the last file";
 const WHOLE_THOUGHT = "Start with the build. Then the middle of the thought. Then ship.";
 
-/** A turn whose thought and command output its page carried cut. */
 const CUT_TURN: AgentTranscriptMessage = {
   id: JOURNAL_ID,
   role: MESSAGE_ROLE.ASSISTANT,
@@ -114,7 +106,6 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** Lets the window's promises settle. */
 async function settled(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -122,7 +113,6 @@ async function settled(): Promise<void> {
   await settleQueries();
 }
 
-/** The tab drawn over the cut turn, each part read whole answering as `answer` resolves, and the reads it was asked. */
 async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
   const asked: AgentPartParams[] = [];
   fakeAppBridge({});
@@ -163,13 +153,11 @@ async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
     ),
   );
   await settled();
-  // A finished turn folds its work under one line, which a reader opens first.
   press(container.querySelector<HTMLElement>("[data-turn-fold] > summary"));
   await settled();
   return { container, asked };
 }
 
-/** Presses a closed fold's line open, as a reader would. */
 function press(summary: HTMLElement | null): void {
   assert.ok(summary, "the fold's line is drawn");
   assert.equal(summary.getAttribute("aria-expanded"), "false");

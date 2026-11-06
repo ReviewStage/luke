@@ -1,14 +1,3 @@
-/**
- * update-toast.ts -- the toast that says the app was updated, once for each version, on the first launch after the update, with the way to what changed.
- *
- * Main reports `UPDATED` on the first launch after an install, until its
- * first check overwrites it, which the Settings row words as where the
- * update came from. The toast says it where the developer is looking
- * instead, and offers What's new, the changelog Settings' Changelog row
- * opens. The version it last said is kept in the renderer's storage, so a
- * window drawn again while main still reports it says nothing twice.
- */
-
 import { ACT_KIND } from "@repo/host/acts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { STATUS_TONE } from "@repo/ui";
@@ -19,20 +8,16 @@ import { pressMutation } from "./act-mutations.js";
 import { readKeptOption, writeKept } from "./kept-storage.js";
 import { useToast } from "./toast.js";
 
-/** The storage key the version last announced is kept under. */
 const ANNOUNCED_KEY = "app.update-announced";
 
-/** The version last announced, or none where there is none or storage refuses the read. */
 function readAnnounced(): string | null {
   return Option.getOrNull(readKeptOption(ANNOUNCED_KEY, Schema.String));
 }
 
-/** Keeps the version announced; storage that refuses the write leaves it to be said again. */
 function keepAnnounced(version: string): void {
   writeKept(ANNOUNCED_KEY, Schema.String, version);
 }
 
-/** Says, once for each version, that the app was updated to the version running. */
 export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
   const toast = useToast();
   const { mutate: openChangelog } = useMutation(pressMutation(ACT_KIND.UPDATE_OPEN_CHANGELOG));

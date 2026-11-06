@@ -18,73 +18,34 @@ import { type KeyboardEvent, type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { replayMaskedError } from "./marks.js";
 
-/**
- * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.
- *
- * The row's acts live in the window's own menu rather than in buttons along
- * the row, the way a sidebar task's do: a ⋯ at the row's end (`MoreButton`, named
- * "{thing} actions") opens it, a right-click anywhere on the row opens the same
- * menu at the pointer, and the menu key or ⇧F10 on the row opens it under the
- * row. The ⋯ is always drawn, muted as a toolbar's glyphs are until the pointer
- * is on it, because a ⋯ shown only on hover leaves an empty gap at the end of
- * the row. A row with no act that applies now draws no ⋯ and opens nothing, and
- * a row given `alone` that holds exactly one act draws it as an icon button
- * of its own (named and tipped by the act's words, in a group named by the
- * row's label, as a `ListRow`'s acts are) rather than a ⋯ over one item. An
- * act that cannot be taken back asks first through the confirm dialog, which
- * hands focus back to the ⋯ the menu returned it to.
- *
- * Its acts may come in groups, a rule between each. The ⋯ is `@repo/ui`'s
- * quiet `IconButton`. A row given its words (`row`) stands in `@repo/ui`'s
- * `SettingsRow`, its control and the ⋯ at the row's end, or, where it folds
- * lines open under its words, in `SettingsFoldRow`, its ⋯ before the chevron;
- * one given `children` still draws them in the window's own row, until its
- * page moves.
- */
-
-/** A row's acts: one list, or lists drawn with a rule between each. */
 type MenuRowActions = readonly MenuAction[] | readonly (readonly MenuAction[])[];
 
-/** A row's words as the shared row draws them, and the control standing before its ⋯. */
 interface MenuRowWords {
   label: ReactNode;
-  /** What rides the label's line without naming the row: a Modified word, a mark. */
   adornment?: ReactNode;
   description?: ReactNode;
-  /** What went wrong with the row's last act, and the failure beneath it, or nothing while none did. */
   error?: ShownError | undefined;
-  /** What the row grows under its line and owns alone, a stored key's field. */
   below?: ReactNode;
-  /** The provider's or service's mark the row leads with. */
   leading?: ReactNode;
   control?: ReactNode;
-  /** A control drawn from the row's ids, where the row's words and error must describe it. */
   describedControl?: (control: SettingsRowControl) => ReactNode;
-  /** Whether the row just arrived, which lights it once. */
   landed?: boolean;
-  /** Whether the row stands inset under the row above, one of its things, as GitHub's accounts stand under GitHub's. */
   indent?: SettingsRowIndent;
-  /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, or many drawn only near the view (`run`) with its foot as `lines`, the chevron's name, and whether it starts open. */
   fold?: { lines?: ReactNode; run?: SettingsFoldRun; label: string; defaultOpen: boolean };
-  /** The chevron of the rows the row folds under it (`SettingsRowsFold`), last at its end. */
   chevron?: ReactNode;
 }
 
-/** What the row draws: its words for the shared row, or its own children in the window's row. */
 type MenuRowBody =
   | { row: MenuRowWords; children?: undefined }
   | {
       row?: undefined;
-      /** The row's words, and any control standing before the ⋯. */
       children: ReactNode;
     };
 
-/** Whether a row's acts came in groups rather than as one list. */
 function grouped(actions: MenuRowActions): actions is readonly (readonly MenuAction[])[] {
   return actions.every((entry) => Array.isArray(entry));
 }
 
-/** The row's acts as the menu draws them: in groups, none of them empty. */
 function groupsOf(actions: MenuRowActions): readonly (readonly MenuAction[])[] {
   const groups = grouped(actions) ? actions : [actions];
   return groups.filter((group) => group.length > 0);
@@ -99,18 +60,12 @@ export function MenuRow({
   row,
   children,
 }: MenuRowBody & {
-  /** What the row is, as a sentence opens with it: "Linear" names its ⋯ and its menu "Linear actions". */
   thing: string;
   actions: MenuRowActions;
-  /** A muted line over the menu's acts saying what they act on, where the row's words do not. */
   heading?: string;
-  /** The id a pressed search result lands on. */
   anchor?: string;
-  /** Whether a lone act stands as a button of its own rather than behind a ⋯; a row whose acts may grow keeps its ⋯. */
   alone?: boolean;
 }): React.JSX.Element {
-  // The page is drawn whenever the row is, so the menu needs no surface of
-  // its own to close with: it closes with the row unmounting.
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   const groups = groupsOf(actions);
@@ -129,7 +84,6 @@ export function MenuRow({
     ) : acting ? (
       <MoreButton ref={door} thing={thing} {...menu.trigger()} />
     ) : null;
-  // Note that the menu hangs under the row but hands focus back to what held the keyboard, the ⋯ or a control beside it, since the row itself takes none.
   const keyMenu = (event: KeyboardEvent<HTMLElement>) => {
     if (!opensMenu(event)) return;
     event.preventDefault();
@@ -185,7 +139,6 @@ export function MenuRow({
                 {only === undefined ? (
                   more
                 ) : (
-                  // Note that a lone act is a group named by the row's label, so a reader hears which host's "Remove" or which invitation's "Cancel invitation" it is.
                   // biome-ignore lint/a11y/useSemanticElements: a row's act is a press on its thing, not a form's field, so it is no `<fieldset>`.
                   <div role="group" aria-labelledby={control.labelId} className="contents">
                     {more}
@@ -202,7 +155,6 @@ export function MenuRow({
           label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups}
-          // Note that a row's acts are the app's own words, and an act that names a person's thing is the caller's to mark `replayMasked`.
           replayUnmasked
           {...(heading === undefined ? undefined : { heading })}
           onClose={menu.close}

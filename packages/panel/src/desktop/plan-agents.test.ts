@@ -17,21 +17,8 @@ import { item } from "../testing/desktop-inbox.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { PlanAgents } from "./plan-agents.js";
 
-/**
- * plan-agents.test.ts -- the plan's agents list those waiting on the
- * developer first, each naming the thread it waits in, then those at work,
- * then the newest started, each saying where it runs itself; a row opens its agent, its pull request's chip opens
- * the pull request and not the agent, and a task with no agent and no start
- * draws no list; the group ends with New agent, even on a task with no
- * agent, and on a phone the task's Inbox follows it only while something
- * waits there that no listed agent's row marks, on a task that starts no
- * agent too.
- * Synthetic agents throughout.
- */
-
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** An agent of the plan, started at `createdAt`, standing at `status`. */
 function agent(id: string, title: string, createdAt: number, status: AgentSummary["status"]) {
   return {
     id,
@@ -45,7 +32,6 @@ function agent(id: string, title: string, createdAt: number, status: AgentSummar
   } satisfies AgentSummary;
 }
 
-// Note that the oldest ran on a device since removed, and the one at work runs on the member's Studio.
 const OLDEST = {
   ...agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d21", "Research providers", 1, AGENT_STATUS.COMPLETED),
   machine: AGENT_MACHINE.DEVICE,
@@ -70,7 +56,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** `count` threads of the agent given waiting on the developer, by that agent, as `waitingByAgent` hands them. */
 function waitingOn(agentId: string, count: number): ReadonlyMap<string, readonly InboxItem[]> {
   const items = Array.from({ length: count }, (_, at) => ({
     ...item(`a1b2c3d4-0000-4000-8000-00000000000${at}`, `Which retry budget, ${at}?`, at),
@@ -79,7 +64,6 @@ function waitingOn(agentId: string, count: number): ReadonlyMap<string, readonly
   return new Map([[agentId, items]]);
 }
 
-/** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says, offering New agent where `starts` says, a phone's where `phone` says; every agent, pull request, and start it opens recorded. */
 function mount(
   agents: readonly AgentSummary[],
   {
@@ -218,14 +202,12 @@ test("the group ends with New agent even on a task with no agent, and on a phone
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  // Note that the threads are an agent's the group does not list, an archived one's, so no row marks them.
   const waiting = mount([OLDEST], { starts: true, phone: true, waiting: waitingOn(NEWEST.id, 2) });
   press(waiting.host, "2 threads need you");
   assert.deepEqual(waiting.opened.phone, ["inbox"]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  // A task whose agents are all archived starts none, and its waiting threads still stand.
   const archived = mount([], { phone: true, waiting: waitingOn(NEWEST.id, 1) });
   press(archived.host, "1 thread needs you");
   assert.deepEqual(archived.opened.phone, ["inbox"]);

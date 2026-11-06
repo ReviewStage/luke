@@ -27,10 +27,6 @@ import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-
 import { DesktopTasks } from "./desktop-tasks.js";
 import { TASK_PANE, taskPaneOf } from "./task-pane-switcher.js";
 
-/**
- * task-pane-switcher.test.ts -- a phone's task is headed by one row, the way back, the title of what is on screen, and one ⋯ of what is on screen: Overview leads out of the task and offers the task's own menu; an agent's screen, a draft's, and a tab of the panel are pushed over it, each going back a screen, named for where it goes, titled by what it shows, and its ⋯ the agent's, Discard draft, or the tab's, unnamed under each item since the row names it; and a wide window keeps its strip and toolbar, Overview's ⋯ renaming the task in the plan's own title.
- */
-
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
@@ -41,7 +37,6 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-/** An agent of the task, whose tab the column shows on the Agents view. */
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
@@ -53,10 +48,8 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-/** The draft's tab, a New agent not yet started. */
 const DRAFT = { draft: "draft" } as const;
 
-/** A page an agent showed on the plan, whose tab offers a link to itself. */
 const PAGE = {
   id: "5d0c1f2e-7a3b-4c9d-8e1f-2a3b4c5d6e7f",
   title: "Invite funnel",
@@ -103,8 +96,6 @@ test("the screen standing follows the column and the panel: a tab of the panel w
   assert.equal(taskPaneOf({ open: false, column: { draft: "draft" } }), TASK_PANE.AGENT);
 });
 
-/** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the comments, a page of the plan's where `paged`, and its column on the agent's tab where `agent`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
-/** What a menu item says, its words and what it acts on, without the chord the open task's items print at their end. */
 function itemWords(item: HTMLElement): string {
   const chord = item.querySelector(".ui-shortcut")?.textContent ?? "";
   const words = item.textContent ?? "";
@@ -126,7 +117,6 @@ function mount(
   roots.push(root);
   const narrow = room === SHELL_ROOM.NARROW;
   const registry = AtomRegistry.make();
-  /** The rename door the open task's page offers ⌘K, as it stood at the last draw. */
   let renameOffer: ReturnType<typeof useTaskRenameOffer>;
   function RenameOfferProbe(): null {
     renameOffer = useTaskRenameOffer();
@@ -142,7 +132,6 @@ function mount(
       root.render(
         onRegistry(
           registry,
-          // Note that the shell hands its room to every tab's body, as the window's root does.
           createElement(
             ShellRoomContext.Provider,
             { value: room },
@@ -201,7 +190,6 @@ function mount(
       ),
     );
   draw(open, tab);
-  // The row's ⋯, named for what is on screen ("Agent actions").
   const more = () => {
     const found = container.querySelector<HTMLButtonElement>(
       '.task-head .ui-toolbar-actions button[aria-haspopup="menu"]',
@@ -209,7 +197,6 @@ function mount(
     assert.ok(found, "the row holds its ⋯");
     return found;
   };
-  // The ⋯'s menu, opened to be read and closed again by the press that opened it.
   const menu = () => {
     act(() => more().click());
     const groups = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].map((each) =>
@@ -241,7 +228,6 @@ function mount(
     [...container.querySelectorAll("button")].some(
       (each) => each.getAttribute("aria-label") === label,
     );
-  /** Asks the rename ⌘K would, through the door the page offers it. */
   const renameFromPalette = () => {
     assert.ok(renameOffer, "the page offers ⌘K its rename");
     act(() => renameOffer?.begin());
@@ -420,7 +406,6 @@ test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offe
   assert.ok(page.menu().includes("View page"), "the source is shown");
 });
 
-/** Chooses Rename from Overview's ⋯ in a wide window's column. */
 function chooseOverviewRename(container: HTMLElement): void {
   openTaskMenu(container);
   const rename = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
@@ -430,7 +415,6 @@ function chooseOverviewRename(container: HTMLElement): void {
   act(() => rename.click());
 }
 
-/** The description's own title, which a wide window renames the task in. */
 function descriptionTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
@@ -460,7 +444,6 @@ test("on a wide window whose column shows an agent, the rename ⌘K asks shows O
   );
 });
 
-/** A wide window's task whose renames are all refused, its name drawn as the title's words are typed, as the window draws a draft. */
 function RefusingTask(): React.JSX.Element {
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const task = { ...TASK, name: draft ?? TASK.name };
@@ -493,7 +476,6 @@ test("on a wide window a refused rename keeps the name typed in the description'
   });
   await act(async () => title.blur());
 
-  // Note that the refusal reaches the title through the rename's mutation, a moment after it is answered.
   await vi.waitFor(() =>
     assert.equal(descriptionTitle(container)?.textContent, "Invite teammates"),
   );

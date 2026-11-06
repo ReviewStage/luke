@@ -13,14 +13,6 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileTreePane } from "./file-tree-pane.js";
 
-/**
- * file-tree-stage.test.ts -- where a file tree stands is said by its host,
- * in `@repo/ui`'s lines, beside the tree the bundle draws: its root being
- * read, a root that could not be listed with Retry, which lists it again, a
- * search matching nothing, and a folder listed short of whole. The tree is
- * the bundle's own, Pierre drawing it in jsdom; synthetic paths.
- */
-
 const REPOSITORY = "acme/relay";
 const REFUSED = "The repository could not be listed.";
 
@@ -38,7 +30,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `element` over the landed tree bundle, and draws again whatever it is handed after. */
 function draw(element: ReactElement) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -50,21 +41,18 @@ function draw(element: ReactElement) {
   return { container, render };
 }
 
-/** Lets the listings answered land, which the tree and its host draw as they land, on no clock. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The words of every line the host says, alerts, notes and waits alike. */
 function said(): string[] {
   return [...document.querySelectorAll(".ui-note-line, .ui-failure-note, .ui-spinner-region")].map(
     (line) => line.textContent ?? "",
   );
 }
 
-/** The host the tree draws in, and whether it is shown. */
 function hostShown(): boolean {
   const host = document.querySelector(".file-tree-host") ?? assert.fail("the host is mounted");
   return !host.hasAttribute("hidden");
@@ -80,7 +68,6 @@ test("a crumb's tree says its root is read, says why it could not be with Retry,
       listFolder: (path) => {
         if (path !== "") return Promise.resolve({ entries: [], truncated: false });
         asked += 1;
-        // Note that the tree lists its root once more as it draws it, which the last answer answers.
         return (answers[asked - 1] ?? answers[1])?.promise ?? assert.fail("the root is answered");
       },
       onOpen: () => undefined,

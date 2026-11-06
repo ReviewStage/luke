@@ -12,14 +12,6 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import type { DiffLook, FileViewHandle, FileViewProps } from "./contract.js";
 import { diffView } from "./index.js";
 
-/**
- * whole-file.test.ts -- a whole file drawn by the diff bundle with no diff,
- * as a File tab draws one (`mountFile`), a patch drawn alone with notes
- * under its lines (`mount`), and a list's notes and scrolls (`mountList`): Pierre draws them in jsdom on the window's own
- * thread, since no worker text was built in, and the tests read what it drew
- * in the shadow root and what the view's own elements hold.
- */
-
 const LOOK: DiffLook = {
   layout: DIFF_LAYOUT.UNIFIED,
   indicators: DIFF_INDICATORS.BARS,
@@ -34,12 +26,10 @@ const LOOK: DiffLook = {
   ligatures: false,
 };
 
-/** The motion token saying how a scroller a component moves itself gets there, `auto` where motion is held still. */
 const SCROLL_GLIDE = "--ui-scroll-glide";
 
 const TEXT = "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n";
 
-/** The element each note was drawn in, by its key, as the view keeps them. */
 let kept = new Map<string, HTMLElement>();
 let mounted: Array<{ unmount: () => void }> = [];
 
@@ -52,7 +42,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The view's element for a note, made the first time it is asked for. */
 function noteElement(key: string): HTMLElement {
   const held = kept.get(key);
   if (held !== undefined) return held;
@@ -74,7 +63,6 @@ function props(overrides: Partial<FileViewProps> = {}): FileViewProps {
   };
 }
 
-/** A file mounted under a host of its own, and the host. */
 function mountFile(drawn: FileViewProps): { host: HTMLElement; handle: FileViewHandle } {
   const host = document.createElement("div");
   document.body.append(host);
@@ -83,24 +71,20 @@ function mountFile(drawn: FileViewProps): { host: HTMLElement; handle: FileViewH
   return { host, handle };
 }
 
-/** The shadow root Pierre drew the file in. */
 function drawnRoot(host: HTMLElement): ShadowRoot {
   const root = host.querySelector("diffs-container")?.shadowRoot;
   assert.ok(root, "the file is drawn in a shadow root");
   return root;
 }
 
-/** Waits for Pierre's next frame, where it draws what it was handed. */
 function nextFrame(): Promise<void> {
   return new Promise((done) => requestAnimationFrame(() => done()));
 }
 
-/** The numbers of the rows of code drawn, in order. */
 function drawnLines(root: ShadowRoot, selector = "[data-line]"): number[] {
   return [...root.querySelectorAll(selector)].map((row) => Number(row.getAttribute("data-line")));
 }
 
-// Note that Pierre draws nothing until its highlighter has loaded, once for the run, so the tests wait for it here rather than each on its first frame.
 beforeAll(async () => {
   const { host, handle } = mountFile(props());
   for (let frame = 0; frame < 300; frame += 1) {
@@ -283,7 +267,6 @@ test("a list draws each file's notes in the view's own element for that file and
 });
 
 test("a list is written with no style as markup, which the panel's policy would refuse", async () => {
-  // Note that each spy calls through, so Pierre draws as it would, and only what it wrote is read.
   const writers = [
     vi.spyOn(Element.prototype, "innerHTML", "set"),
     vi.spyOn(ShadowRoot.prototype, "innerHTML", "set"),
@@ -321,18 +304,11 @@ test("a list is written with no style as markup, which the panel's policy would 
   for (const html of code) assert.doesNotMatch(html, /\sstyle="/);
 });
 
-/** A patch adding twenty lines to a file of a path's name. */
 function addingPatch(path: string): string {
   const lines = Array.from({ length: 20 }, (_, at) => `+const line${at} = ${at};`).join("\n");
   return `--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,20 @@\n${lines}\n`;
 }
 
-/**
- * A list of eight files scrolled to its sixth, and every top its scroller
- * was moved to on the way there. Note that jsdom lays nothing out and moves
- * no scroller, so the list stands 400 pixels tall, near enough to its sixth
- * file for Pierre to glide there, and its scroller records each move.
- */
 async function scrolledTops(): Promise<number[]> {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     new DOMRect(0, 0, 600, 400),
@@ -379,7 +355,6 @@ test("a list scrolled to a file glides there", async () => {
 });
 
 test("a list scrolled to a file where motion is held still gets there at once", async () => {
-  // Note that reduced motion and a capture run hold the glide at the token, which jsdom's stylesheet-free document leaves to the test.
   document.documentElement.style.setProperty(SCROLL_GLIDE, "auto");
   const tops = await scrolledTops();
   assert.equal(tops.length, 1, "the list moves once, to the file");

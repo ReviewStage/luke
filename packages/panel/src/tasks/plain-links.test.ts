@@ -32,17 +32,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * plain-links.test.ts -- a link the window has no chip for is one plain
- * link wherever words are drawn: a transcript, the description read and edited, and
- * a version. A bare address says its host and path and a labeled one its
- * label, and a plain link pressed opens in the browser, in the description or a
- * version without opening the section's editor. Synthetic description and
- * repository.
- */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/relay";
@@ -63,7 +53,6 @@ const TASK: Task = {
   document: { body: `## Rollout\n\n${WORDS}`, assumptions: [] },
 };
 
-/** What every surface draws the two plain links as: the label, and the bare address cut short. */
 const PLAIN = ["the docs", "postgresql.org/docs/…/sql-createindex.html"];
 
 const PAGE: TaskMentionsValue = {
@@ -88,13 +77,11 @@ const SECTION_LINKS = {
   reveal: undefined,
 };
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 let sent: (AnyAct | OpenedLink)[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -121,14 +108,12 @@ function drawn(node: ReactNode): HTMLElement {
   return container;
 }
 
-/** What each plain link drawn says. */
 function plainLinks(container: HTMLElement): (string | null)[] {
   return [...container.querySelectorAll<HTMLElement>(".ui-text-link")].map(
     (link) => link.textContent,
   );
 }
 
-/** A description's version, read and ready, as the version history draws it. */
 function Version(): ReactNode {
   const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {

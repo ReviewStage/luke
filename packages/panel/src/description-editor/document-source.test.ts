@@ -18,11 +18,6 @@ import {
 } from "./document-source.js";
 import { markdownExtensions } from "./description-editor.js";
 
-/**
- * A whole description in the editor keeps every block's exact source but the ones
- * the developer changes, so an edit is a change on its own lines only.
- */
-
 const DOCUMENT = [
   "## Problem",
   "",
@@ -62,7 +57,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The document in an editor, with what it would hand over now. */
 function opened(markdown: string) {
   const extensions = markdownExtensions();
   const manager = documentManager(extensions);
@@ -99,7 +93,6 @@ async function retype(host: HTMLElement, words: string, next: string): Promise<v
   await new Promise<void>((settled) => queueMicrotask(settled));
 }
 
-/** The lines one document has that the other does not. */
 function changedLines(before: string, after: string): string[] {
   return diffLines(before, after)
     .filter((part) => part.added === true || part.removed === true)
@@ -156,7 +149,6 @@ test("a block the developer changed after the save went out stays theirs when th
   ]);
 });
 
-/** A description whose picture stands on its own line, as a coding agent may write one. */
 const PICTURED = [
   "## Approach",
   "",
@@ -168,7 +160,6 @@ const PICTURED = [
   "",
 ].join("\n");
 
-/** Where the first picture stands in the editor's document. */
 function picturePosition(editor: Editor): number {
   let at = -1;
   editor.state.doc.descendants((node, pos) => {
@@ -214,7 +205,6 @@ test("a picture whose alt text, address, and title need escaping reads back as t
   assert.deepEqual([read?.alt, read?.src, read?.title], [alt, src, title]);
 });
 
-/** How many checkboxes the read view draws for a description's text. */
 function drawnCheckboxes(words: string): number {
   return (
     renderToStaticMarkup(withQueryClient(createElement(MarkdownMessage, { words }))).split(
@@ -223,7 +213,6 @@ function drawnCheckboxes(words: string): number {
   );
 }
 
-/** The words typed at the very end of the editor's text. */
 function typedAtEnd(editor: Editor, words: string): void {
   editor.commands.setTextSelection(Selection.atEnd(editor.state.doc).from);
   editor.commands.insertContent(words);

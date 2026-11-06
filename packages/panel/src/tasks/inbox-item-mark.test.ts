@@ -15,18 +15,10 @@ import { listedAgent } from "../testing/tasks-control.js";
 import { ItemMark } from "./inbox-item-parts.js";
 import { taskHolder } from "./inbox-model.js";
 
-/**
- * inbox-item-mark.test.ts -- an Inbox item whose agent was archived still
- * stands, and its row's mark wears the harness that agent ran on, as the
- * task list carries its tasks' agents, archived ones among them, since the
- * task's row names no archived agent. Synthetic task and agent.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const ARCHIVED = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const AT = 1_792_000_000_000;
 
-/** The task as the list carries it: its row names no agent, the one that posted being archived. */
 const TASK: TaskSummary = {
   id: TASK_ID,
   workspaceId: "workspace-acme",

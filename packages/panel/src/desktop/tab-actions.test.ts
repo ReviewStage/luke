@@ -33,24 +33,9 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
-// Note that a Pull request tab is loaded as the side panel loads it, on first use
-// (`pages-on-demand.ts`), so the module is read here first and its load settles
-// within the test's own ticks.
 import "../tasks/agent-pull-request-tab.js";
 import { openTaskMenu } from "../testing/task-menu.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-
-/**
- * tab-actions.test.ts -- a column's bar holds a ⋯ for its chosen tab's
- * content actions: on an agent's or a subagent's tab the actions its
- * right-click offers on what it shows, the one agent menu, without the
- * tab's own keeping (Close, Close others, Pin), which stays on the
- * right-click alone; the task's column draws no ⋯ of the task's, whose own
- * document menu the Plan tab's ⋯ and right-click offer instead, pinning
- * the task rather than the tab. A tab with no content action shows no ⋯,
- * and no tab wears one of its own. A Pull request tab's ⋯ also offers what
- * its body hands up, Open on GitHub and Refresh, which no other tab's offers.
- */
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -88,10 +73,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The agent's delegated worker, whose tab the side panel holds. */
 const SUBAGENT = { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } };
 
-/** What a right-click offers on a tab itself rather than on what it shows. */
 const TAB_KEEPING = new Set([
   "Close",
   "Close others",
@@ -103,20 +86,12 @@ const TAB_KEEPING = new Set([
   "Move right",
 ]);
 
-/** Waits out the few microtasks the window's document takes to arrive after the first draw. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/**
- * The task's page with a tab of every kind open, `main` chosen in its column
- * and `side` in the side panel: the Call's, an agent's, and the draft's in
- * the column, and in the side panel the fixed tabs, the Plan and the Inbox
- * among them, the agent's delegated worker's, a file's, the agent's Changes
- * and Terminal, and a page's.
- */
 async function mountEveryTab(
   chosen: { main: MainTab; side: SidePanelTab },
   pullRequests: AgentsControl["pullRequests"] = new Map(),
@@ -155,7 +130,6 @@ async function mountEveryTab(
       },
     }),
   });
-  // The host holds the Pull request tab's parts, answered as a service that did not answer.
   const unanswered = () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED } as const);
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.PULL_REQUEST]: unanswered,
@@ -169,7 +143,6 @@ async function mountEveryTab(
     root.render(
       onRegistry(
         registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
-        // Only the tabs' bars are asked about, so no bundle lands under them.
         onSideBundles(
           unlandedBundles(),
           createElement(DesktopTasks, {
@@ -185,12 +158,10 @@ async function mountEveryTab(
   return container;
 }
 
-/** The menu standing open, if one is: drawn and not on its way out. */
 function openMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
 }
 
-/** What the open menu offers, each item's words and whether it applies now, then the menu closed by Escape. */
 function readAndClose(): string[] {
   const menu = openMenu();
   assert.ok(menu, "a menu stands open");
@@ -205,7 +176,6 @@ function readAndClose(): string[] {
   return items;
 }
 
-/** What a right-click on the chosen tab of `strip` offers, the menu closed again. */
 function rightClickChosen(strip: HTMLElement): string[] {
   const tab = strip.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
   assert.ok(tab, "the strip has a chosen tab");
@@ -217,14 +187,12 @@ function rightClickChosen(strip: HTMLElement): string[] {
   return readAndClose();
 }
 
-/** The bars of the task's page: the task's topbar, and under it its column's agents' bar and the side panel's. */
 interface Bars {
   task: HTMLElement;
   main: HTMLElement;
   side: HTMLElement;
 }
 
-/** The bars of the task's page, as it draws them. */
 function bars(container: HTMLElement): Bars {
   const task = container.querySelector<HTMLElement>(".task-topbar .ui-toolbar");
   const main = container.querySelector<HTMLElement>(".desktop-task-main .ui-toolbar");
@@ -233,12 +201,10 @@ function bars(container: HTMLElement): Bars {
   return { task, main, side };
 }
 
-/** What the right-click of the chosen tab of `strip` offers on what the tab shows, its own keeping left out. */
 function contentOf(items: readonly string[]): string[] {
   return items.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", "")));
 }
 
-/** Every ⋯ a bar draws, by its name. */
 function moreButtons(bar: HTMLElement): (string | null)[] {
   return [...bar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
     button.getAttribute("aria-label"),
@@ -331,7 +297,6 @@ test("a tab with nothing to offer on what it shows still answers a right-click w
   }
 });
 
-/** The agent's pull request, as what it published names it. */
 const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
@@ -358,7 +323,6 @@ test("the Pull request tab's right-click offers Copy link first, then Copy GitHu
     published,
   );
   const { side } = bars(container);
-  // Note that the pull request's actions stand once its read reaches its query.
   await vi.waitFor(() =>
     assert.deepEqual(contentOf(rightClickChosen(side)), [
       "Copy link",
@@ -392,7 +356,6 @@ test("the Pull request tab's right-click offers Copy link first, then Copy GitHu
   }
 });
 
-/** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), pageFrameUrl });

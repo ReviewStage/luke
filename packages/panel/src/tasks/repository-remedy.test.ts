@@ -10,11 +10,6 @@ import { afterEach, test } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 
-/**
- * A missing credential's press opens Settings › Agents at the row of the
- * harness the service named, and at the page's top where it named none.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -22,7 +17,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Presses the remedy of each failure in turn, answering every place Settings was opened at. */
 function pressed(failures: readonly Failure[]): SettingsLink[] {
   const opened: SettingsLink[] = [];
   const presses: (() => void)[] = [];

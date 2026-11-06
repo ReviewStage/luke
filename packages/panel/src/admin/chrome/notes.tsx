@@ -3,41 +3,21 @@ import { formatCount } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { TEXT_TONE, Text } from "@repo/ui";
 
-/**
- * Why the hosted tier's figures stand under a retired heading: the voice
- * service that made most of its calls left on Oct 28, 2026 (#5712), and every
- * model call runs on the account's own key, so dictation alone still meters.
- */
 const HOSTED_TIER_RETIRED =
   "The hosted tier is retired: since Oct 28, 2026, only dictation writes its rows, so an account working through tasks and agents can read as idle here.";
 
-/**
- * A section's title marked retired, for what measures a feature the product
- * no longer has. Such a section stands at the bottom of its page, under every
- * live one.
- */
 export function retiredTitle(title: string): string {
   return `${title} · retired`;
 }
 
-/** A note under the cards of the section it explains, in the muted body role; the section stands it. */
 function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
 }
 
-/**
- * What every figure on a page is, where its title cannot say it: a muted
- * line at the top of its content, since the toolbar holds a title alone;
- * the page stands it a section's gap above the first section.
- */
 export function PageNote({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
 }
 
-/**
- * What a retention cell counts, by the grid's basis: a meaningful action, or
- * any hosted-tier call, the basis the grid had before the Overview was rebuilt.
- */
 export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.Element {
   return (
     <SectionNote>
@@ -63,7 +43,6 @@ export function TopAccountsNote(): React.JSX.Element {
   );
 }
 
-/** What the activity chart and the headline tiles count, and what they cannot. */
 export function ActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
@@ -76,7 +55,6 @@ export function ActivityNote(): React.JSX.Element {
   );
 }
 
-/** How the agents-by-origin rows split the week's agents, and where pilots stand. */
 export function AgentOriginsNote(): React.JSX.Element {
   return (
     <SectionNote>
@@ -98,7 +76,6 @@ export function AccountActivityNote(): React.JSX.Element {
   );
 }
 
-/** What the account page's live activity counts: the Overview's and the roster's active day. */
 export function AccountActionsNote(): React.JSX.Element {
   return (
     <SectionNote>
@@ -148,10 +125,6 @@ export function DayNote({
   );
 }
 
-/**
- * What the Day page's live figures count: one UTC day of the Overview's
- * activity chart, and who was active in it.
- */
 export function DayActivityNote({
   truncatedTo,
   activeDevelopers,
@@ -172,7 +145,6 @@ export function DayActivityNote({
   );
 }
 
-/** Why the app's own turns stand under a retired heading on Reliability. */
 export function AppTurnsNote(): React.JSX.Element {
   return (
     <SectionNote>

@@ -26,14 +26,6 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { type InboxCloser, useInboxClose, useInboxCloser } from "./inbox-close.js";
 
-/**
- * inbox-close.test.ts -- an item's Close asks first, and its question is
- * withdrawn once the agent posts the item again, so the reader never closes
- * a request they were not asked about; a close taken lets go of the answer
- * drafted against the revision it closed, and of nothing else of the item's.
- * Synthetic item.
- */
-
 const ITEM: InboxItem = {
   id: "a1b2c3d4-0000-4000-8000-000000000001",
   agentId: "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b",
@@ -71,7 +63,6 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-/** The close as a row offers it: a button pressing its action, and its question beside it. */
 function CloseProbe({ item, closed }: { item: InboxItem; closed: InboxItem[] }): React.JSX.Element {
   const close = useInboxClose(
     item,
@@ -91,7 +82,6 @@ function CloseProbe({ item, closed }: { item: InboxItem; closed: InboxItem[] }):
   );
 }
 
-/** The question's button reading `words`. */
 function questionButton(words: string): HTMLButtonElement {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Close asks first");
@@ -143,7 +133,6 @@ test("a settled item offers no Close", () => {
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** Where the item's draft is kept. */
 const PLACE: InboxPlace = {
   kind: DRAFT_PLACE.INBOX,
   planId: PLAN,
@@ -179,7 +168,6 @@ test("a close taken keeps the words of a message begun on the item while it was 
     closed = closer?.(ITEM);
   });
   act(() => write?.("One more detail"));
-  // Note that the close reaches the act port a few steps after it is sent, as its mutation sends it.
   await vi.waitFor(() => assert.ok(land !== undefined, "the close is out"));
   await act(async () => {
     land?.();

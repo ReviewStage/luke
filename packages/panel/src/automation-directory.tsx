@@ -3,34 +3,15 @@ import type { Workspace } from "@repo/features/workspace-wire";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { useAutomations } from "./desktop/use-automations.js";
 
-/**
- * automation-directory.tsx -- the automations of the workspace a place stands in, read for the agents in it that an automation started, so an agent's card names the one that did.
- *
- * An agent's summary names the automation whose run started it by id
- * alone, so the card reads it against the workspace's automations for its
- * name, schedule, and last run, and opens its page on a press. The list is
- * held only while the place holds an agent an automation started
- * (`wanted`), as the Automations page holds it. The window stands one
- * around everything for the listed workspace (`listed-automations.tsx`),
- * for Home's rows and ⌘K, and a place of its own, the open task or the
- * Inbox, holds that read too where it is of the same workspace, which
- * costs no second follow. Outside a directory no automation is known, and
- * an agent's card says nothing of one.
- */
-
-/** The workspace's automations as read, which workspace's and whose they are, whether a read of them stands, and the way to one's page. */
 interface Shelf {
   readonly automations: readonly AutomationSummary[] | undefined;
   readonly workspaceId: string | undefined;
   readonly workspaceName: string | undefined;
-  /** Whether this directory, or one standing around it, reads the workspace's automations. */
   readonly reading: boolean;
-  /** Whether that read has answered, the automations or why it was refused. */
   readonly settled: boolean;
   readonly onOpen: (automationId: string) => void;
 }
 
-/** One automation as a place names it: the automation, whose it is, and the way to its page. */
 export interface KnownAutomation {
   readonly automation: AutomationSummary;
   readonly workspaceName: string | undefined;
@@ -39,11 +20,6 @@ export interface KnownAutomation {
 
 const ShelfContext = createContext<Shelf | undefined>(undefined);
 
-/**
- * Holds the workspace's automations for everything inside it while
- * `wanted` holds, or while a directory standing around it holds the same
- * workspace's.
- */
 export function AutomationDirectory({
   workspace,
   wanted,
@@ -51,9 +27,7 @@ export function AutomationDirectory({
   children,
 }: {
   workspace: Pick<Workspace, "id" | "name"> | undefined;
-  /** Whether the place holds an agent an automation started. */
   wanted: boolean;
-  /** Opens an automation's page. */
   onOpen: (automationId: string) => void;
   children: ReactNode;
 }): React.JSX.Element {
@@ -71,13 +45,6 @@ export function AutomationDirectory({
   return <ShelfContext.Provider value={shelf}>{children}</ShelfContext.Provider>;
 }
 
-/**
- * Holds the workspace's automations for everything inside it while
- * `wanted` holds, in the workspace and with the way to a page of the
- * directory standing around it, which a place inside reads where the
- * place around it does not: a transcript holding an automation's lines,
- * on an agent no automation started.
- */
 export function AutomationsWanted({
   wanted,
   children,
@@ -100,7 +67,6 @@ export function AutomationsWanted({
   );
 }
 
-/** The automation `automationId` names, as the directory standing around the caller knows it; none while the list is unread, or it lists no such automation. */
 export function useAutomation(automationId: string | undefined): KnownAutomation | undefined {
   const shelf = useContext(ShelfContext);
   if (shelf === undefined || automationId === undefined) return undefined;
@@ -113,7 +79,6 @@ export function useAutomation(automationId: string | undefined): KnownAutomation
   };
 }
 
-/** Whether the automations the directory around the caller reads have answered, or no read of them stands, so a card no longer waits on them. */
 export function useAutomationsLanded(): boolean {
   const shelf = useContext(ShelfContext);
   return shelf === undefined || !shelf.reading || shelf.settled;

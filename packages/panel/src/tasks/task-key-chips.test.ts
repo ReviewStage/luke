@@ -20,17 +20,8 @@ import { mentionLinkDrawer } from "./mention-chip.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * task-key-chips.test.ts -- a listed task's key written among words
- * (`STAG-422`) is drawn as that task's chip, saying the key as written,
- * wherever words are drawn with chips: a transcript's, an Inbox item's, and a description's or a comment's. A key in code or a link, a
- * word shaped like a key that names no task, and a key two tasks share
- * stay words. Synthetic workspaces and tasks.
- */
-
 const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
-/** A workspace of the reader's, its slug its name in lower case. */
 function workspace(id: string, name: string): Workspace {
   return { id, name, slug: name.toLowerCase(), role: WORKSPACE_ROLE.OWNER, github: null };
 }
@@ -38,7 +29,6 @@ function workspace(id: string, name: string): Workspace {
 const STAGE = workspace("workspace-stage", "Stage");
 const STAG = workspace("workspace-stag", "Stag");
 
-/** A task of `home`'s, numbered `number`. */
 function task(home: Workspace, number: number, name: string): TaskSummary {
   return {
     id: `${home.id}-${number}`,
@@ -52,7 +42,6 @@ function task(home: Workspace, number: number, name: string): TaskSummary {
   };
 }
 
-// Words are drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
@@ -62,7 +51,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's document listing Stage's tasks 421 and 422, and task 7 of both Stage and Stag, whose keys are alike. */
 function listTasks(): void {
   handState(
     {},
@@ -81,7 +69,6 @@ function listTasks(): void {
   );
 }
 
-/** What a plan's page hands its places, each task a chip opened kept. */
 function planPage(opened: Mention[]): TaskMentionsValue {
   return {
     holder: { taskId: PLAN_ID },
@@ -99,16 +86,13 @@ function planPage(opened: Mention[]): TaskMentionsValue {
   };
 }
 
-/** Whether the window's document has reached the test's Query client, which every chip reads its tasks from. */
 let landed = false;
 
-/** Marks `landed` once the document's tasks reach the client. */
 function Landed(): null {
   landed = useQuery({ ...appStateQuery, select: selectTasks }).data !== undefined;
   return null;
 }
 
-/** `element` drawn on the plan's page over the window's document, once the document has landed. */
 async function drawn(element: ReactElement, opened: Mention[] = []): Promise<HTMLElement> {
   landed = false;
   listTasks();
@@ -120,7 +104,6 @@ async function drawn(element: ReactElement, opened: Mention[] = []): Promise<HTM
     value: planPage(opened),
     children: createElement(Fragment, null, createElement(Landed), element),
   });
-  // Note that the words are drawn before the document lands, as a window drawn before its tasks are listed draws them.
   act(() => root.render(onRegistry(AtomRegistry.make(), page)));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -129,7 +112,6 @@ async function drawn(element: ReactElement, opened: Mention[] = []): Promise<HTM
   return container;
 }
 
-/** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
@@ -137,7 +119,6 @@ function chips(container: HTMLElement): [string | undefined, string | null][] {
   ]);
 }
 
-/** Whether any element drawn carries an address on an attribute the session recording keeps, other than a link's own. */
 function carriesTarget(container: HTMLElement): boolean {
   const masked = new Set(["title", "href", "xmlns"]);
   return [...container.querySelectorAll("*")]

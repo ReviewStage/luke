@@ -57,48 +57,11 @@ import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
-/**
- * mcp-clients-section.tsx -- Settings › our MCP: the outside agents the account let in, each revoked from its row, and how to connect one.
- *
- * An agent that signs a member in to the MCP server (Claude Code, Codex,
- * Cursor, Claude, ChatGPT) holds the member's Allow from the consent page
- * until it is revoked. Connected lists every one the account allowed, read
- * by the host while the page shows and again whenever the window is focused
- * (`LIVE_READ.MCP_CLIENTS`): its name, where its sign-in returns to as the
- * consent page said it, when it was allowed, and when it last refreshed its
- * access. Its ⋯ holds Disconnect, as an integration's does, which
- * asks first in the confirm dialog, then cuts the agent off: its next
- * refresh is refused and its next sign-in asks again, but an access token it
- * already holds keeps working until it expires, so a row revoked stays on
- * the page saying so. A revoke that did not finish says so under its row,
- * which keeps its Disconnect, since an agent half revoked could sign in again
- * without being asked.
- *
- * Connect an agent asks which agent first, and then shows only that agent's
- * one step, as its own docs say it adds a remote MCP server signed in with
- * OAuth: Claude Code, Codex, and VS Code by a command with its Copy, Cursor
- * by its install link, Claude and ChatGPT by the server's address pasted in
- * their own settings, and any other agent by the address alone. An agent
- * that arrives while the page shows, which is how a member comes back from
- * the browser, lights its row and is said to be connected under the step.
- * While the account has none, Connect an agent stands first. The `vespin`
- * command, which the read lists too, is left out of Connected: its sign-in
- * is Settings › CLI's (`cli-page.tsx`).
- *
- * Each agent is led by its brand's mark, in the picker and on its row, an
- * allowed agent's found by the name it registered under; Other stands in
- * the picker by its name alone, and a row whose agent the page does not
- * know wears a plain agent's glyph, so the rows' names stay in one column. Each section is `@repo/ui`'s
- * `SettingsSection`, the agent asked for its segmented `ChoiceBar`, each
- * allowed agent `MenuRow`'s row, and an address or a command its `CopyField`.
- */
-
 const SECTION_TITLE = {
   CLIENTS: "Connected",
   CONNECT: "Connect an agent",
 } as const;
 
-/** The name each agent knows the server by in a command that adds it. */
 const SERVER_NAME = MCP_SERVER_NAME;
 
 const PAGE_LINE = {
@@ -111,7 +74,6 @@ const PAGE_LINE = {
   REVOKED: `Disconnected. Its access ends within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
 } as const;
 
-/** The agents Connect an agent knows, in the order it offers them, any other last. */
 const CONNECT_AGENT = {
   CLAUDE_CODE: "claudeCode",
   CODEX: "codex",
@@ -124,14 +86,8 @@ const CONNECT_AGENT = {
 
 type ConnectAgent = (typeof CONNECT_AGENT)[keyof typeof CONNECT_AGENT];
 
-/**
- * How one agent adds the server, as its own docs say it: its step's words,
- * and the one thing the step hands over, a command to copy, the server's
- * address to copy, or a link that installs it.
- */
 interface ConnectStep {
   readonly name: string;
-  /** Its brand's mark; any other agent has none. */
   readonly mark?: React.JSX.Element;
   readonly label: string;
   readonly words: string;
@@ -140,7 +96,6 @@ interface ConnectStep {
   readonly install?: { readonly label: string; readonly url: (serverUrl: string) => string };
 }
 
-/** Each agent's one step. */
 const CONNECT_STEPS: Readonly<Record<ConnectAgent, ConnectStep>> = {
   [CONNECT_AGENT.CLAUDE_CODE]: {
     name: "Claude Code",
@@ -194,12 +149,10 @@ const CONNECT_STEPS: Readonly<Record<ConnectAgent, ConnectStep>> = {
   },
 };
 
-/** The names an agent registers under where they are not the name the picker calls it by. */
 const REGISTERED_AS: ReadonlyMap<string, ConnectAgent> = new Map([
   ["visual studio code", CONNECT_AGENT.VS_CODE],
 ]);
 
-/** The mark an allowed agent's row leads with: its brand's, where the name it registered under is one the picker knows, or a plain agent's. */
 function clientMark(client: McpClient): React.JSX.Element {
   const name = client.name?.trim().toLowerCase() ?? "";
   const agent =
@@ -208,14 +161,8 @@ function clientMark(client: McpClient): React.JSX.Element {
   return (agent === undefined ? undefined : CONNECT_STEPS[agent].mark) ?? <GLYPH.AGENT />;
 }
 
-/** How many agents stand as rows while the read is out. */
 const CLIENT_SKELETON_ROWS = 1;
 
-/**
- * The sections that stand while the agents are read: a row to each agent
- * likely, ending in its ⋯, and Connect an agent's two rows, the agent asked
- * for and its step.
- */
 const SECTIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: true,
@@ -233,17 +180,14 @@ const SECTIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   },
 ];
 
-/** What an agent is called on its row: the name it registered under, or a plain one where it gave none. */
 function clientName(client: McpClient): string {
   return client.name ?? PAGE_LINE.UNNAMED;
 }
 
-/** Where an agent's sign-in returns to, as the consent page named it: each place once. */
 function destinations(client: McpClient): string {
   return [...new Set(client.redirectUris.map(oauthRedirectDestination))].join(", ");
 }
 
-/** An agent's line: where it returns to, when it was allowed, and when it last refreshed its access, where it has. */
 function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
   return (
     <>
@@ -264,7 +208,6 @@ function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
   );
 }
 
-/** One agent the account allowed: its line and its ⋯ holding Disconnect, or, once revoked, how long what it holds lasts. */
 function ClientRow({
   client,
   revoked,
@@ -273,7 +216,6 @@ function ClientRow({
 }: {
   client: McpClient;
   revoked: boolean;
-  /** Whether it was allowed while the page showed, which lights its row once. */
   arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
@@ -316,7 +258,6 @@ function ClientRow({
     confirmFailure(FAILURE_SURFACE.MCP_CLIENT_REVOKE),
   );
 
-  // Note that an agent that gave no name is called by the app's own words, which show in a screen recording.
   const named = client.name !== null && client.name !== undefined;
   return (
     <>
@@ -360,7 +301,6 @@ function ClientRow({
   );
 }
 
-/** The agents the account allowed, and those revoked while the page shows, in the order they were allowed, newest first; never the `vespin` command, which Settings › CLI signs out. */
 function shownClients(
   listed: readonly McpClient[],
   revoked: ReadonlyMap<string, McpClient>,
@@ -374,7 +314,6 @@ function shownClients(
   );
 }
 
-/** One agent's step: its words, and the command or address to copy, or the link that installs it. */
 function ConnectStepRow({
   step,
   serverUrl,
@@ -423,7 +362,6 @@ function ConnectStepRow({
   );
 }
 
-/** Connect an agent: which agent, that agent's one step, and the agent that just connected, once one has. */
 function ConnectSection({
   serverUrl,
   arrived,
@@ -466,15 +404,12 @@ function ConnectSection({
   );
 }
 
-/** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
   const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const read = useQuery(mcpClientsQuery(accountId));
   const retry = useMutation(mcpClientsRetryMutation());
   const rows = read.data;
-  // The agents revoked while the page shows, which stand saying so after the read no longer lists them.
   const [revoked, setRevoked] = useState<ReadonlyMap<string, McpClient>>(new Map());
-  // The agents the first read listed, so one allowed while the page shows is told apart as just connected.
   const [known, setKnown] = useState<ReadonlySet<string> | undefined>(undefined);
   if (rows !== undefined && known === undefined) {
     setKnown(new Set(rows.clients.map((client) => client.clientId)));
@@ -519,7 +454,6 @@ export function McpClientsSections(): React.JSX.Element {
     </SettingsSection>
   );
   const connect = <ConnectSection serverUrl={rows.serverUrl} arrived={shown.find(isNew)} />;
-  // Note that an account with no agent yet is led to connect one, rather than to an empty list.
   return shown.length === 0 ? (
     <>
       {connect}

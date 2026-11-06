@@ -2,18 +2,6 @@ import { SearchMatch } from "@repo/ui";
 import { type MatchRange, matchRanges } from "@repo/ui/search-tokens";
 import { focusSeek } from "./focus-seek.js";
 
-/**
- * search-field.tsx -- the settings search's caret seek and the marks on the words a query found.
- */
-
-/**
- * Puts the caret in a search field, waiting out its arrival on the way: the
- * field mounts on the same press that summons it, so it may not be drawn yet.
- * What is already typed is selected rather than kept, so a repeated summons
- * types the next query over the last one instead of appending to it.
- * `ready` says when the field can take the caret, where its arrival is more
- * than the panel's staging, as a column shown on the same press is.
- */
 export function focusSearchField(
   fieldId: string,
   ready?: (field: HTMLElement) => boolean,
@@ -28,12 +16,6 @@ export function focusSearchField(
   });
 }
 
-/**
- * One drawn line with the query's words marked where they landed, so a
- * result says why it matched: the stretches a search hit gave (`ranges`,
- * `@repo/ui/search-score`), or else wherever the words typed (`tokens`)
- * stand in it. A line the words did not land on is returned as it was.
- */
 export function Highlighted({
   text,
   tokens,
@@ -41,7 +23,6 @@ export function Highlighted({
 }: {
   text: string;
   tokens?: readonly string[] | undefined;
-  /** The stretches to mark, where a scorer said them, in place of the words' own. */
   ranges?: readonly MatchRange[] | undefined;
 }): React.JSX.Element {
   const ranges = given ?? (tokens === undefined ? [] : matchRanges(text, tokens));

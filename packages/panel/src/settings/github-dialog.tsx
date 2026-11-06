@@ -47,21 +47,6 @@ import { confirmFailure, refusedShown } from "../failure-report.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 
-/**
- * github-dialog.tsx -- Settings › Profile › GitHub personal access token: the member's own classic token, added, shown, and removed.
- *
- * The dialog holds the token alone: a password field with Save, or once a token is saved its hint, login, expiry, and Disconnect, which asks
- * first at the dialog's own foot (`FootQuestion`), and at its foot Create token, which opens
- * GitHub's page for a new classic token in the browser. Every refusal and status says what to do
- * next, in a line.
- *
- * The token stands in the open field alone, is sent once on Save, and is
- * cleared as soon as the service keeps it; the service never answers one.
- * The dialog is kept out of the screen recording, which masks a field's
- * characters but not their count, as Settings › Agents' keys are.
- */
-
-/** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
 
 const LINE = {
@@ -69,7 +54,6 @@ const LINE = {
   REMOVE_FAILED: "The token could not be removed. Try again.",
 } as const;
 
-/** Why a save kept nothing, and what to do next, as one short line. */
 export function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
   switch (rejection) {
     case GITHUB_TOKEN_REJECTION.FINE_GRAINED:
@@ -85,7 +69,6 @@ export function rejectionLabel(rejection: GitHubTokenRejection): ReactNode {
   }
 }
 
-/** A saved token's status where it is not in use, and what to do about it, as one short line. */
 function statusLabel(status: GitHubTokenStatus): string | undefined {
   switch (status) {
     case GITHUB_TOKEN_STATUS.VERIFIED:
@@ -97,7 +80,6 @@ function statusLabel(status: GitHubTokenStatus): string | undefined {
   }
 }
 
-/** A problem said in the attention tint, announced as it lands. */
 function Problem({ children }: { children: string }): React.JSX.Element {
   useAnnounceShown(ANNOUNCE.ALERT, children);
   return (
@@ -105,21 +87,12 @@ function Problem({ children }: { children: string }): React.JSX.Element {
   );
 }
 
-/** The space a fact ends in, so the text of the line reads its facts apart where the gap only draws them so; at a line's end it collapses. */
 const FACT_BREAK = " ";
 
-/** The expiry's words, whole: "Expires Dec 23, 2026" never breaks inside, so a narrow row moves it as one. */
 function expiryWords(expiresAt: number): string {
   return `Expires ${dayText(expiresAt)}`.replaceAll(" ", "\u00a0");
 }
 
-/**
- * What tells a saved token apart: its hint and login as one unit, then its
- * expiry, then its status where it is not in use. Note that the units are set
- * apart by their gap rather than by a dot, because a dot is strewn at a line's
- * end or start wherever the line breaks, and the hint and login are joined
- * so that the only dot never breaks.
- */
 export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
   const status = statusLabel(token.status);
   return (
@@ -145,7 +118,6 @@ export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.
   );
 }
 
-/** The saved token's removal, as Disconnect's question holds its own mutation over it, answered as that question reads it. */
 const TOKEN_REMOVE_MUTATION = mutationOptions({
   mutationKey: [ACT_KIND.GITHUB_TOKEN_REMOVE],
   mutationFn: (): Promise<ActionResult> =>
@@ -159,7 +131,6 @@ const TOKEN_REMOVE_MUTATION = mutationOptions({
       }),
 });
 
-/** A saved token with Disconnect, which asks first, as every connection in Settings ends. */
 function SavedToken({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
   const removing = useMutation(TOKEN_REMOVE_MUTATION);
   const removalAct = useConfirmAct(removing, {
@@ -197,12 +168,10 @@ function SavedToken({ token }: { token: GitHubTokenSummary }): React.JSX.Element
   );
 }
 
-/** The field a token is pasted into, with Save, and why a save kept nothing under it. */
 function TokenForm({
   field,
   onSave,
 }: {
-  /** The dialog's way to the field, which takes focus as the card opens and as a removal brings the form back. */
   field: React.RefObject<HTMLInputElement | null>;
   onSave: (token: string) => Promise<ReactNode>;
 }): React.JSX.Element {
@@ -217,7 +186,6 @@ function TokenForm({
     void onSave(token).then((refused) => {
       setSaving(false);
       setProblem(refused);
-      // Kept: the token leaves the field, and the panel draws the service's word for it.
       if (refused === undefined) setPasted("");
     });
   };
@@ -256,19 +224,13 @@ function TokenForm({
   );
 }
 
-/**
- * The dialog the Profile row's Add or Manage opens, over the token as the
- * host holds it, where a save's and a removal's own answer lands.
- */
 export function GitHubTokenDialog({
   open,
   token,
   onClose,
   onExited,
 }: {
-  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
   open: boolean;
-  /** The saved token, or null where none is. */
   token: GitHubTokenSummary | null;
   onClose: () => void;
   onExited: () => void;
@@ -276,7 +238,6 @@ export function GitHubTokenDialog({
   const { mutateAsync: sendGithubTokenSave } = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
   const openLink = useOpenLink();
   const field = useRef<HTMLInputElement | null>(null);
-  // Note that a token leaving while the card stands puts focus in the form it brings back, since its read can land after Disconnect's question handed focus back.
   const held = token !== null;
   const wasHeld = useRef(held);
   useEffect(() => {

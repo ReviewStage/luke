@@ -137,7 +137,6 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
   ]);
 });
 
-/** A row of the developer's, as the service writes one. */
 function developer(id: string, text: string): AgentTranscriptMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
@@ -173,7 +172,6 @@ test("a line after a turn still open is placed in that turn, unless it did not g
   );
 });
 
-/** A line sent under `clientKey`, still on its way. */
 function sentUnder(clientKey: string, text: string): SentLine {
   return {
     id: sentLineId(clientKey),
@@ -186,7 +184,6 @@ function sentUnder(clientKey: string, text: string): SentLine {
   };
 }
 
-/** The developer's row the service wrote for a line sent under `clientKey`. */
 function writtenFor(id: string, clientKey: string, text: string): AgentTranscriptMessage {
   return { ...developer(id, text), clientId: sentLineId(clientKey) };
 }
@@ -195,7 +192,6 @@ test("a sent line is read back by the row written under its key alone, so two li
   const description = developer("m-plan", "Go on.");
   const first = sentUnder("key-1", "Go on.");
   const second = sentUnder("key-2", "Go on.");
-  // The description already says the same words, and a row of the same words under another key is another line's.
   assert.deepEqual(unreadSentLines([first, second], [description]), [first, second]);
   const secondLanded = [description, writtenFor("m-2", "key-2", "Go on.")];
   assert.deepEqual(unreadSentLines([first, second], secondLanded), [first]);
@@ -216,7 +212,6 @@ test("the line an agent was started on stands until the transcript reads back th
   );
   const reply: AgentTranscriptMessage = { id: "m-0", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
   assert.equal(unreadOpeningLine(opening, [reply]), opening, "no row of the developer's yet");
-  // eve writes the first row under no key of the start's.
   assert.equal(unreadOpeningLine(opening, [developer("m-1", "Fix the sidebar.")]), undefined);
   assert.equal(unreadOpeningLine(undefined, []), undefined);
 });
@@ -282,7 +277,6 @@ test("the checkout command fetches and switches to the branch, and the chip open
     "https://github.com/acme/relay/compare/luke/x?expand=1",
   );
   assert.equal(publishedUrl({ repository, branch: null, pullRequest: null }), undefined);
-  // A branch a shell or an address would read into is quoted or encoded, never read.
   assert.equal(
     checkoutCommand("luke/$(touch pwned)'x"),
     "git fetch origin 'luke/$(touch pwned)'\\''x' && git switch 'luke/$(touch pwned)'\\''x'",
@@ -317,7 +311,6 @@ test("a fast or Ultrafast version is folded into its base model by its id, read 
     model("anthropic/claude-opus-5.5-fast", "Claude Opus 5.5 (Fast)"),
     model("anthropic/claude-opus-5.5", "Claude Opus 5.5"),
     model("anthropic/claude-fable-5", "Claude Fable 5"),
-    // A suffixed id with no base beside it is a model of its own.
     model("anthropic/claude-haiku-4-fast", "Claude Haiku 4 (Fast)"),
     { ...model("openai/gpt-6.1-sol", "GPT-6.1 Sol"), provider: MODEL_PROVIDER.OPENAI },
     {
@@ -476,22 +469,16 @@ test("a working agent is starting until its turn opens, saying what a host's lau
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: "Also expire them after a week." }],
   };
-  // Before the session runs a turn, whatever stands, and before the turn writes its journal.
   assert.equal(agentWorkingPhase([task], true), "starting");
-  // A rewind under way is what the line says, whatever the transcript shows.
   assert.equal(agentWorkingPhase([task, opened], false, true), "rewinding");
   assert.equal(agentWorkingPhase([task, opened], true), "starting");
   assert.equal(agentWorkingPhase([task], false), "starting");
-  // The turn open with nothing past its step boundary is the model at its first step.
   assert.equal(agentWorkingPhase([task, opened], false), "thinking");
   assert.equal(agentWorkingPhase([task, calling], false), "working");
-  // A line after a closed turn awaits a turn of its own; one sent into an open turn steers it.
   assert.equal(agentWorkingPhase([task, closed, line], false), "starting");
-  // A turn closing ahead of its row's settling ends as it worked, not as a start.
   assert.equal(agentWorkingPhase([task, closed], false), "working");
   assert.equal(agentWorkingPhase([task, calling, line], false), "working");
   assert.equal(agentWorkingPhase([task, opened, line], false), "thinking");
-  // A host's launch says what the start waits on, naming the host or the harness, and nothing once the turn has opened.
   const waiting = { launch: AGENT_LAUNCH.WAITING, host: "Studio", runtime: AGENT_RUNTIME.CODEX };
   assert.equal(workingLineWords("starting", waiting), "Waiting for Studio…");
   assert.equal(
@@ -575,7 +562,6 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to our GitHub App is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,

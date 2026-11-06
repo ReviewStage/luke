@@ -71,28 +71,13 @@ import {
   textFill,
 } from "./skills-model.js";
 
-/**
- * add-skill-dialog.tsx -- Settings › Skills' Add skill: one box that takes a GitHub repository, a link to one of its folders, an `npx skills add` line, or a skill's text, then what it would install, and Install.
- *
- * A short pause after the box last changed, the service previews it. A
- * GitHub source's skills are one list to tick, with a search once it is
- * long, the skills the paste named or the one skill there is ticked as it
- * lands; a skill's text is its name and the description agents read, both
- * filled from its frontmatter and both the member's to change. Install for
- * stands at the foot's start and the button names what Install will do; a
- * refusal is said under the box in plain words.
- */
-
-/** How long the box stands still before the service previews it. */
 const PREVIEW_PAUSE_MS = 400;
 
-/** How the line under the box is drawn: a problem in the attention tint, or plain while it waits. */
 const LINE_STATE = {
   [STATUS_TONE.ATTENTION]: "attention",
   [STATUS_TONE.NEUTRAL]: "plain",
 } as const satisfies Record<DetectedLine["tone"], string>;
 
-/** What pasted text comes to, asked once typing pauses and again on Retry: answered at once on a failure, never tried again on its own. */
 function skillPreviewQueryOptions(workspaceId: string, text: string) {
   return queryOptions({
     queryKey: [QUERY_ROOT.INSTALLED_SKILL_PREVIEW, workspaceId, text],
@@ -101,7 +86,6 @@ function skillPreviewQueryOptions(workspaceId: string, text: string) {
   });
 }
 
-/** The preview as the box reads it: none while it is out, a read being asked again among them, and a call with no answer as a failed preview, so the line under the box stops reading. */
 function previewView(
   previewed: UseQueryResult<InstalledSkillPreviewView>,
 ): InstalledSkillPreviewView | undefined {
@@ -110,7 +94,6 @@ function previewView(
   return previewed.data;
 }
 
-/** A line in its tone's tint, announced as it lands and as it changes: an alert where it needs a hand. */
 function DetectedText({ line }: { line: DetectedLine }): React.JSX.Element {
   useAnnounceShown(
     line.tone === STATUS_TONE.ATTENTION ? ANNOUNCE.ALERT : ANNOUNCE.POLITE,
@@ -123,7 +106,6 @@ function DetectedText({ line }: { line: DetectedLine }): React.JSX.Element {
   );
 }
 
-/** One found skill to tick: its name, its description, and where it is and how large. */
 function SkillOption({
   candidate,
   ticked,
@@ -159,7 +141,6 @@ function SkillOption({
   );
 }
 
-/** A skill's text's name and description, filled from its frontmatter and the member's to change. */
 function TextFields({
   fill,
   disabled,
@@ -199,7 +180,6 @@ function TextFields({
   );
 }
 
-/** The dialog Settings › Skills' Add skill opens, over the workspace the page shows. */
 export function AddSkillDialog({
   open = true,
   workspace,
@@ -208,22 +188,17 @@ export function AddSkillDialog({
   onExited,
   pause = rendererPause,
 }: {
-  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. Standing while mounted where it is left out. */
   open?: boolean | undefined;
   workspace: Workspace;
-  /** The skills an install made, in the order asked. */
   onInstalled: (skills: readonly InstalledSkillSummary[]) => void;
   onClose: () => void;
-  /** Its fade has run and it is gone, which its owner takes it out on. */
   onExited?: (() => void) | undefined;
-  /** The wait before a preview, the renderer's own where none is handed in. */
   pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element {
   const { mutateAsync: sendInstalledSkillsInstall } = useMutation(
     actMutation(ACT_KIND.INSTALLED_SKILLS_INSTALL),
   );
   const [text, setText] = useState("");
-  // Note that the text is previewed once typing pauses, so a preview asks for the words as they settled.
   const [settled, setSettled] = useState<string | undefined>(undefined);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [fill, setFill] = useState<TextFill>(() => textFill(undefined));
@@ -251,7 +226,6 @@ export function AddSkillDialog({
     enabled: previewing,
   });
   const view = previewing ? previewView(previewed) : undefined;
-  // A preview that lands chooses its skills afresh, as React's guide adjusts state to a prop that changed.
   const [landedOn, setLandedOn] = useState<InstalledSkillPreviewView | undefined>(undefined);
   if (view !== undefined && !("failure" in view) && view !== landedOn) {
     setLandedOn(view);
@@ -304,7 +278,6 @@ export function AddSkillDialog({
       open={open}
       title={SKILLS_LINE.ADD_SKILL}
       size={DIALOG_SIZE.WIDE}
-      // Note that its own words show in a screen recording, but every skill's name, description, and source, the workspace's name, and a refusal stay masked.
       replayUnmasked
       busy={installing}
       holding={asks}
@@ -341,13 +314,11 @@ export function AddSkillDialog({
             busyLabel="Installing"
             onClick={install}
           >
-            {/* Note that a lone skill's Install names it, so only Install and a count show. */}
             <ReplayWords unmasked={toInstall.length !== 1}>{label}</ReplayWords>
           </Button>
         </>
       }
     >
-      {/* Note that the card's parts are its own flex items, so the box stays at its head, what it would install gives way and scrolls, and Install for stays at the foot however many skills a repository holds. */}
       <Stack gap={GAP.FIELD}>
         <FormField
           label={SKILLS_LINE.PASTE_LABEL}

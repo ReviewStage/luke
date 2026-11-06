@@ -15,19 +15,9 @@ import { afterEach, it } from "vitest";
 import { openPushStream } from "./app-bridge.js";
 import { stateWith } from "./testing/app-state.js";
 
-/**
- * What main pushes a window, through the window's act port as the desktop
- * opens it: each push reaches the listeners on its own method with the
- * payload main pushed, in the order main pushed them; a document pushed the
- * moment the stream opens is heard, and a burst of documents only as its
- * newest; a payload its guard refuses is dropped;
- * and a window that goes, or reloads, leaves no listener behind in main.
- */
-
 const WINDOW = Symbol("window");
 const PANEL: ActSender = { sender: WINDOW, panel: true };
 
-/** An app link to a task, and to another, as the system hands them the app. */
 const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
 const OTHER_LINK = { ...LINK, place: { kind: LINK_PLACE.TASK, planId: "task-2" } };
 
@@ -37,12 +27,9 @@ afterEach(() => {
   for (const port of opened.splice(0)) port.close();
 });
 
-/** Main's side of every window: the pushes it holds, and the port server each window's port is upgraded with. */
 function mainProcess() {
   const pushes = new WindowPushes();
-  // Note that these tests open the push stream alone, so the port serves its procedure and no act.
   const handler = actPortHandlerOf(pushProcedures(pushes));
-  /** One page of a window standing as `actor`: its act port opened, and its push stream on it. */
   const page = (actor: ActSender) => {
     const { port1, port2 } = new MessageChannel();
     opened.push(port1, port2);
@@ -57,7 +44,6 @@ function mainProcess() {
   return { pushes, page };
 }
 
-/** Whatever a listener hears, and a wait for the count of hearings a test expects. */
 function hearing<Heard>() {
   const heard: Heard[] = [];
   const waits: { count: number; resolve: () => void }[] = [];
@@ -72,7 +58,6 @@ function hearing<Heard>() {
   return { heard, hear, until };
 }
 
-/** Waits until `holds` is true of main, which learns of a closed port as the port's own close event arrives. */
 async function eventually(holds: () => boolean): Promise<void> {
   for (let turn = 0; turn < 1000 && !holds(); turn += 1) {
     await new Promise((resolve) => setImmediate(resolve));
@@ -140,7 +125,6 @@ it("a payload its push's guard refuses is dropped, and the pushes after it still
   const shown = hearing<unknown>();
   panel.listeners.onShowLink(shown.hear);
 
-  // SAFETY: a payload main's own types would refuse, standing for one a bug let through.
   main.pushes.push(WINDOW, PUSH.SHOW_LINK, { workspace: "workspace-1" } as never);
   main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
   await shown.until(1);

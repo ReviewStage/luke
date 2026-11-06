@@ -4,30 +4,20 @@ import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { followStream } from "./act-stream.js";
 
-/**
- * A followed stream over a fake act port: each open hands the next stream
- * the test scripted, and what the follow took is read back. The clock is the
- * test's own.
- */
-
 type Stream = AsyncIteratorObject<string, unknown, unknown>;
 
-/** Lets the follow's promises settle between steps. */
 const settle = Effect.repeat(Effect.yieldNow, { times: 20 });
 
-/** A stream that hands each word, then throws as a port that went away does. */
 async function* brokenAfter(...words: string[]): AsyncGenerator<string> {
   yield* words;
   throw new Error("port closed");
 }
 
-/** A stream that hands each word, then waits for one that never comes. */
 async function* heldAfter(...words: string[]): AsyncGenerator<string> {
   yield* words;
   await Promise.withResolvers<never>().promise;
 }
 
-/** A port that opens each scripted stream in turn, a rejection where one is `undefined`, and counts its opens. */
 function port(...streams: (Stream | undefined)[]) {
   const taken: string[] = [];
   let opens = 0;
@@ -87,7 +77,6 @@ it.effect("a stream that cannot be opened is asked again on a wait that doubles"
     yield* settle;
     assert.equal(fake.opens(), 2);
 
-    // The second wait is two seconds, so one more second asks nothing.
     yield* TestClock.adjust("1 second");
     yield* settle;
     assert.equal(fake.opens(), 2);

@@ -17,15 +17,6 @@ import {
   startHighlighting,
 } from "./highlight-pool.js";
 
-/**
- * highlight-pool.test.ts -- a list's files are highlighted in Pierre's pool
- * of workers where a worker starts, and on the window's own thread where
- * none can: with no door to start one, a door that throws, or a worker
- * that fails as it loads. The workers are stood in for at the door, the
- * process boundary, each answering Pierre's start as the real worker does
- * or failing it.
- */
-
 const LOOK: DiffLook = {
   layout: DIFF_LAYOUT.UNIFIED,
   indicators: DIFF_INDICATORS.BARS,
@@ -40,7 +31,6 @@ const LOOK: DiffLook = {
   ligatures: false,
 };
 
-/** A request the pool sends a worker, as much of it as a stand-in reads. */
 interface Request {
   readonly type: string;
   readonly id: string;
@@ -48,10 +38,8 @@ interface Request {
   readonly preferredHighlighter?: string;
 }
 
-/** Every request the stand-in workers were sent, in order. */
 let sent: Request[] = [];
 
-/** A worker stood in for: it answers the pool's start as Pierre's own worker does, or fails as it loads. */
 class StandInWorker extends EventTarget implements Worker {
   onmessage: Worker["onmessage"] = null;
   onmessageerror: Worker["onmessageerror"] = null;

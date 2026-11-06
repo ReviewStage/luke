@@ -78,42 +78,6 @@ import { usePullRequestNumber } from "./pull-request-number.js";
 import { agentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
 import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 
-/**
- * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line over the header where GitHub would not take one.
- *
- * Every change is one act (`AGENTS_PULL_REQUEST_ACTION`), which the
- * service makes on GitHub as the member pressing it, on their own GitHub
- * sign-in and never as our GitHub App (`pull-request-write-wire.ts`).
- * One is out at a time; while it is, the controls that would send another
- * stand disabled. Once GitHub took it, or refused it, the tab's reads are
- * asked again (`onWritten`), and the change stays out until they land, so
- * the header and the page say where the pull request stands now rather
- * than what the press assumed, and a press never draws the pull request as
- * it stood before its change for the moment between. A refusal stands
- * on its own line over the header until it is dismissed or the next change
- * is sent: our sentence where GitHub refused the change, with GitHub's own
- * words quoted on a line of their own under it, naming GitHub, never inside
- * our sentence; an offer to sign in with GitHub again where it would not
- * take the member's sign-in; and our own words where the change never
- * reached GitHub.
- *
- * The pill is `@repo/ui`'s pill chip in the tone of where the pull request
- * stands, as stage-cli's status pill is, and opens a menu offering what may
- * be done from there: Ready for review for a draft and Convert to draft for
- * one open, each with Close pull request, drawn red as every item that
- * ends what it acts on is, and
- * Reopen pull request for one closed. Close acts at once and a toast offers
- * Reopen, except for one in the merge queue, where it asks first with the
- * queue's warning, since reopening does not queue it again; once merged it is a badge in that
- * tone, with nothing left to press. The title is edited in place, as
- * stage-cli's is: its pencil opens a field over it, Enter or the check keeps
- * the words, and Escape or the cross keeps the title as it stood. The pill,
- * the title, and the line are drawn by whatever header the tab wears, so
- * they move with it. The header's reviewer and label pickers send their
- * changes through the same writes (`pull-request-pickers.tsx`).
- */
-
-/** What each change says on the menu, and while it is out. */
 const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: "Ready for review",
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: "Convert to draft",
@@ -144,20 +108,15 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.REMOVE_REACTION]: "Remove reaction",
 } as const satisfies Record<PullRequestAction, string>;
 
-/** The line's own words. */
 const WRITE_WORDS = {
   SIGN_IN: "Sign in with GitHub to make this change as you.",
   SIGN_IN_PRESS: "Sign in with GitHub",
   DISMISS: "Dismiss",
-  /** Our sentence on a change GitHub refused, which GitHub's own words follow on a line of their own. */
   REFUSED: "GitHub refused this change.",
-  /** Who said the words quoted under a refusal. */
   SOURCE: "GitHub",
-  /** A repository out of the workspace's reach, and where it is given back: the workspace's GitHub in Settings, whose Manage on GitHub chooses the App's repositories. */
   UNREACHED: `${REPOSITORY_UNREACHED_NOTE} Choose which repositories ${PRODUCT_NAME} can see.`,
 } as const;
 
-/** Our own words where a change never reached GitHub, by why. */
 function failureWords(failure: AgentCallFailure): string {
   switch (failure) {
     case AGENT_CALL_FAILURE.NOT_FOUND:
@@ -169,7 +128,6 @@ function failureWords(failure: AgentCallFailure): string {
   }
 }
 
-/** What the line over the header says of the last change, where GitHub did not take it. */
 export const WRITE_NOTE = {
   SIGN_IN: "sign-in",
   WORDS: "words",
@@ -180,15 +138,11 @@ export type WriteNote =
   | {
       readonly kind: typeof WRITE_NOTE.WORDS;
       readonly words: string;
-      /** GitHub's own words on a change it refused, quoted and naming GitHub, for a line under `words`; none where it said none. */
       readonly said?: string | undefined;
-      /** Why the service refused it, where the control that sent it does more than say its words. */
       readonly reason?: PullRequestRefusal | undefined;
-      /** What mends it beyond trying again, where something does. */
       readonly remedy?: WriteRemedy | undefined;
     };
 
-/** Where the agent whose pull request a tab shows stands: its task, or, for an agent on none, the workspace its page belongs to. */
 export interface WritePlace {
   readonly taskId: string | null;
   readonly workspaceId?: string | undefined;
@@ -196,23 +150,18 @@ export interface WritePlace {
 
 const WritePlaceContext = createContext<WritePlace | undefined>(undefined);
 
-/** Hands the notes under it where the agent stands, so a repository out of reach is mended in that workspace's GitHub; none opens Settings on the workspace it lists. */
 export const WritePlaceProvider = WritePlaceContext.Provider;
 
-/** What mends a change that never reached GitHub, beyond trying again. */
 export const WRITE_REMEDY = {
-  /** The workspace's GitHub in Settings, where the App is given the repository again. */
   GITHUB_ACCESS: "github-access",
 } as const;
 
 export type WriteRemedy = (typeof WRITE_REMEDY)[keyof typeof WRITE_REMEDY];
 
-/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why, and the note it left. */
 export type WriteOutcome =
   | { readonly done: true }
   | { readonly done: false; readonly words: string; readonly note: WriteNote };
 
-/** What a press sent while another change is out is told: it was not sent. */
 const NOT_SENT_WORDS = "Another change is on its way to GitHub.";
 const NOT_SENT: WriteOutcome = {
   done: false,
@@ -220,49 +169,32 @@ const NOT_SENT: WriteOutcome = {
   note: { kind: WRITE_NOTE.WORDS, words: NOT_SENT_WORDS },
 };
 
-/** What a note says, our sentence first and any words GitHub said on the line under it. */
 function noteWords(note: WriteNote): string {
   if (note.kind === WRITE_NOTE.SIGN_IN) return WRITE_WORDS.SIGN_IN;
   return note.said === undefined ? note.words : `${note.words}\n${note.said}`;
 }
 
-/** How an answer went, in the words its line says where GitHub did not make the change. */
 function outcomeOf(note: WriteNote | undefined): WriteOutcome {
   if (note === undefined) return { done: true };
   return { done: false, words: noteWords(note), note };
 }
 
-/** What a change reads again once GitHub answered it: where it answers a promise, the change stays out until it settles. */
 export type ReadAgain = () => unknown;
 
-/** The tab's changes: the one out, if any, what the last one left to say, and the presses. */
 export interface PullRequestWrites {
-  /** The change out now; none while nothing is. */
   readonly pending: PullRequestAction | undefined;
   readonly note: WriteNote | undefined;
-  /**
-   * Sends the change; `onDone` hears once GitHub made it, so the press that
-   * sent it can let go of what it held, and what it answers settles once
-   * GitHub answered and what it said is drawn, as a merge's question waits.
-   */
   readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<WriteOutcome>;
   readonly dismiss: () => void;
-  /**
-   * The change `request` asks, as a question that confirms it reads it from
-   * the change mutation: out while it is the one out, and refused as its
-   * newest answer says, or where it was not sent because another was out.
-   */
   readonly confirmAct: (request: PullRequestActionRequest) => ConfirmAct;
 }
 
-/** A change's outcome as a question reads it: none where GitHub made it. */
 function refusalOf(outcome: WriteOutcome): ActionResult | undefined {
   return outcome.done
     ? undefined
     : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words };
 }
 
-/** What an answer leaves to say: nothing where GitHub made the change. */
 export function noteOf(
   answer: AgentPullRequestWriteAnswerView | AgentPullRequestViewedAnswerView,
 ): WriteNote | undefined {
@@ -285,30 +217,20 @@ export function noteOf(
         kind: WRITE_NOTE.WORDS,
         words: WRITE_WORDS.REFUSED,
         said: saidWords(WRITE_WORDS.SOURCE, answer.words),
-        // Note that only a change's answer names why; a viewed mark's never does.
         reason: "reason" in answer ? answer.reason : undefined,
       };
   }
 }
 
-/**
- * The agent's pull request's changes, one at a time, a press while one is
- * out doing nothing; once GitHub
- * answers, whether it took the change or refused it, `onWritten` asks the
- * tab's reads again, and the change stays out until they land. A change goes through the source of the tab around it
- * (`pull-request-source.ts`), or, drawn outside one, to the agent named.
- */
 export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): PullRequestWrites {
   const number = usePullRequestNumber();
   const source = usePullRequestSource();
   const send = source?.write ?? agentPullRequestWrite(agentId, number);
   const queryClient = useQueryClient();
-  // Note that every change to one pull request is keyed alike, so each control refuses to send while any is out (`isMutating`), and runs in order under one scope where two land in one tick.
   const mutationKey = useMemo(
     () => [ACT_KIND.AGENTS_PULL_REQUEST_ACTION, agentId, number] as const,
     [agentId, number],
   );
-  // Note that the change is one mutation through GitHub's answer and the reads it asks again, so it stays pending until they land.
   const change = useMutation({
     mutationKey,
     scope: { id: agentId },
@@ -316,17 +238,12 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
       const answer = await send(request).catch(
         (): AgentPullRequestWriteAnswerView => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
       );
-      // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again,
-      // and the change stays out until that read lands, so the press never draws the pull request as it stood.
       if (!("failure" in answer)) await Promise.resolve(onWritten()).catch(() => undefined);
-      // Note that the note is made once, so what the press answers and what the tab draws are the same object.
       return { answer, note: noteOf(answer) };
     },
   });
   const { mutateAsync, reset } = change;
-  // Note that the one out is held in a ref as well, because two presses in one frame both read the mutation from before either.
   const out = useRef(false);
-  // The change a question asked that was not sent because another was out, which the mutation never hears of.
   const [unsent, setUnsent] = useState<PullRequestAction | undefined>(undefined);
   const write = useCallback(
     async (request: PullRequestActionRequest, onDone?: () => void) => {
@@ -369,14 +286,12 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
   return { pending, note, write, dismiss: reset, confirmAct };
 }
 
-/** The changes the pill's menu offers: where the pull request stands, never a review. */
 type StateAction =
   | typeof PULL_REQUEST_ACTION.READY_FOR_REVIEW
   | typeof PULL_REQUEST_ACTION.CONVERT_TO_DRAFT
   | typeof PULL_REQUEST_ACTION.CLOSE
   | typeof PULL_REQUEST_ACTION.REOPEN;
 
-/** The changes the pill's menu offers from where the pull request stands; one in the merge queue may be closed but not turned back to a draft, as on GitHub. */
 function actionsFrom(state: PullRequestState, queued: boolean): readonly StateAction[] {
   if (queued && state === PULL_REQUEST_STATE.OPEN) return [PULL_REQUEST_ACTION.CLOSE];
   switch (state) {
@@ -391,7 +306,6 @@ function actionsFrom(state: PullRequestState, queued: boolean): readonly StateAc
   }
 }
 
-/** The glyph each change leads its item with. */
 const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.READY_FOR_REVIEW]: <GitPullRequestIcon aria-hidden="true" />,
   [PULL_REQUEST_ACTION.CONVERT_TO_DRAFT]: <GitPullRequestDraftIcon aria-hidden="true" />,
@@ -399,11 +313,9 @@ const ACTION_GLYPHS = {
   [PULL_REQUEST_ACTION.REOPEN]: <GitPullRequestIcon aria-hidden="true" />,
 } as const satisfies Record<StateAction, React.JSX.Element>;
 
-/** What leaving GitHub's merge queue costs the pull requests behind it, said as the merge box's Remove from queue and a queued Close each ask. */
 export const QUEUE_WARNING =
   "Removing this pull request from the queue could impact other pull requests in the queue.";
 
-/** The question Close asks of a pull request in the merge queue, since reopening it does not queue it again. */
 const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   title: "Close this pull request?",
   body: `Closing it takes it out of the merge queue, and reopening it does not queue it again. ${QUEUE_WARNING}`,
@@ -413,30 +325,16 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   replayUnmasked: true,
 };
 
-/** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
 const CLOSE_UNKNOWN_QUESTION: DialogQuestion = {
   ...CLOSE_QUEUED_QUESTION,
   body: `Could not read whether this pull request is in the merge queue. If it is, closing it takes it out, and reopening it does not queue it again. ${QUEUE_WARNING}`,
 };
 
-/** What the toast says once a pull request is closed, and its one way back. */
 const CLOSED_TOAST = {
   WORDS: "Pull request closed",
   REOPEN: "Reopen",
 } as const;
 
-/**
- * The pill saying where the pull request stands, in its tone; a press
- * opens the changes that may be made from there, and a merged pull request,
- * which no change leaves, is a badge. An open one GitHub holds in its merge
- * queue says so in the pill, as stage-cli's does: Queued and its place, in
- * the attention tone with the merge's mark, its menu offering Close alone,
- * which asks first, since reopening does not queue it again; any other Close
- * acts at once and a toast offers Reopen.
- * Note that the pill is a compact one, which `@repo/ui` draws in a badge's
- * box, so every state stands at the one size the app's status badges do,
- * the one with a menu adding its chevron.
- */
 export function PullRequestStateMenu({
   pullRequest,
   queued,
@@ -444,9 +342,7 @@ export function PullRequestStateMenu({
   writes,
 }: {
   pullRequest: Pick<AgentPullRequest, "number" | "state" | "checks">;
-  /** Where GitHub's merge queue holds it, as the merge control read it or, until that lands, as what was published says; none where it holds it nowhere. */
   queued?: { readonly position?: number | undefined } | null | undefined;
-  /** Whether the panel the pill stands in is on screen; a question asked goes with it. */
   shown?: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element {
@@ -457,12 +353,9 @@ export function PullRequestStateMenu({
   const toast = useToast();
   const withdrawToast = useWithdrawToast();
   const toastSubject = useId();
-  // Read as a press lands, so the toast's Reopen, which outlives this render, sends through the newest writes.
   const newestWrites = useRef(writes);
   newestWrites.current = writes;
-  // Whether Close is being asked about; the question goes once a read finds it out of the queue, so it never closes what no longer stands in it.
   const [asked, setAsked] = useState(false);
-  // Note that a place in the queue left unread, as a failed merge read leaves it, may be one, so it is asked about as one is: only a read saying it holds it nowhere lets Close act at once.
   const unread = queued === undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
   const mayBeQueued = inQueue || unread;
   const confirm = useConfirmDialog(
@@ -470,16 +363,13 @@ export function PullRequestStateMenu({
     writes.confirmAct({ action: PULL_REQUEST_ACTION.CLOSE }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DEQUEUE),
   );
-  // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
   if ((!shown || !mayBeQueued) && asked && !confirm.busy) setAsked(false);
   const words = inQueue
     ? queuedLabel(queued.position)
     : PULL_REQUEST_STATE_LABEL[pullRequest.state];
-  // Note that the pill is named by the words it draws, so a change out reads "Merging…" as the screen does.
   const shownWords = writes.pending === undefined ? words : `${ACTION_WORDS[writes.pending]}…`;
   const label = `Pull request ${shownWords}`;
   const tone = inQueue ? STATUS_TONE.ATTENTION : PULL_REQUEST_TONE[pullRequest.state];
-  // The pill's mark says queued from the `queued` it is handed alone, as its words do, so the two never disagree.
   const mark = (
     <PullRequestMark
       pullRequest={{
@@ -497,7 +387,6 @@ export function PullRequestStateMenu({
       </Badge>
     );
   }
-  // Note that a Close that may leave the queue asks first, and every other change acts at once, a Close offering Reopen in a toast since it can be taken back.
   const select = (action: StateAction) => {
     if (action === PULL_REQUEST_ACTION.REOPEN) withdrawToast(toastSubject);
     if (action === PULL_REQUEST_ACTION.CLOSE && mayBeQueued) {
@@ -564,21 +453,10 @@ export function PullRequestStateMenu({
   );
 }
 
-/**
- * The line where GitHub did not take the last change: why, the sign-in
- * that mends it where that is why, and its dismissal. It stands over the
- * header unless the control that sent the change draws it in its own place
- * (`className`), as the review panel does. Note that a change that went
- * wrong is a failure note, whose words keep their line breaks, so GitHub's
- * own words stand on a line of their own under ours; only the sign-in, and
- * a repository out of reach, which Settings › Workspace's GitHub gives back,
- * need a remedy beyond Dismiss, and so are error states.
- */
 export function PullRequestWriteNote({
   writes,
   className = "pull-request-write-note flex-none border-b border-border py-tight-gap pr-column-inset pl-content-inset",
 }: {
-  /** What the last change left to say, and the door that lets it go: a tab's changes', or Files changed's viewed marks'. */
   writes: Pick<PullRequestWrites, "note" | "dismiss">;
   className?: string;
 }): React.JSX.Element | null {
@@ -586,7 +464,6 @@ export function PullRequestWriteNote({
   const openSettings = useOpenSettings();
   const openWorkspaceGitHub = useOpenWorkspaceGitHub();
   const place = useContext(WritePlaceContext);
-  // Note that a task's workspace is the task's to name, and an agent on none names its page's.
   const openAccess = () =>
     place?.taskId === null || place?.taskId === undefined
       ? openSettings({
@@ -597,7 +474,6 @@ export function PullRequestWriteNote({
       : openWorkspaceGitHub(place.taskId);
   const { note, dismiss } = writes;
   if (note === undefined) return null;
-  // Note that the note is the answer the write kept, the same object while it stands, and names its refusal.
   const failure = failureShown({
     surface: FAILURE_SURFACE.PULL_REQUEST_WRITE,
     cause: note,
@@ -633,14 +509,12 @@ export function PullRequestWriteNote({
   );
 }
 
-/** The title's own words. */
 const TITLE_WORDS = {
   EDIT: "Edit title",
   OPEN: "⌘-click the title to open on GitHub",
   FIELD: "Pull request title",
 } as const;
 
-/** The title's line in the dialog's type, holding its field while it is edited, or the blocks of a title still being read. */
 export function PullRequestTitleLine({
   field = false,
   children,
@@ -659,14 +533,6 @@ export function PullRequestTitleLine({
   );
 }
 
-/**
- * The pull request's title and number, the number wrapping with the
- * title's last word, its pencil opening a field over the
- * title where its words may be changed: kept on Enter, or as the focus
- * leaves, where they changed and are not empty, and given up on Escape.
- * The title stands as it was until GitHub answers with the new one, its
- * pencil unavailable while the write is out.
- */
 export function PullRequestTitle({
   title,
   number,
@@ -674,10 +540,8 @@ export function PullRequestTitle({
   onOpen,
 }: {
   title: string;
-  /** The pull request's number as the header says it. */
   number: string;
   writes: PullRequestWrites;
-  /** Opens the pull request on GitHub, which a ⌘-click on the title asks. */
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false);
@@ -703,15 +567,12 @@ export function PullRequestTitle({
   }
   const numberWords = <span className="pull-request-number">{number}</span>;
   return (
-    // Only a ⌘-click (Ctrl elsewhere) opens it, so a plain press still selects the title's words,
-    // and one on the pencil is the pencil's; the header's ⋯ offers Open on GitHub to the keyboard.
     <CommandLink
       as={COMMAND_LINK_ELEMENT.H2}
       className="pull-request-title pull-request-title-editable"
       onOpen={onOpen}
     >
       {title}
-      {/* Note that the space before the number stands inside the end that never wraps, so the number and the pencil keep to the title's last word, and the number never stands alone on a line. */}
       <span className="pull-request-title-end">
         {" "}
         {onOpen === undefined ? (

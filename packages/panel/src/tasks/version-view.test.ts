@@ -14,10 +14,6 @@ import { ToastHost, type ToastNotice, useToast } from "../toast.js";
 import { HISTORY_READ } from "./use-description-history.js";
 import { sayRestored, useVersionRestore, VersionView } from "./version-view.js";
 
-/**
- * version-view.test.ts -- Restore this version restores at once, asking nothing, a refusal said in a toast; and a restored version is said in the window's toast: with an Undo where the history names the version that stood before, which restores that one and says so where it is refused. Synthetic throughout.
- */
-
 let root: Root | undefined;
 let registry: AtomRegistry.AtomRegistry | undefined;
 let show: ((notice: ToastNotice) => void) | undefined;
@@ -29,13 +25,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Hands the test the window's way of showing a toast. */
 function Shower(): null {
   show = useToast();
   return null;
 }
 
-/** The window's toasts, mounted as its root mounts them. */
 function mount(): void {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -51,7 +45,6 @@ function mount(): void {
   );
 }
 
-/** A version of a description that is not the newest, as the version history draws it, whose restore answers `answer`; each version asked and each restore landed heard. */
 function mountVersion(answer: ActionResult, asked: (number | undefined)[], landed: string[]): void {
   function Version(): React.JSX.Element {
     const restore = useVersionRestore(
@@ -96,7 +89,6 @@ function mountVersion(answer: ActionResult, asked: (number | undefined)[], lande
   );
 }
 
-/** Restore this version's button. */
 function restoreButton(): HTMLButtonElement {
   return (
     [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -105,14 +97,12 @@ function restoreButton(): HTMLButtonElement {
   );
 }
 
-/** What each toast standing says, leaving out those on their way out. */
 function standing(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
 
-/** The Undo on the toasts, or nothing where none stands. */
 function undoButton(): HTMLButtonElement | undefined {
   return [
     ...document.querySelectorAll<HTMLButtonElement>(".ui-toast:not([data-leaving]) button"),

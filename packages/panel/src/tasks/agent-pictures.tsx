@@ -34,36 +34,6 @@ import {
 } from "./attached-file-chips.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 
-/**
- * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, the pictures an integration's call answered, under the call's row, and an image a line handed it, over the line.
- *
- * Each picture is read once through the window's pictures
- * (`../picture-query.ts`), under the agent, or under the worker whose
- * transcript names it, and drawn as a description's picture is
- * (`../picture-block.tsx`): its own block while one, a quiet box while its
- * bytes are read, its words where it is gone. Several, whether the agent
- * showed them or an integration's call answered them under the call's row,
- * open or closed, are one set of tiles (`@repo/ui`'s `PictureSet`): a few
- * the agent showed in one row at their own shapes, more, and a call's
- * however few, as thumbnails that wrap, six drawn and
- * the rest read all the same for the viewer; a picture the call answered
- * that was not kept says so, with its size, since the model saw it all the
- * same, and a gone tile opens nothing. A press on any other opens the window's file viewer
- * walking the set, or the call's pictures, from it, with Add to description
- * beside Download where the transcript is drawn on a plan's page. A WebM
- * the agent recorded, shown as a picture or answered by its browser's
- * `stop_recording`, plays where it stands instead, its own block above the
- * call's pictures, with the player's own controls, Full screen among them
- * (`@repo/ui`'s `VideoPlayer`); its Expand opens the same viewer over the
- * call's videos and pictures, which plays it there. An image a line handed
- * the agent, which its row names by the picture it was kept as rather than
- * carrying its bytes, is read the same way and drawn among the line's files
- * (`MessageFileChips`).
- * Everything here is left out of the screen recording, as the tab around
- * it is.
- */
-
-/** Where an agent's or a worker's pictures are read through: the scope the window keeps them under, and the read. */
 export interface AgentPictureDoor {
   readonly owner: string;
   readonly read: PictureReader;
@@ -71,14 +41,8 @@ export interface AgentPictureDoor {
 
 const AgentPicturesContext = createContext<AgentPictureDoor | undefined>(undefined);
 
-/** Hands the transcript under it the door its pictures are read through. */
 export const AgentPicturesProvider = AgentPicturesContext.Provider;
 
-/**
- * The door to an agent's pictures, or a worker's where `callId` names the
- * delegation that started it; the cache keeps a worker's under its call, as
- * the service reads them from its own transcript.
- */
 export function useAgentPictureDoor(agentId: string, callId?: string): AgentPictureDoor {
   const read = useCallback(
     (_owner: string, pictureId: string) =>
@@ -92,23 +56,16 @@ export function useAgentPictureDoor(agentId: string, callId?: string): AgentPict
   return useMemo(() => ({ owner: callId ?? agentId, read }), [agentId, callId, read]);
 }
 
-/** What the viewer saves a picture as: its words, or its file's name, under its type's extension. */
 function viewerName(words: string, picture: KeptPicture): string {
   const extension = picture.mediaType.slice(picture.mediaType.indexOf("/") + 1);
   return `${words.replaceAll(/[/\\:]/gu, "-")}.${extension}`;
 }
 
-/** A held picture as the viewer takes it, beside the id it is opened by. */
 interface HeldFile {
   readonly file: FileChip;
   readonly id: string;
 }
 
-/**
- * Where each picture `ids` names stands, read through `door` and watched, so
- * what draws them is drawn again as each read lands; one no id names, or
- * any with no door, is read by nothing and stands as reading.
- */
 function usePictureStates(
   door: AgentPictureDoor | undefined,
   ids: readonly (string | undefined)[],
@@ -125,7 +82,6 @@ function usePictureStates(
   });
 }
 
-/** The pictures among `items` that landed, each standing as `states` says at its place, as the viewer takes files, each beside the place it stands at. */
 function heldFiles(
   items: readonly ViewedPicture[],
   states: readonly PictureState[],
@@ -138,23 +94,16 @@ function heldFiles(
   });
 }
 
-/** A picture a viewer walks: what it was kept as, and its words. */
 interface ViewedPicture {
   readonly picture: KeptPicture;
   readonly words: string;
 }
 
-/** The viewer a set or a call's chips open: how one is opened over its pictures, and the viewer while it stands. */
 interface PictureViewer {
   readonly open: (items: readonly ViewedPicture[], id: string) => void;
   readonly viewer: ReactNode;
 }
 
-/**
- * The viewer over a set's pictures, from the one named: each picture held
- * now among the files it walks, and each still read joining them as its
- * read lands, so a press on the first picture to land reaches the rest.
- */
 function OpenViewer({
   door,
   items,
@@ -190,7 +139,6 @@ function OpenViewer({
   );
 }
 
-/** The viewer over a set's pictures, from the one named, until it is closed. */
 function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
   const addToDescription = useAddToDescription();
   const [viewing, setViewing] = useState<
@@ -214,7 +162,6 @@ function useViewer(door: AgentPictureDoor | undefined): PictureViewer {
   return { open, viewer };
 }
 
-/** One picture of a set the agent showed alone: its own block, at its own size up to the column's. */
 function ShownOne({
   door,
   shown,
@@ -225,7 +172,6 @@ function ShownOne({
   onOpen: () => void;
 }): ReactNode {
   const state = usePicture(pictureQuery(door.owner, shown.picture.id, door.read), pictureUnread);
-  // Note that a picture is described by its file's name, since its caption is drawn beside it, but a video's player is named by the caption, because "Video: flow" says nothing of what it shows.
   const video = state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url);
   return (
     <PictureBlock
@@ -237,7 +183,6 @@ function ShownOne({
   );
 }
 
-/** One tile of a set the agent showed, read through the door; one the call has not answered yet waits. */
 function ShownTile({
   door,
   shown,
@@ -268,7 +213,6 @@ function ShownTile({
   );
 }
 
-/** A tile of a picture that was kept, read through the door, opening the viewer from it. */
 function KeptTile({
   door,
   picture,
@@ -294,13 +238,11 @@ function KeptTile({
   );
 }
 
-/** A picture of a set past the six drawn, read all the same, so the viewer walks the whole set. */
 function UnseenPicture({ door, picture }: { door: AgentPictureDoor; picture: KeptPicture }): null {
   usePicture(pictureQuery(door.owner, picture.id, door.read), pictureUnread);
   return null;
 }
 
-/** The pictures of a set past the six drawn, each read ahead for the viewer. */
 function UnseenPictures({
   door,
   pictures,
@@ -317,10 +259,6 @@ function UnseenPictures({
     );
 }
 
-/**
- * A `show_image` call drawn as what it showed: one picture or video as its
- * own block, several as one set, each in its place while the call reads it.
- */
 export function ShownPictures({
   input,
   output,
@@ -334,19 +272,12 @@ export function ShownPictures({
   return <ShownSet door={door} shown={all} />;
 }
 
-/** Whether a shown file was kept as a video, played where it stands rather than drawn in a set. */
 function isShownVideo(
   shown: ShownPicture,
 ): shown is ShownPicture & { readonly picture: KeptPicture } {
   return shown.picture !== undefined && isVideoType(shown.picture.mediaType);
 }
 
-/**
- * The pictures and videos of a `show_image` call, or a browser call's
- * recordings: each video played as its own block, then one picture as its
- * own block or several as one set, and one viewer over them all, which a
- * picture's press and a video's Expand open alike.
- */
 function ShownSet({
   door,
   shown,
@@ -357,7 +288,6 @@ function ShownSet({
   const { open, viewer } = useViewer(door);
   const videos = shown.filter(isShownVideo);
   const stills = shown.filter((each) => !isShownVideo(each));
-  // Note that the viewer walks them in the order they are drawn, videos first, rather than the order the call named them.
   const kept = [...videos, ...stills].flatMap((each) =>
     each.picture === undefined
       ? []
@@ -367,7 +297,6 @@ function ShownSet({
   return (
     <>
       {videos.map((each, index) => (
-        // Note that a video's place among the call's is its identity: a call never reorders.
         <ShownOne key={index} door={door} shown={each} onOpen={() => openAt(each.picture.id)} />
       ))}
       {stills.length === 0 ? null : <ShownStills door={door} shown={stills} openAt={openAt} />}
@@ -376,7 +305,6 @@ function ShownSet({
   );
 }
 
-/** The pictures of a call that are no video: one as its own block, several as one set. */
 function ShownStills({
   door,
   shown,
@@ -401,7 +329,6 @@ function ShownStills({
     <div className="my-block-gap">
       <PictureSet label={SHOWN_LABEL} count={shown.length}>
         {shown.slice(0, PICTURE_SET_SHOWN).map((each, index) => (
-          // Note that a picture's place in its set is its identity: a set never reorders.
           <ShownTile key={index} door={door} shown={each} onOpen={openAt} />
         ))}
       </PictureSet>
@@ -410,22 +337,13 @@ function ShownStills({
   );
 }
 
-/** What a set the agent showed is named, and what the pictures under a call's row are. */
 const SHOWN_LABEL = "Pictures the agent showed";
 const CALLED_LABEL = "Pictures the call answered";
 
-/** Why a picture the call answered is not drawn: it was not kept, though the model saw it. */
 function notKeptWords(byteCount: number): string {
   return `not kept · ${formatBytes(byteCount)}`;
 }
 
-/**
- * The pictures an integration's call answered, as a row of chips under its
- * line, open or closed: one kept is its thumbnail, opening the viewer over
- * the call's pictures; one not kept says so, with its size, since the
- * model saw it all the same. The videos a browser call recorded stand
- * under them as a `show_image` call's would.
- */
 export function CallPictures({
   tool,
   input,
@@ -446,7 +364,6 @@ export function CallPictures({
     each.kept ? [{ picture: each.picture, words: each.name }] : [],
   );
   const openAt = (id: string) => open(kept, id);
-  // Note that a call's set draws every picture it answered, never six and a count, because one not kept says why only on its own tile and the viewer walks none of those.
   return (
     <>
       <div className="mt-list-gap mr-0 mb-item-gap ml-transcript-gutter">
@@ -454,7 +371,6 @@ export function CallPictures({
           {called.map((each, index) =>
             each.kept ? (
               <KeptTile
-                // Note that a picture's place among its call's is its identity: an answer never reorders.
                 key={index}
                 door={door}
                 picture={each.picture}
@@ -464,7 +380,6 @@ export function CallPictures({
               />
             ) : (
               <PictureSetTile
-                // Note that a picture's place among its call's is its identity: an answer never reorders.
                 key={index}
                 state={{ kind: PICTURE_STATE.MISSING }}
                 words={each.name}
@@ -480,10 +395,8 @@ export function CallPictures({
   );
 }
 
-/** The media types a message may carry a file of, as the wire takes them. */
 const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(AGENT_ATTACHMENT_TYPE));
 
-/** A file's bytes as a message carries them, read off a `data:` address; none for any other address. */
 function attachmentOfData(name: string, url: string): AgentAttachment | undefined {
   const read = /^data:([^;,]+);base64,(.+)$/u.exec(url);
   const mediaType = read?.[1];
@@ -491,23 +404,14 @@ function attachmentOfData(name: string, url: string): AgentAttachment | undefine
   if (mediaType === undefined || data === undefined || !ATTACHMENT_TYPES.has(mediaType)) {
     return undefined;
   }
-  // SAFETY: the type was just found among the wire's own.
   return { name, mediaType: mediaType as AgentAttachment["mediaType"], data };
 }
 
-/** One of a line's files as Edit carries it again, by its place on the line, which never changes. */
 export interface LineAttachment {
   readonly key: string;
   readonly attachment: AgentAttachment;
 }
 
-/**
- * A line's files as a message to the agent carries them again, for Edit to
- * send: each one the line holds inline, and each one kept as a picture whose
- * bytes the window has read, by its place on the line; and whether a
- * picture is still being read, which joins them once it lands. One that
- * is gone is left out.
- */
 export function useLineAttachments(message: AgentTranscriptMessage): {
   readonly attachments: readonly LineAttachment[];
   readonly reading: boolean;
@@ -537,36 +441,21 @@ export function useLineAttachments(message: AgentTranscriptMessage): {
   return { attachments, reading };
 }
 
-/**
- * The files on a line of the transcript, as chips: each from the bytes its
- * row carries, and an image its row names by the picture it was kept as
- * read through the agent's door, so it draws its thumbnail and opens once
- * the read lands, and is its name alone while read or where it is gone.
- * A line still on its way draws its files going up.
- */
 export function MessageFileChips({
   message,
   sending = false,
 }: {
   message: AgentTranscriptMessage;
-  /** Whether the line is still on its way, its row not yet read back. */
   sending?: boolean;
 }): ReactNode {
   return <KeptFileChips files={messageFileChips(message)} sending={sending} />;
 }
 
-/**
- * Files as a line draws them, each one that names a picture rather than
- * carrying its bytes read through the agent's pictures, its thumbnail drawn
- * once they land: a transcript row's (`MessageFileChips`), and a queued
- * message's, whose files the queue names by the id their bytes are read by.
- */
 export function KeptFileChips({
   files,
   sending = false,
 }: {
   files: readonly MessageFileChip[];
-  /** Whether the line is still on its way, its row not yet read back. */
   sending?: boolean;
 }): ReactNode {
   const door = useContext(AgentPicturesContext);

@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { fileMatches, matchFrom } from "./file-find.js";
 
-/**
- * file-find.test.ts -- a find over a whole file: the matches on its lines and
- * in its notes, in the order the tab draws them, and where a find starts.
- */
-
 const LINES = ["const seat = 1;", "// Seats, seats", "return seat;"];
 
 test("a query matches on every line without regard to case, and a note's matches follow its line's own", () => {

@@ -8,12 +8,6 @@ import { SIDE_PANEL_TAB } from "./tasks/use-side-panel.js";
 import type { InboxChoice } from "./tasks/use-tasks-tab.js";
 import { tasksControl } from "./testing/tasks-control.js";
 
-/**
- * history-titles.test.ts -- each step of the history is named as Back's menu
- * lists it: a task by its name with the tabs it showed, the Inbox with the
- * task its item is of, and every other page by what the window's title calls it.
- */
-
 const TASK = {
   id: "task-1",
   workspaceId: "workspace-acme",
@@ -23,7 +17,6 @@ const TASK = {
   repository: null,
 };
 
-/** The window on the task, its side panel open on the tab given or shut. */
 function onTask(
   side: (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB] | { file: string } | undefined,
 ) {

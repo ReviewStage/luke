@@ -1,13 +1,3 @@
-/**
- * activity-chart.tsx -- the Overview's daily activity, stacked by feature.
- *
- * One bar a UTC day, each feature's count a segment of it from the base up in
- * the vocabulary's order, so the stack's height is the day's whole activity
- * and each band's thickness one feature's share of it. The legend under the
- * plot names every band in its slot's hue, since five series cannot be told
- * apart by the heading alone, and the tooltip carries each day's exact counts.
- */
-
 import type { AdminOverview } from "@repo/features/admin-answer-wire";
 import { ACTIVITY_FEATURE, type ActivityFeature } from "@repo/features/admin-overview-vocabulary";
 import type { ChartConfig } from "@repo/ui/chart";
@@ -25,10 +15,8 @@ import {
 
 const ACTIVITY_TITLE = "Activity by feature per day";
 
-/** The plot's height, which the chart and its skeleton both stand. */
 const ACTIVITY_PLOT_HEIGHT = "15rem";
 
-/** Each feature's name and its slot's hue, keyed by the series it draws. */
 const ACTIVITY_CHART = {
   [ACTIVITY_FEATURE.AGENTS_STARTED]: {
     label: "Agents started",
@@ -50,7 +38,6 @@ const ACTIVITY_CHART = {
 
 const FEATURES = Object.values(ACTIVITY_FEATURE);
 
-/** One band's swatch and name, in the legend under the plot. */
 function LegendEntry({ feature }: { feature: ActivityFeature }): React.JSX.Element {
   return (
     <span className={LEGEND_ENTRY}>
@@ -74,13 +61,6 @@ function ActivityLegend(): React.JSX.Element {
   );
 }
 
-/**
- * The stacked chart. A window with no activity at all says so instead of
- * drawing the zero-fill as a flat measurement, and today's bar wears the
- * partial-day fade on every band. Where a day has a roster to open, a click
- * anywhere in its column opens it, read from the chart's own axis datum.
- */
-/** A feature's name as the chart's legend writes it, for a figure that stands for one of its bands. */
 export function activityFeatureLabel(feature: ActivityFeature): string {
   return ACTIVITY_CHART[feature].label;
 }
@@ -125,7 +105,6 @@ export function ActivityChart({
   );
 }
 
-/** The chart while the window is read: its heading and legend, which it knows, over its plot's block, and a bone for the trend it reads. */
 export function ActivityChartSkeleton(): React.JSX.Element {
   return (
     <ChartFrameSkeleton

@@ -30,34 +30,6 @@ import { RelationKindPill } from "./relation-kind-pill.js";
 import { TASK_RELATION_MENU } from "./task-relation-menu.js";
 import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 
-/**
- * new-task-relation.tsx -- New task's relations: the other tasks the new task starts related to, and how, read from the new task's side, picked from the + menu and drawn as rows over the card.
- *
- * The card's + menu ends in Task relation (`relationMenuPanel`), which hangs
- * the task search beside the menu as its panel: the workspace's tasks by
- * status mark, name, and key, a search matching the key too, with the kind
- * pinned at its foot as a submenu switched without losing the search. A pick
- * relates the task as the kind standing there and closes the menu. A task
- * takes one relation, so picking one already related changes its kind, its
- * row in the search naming that kind in its key's place; a task has one
- * parent, so a second Sub-task of replaces the first; and a card takes at
- * most `TASK_BOUNDS.MAX_START_RELATIONS`, past which the rest are dimmed. A
- * task that cannot take the kind stays listed, dimmed, with why: for Sub-task
- * of and Parent of, one in another repository than the card's, since a tree
- * works in one, and once a tree relation stands the card's repository is held
- * to its task's, so every tree relation shares it, as the service asks; and
- * for Parent of, one with a parent already, which the service would refuse.
- *
- * Each relation stands as a row docked over the card (`NewTaskRelationRows`),
- * the plan's own task row with no room at its edges, reading as a sentence:
- * the kind as a compact pill that drops the kinds and Remove relation
- * (`relation-kind-pill.tsx`), the task's key, its status mark, its name, and
- * a × that takes the row off. Pressing the name opens the task search under
- * the row to swap its task, keeping its kind. The card holds the relations
- * and starts with them all (`new-task-composer.tsx`).
- */
-
-/** Each kind as the rows, the kind submenu, and the search name it, from the new task's side. */
 const KIND_WORDS = {
   [TASK_CREATE_RELATION_KIND.SUB_TASK_OF]: "Sub-task of",
   [TASK_CREATE_RELATION_KIND.PARENT_OF]: "Parent of",
@@ -65,7 +37,6 @@ const KIND_WORDS = {
   [TASK_CREATE_RELATION_KIND.BLOCKS]: "Blocks",
 } as const satisfies Record<TaskCreateRelationKind, string>;
 
-/** The kinds in the order the kind submenu and a row's pill stand them, as the add menu stands its own. */
 const KIND_ORDER: readonly TaskCreateRelationKind[] = [
   TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
   TASK_CREATE_RELATION_KIND.PARENT_OF,
@@ -73,7 +44,6 @@ const KIND_ORDER: readonly TaskCreateRelationKind[] = [
   TASK_CREATE_RELATION_KIND.BLOCKS,
 ];
 
-/** The menu's words, the rows', and why a task cannot take a kind. */
 const WORDS = {
   MENU: TASK_RELATION_MENU,
   KIND: "Relation",
@@ -87,10 +57,8 @@ const WORDS = {
   FULL: `At most ${TASK_BOUNDS.MAX_START_RELATIONS} relations`,
 } as const;
 
-/** The pinned row's id, apart from every task's. */
 const KIND_ROW_ID = "relation-kind";
 
-/** The cells a relation's row draws: the kind, the task's key, its status, its name, and its ×. */
 const ROW_CELLS: readonly TaskRowCell[] = [
   TASK_ROW_CELL.RELATION,
   TASK_ROW_CELL.KEY,
@@ -98,42 +66,30 @@ const ROW_CELLS: readonly TaskRowCell[] = [
   TASK_ROW_CELL.END,
 ];
 
-/** A relation New task's card starts its task in: how it stands to the other task, and that task. */
 export interface NewTaskRelation {
   readonly kind: TaskCreateRelationKind;
   readonly task: TaskSummary;
 }
 
-/** The repository a card's tree relations are judged against: the card's, and whether a tree relation already holds it. */
 interface RelationPlace {
-  /** The repository the card's chip chose, or a tree relation's task's; none chosen. */
   readonly repository: string | null;
-  /** Whether a tree relation stands, which holds every other to its task's repository, none among them. */
   readonly held: boolean;
 }
 
-/** Whether a kind makes a tree, whose two tasks share one repository and the sub-task its parent's place to run. */
 export function treeKind(kind: TaskCreateRelationKind): boolean {
   return (
     kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF || kind === TASK_CREATE_RELATION_KIND.PARENT_OF
   );
 }
 
-/** The card's first tree relation, whose task's repository every tree relation shares; none where none stands. */
 export function treeRelationOf(relations: readonly NewTaskRelation[]): NewTaskRelation | undefined {
   return relations.find((relation) => treeKind(relation.kind));
 }
 
-/** What a start names of the card's relations: each kind and the other task's id. */
 export function relationsAsked(relations: readonly NewTaskRelation[]): TaskCreateRelation[] {
   return relations.map((relation) => ({ kind: relation.kind, taskId: relation.task.id }));
 }
 
-/**
- * Each kind's icon, the plan's for the same relationship: the up-arrow where
- * the other task is the parent (Sub-task of), the sub-task glyph where it is
- * a sub-task (Parent of).
- */
 function kindIcon(kind: TaskCreateRelationKind): React.JSX.Element {
   switch (kind) {
     case TASK_CREATE_RELATION_KIND.SUB_TASK_OF:
@@ -147,13 +103,11 @@ function kindIcon(kind: TaskCreateRelationKind): React.JSX.Element {
   }
 }
 
-/** Two repositories as the service compares them: both none, or the same name in any case. */
 function sameRepository(one: string | null, other: string | null): boolean {
   if (one === null || other === null) return one === other;
   return one.toLowerCase() === other.toLowerCase();
 }
 
-/** Why `other` cannot take `kind` on a card standing at `place`, none chosen and none held judging no repository; none where it can. */
 function relationWhyNot(
   other: TaskSummary,
   kind: TaskCreateRelationKind,
@@ -170,7 +124,6 @@ function relationWhyNot(
   return undefined;
 }
 
-/** Whether a relation would take the card's one parent's place: a Sub-task of beside another. */
 function takesParentOf(relation: NewTaskRelation, kind: TaskCreateRelationKind): boolean {
   return (
     kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF &&
@@ -178,12 +131,6 @@ function takesParentOf(relation: NewTaskRelation, kind: TaskCreateRelationKind):
   );
 }
 
-/**
- * The relations with `next` set in its place: the task's own relation where
- * it has one, else the card's parent where `next` is a second Sub-task of,
- * else added at the end, unless the card holds its most already; any other
- * relation to the same task, or second parent, let go.
- */
 function withRelation(
   relations: readonly NewTaskRelation[],
   next: NewTaskRelation,
@@ -201,7 +148,6 @@ function withRelation(
   });
 }
 
-/** The relations with the one at `at` moved to `kind`, any other parent let go where it moves to Sub-task of. */
 function withKind(
   relations: readonly NewTaskRelation[],
   at: number,
@@ -211,7 +157,6 @@ function withKind(
   return moved === undefined ? relations : withRelation(relations, { kind, task: moved.task });
 }
 
-/** The relations with the one at `at` relating `task` instead, its kind kept, any other relation to `task` let go. */
 function withTask(
   relations: readonly NewTaskRelation[],
   at: number,
@@ -223,12 +168,6 @@ function withTask(
   });
 }
 
-/**
- * The search's rows for a kind: every task listed, by status mark, name, and
- * key, a related task naming its relation's kind in its key's place, each that
- * cannot take the kind dimmed with why, and every unrelated one dimmed once
- * the card holds its most.
- */
 function relationRows(
   tasks: readonly TaskSummary[],
   workspaceName: string,
@@ -238,7 +177,6 @@ function relationRows(
   adds: boolean,
 ): readonly MenuRow[] {
   const related = new Map(relations.map((each) => [each.task.id, each.kind]));
-  // Note that a Sub-task of beside the card's parent takes its place rather than adding one, so the card's most never holds it.
   const replacesParent = relations.some((each) => takesParentOf(each, kind));
   const full = adds && !replacesParent && relations.length >= TASK_BOUNDS.MAX_START_RELATIONS;
   return tasks.map((each) => {
@@ -259,22 +197,15 @@ function relationRows(
   });
 }
 
-/** What the card hands its relations' search, its panel, and its rows. */
 export interface NewTaskRelations {
-  /** The relations the card starts its task in, in the order they were picked. */
   readonly relations: readonly NewTaskRelation[];
-  /** The tasks of the card's workspace, which the search lists. */
   readonly tasks: readonly TaskSummary[];
-  /** The workspace's name, which a task's key is drawn from. */
   readonly workspaceName: string;
-  /** The repository the card's chip chose, held to a tree relation's task's where one stands; none chosen. */
   readonly repository: string | null;
-  /** Whether a start is out, which holds the rows. */
   readonly disabled: boolean;
   onChange: (relations: readonly NewTaskRelation[]) => void;
 }
 
-/** Where the card's tree relations are judged from. */
 function placeOf(control: NewTaskRelations): RelationPlace {
   return {
     repository: control.repository,
@@ -282,11 +213,6 @@ function placeOf(control: NewTaskRelations): RelationPlace {
   };
 }
 
-/**
- * Where a swap of the relation at `at` is judged from: the tree relations
- * left beside it, whose repository holds it; none left, no repository, since
- * the one swapped held the chip and the task it takes sets it afresh.
- */
 function swapPlaceOf(control: NewTaskRelations, at: number): RelationPlace {
   const left = treeRelationOf(control.relations.filter((_, index) => index !== at));
   return left === undefined
@@ -294,12 +220,6 @@ function swapPlaceOf(control: NewTaskRelations, at: number): RelationPlace {
     : { repository: left.task.repository, held: true };
 }
 
-/**
- * The + menu's Task relation: the task search hung beside the menu as its
- * panel, the kind standing at its foot, which the card keeps from one opening
- * to the next; a pick relates the task as that kind and closes the menu, and
- * Escape goes back to the menu.
- */
 export function relationMenuPanel(
   id: string,
   control: NewTaskRelations,
@@ -360,7 +280,6 @@ export function relationMenuPanel(
   };
 }
 
-/** One relation's row: its kind's pill, the task's key and status, its name, which opens the search that swaps it, and its ×. */
 function RelationRow({
   control,
   relation,
@@ -457,7 +376,6 @@ function RelationRow({
   );
 }
 
-/** The card's relations as rows docked over it, edge to edge with no room at their ends; nothing while it holds none. */
 export function NewTaskRelationRows({
   control,
 }: {

@@ -14,32 +14,6 @@ import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { pictureQuery } from "../picture-query.js";
 
-/**
- * image-diff.tsx -- a changed image as Files changed draws it: the picture before and after, side by side, swiped, or one faded over the other, in place of "binary file".
- *
- * Each side is the file of the agent's own repository at a commit, read by
- * the service through the repository's contents on the App's token, as the
- * Pull request tab reads any picture its pull request names
- * (`@repo/features/github-image`'s raw-file address, the act
- * `AGENTS_GITHUB_IMAGE`): the before at the merge base GitHub counts
- * the changes from, the after at the head. So the window asks GitHub nothing
- * itself, holds no token, and draws each from a `data:` URL of its own
- * making, which the panel's policy admits; a side waits under the window's
- * spinner, and one the service will not answer, an image past its bound or
- * no image at all, says so, as a picture of a transcript does
- * (`@repo/ui`'s `PictureStandIn`), and one whose read did not land this
- * time says so with Retry, which reads it again. A side is
- * read only once its file is open and Pierre has drawn it near the view,
- * and kept while it is looked at (`../picture-query.ts`), so a list of a
- * hundred images reads only the ones looked at; a side whose read did not
- * land is asked for again when the changes are read again. An image added has no
- * before and one deleted no after; a before whose merge base the service
- * could not read is not drawn at all rather than drawn wrong, and the after
- * stands alone, saying so. The comparisons are tabs over the one panel that
- * shows the sides, labeled by the comparison it shows.
- */
-
-/** How an image's two sides are set against each other: beside each other, the after swiped over the before, or faded over it. */
 const IMAGE_COMPARE = {
   SIDE_BY_SIDE: "side-by-side",
   SWIPE: "swipe",
@@ -54,7 +28,6 @@ const COMPARE_OPTIONS = [
   { value: IMAGE_COMPARE.ONION_SKIN, label: "Onion skin" },
 ] as const satisfies readonly { readonly value: ImageCompare; readonly label: string }[];
 
-/** What a changed image's place says. */
 const IMAGE_WORDS = {
   BEFORE: "Before",
   AFTER: "After",
@@ -66,26 +39,21 @@ const IMAGE_WORDS = {
   FADE: "Fade the after over the before",
 } as const;
 
-/** How far into the before the swipe or the fade starts, in percent. */
 const HALFWAY = 50;
 
-/** Where an image's sides are read: the agent whose repository they are in, the repository as `owner/name`, and the commits each side stands at. */
 export interface ImageSides {
   readonly agentId: string;
   readonly repository: string;
   readonly headSha: string | undefined;
   readonly baseSha: string | undefined;
-  /** How many times the changes were read, so a read again asks again for a side whose last read did not land. */
   readonly read: number;
 }
 
-/** The raw file of the repository at a commit, the address the service reads a repository's picture by. */
 function rawAddress(repository: string, sha: string, path: string): string {
   const segments = [...repository.split("/"), sha, ...path.split("/")];
   return `https://raw.githubusercontent.com/${segments.map(encodeURIComponent).join("/")}`;
 }
 
-/** Reads a picture of the agent's repository through the service. */
 function useImageRead() {
   return useCallback(
     (agentId: string, address: string) =>
@@ -94,7 +62,6 @@ function useImageRead() {
   );
 }
 
-/** Whether `element` has come near the view, which it stays once it has; an element no document holds never does. */
 function useNearView(element: HTMLElement | null): boolean {
   const [near, setNear] = useState(false);
   useEffect(() => {
@@ -111,12 +78,10 @@ function useNearView(element: HTMLElement | null): boolean {
   return near;
 }
 
-/** One side as it stands: its picture, or what stands in its place, Retry where its read did not land. */
 function SidePicture({ state, label }: { state: PictureState; label: string }) {
   if (state.kind === PICTURE_STATE.READY) {
     return <img className="image-diff-picture" src={state.url} alt={label} />;
   }
-  // Note that the side's words are its caption's, drawn above it, so what stands in for it says this picture.
   if (state.kind === PICTURE_STATE.FAILED) {
     return (
       <PictureStandIn failure={state.failure} state={state.kind} words="" onRetry={state.retry} />
@@ -125,7 +90,6 @@ function SidePicture({ state, label }: { state: PictureState; label: string }) {
   return <PictureStandIn state={state.kind} words="" />;
 }
 
-/** One side alone, under the word for what it is, and a note under it where it stands for two. */
 function OneSide({
   agentId,
   address,
@@ -149,7 +113,6 @@ function OneSide({
   );
 }
 
-/** How an image's two sides are set against each other, and how far the after is swiped or faded in, in percent. */
 interface Comparison {
   readonly compare: ImageCompare;
   readonly amount: number;
@@ -157,7 +120,6 @@ interface Comparison {
 
 const FIRST_COMPARISON: Comparison = { compare: IMAGE_COMPARE.SIDE_BY_SIDE, amount: HALFWAY };
 
-/** The after over the before, swiped or faded at `amount` percent, with the slider that moves it. */
 function Stacked({
   before,
   after,
@@ -172,7 +134,6 @@ function Stacked({
   onAmount: (amount: number) => void;
 }): React.JSX.Element {
   const swipe = compare === IMAGE_COMPARE.SWIPE;
-  // Note that the after is cut or faded through the CSSOM (`style`), which the panel's policy admits where it refuses a style written as markup.
   const style = swipe ? { clipPath: `inset(0 0 0 ${amount}%)` } : { opacity: amount / 100 };
   return (
     <div className="flex max-w-full flex-col items-center gap-control-gap">
@@ -189,7 +150,6 @@ function Stacked({
   );
 }
 
-/** Both sides, as the comparison chosen sets them, once both are read; each side as it stands until then. */
 function BothSides({
   agentId,
   before,
@@ -261,7 +221,6 @@ function BothSides({
   );
 }
 
-/** What of a changed image is drawn: both sides, one, or neither, by what became of it and which commits the service named. */
 function sidesOf(file: AgentChangedFile, sides: ImageSides) {
   const { repository, headSha, baseSha } = sides;
   const before =
@@ -275,17 +234,11 @@ function sidesOf(file: AgentChangedFile, sides: ImageSides) {
   return { before, after };
 }
 
-/** Whether a changed image can be drawn at all: the commit of a side it has is known. */
 export function imageDrawable(file: AgentChangedFile, sides: ImageSides): boolean {
   const { before, after } = sidesOf(file, sides);
   return file.status === CHANGED_FILE_STATUS.DELETED ? before !== undefined : after !== undefined;
 }
 
-/**
- * A changed image's sides as one read of the changes names them, read once
- * they come near the view: both for one changed, the one it has for one
- * added or deleted.
- */
 function ImageSidesNear({
   file,
   sides,
@@ -338,14 +291,6 @@ function ImageSidesNear({
   );
 }
 
-/**
- * A changed image, read and drawn once it comes near the view. Note that
- * its sides are drawn anew for each read of the changes, and wait to come
- * near the view again, so a side whose read did not land is asked for
- * again and one far from the view is asked for nothing, while the
- * comparison chosen and how far it is swiped stand here, above them, and
- * outlast the read.
- */
 export function ImageDiff({
   file,
   sides,

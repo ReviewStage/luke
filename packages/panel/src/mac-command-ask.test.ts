@@ -22,14 +22,6 @@ import { deliveryOf, handState, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 
-/**
- * The prompt for a command an agent asked to run on this Mac is drawn from
- * what main holds: nothing while no ask waits, the earliest ask while some
- * do, and each answer goes back to main by the ask's id; an answer main
- * refuses says why in a toast, where a report nobody pressed for stays quiet.
- * Synthetic commands.
- */
-
 const FIRST: MacCommandAsk = {
   id: "2f6a1c7e-9b3d-4e8f-a5c1-7d2e9b4f6a03",
   command: "node --version",
@@ -51,7 +43,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The dialog drawn over main's document holding `asks`, with what it answered main. */
 async function mount(asks: readonly MacCommandAsk[]): Promise<MacCommandAnswer[]> {
   handState({}, { macCommands: { asks } });
   const answered: MacCommandAnswer[] = [];
@@ -71,11 +62,6 @@ async function mount(asks: readonly MacCommandAsk[]): Promise<MacCommandAnswer[]
   return answered;
 }
 
-/**
- * The dialog over main's document holding `FIRST`, main refusing every answer
- * in `sentence`, beside the window's toasts on the window's own registry, the
- * one its root provides and a press's toast is raised on.
- */
 async function mountRefusing(sentence: string): Promise<void> {
   handState({}, { macCommands: { asks: [FIRST] } });
   fakeActPort({
@@ -97,12 +83,10 @@ async function mountRefusing(sentence: string): Promise<void> {
   await vi.waitFor(() => assert.equal(promptStands(), true));
 }
 
-/** Whether the prompt is drawn. */
 function promptStands(): boolean {
   return document.querySelector('[role="alertdialog"]') !== null;
 }
 
-/** What each toast standing says, oldest first. */
 function toasts(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",

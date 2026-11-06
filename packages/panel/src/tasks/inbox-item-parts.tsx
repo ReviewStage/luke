@@ -1,15 +1,3 @@
-/**
- * inbox-item-parts.tsx -- the pieces that draw an Inbox item as the Inbox does, for every place that lists one: its agent's tile, the glyph of what it asks, its card, and the marks at its row's end.
- *
- * The Inbox's own list draws an item as a row of its agent's tile, its
- * title, the last word in its thread, and at its end the teammate's face
- * whose agent asks it, the Draft pencil, the attention mark, its task's
- * status and how long ago it changed (`InboxItemEnd`), with the item's card
- * hung beside the row (`InboxItemCard`). ⌘K, the person page, the Next row,
- * and a chip of an item draw those same pieces, so an item reads alike
- * wherever it stands; the list itself composes them in `inbox-list.tsx`.
- */
-
 import {
   INBOX_STATUS,
   type InboxItem,
@@ -76,40 +64,22 @@ import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.
 import { cardTitle } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/**
- * An item that needs the developer wears the attention mark before its time,
- * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge
- * reads at the time's height.
- */
 const INBOX_ROW_ATTENTION =
   "inbox-row-attention inline-flex [&_.attention-mark]:size-ui-12 [&_.attention-mark_svg]:size-attention-glyph-small";
 
-/**
- * An item put away until a reminder says when it comes back in its age's
- * place, after the clock glyph the reminder's acts wear, in the accent's
- * ink, so a row put away reads apart from one that changed.
- */
 const INBOX_ROW_DUE =
   "inbox-row-due inline-flex items-center gap-tight-gap text-accent-ink [&>svg]:size-caption-glyph";
 
-/** What a reminded row says to a reader before its time, the glyph being drawn for the eye alone. */
 const REMINDER_DUE = "Reminder";
 
-/** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
   return `Waiting on ${actorName(starter, { sentence: true })}`;
 }
 
-/** What a message or a thread its agent addressed to a member by name says of them: "To you", or "To" and their name. */
 export function addressedWords(person: Actor): string {
   return `To ${actorName(person, { sentence: true })}`;
 }
 
-/**
- * Whom an agent addressed a message or a thread to by name, at the end of
- * its head: "To", their face, and their name, or "you"; nothing where it
- * named nobody, which then waits on its task's assignee or its starter.
- */
 export function AddressedTo({ to }: { to: InboxPerson | undefined }): React.JSX.Element | null {
   const person = usePerson(to);
   if (to === undefined) return null;
@@ -124,7 +94,6 @@ export function AddressedTo({ to }: { to: InboxPerson | undefined }): React.JSX.
   );
 }
 
-/** The tile of an agent the window names nothing of. */
 const UNNAMED_AGENT = {
   kind: ACTOR_KIND.AGENT,
   name: "",
@@ -132,7 +101,6 @@ const UNNAMED_AGENT = {
   state: ACTOR_STATE.REST,
 } as const;
 
-/** The agent that posted an item as its holder names it: the task's summary's line, or main's line for an agent with no task; none where neither holds it. */
 function itemSubject(
   holder: InboxHolder,
   agentId: string,
@@ -147,13 +115,6 @@ function itemSubject(
   return line === undefined ? undefined : lineSubject(line, models, readerId);
 }
 
-/**
- * The tile of the agent that posted an item, hanging the agent's card and
- * leaving the press to its row; where the holder names no such agent, an
- * archived one say, whose items still stand, a bare tile of the harness
- * the task list carries for it (`ReadAgentModel`), and of no known harness
- * until the list carries it and where it never does.
- */
 export function ItemMark({
   holder,
   agentId,
@@ -165,7 +126,6 @@ export function ItemMark({
   agentId: string;
   models: readonly CatalogModel[] | undefined;
   readerId: string | undefined;
-  /** Whether the tile hangs no card of its own, as a row's leading mark does, the row's own card naming the agent instead. */
   plain?: boolean;
 }): React.JSX.Element {
   const subject = itemSubject(holder, agentId, models, readerId);
@@ -191,7 +151,6 @@ export function ItemMark({
   );
 }
 
-/** The glyph saying what an item asks, as its row's second line leads with it: its open ask's kind, a tick where an answer settled it, and none before words alone. */
 export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
   switch (kind) {
     case INBOX_LINE.DECIDE:
@@ -207,16 +166,10 @@ export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
   }
 }
 
-/**
- * An item's own glyph, as its chip wears it and its card leads with it:
- * what it asks, as its row's second line leads with it (`inboxLineGlyph`),
- * or the thread's glyph where it asks nothing.
- */
 export function inboxItemGlyph(item: InboxItem): React.JSX.Element {
   return inboxLineGlyph(inboxLineKind(item)) ?? <GLYPH.THREAD />;
 }
 
-/** Where an item stands, as its row's card says it under its title. */
 function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | undefined): string {
   if (needsYou) return NEEDS_YOU.LABEL;
   if (item.status === INBOX_STATUS.OPEN) {
@@ -225,18 +178,6 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
   return inboxSettledStanding(item);
 }
 
-/**
- * An Inbox row's card, hung beside the row as a sidebar task's row hangs
- * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with the item's glyph, what it asks as its chip wears
- * it, its title, where it stands, waiting on the reader, on a teammate, or
- * settled, and when it last moved; then what holds it, a task as its key
- * and its chip, which wears its status, or an automation by its name;
- * how it ended, once it has; and the agent's latest words, three lines at
- * most. Note that it draws no open ask's options or steps, because a card
- * takes no press and they would read as controls; the item's box answers. The agent that asked
- * stands at its foot, the loading spinner beside it while it works.
- */
 export function InboxItemCard({
   listed,
   now,
@@ -244,10 +185,8 @@ export function InboxItemCard({
   readerId,
 }: {
   listed: InboxListed;
-  /** The time its age counts from; the window's minute where none is handed. */
   now?: number | undefined;
   models: readonly CatalogModel[] | undefined;
-  /** The signed-in account's id, whose own agents' cards name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
@@ -255,7 +194,6 @@ export function InboxItemCard({
   const settled = inboxSettledWords(item, nameOf);
   const subject = itemSubject(holder, item.agentId, models, readerId);
   const words = inboxCardWords(item);
-  // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
   const line =
     holder.kind === INBOX_HOLDER.TASK
       ? holder.task.agents?.agents.find((each) => each.id === item.agentId)
@@ -297,15 +235,6 @@ export function InboxItemCard({
   );
 }
 
-/**
- * What holds an item, as its card says it under the head, a quieter row
- * on the name's column: a task by its key, as the task's own card says it
- * (`TaskKey`), and by its chip as a mention of it is drawn (`HolderRef`),
- * which wears the task's status as its mark, so the card says no status in
- * words; an automation, or the agents no automation names, by their chip
- * alone. Note that the row wears no glyph of its own, because the chip
- * already leads with the holder's.
- */
 function HolderDetail({
   holder,
   workspaceId,
@@ -334,19 +263,11 @@ function HolderDetail({
   );
 }
 
-/**
- * What holds an item, named as a mention of it is (`mention-chip.tsx`): a
- * pill of its glyph and its name, cut at its end where the card is too
- * narrow for it. A task's hangs the task's card and opens the task, as a
- * mention of the task does; an automation's hangs its card, read as the
- * card is hung where no directory around it knows the automation yet; the agents no automation names hang their name alone.
- */
 function HolderRef({
   holder,
   workspaceId,
 }: {
   holder: InboxHolder;
-  /** The workspace the item belongs to, in which an automation the window has not read yet is read as its card is hung. */
   workspaceId: string | undefined;
 }): React.JSX.Element {
   const openPlace = useOpenPlace();
@@ -364,7 +285,6 @@ function HolderRef({
         label={name}
         card={
           automationId === null ? undefined : workspaceId === undefined ? (
-            // Note that an older service names no workspace for the item, so only a directory around the card can know the automation.
             known === undefined ? undefined : (
               <AutomationCard {...known} />
             )
@@ -409,22 +329,11 @@ function HolderRef({
   );
 }
 
-/**
- * An item's task's status as its row wears it before its time: the
- * status's mark alone, small and quiet, as the task's sidebar row wears
- * it, so a Done task's item reads ✓ and a Canceled one's ×, its words said
- * to a reader and in the row's card (`HolderDetail`). Note that it is drawn
- * whatever the status, an item of a finished task staying listed until it
- * is read or answered, and none for an agent with no task, nor for a task
- * from a service before statuses. A row that draws the status elsewhere, on
- * the line naming its task, keeps only its words here (`drawn` off).
- */
 function TaskStatusChip({
   holder,
   drawn = true,
 }: {
   holder: InboxHolder;
-  /** Whether the mark is drawn, or its words alone said to a reader. */
   drawn?: boolean;
 }): React.JSX.Element | null {
   if (holder.kind !== INBOX_HOLDER.TASK || holder.task.status === undefined) return null;
@@ -437,12 +346,6 @@ function TaskStatusChip({
   );
 }
 
-/**
- * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the
- * automation glyph for the agents no automation names, as the holder's
- * group header draws them.
- */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const automationId = holderAutomationId(holder);
   const known = useAutomation(automationId ?? undefined);
@@ -459,17 +362,12 @@ export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Elem
   );
 }
 
-/** Where an item stands for the reader, as its row, its card, and its end marks all say it. */
 interface InboxStanding {
-  /** Whether the item is an open one the reader's own agent asks, which needs their answer. */
   readonly needsYou: boolean;
-  /** The teammate whose agent's open item waits on them; none for the reader's own. */
   readonly starter: Actor | undefined;
-  /** A member's name as the window says it, the reader's own as You. */
   readonly nameOf: (member: Parameters<typeof personActor>[0]) => string;
 }
 
-/** An item's standing for the reader, read as the member directory around the row knows its people. */
 export function useInboxStanding(listed: InboxListed, readerId: string | undefined): InboxStanding {
   const { item } = listed;
   const directory = useMemberDirectory();
@@ -484,49 +382,26 @@ export function useInboxStanding(listed: InboxListed, readerId: string | undefin
   };
 }
 
-/** An item row's meta, its context, marks, and time in one line at the title's right. */
 function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
   return <span className={HOME_ROW_META}>{children}</span>;
 }
 
-/** What an item row's end is handed: the item, and how it stands on its row. */
 interface InboxItemEndProps {
   listed: InboxListed;
-  /** The time its age counts from; the window's minute where none is handed. */
   now?: number | undefined;
   readerId: string | undefined;
-  /** Whether the item's box stands beside the list, so its draft is in sight and unmarked. */
   open?: boolean;
-  /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
   standing?: boolean;
-  /** Whether a reader hears Needs you where the item needs them, which a row under a name already saying it leaves out. */
   needsYouSaid?: boolean;
   before?: ReactNode;
-  /** What stands after the time, as a shortcut does. */
   after?: ReactNode;
 }
 
-/**
- * The marks at an item row's end, in the Inbox's own order: the face of the
- * teammate whose agent asks it, the Draft pencil where an answer or message
- * waits unsent in its box and that box is not the one open beside the list,
- * the attention mark where it needs the reader, its task's status, and how
- * long ago it changed. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
- * A row that says where its item stands on a line of its own (`standing`
- * off), the Inbox's own, draws neither the attention mark nor the status at
- * its end, a reader still hearing both there.
- */
 export function InboxItemEnd(props: InboxItemEndProps): React.JSX.Element {
   return <InboxItemMarks {...props} drafted={useInboxItemDrafted(props.listed.item)} />;
 }
 
-/**
- * An item row's end (`InboxItemEnd`) where its list reads every row's
- * draft at once (`useInboxRowDrafts`), handed whether the item's box holds
- * one rather than reading it row by row.
- */
 export function InboxItemMarks({
   listed,
   now,
@@ -539,7 +414,6 @@ export function InboxItemMarks({
   before,
   after,
 }: InboxItemEndProps & {
-  /** Whether the item's box holds a draft as the item now stands (`rowDrafted`), marked where that box is not the one open. */
   drafted: boolean;
 }): React.JSX.Element {
   const { holder, item } = listed;
@@ -562,7 +436,6 @@ export function InboxItemMarks({
         <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
       ) : null}
       <TaskStatusChip holder={holder} drawn={standing} />
-      {/* Note that an item put away until a reminder says when it comes back in its age's place, as Mail's Remind Me list does. */}
       {item.remindAt === undefined ? (
         <Time at={item.updatedAt} now={now} hint={false} />
       ) : (

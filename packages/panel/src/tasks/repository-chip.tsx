@@ -45,107 +45,34 @@ import {
 } from "../live-reads.js";
 import { useOpenSettings } from "../open-settings.js";
 
-/**
- * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
- *
- * Drawn along the composer card's foot for a task about to start, the way a
- * branch or model chip is: the owner's picture and `owner/name`, or the
- * GitHub mark and the pick it is waiting on. In the open plan the same
- * menu drops from the first crumb of the task's path over its title
- * (`task-standing.tsx`, through `useRepositoryMenu`), reading `Choose a
- * repository` while the task has none and the repository once the task
- * names one; ⌘K's Change repository opens its menu from there. Its menu is the shared searchable one: a search over every
- * repository the GitHub connected to the workspace reaches, the
- * repositories the account's tasks were about lately first and the rest as
- * GitHub last saw them change, each under its owner's picture, one the
- * developer's own GitHub token reaches marked Token. Nothing the
- * workspace's GitHub does not reach is offered, so a task never starts on
- * a repository its workspace cannot work in; a pick the read finds out of
- * reach is handed back, and with nothing to offer the chip reads No
- * repository, which a task can start with. An opener that may stand on
- * no repository, as New task and an automation's editor may, is offered No repository
- * pinned under the list, which lets the pick go. With no
- * GitHub connected to the workspace, one GitHub removed or suspended, or
- * one installed that reaches no repository, the list's place holds one
- * GitHub row, as a disconnected server's row in the Integrations menu is
- * drawn (`MenuNoteRow`): an owner or an admin is offered Connect, Reconnect,
- * or Choose repositories at its end, each opening the workspace's GitHub
- * repositories in Settings, the one place they are set, and a member is
- * told there which owners and admins, by name, to ask. The list is held by the host while the chip stands, drawn at once from its
- * last answer, and asked again whenever a window comes forward, so a
- * developer back from connecting GitHub in the browser sees the change on
- * the next opening; nothing polls. Where the opener picks several, as New
- * task does for an agent in the cloud, a press checks or unchecks a row and
- * the menu stands open: the first pick is the primary, marked Primary once
- * another is picked beside it, where
- * the agent starts and its pull requests open by default, and unchecking it
- * makes the next pick the primary, unless the opener holds it, as a
- * sub-task's card holds its parent's, its row then checked and disabled
- * saying why; the chip names the picks, the first two
- * and then the rest counted, under the first's owner picture; and once a
- * primary is picked, each row the service would refuse beside it
- * (`start.ts`'s `extraRepositoriesOf`) is dimmed, saying why, so it is
- * known before the Start rather than refused by it. The menu
- * is placed as a Settings picker's is, below the chip or above it where the
- * window leaves more room there, its list capped to that room. A one-pick
- * menu closes on a choice, and every menu on Escape and on focus leaving
- * it; Escape stops there, so it closes the menu and not the panel behind it.
- */
-
-/** What the chip's menu offers, read from the account's tasks and the service. */
 export interface RepositoryChooser {
-  /** The repositories the account's tasks were about lately, the newest first, each once. */
   recent: readonly string[];
-  /** Whether those tasks are still being read, so the newest's repository, a card's default, is not yet known; never where left out. */
   reading?: boolean | undefined;
-  /** Opens a page of GitHub's in the browser, such as a repository's own. */
   openGitHub: (url: string) => void;
-  /** Whether a repository is drawn with its owner's picture: not in a fixture run (`RepositoryPicture`). */
   pictures: boolean;
-  /** The workspace the list is for, where one is chosen, whose repositories the host holds for the chip (`LIVE_READ.REPOSITORY_LISTS`); every workspace's where none is. */
   scope?: string | undefined;
-  /** Whether the account manages that workspace, so can connect its GitHub; a member is told to ask. */
   manages: boolean;
-  /**
-   * Whether the workspace has a GitHub connected, as its row last said: a read
-   * that then finds none installed means GitHub removed or suspended it, which
-   * the row offers Reconnect for rather than Connect, whether or not the row
-   * has heard yet.
-   */
   connected?: boolean | undefined;
 }
 
-/** Where the chip stands, which is how it is sized. */
 export const CHIP_PLACE = {
   COMPOSER: "composer",
-  /** A form row's value, or the plan's chip row, as a Settings picker's chip is drawn. */
   FIELD: "field",
 } as const;
 
 export type ChipPlace = (typeof CHIP_PLACE)[keyof typeof CHIP_PLACE];
 
-/** The chip's look in each place: the composer's pill, or a form row's field. */
 const PLACE_LOOK = {
   [CHIP_PLACE.COMPOSER]: CHIP_LOOK.PILL,
   [CHIP_PLACE.FIELD]: CHIP_LOOK.FIELD,
 } as const satisfies Record<ChipPlace, ChipLook>;
 
-/** The chip's words while it waits on a pick. */
 export const CHOOSE_LABEL = "Choose a repository";
 
-/** The chip's words while what its default is read from, the tasks or the repositories, is still being read, which ask nothing yet. */
 const READING_LABEL = "Repository";
 
-/** How many repositories a chip naming several names before it counts the rest. */
 const NAMED_PICKS = 2;
 
-/**
- * Why a row cannot stand beside the primary, as the service would refuse
- * it, in the few words the dimmed row ends with: reached only on the
- * member's own token, the primary itself reached so, on another
- * installation of the App than the primary's, or past the bound a Start
- * holds its extras to.
- */
 const EXTRA_REFUSED = {
   TOKEN: "Token only",
   PRIMARY_TOKEN: "Primary on token",
@@ -153,20 +80,12 @@ const EXTRA_REFUSED = {
   FULL: "Limit reached",
 } as const;
 
-/** The id of the row pinned under the list that chooses no repository. */
 const NONE_ROW = "none";
 
-/** What the menu says where the search matches no repository. */
 const NO_MATCH = "No repositories match";
 
-/** What the row in the list's place names, where nothing can be picked. */
 const GITHUB_LABEL = "GitHub";
 
-/**
- * Each way the list can stand empty for want of GitHub: the press an owner
- * or an admin mends it with, and what a member asks them to do, finishing
- * "Ask … to".
- */
 const DEAD_END = {
   NOT_CONNECTED: { action: "Connect", ask: "connect" },
   LAPSED: { action: "Reconnect", ask: "reconnect" },
@@ -175,23 +94,14 @@ const DEAD_END = {
 
 type DeadEnd = (typeof DEAD_END)[keyof typeof DEAD_END];
 
-/** How many owners and admins a member's row names before it counts the rest. */
 const NAMED_OWNERS = 3;
 
-/** Who a member asks when none of the workspace's owners and admins is named. */
 export const ANY_OWNER = "an owner or admin";
 
-/** The words counting the owners and admins past those named: "2 others". */
 export function otherOwnersWords(rest: number): string {
   return countWords(rest, { one: "other", many: "others" });
 }
 
-/**
- * Who a member asks to mend a workspace's GitHub: its owners and admins, the
- * first few named and the rest counted, read while the asker stands; none
- * named until the read answers, or if it never does, since a name is only
- * ever a help.
- */
 export function useOwnersToAsk(workspaceId: string | undefined): {
   readonly named: readonly WorkspaceMember[];
   readonly rest: number;
@@ -204,7 +114,6 @@ export function useOwnersToAsk(workspaceId: string | undefined): {
   return { named, rest: owners.length - named.length };
 }
 
-/** A member's way out of a dead end: the GitHub row, ending in whom to ask (`useOwnersToAsk`), who alone can mend it. */
 function AskOwnersRow({
   workspaceId,
   ask,
@@ -225,22 +134,11 @@ function AskOwnersRow({
   );
 }
 
-/** Whether the read's repositories hold one, as GitHub spells it or not. */
 function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
   const wanted = repository.toLowerCase();
   return reached.some((each) => each.fullName.toLowerCase() === wanted);
 }
 
-/**
- * The menu's rows: the recent repositories first, then every other the App
- * reaches as the service ordered them, most recently updated first, each
- * once, every one under its owner's picture whether private or not. Once
- * the read has answered, a recent repository it does not list is left out,
- * because a plan started on it would be refused. A row names the repository
- * first and its owner muted after it, since the owner is the part rows most
- * often share, and a narrow menu cuts the end of a row; it is found by its
- * whole `owner/name` all the same.
- */
 function repositoryRows(
   recent: readonly string[],
   reached: readonly GitHubRepository[] | undefined,
@@ -265,18 +163,10 @@ function repositoryRows(
   );
 }
 
-/** Whether two `owner/name`s name one repository, as GitHub spells it or not. */
 function sameName(one: string, other: string): boolean {
   return one.toLowerCase() === other.toLowerCase();
 }
 
-/**
- * Why a repository the listing names could not stand beside the primary,
- * where the listing can tell: none where it cannot. Note that an App
- * installation is on one account and reaches only that account's
- * repositories, so one owned by another account than the primary's is on
- * another installation, which `repositorySetReach` refuses.
- */
 function extraRefusal(
   row: GitHubRepository | undefined,
   primary: GitHubRepository | undefined,
@@ -291,12 +181,6 @@ function extraRefusal(
   return undefined;
 }
 
-/**
- * The words a chip names the repositories picked with, in pick order: one
- * by its whole `owner/name`, as a chip setting one repository names it, and
- * several by their names, the first two and then the rest counted
- * ("vespin, meerkat +1").
- */
 function pickedRepositoriesWords(picked: readonly string[]): string {
   if (picked.length === 1) return picked[0] ?? "";
   const named = picked.slice(0, NAMED_PICKS).map((each) => repositoryParts(each).name);
@@ -304,19 +188,13 @@ function pickedRepositoriesWords(picked: readonly string[]): string {
   return more > 0 ? `${named.join(", ")} +${more}` : named.join(", ");
 }
 
-/** The repositories a chip picks several of beside its one, and the press that checks or unchecks one. */
 export interface SeveralPicks {
-  /** The repositories picked after `value`, in pick order. */
   readonly also: readonly string[];
-  /** Hears a press on a row, which checks it where it stands unchecked and unchecks it where it stands checked. */
   readonly onToggle: (repository: string) => void;
-  /** Why the primary is held, its row drawn checked and disabled with these words, so it is neither unchecked nor replaced; none where it may be. */
   readonly held?: string | undefined;
-  /** Whether `value` is the opener's own choice, standing in until the first pick replaces it, so no row is yet refused beside it. */
   readonly standIn?: boolean | undefined;
 }
 
-/** Where a repository's menu stands, whatever it lists; closing hands focus back to its opener, as a native menu returns it to its trigger. */
 function useMenuPlace() {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -351,7 +229,6 @@ type MenuPlace = ReturnType<typeof useMenuPlace>;
 
 type SearchableMenuProps = React.ComponentProps<typeof SearchableMenu>;
 
-/** The searched menu a repository's opener drops, over the rows it lists. Note that every row names a repository and its owner, so each stays masked, and the note, which can name the workspace, is left unmarked. */
 function repositoryMenu(
   place: MenuPlace,
   menu: Pick<SearchableMenuProps, "rows" | "value" | "checked" | "note" | "onPick" | "foot"> & {
@@ -375,79 +252,51 @@ function repositoryMenu(
   ) : null;
 }
 
-/** The rows of `rows` whose repository is among `picked`, by the id each row spells it with, which a pick may spell in another case. */
 function checkedAmong(rows: readonly MenuRow[], picked: readonly string[]): ReadonlySet<string> {
   return new Set(
     rows.filter((row) => picked.some((each) => sameName(each, row.id))).map((row) => row.id),
   );
 }
 
-/** The owner's picture of the first of the repositories picked, at a chip's glyph size. */
 function firstPicture(repository: string, pictures: boolean): React.JSX.Element {
   return <RepositoryPicture repository={repository} pictures={pictures} size={AVATAR_SIZE.GLYPH} />;
 }
 
-/** What the repository's menu is handed, whatever opens it: the chip, or the plan's repository crumb. */
 interface RepositoryMenuProps {
-  /** The repository named now, `owner/name`, or null while none is. */
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
-  /** Lets the pick go, offered as No repository pinned under the list, where the opener may stand on none, as a new task or an automation's runs may; a null value then reads No repository. */
   onClear?: (() => void) | undefined;
-  /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the opener's own to drop. */
   onUnreached?: (() => void) | undefined;
-  /** Whether a null value is a default still waiting on the read rather than No repository picked, so it reads as waiting while the read could still name one. */
   pending?: boolean | undefined;
-  /** Hears the repositories each successful read lists, `owner/name`. */
   onListed?: ((repositories: readonly string[]) => void) | undefined;
-  /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
-  /** Hears each ask the menu opened for, so the asker can let it go. */
   onAsked?: ((request: number) => void) | undefined;
-  /** The edge of its room the menu hangs from, the trailing one where none is named. */
   align?: PopoverAlign | undefined;
-  /** The repositories the menu leaves out, in any case, as an opener that adds one leaves out those it holds; none where left out. */
   omit?: readonly string[] | undefined;
-  /** Whether the menu offers only what the workspace's GitHub App reaches, leaving out what the developer's own token alone reaches, as a repository added to a running agent must be; every reached one where left out. */
   appOnly?: boolean | undefined;
-  /** Several picks rather than one, `value` the primary and these after it, each row checked and a press leaving the menu open; one pick, which closes it, where left out. */
   several?: SeveralPicks | undefined;
 }
 
-/**
- * The repository's menu as its opener draws it: whether it stands open, the
- * opener's words and mark, the card it hangs while shut, the press that
- * opens and shuts it from the element pressed, the room the menu hangs in,
- * which the opener's box holds as the menu's anchor, and the menu itself,
- * drawn in that room.
- */
 export interface RepositoryMenu {
   readonly open: boolean;
   readonly menuId: string;
-  /** The opener's words: the repository, the repositories picked, or the pick it waits on. */
   readonly label: string;
-  /** What the opener's hint names: every repository picked, whole; none while none is. */
   readonly hint: string | undefined;
-  /** The owner's picture, or the repository's glyph while none is named. */
   readonly glyph: React.JSX.Element;
-  /** The repository's card, none while none is named, several are, or the menu stands open. */
   readonly card: React.ReactNode;
   readonly press: (opener: HTMLElement) => void;
   readonly room: React.RefObject<HTMLDivElement | null>;
   readonly menu: React.ReactNode;
 }
 
-/** The repository's menu, read and placed as the chip's always was, for whatever opener draws it (`RepositoryMenu`). */
 export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const { chooser, openRequest, onAsked, onUnreached, onListed, onClear, value } = props;
   const openSettings = useOpenSettings();
   const place = useMenuPlace();
-  // Note that the host asks the list again as a window comes forward, which is how a developer returns from installing the App in the browser.
   const scope = chooser.scope ?? EVERY_WORKSPACE;
   const list = useQuery(repositoryListsQuery(scope));
   const retry = useMutation(repositoryListsRetryMutation());
-  // Each ask from elsewhere, ⌘K's Change repository, opens the menu once, and is answered.
   const answered = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (openRequest === undefined || openRequest === 0 || openRequest === answered.current) return;
@@ -462,7 +311,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
 
   const listed = list.data;
   const failure = list.isError ? TASK_CALL_FAILURE.UNANSWERED : undefined;
-  // A pick the read does not list is handed back, so nothing out of reach stands chosen.
   const unreached = value !== null && listed !== undefined && !listedIn(listed.repositories, value);
   useEffect(() => {
     if (unreached) onUnreached?.();
@@ -470,7 +318,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   useEffect(() => {
     if (listed !== undefined) onListed?.(listed.repositories.map((each) => each.fullName));
   }, [listed, onListed]);
-  // A GitHub not connected, or reaching nothing, is mended at the workspace's GitHub row.
   const workspaceGitHub: SettingsLink = {
     page: SETTINGS_VIEW.WORKSPACE,
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
@@ -481,16 +328,13 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     props.appOnly === true
       ? listed?.repositories.filter((each) => each.access === GITHUB_ACCESS.APP)
       : listed?.repositories;
-  // Note that an App-only menu offers no recent repository before the read says how each is reached.
   const recent = props.appOnly === true && reached === undefined ? [] : chooser.recent;
   const { several } = props;
   const picked = value === null ? [] : [value, ...(several?.also ?? [])];
   const isPicked = (name: string) => picked.some((each) => sameName(each, name));
   const listing = (name: string) => reached?.find((each) => sameName(each.fullName, name));
   const primary = several === undefined || value === null ? undefined : value;
-  // Note that a stand-in is replaced by the first pick, so nothing is refused beside it.
   const judgedBeside = several?.standIn === true ? undefined : primary;
-  // Note that the primary is marked only beside another pick, since a lone pick is simply the task's.
   const rows = repositoryRows(
     recent,
     reached,
@@ -499,7 +343,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   )
     .filter((row) => !omitted.has(row.id.toLowerCase()))
     .map((row) => {
-      // Once a primary is picked, a row the service would refuse beside it says why before the pick.
       const why =
         judgedBeside === undefined
           ? undefined
@@ -510,7 +353,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
               : extraRefusal(listing(row.id), listing(judgedBeside), picked.length - 1);
       return why === undefined ? row : { ...row, disabled: why };
     });
-  // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
   const nothingReached = rows.length === 0 && listed !== undefined;
   const none = nothingReached || (onClear !== undefined && props.pending !== true);
   const label =
@@ -520,7 +362,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
       : chooser.reading === true || props.pending === true
         ? READING_LABEL
         : CHOOSE_LABEL);
-  // A list with nothing to pick is mended at the workspace's GitHub, by an owner or an admin, whom a member is told to ask.
   const deadEnd = (way: DeadEnd) =>
     chooser.manages ? (
       <MenuNoteRow
@@ -540,12 +381,10 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         {repositoryFailureNote(failure)}
       </ErrorState>
     ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (
-      // Note that a workspace whose row says GitHub is connected, yet whose read finds none installed, had it removed or suspended on GitHub.
       deadEnd(chooser.connected === true ? DEAD_END.LAPSED : DEAD_END.NOT_CONNECTED)
     ) : listed === undefined ? (
       <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
-      // Installed but giving us nothing: the repositories are chosen on GitHub, through the workspace's row.
       deadEnd(DEAD_END.NONE_REACHED)
     ) : undefined;
 
@@ -592,16 +431,11 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   };
 }
 
-/** Where a repository chip stands and what its row says of it. */
 interface ChipStanding {
   place: ChipPlace;
-  /** A form row's chip: how wide it stands, its words' own width where none is named. */
   width?: ChipWidth | undefined;
-  /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
   describedBy?: string | undefined;
-  /** A form row's chip: whether the row says its value is refused. */
   invalid?: true | undefined;
-  /** Why the repository is held to `value` and takes no pick, said on hover; none where it may be changed. */
   held?: string | undefined;
 }
 
@@ -609,7 +443,6 @@ export function RepositoryChip(props: RepositoryMenuProps & ChipStanding): React
   return <MenuChip {...props} menu={useRepositoryMenu(props)} named={props.value !== null} />;
 }
 
-/** A form row's repository chip over rows its caller lists, as setup's token card does, each pick checked and the menu standing open between presses. */
 export function CheckedRepositoryChip(props: {
   rows: readonly MenuRow[];
   picked: readonly string[];
@@ -643,18 +476,9 @@ export function CheckedRepositoryChip(props: {
   return <MenuChip place={CHIP_PLACE.FIELD} menu={menu} named={first !== undefined} />;
 }
 
-/**
- * The chip a repository's menu drops from, in its place's look, and the
- * menu itself: the first pick's owner picture, or the glyph standing for
- * none, and its words, masked in a screen recording where they name a
- * repository; its hint names every pick while the menu is shut. Note that a
- * held chip is `aria-disabled` rather than disabled, because a disabled
- * button hears no pointer, and its hint says why.
- */
 function MenuChip(
   props: ChipStanding & {
     menu: RepositoryMenu;
-    /** Whether the words name a repository rather than the pick waited on. */
     named: boolean;
   },
 ): React.JSX.Element {

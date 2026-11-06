@@ -24,18 +24,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AccountSection } from "./account-section.js";
 
-/**
- * Settings › Profile's GitHub personal access token row and its dialog, over
- * a bridge answering as the host would, the token held on app state and each
- * write's answer laid there: the row offers Add with no token and
- * Manage with one, drawn as its hint, login, and expiry; a pasted token is
- * sent once from an unrecorded password field; Disconnect asks first; a refused
- * save says why in a short label. Synthetic tokens.
- */
-
 const PASTED = "synthetic-classic-token-0000000000wxyz";
 
-/** The account signed in, whose token the host holds. */
 const ADA = {
   status: ACCOUNT_STATUS.SIGNED_IN,
   id: "user-ada",
@@ -53,19 +43,12 @@ const KEPT: GitHubTokenSummary = {
   expiresAt: Date.UTC(2026, 11, 18, 12),
 };
 
-/** The token the test's service holds. */
 let stored: GitHubTokenSummary | null = null;
-/** Every act the dialog sent, in order. */
 let sent: { kind: PortActKind; payload: unknown }[] = [];
-/** Why the service keeps nothing of the next save, where it refuses one. */
 let refuseSave: GitHubTokenRejection | undefined;
-/** How many of the next reads go unanswered. */
 let unansweredReads = 0;
-/** Whether the host holds no read of the token at all, as after a sign-out. */
 let cleared = false;
-/** Lays the token on the window's document, as the host lays its read and each write's answer. */
 let layToken: () => void = () => undefined;
-/** Every place in Settings the window was asked to open, in order. */
 let opened: SettingsLink[] = [];
 
 const roots: Root[] = [];
@@ -79,7 +62,6 @@ beforeEach(() => {
   cleared = false;
   opened = [];
   handState({}, { account: ADA });
-  // Note that the token is laid as the host holds it, and a write's answer is laid before it answers.
   layToken = holdGitHubToken(() => {
     if (cleared) return undefined;
     if (unansweredReads === 0) return { rows: { token: stored } };
@@ -118,7 +100,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Profile's account section, its token row read, with the dialog opened by the row's one button. */
 async function mountAndOpen(open = true): Promise<void> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -140,7 +121,6 @@ async function mountAndOpen(open = true): Promise<void> {
     ),
   );
   await settle();
-  // Note that the row draws its press, or its Retry, once the token the host holds reaches its query.
   await vi.waitFor(() =>
     assert.equal(
       [...document.querySelectorAll("button")].some((each) =>
@@ -156,7 +136,6 @@ async function mountAndOpen(open = true): Promise<void> {
 
 const dialog = () => document.querySelector('[role="dialog"]') ?? assert.fail("no dialog");
 
-/** The field its visible label names, as a reader finds it. */
 const tokenField = () => {
   const label = [...document.querySelectorAll("label")].find(
     (each) => each.textContent === "Personal access token",
@@ -172,7 +151,6 @@ const button = (words: string, within: ParentNode = document) =>
 async function paste(token: string): Promise<void> {
   const input = tokenField() ?? assert.fail("no token field");
   act(() => {
-    // Note that the value goes through the element's own setter, as typing does, so React hears it.
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, token);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -194,7 +172,6 @@ test("with no token the row offers Add, and a token pasted into the unrecorded f
     sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_SAVE).map((each) => each.payload),
     [{ token: PASTED }],
   );
-  // Note that the form gives way once the token the host lays after the save reaches its query.
   await vi.waitFor(() => assert.equal(tokenField() === null, true, "the field closes"));
   act(() => button("Done").click());
   assert.match(
@@ -241,7 +218,6 @@ test("the dialog opens with the token field focused, and Disconnect's question g
     ).click(),
   );
   await settle();
-  // Note that the form stands once the token the host lays after the removal reaches its query.
   await vi.waitFor(() =>
     assert.equal(document.activeElement === tokenField(), true, "the form drawn again has focus"),
   );
@@ -253,7 +229,6 @@ test("a saved token's Manage opens it with Disconnect, which asks at the dialog'
   assert.equal(tokenField() === null, true);
   const asked = () => dialog().querySelector<HTMLElement>('[role="group"]');
 
-  // Note that the press is made from Disconnect holding focus, as a pointer's or a key's press is.
   act(() => {
     button("Disconnect", dialog()).focus();
     button("Disconnect", dialog()).click();
@@ -263,7 +238,6 @@ test("a saved token's Manage opens it with Disconnect, which asks at the dialog'
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "no card opens over it");
   const question = asked() ?? assert.fail("no question at the foot");
   assert.match(question.textContent ?? "", /Disconnect your GitHub token\?/u);
-  // The question has a one-line body saying what goes.
   assert.match(question.textContent ?? "", /Vespin deletes the token it holds/u);
   assert.doesNotMatch(dialog().textContent ?? "", /Create token|Done/u, "the foot is the question");
   assert.ok(document.activeElement === button("Cancel", question), "Cancel takes focus");
@@ -342,7 +316,6 @@ test("a read that went unanswered says so as an alert with Retry in place of Add
 
   act(() => button("Retry").click());
   await settle();
-  // Note that Add stands once the token read again reaches its query.
   await vi.waitFor(() => button("Add"));
 });
 
@@ -401,7 +374,6 @@ test("the row draws no other account's token when Profile is drawn for another a
   assert.ok(!(container.textContent ?? "").includes("octo-member"), "Ada's token is gone");
 });
 
-/** The token dialog opened from the row's Add, which held focus as it was pressed, and then put away by its Done. */
 async function openedThenDone(): Promise<HTMLButtonElement> {
   await mountAndOpen(false);
   const opener = button("Add");

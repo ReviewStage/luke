@@ -28,20 +28,16 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** A task that has used every fixed tab. */
 function usedTask(id: string): OpenTask {
   return { id, holds: Object.fromEntries(SIDE_PANEL_TABS.map((tab) => [tab, true])) };
 }
 
-/** The open task and its agents, every one, or nothing while unread. */
 interface Stood {
   task: string;
   taskAgents: readonly string[] | undefined;
-  /** Whether the plan holds nothing yet, so its strip draws no tab. */
   bare?: boolean;
 }
 
-/** Mounts the panel alone, as a launch does, over the task and agents given, answering the control as it stands. */
 function launch(stood: Stood) {
   let control: SidePanelControl | undefined;
   function Probe({ held }: { held: Stood }) {
@@ -82,14 +78,12 @@ test("an agent's Changes tab opens on its plan, stands chosen across a launch, a
   assert.deepEqual(first.control().tab, { changes: AGENT });
   first.quit();
 
-  // A launch opens the task on the Changes tab it was left on, before its agents are read.
   const second = launch({ task: TASK, taskAgents: undefined });
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
   assert.deepEqual(second.control().tab, { changes: AGENT });
   second.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
-  // Another task, its agents unread, never draws it, nor shows it chosen.
   second.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.deepEqual(second.control().changes, []);
   assert.equal(second.control().tab, undefined);
@@ -128,7 +122,6 @@ test("a Changes tab closed stays closed across a launch, and closing the chosen 
   assert.deepEqual(first.control().tab, { terminal: AGENT });
   first.quit();
 
-  // Note that a Terminal tab is kept across no launch, so nothing stands to choose.
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(second.control().changes, []);
   assert.equal(second.control().tab, undefined);
@@ -142,14 +135,12 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.deepEqual(first.control().strip.at(-1), { terminal: AGENT });
   assert.deepEqual(first.control().tab, { terminal: AGENT });
 
-  // Another task never draws it, its agents read or not.
   first.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "terminal" in tab));
   assert.equal(first.control().tab, undefined);
   first.render({ task: OTHER_TASK, taskAgents: [] });
   assert.equal(first.control().tab, undefined);
 
-  // Back on its task it stands as it was; closed, no tab stands.
   first.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(first.control().tab, { terminal: AGENT });
   act(() => first.control().onClose({ terminal: AGENT }));
@@ -174,7 +165,6 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
     second.control().pins.map(({ tab, label, at: _at, ...holder }) => ({ ...holder, tab, label })),
     [{ task: TASK, tab: { changes: AGENT }, label: "Pull request" }],
   );
-  // The panel's other choices read too, rather than the whole record being dropped.
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
   act(() => second.control().onRenamePins(TASK, { pullRequests: new Map() }));
@@ -183,7 +173,6 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   act(() => second.control().onRenamePins(TASK, { pullRequests }));
   assert.equal(second.control().pins[0]?.label, "#42 Expire invitations");
 
-  // Shown from its pin on another task, it opens there, at the end of that task's strip.
   second.render({ task: OTHER_TASK, taskAgents: [OTHER_AGENT] });
   act(() => second.control().onShow(TASK, { changes: AGENT }));
   second.render({ task: TASK, taskAgents: [AGENT] });
@@ -308,7 +297,6 @@ test('closing the last tab shuts the panel and leaves full screen, and the toggl
 
 test("a new stop starts with the panel shut, whatever its strip holds, unless a tab was asked for there, as a pin or a link opens one, and a plan whose strip holds no tab draws none", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT] });
-  // Note that the agent works on both tasks, so its Terminal tab stands on each.
   act(() => panel.control().onChoose({ terminal: AGENT }));
   assert.equal(panel.control().open, true);
 
@@ -404,7 +392,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 });
 
 test("a panel kept open launches shown only where the task's strip holds a tab, whatever tab was chosen, and never empty", () => {
-  // Note that the tab chosen as the window quit is kept nowhere here, as a Terminal's is not.
   const kept = { open: true, tabs: ["comments"], width: 400, pins: [] };
   window.localStorage.setItem("app.sidePanel", JSON.stringify({ ...kept, tasks: {} }));
   const bare = launch({ task: TASK, taskAgents: [], bare: true });
@@ -468,12 +455,10 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   roots.push(root);
   const render = () => act(() => root.render(createElement(Probe, { at: room })));
   const now = () => control ?? assert.fail("the panel is held");
-  // The panel opens on a tab chosen, which the narrow room holds full screen.
   render();
   act(() => now().onChoose({ changes: AGENT }));
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, true, true]);
 
-  // Back, a column's tab shown, and a pin opened step out of full screen this way.
   act(() => now().onToggleFullScreen());
   assert.equal(now().open, false, "leaving full screen in a narrow room shuts the panel");
 
@@ -494,7 +479,6 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   const now = () => control ?? assert.fail("the panel is held");
   const render = (at: ShellRoom, task: OpenTask) =>
     act(() => root.render(createElement(Probe, { at, task })));
-  // The panel stands open on a plan once a tab is chosen, and is kept open for the next launch.
   render(SHELL_ROOM.NARROW, usedTask(TASK));
   act(() => now().onChoose({ changes: AGENT }));
   assert.equal(now().open, true);
@@ -582,7 +566,6 @@ test("a page of another task opens beside the Inbox item, drawn there, and Open 
   assert.deepEqual(panel().tab, { page: PAGE });
   assert.deepEqual(panel().pages[0]?.place, { taskId: OTHER_TASK }, "read on its own task");
 
-  // Open task: the window goes to the page's task, showing the tab there (`onShowPanelTab`).
   act(() => panel().onShow(OTHER_TASK, { page: PAGE }));
   render(false);
   assert.deepEqual(panel().tab, { page: PAGE }, "the page still chosen");
@@ -690,6 +673,5 @@ test("an archived agent's Pull request tab is drawn as a live agent's, while its
   assert.equal(drawsChanges({ changes: "archived" }, drawn), true);
   assert.equal(drawsChanges({ changes: "other" }, drawn), false);
   assert.equal(drawsTerminal({ terminal: "archived" }, drawn), false);
-  // A place that names no held agents draws Pull request tabs by its live ones, as before.
   assert.equal(drawsChanges({ changes: "archived" }, { taskAgents: ["live"] }), false);
 });

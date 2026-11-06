@@ -42,31 +42,6 @@ import { usePendingNow } from "../pending-clock.js";
 import { useNamer } from "./pull-request-people.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
-/**
- * pull-request-pickers.tsx -- the header's reviewer and label pickers, as stage-cli's are: two presses side by side after the reviewers, “+ Reviewer” and “+ Label”, each a menu of what may be asked for or put on, what stands now checked.
- *
- * What the pickers offer is the agent's repository's (`review-options`):
- * the users it may assign and the teams that reach it, who may be asked for a
- * review, and its labels. The host holds them from the moment a picker
- * first opens (`useReviewOptions`), read on our GitHub App's token as every
- * read is, and asks again as a window comes forward and on the Retry a
- * failed read's menu offers in the place of its items.
- * Choosing an item is one change, sent through the tab's own writes
- * (`pull-request-writes.tsx`): asking or no longer asking a review of a
- * user or a team, putting a label on or taking it off. That change is made
- * on GitHub as the member pressing it, on their own sign-in, and is drawn
- * at once, the face or the label from what the repository's read holds,
- * over what the pull request's read holds (`usePullRequestPicks`, over
- * `@repo/ui/pending-values` as a task's chips are), until that read carries
- * it; where GitHub refuses it, it goes back at once and GitHub's refusal
- * stands on the tab's line under the bar. While a change is out, and until
- * the read after it lands, the pickers stand disabled, so a second change
- * never waits behind the first; the picker whose change is out is the one
- * that shows busy, named for what it does. A pull request merged or closed
- * asks no review, so only its labels are offered.
- */
-
-/** The pickers' own words. */
 const PICKER_WORDS = {
   REVIEWERS: "Edit reviewers",
   LABELS: "Edit labels",
@@ -87,7 +62,6 @@ const PICKER_WORDS = {
   TEAM: "Team",
 } as const;
 
-/** The changes each picker's menu sends, which show its button busy while one is out. */
 const REVIEWER_ACTIONS: readonly PullRequestAction[] = [
   PULL_REQUEST_ACTION.REQUEST_REVIEW,
   PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST,
@@ -97,7 +71,6 @@ const LABEL_ACTIONS: readonly PullRequestAction[] = [
   PULL_REQUEST_ACTION.REMOVE_LABEL,
 ];
 
-/** Where the read of what the pickers offer stands. */
 const OPTIONS = {
   UNASKED: "unasked",
   READING: "reading",
@@ -109,19 +82,11 @@ type OptionsRead =
   | { readonly kind: typeof OPTIONS.UNASKED | typeof OPTIONS.READING | typeof OPTIONS.FAILED }
   | { readonly kind: typeof OPTIONS.LANDED; readonly value: AgentReviewOptions };
 
-/** What the pickers offer and the door that reads it, as both share it. */
 export interface ReviewOptions {
   readonly read: OptionsRead;
-  /** Reads it, where it is not read or reading already. */
   readonly ask: () => void;
 }
 
-/**
- * The agent's repository's labels, assignable users, and teams, held by the
- * host from the moment a picker first asks (`reviewOptionsQuery`), so a
- * tab drawn again offers them at once, asked again as a window comes forward
- * and on Retry after a failure.
- */
 export function useReviewOptions(agentId: string): ReviewOptions {
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
@@ -147,11 +112,6 @@ export function useReviewOptions(agentId: string): ReviewOptions {
   return { read, ask };
 }
 
-/**
- * What a picker says in its list's place until what it offers is read: a
- * wait, or the failure with a Retry that reads it again; `none` once it is
- * read and offers nothing; nothing while it offers anything.
- */
 function optionsNote(options: ReviewOptions, offered: number, none: string): React.ReactNode {
   if (options.read.kind === OPTIONS.FAILED) {
     return (
@@ -166,17 +126,14 @@ function optionsNote(options: ReviewOptions, offered: number, none: string): Rea
   return offered === 0 ? none : undefined;
 }
 
-/** What the pull request's read holds of its reviewers asked and its labels, which the picks are drawn over. */
 interface PickedHeld {
   readonly requested: readonly GitHubPerson[];
   readonly requestedTeams?: readonly PullRequestReviewTeam[] | undefined;
   readonly labels?: readonly PullRequestLabel[] | undefined;
 }
 
-/** A pick drawn over the read: what it puts on, or null for what it takes off. */
 type Picks<T> = PendingValues<string, T | null>;
 
-/** Whether two picks are one as the header draws them: both on, or both off, since the key names what each is. */
 const samePick: SameValue<unknown> = (a, b) => (a === null) === (b === null);
 
 const NO_PEOPLE: readonly GitHubPerson[] = [];
@@ -186,12 +143,10 @@ const loginOf = (person: GitHubPerson) => person.login;
 const slugOf = (team: PullRequestReviewTeam) => team.slug;
 const nameOf = (label: PullRequestLabel) => label.name;
 
-/** What the read holds of the one `key` names: it, or null where it holds none. */
 function heldOf<T>(held: readonly T[], keyOf: (each: T) => string, key: string): T | null {
   return held.find((each) => keyOf(each) === key) ?? null;
 }
 
-/** The read's list with each pick drawn in place: one taken off left out, one put on after those the read holds. */
 function pickedOver<T>(
   held: readonly T[],
   picks: Picks<T>,
@@ -205,13 +160,6 @@ function pickedOver<T>(
   return [...kept, ...added];
 }
 
-/**
- * One list's picks over what the read holds of it: the list drawn, and the
- * door that draws a pick at once and answers what lets go of it again.
- * Note that a pick stands until the read carries it, or answers otherwise,
- * or its time runs out (`@repo/ui/pending-values`), so one GitHub took
- * never flickers back while the pull request is read again.
- */
 function usePicks<T>(
   held: readonly T[],
   keyOf: (each: T) => string,
@@ -236,25 +184,15 @@ function usePicks<T>(
   return { shown, draw };
 }
 
-/** The pull request's reviewers asked and its labels as the header draws them, each pick drawn over the read, and the doors that pick. */
 export interface PullRequestPicks {
   readonly requested: readonly GitHubPerson[];
   readonly requestedTeams: readonly PullRequestReviewTeam[];
   readonly labels: readonly PullRequestLabel[];
-  /** Asks a review of a person, or asks it no longer. */
   readonly pickPerson: (person: GitHubPerson, on: boolean) => void;
-  /** Asks a review of a team, or asks it no longer. */
   readonly pickTeam: (team: PullRequestReviewTeam, on: boolean) => void;
-  /** Puts a label on, or takes it off. */
   readonly pickLabel: (label: PullRequestLabel, on: boolean) => void;
 }
 
-/**
- * The pull request's reviewers and labels with each choice the pickers made
- * drawn at once from what the repository's read holds, and sent through
- * `writes`; a choice GitHub did not make goes back at once, and the tab's
- * line says why.
- */
 export function usePullRequestPicks(
   held: PickedHeld | undefined,
   writes: PullRequestWrites,
@@ -291,7 +229,6 @@ export function usePullRequestPicks(
   };
 }
 
-/** A label's color as the dot its item leads with; a quiet dot for one GitHub spelled otherwise. */
 function LabelDot({ color }: { color: string }): React.JSX.Element {
   const hex = /^[0-9a-f]{6}$/iu.test(color) ? `#${color}` : undefined;
   return (
@@ -303,11 +240,6 @@ function LabelDot({ color }: { color: string }): React.JSX.Element {
   );
 }
 
-/**
- * A picker's press, the same for both so they read as a pair: a plus and
- * the word for what it adds, quiet beside the faces and the labels, named
- * in full for a reader, opening its menu under it.
- */
 function PickerButton({
   ref,
   label,
@@ -321,13 +253,10 @@ function PickerButton({
 }: {
   ref: React.Ref<HTMLButtonElement>;
   label: string;
-  /** What it adds, in a word: “Reviewer”, “Label”. */
   word: string;
   disabled: boolean;
-  /** Whether a change its menu sent is out, and what it is named meanwhile. */
   busy: boolean;
   busyLabel: string;
-  /** Whether its menu stands, and the menu's id while it does. */
   open: boolean;
   menuId: string;
   onPress: () => void;
@@ -337,7 +266,6 @@ function PickerButton({
       <Button
         ref={ref}
         icon={<PlusIcon aria-hidden="true" />}
-        // Note that the button is named by the word it draws, since "Edit reviewers" is the hint's and no reader hears a name the screen does not show.
         label={word}
         variant={BUTTON_VARIANT.SUBTLE}
         size={BUTTON_SIZE.COMPACT}
@@ -355,13 +283,6 @@ function PickerButton({
   );
 }
 
-/**
- * One picker: its press, which reads what the repository offers as it first
- * opens, and the searchable menu of `search` under it, which draws only the
- * rows near its view, since a repository's people or labels may run to
- * hundreds. A pick closes it and hands the keyboard back to the press. It
- * stands disabled while a change is out or the pull request is read again.
- */
 function OptionsPicker({
   label,
   word,
@@ -373,11 +294,8 @@ function OptionsPicker({
   refreshing,
 }: {
   label: string;
-  /** What it adds, in a word: “Reviewer”, “Label”. */
   word: string;
-  /** What the button is named while a change of its own is out. */
   busyLabel: string;
-  /** The changes its menu sends, any of which out makes its button busy. */
   busyOn: readonly PullRequestAction[];
   search: ActionSearch;
   options: ReviewOptions;
@@ -390,7 +308,6 @@ function OptionsPicker({
   const box = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const busy = writes.pending !== undefined && busyOn.includes(writes.pending);
-  // Note that we hand focus back to the press, as a native menu returns it to its button, because closing takes the focused menu away with it.
   const close = () => {
     setOpen(false);
     button.current?.focus();
@@ -401,7 +318,6 @@ function OptionsPicker({
         ref={button}
         label={label}
         word={word}
-        // Note that a busy button takes no press of its own, so it is left to say so rather than drawn disabled.
         disabled={(writes.pending !== undefined && !busy) || refreshing}
         busy={busy}
         busyLabel={busyLabel}
@@ -430,12 +346,6 @@ function OptionsPicker({
   );
 }
 
-/**
- * The reviewer picker: a menu of the teams that reach the repository, then
- * its assignable users, the pull request's author left out, each checked while
- * a review is asked of them; choosing one asks a review of them, or asks it
- * no longer.
- */
 export function ReviewerPicker({
   author,
   picks,
@@ -443,13 +353,10 @@ export function ReviewerPicker({
   writes,
   refreshing,
 }: {
-  /** Who opened the pull request, whom GitHub asks no review of. */
   author: string | undefined;
-  /** Who is asked for a review, each choice drawn at once, and the doors that choose. */
   picks: PullRequestPicks;
   options: ReviewOptions;
   writes: PullRequestWrites;
-  /** Whether the pull request is being read again, until which what it holds may be stale. */
   refreshing: boolean;
 }): React.JSX.Element {
   const asked = new Set(picks.requested.map((person) => person.login));
@@ -477,7 +384,6 @@ export function ReviewerPicker({
   );
 }
 
-/** The reviewer picker's actions: the teams, then the people by their GitHub face and card, each checked while asked; none until what they offer is read. */
 function reviewerActions(
   options: ReviewOptions,
   author: string | undefined,
@@ -516,22 +422,15 @@ function reviewerActions(
   return [...teams, ...people];
 }
 
-/**
- * The label picker: a menu of the repository's labels, each by its color
- * and name, checked while it is on the pull request; choosing one puts it
- * on, or takes it off.
- */
 export function LabelPicker({
   picks,
   options,
   writes,
   refreshing,
 }: {
-  /** The labels on, each choice drawn at once, and the door that chooses. */
   picks: PullRequestPicks;
   options: ReviewOptions;
   writes: PullRequestWrites;
-  /** Whether the pull request is being read again, until which the labels it holds may be stale. */
   refreshing: boolean;
 }): React.JSX.Element {
   const on = new Set(picks.labels.map((label) => label.name));
@@ -557,7 +456,6 @@ export function LabelPicker({
   );
 }
 
-/** The label picker's actions, each checked while on; none until what it offers is read. */
 function labelActions(
   options: ReviewOptions,
   on: ReadonlySet<string>,

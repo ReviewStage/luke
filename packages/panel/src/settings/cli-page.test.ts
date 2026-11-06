@@ -16,10 +16,6 @@ import { DESKTOP_CAPABILITIES, handState, signedInAs, stateWith } from "../testi
 import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { CliPage } from "./cli-page.js";
 
-/**
- * cli-page.test.ts -- Settings › CLI: the desktop's Install says why it failed or the version it installed, a browser tab offers the npm install alone, and Sign out everywhere signs the command out. Synthetic ids and addresses.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -41,7 +37,6 @@ const ACCOUNT_ID = "user-dana";
 const EMAIL = "dana@app.test";
 const SERVER_URL = "https://app.test/api/mcp";
 
-/** The `vespin` command's grant, as the read lists it once the command signed in. */
 const VESPIN_CLI: McpClient = {
   clientId: "vespin-cli",
   name: "Vespin CLI",
@@ -50,14 +45,12 @@ const VESPIN_CLI: McpClient = {
   lastRefreshedAt: null,
 };
 
-/** Lets the window's document and a press's acts land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
 }
 
-/** The page drawn on a client offering `capabilities`, the account's clients read as `clients`. */
 async function drawPage(
   capabilities: readonly HostCapability[],
   clients: readonly McpClient[] = [],
@@ -82,7 +75,6 @@ async function drawPage(
   await settle();
 }
 
-/** Presses the button whose words are given within `scope`. */
 async function press(words: string, scope: ParentNode = document): Promise<void> {
   const button = [...scope.querySelectorAll("button")].find((each) => each.textContent === words);
   assert.ok(button !== undefined, `${words} is drawn`);
@@ -90,19 +82,16 @@ async function press(words: string, scope: ParentNode = document): Promise<void>
   await settle();
 }
 
-/** Whether a button with these words is drawn. */
 function drawn(words: string): boolean {
   return [...document.querySelectorAll("button")].some((each) => each.textContent === words);
 }
 
-/** The confirm dialog standing over the page. */
 function dialog(): HTMLElement {
   const open = document.querySelector<HTMLElement>('[role="alertdialog"]');
   assert.ok(open !== null, "the confirm dialog stands");
   return open;
 }
 
-/** The page's words, apart from any dialog over it. */
 function pageText(): string {
   return [...document.body.children]
     .filter((each) => each.querySelector('[role="alertdialog"]') === null)

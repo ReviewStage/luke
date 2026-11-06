@@ -11,13 +11,6 @@ import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { TOAST_HOLD, ToastHost } from "./toast.js";
 
-/**
- * copy-feedback.test.ts -- a copy made from a menu answered in the window's
- * toast, for as long as every toast of its kind stands: a copy the clipboard
- * took for the confirmation's hold, and one it refused for the failure's.
- * The toasts' holds run down on a faked clock. Synthetic throughout.
- */
-
 let root: Root | undefined;
 let registry: AtomRegistry.AtomRegistry | undefined;
 let copy: ((words: string, label: string) => void) | undefined;
@@ -30,13 +23,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Hands the test a menu's way of copying. */
 function Copier(): null {
   copy = useCopyToast();
   return null;
 }
 
-/** The toasts, mounted as the window's root mounts them, beside a menu that copies. */
 function mount(): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const container = document.body.appendChild(document.createElement("div"));
@@ -53,21 +44,18 @@ function mount(): void {
   );
 }
 
-/** What each toast standing says, leaving out those on their way out. */
 function standing(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",
   );
 }
 
-/** Lets `ms` pass on the faked clock the toasts' holds run down on. */
 function pass(ms: number): void {
   act(() => {
     vi.advanceTimersByTime(ms);
   });
 }
 
-/** A menu's copy of `words`, its toast reading `label` once the clipboard answers. */
 async function copyFromMenu(words: string, label: string): Promise<void> {
   await act(async () => copy?.(words, label));
 }

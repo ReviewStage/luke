@@ -13,12 +13,6 @@ import { taskTreeQueryOptions } from "./tasks/repository-reads.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
 
-/**
- * query-keys.test.ts -- a read taken as the account signed in but keyed by
- * no account is let go of once the account changes, so the next account is
- * never drawn what the last one read. Synthetic paths.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -26,7 +20,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The task's tree root as the service answers it to whoever asks now: one file, by name. */
 function listing(file: string) {
   return {
     folder: {
@@ -57,6 +50,5 @@ test("a task's tree one account read is not drawn to the next account once the w
   reader = "two.ts";
   await act(() => forgetAccountReads(testQueryClientNow()));
 
-  // Note that the tree is drawn from what the next account is answered, never from the last account's listing held.
   await vi.waitFor(() => assert.equal(container.textContent, "two.ts"));
 });

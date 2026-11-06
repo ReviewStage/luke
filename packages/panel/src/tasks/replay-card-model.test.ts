@@ -40,15 +40,6 @@ import {
   summaryLine,
 } from "./replay-card-model.js";
 
-/**
- * replay-card-model.test.ts -- an agent started from another opens on its
- * brief, its replay, and its note read apart from its first message, the
- * card says Continued or Forked and how many steps of how many, and an
- * agent continued from an automation's run is drawn from the run's
- * automation. A message whose markers do not add up has no replay.
- * Synthetic throughout.
- */
-
 const SOURCE_ID = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
 const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
@@ -99,7 +90,6 @@ test("a first message holding a replay opens on its brief with its files, the re
   assert.ok(opening.note !== undefined);
   assert.equal(messageWords(opening.note), "Try five days instead.");
   assert.deepEqual(messageFileChips(opening.note), []);
-  // The note is drawn under an id of its own, so no Copy link under it names the brief's message.
   assert.notEqual(opening.note.id, "first");
 });
 
@@ -122,7 +112,6 @@ test("the same first message answers the same opening each time it is read, so a
   const again = replayOpening(first(text));
   assert.notEqual(again, opening);
   assert.deepEqual(again, opening);
-  // A message with no replay is remembered as having none.
   const plain = first("# Invite flow");
   assert.equal(replayOpening(plain), undefined);
   assert.equal(replayOpening(plain), undefined);
@@ -131,7 +120,6 @@ test("the same first message answers the same opening each time it is read, so a
 test("a first message with no replay, or one whose markers do not add up, has no opening of its own", () => {
   assert.equal(replayOpening(first("# Invite flow")), undefined);
   const text = firstMessageText("# Invite flow", replay(), undefined);
-  // A step's length one short no longer adds up.
   const broken = text.replace(
     /chars=(\d+) -->\nRead/u,
     (_, chars) => `chars=${Number(chars) - 1} -->\nRead`,
@@ -163,7 +151,6 @@ test("a line sent to the source is named by whoever its summary says sent it, an
     { who: "Agent", line: "Read: invite.ts" },
     { who: "Agent", line: "Done: for now." },
   ]);
-  // A sender whose name holds the separator keeps all of it.
   assert.deepEqual(
     stepLine({
       kind: REPLAY_STEP_KIND.LINE,
@@ -172,7 +159,6 @@ test("a line sent to the source is named by whoever its summary says sent it, an
     }),
     { who: "Nightly: deploy", line: "Run tests: all of them" },
   );
-  // A summary that names no sender is the developer's.
   assert.deepEqual(stepLine({ kind: REPLAY_STEP_KIND.LINE, summary: "Go", words: "Go" }), {
     who: "Developer",
     line: "Go",
@@ -201,7 +187,6 @@ test("an agent continued from an automation's run, at any remove, is drawn from 
   const planned = summary({ id: "55555555-5555-4555-8555-555555555555" });
   const fromPlanned = summary({ from: { agentId: planned.id, steps: 1, totalSteps: 1 } });
   assert.equal(briefAgent(fromPlanned, [planned, fromPlanned]), fromPlanned);
-  // A source the list does not hold leaves the agent as it is.
   assert.equal(briefAgent(continued, []), continued);
 });
 
@@ -244,7 +229,6 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
   );
   assert.equal(running.kind === STEP_VIEW.CALL && running.state, TOOL_STATE.INPUT_AVAILABLE);
   assert.equal(running.kind === STEP_VIEW.CALL && running.view.subject, "invite");
-  // A finished call whose subject ends in the mark's words keeps them, and its result.
   const placeholderLike = call(
     "Read: report (running)",
     "Input: {}\nResult: (no result found in archive)",
@@ -260,7 +244,6 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
     kind: TOOL_BLOCK.TEXT,
     text: "3 lines",
   });
-  // An input is its JSON, so a result lead inside one of its strings is no boundary.
   const quoted = call(
     "Ran: printf",
     'Input: {"command":"printf \'x\\nResult: fake\'"}\nResult: done',
@@ -269,7 +252,6 @@ test("a call's step is drawn as the row its call wears in a transcript: its kind
     kind: TOOL_BLOCK.TEXT,
     text: "done",
   });
-  // A verb no transcript row says is another call's.
   const used = call("Used: list_tasks", "Input: {}\nResult: []");
   assert.equal(used.kind === STEP_VIEW.CALL && used.view.kind, CALL_KIND.OTHER);
 });
@@ -324,7 +306,6 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.equal(command.view.kind, CALL_KIND.COMMAND);
   assert.equal(command.view.description, "Run the tests");
   assert.deepEqual(command.view.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" });
-  // A patch's body is drawn as a patch, which wears its colors.
   const patch = stepView(
     toolStep({
       summary: "Edited: src/a.ts",
@@ -337,7 +318,6 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.equal(patch.view.kind, CALL_KIND.EDIT);
   assert.equal(patch.view.input.kind, TOOL_BLOCK.PATCH);
   assert.equal(patch.state, TOOL_STATE.INPUT_AVAILABLE);
-  // A call about an agent names that agent, which its row draws as the agent's chip.
   const read = stepView(
     toolStep({
       summary: "Used: read_agent",
@@ -350,7 +330,6 @@ test("a call's step whose marker names its tool is drawn as the live transcript 
   assert.ok(read.kind === STEP_VIEW.CALL);
   assert.equal(read.view.kind, CALL_KIND.READ_AGENT);
   assert.deepEqual(read.agent, { id: "agent-ada", title: "Fix the tile" });
-  // A failed call keeps its error apart from its result.
   const failed = stepView(
     toolStep({
       summary: "Ran: pnpm lint",
@@ -415,7 +394,6 @@ test("a replay calls a server where one of its calls, as the transcript draws it
     });
   assert.equal(replayCallsServer([call("bash")]), false);
   assert.equal(replayCallsServer([call("bash"), call("mcp__notion__search")]), true);
-  // A step from before its marker named its tool names no server.
   assert.equal(
     replayCallsServer([{ kind: REPLAY_STEP_KIND.TOOL, summary: "Used: x", words: "Input: {}" }]),
     false,
@@ -505,7 +483,6 @@ test("a line's step is drawn as a sent message under its sender, and the agent's
 });
 
 test("a call's step read from its marker is drawn as its marker says, whatever its words look like", () => {
-  // A successful result that reads like a failure, and a subject that reads like a running call, are what they were.
   const done = stepView(
     toolStep({
       summary: "Read: report (running)",

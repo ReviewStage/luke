@@ -21,13 +21,6 @@ import { onSideBundles } from "../testing/side-bundles.js";
 import { AgentComposer } from "./agent-composer.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * A box drawn before the editor bundle has landed: its field stands inert at
- * its own size with its placeholder, and the editor mounts and takes the
- * caret as the bundle lands. The box is drawn over an importer the test
- * answers once it has looked at the box, as the bundle's chunk would land.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => {

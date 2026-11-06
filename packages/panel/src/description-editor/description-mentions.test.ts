@@ -17,20 +17,10 @@ import { installEditorLayout } from "../testing/composer.js";
 import type { ComposerTrigger, MentionNode, DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * The description editor's mentions over the real editor: a mention in the text
- * opened as its node, drawn by the panel, and written back as the link it was
- * read from; an `@` word reported and a pick written in its place; no `@` in
- * code or inside a word; and a heading renamed in the edit, or one laid in
- * that a later heading's anchor steps aside for, renaming the text's own
- * mentions of it. Synthetic description.
- */
-
 const TASK_ID = "pl_1";
 
 const PLACE: MentionPlace = { workspace: "acme", repository: "acme/checkout" };
 
-/** A mention of the section an anchor names, written with the name given. */
 const named = (anchor: string, name: string) =>
   mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor }, name, PLACE);
 
@@ -38,7 +28,6 @@ const section = (heading: string) => named(sectionAnchors([heading])[0] ?? "", h
 
 const TEXT = `## Goal\n\nShip as ${section("Rollout")} says.\n\n## Rollout\n\nStore first.\n`;
 
-/** A page of an integration's, as the panel names it. */
 const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 const ISSUE = { name: "ACME-142/fix-the-thing", target: ISSUE_URL };
 
@@ -51,7 +40,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text, with every draft, report, drawn mention, and key the list was offered written down. */
 function mounted(markdown: string) {
   const offered: string[] = [];
   const drafts: string[] = [];
@@ -84,7 +72,6 @@ function mounted(markdown: string) {
       },
       retarget: (target, change) => retargetedMention(TASK_ID, PLACE, target, change),
       namesMention: () => false,
-      // The panel reads the one page of an integration's this description is pasted.
       pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
   });
@@ -92,7 +79,6 @@ function mounted(markdown: string) {
   const element = host.querySelector<TiptapEditorHTMLElement>(".description-document-text");
   const editor = element?.editor;
   assert.ok(editor, "the editor is running");
-  /** The caret put right after the words given, and the words typed there. */
   const typeAfter = (words: string, typed: string) => {
     let at: number | undefined;
     editor.state.doc.descendants((node, position) => {
@@ -105,17 +91,14 @@ function mounted(markdown: string) {
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)));
     editor.view.dispatch(editor.state.tr.insertText(typed));
   };
-  /** A heading of the words given laid in as its own block, right after the words named. */
   const layHeadingAfter = (words: string, heading: string) => {
     typeAfter(words, "");
     editor.chain().splitBlock().setHeading({ level: 2 }).insertContent(heading).run();
   };
-  /** A key pressed in the editor. */
   const press = (init: KeyboardEventInit) =>
     editor.view.dom.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
     );
-  /** The caret moved back by the characters given. */
   const back = (characters: number) =>
     editor.view.dispatch(
       editor.state.tr.setSelection(
@@ -133,7 +116,6 @@ function mounted(markdown: string) {
     press,
     back,
     last: () => drafts.at(-1) ?? "",
-    /** Words pasted where the caret stands, as the system's clipboard hands them over. */
     paste: (words: string) => {
       const event = new Event("paste", { bubbles: true, cancelable: true });
       Object.defineProperty(event, "clipboardData", {

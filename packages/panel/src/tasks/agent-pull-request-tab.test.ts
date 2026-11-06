@@ -113,19 +113,6 @@ import type { AgentsControl } from "./use-agents.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
-/**
- * agent-pull-request-tab.test.ts -- an agent's Pull request tab draws its
- * pull request as a page: where it stands beside its title, its branches,
- * whether it would merge, its checks with what failed first, its
- * description as markdown, and its comments and reviews in time order, a
- * long one sending the reader to GitHub for the rest; it opens the agent's
- * Changes from its bar, says so where there is no pull request yet, and
- * offers a retry where a read failed. The overview is three reads, the pull
- * request itself, its checks, and its conversation, each drawn as it lands,
- * a skeleton until then, under the pill and title the app already held.
- * Synthetic people throughout.
- */
-
 const CHARLES: WorkspaceMember = {
   userId: "user-charles",
   name: "Charles Pan",
@@ -133,7 +120,6 @@ const CHARLES: WorkspaceMember = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 
-/** The workspace's people as the host holds them for the tab: Charles alone. */
 const HELD_PEOPLE: AppWorkspaceMembers = { "workspace-acme": { rows: { members: [CHARLES] } } };
 
 const AGENT: AgentSummary = {
@@ -150,7 +136,6 @@ const AGENT: AgentSummary = {
 const PAGE = "https://github.com/acme/relay/pull/42";
 const CHARLES_ON_GITHUB = { login: "charlespan", bot: false, userId: CHARLES.userId };
 
-/** A check as the overview lists one. */
 function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STATE]) {
   return {
     name,
@@ -162,19 +147,14 @@ function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STAT
   };
 }
 
-/** An upload in the description, as GitHub's rendering names it. */
 const UPLOAD = "https://github.com/user-attachments/assets/4f2c1a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
 
-/** A bot's themed badge, its light image as GitHub's image proxy serves it. */
 const BADGE = "https://camo.githubusercontent.com/abc123/6c69676874";
 
-/** A screenshot on a branch of the agent's own repository. */
 const SCREENSHOT = "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42/overview.png";
 
-/** The image the service reads for it, a transparent pixel. */
 const PIXEL = { contentType: "image/png", base64: "iVBORw0KGgo=" } as const;
 
-/** The pull request itself, as its overview's first read answers it. */
 const PULL_REQUEST: AgentOverviewPullRequest = {
   number: 42,
   title: "Expire invitations",
@@ -207,7 +187,6 @@ const PULL_REQUEST: AgentOverviewPullRequest = {
   requested: [],
 };
 
-/** Its checks, as the overview's second read answers them. */
 const CHECKS: AgentOverviewChecks = {
   checks: [
     check("lint", CHECK_STATE.FAILED),
@@ -216,7 +195,6 @@ const CHECKS: AgentOverviewChecks = {
   ],
 };
 
-/** Its conversation, as the overview's third read answers it. */
 const CONVERSATION: AgentOverviewConversation = {
   reviewers: [{ by: CHARLES_ON_GITHUB, state: REVIEW_STATE.CHANGES_REQUESTED }],
   conversation: [
@@ -243,12 +221,9 @@ const CONVERSATION: AgentOverviewConversation = {
 
 let root: Root | undefined;
 let opened: string[] = [];
-/** Every image the tab asked the service for, by its address. */
 let images: string[] = [];
-/** What each review thread's preview handed the diff bundle, in the order drawn. */
 let previews: DiffViewProps[] = [];
 
-/** The diff bundle, a chunk of its own the panel imports, stood in for at its importer. */
 const DIFF_STAND_IN: DiffViewModule = {
   mount: (_host, props) => {
     previews.push(props);
@@ -273,7 +248,6 @@ const DIFF_STAND_IN: DiffViewModule = {
   },
 };
 
-/** The file tree's bundle, stood in for: it draws nothing, so its search field, the panel's own, is what narrows the files. */
 const TREE_STAND_IN: FileTreeModule = {
   mount: () => {
     const nothing = () => undefined;
@@ -302,20 +276,14 @@ beforeAll(async () => {
     }),
   );
 });
-/** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
-/** How the service answers the next change asked for. */
 let changeAnswer: AgentPullRequestWriteAnswerView = {
   outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
 };
-/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
-/** The number of the pull request each change named, none where it was the agent's own. */
 let changeNumbers: (number | undefined)[] = [];
 
-/** What Files changed handed the diff bundle's list, mount first, each draw after it. */
 let lists: DiffListProps[] = [];
-/** The files, or the lines of them, the list was scrolled to, in order. */
 let listReveals: string[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -355,7 +323,6 @@ beforeEach(() => {
       return Promise.resolve(PIXEL);
     },
   });
-  // Note that the workspace's people stand on the document from the first frame, as the host holds them for a tab drawn again.
   handHostReads({ members: HELD_PEOPLE });
 });
 
@@ -367,7 +334,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The pull request as what the agent published names it, which the tab's pill wears. */
 function published(state: PullRequestState) {
   return {
     number: PULL_REQUEST.number,
@@ -381,7 +347,6 @@ function published(state: PullRequestState) {
   };
 }
 
-/** The overview's three parts, the pickers' options, and the member's viewed marks, any of them answering otherwise than the fixtures above, which answer neither the options nor the marks. */
 interface OverviewReads {
   readonly pullRequest?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.PULL_REQUEST];
   readonly reviewOptions?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.REVIEW_OPTIONS];
@@ -390,13 +355,10 @@ interface OverviewReads {
   readonly viewed?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.VIEWED];
 }
 
-/** A read of the options or the marks the service did not answer. */
 const unanswered = () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED } as const);
 
-/** An agent's changes as the service answers them, by the agent and the number a tab names. */
 type ReadChanges = (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
 
-/** The plan's agents, the one whose pull request it is among them, its parts held by the host and answering as given and the fixtures otherwise. */
 function controlAnswering(
   reads: OverviewReads = {},
   state: PullRequestState = PULL_REQUEST_STATE.OPEN,
@@ -425,33 +387,25 @@ function controlAnswering(
   return control;
 }
 
-/** How the service answers each control's changes, which a test drawing several controls in turn answers as it draws each. */
 const changesOf = new WeakMap<AgentsControl, ReadChanges>();
 
-/** How the service answers the changes of the control made or drawn last. */
 let drawnChanges: ReadChanges = () =>
   Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } });
 
-/** How the host answers each control's parts, which a test drawing several controls in turn answers as it draws each. */
 const partsOf = new WeakMap<AgentsControl, PullRequestPartAnswers>();
 
-/** How the host answers the parts of the control made or drawn last. */
 let drawnParts: PullRequestPartAnswers = {};
 
-/** A part the control drawn last does not answer, held unanswered. */
 const unanswering = () => new Promise<never>(() => undefined);
 
-/** The header's parts the host has answered with what it read since the tab was last drawn. */
 let answeredParts = new Set<PullRequestPart>();
 
-/** What the header says while each of its parts is read, which a draw waits out once the host has answered the part. */
 const READING_OF: Partial<Record<PullRequestPart, readonly string[]>> = {
   [PULL_REQUEST_PART.PULL_REQUEST]: ["Reading pull request", "Reading description"],
   [PULL_REQUEST_PART.CHECKS]: ["Reading checks"],
   [PULL_REQUEST_PART.CONVERSATION]: ["Reading conversation"],
 };
 
-/** `read`, its part counted as answered once it lands with what it read; a failure still draws beside its region's wait, so it is not counted. */
 function answering<A>(part: PullRequestPart, read: Promise<A>): Promise<A> {
   return read.then((answer) => {
     if (typeof answer !== "object" || answer === null || !("failure" in answer)) {
@@ -461,7 +415,6 @@ function answering<A>(part: PullRequestPart, read: Promise<A>): Promise<A> {
   });
 }
 
-/** The host's holds on the tab's parts, answered as the control made or drawn last says, so a control made anew as a tab draws again answers alike. */
 function holdDrawnParts(): void {
   answeredParts = new Set();
   holdPullRequestParts(handHostReads({}).deliverParts, {
@@ -491,21 +444,12 @@ function holdDrawnParts(): void {
   });
 }
 
-/** A read held open until the test lets it answer. */
 function held<A>() {
   const { promise, resolve } = Promise.withResolvers<A>();
   return { read: () => promise, answer: resolve };
 }
 
-/** The tab, holding the view its switch chooses as the side panel does. */
-function Switching({
-  control,
-  first,
-}: {
-  control: AgentsControl;
-  /** The tab it opens on, as the chip that opened it asked. */
-  first: PullRequestView;
-}) {
+function Switching({ control, first }: { control: AgentsControl; first: PullRequestView }) {
   const [view, setView] = useState<PullRequestView>(first);
   const [actions, setActions] = useState<TabActionGroups | undefined>(undefined);
   return createElement(
@@ -525,7 +469,6 @@ function Switching({
   );
 }
 
-/** What the side panel's toolbar ⋯ offers for the tab, as a row of presses: its items as the tab hands them up. */
 function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
   return createElement(
     "div",
@@ -549,27 +492,23 @@ function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
   );
 }
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The words of the Markdown box inside `within`, the one named `label` where given. */
 function boxWordsElement(within: ParentNode, label?: string): TiptapEditorHTMLElement | null {
   return within.querySelector<TiptapEditorHTMLElement>(
     label === undefined ? EDITOR_ROOT_SELECTOR : `${EDITOR_ROOT_SELECTOR}[aria-label="${label}"]`,
   );
 }
 
-/** The editor of the Markdown box inside `within`, the one named `label` where given. */
 function boxEditor(within: ParentNode, label?: string): Editor {
   const element = boxWordsElement(within, label) ?? assert.fail(`a box for ${label ?? "words"}`);
   return element.editor ?? assert.fail("the box's editor is running");
 }
 
-/** Writes `words` as the whole of the box's text, read as Markdown, as the member would. */
 function writeBox(within: ParentNode, words: string, label?: string): void {
   const editor = boxEditor(within, label);
   act(() => {
@@ -577,12 +516,10 @@ function writeBox(within: ParentNode, words: string, label?: string): void {
   });
 }
 
-/** The words the box inside `within` reads, as drawn; none where no box stands. */
 function boxWords(within: ParentNode, label?: string): string | undefined {
   return boxWordsElement(within, label)?.textContent ?? undefined;
 }
 
-/** Presses a key in the box's words, as the member would. */
 function pressInBox(within: ParentNode, init: KeyboardEventInit, label?: string): void {
   const element = boxWordsElement(within, label) ?? assert.fail("a box to press in");
   act(() => {
@@ -592,14 +529,12 @@ function pressInBox(within: ParentNode, init: KeyboardEventInit, label?: string)
   });
 }
 
-/** Nothing connected, and presses that do nothing, as outside the window. */
 const NO_GITHUB: GitHubConnectControl = {
   connection: undefined,
   connect: () => Promise.resolve(false),
   disconnect: () => Promise.resolve(false),
 };
 
-/** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({
     initialValues: [
@@ -609,7 +544,6 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   });
 }
 
-/** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function draw(
   control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
@@ -622,7 +556,6 @@ async function draw(
   return drawn(createElement(Switching, { control, first }), registry, github, openPlace);
 }
 
-/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in the app where one is given. */
 async function drawn(
   tab: React.ReactElement,
   registry = AtomRegistry.make(),
@@ -657,7 +590,6 @@ async function drawn(
     ),
   );
   await settle();
-  // Note that a part the host answered draws a notify tick after its answer reaches its query, so the draw waits until no answered part still reads.
   await vi.waitFor(() =>
     assert.deepEqual(
       waiting(container).filter((words) =>
@@ -666,12 +598,10 @@ async function drawn(
       [],
     ),
   );
-  // Note that the tab draws who opened and reviewed once the workspace's people reach their query.
   await peopleRead();
   return container;
 }
 
-/** The tab of the row under the header named as given. */
 function option(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     [...tab.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
@@ -680,68 +610,56 @@ function option(tab: HTMLElement, name: string): HTMLButtonElement {
   );
 }
 
-/** What the tab named as given counts beside its name, its words after the name. */
 function tabCount(tab: HTMLElement, name: string): string {
   return (option(tab, name).textContent ?? "").slice(name.length);
 }
 
-/** The lines the header counts after the branches, once it draws them. */
 function headerLines(tab: HTMLElement): string | undefined {
   return tab.querySelector(".pull-request-lines")?.textContent ?? undefined;
 }
 
-/** How the Checks tab's glyph says its checks went, in its words. */
 function checksGlyph(tab: HTMLElement): string | null | undefined {
   return option(tab, "Checks").querySelector('[role="img"]')?.getAttribute("aria-label");
 }
 
-/** The tab named as given chosen, and what it reads landed. */
 async function choose(tab: HTMLElement, name: string): Promise<void> {
   act(() => option(tab, name).click());
   await settle();
-  // Note that Files changed reads its changes through a query, so it is chosen once it no longer reads them.
   if (name === "Files changed") await vi.waitFor(() => assert.equal(readingChanges(tab), false));
 }
 
-/** Whether Files changed still says it is reading the changes. */
 function readingChanges(tab: HTMLElement): boolean {
   return [...tab.querySelectorAll('[role="status"]')].some((status) =>
     status.textContent?.includes("Reading changes"),
   );
 }
 
-/** What every skeleton on screen says it stands for, those of a hidden tab left out. */
 function waiting(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[aria-busy="true"]')]
     .filter((each) => each.closest("[hidden]") === null)
     .map((each) => each.textContent ?? "");
 }
 
-/** The header's pill, in its seat after the title in its row's markup; none where the row holds none. */
 function pillOf(tab: HTMLElement): Element | undefined {
   return (
     tab.querySelector(".pull-request-title-row > .pull-request-state > :first-child") ?? undefined
   );
 }
 
-/** What the header says of where the pull request stands: its pill's words. */
 function standing(tab: HTMLElement): string | undefined {
   return pillOf(tab)?.textContent ?? undefined;
 }
 
-/** The merge control at the title row's end, where one stands. */
 function mergeControl(tab: HTMLElement): HTMLElement | null {
   return tab.querySelector<HTMLElement>(".pull-request-title-row .merge-control");
 }
 
-/** What the toolbar's ⋯ offers for the tab, each item's words and whether it applies now. */
 function toolbarItems(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll<HTMLButtonElement>("[data-toolbar] button")].map(
     (each) => `${each.textContent}${each.disabled ? " (off)" : ""}`,
   );
 }
 
-/** Presses the toolbar ⋯'s item named as given. */
 async function pressToolbar(tab: HTMLElement, label: string): Promise<void> {
   const item =
     [...tab.querySelectorAll<HTMLButtonElement>("[data-toolbar] button")].find(
@@ -750,19 +668,16 @@ async function pressToolbar(tab: HTMLElement, label: string): Promise<void> {
   await act(async () => item.click());
 }
 
-/** The words of every element the selector names, in order. */
 function words(container: HTMLElement, selector: string): string[] {
   return [...container.querySelectorAll(selector)].map((each) => each.textContent ?? "");
 }
 
-/** The button whose words match, where one stands. */
 function buttonWith(container: HTMLElement, label: RegExp): HTMLButtonElement | undefined {
   return [...container.querySelectorAll("button")].find((each) =>
     label.test(each.textContent ?? ""),
   );
 }
 
-/** The labels a thread's head wears beside its path, in order. */
 function threadLabels(thread: HTMLElement): string[] {
   const head = thread.querySelector(".annotation-card-fold > summary")?.textContent ?? "";
   return ["Resolved", "Outdated"].filter((label) => head.includes(label));
@@ -972,7 +887,6 @@ test("a picture GitHub linked to itself opens over the window rather than in the
   await settle();
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
-  // Note that a picture is drawn once its query hands its read to React, a tick after it lands.
   await vi.waitFor(() =>
     assert.equal(description.querySelector('img[alt="before and after"]') === null, false),
   );
@@ -1155,7 +1069,6 @@ test("the header offers Preview once the checks land, before their tab is shown:
         }),
     }),
   );
-  // Note that the checks the first draw read stand in the cache until this draw's read lands.
   const menuButton = await vi.waitFor(() => {
     const button = preview(several) ?? assert.fail("the header offers Preview");
     assert.equal(button.getAttribute("aria-haspopup"), "menu");
@@ -1183,7 +1096,6 @@ test("the header offers Preview once the checks land, before their tab is shown:
         }),
     }),
   );
-  // Note that the checks the draw before read stand in the cache until this draw's read lands.
   await vi.waitFor(() =>
     assert.equal(preview(none) === undefined, true, "nothing serving offers no Preview"),
   );
@@ -1239,7 +1151,6 @@ test("the earlier entries a read left on GitHub are counted first, in the headin
   assert.deepEqual(opened, [PAGE]);
 });
 
-/** A review thread on lines, open and current unless said otherwise. */
 function thread(overrides: Partial<ReviewThread> = {}): ReviewThread {
   return {
     path: "src/invite.ts",
@@ -1383,7 +1294,6 @@ test("a review that only left line comments draws each thread under it: its file
   );
 });
 
-/** A reaction's pill in a row of them, a press or a count, named by who reacted. */
 const REACTION_PILL = '[aria-label*=" reacted with "]';
 
 test("the description, a comment, a review, and a thread comment wear their reactions under their words, each its emoji and count, the reader's own lit only where the read named them among who gave it", async () => {
@@ -1438,7 +1348,6 @@ test("the description, a comment, a review, and a thread comment wear their reac
         }),
     }),
   );
-  /** Each pill under the element given: what it says to a reader, and whether it is lit as the reader's. */
   const pills = (under: Element | null) =>
     [...(under?.querySelectorAll(REACTION_PILL) ?? [])].map((pill) => [
       pill.textContent,
@@ -1471,7 +1380,6 @@ test("the description, a comment, a review, and a thread comment wear their reac
   ]);
 });
 
-/** The conversation with a heart on the description, the reader's own as given, and a comment wearing eyes. */
 function reacted(heart: { readonly count: number; readonly mine: boolean } | undefined) {
   return {
     ...CONVERSATION,
@@ -1493,7 +1401,6 @@ function reacted(heart: { readonly count: number; readonly mine: boolean } | und
   };
 }
 
-/** The description's heart, as a press. */
 function heartOf(tab: HTMLElement): HTMLButtonElement | null {
   return (
     tab
@@ -1518,7 +1425,6 @@ test("a reaction is pressed to take the reader's own back, waits on its change w
   const removing = Promise.withResolvers<void>();
   changeHeld = removing.promise;
   act(() => pressed.click());
-  // Note that a change reaches the act port a few steps after its press, as its mutation sends it.
   await vi.waitFor(() =>
     assert.deepEqual(changes, [
       [
@@ -1560,7 +1466,6 @@ test("a reaction pressed again before the conversation is read again takes back 
       },
     }),
   );
-  // Note that the comment's reactions stand once the conversation's read reaches its query.
   const eyes = await vi.waitFor(
     () =>
       tab.querySelector<HTMLButtonElement>(`.pull-request-entry button${REACTION_PILL}`) ??
@@ -1596,7 +1501,6 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
       conversation: () => Promise.resolve({ pullRequest: reacted(undefined) }),
     }),
   );
-  // Note that the comment stands once the conversation's read reaches its query.
   const add = await vi.waitFor(
     () =>
       tab.querySelector<HTMLButtonElement>('.pull-request-entry [aria-label="Add reaction"]') ??
@@ -1659,7 +1563,6 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
   );
 });
 
-/** The chip of the Conversation's filter named as given, beside the end of the Conversation's heading. */
 function filter(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(
@@ -1668,7 +1571,6 @@ function filter(tab: HTMLElement, name: string): HTMLButtonElement {
   );
 }
 
-/** The heading of the Conversation view's section named as given, which folds it. */
 function sectionHead(tab: HTMLElement, name: string): HTMLElement {
   return (
     tab.querySelector<HTMLElement>(
@@ -1677,13 +1579,11 @@ function sectionHead(tab: HTMLElement, name: string): HTMLElement {
   );
 }
 
-/** What a filter's switch says it leaves out, as a reader hears it. */
 function filterNote(tab: HTMLElement, name: string): string {
   const note = filter(tab, name).getAttribute("aria-describedby");
   return note === null ? "" : (document.getElementById(note)?.textContent ?? "");
 }
 
-/** Who wrote each entry still drawn, and how many threads stand under it. */
 function drawnEntries(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll(".pull-request-entry")].map(
     (entry) =>
@@ -1989,7 +1889,6 @@ test("opened on its files, as a link to its changes opens it, the header stands 
     }),
     PULL_REQUEST_VIEW.FILES,
   );
-  // The views' own panels, not the Write and Preview panel of a comment box inside one.
   const shownPanel = () =>
     [...tab.querySelectorAll<HTMLElement>('[role="tabpanel"]')].filter(
       (each) => !each.hidden && each.parentElement?.closest('[role="tabpanel"]') === null,
@@ -2185,7 +2084,6 @@ test("a merged pull request says so on its pill, as its overview read it, says n
     html: "",
   };
   const tab = await draw(
-    // Note that what the agent published was last read open, so the pill says what the overview read.
     controlAnswering(
       {
         pullRequest: () => Promise.resolve({ pullRequest: merged }),
@@ -2281,7 +2179,6 @@ test("a screen reader meets the title before the pill, which comes after it in t
   assert.match(pill.textContent ?? "", /Open/u);
 });
 
-/** Scrolls `box` to `top` from wherever it stood, as a finger dragging it does. */
 function scrollTo(box: Element, top: number): void {
   Object.defineProperty(box, "scrollTop", { configurable: true, value: top });
   act(() => {
@@ -2289,7 +2186,6 @@ function scrollTo(box: Element, top: number): void {
   });
 }
 
-/** Gives `element` the box jsdom lays out none for: how tall it stands, and how tall what it holds runs. */
 function sized(
   element: Element,
   box: { readonly height: number; readonly content?: number },
@@ -2302,7 +2198,6 @@ function sized(
   });
 }
 
-/** A Pull request tab on a phone's Conversation, the header, its one-line title, and the conversation's scroller given the boxes a phone lays them out in, so the header folds away 160 pixels. */
 async function phoneTab(conversationRuns: number) {
   const tab = await drawn(
     createElement(
@@ -2327,7 +2222,6 @@ async function phoneTab(conversationRuns: number) {
   return { tab, conversation, folded: () => header.hasAttribute("data-folded") };
 }
 
-/** Lets `box` be scrolled to where a scroll the tab makes asks, at once, as a glide lands. */
 function glides(box: Element): void {
   Object.defineProperty(box, "scrollTo", {
     configurable: true,
@@ -2338,7 +2232,6 @@ function glides(box: Element): void {
   });
 }
 
-/** Scrolls `box` to `top` and lets go there, as a finger lifted once the scroll comes to rest. */
 function rest(box: Element, top: number): void {
   scrollTo(box, top);
   act(() => {
@@ -2477,7 +2370,6 @@ test("until the pull request's own read lands, the line under the title draws wh
     author: "luke-agent[bot]",
     openedAt: 1_000,
   };
-  // The host holds the pull request's link standing, as a chip naming it read it, and the workspace it was read through.
   const earlier = fakeAppBridgeCalls().requestAppState ?? assert.fail("the document is handed");
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -2498,7 +2390,6 @@ test("until the pull request's own read lands, the line under the title draws wh
   assert.match(tab.querySelector(".pull-request-opened")?.textContent ?? "", /opened/u);
 });
 
-/** A read answering each ask with the next of the answers given, the last again once they run out. */
 function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   let ask = 0;
   return () => {
@@ -2648,18 +2539,15 @@ test("the pill wears what was published of the checks only for the pull request 
   );
 });
 
-/** The header's pill, as a press; nothing where it is no press. */
 function pillPress(tab: HTMLElement): HTMLButtonElement | undefined {
   const pill = pillOf(tab);
   return pill instanceof HTMLButtonElement ? pill : undefined;
 }
 
-/** The header's pill, as a press. */
 function pill(tab: HTMLElement): HTMLButtonElement {
   return pillPress(tab) ?? assert.fail("the pill is a press that opens what may be done");
 }
 
-/** Opens the pill's menu and presses its item of the words given. */
 async function pressAction(tab: HTMLElement, label: string): Promise<void> {
   act(() => pill(tab).click());
   const item =
@@ -2670,7 +2558,6 @@ async function pressAction(tab: HTMLElement, label: string): Promise<void> {
   await settle();
 }
 
-/** The labels the pill's menu offers, opened and closed again. */
 function offered(tab: HTMLElement): string[] {
   act(() => pill(tab).click());
   const labels = words(document.body, '[role="menuitem"]');
@@ -2720,7 +2607,6 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
 
   await pressAction(tab, "Convert to draft");
 
-  // Note that the refusal lands through the change's mutation, so the note is read once drawn.
   await vi.waitFor(() =>
     assert.equal(
       tab.querySelector(".pull-request-write-note") !== null,
@@ -2747,7 +2633,6 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
     }),
   );
-  // Note that the open pull request the draw before read stands in the cache until this draw's read lands.
   await vi.waitFor(() => assert.equal(standing(merged), "Merged"));
   assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
 });
@@ -2772,7 +2657,6 @@ test("a change refused for a repository out of the workspace's reach says where 
 
   await pressAction(tab, "Convert to draft");
 
-  // Note that the refusal lands through the change's mutation, so the note is read once drawn.
   await vi.waitFor(() =>
     assert.equal(
       tab.querySelector(".pull-request-write-note") !== null,
@@ -2831,7 +2715,6 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
   );
 });
 
-/** How the pull request may be merged where a test says nothing else: squash or rebase, nothing asked for yet, checks passing. */
 const MERGING: PullRequestMerging = {
   methods: [MERGE_METHOD.SQUASH, MERGE_METHOD.REBASE],
   autoMergeAllowed: true,
@@ -2843,7 +2726,6 @@ const MERGING: PullRequestMerging = {
   checks: CHECK_SUMMARY.PASSING,
 };
 
-/** The plan's agents, its pull request standing as given and merged as given. */
 function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): AgentsControl {
   return controlAnswering({
     pullRequest: () =>
@@ -2853,14 +2735,12 @@ function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): A
   });
 }
 
-/** The merge control's presses, the chevron's left out, in order. */
 function mergePresses(tab: HTMLElement): HTMLButtonElement[] {
   return [...(mergeControl(tab)?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
     (each) => each.getAttribute("aria-label") !== "Choose how to merge",
   );
 }
 
-/** What the merge control shows: its chip's word, tone, and GitHub's sentence for a reader; its press, the press's look, and whether a chevron chooses the method. None where it shows nothing. */
 function mergeShown(tab: HTMLElement) {
   const control = mergeControl(tab);
   if (control === null) return undefined;
@@ -2876,9 +2756,7 @@ function mergeShown(tab: HTMLElement) {
   };
 }
 
-/** The merge control's press of the words given, pressed. */
 async function pressBox(tab: HTMLElement, label: string): Promise<void> {
-  // Note that the merge control offers its press once the pull request's merge read reaches its query.
   const press = await vi.waitFor(
     () =>
       mergePresses(tab).find((each) => each.textContent === label) ??
@@ -2888,7 +2766,6 @@ async function pressBox(tab: HTMLElement, label: string): Promise<void> {
   await settle();
 }
 
-/** The press of the words given in the question over the window, pressed. */
 async function answerQuestion(label: string): Promise<void> {
   const press =
     [
@@ -2900,7 +2777,6 @@ async function answerQuestion(label: string): Promise<void> {
   await settle();
 }
 
-/** Each case of the merge control: its name, the pull request's control, and what the control shows. */
 function mergeCases() {
   const draft = controlAnswering(
     {
@@ -3039,7 +2915,6 @@ test.each(mergeCases().map(([name]) => name))(
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
-  // Note that the merge control stands once the pull request's merge read reaches its query.
   const chevron = await vi.waitFor(
     () =>
       first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
@@ -3146,7 +3021,6 @@ test("while a merge's change is out its press stands busy, a second press sends 
     assert.equal(press?.getAttribute("aria-busy"), "true");
     assert.equal(press?.getAttribute("aria-label"), "Merging");
   });
-  // A second change while the first is out is dropped, from any control of the pull request.
   const [press] = mergePresses(tab);
   await act(async () => press?.click());
   writeReview(openReview(tab), "Looks right.");
@@ -3159,7 +3033,6 @@ test("while a merge's change is out its press stands busy, a second press sends 
     ),
   );
   await settle();
-  // Note that the review is read once the merge has settled, since one waiting its turn would go then.
   assert.deepEqual(
     changes.map(([, change]) => change.action),
     [PULL_REQUEST_ACTION.MERGE],
@@ -3228,7 +3101,6 @@ test("Review stands at the end of the tabs' row however the pull request stands,
   }
 });
 
-/** The Review press at the end of the tabs' row. */
 function reviewPress(tab: HTMLElement): HTMLButtonElement {
   return (
     buttonWith(tab.querySelector(".pull-request-tab > .ui-pane-bar") ?? tab, /^Review$/u) ??
@@ -3236,18 +3108,15 @@ function reviewPress(tab: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** Opens the review panel from the tabs' row. */
 function openReview(tab: HTMLElement): HTMLElement {
   act(() => reviewPress(tab).click());
   return tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens the panel");
 }
 
-/** Writes the review's words as the member would. */
 function writeReview(panel: HTMLElement, words: string): void {
   writeBox(panel, words, "Review comment");
 }
 
-/** Chooses what the review says by its label, and submits it. */
 async function submitReview(panel: HTMLElement, label: string): Promise<void> {
   const choice =
     [
@@ -3328,7 +3197,6 @@ test("Enter submits the review from its words, while Shift+Enter only adds a lin
       {
         action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
         event: REVIEW_EVENT.COMMENT,
-        // Note that Shift+Enter left a new line open after the words.
         body: "Looks right.\n\n",
       },
     ],
@@ -3383,7 +3251,6 @@ test("a merged pull request still takes a review, sent for the agent as one on a
 });
 
 test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
-  // Note that jsdom lays out nothing, so the press stands low in a 768px window and the panel is taller than either side.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("pull-request-review")) {
       return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
@@ -3740,7 +3607,6 @@ test("a pull request in no stack draws no stack", async () => {
   assert.equal(tab.querySelector(".pull-request-stack") === null, true);
 });
 
-/** The items of the menu standing open, by their words and whether each is checked. */
 function menuItems(): { readonly label: string; readonly checked: string | null }[] {
   return [
     ...document.querySelectorAll<HTMLButtonElement>(
@@ -3752,7 +3618,6 @@ function menuItems(): { readonly label: string; readonly checked: string | null 
   }));
 }
 
-/** Presses the menu item whose label begins with the words given. */
 async function pressItem(words: string): Promise<void> {
   const item =
     [
@@ -3765,7 +3630,6 @@ async function pressItem(words: string): Promise<void> {
   await settle();
 }
 
-/** The rows of the picker standing open, by their words and whether each is checked. */
 function pickerRows(): { readonly label: string; readonly checked: boolean }[] {
   return [...document.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => ({
     label: row.querySelector(".ui-combobox-option-label")?.textContent ?? "",
@@ -3773,7 +3637,6 @@ function pickerRows(): { readonly label: string; readonly checked: boolean }[] {
   }));
 }
 
-/** The picker's row whose label begins with the words given. */
 function pickerRow(words: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((row) =>
@@ -3782,9 +3645,7 @@ function pickerRow(words: string): HTMLElement {
   );
 }
 
-/** Picks the picker's row whose label begins with the words given. */
 async function pickRow(words: string): Promise<void> {
-  // Note that the rows stand once what the pickers offer reaches its query.
   const row = await vi.waitFor(() => pickerRow(words));
   act(() => row.click());
   await settle();
@@ -3922,7 +3783,6 @@ test("a picker's choice shows its button busy once the change has waited the set
   } finally {
     vi.useRealTimers();
   }
-  // Note that the answer reaches React through the change's mutation, which hands it on a timer of its own, so it lands on real timers.
   answer.resolve();
   await vi.waitFor(() =>
     assert.equal(
@@ -4106,7 +3966,6 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
   assert.deepEqual(pickerRows(), [{ label: "priyan", checked: false }]);
 });
 
-/** A review carrying the threads given, as the conversation's read answers one. */
 function reviewWith(threads: readonly ReviewThread[]): AgentOverviewConversation {
   return {
     ...CONVERSATION,
@@ -4125,7 +3984,6 @@ function reviewWith(threads: readonly ReviewThread[]): AgentOverviewConversation
   };
 }
 
-/** The press of the words given under the thread. */
 function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
   return (
     [...thread.querySelectorAll<HTMLButtonElement>(".pull-request-thread-actions button")].find(
@@ -4134,13 +3992,11 @@ function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-/** Writes a reply on the thread as the member would, the field opened first. */
 function writeReply(thread: HTMLElement, words: string): void {
   act(() => threadPress(thread, "Reply…").click());
   writeBox(thread, words, "Reply");
 }
 
-/** The thread as GitHub holds it once the changes asked so far were made: their replies after its comment, and resolved by the last resolve or unresolve. */
 function threadAfterChanges(): ReviewThread {
   const base = thread({ id: "PRRT_flag" });
   let resolved = false;
@@ -4351,7 +4207,6 @@ test("a numbered pull request nothing published shows how its checks went on its
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
   const open = await draw(merging(MERGE_STATE.CLEAN));
-  // Note that Close asks first until the read says the pull request is out of the merge queue.
   await vi.waitFor(() => assert.equal(mergeShown(open)?.press, "Squash and merge"));
   await pressAction(open, "Close pull request");
   act(() => root?.unmount());
@@ -4379,7 +4234,6 @@ test("the pill is named by the words it draws, so a change out reads as the scre
   const answer = Promise.withResolvers<void>();
   changeHeld = answer.promise;
   await pressAction(tab, "Close pull request");
-  // Note that the change is out once its mutation says so, which it hands React a moment later.
   await vi.waitFor(() =>
     assert.match(pill().textContent ?? "", /…$/u, "the pill says its change is out"),
   );
@@ -4393,7 +4247,6 @@ test("the pill is named by the words it draws, so a change out reads as the scre
 test("Close acts at once on an open pull request and a draft, a toast offering Reopen, which sends the reopen and goes", async () => {
   const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
   const tab = await draw(merging(MERGE_STATE.CLEAN));
-  // Note that Close asks first until the read says the pull request is out of the merge queue.
   await vi.waitFor(() => assert.equal(mergeShown(tab)?.press, "Squash and merge"));
   await pressAction(tab, "Close pull request");
 
@@ -4431,7 +4284,6 @@ test("Close acts at once on an open pull request and a draft, a toast offering R
 test("a Close GitHub would not take offers no Reopen", async () => {
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Not allowed." };
   const tab = await draw(merging(MERGE_STATE.CLEAN));
-  // Note that Close asks first until the read says the pull request is out of the merge queue.
   await vi.waitFor(() => assert.equal(mergeShown(tab)?.press, "Squash and merge"));
   await pressAction(tab, "Close pull request");
 
@@ -4493,7 +4345,6 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
       autoMerge: { method: null },
     }),
   );
-  // Note that the pill says Queued once the pull request's read reaches its query.
   await vi.waitFor(() => assert.equal(standing(tab), "Queued #2"));
   const pill = pillOf(tab) ?? assert.fail("the pill stands");
   assert.deepEqual(
@@ -4518,7 +4369,6 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
   root = undefined;
 
   const open = await draw(merging(MERGE_STATE.CLEAN));
-  // Note that the queued read the draw before held stands in the cache until this draw's read lands.
   await vi.waitFor(() =>
     assert.equal(standing(open), "Open", "out of the queue the pill says where it stands"),
   );
@@ -4545,7 +4395,6 @@ test("a pull request published as queued says Queued in the pill while its own r
   await vi.waitFor(() => assert.equal(standing(tab), "Queued #2"));
 });
 
-/** The title's field, opened by its pencil. */
 function editTitle(tab: HTMLElement): HTMLInputElement {
   act(() =>
     (
@@ -4559,7 +4408,6 @@ function editTitle(tab: HTMLElement): HTMLInputElement {
   );
 }
 
-/** Words typed into a field, as React hears them. */
 function type(field: HTMLInputElement, words: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -4568,7 +4416,6 @@ function type(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** A key pressed in a field, while an input method composes a word where `composing` says. */
 async function key(field: HTMLInputElement, name: string, composing = false): Promise<void> {
   act(() => {
     field.dispatchEvent(
@@ -4673,7 +4520,6 @@ test("Files changed draws each review thread under its line, its comments throug
             additions: 2,
             deletions: 1,
             omitted: null,
-            // The hunk as the pull request's files carry it, its header counting the lines it holds.
             patch: thread().diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
           },
         ],
@@ -4713,7 +4559,6 @@ test("Files changed draws each review thread under its line, its comments throug
   );
   assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
   await minimize();
-  // Note that the setting's write lands a moment after the press, and the chip with it.
   await vi.waitFor(() =>
     assert.equal(note.querySelector(".diff-thread-chip-row > summary") !== null, true),
   );
@@ -4747,7 +4592,6 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     threads: [
       thread(),
       thread({
-        // A first line above the patch's hunk, which no drawn row holds.
         startLine: 3,
         originalStartLine: 3,
         comments: [
@@ -4797,7 +4641,6 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     );
   });
   assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go");
-  // The keyboard in the card lights its lines as the pointer does, and lets them go as it leaves.
   const summary = note.querySelector<HTMLElement>("summary") ?? assert.fail("the card's head");
   document.documentElement.dataset.keyboard = "true";
   act(() => {
@@ -4857,7 +4700,6 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     );
   });
   assert.equal(litFrom(), 3, "back on the chip, the chip's lines light again");
-  // The keyboard in a thread the chip shows lights that thread's lines, not the chip's.
   document.documentElement.dataset.keyboard = "true";
   act(() => {
     shown.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
@@ -4916,7 +4758,6 @@ test("a review thread on its line in Files changed is replied on and resolved fr
   ]);
 });
 
-/** Writes in the comment box at the Conversation's foot as the member would. */
 function writeComment(tab: HTMLElement, words: string): HTMLElement {
   const box =
     tab.querySelector<HTMLElement>(".pull-request-comment-box") ??
@@ -4925,7 +4766,6 @@ function writeComment(tab: HTMLElement, words: string): HTMLElement {
   return box;
 }
 
-/** The comment box's Comment press. */
 function commentPress(tab: HTMLElement): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(".pull-request-comment-foot button") ??
@@ -4991,7 +4831,6 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
   writeComment(tab, "Ping?");
   act(() => commentPress(tab).click());
 
-  // Note that GitHub's answer reaches React a tick after it lands, as the change's mutation hands it on.
   await vi.waitFor(() =>
     assert.equal(
       tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
@@ -5001,10 +4840,8 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
   assert.equal(boxWords(tab.querySelector(".pull-request-comment-box") ?? tab), "Ping?");
 });
 
-/** The head the changes were read at, which a comment on their lines names. */
 const READ_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
 
-/** One changed file whose hunk is the review threads' own: old lines 8–12, the last removed, and new lines 8–13, the last two added. */
 const INVITE_FILE = {
   path: "src/invite.ts",
   previousPath: null,
@@ -5015,7 +4852,6 @@ const INVITE_FILE = {
   patch: thread().diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
 };
 
-/** The tab over that one file, read at `READ_HEAD`, its conversation holding the member's pending review as given; a read of the changes after the first answers `reread` in its place where one is given. */
 async function drawCommentable(
   pendingReview?: { readonly comments: number } | null,
   reread: typeof INVITE_FILE = INVITE_FILE,
@@ -5050,9 +4886,7 @@ async function drawCommentable(
   return { tab };
 }
 
-/** Presses the gutter's + on the lines given of the file, as the diff bundle tells the view, and the comment it opened. */
 async function pickLines(selection: DiffListSelection["selection"]): Promise<HTMLElement> {
-  // Note that the changes land through a query, so the files are picked from once they are drawn.
   await vi.waitFor(() => assert.equal(lists.length > 0, true, "the files are drawn"));
   const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
   const onComment = drawn.onComment ?? assert.fail("the gutter offers a comment");
@@ -5061,7 +4895,6 @@ async function pickLines(selection: DiffListSelection["selection"]): Promise<HTM
   return commentNotes().at(-1)?.element ?? assert.fail("the pick opens a comment");
 }
 
-/** The comments the files' last draw stands under their lines, in the order they were opened: each note's place and the element drawn in it. */
 function commentNotes() {
   const drawn = lists.at(-1);
   if (drawn === undefined) return [];
@@ -5077,12 +4910,10 @@ function commentNotes() {
     .filter((note) => note.element.querySelector(".line-comment") !== null);
 }
 
-/** Writes the comment's words as the member would. */
 function writeLineComment(comment: HTMLElement, words: string): void {
   writeBox(comment, words, "Comment");
 }
 
-/** The comment's press of the words given. */
 function commentOffer(comment: HTMLElement, label: string): HTMLButtonElement {
   return (
     [...comment.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -5091,7 +4922,6 @@ function commentOffer(comment: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-/** Whether the files' last draw stands a comment under a line. */
 function commentDrawn(): boolean {
   return commentNotes().length > 0;
 }
@@ -5207,7 +5037,6 @@ test("the words of a line comment outlast the tab: a window drawn again finds th
   writeLineComment(await pickLines(added), "Why twice?");
   writeLineComment(await pickLines(removed), "Gone?");
 
-  // Closing the tab and reading the window again, as a relaunch does.
   act(() => root?.unmount());
   root = undefined;
   await drawCommentable();
@@ -5340,14 +5169,12 @@ test("code selected as text on lines GitHub takes a comment on is offered a Comm
   );
 });
 
-/** The rows the `/` menu inside `within` offers now, by their words; none while it stands closed. */
 function slashRows(within: ParentNode): string[] {
   return [...within.querySelectorAll(".ui-block-menu .ui-combobox-option-label")].map(
     (row) => row.textContent ?? "",
   );
 }
 
-/** Types `words` on a line of their own after the box's text, the caret in the box, as the member would; a comment's note is stood in the window first, as the list stands it. */
 async function typeOnNewLine(within: HTMLElement, words: string): Promise<void> {
   if (!within.isConnected) document.body.append(within);
   await settle();
@@ -5592,7 +5419,6 @@ test("Remove from queue's question goes with its panel: hidden, the question is 
     });
   }
   const tab = await drawn(createElement(Hiding));
-  // Note that the question is read as whether it stands, so a failure prints a word rather than a whole DOM node.
   const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
 
   await pressBox(tab, "Remove from queue");
@@ -5606,13 +5432,10 @@ test("Remove from queue's question goes with its panel: hidden, the question is 
   assert.deepEqual(changes, []);
 });
 
-/** The thread the jumps below land on, by GitHub's node id. */
 const JUMPED = "PRRT_kwDOjump";
 
-/** The route's opener the last `Routed` drew, as a link pressed anywhere in the window reaches it. */
 let routeOpen: (link: ReadLink) => void = () => undefined;
 
-/** The Pull request tab inside the window's route for a review thread's link, as `openLink` takes it: the view the link names chosen, and the ask left for the tab; every link opened heard. */
 function Routed({
   control,
   heard,
@@ -5661,7 +5484,6 @@ function Routed({
   );
 }
 
-/** A control whose conversation holds the threads given and whose changes hold the files given. */
 function jumpControl(
   threads: readonly ReviewThread[],
   files: readonly (typeof INVITE_FILE)[] = [INVITE_FILE],
@@ -5674,14 +5496,12 @@ function jumpControl(
   );
 }
 
-/** Lets the frames a landing waits on pass. */
 async function frames(count = 3): Promise<void> {
   for (let frame = 0; frame < count; frame += 1) {
     await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   }
 }
 
-/** A thread's head press in the Conversation, which takes it to Files changed. */
 function headPress(tab: HTMLElement): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>('button[aria-label^="View in Files changed"]') ??
@@ -5689,7 +5509,6 @@ function headPress(tab: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** Ends a card's ring, as its animation would. Note that jsdom has no AnimationEvent, so React hears the prefixed name there, which is sent beside the standard one. */
 function ringEnds(card: Element): void {
   for (const name of ["animationend", "webkitAnimationEnd"]) {
     const end = new Event(name, { bubbles: true });
@@ -5698,7 +5517,6 @@ function ringEnds(card: Element): void {
   }
 }
 
-/** A thread's ⋯ opened and the item named pressed. */
 async function threadMenuItem(card: Element, label: string): Promise<void> {
   act(() =>
     (
@@ -5720,7 +5538,6 @@ test("a thread's file and lines in the Conversation take it to Files changed thr
   const tab = await drawn(
     createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),
   );
-  // The member collapsed the file and minimized the comments in Files changed before.
   await choose(tab, "Files changed");
   const header = (lists.at(-1) ?? assert.fail("the files are drawn")).renderHeader(
     INVITE_FILE.path,
@@ -5764,7 +5581,6 @@ test("a thread's file and lines in the Conversation take it to Files changed thr
   const card =
     note.querySelector(".diff-inline-thread") ?? assert.fail("the chip shows its thread");
 
-  // Pierre draws the thread's note into the list, where it stands in sight.
   (tab.querySelector(".diff-list") ?? assert.fail("the list's box")).appendChild(note);
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 600, 400));
   await frames();
@@ -5798,7 +5614,6 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
   act(() => headPress(tab).click());
   await settle();
   assert.equal(option(tab, "Files changed").getAttribute("aria-selected"), "true");
-  // Note that the file is revealed once Files changed has read its changes, which land through a query.
   await vi.waitFor(() => assert.deepEqual(listReveals, [INVITE_FILE.path]));
 
   await choose(tab, "Conversation");
@@ -5837,7 +5652,6 @@ test("a link to a thread opens a folded Conversation to land on it, centering it
     "a folded Conversation draws none",
   );
 
-  // The scroller jsdom lays out none for: 400px tall over a long run, clearing 58px at its top for its heading and fade.
   const scroller =
     tab.querySelector<HTMLElement>("[aria-label='Pull request conversation']") ??
     assert.fail("the conversation scrolls");
@@ -5903,7 +5717,6 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   await settle();
   await frames();
 
-  // Note that the Conversation is chosen through the route a Query notification later than the press.
   await vi.waitFor(() =>
     assert.equal(option(tab, "Conversation").getAttribute("aria-selected"), "true"),
   );
@@ -6118,7 +5931,6 @@ test("a thread on a changed image a filter left out lands above its picture once
     originalStartLine: null,
     startSide: null,
   });
-  // The picture is read as it comes near the view, which nothing here watches.
   vi.stubGlobal(
     "IntersectionObserver",
     class {
@@ -6192,14 +6004,12 @@ test("a landing waits for the panel to be visible before it takes the focus, as 
   assert.equal(document.activeElement, card.querySelector("summary"));
 });
 
-/** Three files of differing sizes, +60 −7 in all, as the changes read names them. */
 const SIZED = [
   ["a.ts", 10, 2],
   ["b.ts", 20, 5],
   ["c.ts", 30, 0],
 ] as const;
 
-/** The plan's agents, the pull request published at the size given (+60 −7 in 3 files unless told), its changes those three files, read in full unless told, and the member's marks as given. */
 function viewing(
   marked: readonly string[],
   options: {
@@ -6243,7 +6053,6 @@ function viewing(
   return { control };
 }
 
-/** A file's Viewed box, in the header Files changed's list draws for it. */
 function viewedBoxOf(path: string): HTMLInputElement {
   const list = lists.at(-1) ?? assert.fail("Files changed draws its list");
   const head = list.renderHeader(path);
@@ -6254,13 +6063,11 @@ function viewedBoxOf(path: string): HTMLInputElement {
   );
 }
 
-/** What the hint over the header's lines says, once the pointer rests on them. */
 async function linesHint(tab: HTMLElement): Promise<string | undefined> {
   const lines = tab.querySelector<HTMLElement>(".pull-request-lines");
   if (lines === null) return assert.fail("the header counts the lines");
   restOn(lines);
   await settle();
-  // Note that words taking no focus own their hint, which a reader hears at their end.
   const hint = lines.getAttribute("aria-owns");
   return hint === null ? undefined : (document.getElementById(hint)?.textContent ?? undefined);
 }
@@ -6362,7 +6169,6 @@ test("where the read stopped short of more files than were published, Files chan
   await vi.waitFor(() => assert.equal(tabCount(tab, "Files changed"), "2/3 viewed"));
 });
 
-/** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
 function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewComment {
   return {
     id: "PRRC_start",
@@ -6379,7 +6185,6 @@ function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewCo
   };
 }
 
-/** Writes words into the field labeled as given, as the member would. */
 function typeInto(within: Element, label: string, words: string): void {
   writeBox(within, words, label);
 }
@@ -6479,7 +6284,6 @@ test("the member's pending comments stand on their lines in Files changed, marke
     "the published comment stays as it was",
   );
 
-  // Edit opens the words in place; Cancel keeps nothing, Save sends the new words.
   act(() => commentOffer(card, "Edit").click());
   typeInto(card, "Pending comment", "Thrown away");
   act(() => commentOffer(card, "Cancel").click());
@@ -6490,7 +6294,6 @@ test("the member's pending comments stand on their lines in Files changed, marke
   act(() => commentOffer(card, "Save").click());
   await settle();
 
-  // Delete asks first, since it cannot be undone.
   act(() => commentOffer(comments[1] ?? assert.fail(), "Delete").click());
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Delete asks first");
@@ -6527,7 +6330,6 @@ test("the member's pending comments stand on their lines in Files changed, marke
     "a pending comment's place reads in the monospace face, as a path does",
   );
 
-  // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
   const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();
   act(() => commentOffer(entry, "Edit").click());
   typeInto(entry, "Pending comment", "Still once, really?");
@@ -6545,7 +6347,6 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
   act(() => commentOffer(panel, "Cancel").click());
 
-  // A Delete asked in Files changed goes as another view of the tab is chosen.
   act(() => commentOffer(card, "Delete").click());
   assert.ok(document.querySelector('[role="alertdialog"]'), "Delete asks first");
   await act(async () => option(tab, "Conversation").click());

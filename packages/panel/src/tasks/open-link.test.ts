@@ -20,15 +20,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * A link pressed in written words: an app link, a task's drawn as its chip,
- * opens its place in the window, a task at its section, an agent, an Inbox
- * item, and never the browser, while a GitHub page, drawn as GitHub's chip,
- * and any other web page open in the browser over their acts; off the
- * window, where no opener for a place is handed down, an app link opens
- * nothing in it. Synthetic ids.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const ITEM_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
@@ -42,7 +33,6 @@ const WORDS = [
   "and [the docs](https://example.com/docs).",
 ].join(" ");
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
@@ -60,7 +50,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn under the opener given, each link pressed in order. */
 function pressedEach(openPlace: ((link: ReadLink) => void) | undefined): void {
   const container = document.createElement("div");
   document.body.append(container);

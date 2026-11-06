@@ -7,12 +7,6 @@ import { SettingsSection } from "@repo/ui";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/**
- * agent-composer-section.tsx -- the Account page's Message box group: what Enter does in an agent's message box while its turn runs, which the account carries across its Macs and the web.
- *
- * The one row is the schema's (`agentEnter`), drawn by `SchemaSettingRows`
- * like every stored setting, so the settings search finds it too.
- */
 export function AgentComposerSection({
   view,
   writes,

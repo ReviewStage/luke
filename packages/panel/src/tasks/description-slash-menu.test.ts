@@ -19,19 +19,8 @@ import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
-/**
- * description-slash-menu.test.ts -- the `/` menu in the description's open text: opened by
- * a `/` at a line's start or after a space, outside code; narrowed by the
- * words after it, by name and by alias, and closed by a space or a run that
- * matches nothing; Enter laying the block in place of the `/` word; Escape
- * closing it for that `/` alone; and the selection toolbar standing aside
- * for it. The editor is the real one, from its bundle. Synthetic text.
- */
-
-// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
 vi.hoisted(() => {
   Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
 });
@@ -48,12 +37,10 @@ const TEXT = [
 
 const PLAN: Task = { ...DOCUMENT_TASK, document: { body: TEXT, assumptions: [] } };
 
-/** The plan's own page's links, which say the page is the plan's own and so takes mentions and pictures. */
 const PAGE_LINKS = { workspace: "acme", onOpen: () => undefined, reveal: undefined };
 
 const roots: Root[] = [];
 
-// Landed before the description renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -74,7 +61,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's page with its text open in the editor from the Goal block's Enter. */
 async function opened() {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -105,7 +91,6 @@ async function opened() {
   return { container, element: element as TiptapEditorHTMLElement, editor };
 }
 
-/** Where `words` end in the editor's text, as a position. */
 function endOf(editor: Editor, words: string): number {
   let found: number | undefined;
   editor.state.doc.descendants((node, pos) => {
@@ -115,7 +100,6 @@ function endOf(editor: Editor, words: string): number {
   return found ?? assert.fail(`${words} is in the text`);
 }
 
-/** The caret put at `at`, and `words` typed there as the editor's own input inserts them. */
 function typeAt(editor: Editor, at: number, words: string): void {
   act(() => {
     editor.view.focus();
@@ -124,7 +108,6 @@ function typeAt(editor: Editor, at: number, words: string): void {
   typed(editor, words);
 }
 
-/** `words` typed at the caret, one character at a time. */
 function typed(editor: Editor, words: string): void {
   for (const character of words) {
     act(() => {
@@ -133,7 +116,6 @@ function typed(editor: Editor, words: string): void {
   }
 }
 
-/** A new empty line under the one `words` end, the caret on it. */
 function newLineAfter(editor: Editor, words: string): void {
   act(() => {
     editor.view.focus();
@@ -141,7 +123,6 @@ function newLineAfter(editor: Editor, words: string): void {
   });
 }
 
-/** The menu's rows, by their names, where it stands. */
 function menuRows(container: HTMLElement): string[] | undefined {
   const menu = container.querySelector<HTMLElement>('[role="listbox"][aria-label="Blocks"]');
   if (menu === null) return undefined;
@@ -150,7 +131,6 @@ function menuRows(container: HTMLElement): string[] | undefined {
   );
 }
 
-/** The menu's group headings, where it stands. */
 function menuGroups(container: HTMLElement): string[] {
   const menu = container.querySelector<HTMLElement>('[role="listbox"][aria-label="Blocks"]');
   return [...(menu?.querySelectorAll<HTMLElement>('[role="group"]') ?? [])].map(
@@ -158,7 +138,6 @@ function menuGroups(container: HTMLElement): string[] {
   );
 }
 
-/** A key pressed in the editor. */
 function press(element: HTMLElement, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
   const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
   act(() => {

@@ -37,29 +37,12 @@ import { type HeldShell, localShellsHeld } from "./local-held.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { LocalSession } from "./use-local-session.js";
 
-/**
- * local-shells.tsx -- the shells beside a Local tab's screen: each one this window opened on this Mac in the agent's mirror, the one shown marked, and the agent at the foot.
- *
- * A Local tab belongs to one agent's mirror, and so does every shell in
- * its list: the "+" opens another in that same folder, and the list never
- * switches agent. A row shows its shell's name; a press shows it on the
- * screen, its × ends it, and its right-click offers renaming it and ending
- * it. The list folds away beside the screen as a File tab's tree does, and
- * its foot names the agent. Whether the agent works is
- * its glyph's to say, the working mark in its place, so no word beside it
- * repeats it (`state-glyph.tsx`).
- */
-
-/** What a shell's row is, which names its ⋯ and its menu. */
 const SHELL_THING = "Shell";
 
-/** What ends a shell, as its row's hover × and its menu both say it. */
 const END_SHELL = "End shell";
 
-/** The most characters of a shell's name. */
 const TITLE_MAX = 60;
 
-/** The shells' list in its scroller, which the shells and their placeholder rows both stand in. */
 function ShellList({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <ScrollArea>
@@ -72,7 +55,6 @@ function ShellList({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The list's body once the shells are listed: a row each, or none said. */
 function ListedShells({
   listed,
   session,
@@ -103,7 +85,6 @@ function ListedShells({
   );
 }
 
-/** One shell's row: its press shows it, its × ends it, and its ⋯, right-click, long press and menu key open its menu, a finger's row keeping its × but drawing no ⋯. */
 function ShellRow({
   shell,
   shown,
@@ -112,11 +93,9 @@ function ShellRow({
 }: {
   shell: HeldShell;
   shown: boolean;
-  /** Whether the tab the list stands in is on screen, which the end's question goes with. */
   surfaceOpen: boolean;
   session: Pick<LocalSession, "onChoose" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  // Note that a shell's name is the window's own, so a rename takes at once and is never refused.
   const rename = useInlineRename(shell.terminalId, {
     run: session.onRename,
     asked: undefined,
@@ -126,7 +105,6 @@ function ShellRow({
   const renaming = rename.editing;
   const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
-  // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const closing = useMutation({ mutationFn: () => session.onKill(shell.terminalId) });
   const endingAct = useConfirmAct(closing, {
     send: () => closing.mutateAsync(),
@@ -196,7 +174,6 @@ function ShellRow({
           running: "Ending the shell",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
           replayUnmasked: true,
-          // Note that the title names the shell.
           titleReplayMasked: true,
         }}
       />
@@ -218,13 +195,9 @@ export function LocalShells({
   models: readonly CatalogModel[] | undefined;
   session: LocalSession;
   onOpenAgent: () => void;
-  /** What the list floating over the screen is handed (`file-view.tsx`); none draws it beside the screen. */
   over: PaneOver | undefined;
-  /** The list's box beside the screen, which slides in and out (`usePaneSlide`). */
   pane: RefObject<HTMLElement | null>;
-  /** Whether it is on its way out beside the screen. */
   leaving: boolean;
-  /** Whether the tab is on screen: a question asked from the list goes as the panel closes. */
   surfaceOpen: boolean;
 }): React.JSX.Element {
   const { listed } = session;
@@ -283,11 +256,6 @@ export function LocalShells({
   );
 }
 
-/**
- * The agent's shells, as a terminal's row in the panel's "+" says them
- * after the agent's name: how many this window holds, nothing before the
- * first. Whether the agent works is the row's glyph's to say.
- */
 export function LocalStanding({ agentId }: { agentId: string }): React.JSX.Element {
   const count = useAtomValue(localShellsHeld(agentId)).length;
   return <>{count === 0 ? null : `${count} ${count === 1 ? "shell" : "shells"}`}</>;

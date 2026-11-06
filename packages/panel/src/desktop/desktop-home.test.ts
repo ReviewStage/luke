@@ -37,12 +37,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopHome } from "./desktop-home.js";
 
-/**
- * Home greets the reader, opens on New task's composer, lists what waits on
- * them in the listed workspace and its tasks worked on latest, and welcomes
- * an account with nothing yet instead. Synthetic accounts.
- */
-
 const NOW = Date.now();
 const MINUTE = 60_000;
 const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
@@ -66,7 +60,6 @@ const CACHE = task(2, "Edge cache keys", 3 * MINUTE);
 const DASHBOARD = task(3, "Retry budget dashboard", 2 * 24 * 60 * MINUTE);
 const TASKS = [RETRIES, CACHE, DASHBOARD];
 
-/** An open item of an agent's on `RETRIES`, asking a choice. */
 function item(n: number, title: string, ago: number): InboxItem {
   return {
     id: `a1b2c3d4-0000-4000-8000-${String(n).padStart(12, "0")}`,
@@ -99,7 +92,6 @@ const RETRY_429 = item(1, "Retry 429s too?", 8 * MINUTE);
 
 let root: Root | undefined;
 
-// Landed before any page renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -121,7 +113,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Home for Dean over `tasks` in `room`, each place of Settings it opens heard by `onSettings`. */
 function home(tasks: TasksControl, room: ShellRoom, onSettings: (link: SettingsLink) => void) {
   return onRegistry(
     AtomRegistry.make(),
@@ -133,7 +124,6 @@ function home(tasks: TasksControl, room: ShellRoom, onSettings: (link: SettingsL
   );
 }
 
-/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task, item, and place of Settings it opens recorded. */
 function mount(
   overrides: Partial<TasksControl> = {},
   items: readonly InboxItem[] = [RETRY_429],
@@ -184,7 +174,6 @@ function mount(
   return { page: container, opened, tasks };
 }
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -194,7 +183,6 @@ async function settle(): Promise<void> {
   await settleQueries(ticks);
 }
 
-/** Each section Home draws, by its name, with its rows' names. */
 function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
@@ -206,7 +194,6 @@ function sections(page: HTMLElement): Record<string, string[]> {
   );
 }
 
-/** The row named `name`'s press. */
 function row(page: HTMLElement, name: string): HTMLElement {
   return (
     [...page.querySelectorAll<HTMLElement>("li [data-roving-item]")].find((each) =>
@@ -221,7 +208,6 @@ test("Home greets the reader by first name over New task's composer, the items w
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
   assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
-  // Note that the Inbox's items stand once the account's feed reaches its query.
   await vi.waitFor(() =>
     assert.deepEqual(sections(page), {
       Inbox: [RETRY_429.title],
@@ -290,7 +276,6 @@ test("a workspace that reaches no repository says so over Home's composer, telli
   const { page, opened } = mount({ newTask });
   const notice = () => page.querySelector(".new-task-notices")?.textContent ?? "";
 
-  // Note that the owner is named by their person chip, whose disc's initial stands before the name.
   const chip = () =>
     page.querySelector('.new-task-notices [data-actor-ref][data-kind="person"]')?.textContent;
   await vi.waitFor(() => assert.equal(chip(), "AAda Lovelace"));
@@ -298,7 +283,6 @@ test("a workspace that reaches no repository says so over Home's composer, telli
     notice(),
     "This workspace has no repositories yetAsk AAda Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
   );
-  // Note that the workspace's Add repository stands only once a token is known to be saved, so a member whose token read is still out saves one first.
   const add = [...page.querySelectorAll<HTMLButtonElement>(".new-task-notices button")].find(
     (each) => each.textContent === "Add with your token",
   );
@@ -313,7 +297,6 @@ test("a workspace that reaches no repository says so over Home's composer, telli
 
 test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async () => {
   const { page } = mount();
-  // Note that the Inbox's row stands once the account's feed reaches its query, as the first test waits for it.
   const first = await vi.waitFor(() => row(page, RETRY_429.title));
   act(() => first.focus());
 
@@ -330,7 +313,6 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
 });
 
 test("nothing waiting draws no Inbox section, but an Inbox that could not be read says so, and a list that could not be read says so under Recent", async () => {
-  // Note that the feed that could not be read comes first, since the test's one client keeps a feed that answered, as the window does.
   const unread = mount({}, [RETRY_429], SHELL_ROOM.WIDE, true);
   await vi.waitFor(() =>
     assert.match(unread.page.textContent ?? "", /Some inbox items could not be read\./u),
@@ -346,7 +328,6 @@ test("nothing waiting draws no Inbox section, but an Inbox that could not be rea
   assert.match(refused.page.textContent ?? "", /Your tasks could not be read\./u);
 });
 
-/** A new account, its one model connected, over a workspace that reaches no repository. */
 function newAccount(): Partial<TasksControl> {
   const base = tasksControl();
   return {

@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { keptKey, useKept } from "./use-kept.js";
 
-/**
- * use-kept.test.ts -- a view choice is remembered: a surface drawn again
- * after it went opens at the choice it last kept, one never chosen opens at
- * its initial value, and so does one an earlier build kept in a shape that
- * no longer reads.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -45,10 +38,8 @@ const KEPT = {
   ),
 } as const;
 
-/** The door the surface last drew with, which chooses another sort. */
 let chooseSort: ((next: Sort) => void) | undefined;
 
-/** A list's sort, drawn as its words. */
 function SortedList(): React.JSX.Element {
   const [sort, choose] = useKept(KEPT.SORT, SORT.LATEST);
   chooseSort = choose;
@@ -93,7 +84,6 @@ test("a choice kept in a shape that no longer reads opens at its initial value",
   expect(shown()).toBe(SORT.OLDEST);
 });
 
-/** Two surfaces holding the sort, and the doors the first drew with. */
 let doors:
   | { choose: (next: Sort) => void; change: (change: (kept: Sort) => Sort) => void }
   | undefined;
@@ -118,7 +108,6 @@ test("a change is made over what storage holds now, and one that answers what it
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(createElement(TwoLists)));
-  // Another window kept a sort after this one drew.
   window.localStorage.setItem(KEPT.SORT.name, JSON.stringify(SORT.OLDEST));
   act(() => doors?.change((held) => (held === SORT.OLDEST ? SORT.LATEST : SORT.OLDEST)));
   expect(window.localStorage.getItem(KEPT.SORT.name)).toBe(JSON.stringify(SORT.LATEST));
@@ -144,7 +133,6 @@ test("where storage refuses a write, a change goes on from the choice drawn, not
   expect(shown()).toBe(`${SORT.OLDEST} ${SORT.OLDEST}`);
 });
 
-/** A record of sorts by list, which a change of one list's sort keeps the others' of. */
 const storedSorts = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Literals([SORT.LATEST, SORT.OLDEST])),
 );
@@ -171,7 +159,6 @@ test("where storage refused a write, an entry another window kept since is chang
   });
   act(() => sortsDoors?.change((held) => ({ ...held, a: SORT.OLDEST })));
   refuse.mockRestore();
-  // Another window keeps an entry of its own, which this one's next change must not undo.
   window.localStorage.setItem(SORTS.name, JSON.stringify({ a: SORT.LATEST, b: SORT.OLDEST }));
   act(() => sortsDoors?.change((held) => ({ ...held, a: SORT.OLDEST })));
   expect(JSON.parse(window.localStorage.getItem(SORTS.name) ?? "{}")).toEqual({

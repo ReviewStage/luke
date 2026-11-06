@@ -31,23 +31,6 @@ import type { NewTaskRelation } from "./new-task-relation.js";
 import { MODELS_READ, type ModelsRead } from "./use-agents.js";
 import type { NewTaskStart } from "./use-tasks-tab.js";
 
-/**
- * new-task-composer-runs-on.test.ts -- New task's Runs on, with Bring your own
- * host on and two of the member's devices offered, one offline: the task starts on the device picked,
- * by its id, and the offline one cannot be picked, nor one online but getting
- * ready or not set up, which says so; a last pick that is offline or getting
- * ready as the card opens stays picked and says so, never Cloud; a card takes
- * a device picked in another card; and nothing starts on a last pick of a
- * device before the card's own read of the devices lands, a read that failed
- * saying so with a Retry that reads them again, while a member whose last pick
- * is the cloud is not held, the chip standing on Cloud alone. With the
- * experiment off the card reads no devices, offers Cloud alone, and starts in
- * the cloud at once, a last pick of a device unheld. A card opened as a sub-task
- * of another names no repository, which it takes from its parent, but draws
- * Runs on as any card does, since a task holds no place to run.
- * Synthetic throughout.
- */
-
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -62,7 +45,6 @@ const BUILDER = "0b8e4c1a-2f6d-4f53-8a2e-9d1c7e5b3a40";
 
 const roots: Root[] = [];
 
-/** A card opened as a sub-task of a task in Acme, as New sub-task opens it. */
 const SUB_TASK: NewTaskRelation = {
   kind: TASK_CREATE_RELATION_KIND.SUB_TASK_OF,
   task: {
@@ -91,7 +73,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -101,7 +82,6 @@ async function settle(): Promise<void> {
   await settleQueries(ticks);
 }
 
-/** The member's devices: the Studio, online unless said, and the build host, offline unless said. */
 function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly MacOffer[] {
   return [
     {
@@ -121,7 +101,6 @@ function devicesWith(studioSeenAt = Date.now(), builderSeenAt = 0): readonly Mac
   ];
 }
 
-/** How the card's own reads of the models answer: they land, stay out, or fail, until the test lets them land. */
 const READS = {
   LAND: "land",
   HOLD: "hold",
@@ -130,21 +109,13 @@ const READS = {
 
 type Reads = (typeof READS)[keyof typeof READS];
 
-/** What the card is offered: the devices an earlier read listed, none where no read landed, and how its own reads answer, a read that lands listing `reread`, else those devices again. */
 interface Offered {
   devices: readonly MacOffer[] | undefined;
   reread?: readonly MacOffer[];
   reads?: Reads;
 }
 
-/**
- * The card in Acme offering what `offered` holds, each start's Runs on
- * written down. Note that the card is handed New task through the steady
- * doors, as the tasks tab hands it, so a read listing the same devices
- * hands back the list already standing.
- */
 async function mount(offered: Offered = { devices: devicesWith() }, relation?: NewTaskRelation) {
-  // The host holds the devices' beats no later than the lists carry them.
   handBeats(
     Object.fromEntries(
       (offered.devices ?? []).flatMap((device) =>
@@ -220,7 +191,6 @@ async function mount(offered: Offered = { devices: devicesWith() }, relation?: N
   return { container, starts, named, letReadsLand, reads: () => asked };
 }
 
-/** The card's Runs on chip. */
 function runsOnChip(container: HTMLElement): HTMLButtonElement {
   return (
     container.querySelector<HTMLButtonElement>('button[aria-label^="Runs on"]') ??
@@ -228,7 +198,6 @@ function runsOnChip(container: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** The menu's row naming `name`. */
 function row(name: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
@@ -248,7 +217,6 @@ test("a task starts on the device Runs on picked, by its id, and an offline devi
   assert.equal(row("Build host").getAttribute("aria-disabled"), "true");
   act(() => row("Studio").click());
   await settle();
-  // ⌘Return on the empty box: a bare task, which carries where its agents run as any start does.
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
@@ -329,7 +297,6 @@ test("a device picked in another card reaches this one", async () => {
 
 test("nothing starts before the card's own read of the devices lands, and one that failed says so, with a Retry that reads them again", async () => {
   window.localStorage.setItem("app.newTaskRunsOn", STUDIO);
-  // A list read before the card opened, here one with no device, is no read of the card's own.
   const reading = await mount({ devices: [], reads: READS.HOLD });
   pressInComposer(reading.container, "Enter", { metaKey: true });
   await settle();
@@ -393,7 +360,6 @@ test("a sub-task's card names no repository and starts on the device Runs on pic
   await settle();
   act(() => row("Studio").click());
   await settle();
-  // ⌘Return on the empty box: a bare sub-task, which carries what any sub-task's start does.
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 

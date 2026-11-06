@@ -18,14 +18,6 @@ import { handHostReads, holdGitHubToken, holdRepositoryLists } from "../testing/
 import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { GitHubSetup } from "./setup-github.js";
 
-/**
- * Setup's GitHub step over a workspace the App reaches: its card stands
- * checked, naming the owners reached. And the token's picker, which adds
- * several repositories in one open menu and keeps the token's card through
- * Back; the shared menu's checks and words are New task's tests' to hold.
- * Synthetic throughout.
- */
-
 const WORKSPACE = "workspace-acme";
 
 const roots: Root[] = [];
@@ -41,7 +33,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -74,7 +65,6 @@ test("a workspace reached through the App draws the App's card checked, its done
     ),
   );
 
-  // Note that the step checks a route once the repositories it reaches reach their query.
   await vi.waitFor(() => {
     const checked =
       container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
@@ -88,7 +78,6 @@ test("a workspace reached through the App draws the App's card checked, its done
   });
 });
 
-/** A repository as the workspace's listing answers it, reached through `access`. */
 function reached(fullName: string, updatedAt: number, access: GitHubAccess): GitHubRepository {
   const [owner = "", name = ""] = fullName.split("/");
   return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt, access };
@@ -168,10 +157,8 @@ test("the token's picker adds several repositories in one open menu and keeps st
   await settle();
   await act(() => lists.again());
   await settle();
-  // Back draws the step again, which forgets the card last pressed.
   act(() => first.unmount());
   draw();
-  // The host hands a window opened again the token repositories as they stand now.
   act(() => reads.deliverTokenRepositories({ [WORKSPACE]: { rows: added } }));
   await settle();
   act(() => chip().click());

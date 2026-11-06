@@ -21,14 +21,6 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PlanRelations } from "./plan-relations.js";
 
-/**
- * plan-relations.test.ts -- the open task's Sub-tasks and Task relations groups:
- * a sub-task's own nested under it once its fold opens, a group drawn only
- * while it holds a row, and a relation's kind moved from its pill in one
- * call, never a block taken away and added again, and Remove relation
- * taking the block away through the door that offers Undo. Synthetic tasks.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -59,7 +51,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A task of the workspace, `id`, standing under `parentTaskId` where one is named. */
 function summary(id: string, number: number, parentTaskId?: string): TaskSummary {
   return {
     id,
@@ -75,7 +66,6 @@ function summary(id: string, number: number, parentTaskId?: string): TaskSummary
   };
 }
 
-/** Draws the groups for the open task, its blocks as given, over `listed`, its sends kept in `sent`. */
 function draw(
   listed: readonly TaskSummary[],
   blocks: { blockedBy?: string[]; blocks?: string[] },
@@ -110,7 +100,6 @@ function draw(
   return container;
 }
 
-/** The ids of the rows a group's list draws, in order. */
 function rowIds(container: HTMLElement, list: string): (string | null)[] {
   return [...container.querySelectorAll(`ul[aria-label='${list}'] > li[data-task-id]`)].map((row) =>
     row.getAttribute("data-task-id"),
@@ -141,7 +130,6 @@ test("a relation stands while the list does not hold its task, and picking anoth
   };
   const container = draw([summary("t-5", 5)], { blockedBy: ["t-5"], blocks: ["t-9"] }, sent);
   assert.equal(container.querySelector("ul[aria-label='Sub-tasks']"), null);
-  // Note that a task the list does not hold yet still stands, so a list still read hides no relation.
   assert.deepEqual(rowIds(container, "Task relations"), ["t-5", "t-9"]);
   const unlisted = container.querySelector("li[data-task-id='t-9']");
   assert.equal(

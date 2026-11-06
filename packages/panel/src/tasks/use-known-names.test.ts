@@ -16,16 +16,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { MentionedAgents } from "./mentioned-place.js";
 import { useKnownNames, useWordTargets } from "./use-known-names.js";
 
-/**
- * use-known-names.test.ts -- every chip of a window reads the one set of
- * names main's document holds: two readers of the same document are handed
- * the same names, a delivery that moves neither the tasks nor the Inbox
- * hands them those names again, and one that adds a task hands them new
- * names naming it; the tasks' keys, likewise, are handed again until a key
- * changes, whatever else about a task moves; and an untitled agent is named
- * by the catalog around the reader. Synthetic tasks.
- */
-
 const AT = 1_792_000_000_000;
 
 const INVITES: TaskSummary = {
@@ -43,7 +33,6 @@ const BILLING: TaskSummary = {
   name: "Usage billing",
 };
 
-/** Main's document holding `tasks`. */
 function holding(tasks: readonly TaskSummary[], version: number): AppStateSnapshot {
   return { ...stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, tasks: [...tasks] } }), version };
 }
@@ -64,7 +53,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What each of two readers was last handed, and a way to deliver the window a new document. */
 async function twoReaders(first: AppStateSnapshot): Promise<{
   readonly seen: Map<string, KnownNames>;
   readonly deliver: (next: AppStateSnapshot) => Promise<void>;

@@ -11,15 +11,6 @@ import { useState } from "react";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
 import type { ArchivedByReading } from "./agent-model.js";
 
-/**
- * archived-note.tsx -- what stands in a composer's place while the agent it writes to is archived.
- *
- * An archived agent reads but takes no message until it is brought back, so
- * its composer says why rather than standing there as a dead control, with
- * the one press that brings it back.
- */
-
-/** What the composer's note says, worded once. */
 const ARCHIVED_NOTE_COPY = {
   COMPOSER: "Unarchive to send messages",
   UNARCHIVE: "Unarchive",
@@ -28,37 +19,23 @@ const ARCHIVED_NOTE_COPY = {
   STOPPING: "Stopping",
 } as const;
 
-/** The two presses the note waits on, of which one is out at a time. */
 const ARCHIVED_PRESS = { STOP: "stop", UNARCHIVE: "unarchive" } as const;
 type ArchivedPress = (typeof ARCHIVED_PRESS)[keyof typeof ARCHIVED_PRESS];
 
-/**
- * What stands in an agent's composer's place while the agent is archived:
- * why nothing is sent, and Unarchive, after who archived the agent and why
- * where the service said. An agent still running finishes the turn it is
- * on, so its Stop stands beside them. A press that waits on the service
- * shows busy until it settles, a Stop it took until the agent offers none,
- * and the other waits meanwhile.
- */
 export function ArchivedComposerNote({
   onUnarchive,
   stop,
   archivedBy,
 }: {
   onUnarchive: () => void | Promise<void>;
-  /** Who archived the agent and why, where the agent itself was archived and the service said. */
   archivedBy?: ArchivedByReading | undefined;
-  /** Stops the agent, while it has a turn to stop; settles once the service has answered, with whether it took the stop. */
   stop?: (() => Promise<boolean>) | undefined;
 }): React.JSX.Element {
   const [out, setOut] = useState<ArchivedPress | undefined>(undefined);
-  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
-  // list carries the stop a moment after the answer.
   if (out === ARCHIVED_PRESS.STOP && stop === undefined) setOut(undefined);
   const press = (which: ArchivedPress, run: () => unknown) => {
     if (out !== undefined) return;
     const settles = run();
-    // Note that a press that answers at once, as one that asks first does, has nothing to wait on.
     if (!(settles instanceof Promise)) return;
     setOut(which);
     settles.then(

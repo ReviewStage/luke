@@ -19,16 +19,6 @@ import { openTaskMenu } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
-/**
- * move-task-dialog.test.ts -- Move to workspace in the open task's ⋯: offered
- * to the task's owner while the account has another workspace, it lists the
- * other workspaces, disables one whose GitHub cannot reach the task's
- * repository with the reason, says who loses and gains the task, and moves
- * it, closing on a move and staying up saying so on a refusal. A task
- * stranded in a workspace that cannot reach its repository says so over
- * every tab of it, naming the workspace that can. Synthetic throughout.
- */
-
 const DANA = "user-dana";
 const SAM = "user-sam";
 
@@ -83,14 +73,12 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-/** The agent's tab in the task's column. */
 const AGENT_TAB: MainTab = { agent: AGENT.id };
 
 const roots: Root[] = [];
 
 beforeEach(installScrollIntoView);
 
-/** Takes down every mounted surface and the menus and dialogs they drew. */
 function unmountAll(): void {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
@@ -104,14 +92,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Lets a move's answer, and the redraw it causes, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/** The open task's tab, read by Dana, the task as given open and listed, its side panel showing the plan. */
 function openTab(
   task: Task,
   workspaces: readonly Workspace[],
@@ -130,7 +116,6 @@ function openTab(
   });
 }
 
-/** Mounts the task's page and opens the Plan tab's ⋯ menu, the task's own. */
 function openMenu(tasks: TasksControl): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -155,20 +140,17 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** The menu item standing whose words are `words`, if any. */
 function menuItem(words: string): HTMLButtonElement | undefined {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
     (candidate) => candidate.textContent === words,
   );
 }
 
-/** Opens the menu's Move to, where the task's sections and Another workspace stand beside it. */
 function openMoveTo(): void {
   const moveTo = menuItem("Move to");
   if (moveTo !== undefined) act(() => moveTo.click());
 }
 
-/** Opens the move to another workspace from the menu standing: Move to's Another workspace, or Move to workspace where no section menu stands. */
 function chooseMove(): HTMLElement {
   openMoveTo();
   const item = menuItem("Another workspace") ?? menuItem("Move to workspace");
@@ -176,7 +158,6 @@ function chooseMove(): HTMLElement {
   return dialog() ?? assert.fail("the move opens a dialog");
 }
 
-/** The dialog's button with these words. */
 function button(within: HTMLElement, words: string): HTMLButtonElement {
   return (
     [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -245,7 +226,6 @@ test("the dialog lists the other workspaces, disables one whose GitHub cannot re
       "Its agents keep running, now in Acme.",
     ],
   );
-  // The recording masks text alone, so no name may stand in an attribute.
   for (const element of [moving, ...moving.querySelectorAll("*")]) {
     for (const attribute of element.attributes) {
       assert.doesNotMatch(attribute.value, /Checkout retries|Acme|Northwind|Octo/u, attribute.name);
@@ -288,7 +268,6 @@ test("a refused move keeps the dialog up, saying so under the list", async () =>
   );
 });
 
-/** Mounts the open task's page, its menu left closed. */
 function openTask(tasks: TasksControl): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -303,7 +282,6 @@ function openTask(tasks: TasksControl): HTMLElement {
   return container;
 }
 
-/** The task-wide banner over a stranded task, where one stands: the region its words name. */
 function strandedBanner(within: HTMLElement): HTMLElement | null {
   const regions = [...within.querySelectorAll<HTMLElement>("section[aria-labelledby]")];
   return (
@@ -315,14 +293,12 @@ function strandedBanner(within: HTMLElement): HTMLElement | null {
   );
 }
 
-/** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */
 function heard(node: Node): string {
   if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   return [...node.childNodes].map(heard).join("");
 }
 
-/** The open task's tab as `openTab` gives it, its column showing `tab` and its side panel as given. */
 function onTab(
   tasks: TasksControl,
   tab: MainTab | undefined,

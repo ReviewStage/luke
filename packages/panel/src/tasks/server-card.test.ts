@@ -41,19 +41,6 @@ import { AgentTab } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * server-card.test.ts -- a mention of an MCP server or of one of its tools
- * hangs the server as the MCP popover reads it: its mark, its name, how
- * many tools it offers, and, in an agent's tab, whether the agent has it
- * on, a word with nothing to press; then what the mention does for the
- * agent, then the server's tools, each its title and its badge, or the one
- * tool a tool's mention names. A server switched off for the agent is handed to
- * the turn a line opens alone, or to the next turn where the line reached
- * one under way, as its row says or, not yet read back, as the agent stood
- * when it went; the box says the same of a send now. Off an agent the card
- * says nothing of on or off and has no note. Synthetic agent, plan, and tools.
- */
-
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -62,7 +49,6 @@ const PLACE: MentionPlace = { workspace: "acme", repository: "acme/relay" };
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 
-/** Linear's server's tools, out of order, more than a card has height for. */
 const TOOLS = [
   { name: "update_issue", description: "Change an issue." },
   {
@@ -85,24 +71,20 @@ const TOOL = mentionMarkdown(
   PLACE,
 );
 
-/** Where Linear stands now, every other integration unavailable. */
 let linear: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
 
 const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   linear = INTEGRATION_STATUS.CONNECTED;
   installScrollIntoView();
   installEditorLayout();
-  // The main process answers the panel where the integrations stand, and holds Linear's tools; nothing else here.
   fakeAppBridge({});
   fakeActPort({});
   holdIntegrationTools(handHostReads({}).deliverTools, () => ({ tools: TOOLS }));
@@ -116,9 +98,7 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-/** Where the integrations stand, as the act port answers the panel: Linear as the test stands it, the rest unavailable. */
 function integrationStatuses(): Record<IntegrationProvider, IntegrationStatus> {
-  // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
   return Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [
       provider,
@@ -168,11 +148,6 @@ function journal(id: string, text: string): AgentTranscriptMessage {
   };
 }
 
-/**
- * The transcript: the task, the agent's reply naming Linear, a line that
- * opened the next turn naming Linear, and a line that reached that turn
- * while it ran naming one of its tools.
- */
 const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
   line("task", "Triage the backlog."),
   journal("first", `I would look it up in ${SERVER}.`),
@@ -181,7 +156,6 @@ const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
   journal("second", "Read it."),
 ];
 
-/** A plan's page, which an agent's box takes mentions on. */
 const PAGE: TaskMentionsValue = {
   holder: { taskId: TASK_ID },
   taskName: "Backlog",
@@ -197,7 +171,6 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** The node drawn on the plan's page. */
 async function drawn(node: ReactNode): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -211,7 +184,6 @@ async function drawn(node: ReactNode): Promise<HTMLElement> {
   return container;
 }
 
-/** The agent's tab over one page of `messages`, its sends never answered. */
 function agentTab(
   messages: readonly AgentTranscriptMessage[],
   agent: AgentSummary,
@@ -239,7 +211,6 @@ function agentTab(
   );
 }
 
-/** What a server's card says, once its reads have landed under the resting pointer. */
 async function cardOf(chip: Element | null | undefined) {
   assert.ok(chip, "the mention is drawn as its chip");
   restOn(chip);
@@ -263,7 +234,6 @@ async function cardOf(chip: Element | null | undefined) {
   return look;
 }
 
-/** The chip of the mention in the message given. */
 function chipIn(container: HTMLElement, messageId: string): Element | null {
   return container.querySelector(`[data-message-id="${messageId}"] [data-mention-ref]`);
 }

@@ -24,34 +24,12 @@ import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
-/**
- * pending-comments.tsx -- the member's own pending review comments, which nobody else sees until they submit the review, drawn as GitHub draws them: on their lines in Files changed, each marked Pending, with Edit and Delete.
- *
- * The conversation's read carries them beside the review they hold
- * pending, read on their own token (`pendingReview.drafts`). Each is drawn
- * where a review thread is drawn, so it is placed as threads are, on its
- * line, a gap opened over it included, or above the diff, and counted in a
- * minimized line's chip (`pendingThreadsOf`): a reply on a published thread
- * as that thread's last comment, and one that starts a thread as a thread
- * of its own, keyed by the comment's own id, which no thread's page is. A
- * comment drawn so is told apart by that key (`PendingCommentsProvider`),
- * and draws itself Pending, in the member's own name, with Edit, which
- * opens its words in place, and Delete, which asks first, since it cannot
- * be undone. Each is one change on GitHub as the member
- * (`PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT`, `DELETE_REVIEW_COMMENT`),
- * which the service holds to their own pending review on this pull
- * request; GitHub's refusal stands under the comment in its words, and the
- * tab reads the conversation again whatever GitHub answered.
- */
-
-/** What a pending comment says of itself and its presses. */
 export const PENDING_WORDS = {
   PENDING: "Pending",
   EDIT: "Edit",
   DELETE: "Delete",
 } as const;
 
-/** What the edit's form is named, asks for, and says. */
 const EDIT_WORDS: ReplyFormWords = {
   field: "Pending comment",
   placeholder: "Edit comment",
@@ -60,7 +38,6 @@ const EDIT_WORDS: ReplyFormWords = {
   sending: "Saving",
 };
 
-/** What Delete asks before it takes a pending comment out of the review. */
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this pending comment?",
   body: IRREVERSIBLE_WORDS,
@@ -70,12 +47,10 @@ const DELETE_QUESTION: DialogQuestion = {
   replayUnmasked: true,
 };
 
-/** A pending comment as the comment of a thread it is drawn as: keyed by its own id. */
 function commentOf(draft: PendingReviewComment): ReviewThread["comments"][number] {
   return { by: draft.by, html: draft.html, body: draft.body, at: draft.at, url: draft.id };
 }
 
-/** A pending comment that starts a thread, as a thread of its own on its lines, open and current, with no id a reply or a resolve could name. */
 function threadOf(draft: PendingReviewComment): ReviewThread {
   return {
     path: draft.path,
@@ -93,12 +68,6 @@ function threadOf(draft: PendingReviewComment): ReviewThread {
   };
 }
 
-/**
- * The review threads with the member's pending comments among them: a reply
- * on a published thread as that thread's last comment, and every other
- * comment as a thread of its own after them, oldest first. The threads are
- * handed back as they are where no comment is pending.
- */
 export function pendingThreadsOf(
   threads: readonly ReviewThread[],
   drafts: readonly PendingReviewComment[],
@@ -121,15 +90,12 @@ export function pendingThreadsOf(
   return [...replied, ...starts.map(threadOf)];
 }
 
-/** The member's pending comments by the key each is drawn under, its own id. */
 export type PendingComments = ReadonlyMap<string, PendingReviewComment>;
 
 const PendingCommentsContext = createContext<PendingComments>(new Map());
 
-/** Tells every comment drawn under it which of them are the member's pending ones. */
 export const PendingCommentsProvider = PendingCommentsContext.Provider;
 
-/** The member's pending comment drawn under `key`; none for any other comment. */
 export function usePendingComment(key: string | undefined): PendingReviewComment | undefined {
   const pending = useContext(PendingCommentsContext);
   return key === undefined ? undefined : pending.get(key);
@@ -137,29 +103,16 @@ export function usePendingComment(key: string | undefined): PendingReviewComment
 
 const PendingSurfaceContext = createContext(true);
 
-/**
- * Whether the surface the pending comments under it are drawn on is shown:
- * Files changed hidden behind another view of the tab is not, and a
- * Delete's question asked there goes with it.
- */
 export const PendingSurfaceProvider = PendingSurfaceContext.Provider;
 
-/** Whether a thread is one a pending comment starts, which has no id to reply or resolve by, and no page on GitHub yet. */
 export function usePendingThread(thread: ReviewThread): boolean {
   return usePendingComment(thread.comments[0]?.url) !== undefined;
 }
 
-/** The Pending words a pending comment and a thread it starts wear. */
 export function PendingWords(): React.JSX.Element {
   return <QuietWords>{PENDING_WORDS.PENDING}</QuietWords>;
 }
 
-/**
- * One of the member's pending comments: its head, marked Pending, then its
- * words, or the field over them while Edit is open, Esc keeping what
- * was written for the next Edit and Cancel keeping nothing; then Edit and Delete, Delete asking first; GitHub's refusal of
- * either under them. Outside a tab that writes, it is drawn without them.
- */
 export function PendingComment({
   draft,
   head,
@@ -167,11 +120,8 @@ export function PendingComment({
   marked = true,
 }: {
   draft: PendingReviewComment;
-  /** Whether it wears its own Pending mark; not where the card it starts already wears one in its head. */
   marked?: boolean;
-  /** Who wrote it and when, as every comment's head names them (`Comment`); none where the card it stands in names them beside it. */
   head?: { readonly person: GitHubPerson; readonly at: number; readonly now: number } | undefined;
-  /** Its words as every comment's are drawn. */
   words: ReactNode;
 }): React.JSX.Element {
   const writing = useThreadWriting();
@@ -193,7 +143,6 @@ export function PendingComment({
           start={writing.edits.of(draft.id) ?? draft.body}
           busy={out !== undefined}
           sending={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
-          // Note that words written back to the comment's own are no edit, so none are held.
           onWrite={(next) => writing.edits.keep(draft.id, next === draft.body ? undefined : next)}
           onSend={(body) =>
             writes.write(

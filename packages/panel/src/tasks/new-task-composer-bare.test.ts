@@ -16,14 +16,6 @@ import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 
-/**
- * New task's round button while its box holds nothing: ⌘Return there starts a
- * task with no agent, and the button's hint is the one place that says so,
- * with the chord. A box with words keeps the button's own hint, and the
- * automation's card, whose ⌘Return starts no bare task, never names one.
- * Synthetic throughout.
- */
-
 const roots: Root[] = [];
 
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -48,7 +40,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card for `purpose` on a repository, its box empty. */
 async function mount(purpose: NewTaskPurpose = NEW_TASK_PURPOSE.TASK): Promise<HTMLElement> {
   const control = tasksControl();
   const container = document.body.appendChild(document.createElement("div"));
@@ -76,7 +67,6 @@ async function mount(purpose: NewTaskPurpose = NEW_TASK_PURPOSE.TASK): Promise<H
   return container;
 }
 
-/** The round button's hint once the pointer has rested on it: its words, and the chord it draws. */
 function sendHint(container: HTMLElement): { words: string; chord: string | undefined } {
   restOn(
     container.querySelector('button[type="submit"]') ?? assert.fail("the card draws its button"),

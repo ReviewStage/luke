@@ -8,28 +8,9 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { fileName } from "./file-ref-model.js";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
 
-/**
- * file-menu.tsx -- the File view bar's ⋯: what is done with the file shown.
- *
- * The window's own menu (`../desktop/action-menu.tsx`), as the task's ⋯
- * draws it: the file's name, its path, or its whole text copied, said in the copy
- * toast as every copy from a menu is, and the file saved where the system's
- * save dialog chooses (`appPlatform().saveFile`). The text is read only
- * when it is asked for, raw and in one read, so what is copied or saved is
- * the file as it holds it, its long lines uncut, rather than the lines the
- * tab draws, which the service cuts.
- *
- * The File tab hands its bar this menu's definition (`useFileMenu`) for
- * `PaneBar` to draw as its ⋯, and an agent's Files changed view hands its
- * own (`useChangesMenu`); how the lines are drawn is set from the View
- * settings button beside it (`view-settings.tsx`), never from the ⋯.
- */
-
-/** What the menu says where the file's text could not be read, or the service will not carry it whole. */
 const UNREAD = "The file could not be read in full.";
 const REFUSED = "This file is too large to copy whole. Open it on GitHub instead.";
 
-/** What copying a file's path says, from a header's path or a ⋯ alike, so one copy reads the same wherever it is pressed. */
 export const PATH_COPY_WORDS = {
   COPY_PATH: "Copy path",
   COPY_OLD_PATH: "Copy old path",
@@ -37,7 +18,6 @@ export const PATH_COPY_WORDS = {
   PATH_COPIED: "Path copied",
 } as const;
 
-/** The ⋯'s Copy path for a file, from the repository's root. */
 function copyPathAction(path: string, copy: (text: string, words: string) => void): MenuAction {
   return {
     label: PATH_COPY_WORDS.COPY_PATH,
@@ -46,7 +26,6 @@ function copyPathAction(path: string, copy: (text: string, words: string) => voi
   };
 }
 
-/** Saves text where the system's save dialog chooses, as a file of the name given, its failure said in a toast. */
 export function useSaveText(): (name: string, text: string) => Promise<void> {
   const show = useToast();
   return (name, text) =>
@@ -69,11 +48,8 @@ export function useFileMenu({
   ready,
   readText,
 }: {
-  /** The file shown, from the repository's root. */
   path: string;
-  /** Whether the file was read, so its text can be: a file refused or still loading offers its name alone. */
   ready: boolean;
-  /** The file's whole text, read a window at a time, or why it is not at hand. */
   readText: () => Promise<WholeText>;
 }): PaneBarMenu {
   const copyWithToast = useCopyToast();

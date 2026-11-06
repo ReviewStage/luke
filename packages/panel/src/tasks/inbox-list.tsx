@@ -157,87 +157,18 @@ import { type InboxListMark, type InboxSelection, useInboxSelection } from "./in
 import { PlanGlyph } from "./tab-look.js";
 import { cardTitle } from "./tool-call-model.js";
 
-/**
- * inbox-list.tsx -- the Inbox's list of items: one row each, in one run, the latest changed first, with what the list shows at its head.
- *
- * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
- * sidebar does. An item is a row, as a
- * mail app lists a thread: the tile of the agent that posted it
- * (`actor-ref.tsx`), as the task's summary or main's read of an agent with
- * no task names the agent, its title, and how long ago it last changed,
- * and before its time the face of the teammate whose agent asks it, as the
- * sidebar marks a teammate's task, the reader's own wearing none; under
- * them, muted, the last word in its thread, who said it first
- * (`inboxPreview`); a press chooses it, for the pane beside the list to
- * show. The tile hangs the agent's tab's card while the pointer rests on
- * it (`agent-ref.tsx`), and leaves the press to its row, whose pane opens
- * the agent. An item that needs the developer's answer, an open one their
- * own agent asks (`needsReader`), wears the attention mark before its time
- * (`attention-mark.tsx`), filtered or not; a
- * teammate's open item waits on the teammate, whose face stands in that
- * place, and any member may still answer it; an answered one wears
- * neither. Apart from whether it waits, an item is unread where it changed
- * since the developer last read it, or they marked it so: the blue dot in
- * a gutter before its tile, its title in the unread weight; opening it
- * reads it, and its row, its menu, U, and Mark all as read, which the
- * sidebar's Inbox row offers on a right-click, ⌘K, and a
- * phone's ⋯, mark it read or unread (`use-inbox-read-marks.ts`). An item settled
- * and read is done with (`isDone`), and its row stands back, gray, with no
- * word saying so: the chosen row Open keeps once it is answered or read,
- * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists.
- * The head names the Inbox, whatever it lists, and, at its right, offers the view's
- * menu: first what the list shows, Open, every thread still open, a
- * question or an update not yet opened, All, every item, each leaving out
- * what the developer set a reminder on, or Reminders, those items alone; then Addressed
- * to, the developer's own, anyone's, or one teammate's by face and name,
- * which a chip over the list then says, its × listing the developer's own
- * again. Open addressed to the developer is Needs you, the threads the
- * sidebar's Inbox row counts, where the Inbox opens. Each choice stands
- * checked, and every choice is kept across launches. An Inbox narrowed to one
- * task lists every item it holds, open and settled, addressed to anyone,
- * with no view's menu, and names the task in a chip over the list, its ×
- * listing every task's items again under the view kept. Every row, in the window's Inbox and a
- * task's own alike, names its task on its first line, over its title.
- * Where the scope leaves out every
- * item listed, the list says so in the Inbox's empty state, offering the
- * view that holds something, as a mail app's empty unread view does; the
- * item the pane shows keeps its place there, though no row. A task's own
- * Inbox lists every item it holds, with no view's menu, and says
- * "Nothing here" where it holds none. Either list
- * is resized from its right edge as the sidebar is, and keeps one width
- * between them across launches; an Inbox showing one column at a time
- * draws its list the whole Inbox wide, with no edge, and hides it while an
- * item stands in its place (`inbox-columns.ts`). A list on a page chooses
- * rows as a Mac's list does (`SelectionRegion`): ⌘-click one in or out,
- * ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn, and Esc none,
- * while a plain press still opens its item, and a row's box, which comes
- * in under the pointer over its unread dot, puts it in or out; while any
- * is chosen, the list's head says how many in the Inbox's name's place,
- * with a box choosing every row or none, and offers what marks them read
- * or unread, sets their reminder, or resolves them, at once, as a chosen
- * row's right-click does (`inbox-selection.tsx`). A phone, whose head is
- * its own, keeps those acts in a bar at the list's foot.
- */
-
-/** What an item's row is, which names its ⋯ and its menu "Inbox item actions". */
 const ITEM_THING = "Inbox item";
 
-/** What the list's region is named. */
 const INBOX_ITEMS = "Inbox items";
 
-/** What the head's box says, which chooses every row drawn, or none once every one is. */
 const SELECT_ALL = "Select all";
 
-/** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
-/** What a phone's ⋯ offers to clear every dot with, as the sidebar's rows offer it on a right-click. */
 const MARK_ALL_READ = "Mark all as read";
 
-/** What the list's placeholder rows say to a reader while its items are first read. */
 const READING_ITEMS = "Reading your inbox…";
 
-/** How wide each placeholder row's task line, the title under it, and the preview under that stand, as shares of their lines, so the rows read as items of their own. */
 const SKELETON_ROWS = [
   { task: "40%", title: "68%", preview: "84%" },
   { task: "32%", title: "52%", preview: "70%" },
@@ -246,10 +177,8 @@ const SKELETON_ROWS = [
   { task: "36%", title: "60%", preview: "78%" },
 ] as const;
 
-/** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** What each scope is called, in the view's menu and the list's region's name, and its glyph in the menu. */
 const SCOPE_WORDS = {
   [INBOX_SHOW.NEEDS_ME]: { label: "Needs you", icon: <GLYPH.PERSON /> },
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
@@ -257,7 +186,6 @@ const SCOPE_WORDS = {
   [INBOX_SHOW.REMINDERS]: { label: "Reminders", icon: <GLYPH.TIME /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
-/** The scopes the window's Inbox's view's menu offers, in its order. */
 const INBOX_SCOPES = [
   INBOX_SHOW.NEEDS_ME,
   INBOX_SHOW.OPEN,
@@ -265,24 +193,16 @@ const INBOX_SCOPES = [
   INBOX_SHOW.REMINDERS,
 ] as const satisfies readonly InboxShow[];
 
-/** The Inbox's name at its head, whatever it lists, the view's menu saying the rest. */
 const INBOX_TITLE = "Inbox";
 
-/**
- * Whether the list holds only what needs the reader, the window's Inbox's
- * Needs you: its rows then leave Needs you unsaid (`needsYouShown`), and its
- * region says it once.
- */
 function needsYouListed(head: InboxListHead): boolean {
   return head.view?.show === INBOX_SHOW.NEEDS_ME;
 }
 
-/** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Needs you, or where the Inbox offers no view. */
 function narrowingWhose(view: InboxViewChoices | undefined): InboxWhoseChoice | undefined {
   return view !== undefined && narrowedByWhose(view.show) ? view : undefined;
 }
 
-/** Whom Addressed to names, in the words a reader hears after the list's region's name. */
 function whoseWords(whose: InboxWhose): string {
   switch (whose.kind) {
     case INBOX_WHOSE.EVERYONE:
@@ -294,12 +214,6 @@ function whoseWords(whose: InboxWhose): string {
   }
 }
 
-/**
- * The list's region's name, saying what it lists, since the head names the
- * Inbox alone: Needs you by its scope's name alone, whom Addressed to names
- * leaving it as it is; else the scope and whom Addressed to names. A task's
- * own Inbox lists everything, so its region is named alone.
- */
 function regionLabel(head: InboxListHead): string {
   const { view } = head;
   if (view === undefined) return INBOX_ITEMS;
@@ -307,19 +221,14 @@ function regionLabel(head: InboxListHead): string {
   return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label} · ${whoseWords(view.whose)}`;
 }
 
-/** What a task's own Inbox says holding nothing at all. */
 export const NOTHING_HERE = "Nothing here";
 
-/** What the Reminders scope says holding no item the reader set a reminder on. */
 const NO_REMINDERS = "No reminders";
 
-/** What Open says holding no thread the reader is not done with. */
 const NOTHING_OPEN = "Nothing open";
 
-/** What Needs you says holding no question that waits on the reader, whomever Addressed to names. */
 const NOTHING_NEEDS_ME = "Nothing needs your response";
 
-/** What the list says where its scope and Addressed to leave out every item it holds, by whom Addressed to names. */
 const SHOW_EMPTY = {
   [INBOX_WHOSE.MINE]: {
     [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
@@ -341,7 +250,6 @@ const SHOW_EMPTY = {
   },
 } as const satisfies Record<InboxWhose["kind"], Record<InboxShow, string>>;
 
-/** What the empty state's presses say: Open or All of whom Addressed to names, the reader's own again, or anyone's. */
 const SHOW_INSTEAD = {
   OPEN: "Show open",
   ALL: "Show all",
@@ -349,43 +257,19 @@ const SHOW_INSTEAD = {
   EVERYONE: "Show anyone's",
 } as const;
 
-/** What the view's submenu of whom the items are addressed to is called. */
 const WHOSE = "Addressed to";
 
-/** What the chip over the list says its × does, in full, since a reader hears it apart from the empty state's short press. */
 const CLEAR_WHOSE = "Show what's addressed to me";
 
-/**
- * What the list leaves the item beside it, in CSS pixels: the list is
- * dragged no wider than the Inbox less this, so the item keeps the room a
- * question, a code card, and its options read in. An Inbox too narrow for
- * both at their least shows one at a time (`inbox-columns.ts`).
- */
 const PANE_RESERVE = 560;
 
-/**
- * The width the list is drawn at: the one kept, held no wider than the
- * Inbox less the pane's reserve, though never under the least, so a window
- * narrowed under a wide list still leaves the pane its room, and widened
- * again gives the list back as it was kept; the whole Inbox wide where it
- * stands alone. The Inbox is the container the width is measured against
- * (`.inbox-view` in desktop.css).
- */
 function drawnWidth(width: number, alone: boolean): string | undefined {
   if (alone) return undefined;
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** No step ticked, the one list every row ticking none is handed, so its props hold while its draft ticks nothing. */
 const NO_TICKS: readonly number[] = [];
 
-/**
- * What an item's row shows of its draft as its list read every row's at
- * once (`useInboxRowDrafts`): whether it wears the pencil, which it does
- * not while its box stands `open` beside the list, and the steps of its
- * open to-do the draft ticks. Note that a draft of words alone ticks
- * nothing, so a word typed in the open box hands its row nothing new.
- */
 export function inboxRowDraft(
   draft: InboxRowDraft | undefined,
   item: InboxItem,
@@ -402,68 +286,20 @@ export function inboxRowDraft(
   };
 }
 
-/** The items chosen together that a chosen row's menu acts on: how many, and the acts the list's head offers on them. */
 interface InboxChosen {
   readonly count: number;
   readonly acts: readonly SelectionAct[];
 }
 
-/** The list's head while items are chosen: how many of the rows drawn, choosing every one or none, the acts on them, and letting them go. */
 interface InboxHeadSelecting {
   readonly count: number;
   readonly total: number;
   readonly onAll: (all: boolean) => void;
   readonly acts: InboxSelection["acts"];
   readonly onClear: () => void;
-  /** The id of the region the rows are chosen in. */
   readonly controls: string;
 }
 
-/**
- * One item as a `ListRow` of three lines, as a mail app lists a thread,
- * one thing to a line so nothing is cut short to make room for another:
- * what holds it, its task's status and whole name, and whom its agent
- * addressed it to, with how long ago it changed at that line's end, as a
- * mail app puts the time on the sender's line; then the title; then the
- * last word in its thread, muted, led on a thread by what its open ask
- * asks, the steps its draft ticks counted (`inboxPreview`). The agent
- * that asked, and whether it needs the developer, are its card's to say
- * (`InboxItemCard`), a reader still hearing the latter, since an open item
- * nearly always does and a mark on every row would say nothing. A
- * teammate's item wears their face before its time where `face` allows it,
- * the mark of their open item being theirs to wear. The title hangs in the
- * window's pill, since a narrow list cuts it short. An unread item, changed
- * since the developer last read it or marked unread, wears the blue dot in
- * a gutter before its words, its title in the unread weight and its
- * preview in the body's ink; the gutter stands on every row, so the words
- * line up whether a row wears a dot or not. Where
- * an answer or a message waits unsent in the item's box and that box is not
- * the one standing beside the list, which shows its own words, the row wears
- * the Draft pencil before its marks, as a sidebar task's row does
- * (`draft-mark.tsx`).
- * The row's acts stand in its menu alone, its ⋯ the one press over its
- * time while the pointer rests on it or it holds the keyboard, so the title
- * keeps the room a row of buttons would cover. A finger's row draws no ⋯,
- * as a phone's mail list draws none, its time running to the row's edge:
- * a long press opens its menu, the menu key on the row still does, and the
- * open item's own bar keeps its ⋯. Where the list hands down
- * `onMark`, the row offers to mark it read or unread: an item of its menu,
- * which names the key that does the same to the chosen item
- * (`APP_COMMAND.TOGGLE_READ`). Its menu, opened by the row's ⋯, a
- * right-click, a long press, and the menu key
- * alike (`ListRow`'s `menu`), offers
- * Copy link, the item's link under the task or the agent that holds it, where
- * the list hands down a workspace to write it under. Where the list
- * hands down `onAskClose`, an open item's row offers to close it without an
- * answer, asked first through the list's one question (`inbox-close.tsx`),
- * as the last item of its menu. The row is drawn again only where it is
- * handed another prop (`memo`), as ⌘K's rows are: its listed item, which the
- * list keeps while the item and its holder do (`inboxListed`), whether it
- * is chosen, and what it shows of its draft as the list read it once for
- * every row (`inboxRowDraft`); its time counts from the window's minute on
- * its own (`Time`). Note that this is what keeps a long Inbox quick, because only
- * the rows whose item or state moved need draw again when the list does.
- */
 export const InboxItemRow = memo(function InboxItemRow({
   listed,
   chosen,
@@ -488,39 +324,23 @@ export const InboxItemRow = memo(function InboxItemRow({
 }: {
   listed: InboxListed;
   chosen: boolean;
-  /** Whether the item's box stands beside the list, so its draft is in sight and unmarked: the chosen item's unless said, and none while the list stands alone. */
   open?: boolean;
-  /** Whether the row is drawn as the open one: the chosen item's unless said, and none where no item stands open on a screen with no hover, whose open row shows its acts in its time's place. */
   current?: boolean;
-  /** Whether the row wears the Draft pencil, its item's box holding a draft and standing elsewhere than beside the list (`inboxRowDraft`). */
   drafted?: boolean;
-  /** The steps of its open to-do its draft ticks (`inboxRowDraft`); none where it ticks none. */
   ticked?: readonly number[];
   models: readonly CatalogModel[] | undefined;
-  /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
-  /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
   muted?: boolean;
-  /** Whether the row stands under a name that already says Needs you, the scope's or a section's, so it leaves the words unsaid. */
   needsYouShown?: boolean;
-  /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
-  /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
   selectKey?: string | undefined;
   onChoose: (listed: InboxListed) => void;
-  /** Marks the item read or unread; none where the row offers no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
-  /** Asks to close an open item without an answer, through the list's one question; none where the row offers no close. */
   onAskClose?: ((item: InboxItem) => void) | undefined;
-  /** Sets the item's reminder, or cancels it; none where the row offers no reminder. */
   onRemind?: InboxReminder | undefined;
-  /** Opens the date picker on the row for a reminder at the reader's own time, where the row offers a reminder. */
   onPickRemind?: ((item: InboxItem) => void) | undefined;
-  /** The selection the row stands chosen in among several, whose acts its menu offers in place of its own; none elsewhere. */
   several?: InboxChosen | undefined;
-  /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`); none where every row is drawn. */
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
@@ -535,7 +355,6 @@ export const InboxItemRow = memo(function InboxItemRow({
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
   const coarse = useCoarsePointer();
-  // Note that U and H act only on the chosen item, so only its row names their chords.
   const { groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
     onAskClose,
@@ -566,7 +385,6 @@ export const InboxItemRow = memo(function InboxItemRow({
         describedAs={heard}
         lead={{
           icon: <HolderGlyph holder={holder} />,
-          // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
           label:
             addressedTo === undefined
               ? holderName(holder)
@@ -608,14 +426,12 @@ export const InboxItemRow = memo(function InboxItemRow({
   );
 });
 
-/** Addressed to's choices, as every filter by person offers them: Anyone, Me, then each teammate, the choice checked. Note that Me stands though the reader's id is unknown, since the reader's own items are read without one (`readersItem`). */
 function whoseEntries(
   whose: InboxWhose,
   onWhose: (whose: InboxWhose) => void,
   reader: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): MenuAction[] {
-  // Note that a teammate's row, the one keyed by their id, names them, so it stays masked.
   return peopleFilterActions({
     members: reader.members,
     readerId: reader.readerId ?? readerId,
@@ -637,12 +453,6 @@ function whoseEntries(
   }).map((action) => (action.key === undefined ? action : { ...action, replayMasked: true }));
 }
 
-/**
- * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Needs you, Open, All, or Reminders, the one shown checked; then, but
- * under Needs you, Addressed to, a submenu of Anyone, Me, or a teammate by
- * face and name, its choice checked.
- */
 function ViewOptions({
   shown,
   choices,
@@ -652,7 +462,6 @@ function ViewOptions({
   shown: boolean;
   choices: InboxViewChoices;
   readerId: string | undefined;
-  /** Where a phone's ⋯ stands for the button, the menu drawn under the ⋯ each time it asks (`phone-head.tsx`), and no button of its own; none elsewhere. */
   asked?: { readonly ask: MenuAsk | undefined } | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -683,7 +492,6 @@ function ViewOptions({
   );
 }
 
-/** Mark all as read on the window's Inbox's head, pressable while anything is unread. */
 function MarkAllReadButton({ readAll }: { readAll: InboxReadAll }): React.JSX.Element {
   return (
     <Tooltip label={MARK_ALL_READ}>
@@ -697,7 +505,6 @@ function MarkAllReadButton({ readAll }: { readAll: InboxReadAll }): React.JSX.El
   );
 }
 
-/** Mark all as read, as a phone's ⋯ offers it, a phone having no right-click, pressable while anything is unread. */
 function markAllAction(readAll: InboxReadAll): MenuAction {
   return {
     label: MARK_ALL_READ,
@@ -707,7 +514,6 @@ function markAllAction(readAll: InboxReadAll): MenuAction {
   };
 }
 
-/** The window's Inbox's own group of its view's menu, after its scopes: Addressed to, where it narrows the scope shown (`narrowedByWhose`). */
 function windowEntries(
   choices: InboxViewChoices,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -725,16 +531,12 @@ function windowEntries(
   ];
 }
 
-/** The keys the chips over the list are followed by, as each arrives and leaves. */
 const FILTER_CHIP_KEY = { TASK: "task", WHOSE: "whose" } as const;
 
-/** What the task's chip's × says it does. */
 const CLEAR_TASK = "Show every task's items";
 
-/** What the task's chip names while the task is not listed yet. */
 const UNNAMED_TASK = "Task";
 
-/** A chip over the list as last drawn, so it leaves looking as it did: its mark, its words, and its ×. */
 interface FilterChipEntry {
   readonly key: (typeof FILTER_CHIP_KEY)[keyof typeof FILTER_CHIP_KEY];
   readonly mark: React.ReactNode;
@@ -743,10 +545,8 @@ interface FilterChipEntry {
   readonly onRemove: () => void;
 }
 
-/** What a press on the chip leaving does, out of reach as it is: nothing. */
 function stays(): void {}
 
-/** The chip Addressed to calls for, the teammate's face and name; none while it names the reader or anyone. */
 function whoseChipEntries(
   { whose: chosen, onWhose }: InboxWhoseChoice,
   directory: ReturnType<typeof useMemberDirectory>,
@@ -766,7 +566,6 @@ function whoseChipEntries(
   ];
 }
 
-/** The chip the task the Inbox is narrowed to calls for, its status's mark and its name, as every chip naming a task wears them; none while it lists every task's. */
 function taskChipEntries(
   name: string | undefined,
   status: TaskStatus | undefined,
@@ -784,11 +583,6 @@ function taskChipEntries(
   ];
 }
 
-/**
- * The chips themselves. Note that this is its own component under the line's
- * `ListMotion`, because `useLeaving` finds the motion through the context
- * the motion provides.
- */
 function FilterChipLine({
   line,
   whose,
@@ -806,7 +600,6 @@ function FilterChipLine({
   const taskName = task?.name;
   const taskStatus = task?.status;
   const onClearTask = task?.onClear;
-  // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
   const listed = useMemo(
     () => [
       ...taskChipEntries(taskName, taskStatus, onClearTask),
@@ -817,7 +610,6 @@ function FilterChipLine({
     [taskName, taskStatus, onClearTask, chosen, onWhose, directory, readerId],
   );
   const drawn = useLeaving(listed, (entry) => entry.key);
-  // Note that the box around the row stands hidden while no task and no teammate is chosen, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
   return (
     <div ref={line} hidden={drawn.length === 0}>
       <div
@@ -841,14 +633,6 @@ function FilterChipLine({
   );
 }
 
-/**
- * The chips over the list: the task the Inbox is narrowed to, by its name,
- * and a × that lists every task's items again; and, while Addressed to
- * names a teammate, their face and name, and a × that lists the reader's
- * own again (`@repo/ui`'s removable filter chip, as the sidebar's Created
- * by stands over its tasks). Each scales in as it is chosen and out as its
- * × lifts it, as the Tasks page's filter chips do.
- */
 function FilterChips({
   whose,
   task,
@@ -866,13 +650,6 @@ function FilterChips({
   );
 }
 
-/**
- * The way on from an empty scope: from Needs you, Open of whom Addressed to
- * names where it holds anything; else All where it holds anything; else,
- * where Addressed to narrows the scope, back to the reader's own from a
- * teammate's, or to anyone's from the reader's own; none from anyone's, or
- * from Needs you, where nothing else holds anything.
- */
 function emptyWayOn(
   view: InboxViewChoices,
   counts: InboxCounts,
@@ -891,7 +668,6 @@ function emptyWayOn(
   if (view.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
     return turn(SHOW_INSTEAD.ALL, () => view.onShow(INBOX_SHOW.ALL));
   }
-  // Note that Addressed to never narrows Needs you, so naming another lists nothing more.
   if (!narrowedByWhose(view.show)) return undefined;
   if (view.whose.kind === INBOX_WHOSE.PERSON) {
     return turn(SHOW_INSTEAD.MINE, () => view.onWhose(MINE));
@@ -902,7 +678,6 @@ function emptyWayOn(
   return undefined;
 }
 
-/** What the list stands where its scope and Addressed to leave out every item it holds: that nothing is there, in the words of whom it names (`SHOW_EMPTY`), and the press that shows what holds something (`emptyWayOn`), which keeps the list standing where the Inbox shows one column. */
 function ShowEmpty({
   view,
   counts,
@@ -910,7 +685,6 @@ function ShowEmpty({
 }: {
   view: InboxViewChoices;
   counts: InboxCounts;
-  /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
   return (
@@ -922,18 +696,9 @@ function ShowEmpty({
   );
 }
 
-/**
- * The list while its items are first read: rows in an item's own row, a
- * block where its task line and its time, its title, and its preview will stand,
- * so the
- * items land where the blocks stood rather than a lone ring in the list's
- * corner. The rows open nothing and the region says what is being read. A
- * short list asks for fewer rows than the five a whole Inbox stands.
- */
 export function InboxListSkeleton({
   rows = SKELETON_ROWS.length,
 }: {
-  /** How many placeholder rows stand, at most five. */
   rows?: number;
 }): React.JSX.Element {
   return (
@@ -956,19 +721,8 @@ export function InboxListSkeleton({
   );
 }
 
-/** The words naming the list's search. */
 const SEARCH_INBOX = "Search inbox";
 
-/**
- * The list's search under a page's head, on the window's Inbox and a task's
- * own, a phone's head's as a desk's: a field always standing, as Settings'
- * search does, so nothing in the head moves or hides as it is used. It
- * narrows the list as it is typed in, and Escape empties it; an empty one
- * leaves Escape to the surface behind it. Note that the field holds its own
- * words and hands them to the list in a transition, so a key paints in the
- * field at once and the list is ranked for it a render behind, in a render
- * the next key may cut short, as ⌘K ranks its rows.
- */
 function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
   const [words, setWords] = useState(search.query);
   const { onQuery } = search;
@@ -990,18 +744,6 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
   );
 }
 
-/**
- * The list's head: the Inbox's name, whatever it lists, and
- * on the window's Inbox the view's menu at the list's top right, which
- * chooses the scope and whom the items are addressed to; a task's own
- * Inbox lists everything it holds, and offers no menu. On the window's Inbox its heading and its button glide as the
- * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the button keeping to the list's edge. Where the
- * list offers a search, its field stands under the head (`ListSearch`).
- * While items are chosen, but on a phone, the head says how many in the
- * name's place, led by a box choosing every row or none, the acts on them
- * and × in its buttons' (`SelectionToolbar`), as Mail's and Gmail's do.
- */
 function ListHead({
   head,
   readerId,
@@ -1009,18 +751,15 @@ function ListHead({
 }: {
   head: InboxListHead;
   readerId: string | undefined;
-  /** The items chosen in the list, which the head stands for while any is; none while none is. */
   selecting?: InboxHeadSelecting | undefined;
 }): React.JSX.Element {
   const { shown, view } = head;
   const title = INBOX_TITLE;
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
-  // A task's own Inbox tab hands the open item's link to the tab's ⋯.
   const linkGroups: TabActionGroups =
     head.tab === true && head.link !== undefined ? [[head.link]] : [];
   useTabActions(linkGroups.length === 0 ? undefined : linkGroups);
-  // On a phone the task's header, whose title already names the tab, stands for its head; its search field stands over the list as on every page.
   const phone = usePhoneRoom();
   if (head.tab === true && phone) return <>{search}</>;
   if (head.phone !== undefined) {
@@ -1077,7 +816,6 @@ function ListHead({
       </>
     );
   }
-  // Note that the window's Inbox marks everything read from its own head, where its reader looks for it, rather than from the sidebar row's menu.
   const options =
     view === undefined && head.readAll === undefined ? null : (
       <>
@@ -1088,7 +826,6 @@ function ListHead({
       </>
     );
   const choosing = selecting !== undefined && selecting.count > 0 ? selecting : undefined;
-  // Note that a press on a box partly checked resolves to checked, so it chooses every row, and one on a box checked chooses none.
   const all =
     choosing === undefined ? null : (
       <Checkbox
@@ -1098,7 +835,6 @@ function ListHead({
         onChange={choosing.onAll}
       />
     );
-  // Note that the toolbar stays mounted while none is chosen, drawing nothing, so a focus it held as the last row went is handed back to the list.
   const actions =
     selecting === undefined ? (
       options
@@ -1113,7 +849,6 @@ function ListHead({
         {choosing === undefined ? options : null}
       </>
     );
-  // Note that the count stands in the title's place in a label's type rather than the title's, so choosing reads as a passing mode rather than another place.
   const heading = choosing === undefined ? title : selectedWords(choosing.count);
   const barTitle =
     choosing === undefined ? (
@@ -1125,7 +860,6 @@ function ListHead({
     );
   return (
     <>
-      {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
       {head.tab === true ? (
         <PaneBar mark={all} title={heading} titleReplayUnmasked actions={actions} />
       ) : (
@@ -1145,7 +879,6 @@ function ListHead({
   );
 }
 
-/** What a list its search left empty says, under its rows, on the window's Inbox. */
 function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
   return (
     <NoteLine look={NOTE_LINE_LOOK.ROWS}>
@@ -1156,14 +889,8 @@ function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
   );
 }
 
-/** The words of the way on from an Inbox with nothing in it. */
 const NEW_TASK_LABEL = "New task";
 
-/**
- * The way on from an Inbox with nothing in it: New task, opening its dialog, primary
- * because starting one is all there is to do from an Inbox with nothing to
- * answer. None where nothing can start.
- */
 export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAction | undefined {
   return onNewTask === undefined
     ? undefined
@@ -1175,26 +902,15 @@ export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAc
       };
 }
 
-/** What the pane beside a list with items in it says while none is chosen. */
 const CHOOSE_AN_ITEM = "Choose an item";
 
-/**
- * The pane beside the list while nothing is chosen, as a mail app's stands
- * empty: how to choose an item, by a press or by stepping with the keys that
- * step through the list (J and K), or, holding none, that nothing needs the
- * reader, over New task where one can start, or "Nothing here" on a list of
- * everything a task holds. Under a finger there is no
- * keyboard to step with, so it names the press alone.
- */
 export function InboxPaneEmpty({
   listed,
   newTask,
   none = NEEDS_YOU.NONE,
 }: {
-  /** How many items the list holds. */
   listed: number;
   newTask?: (() => void) | undefined;
-  /** What it says holding none: that nothing needs the reader, or `NOTHING_HERE` on a list of everything its place holds. */
   none?: string | undefined;
 }): React.JSX.Element {
   const coarse = useCoarsePointer();
@@ -1224,7 +940,6 @@ export function InboxPaneEmpty({
   );
 }
 
-/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the Inbox's empty state where the list stands alone; nothing for an empty Inbox beside the pane, which says it. */
 export function InboxListNote({
   failed,
   reading,
@@ -1241,20 +956,13 @@ export function InboxListNote({
   failed: boolean;
   reading: boolean;
   empty: boolean;
-  /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
-  /** Opens New task, the way on from the Inbox's empty state where the list stands alone; none where nothing can start. */
   onNewTask?: (() => void) | undefined;
-  /** The scope shown and whom the items are addressed to, where they leave out every item the Inbox holds, for its empty state to show another. */
   filteredOut: InboxViewChoices | undefined;
-  /** How many items each scope lists, for the empty state to offer one that lists something. */
   counts: InboxCounts;
-  /** Asks for the list, so the scope its empty state shows leaves it standing. */
   onList: () => void;
   onRetry: () => void;
-  /** The words the list's search narrows it by, where it narrows it, which an empty list says found nothing. */
   searched?: string | undefined;
-  /** What the list standing alone says holding none: that nothing needs the reader, or `NOTHING_HERE` on a task's. */
   none?: string | undefined;
 }): React.JSX.Element | null {
   if (failed) {
@@ -1275,9 +983,7 @@ export function InboxListNote({
   if (searched !== undefined) return <SearchEmpty searched={searched} />;
   if (filteredOut !== undefined)
     return <ShowEmpty view={filteredOut} counts={counts} onList={onList} />;
-  // Note that beside the pane the list stands bare, since the pane's empty state says it once.
   if (!alone) return null;
-  // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   return (
     <ReplayUnmask>
       <EmptyState replayUnmasked icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
@@ -1287,72 +993,41 @@ export function InboxListNote({
   );
 }
 
-/** What the list's head offers: on the window's Inbox, its scope and whom the items are addressed to. */
 export interface InboxListHead {
-  /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  /** The window's Inbox's view choices, and the presses that change them; none on a task's own, which lists every item it holds. */
   readonly view: InboxViewChoices | undefined;
-  /** The list's search, under its head, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
-  /**
-   * A phone's head (`phone-head.tsx`), where the window's Inbox stands on a
-   * phone's places: its start corner, empty where the places bar holds New
-   * task (`mobile-bar.tsx`), the title centered, and
-   * the ⋯ holding View options and Mark all as read, which a phone has no
-   * right-click to reach, the search standing under it; none elsewhere.
-   */
   readonly phone?:
     | { readonly start: React.ReactNode; readonly readAll?: InboxReadAll | undefined }
     | undefined;
-  /** Mark all as read on the window's Inbox's head beside its view's menu; none on a task's own, and on a phone, whose ⋯ holds it. */
   readonly readAll?: InboxReadAll | undefined;
-  /**
-   * Whether the list stands in a task's own Inbox tab, which a phone heads
-   * with the task's header, so the list draws no head of its own there, only
-   * its search under where the head stood.
-   */
   readonly tab?: boolean | undefined;
-  /** Copy link, the open item's, which a task's own Inbox tab hands its ⋯ first (`useTabActions`); none while no item is open, since a link names no task's Inbox whole. */
   readonly link?: MenuAction | undefined;
-  /** The task the window's Inbox is narrowed to, which a chip over the list names and clears; none where it lists every task's items. */
   readonly task?: InboxTaskHead | undefined;
 }
 
-/** The task the window's Inbox is narrowed to, as the chip over its list names it: its name and its status, none while it is not listed yet, and the × that clears it. */
 interface InboxTaskHead {
   readonly name: string | undefined;
   readonly status: TaskStatus | undefined;
   readonly onClear: () => void;
 }
 
-/** The words a list's search holds, and the change that narrows the list to them. */
 interface InboxSearchHead {
   readonly query: string;
   readonly onQuery: (query: string) => void;
 }
 
-/** Mark all as read as a phone's ⋯ offers it: whether any item is unread, filtered out or not, and the mark. */
 interface InboxReadAll {
   readonly unread: boolean;
   readonly onMarkAll: () => void;
 }
 
-/** What the list wears to keep the keyboard: its element, and its handlers for focus arriving and leaving. */
 interface RowFocus {
   readonly ref: React.RefObject<HTMLElement | null>;
   readonly onFocus: (event: React.FocusEvent) => void;
   readonly onBlur: () => void;
 }
 
-/**
- * Keeps the keyboard in the list when the row holding it is no longer
- * drawn, as Needs you leaves out an item answered on another Mac while its
- * row is focused: the keyboard goes to View options, the control that
- * chooses what the list leaves out, as it does from a row leaving the list
- * while it fades. Note that a removed row fires no blur, so the row last focused is
- * remembered and looked for after every render.
- */
 function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   const ref = useRef<HTMLElement | null>(null);
   const focusedRow = useRef<string | undefined>(undefined);
@@ -1360,7 +1035,6 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
     const list = ref.current;
     const row = focusedRow.current;
     if (list === null || row === undefined || list.hidden) return;
-    // Note that a row leaving, or one in a group leaving, is drawn on, out of reach, while it fades, so the keyboard still in it is in no row.
     if (rows.find(row)?.closest(LIST_LEAVING_SELECTOR) === null) return;
     focusedRow.current = undefined;
     const active = document.activeElement;
@@ -1383,17 +1057,8 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   };
 }
 
-/** How deep two runs of rows are read alike (`sameShape`): each row as the same holder and item. */
 const LAID_OUT_DEPTH = 1;
 
-/**
- * The rows as last drawn while a draw leaves them reading alike
- * (`sameShape`), each row read as the same listed item (`inboxListed`),
- * else as they are now. Note that this is what the list's motion is
- * handed, because it measures every row before and after a commit whose
- * `change` moved, and the list is handed a view built anew on every draw,
- * though it lists the same rows.
- */
 function useLaidOut(items: readonly InboxListed[]): readonly InboxListed[] {
   const held = useRef(items);
   const steady = sameShape(held.current, items, LAID_OUT_DEPTH) ? held.current : items;
@@ -1403,23 +1068,10 @@ function useLaidOut(items: readonly InboxListed[]): readonly InboxListed[] {
   return steady;
 }
 
-/** How tall a row is taken to be before it is drawn, in pixels: its three lines and its insets. */
 const ROW_ESTIMATE_PX = 72;
 
-/**
- * The room between two rows, in pixels: the tight gap (`--ui-tight-gap`),
- * a step further apart than a list's, because a row of three lines standing
- * clear on its ground is told from the next by the room between them alone.
- */
 const ROW_GAP_PX = 4;
 
-/**
- * Where the list's runs of rows stand: the scroller they stand in, the
- * list's body, whose resizing moves the runs below a group that grew or
- * folded, whether a find bar stands open, which draws every row so the find
- * covers them, and where each run is held while it stands, so a row out of
- * view can be brought in (`InboxRowPresses`).
- */
 interface RowsPlace {
   readonly scroller: RefObject<HTMLElement | null>;
   readonly body: RefObject<HTMLElement | null>;
@@ -1427,14 +1079,6 @@ interface RowsPlace {
   readonly holdRun: InboxRowPresses["holdRun"];
 }
 
-/**
- * A run of rows, each drawn on after it is no longer listed until its exit
- * has played (`ListMotion`), drawing only the rows near the view
- * (`VirtualRows`), as a mail app's list does, so a long list draws as
- * quickly as a short one; every row while a find bar
- * stands open, and the row holding the keyboard wherever the list is
- * scrolled.
- */
 function InboxRows({
   items,
   place,
@@ -1472,7 +1116,6 @@ function InboxRows({
   );
 }
 
-/** The list: its head where it has one, then every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
   chosen,
@@ -1490,48 +1133,32 @@ export function InboxList({
   onPointing,
 }: {
   view: InboxListView;
-  /** The id of the item the pane shows. */
   chosen: string | undefined;
-  /** The catalog as last read, which names each agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
-  /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
   readerId: string | undefined;
   head: InboxListHead;
-  /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
-  /** Whether the list is still being read, as its reads land one after another while the window opens, so a row arriving fades in where it stands rather than sliding in as a new one does. */
   reading?: boolean;
-  /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;
-  /** Where each row's press is kept, by the item it opens. */
   rows: InboxRowPresses;
   onChoose: (listed: InboxListed) => void;
-  /** Marks an item read or unread from its row or the selection's bar, answering whether the service took it; none where the rows offer no mark. */
   onMark?: InboxListMark | undefined;
-  /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
-  /** Sets an item's reminder from its row's menu or H, or cancels it; none where the rows offer no reminder. */
   onRemind?: InboxReminder | undefined;
-  /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
   onPointing?: ((pointing: boolean) => void) | undefined;
 }): React.JSX.Element {
   const regionId = useId();
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const drawn = view.items;
-  // Note that only rows drawn stay chosen, so an item gone from the list or filtered out is never acted on, and stays unchosen once back.
   const picks = drawn.filter(({ item }) => picked.has(item.id));
   if (picks.length !== picked.size) setPicked(new Set(picks.map(({ item }) => item.id)));
   const unpick = () => setPicked(new Set());
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
-  // Note that every row's draft is read here once, rather than by each row, so a word typed in the box beside the list draws no row.
   const drafts = useInboxRowDrafts();
-  // Note that a finger's list standing alone marks no row open, since no item is, and the chosen row would show its acts in its time's place at rest (`list-row.css`).
   const marked = !useCoarsePointer() || columns !== INBOX_COLUMNS.LIST;
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  // Note that the rows of every group are one Tab stop that ↑↓ walk, a key reaching past the rows drawn
-  // going on to the list's own first or last row, or the one after or before, brought into view where it is not drawn.
   const roving = useRovingKeys<HTMLDivElement>({
     reach: (from, to) => {
       const ids = drawn.map(({ item }) => item.id);
@@ -1546,7 +1173,6 @@ export function InboxList({
     },
   });
   const rovingBody = useMemo(() => joinRefs(bodyRef, roving.ref), [roving.ref]);
-  // Note that the runs draw only the rows near the view, and every row while a find bar stands open over the list.
   const finding = useFindOpen();
   const { holdRun } = rows;
   const rowsPlace = useMemo(
@@ -1561,14 +1187,10 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
-  // Note that the motion replays a commit only where the rows stand otherwise, never one that drew them where they stood.
   const laidOut = useLaidOut(view.items);
-  // Note that the rows are handed doors that stand across draws, each calling the newest the list was handed,
-  // because the page hands new ones on every draw and a row handed a new door draws again (`InboxItemRow`).
   const choose = useSteadyDoor(onChoose);
   const mark = useSteadyDoor(onMark);
   const remind = useSteadyDoor(onRemind);
-  // Note that H sets a reminder on the chosen item from its row, and a time of the reader's own is picked there, in the list's room.
   const reminding = useInboxReminding({
     room: bodyRef,
     rowOf: rows.find,
@@ -1585,7 +1207,6 @@ export function InboxList({
     onMark,
     onClose,
     onRemindMany: onRemind === undefined ? undefined : remindMany,
-    // Note that the picker hangs from the first item chosen whose row is drawn, since a run draws only the rows near the view.
     onPick:
       onRemind === undefined
         ? undefined
@@ -1594,20 +1215,15 @@ export function InboxList({
             if (anchor !== undefined) reminding.onPick(anchor, onAt);
           },
   });
-  // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
   const several: InboxChosen | undefined =
     picks.length > 1 ? { count: picks.length, acts: selection.acts } : undefined;
-  // Note that a phone's head is its own, so a phone keeps the acts in a bar at the list's foot.
   const phone = usePhoneRoom();
   const footed = head.phone !== undefined || (head.tab === true && phone);
-  // Note that every row asks its close through the list's one question, rather than each drawing its own shut.
   const closing = useInboxCloseAsk(
     onClose,
     head.shown,
     (itemId) => listedItems(view).find(({ item }) => item.id === itemId)?.item,
   );
-  // Note that a row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
-  // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
   const row = (listed: InboxListed, leaving: boolean, at?: VirtualRowPlace) => (
     <InboxItemRow
       key={listed.item.id}
@@ -1687,7 +1303,6 @@ export function InboxList({
           </ScrollArea>
         </SelectionRegion>
       </ListMotion>
-      {/* Note that a phone's bar stands at the list's foot rather than over its rows, so choosing a row moves none under the finger. */}
       {footed && picks.length > 0 ? (
         <Stack inset={INSET.COLUMN}>
           <ReplayUnmask>

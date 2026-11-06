@@ -6,17 +6,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { RetentionGrid } from "./charts/retention-grid.js";
 
-/**
- * admin-retention-grid.test.ts -- the retention grid names every week and
- * cohort it draws and reads each cell's state in words: a share as a
- * percentage with its count on hover, a cohort nobody joined as a dash, the
- * week still accruing as active so far, and a week not yet reached as no
- * cell at all; a window with no accounts says so instead of drawing a grid.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A synthetic three-week window, read during the last week. */
 const RETENTION: AdminMetrics["retention"] = {
   weeks: 3,
   cohorts: [
@@ -60,7 +51,6 @@ function render(retention: AdminMetrics["retention"]): HTMLElement {
   return container;
 }
 
-/** Every element whose own words are `text`, in reading order. */
 function cellsReading(page: HTMLElement, text: string): HTMLElement[] {
   return Array.from(page.querySelectorAll<HTMLElement>("div, span")).filter(
     (element) => element.childElementCount === 0 && element.textContent === text,

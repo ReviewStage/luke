@@ -18,22 +18,6 @@ import { useRef } from "react";
 import { CREATOR, RunRow } from "./automation-runs-panel.js";
 import type { WorkspaceRunsRead } from "./use-automation-runs.js";
 
-/**
- * automation-runs-tab.tsx -- the Automations page's Runs tab: every run of the listed workspace's automations, newest first, each opening its agent.
- *
- * Per the automation agents design, an automation's agent has no
- * place of its own in the sidebar, so this tab is where every one of them
- * is found: the runs of every automation the reader may read, archived
- * agents among them, since archiving takes a run out of the sidebar and
- * never out of reach. Each run is the row an automation's own runs panel
- * draws (`automation-runs-panel.tsx`), its automation named on a line of
- * its own, and the tab narrows them to the runs still working or the ones
- * that failed. A run with nothing of its own to open opens its automation,
- * as the automation's row in the list does. A run that starts slides in at
- * the top.
- */
-
-/** Which runs the tab shows: all of them, the ones whose agent still works, or the ones that failed. */
 export const RUNS_SHOWN = {
   ALL: "all",
   RUNNING: "running",
@@ -42,44 +26,34 @@ export const RUNS_SHOWN = {
 
 export type RunsShown = (typeof RUNS_SHOWN)[keyof typeof RUNS_SHOWN];
 
-/** What each choice that narrows the runs is called, in the bar's order. */
 const SHOWN_LABEL = {
   [RUNS_SHOWN.ALL]: "All",
   [RUNS_SHOWN.RUNNING]: "Running",
   [RUNS_SHOWN.FAILED]: "Failed",
 } as const satisfies Record<RunsShown, string>;
 
-/** The tone a choice's count is drawn in; none for All, which counts nothing. */
 const SHOWN_TONE = {
   [RUNS_SHOWN.ALL]: undefined,
   [RUNS_SHOWN.RUNNING]: STATUS_TONE.WORKING,
   [RUNS_SHOWN.FAILED]: STATUS_TONE.DANGER,
 } as const satisfies Record<RunsShown, StatusTone | undefined>;
 
-/** The standing each narrowing keeps; none for All, which keeps every run. */
 const SHOWN_STANDING = {
   [RUNS_SHOWN.ALL]: undefined,
   [RUNS_SHOWN.RUNNING]: AUTOMATION_RUN_STANDING.WORKING,
   [RUNS_SHOWN.FAILED]: AUTOMATION_RUN_STANDING.FAILED,
 } as const satisfies Record<RunsShown, string | undefined>;
 
-/** What the tab says where the narrowing leaves no run. */
 const NONE_SHOWN = {
   [RUNS_SHOWN.ALL]: "No runs yet.",
   [RUNS_SHOWN.RUNNING]: "Nothing is running.",
   [RUNS_SHOWN.FAILED]: "No run failed.",
 } as const satisfies Record<RunsShown, string>;
 
-/** A count of runs as a choice draws it, in `tone`; none at nothing, as the sidebar's counts leave theirs out. */
 export function runsCount(count: number, tone: StatusTone): readonly CountPart[] | undefined {
   return count === 0 ? undefined : [{ text: String(count), tone }];
 }
 
-/**
- * The choices that narrow the runs, Running and Failed each counting the runs
- * it keeps in its own tone, so the tab says what is working and what failed
- * before either is chosen.
- */
 export function runsShownChoices(
   runs: readonly AutomationWorkspaceRun[],
 ): readonly ChoiceItem<RunsShown>[] {
@@ -93,7 +67,6 @@ export function runsShownChoices(
   });
 }
 
-/** The runs a narrowing keeps, in the order they came. */
 export function shownRuns(
   runs: readonly AutomationWorkspaceRun[],
   shown: RunsShown,
@@ -103,12 +76,10 @@ export function shownRuns(
   return runs.filter((run) => automationRunStanding(run) === standing);
 }
 
-/** How many of the workspace's runs still have an agent at work, which the sidebar's Automations row and the Runs tab count; none while the runs are unread. */
 export function runningRuns(read: WorkspaceRunsRead): number {
   return read !== undefined && "runs" in read ? shownRuns(read.runs, RUNS_SHOWN.RUNNING).length : 0;
 }
 
-/** The runs the narrowing keeps, in a plain list as an automation's own runs panel draws them, or what the tab says where it keeps none. */
 export function WorkspaceRuns({
   runs,
   shown,
@@ -119,11 +90,9 @@ export function WorkspaceRuns({
 }: {
   runs: readonly AutomationWorkspaceRun[];
   shown: RunsShown;
-  /** Whether the reading account made the automation named, whose keys its runs run on; another's runs name its creator's key. */
   mine: (automationId: string) => boolean;
   now: number;
   onOpenAgent: (agentId: string) => void;
-  /** Opens the automation named, for a run with nothing of its own to open. */
   onOpenAutomation: (automationId: string) => void;
 }): React.JSX.Element {
   const body = useRef<HTMLDivElement | null>(null);
@@ -131,7 +100,6 @@ export function WorkspaceRuns({
   if (kept.length === 0) return <EmptyState icon={<ClockIcon />}>{NONE_SHOWN[shown]}</EmptyState>;
   return (
     <div ref={body}>
-      {/* Note that a run's row here names its automation in its lead, which the row measures as words and cannot mask itself, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
       <ReplayMask>
         <ListMotion root={body}>
           <List label="Runs" moves>

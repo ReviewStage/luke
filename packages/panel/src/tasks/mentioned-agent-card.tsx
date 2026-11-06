@@ -15,62 +15,24 @@ import type { AgentsControl } from "./use-agents.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/**
- * mentioned-agent-card.tsx -- the card a chip of a coding agent hangs where the place drawing it holds no tab of the agent: the agent's tab's own card, drawn from the task list the host holds, and the task it works on.
- *
- * A chip of an agent of the plan's page it stands on hangs that agent's
- * tab's card, as the page reads it (`mention-chip.tsx`'s `agentOf`). Any
- * other, an agent of another task of the workspace or of none, in a
- * transcript, the Inbox, or a description, hangs the same card (`agent-ref.tsx`'s
- * `AgentCard`), drawn from the agents the task list carries: every task's,
- * archived ones among them, and those on no task. So hanging one asks the
- * service nothing, and a rename or an archive shows on it as the list's row
- * takes it. Under a rule the card names the task the agent works on, as the
- * window lists it, or says it works on none. Until the list first answers
- * live it stands `reading`; an agent the list does not carry, one of a
- * workspace the reader left say, hangs the chip's own card.
- *
- * A pull request's chip, and an agent's Changes', hangs its Pull request
- * tab's card from the pull request the list holds of the agent that opened
- * it, as the service last synced it (`useListedPullRequest`), never a fresh
- * read of GitHub.
- *
- * A mark the window holds no model for, an archived agent's or one past the
- * few a task's row names, takes its harness from the same list
- * (`ReadAgentModel`).
- */
-
-/** What a card's foot says of the task an agent works on. */
 const TASK_WORDS = {
   NONE: "On no task",
   UNKNOWN: "On another task",
 } as const;
 
-/** No pull request of another task's agents is held here. */
 const NO_PULL_REQUESTS: AgentsControl["pullRequests"] = new Map();
 
-/** Where the task list stands on an agent it carries not. */
 const UNLISTED = {
-  /** The list has not yet answered live, and may carry it once it does. */
   READING: "reading",
-  /** The list answered, or failed, and carries no such agent. */
   ABSENT: "absent",
 } as const;
 
-/** An agent as the task list carries it, or where the list stands on one it carries not. */
 type Listed = AgentSummary | (typeof UNLISTED)[keyof typeof UNLISTED];
 
-/** The agent the list carries; none where it carries none. */
 function agentOf(listed: Listed): AgentSummary | undefined {
   return typeof listed === "string" ? undefined : listed;
 }
 
-/**
- * An agent as the task list carries it: among every task's agents, archived
- * ones among them, or the agents on no task. Note that the list carries a
- * task's agents only once it has answered live, so until then, and unless
- * it failed, an agent it does not name may still be among them.
- */
 function listedAgentOf(tasks: TasksView | undefined, agentId: string): Listed {
   const onTask = tasks?.taskAgents?.find((agent) => agent.id === agentId);
   if (onTask !== undefined) return onTask;
@@ -80,7 +42,6 @@ function listedAgentOf(tasks: TasksView | undefined, agentId: string): Listed {
   return answered ? UNLISTED.ABSENT : UNLISTED.READING;
 }
 
-/** One agent as the task list carries it, for a card of it; reading until the first document arrives. */
 function useListedAgent(agentId: string): Listed {
   const select = useCallback(
     (state: AppStateSnapshot) => listedAgentOf(state.tasks, agentId),
@@ -89,7 +50,6 @@ function useListedAgent(agentId: string): Listed {
   return useQuery({ ...appStateQuery, select }).data ?? UNLISTED.READING;
 }
 
-/** The model one agent runs on, as the task list carries it, for a mark of it; none where it carries no such agent. */
 function useListedModel(agentId: string): string | undefined {
   const select = useCallback(
     (state: AppStateSnapshot) => agentOf(listedAgentOf(state.tasks, agentId))?.model,
@@ -98,14 +58,8 @@ function useListedModel(agentId: string): string | undefined {
   return useQuery({ ...appStateQuery, select }).data;
 }
 
-/** What a mark draws of the model the list carries, or of none. */
 type ModelDrawer = (model: string | undefined) => ReactNode;
 
-/**
- * The model an agent the window holds no line of runs on, for its mark, as
- * the task list carries the agent. It is drawn with none until the list
- * carries the agent, and where it never does.
- */
 export function ReadAgentModel({
   agentId,
   children,
@@ -116,7 +70,6 @@ export function ReadAgentModel({
   return children(useListedModel(agentId));
 }
 
-/** What a card of an agent's says of the task it works on: its name as the window lists it, none, or another the window does not list. */
 function useTaskFoot(agent: AgentSummary | undefined): string | undefined {
   const tasks = useKnownNames().tasks;
   if (agent === undefined) return undefined;
@@ -125,7 +78,6 @@ function useTaskFoot(agent: AgentSummary | undefined): string | undefined {
   return task === undefined ? TASK_WORDS.UNKNOWN : `On ${task}`;
 }
 
-/** An agent as its tab's card names it, from the list's line of it. */
 function listedSubject(agent: AgentSummary, place: MentionedAgentsPlace): AgentSubject {
   return agentSubject(
     {
@@ -141,12 +93,6 @@ function listedSubject(agent: AgentSummary, place: MentionedAgentsPlace): AgentS
   );
 }
 
-/**
- * The card of an agent a chip names where the place holds no tab of it:
- * the agent's tab's card (`tabCard`), with the task it works on at its
- * foot, as the task list carries the agent; `reading` until the list first
- * answers, and `fallback` where it carries no such agent.
- */
 export function MentionedAgentCard({
   agentId,
   reading,
@@ -170,14 +116,12 @@ export function MentionedAgentCard({
   });
 }
 
-/** A pull request one of the workspace's agents opened, as the window lists it: the agent, the task it works on, none for one on none, and its number. */
 interface OwnedPullRequest {
   readonly agentId: string;
   readonly taskId: string | undefined;
   readonly number: number | undefined;
 }
 
-/** The agent that opened the pull request a link names, among the tasks and the agents on no task the window lists; none where none of them did. */
 function useOwnedPullRequest(url: string): OwnedPullRequest | undefined {
   const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
   if (tasks === undefined) return undefined;
@@ -186,13 +130,6 @@ function useOwnedPullRequest(url: string): OwnedPullRequest | undefined {
   return listed === undefined ? undefined : { ...listed, number };
 }
 
-/**
- * The Pull request tab's card of a pull request the window lists an agent
- * of opening, from the agent and its pull request as the task list carries
- * them; `reading` until the list first answers, and `fallback` where it
- * carries neither, or where the chip names another of the agent's pull
- * requests than the one its row keeps.
- */
 function OwnedPullRequestCard({
   owned,
   reading,
@@ -227,14 +164,6 @@ function OwnedPullRequestCard({
   return card ?? fallback;
 }
 
-/**
- * The card of a pull request a chip names: the card its Pull request tab
- * hangs (`tabCard`), wherever the chip stands, for any pull request one of
- * the agents the window lists opened, a task's or one on no task, as the
- * task list carries it; `reading` until the list first answers, and
- * `fallback`, what GitHub answered of it, for any other and where the list
- * carries none.
- */
 export function PullRequestChipCard({
   url,
   reading,
@@ -249,7 +178,6 @@ export function PullRequestChipCard({
   return <OwnedPullRequestCard owned={owned} reading={reading} fallback={fallback} />;
 }
 
-/** The card of an agent's own pull request a chip names by the agent, a link to its Pull request tab: the card that tab hangs, as the task list carries it, as a link to the pull request's page on GitHub hangs it. */
 export function AgentPullRequestChipCard({
   agentId,
   taskId,
@@ -257,7 +185,6 @@ export function AgentPullRequestChipCard({
   fallback,
 }: {
   agentId: string;
-  /** The task a link to the agent's Changes named it under, which the card's agent opens on, where it did. */
   taskId: string | undefined;
   reading: ReactNode;
   fallback: ReactNode;

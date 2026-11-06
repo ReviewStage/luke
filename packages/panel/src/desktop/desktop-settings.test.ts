@@ -30,22 +30,9 @@ import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { DesktopSettings, type SettingsStep } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
-/**
- * Settings as the desktop draws it: the sidebar is the one list of pages,
- * grouped under the workspace the tasks' sidebar lists, Account, and This
- * Mac, opening on Account, and every option moved by the one-home layout is
- * drawn on its new page and on no other, as the search finds it there too.
- * The Workspace page is titled with the listed workspace and follows the
- * sidebar. The Integrations page's own search stands beside the sidebar's:
- * Command-F lands in the nearer one, and a sidebar result that opens an
- * integration hands its query down. The page list is one Tab stop that ↑ and ↓
- * walk, opening nothing until a page is pressed.
- */
-
 const ignore = () => undefined;
 const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first and no experiment is on. */
 const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
@@ -58,7 +45,6 @@ const PAGE_GROUPS = [
   },
 ];
 
-/** Every row the sidebar lists, which is also each page's title but the Workspace page's. */
 const PAGE_TITLES = PAGE_GROUPS.flatMap((group) => group.rows);
 
 const ACME: Workspace = {
@@ -76,7 +62,6 @@ const PERSONAL: Workspace = {
   github: null,
 };
 
-/** The Workspace page's control with `listed` the workspace the tasks' sidebar lists. */
 function listing(listed: Workspace): WorkspaceSettingsControl {
   return {
     workspaces: [PERSONAL, ACME],
@@ -87,7 +72,6 @@ function listing(listed: Workspace): WorkspaceSettingsControl {
   };
 }
 
-/** Each moved option's words, the one page that holds it, and the name the search finds its row by where that differs. */
 const HOMES = [
   { words: "Sign out", page: "Account" },
   { words: "Delete account", page: "Account" },
@@ -107,7 +91,6 @@ const ACCOUNT: SettingsPanelProps["account"] = {
   provider: "github",
 };
 
-/** A signed-in account's Settings, on the desktop unless the platform is named, every press but a page's ignored. */
 function settingsProps(
   view: SettingsView,
   onViewChange: (view: SettingsView) => void,
@@ -147,7 +130,6 @@ function settingsProps(
   } satisfies SettingsPanelProps;
 }
 
-/** A history with nothing to go back or forward to. */
 const NO_HISTORY: NavigationHistory = {
   canGoBack: false,
   canGoForward: false,
@@ -157,12 +139,6 @@ const NO_HISTORY: NavigationHistory = {
   onGoTo: ignore,
 };
 
-/**
- * Settings holding its own page, as the app holds it, opened on Account,
- * over the workspaces the tasks' sidebar lists where it is handed them; in
- * `room`, standing on its list or its page as `step` says, over `history`
- * where it is named.
- */
 function SettingsHarness({
   workspace,
   opensOn = SETTINGS_VIEW.ACCOUNT,
@@ -177,7 +153,6 @@ function SettingsHarness({
   opensOn?: SettingsView;
   onExit?: () => void;
   capabilities?: readonly HostCapability[];
-  /** The stored settings the pages read, the defaults where left out. */
   stored?: SettingsPanelProps["settings"];
   room?: ShellRoom;
   step?: SettingsStep;
@@ -237,12 +212,10 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** Draws the mounted root again over `element`, as a new render of the app hands Settings new props. */
 function redraw(element: React.ReactElement): void {
   act(() => root?.render(onRegistry(registry, element)));
 }
 
-/** An element's words as a reader hears them, what is hidden from a screen reader left out. */
 function spoken(element: Element): string {
   const copy = element.cloneNode(true);
   assert.ok(copy instanceof Element);
@@ -250,7 +223,6 @@ function spoken(element: Element): string {
   return copy.textContent ?? "";
 }
 
-/** The sidebar's groups as they read: each heading and the rows under it. */
 function pageGroups(page: HTMLElement): { heading: string; rows: string[] }[] {
   return [...page.querySelectorAll('nav[aria-label="Settings pages"] .settings-nav-group')].map(
     (group) => ({
@@ -260,26 +232,22 @@ function pageGroups(page: HTMLElement): { heading: string; rows: string[] }[] {
   );
 }
 
-/** The sidebar's pages, by name. */
 function pageButtons(page: HTMLElement): HTMLButtonElement[] {
   return [
     ...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Settings pages"] li button'),
   ];
 }
 
-/** The title of the page drawn beside the sidebar: its own `h1`, the sidebar's being Settings'. */
 function shownTitle(page: HTMLElement): string | null | undefined {
   return [...page.querySelectorAll("h1")].find((title) => title.closest("nav") === null)
     ?.textContent;
 }
 
-/** What scrolls the page drawn beside the sidebar: the shared settings page around its title. */
 function shownScroller(page: HTMLElement): HTMLElement {
   const title = [...page.querySelectorAll("h1")].find((each) => each.closest("nav") === null);
   return title?.closest<HTMLElement>(".ui-settings-page") ?? assert.fail("the page scrolls");
 }
 
-/** Opens the page the sidebar names, answering the page drawn beside it. */
 function openPage(page: HTMLElement, title: string): HTMLElement {
   const button = pageButtons(page).find((each) => each.textContent === title);
   assert.ok(button, `the sidebar lists ${title}`);
@@ -331,7 +299,6 @@ test("the sidebar's first group is headed by the listed workspace's name, over i
 test("the sidebar lists Memory under Workspace and its search finds it only while the account has the Memory experiment on", async () => {
   const off = mount(createElement(SettingsHarness));
   assert.deepEqual(pageGroups(off)[0]?.rows, ["Workspace"]);
-  // While off, the search finds only the experiment's own switch, where Memory is turned on.
   assert.deepEqual(foundUnder(off, "Memory"), ["Experimental"]);
 
   handState(experimentsOn(EXPERIMENT.MEMORY));
@@ -387,7 +354,6 @@ test("every moved option is drawn on its one page and on no other", () => {
   }
 });
 
-/** Types `words` into the sidebar's search, answering the pages whose result groups hold them. */
 function foundUnder(page: HTMLElement, words: string): (string | null)[] {
   const field = page.querySelector<HTMLInputElement>('input[aria-label="Search settings"]');
   assert.ok(field, "the search field is drawn");
@@ -573,7 +539,6 @@ test("Appearance draws every diff setting in the Diff, Lines, and Text groups, i
           [
             title,
             [...each.querySelectorAll('[role="switch"], [aria-haspopup]')].map(
-              // A pop-up's name ends with the value it names, which is not the row's.
               (control) => control.getAttribute("aria-label")?.split(": ")[0],
             ),
           ],
@@ -590,13 +555,11 @@ test("a page turned to opens at its top, not where the last page was scrolled", 
   const page = mount(createElement(SettingsHarness));
   openPage(page, "Appearance");
   const scroller = shownScroller(page);
-  // Note that jsdom lays nothing out, so the scroll offset is held by hand.
   Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 400 });
   openPage(page, "Agents");
   assert.equal(shownScroller(page).scrollTop, 0);
 });
 
-/** Types `words` over whatever the field holds, as the developer would. */
 function typeInto(field: HTMLInputElement, words: string): void {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
@@ -604,7 +567,6 @@ function typeInto(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** The field labeled `label`. */
 function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
   return page.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
 }
@@ -612,7 +574,6 @@ function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
 const SIDEBAR_SEARCH = "Search settings";
 const PAGE_SEARCH = "Search integrations and tools";
 
-/** Presses the sidebar's result named `name` under the Integrations page's heading. */
 function openIntegrationResult(page: HTMLElement, name: string): void {
   const result = [
     ...page.querySelectorAll<HTMLButtonElement>('nav section[aria-label="Integrations"] button'),
@@ -621,7 +582,6 @@ function openIntegrationResult(page: HTMLElement, name: string): void {
   act(() => result.click());
 }
 
-/** Presses Escape where the caret stands, mid-composition where `composing`, the window answering what nothing nearer kept as its own Escape does. */
 function pressEscape(composing = false): void {
   const leave = (event: KeyboardEvent) => {
     if (event.key === "Escape") runAppCommand(APP_COMMAND.EXIT_SETTINGS);
@@ -635,7 +595,6 @@ function pressEscape(composing = false): void {
   window.removeEventListener("keydown", leave);
 }
 
-/** Counts the searches the window reports opened. */
 function countSearchOpens() {
   let opens = 0;
   fakeAppPlatform({
@@ -655,13 +614,11 @@ test("Settings opens with the caret in its search, uncounted as a search opened,
   assert.ok(document.activeElement === field, "the caret stands in the search");
   assert.equal(searchesOpened(), 0);
 
-  // An input method's Escape dismisses its candidates and leaves nothing.
   pressEscape(true);
   assert.equal(exits, 0);
   pressEscape();
   assert.equal(exits, 1);
 
-  // A caret put back by hand is a search opened, and holds Escape as its own.
   act(() => field?.blur());
   act(() => field?.focus());
   assert.equal(searchesOpened(), 1);
@@ -732,29 +689,23 @@ test("a sidebar result that opens an integration hands its query to the page's s
   assert.equal(shownTitle(page), "Integrations");
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "postgres");
 
-  // Note that "disconnect" finds every integration's row in the sidebar but
-  // none by the page's own words, so it stays behind and the page's search
-  // is cleared, so the row the landing seeks is drawn.
   typeInto(sidebar, "disconnect");
   openIntegrationResult(page, "Linear");
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });
 
-/** Presses `key` in `field`, with Shift where `shift`. */
 function pressIn(field: HTMLElement, key: string, shift = false): void {
   act(() => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey: shift, bubbles: true }));
   });
 }
 
-/** The words of the result the sidebar's search names lit. */
 function litResult(page: HTMLElement, field: HTMLElement): string | null | undefined {
   const id = field.getAttribute("aria-activedescendant");
   return id === null ? undefined : page.ownerDocument.getElementById(id)?.textContent;
 }
 
 test("the sidebar's search walks its results from the field, Tab and the arrows each showing the result's page with the caret left in the field", () => {
-  // Note that the landing asks whether the row is drawn and scrolls to it, neither of which jsdom can do, so every row here is drawn and stays put.
   const stood = { checkVisibility: () => true, scrollIntoView: () => undefined };
   for (const [name, value] of Object.entries(stood)) {
     Object.defineProperty(HTMLElement.prototype, name, { value, configurable: true });

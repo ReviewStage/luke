@@ -22,64 +22,31 @@ import {
 import { useDiffLook } from "./file-diff.js";
 import { type FileMatch, fileMatches, matchFrom } from "./file-find.js";
 
-/**
- * whole-file.tsx -- a whole file drawn as every code is, by Pierre's diffs: a File tab's file, a page's source, a text file opened over the window, in the look View settings chose, its lines lit, and each note under its line.
- *
- * The diff bundle draws the file (`../diff-view/index.ts`'s `mountFile`),
- * loaded the first time code is shown: only the lines near the view, in a
- * shadow root of its own, colored off the window's thread, plain until the
- * colors land. The wait stands until Pierre has drawn the lines, not only
- * until the bundle lands, because the first file a window opens is drawn
- * only once its highlighting has loaded, and the tab would stand blank
- * between the two. The look is the diffs' own (`file-diff.tsx`'s
- * `useDiffLook`), so wrap, numbers, theme, and type are one setting for
- * every code the window draws. A note is a React tree the view draws into
- * the element the bundle keeps under its line, through a portal, as Files
- * changed draws its threads (`diff-list.tsx`).
- *
- * Since most of a long file's lines are in no DOM, ⌘F finds in its text
- * rather than the DOM's (`file-find.ts`), and in its notes' cards, which
- * React draws whether or not their lines are in view, handed to the tab's
- * scope as a source of its own: the bar counts every match in the file and its notes,
- * a step scrolls the file to its match's line, and the matches Pierre has
- * drawn are painted, read again each time the lines drawn change, the one
- * the find is at brought into view, with a folded card or a chip around it
- * opened, as the DOM's find opens one.
- */
-
-/** A note drawn under a line of the file: its key, the line, and the tree the view draws for it. */
 export interface WholeFileNote {
   readonly key: string;
   readonly line: number;
   readonly content: ReactNode;
 }
 
-/** A note as a find reads it: where it stands, and the words its card holds as it was last read. */
 interface ReadNote {
   readonly key: string;
   readonly line: number;
   readonly words: string;
 }
 
-/** What the file's owner asks of it once drawn: a run of lines centered, and the lines the reader picked. */
 export interface WholeFileHandle {
   readonly revealLines: (range: FileLineRange) => void;
   readonly pickedLines: () => FileLineRange | undefined;
 }
 
-/** The attribute the element each note is drawn in names its key by, which a find reads a match's note from. */
 const NOTE_KEY_ATTRIBUTE = "data-whole-file-note";
 
-/** What stands in the file's place where the diff bundle failed to load. */
 const FILE_LOAD_FAILED = "The file could not be shown.";
 
-/** How a find steps. */
 type FindStep = (typeof FIND_STEP)[keyof typeof FIND_STEP];
 
-/** No matches. */
 const NO_TALLY: FindTally = { count: 0, at: -1 };
 
-/** Whether two runs of notes read alike to a find: the same words under the same lines by the same keys. */
 function sameReadNotes(a: readonly ReadNote[], b: readonly ReadNote[]): boolean {
   return (
     a.length === b.length &&
@@ -90,7 +57,6 @@ function sameReadNotes(a: readonly ReadNote[], b: readonly ReadNote[]): boolean 
   );
 }
 
-/** The line a range of drawn words stands on, read from the row Pierre drew it in, or the note its words are in. */
 function placeOf(range: Range): { line: number | undefined; note: string | undefined } {
   const start = range.startContainer;
   const element = start instanceof Element ? start : start.parentElement;
@@ -101,10 +67,6 @@ function placeOf(range: Range): { line: number | undefined; note: string | undef
   return { line: Number.isInteger(line) ? line : undefined, note: undefined };
 }
 
-/**
- * Which of the drawn ranges a match is: the `nth` of those on its line, or
- * in its note; -1 where it is not drawn.
- */
 function drawnAt(ranges: readonly Range[], match: FileMatch | undefined): number {
   if (match === undefined) return -1;
   let seen = 0;
@@ -117,11 +79,6 @@ function drawnAt(ranges: readonly Range[], match: FileMatch | undefined): number
   });
 }
 
-/**
- * The find over the file, as its scope's source: matches read from the
- * latest text and notes, painted where drawn. `paint` is what the view runs
- * each time Pierre draws lines anew.
- */
 function useWholeFileFind(
   host: RefObject<HTMLDivElement | null>,
   read: RefObject<{ text: string; notes: readonly WholeFileNote[]; from: number }>,
@@ -135,12 +92,9 @@ function useWholeFileFind(
       matches: [] as FileMatch[],
       at: -1,
       painting: NO_PAINTING as FindPainting,
-      // Whether the match the find is at still waits to be brought into view, once drawn.
       pending: false,
-      // The text and notes the matches were read from.
       searched: { text: "", notes: [] as readonly ReadNote[] },
       listeners: new Set<(tally: FindTally) => void>(),
-      // The note cards watched while a query stands, each with what stops its watch.
       watching: new Map<string, () => void>(),
     };
     const tell = () => {
@@ -169,14 +123,12 @@ function useWholeFileFind(
         handle.current?.revealLines({ startLine: match.line, endLine: match.line });
       paint();
     };
-    // Note that a note's words are read from the card the view draws for it, which React draws whether or not Pierre has its line in view.
     const readNotes = (): ReadNote[] =>
       read.current.notes.map((note) => ({
         key: note.key,
         line: note.line,
         words: noteElement(note.key).textContent ?? "",
       }));
-    // Note that a card is watched while a query stands, since it draws its own words anew, its age among them, with no draw of the file's.
     const watchNotes = () => {
       const standing = new Set(read.current.notes.map((note) => note.key));
       for (const [key, stop] of state.watching) {
@@ -214,7 +166,6 @@ function useWholeFileFind(
       state.at = matchFrom(state.matches, read.current.from);
       go();
     };
-    // Note that matches are read again where the text or the notes changed under an open find, as a note the app adds, the find kept at the match it was at where that still stands, and nothing scrolled.
     const refresh = () => {
       if (state.query.length === 0) return;
       const { text } = read.current;
@@ -256,18 +207,11 @@ function useWholeFileFind(
     return { source, paint, refresh, clear: source.clear };
   });
   useFindSource(findable ? find.source : undefined);
-  // Note that the tints are taken away with the file, since they name ranges of its rows.
   useEffect(() => find.clear, [find]);
   useEffect(() => find.refresh());
   return find.paint;
 }
 
-/**
- * A whole file drawn by the diff bundle in the place it fills, scrolling
- * there: `text` named `name`, read at `revision`, `lit` lit, each of `notes`
- * under its line. `reveal` centers a run of lines each time its `at`
- * changes, once the file is drawn.
- */
 export function WholeFile({
   name,
   text,
@@ -284,16 +228,9 @@ export function WholeFile({
   revision: string;
   lit: FileLineRange | undefined;
   notes: readonly WholeFileNote[];
-  /** The line a find starts from, the first of the lines the tab was opened on. */
   findFrom: number;
-  /** A run of lines to center, again each time `at` changes; none leaves the file at its top. */
   reveal?: { readonly range: FileLineRange; readonly at: number } | undefined;
   handleRef?: RefObject<WholeFileHandle | null> | undefined;
-  /**
-   * Whether ⌘F over the tab finds in the file: false where the file is
-   * drawn over the window rather than in the tab, as a text file opened from
-   * a message is, so the tab's find stays the tab's own.
-   */
   findable?: boolean | undefined;
 }): React.JSX.Element {
   const { diffView } = useSideBundles();
@@ -315,7 +252,6 @@ export function WholeFile({
   const read = useRef({ text: "", notes: [] as readonly WholeFileNote[], from: 1 });
   read.current = { text, notes, from: findFrom };
   const paint = useWholeFileFind(host, read, elementFor, handle, findable);
-  // Whether Pierre has drawn the file's lines since the bundle mounted it.
   const [drawn, setDrawn] = useState(false);
   const onDrawn = useCallback(() => {
     setDrawn(true);
@@ -345,7 +281,6 @@ export function WholeFile({
       setDrawn(false);
     };
   }, [module]);
-  // Note that the bundle draws again only what changed, so it is handed every draw.
   useEffect(() => handle.current?.update(props));
 
   const revealedAt = useRef<number | undefined>(undefined);

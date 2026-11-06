@@ -44,7 +44,6 @@ import { DesktopTasks } from "./desktop-tasks.js";
 import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
@@ -71,7 +70,6 @@ const DIALOG = '[role="alertdialog"]';
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 
-/** `PLAN` as Charles started it and Dean last edited it, the minute after. */
 const SHARED_TASK: Task = {
   ...TASK,
   createdAt: 60_000,
@@ -81,21 +79,16 @@ const SHARED_TASK: Task = {
   lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
 };
 
-/** What the task actions asked of the tab, by the task each named. */
 interface Asked {
   opened: string[];
-  /** Each task whose chip Change repository… asked open. */
   changed: string[];
   deleted: string[];
-  /** Each rename asked, as the task and the name it was given. */
   renamed: string[][];
-  /** Each pin or archive asked, as the task and what was asked of it. */
   marked: [string, TaskMark][];
 }
 
 const roots: Root[] = [];
 
-/** Takes down every mounted surface and the menus they drew. */
 function unmountAll(): void {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
@@ -107,7 +100,6 @@ beforeEach(installScrollIntoView);
 
 afterEach(unmountAll);
 
-/** The open task's tab, its side panel showing the plan, every per-task press recorded; `PLAN` is open and `OTHER` beside it in the list. */
 function openTab(
   repositories: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
@@ -155,12 +147,10 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** `element` drawn on a registry of its own, so it reads main's document anew, the members the test laid among it. */
 function mountReading(element: ReactElement): HTMLElement {
   return mount(onRegistry(AtomRegistry.make(), element));
 }
 
-/** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu; on `registry` where one is named. */
 function mountDescriptionTab(
   tasks: TasksControl,
   registry?: AtomRegistry.AtomRegistry,
@@ -218,11 +208,9 @@ function rightClick(row: HTMLElement, clientX: number, clientY: number): void {
 function menuItems(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
 }
-/** What an item says, without the chord printed at its end. */
 function itemLabel(item: HTMLElement): string | null {
   return item.querySelector(".ui-menu-item-label")?.textContent ?? null;
 }
-/** Each item of the open menu that prints a chord, as what it says and the chord's glyphs. */
 function itemChords(): [string | null, string][] {
   return menuItems().flatMap((item): [string | null, string][] => {
     const keys = item.querySelector(".ui-shortcut");
@@ -238,12 +226,10 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>(DIALOG);
 }
 
-/** Whether a dialog stands, said as a boolean so a failure does not try to print the DOM. */
 function asking(): boolean {
   return dialog() !== null;
 }
 
-/** The dialog's button with these words. */
 function answer(words: string): HTMLButtonElement {
   const button = [...(dialog()?.querySelectorAll("button") ?? [])].find(
     (candidate) => candidate.textContent === words,
@@ -252,7 +238,6 @@ function answer(words: string): HTMLButtonElement {
   return button;
 }
 
-/** Answers the question Permanently delete asked, and lets the delete it starts settle. */
 async function confirmDelete(): Promise<void> {
   assert.equal(asking(), true, "Permanently delete asks first");
   const remove = answer("Permanently delete task");
@@ -274,7 +259,6 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
     body?.textContent,
     "“Teammate invitations” and its board and transcript will be deleted. This cannot be undone. To keep it out of the way instead, mark it done.",
   );
-  // A key already pressed lands on the answer that changes nothing.
   assert.equal(document.activeElement, answer("Cancel"));
   assert.deepEqual(asked.deleted, []);
   await confirmDelete();
@@ -364,7 +348,6 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the des
     "the crumb itself is words, not a press",
   );
 
-  // The head drawn afresh, as another tab and back would, opens nothing for the ask already answered.
   draw({ ...asked(true), region: { kind: DOCUMENT_REGION.READING } });
   draw(asked(true));
   assert.equal(menu(), null, "no second opening");
@@ -383,7 +366,6 @@ test("the plan's name reaches the recording only as masked text, never in an att
   }
 });
 
-/** The open task's tab, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list, its column on no tab and its panel shut. */
 function sharedTab(me: string): TasksControl {
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -394,7 +376,6 @@ function sharedTab(me: string): TasksControl {
   });
 }
 
-/** `tasks` with its side panel open on the plan, whose tab's ⋯ drops the task's menu. */
 function descriptionShown(tasks: TasksControl): TasksControl {
   return {
     ...tasks,
@@ -402,7 +383,6 @@ function descriptionShown(tasks: TasksControl): TasksControl {
   };
 }
 
-/** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
   const notes = document.querySelectorAll('[role="menu"] .ui-menu-footer p');
   return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
@@ -411,7 +391,6 @@ function menuFooter(): string[] {
 test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
   openTaskMenu(mountDescriptionTab(descriptionShown(sharedTab(DEAN.userId))));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
-  // Each person stands on their face, their letter until a picture is read.
   const faces = document.querySelectorAll('[role="menu"] .ui-menu-footer .actor-mark');
   assert.deepEqual(
     [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
@@ -431,14 +410,12 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
   unmountAll();
 
-  // A task the window has not opened, from a service that named no creator, says only when it was saved.
   const { asked } = openTab();
   rightClick(mountSidebarTask(sharedTab(DEAN.userId), OTHER, asked), 40, 60);
   assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
 });
 
 test("a sidebar task wears its assignee's face where someone else is on it, the dashed unassigned mark where no one is, and nothing where the reader is, never its creator's", () => {
-  /** Each mark the row wears, by its kind and its letter, and what the row says of it, read as Dean sees them. */
   const faces = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
@@ -451,7 +428,6 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
       ),
     );
     const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
-    // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
     const line = container.querySelector(".ui-list-row-title");
     const said = [...(line?.childNodes ?? [])]
       .map(heard)
@@ -461,7 +437,6 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
     return [[...marks].map((mark) => [mark.getAttribute("data-kind"), mark.textContent]), said];
   };
 
-  // Charles created it and no one is on it: the dashed mark, not his face.
   assert.deepEqual(faces(SHARED_TASK), [[["unassigned", ""]], "(unassigned)"]);
   assert.deepEqual(faces({ ...SHARED_TASK, assignee: CHARLES }), [
     [["person", "C"]],
@@ -473,7 +448,6 @@ test("a sidebar task wears its assignee's face where someone else is on it, the 
 
 test("a sidebar task no one is on wears no face in a workspace of the reader alone, by its count or else by its members read, and the dashed mark where others share it or nobody counted them", async () => {
   const { memberCount: _uncounted, ...uncounted } = PERSONAL;
-  /** Each mark the row wears, by its kind, and what the row says of who is on it, read as Dean sees them. */
   const faces = async (
     workspace: Workspace,
     members: readonly { userId: string; name: string }[] | undefined,
@@ -501,14 +475,12 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
   assert.deepEqual(await faces(PERSONAL, [DEAN]), [[], undefined]);
   assert.deepEqual(await faces(PERSONAL, undefined), [[], undefined]);
   assert.deepEqual(await faces(STAGE, [DEAN, CHARLES]), [["unassigned"], "(unassigned)"]);
-  // A service that counts no members leaves it to the members read, and keeps the mark while nobody counted them.
   assert.deepEqual(await faces(uncounted, [DEAN]), [[], undefined]);
   assert.deepEqual(await faces(uncounted, [DEAN, CHARLES]), [["unassigned"], "(unassigned)"]);
   assert.deepEqual(await faces(uncounted, undefined), [["unassigned"], "(unassigned)"]);
 });
 
 test("a sidebar task Vespin or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
-  /** Each mark the row wears, by its kind. */
   const marks = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
@@ -563,7 +535,6 @@ test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to de
   assert.match(dialog()?.textContent ?? "", /Teammate invitations/u);
 });
 
-/** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Dean Stratakos",
@@ -579,14 +550,12 @@ const STAGE: Workspace = {
   memberCount: 6,
 };
 
-/** Dean's task in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
 const STRANDED: TaskSummary = {
   ...OTHER,
   repository: "acme-corp/relay",
   ownerId: DEAN.userId,
 };
 
-/** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */
 function heard(node: Node): string {
   if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
@@ -594,7 +563,6 @@ function heard(node: Node): string {
 }
 
 test("a sidebar task's press says its status after its name, as a List row's does, and none where its service gives it none", () => {
-  /** What the row's press says, read as Dean, who is on the task, so no face is said. */
   const said = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
@@ -657,7 +625,6 @@ test("no sidebar plan's card says its repository belongs elsewhere where its own
   );
 });
 
-/** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
   fakeAppBridge({});
@@ -669,7 +636,6 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
   const copied = installClipboard();
   mount(withQueryClient(createElement(ToastHost)));
   const opened = openTab();
-  // The title's Copy link button stands over the plan, which the side panel shows.
   const tasks: TasksControl = {
     ...opened.tasks,
     workspaces: [{ ...PERSONAL, slug: "dean" }],
@@ -699,7 +665,6 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
 });
 
 test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {
-  /** The card's lines under its name, as Dean hears them with the creation's time left off. */
   const details = (task: TaskSummary, workspace: Workspace) => {
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [workspace] });
     const card = mount(
@@ -724,9 +689,7 @@ test("a task's card says who created it where others share its workspace, the re
     "Created by you",
   ]);
   assert.deepEqual(details(charles, PERSONAL), []);
-  // A service that names no creator leaves the card as it was.
   assert.deepEqual(details(OTHER, STAGE), []);
-  // A task an agent made for the reader says so in a workspace of one too.
   const byAgent = {
     ...charles,
     ownerId: DEAN.userId,
@@ -764,7 +727,6 @@ test("a task's card's creator line opens the creator's page in the window, and i
   assert.deepEqual(opened, [CHARLES.userId]);
   unmountAll();
   assert.equal(drawn(false)?.tagName, "SPAN");
-  // A task an agent made for Charles still opens Charles's page, the member it names.
   const byAgent = drawn(true, {
     ...charles,
     origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
@@ -809,9 +771,7 @@ test("a task's card says you of the reader's own task outside a member directory
   assert.deepEqual(await lines(stage, undefined), []);
 });
 
-/** The host holding the workspace's people as `members`, each a member of the workspace, or their read refused where there are none. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
-  // Note that each world reads its own members, never those the last one's surface left cached.
   startQueriesAfresh();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -831,10 +791,8 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
         },
   );
 }
-/** Where a task from a service with statuses stands before anything moves it. */
 const STANDING = { status: TASK_STATUS.TODO, priority: TASK_PRIORITY.NONE } as const;
 
-/** Opens the open menu's submenu `submenu`, then chooses `label` in it. */
 function chooseIn(submenu: string, label: string): void {
   choose(submenu);
   const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')].find(
@@ -874,7 +832,6 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   assert.equal(asking(), false, "Mark done asks nothing, since it stops no agent");
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
-  // S on the focused row opens its menu on Status, the status it stands at checked.
   act(() => rowButton.focus());
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
@@ -886,7 +843,6 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
     ),
     ["In progress"],
   );
-  // A press on the row closes the menu, and the next right-click opens it on its own items, not on Status.
   act(() => rowButton.click());
   rightClick(rowButton, 40, 60);
   assert.equal(document.querySelector('[role="menu"][aria-label="Status"]'), null);
@@ -955,7 +911,6 @@ test("a sidebar row's Task relation asks for the relation beside the menu, then 
   assert.deepEqual(asked.opened, [], "relating from a row opens no task");
 });
 
-/** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
 const CHIP_ITEMS = ["Status", "Priority", "Assignee"];
 
 test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Status, Priority, and Assignee to the plan's chips, which a row keeps, and keeps Change repository, Choose a repository on a task with none, which a row leaves to it; another task's row prints only U, S, and P, which act on the focused row", () => {
@@ -1037,7 +992,6 @@ test("a task is found in the list the control hands down now, a renamed one by i
   assert.equal(taskOf(opened, TASK.id)?.id, TASK.id, "the open document's task");
 });
 
-/** The open menu's name and its items' words, or nothing where none stands. */
 function openedMenu(): { label: string | null; items: (string | null)[] } | undefined {
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   if (menu === null) return undefined;
@@ -1047,7 +1001,6 @@ function openedMenu(): { label: string | null; items: (string | null)[] } | unde
   };
 }
 
-/** Presses `name` on `target`, as a keyboard does. */
 function pressKey(target: HTMLElement, name: string, shiftKey = false): void {
   act(() => {
     target.dispatchEvent(
@@ -1103,7 +1056,6 @@ test("a sidebar task whose rename was refused reopens its field holding the name
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
-  // Note that the refusal reaches the row through the rename's mutation, a moment after it is answered.
   await vi.waitFor(() =>
     assert.equal(
       document.querySelector<HTMLInputElement>('input[aria-label="Task name"]')?.value,

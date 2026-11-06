@@ -23,17 +23,8 @@ import {
 import { onRegistry } from "./testing/copy-feedback.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 
-/**
- * The agent's box takes files: a picture dropped on the card or pasted into
- * the field is held as its chip, and pictures past the bytes a message
- * carries together are left out, the box saying why in its note while the
- * ones that fit still come; the note goes once the box's message goes,
- * whichever way it goes, queued behind a running turn as sent.
- */
-
 const ignore = () => undefined;
 
-/** The agent's box on its own control, whose sends never answer. */
 function AgentBox(): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -44,7 +35,6 @@ function AgentBox(): ReactNode {
   return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: undefined });
 }
 
-/** The agent's box while a turn runs, its Enter queueing, the queue taking its message as the queue does: out of the box. */
 function QueueingBox(): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -72,12 +62,10 @@ function QueueingBox(): ReactNode {
   });
 }
 
-/** The boxes that take files, each drawn alone. */
 const BOXES = {
   agent: () => createElement(AgentBox),
 } as const;
 
-/** A PNG's signature, and bytes past it to give the picture its size. */
 function png(name: string, size = 8): File {
   const bytes = new Uint8Array(size);
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -106,12 +94,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Lets files handed to a box be read off the disk, each read taking a few of the event loop's turns, one file after another. */
 async function read(): Promise<void> {
   for (let round = 0; round < 16; round += 1) await settle();
 }
 
-/** The box drawn, its editor landed. */
 async function mounted(box: keyof typeof BOXES): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -122,7 +108,6 @@ async function mounted(box: keyof typeof BOXES): Promise<HTMLElement> {
   return container;
 }
 
-/** Files dropped on the box's card, and read off the disk before they land. */
 async function drop(container: HTMLElement, files: readonly File[]): Promise<void> {
   const card = container.querySelector(".agent-composer") ?? assert.fail("no card");
   const event = new Event("drop", { bubbles: true, cancelable: true });
@@ -131,7 +116,6 @@ async function drop(container: HTMLElement, files: readonly File[]): Promise<voi
   await read();
 }
 
-/** Files pasted into the box's editor, as the clipboard hands a screenshot over; answers whether the editor let the paste go by. */
 async function paste(container: HTMLElement, files: readonly File[]): Promise<boolean> {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
@@ -144,7 +128,6 @@ async function paste(container: HTMLElement, files: readonly File[]): Promise<bo
   return !event.defaultPrevented;
 }
 
-/** What the box shows of its files: its chips by name, and its note. */
 function held(container: HTMLElement) {
   return {
     chips: [...container.querySelectorAll('[aria-label="Attached files"] > li')].map(
@@ -194,7 +177,6 @@ test("a file this machine cannot read says so in the agent's box and is reported
 });
 
 test("pictures past the bytes a message carries together leave the last out of the agent's box, and the note says why", async () => {
-  // Note that each picture fits a message alone, kept as it is, and two of them fit together while three do not.
   const size = Math.floor(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES / 2.5);
   assert.ok(size <= AGENT_BOUNDS.MAX_IMAGE_BYTES);
   for (const box of Object.keys(BOXES) as (keyof typeof BOXES)[]) {

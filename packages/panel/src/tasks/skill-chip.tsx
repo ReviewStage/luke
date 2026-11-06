@@ -21,39 +21,12 @@ import type { SkillSource } from "./skill-picker.js";
 import { opensFile, SkillRef, type SkillSubject, type SkillWithFile } from "./skill-ref.js";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * skill-chip.tsx -- a skill named in a sent message, drawn as the composer draws a chosen one, which opens the skill's `SKILL.md` in a File tab.
- *
- * A message the developer sent a coding agent names a skill as the words
- * `/name` (`skill-mention.ts`), and its bubble draws each `/name` that names
- * one of the task's repository's skills as the chip the composer drew it as
- * while it was typed (`skill-ref.tsx`), where Claude Code and Codex draw a
- * slash command as a token too; a `/word` that names none stays words. The
- * chip is a button: a press, or Enter once it has the focus, opens the
- * skill's `SKILL.md` in a File tab of the side panel, at the default branch
- * as the repository's skills were read, and it hangs the skill's card. An
- * installed skill names no file of the repository's, so its chip is no
- * button that opens nothing: it hangs its card alone, and still takes the
- * focus for it.
- * A chip the composer drew opens the same file on a press
- * (`skill-picker.tsx`). The words stay the message's own underneath, so a
- * copy of the message and a find in the tab read `/name`.
- * The skills are the ones the composer offers, read once for the task
- * (`repository-skills.ts`), and only once a transcript holds a word they
- * could name, so a conversation naming none reads nothing. The "Loaded
- * skill" row of a call that loaded one hangs the same card and opens the
- * same file (`useSkill`).
- */
-
-/** The task's skills as read, by name, the ask that reads them, and what opening one's file does, handed to every transcript of the task. */
 interface SkillFileDoors {
-  /** The skills, by name; nothing before a reader asked and the read landed, or where it did not. */
   readonly skills: ReadonlyMap<string, SkillOption> | undefined;
   readonly ask: () => void;
   readonly onOpen: (skill: SkillOption) => void;
 }
 
-/** The element a chip is written into the words as, and the one attribute it carries. */
 const SKILL_ELEMENT = {
   TAG: "app-skill",
   NAME: "name",
@@ -61,7 +34,6 @@ const SKILL_ELEMENT = {
 
 const SkillFileContext = createContext<SkillFileDoors | undefined>(undefined);
 
-/** The task's skills, by name, read once a reader wants them; nothing before they land, or where they were not read. */
 function useKnownSkills(wanted: boolean): ReadonlyMap<string, SkillOption> | undefined {
   const doors = useContext(SkillFileContext);
   const ask = doors?.ask;
@@ -71,7 +43,6 @@ function useKnownSkills(wanted: boolean): ReadonlyMap<string, SkillOption> | und
   return doors?.skills;
 }
 
-/** The words with each chip written in as its element, the `/name` it stands for its content. */
 function withChips(text: string, tokens: readonly TextRange[]): string {
   let written = "";
   let at = 0;
@@ -83,36 +54,26 @@ function withChips(text: string, tokens: readonly TextRange[]): string {
   return written + text.slice(at);
 }
 
-/**
- * The element a chip was written in as: the chip, where it names a skill the
- * message's skills hold, and its `/name` as words otherwise, as an element
- * typed into the message by hand is.
- */
 function SkillElement({ node }: MarkdownNodeProps): ReactNode {
   const doors = useContext(SkillFileContext);
   const name = String(node?.properties[SKILL_ELEMENT.NAME] ?? "");
   const skill = doors?.skills?.get(name);
   if (doors === undefined || skill === undefined) return skillWord(name);
-  // Note that an installed skill names no file of the repository's, so its chip is no button, and takes the focus for its card alone.
   const onOpen = opensFile(skill) ? () => doors.onOpen(skill) : undefined;
   return <SkillRef name={name} skill={skill} onOpen={onOpen} />;
 }
 
 const SKILL_COMPONENTS: MarkdownComponents = { [SKILL_ELEMENT.TAG]: SkillElement };
 
-/** Hands every transcript under it the task's skills and what opening one's file does. */
 export function SkillFiles({
   source,
   onOpen,
   children,
 }: {
-  /** Where the task's skills are read from; nothing while the task names no repository. */
   source: SkillSource | undefined;
   onOpen: (skill: SkillWithFile) => void;
   children: ReactNode;
 }): React.JSX.Element {
-  // Note that the press is read through a ref, so a new one each render
-  // does not draw every transcript under it again.
   const latest = useRef(onOpen);
   latest.current = onOpen;
   const [read, setRead] = useState<
@@ -120,16 +81,12 @@ export function SkillFiles({
   >(undefined);
   const asked = useRef<SkillSource | undefined>(undefined);
   const skills = read !== undefined && read.source === source ? read.skills : undefined;
-  // Note that the skills are read once for every reader that asks, and a
-  // read that did not land is asked again by the next reader that asks.
-  // Note that the read goes once the frame that asked has painted, so it never holds up the words being drawn.
   const ask = useCallback(() => {
     if (source === undefined || asked.current === source) return;
     asked.current = source;
     afterPaint(() => {
       if (asked.current !== source) return;
       source().then((answer) => {
-        // A read for a task or repository left since is no answer for this one.
         if (asked.current !== source) return;
         if ("skills" in answer) {
           setRead({ source, skills: new Map(answer.skills.map((skill) => [skill.name, skill])) });
@@ -143,7 +100,6 @@ export function SkillFiles({
     () => ({
       skills,
       ask,
-      // Note that an installed skill names no file of the repository's, so naming one opens nothing.
       onOpen: (skill: SkillOption) => (opensFile(skill) ? latest.current(skill) : undefined),
     }),
     [skills, ask],
@@ -151,7 +107,6 @@ export function SkillFiles({
   return <SkillFileContext.Provider value={doors}>{children}</SkillFileContext.Provider>;
 }
 
-/** The named skill and what opens its `SKILL.md`; nothing where no skill of the task's is so named, or its skills are not read. */
 export function useSkill(name: string | undefined): SkillSubject | undefined {
   const onOpen = useContext(SkillFileContext)?.onOpen;
   const skill = useKnownSkills(name !== undefined && name !== "")?.get(name ?? "");
@@ -159,12 +114,10 @@ export function useSkill(name: string | undefined): SkillSubject | undefined {
   return { skill, onOpen: () => onOpen(skill) };
 }
 
-/** What opens a skill's `SKILL.md`, for the composer's chips, which read the skills themselves; nothing outside a task's page. */
 export function useSkillOpener(): ((skill: SkillOption) => void) | undefined {
   return useContext(SkillFileContext)?.onOpen;
 }
 
-/** A message the developer sent, as markdown with every line break typed kept, each skill it names drawn as its chip; `asDocument` draws it as a document and `line` on one line, as `TranscriptWords` does. */
 export function SentWords({
   text,
   asDocument = false,

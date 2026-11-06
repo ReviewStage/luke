@@ -1,7 +1,3 @@
-/**
- * app-bridge.ts -- the bridge and act port a test's window reaches main through: fakes answering only the calls its test gives them.
- */
-
 import { ORPCError } from "@orpc/client";
 import type { AgentChangesAnswerView } from "@repo/features/agent-view";
 import type { TaskFileRequest } from "@repo/features/task-wire";
@@ -30,19 +26,15 @@ import { installActPortClient, installAppBridge } from "../app-bridge.js";
 let answering: Partial<AppBridge> = {};
 let answeringPort: Partial<FakeActPort> = {};
 
-/** Installs a bridge answering only the calls given, in place of whatever the window held. */
 export function fakeAppBridge(calls: Partial<AppBridge>): void {
   answering = calls;
-  // SAFETY: a test's window makes only the calls its test answers, and any other is undefined and throws where it is made.
   installAppBridge(calls as AppBridge);
 }
 
-/** The calls the fake bridge answers now, for a test that answers one more beside them or puts them back. */
 export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, an agent's or a worker's transcript, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a description's or a page's comments, a task's description history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's description. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_TRANSCRIPT
@@ -74,7 +66,6 @@ type HoldKind =
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW;
 
-/** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
 const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW,
   AGENT_ACT_KIND.AGENTS_TRANSCRIPT,
@@ -107,12 +98,10 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW,
 ]);
 
-/** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
 export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
   return heldUntilClosed<Kind>(() => undefined);
 }
 
-/** A hold as the host answers it, as `quietHold`, telling `closed` as the window closes it. */
 export function heldUntilClosed<Kind extends HoldKind>(
   closed: () => void,
 ): Promise<PortActResult<Kind>> {
@@ -132,27 +121,10 @@ export function heldUntilClosed<Kind extends HoldKind>(
       close();
     },
   };
-  // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
   return Promise.resolve(stream as unknown as PortActResult<Kind>);
 }
 
-/**
- * Installs an act port answering only the procedures given, each by its
- * kind, as a test's window calls them. A hold it does not answer, on a
- * task's or an agent's inbox or pages, an agent's or a worker's transcript, a pull request's chapters or parts,
- * the account's beats, hosts, models, integrations, provider keys, or GitHub token,
- * an agent's or a server's tools, the outside MCP clients, a workspace's
- * memories, skills, or repositories, a link's standing, the automations'
- * lists and histories, a description's or a page's comments, a task's description
- * history, the run that started an agent, a workspace's people, token
- * repositories, own integrations, or Slack channels, or a task's description, is
- * held quietly, and an automations', the integrations', the memories', the
- * skills', a repository list's, a workspace's integrations', its Slack
- * channels', the models', the preferences', or a transcript's Try again taken, since what
- * the hold reads reaches the window on app state.
- */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
-  // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
   const answered: Partial<FakeActPort> = {
     ...Object.fromEntries([...QUIET_HOLDS].map((kind) => [kind, quietHold])),
     [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]: () => Promise.resolve(),
@@ -169,30 +141,22 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
     ...procedures,
   };
   answeringPort = answered;
-  // SAFETY: a test's window calls only the procedures its test answers, and any other is undefined and throws where it is called.
   installActPortClient(answered as ActPortClient);
 }
 
-/** The procedures the fake act port answers now, for a test that answers one more beside them or puts them back. */
 export function fakeActPortCalls(): Partial<FakeActPort> {
   return answeringPort;
 }
 
-/** A procedure's refusal as the act port answers it: the declared error, carrying `sentence`. */
 export function refusedOnPort(sentence: string): ORPCError<string, unknown> {
   return new ORPCError(ACT_ERROR.REFUSED, { message: sentence });
 }
 
-/** A page a press opened in the browser, as the act that opened it. */
 export interface OpenedLink {
   readonly kind: typeof TASKS_ACT_KIND.GITHUB_OPEN | typeof TASKS_ACT_KIND.WEB_OPEN;
   readonly payload: { readonly url: string };
 }
 
-/**
- * The act port's two link openers, each handing `opened` the page it opened
- * as the act it was, for a test to spread into its `fakeActPort`.
- */
 export function openingLinks(
   opened: (link: OpenedLink) => void,
 ): Pick<FakeActPort, OpenedLink["kind"]> {
@@ -208,11 +172,6 @@ export function openingLinks(
   };
 }
 
-/**
- * The act port's file read answered through `read`, which hears each window
- * of a file as the surface asked it, the place it is read through left out,
- * for a test to spread into its `fakeActPort`.
- */
 export function readingFiles(
   read: (request: TaskFileRequest) => Promise<TasksFileAnswer>,
 ): Pick<FakeActPort, typeof TASKS_ACT_KIND.TASKS_FILE> {
@@ -228,11 +187,6 @@ export function readingFiles(
   };
 }
 
-/**
- * The act port's read of an agent's changes answered through `read`, which
- * hears the agent and the pull request's number where a tab names one, for a
- * test to spread into its `fakeActPort`.
- */
 export function answeringChanges(
   read: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>,
 ): Pick<FakeActPort, typeof AGENT_ACT_KIND.AGENTS_CHANGES> {
@@ -244,25 +198,17 @@ export function answeringChanges(
   };
 }
 
-/** Each port kind's procedure as a test answers it: its payload in, its answer or a rejection out. */
 export type FakeActPort = {
   readonly [Kind in PortActKind]: (payload: PortActPayload<Kind>) => Promise<PortActResult<Kind>>;
 };
 
-/** One act as a window sent it on its act port: its kind, and its payload where it carries one. */
 export type SentPortAct = { readonly kind: PortActKind; readonly payload?: WireBoundaryInput };
 
-/**
- * Installs an act port answering every kind through `answer`, as a test
- * that writes down what its window sent, whichever kind it was, does.
- */
 export function fakeActPortAnswering(
   answer: (request: SentPortAct) => Promise<WireBoundaryInput>,
 ): void {
   const procedures: Partial<FakeActPort> = {};
-  // SAFETY: the contract's keys are exactly its kinds.
   for (const kind of Object.keys(actContract) as PortActKind[]) {
-    // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
     Object.assign(procedures, {
       [kind]: (payload: WireBoundaryInput) =>
         answer(payload === undefined ? { kind } : { kind, payload }),
@@ -271,25 +217,20 @@ export function fakeActPortAnswering(
   fakeActPort(procedures);
 }
 
-/** One act a window sent on its act port, its payload typed by its kind, and absent where the kind carries none. */
 type PortAct = {
   [Kind in PortActKind]: PortActPayload<Kind> extends undefined
     ? { readonly kind: Kind; readonly payload?: undefined }
     : { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[PortActKind];
 
-/** One act a test's window sent on its act port, its payload typed by its kind. */
 export type AnyAct = PortAct;
 
-/** How a test's switch answers an act: with the kind's value, refused in a sentence, or not at all. */
 export const FAKE_ANSWER = {
   DONE: "done",
   REFUSED: "refused",
-  /** A kind the switch does not answer, which the port rejects as a kind this build does not know. */
   UNKNOWN_ACT: "unknown-act",
 } as const;
 
-/** What a test's switch answers any act with: a kind's value, a refusal's sentence, or no answer. */
 export type FakeActAnswer =
   | { readonly status: typeof FAKE_ANSWER.DONE; readonly value: PortActResult<PortActKind> }
   | { readonly status: typeof FAKE_ANSWER.REFUSED; readonly reason: string }
@@ -297,19 +238,12 @@ export type FakeActAnswer =
 
 let answeringActs: ((request: AnyAct) => Promise<FakeActAnswer>) | undefined;
 
-/** The answer {@link fakeActs} installed last, for a test that answers a kind more over it. */
 export function fakeActsAnswer(): (request: AnyAct) => Promise<FakeActAnswer> {
   const answer = answeringActs;
   if (answer === undefined) throw new Error("No acts are answered in this test yet.");
   return answer;
 }
 
-/**
- * Installs an act port answered by `calls.act`, as a test whose one switch
- * answers every kind does: a done answer is the kind's bare value, a refusal
- * is the port's refusal in its sentence, and a kind the switch does not know
- * rejects. The bridge's calls are the rest of `calls`.
- */
 export function fakeActs(
   calls: Partial<AppBridge> & {
     readonly act: (request: AnyAct) => Promise<FakeActAnswer>;
@@ -319,7 +253,6 @@ export function fakeActs(
   answeringActs = answer;
   fakeAppBridge(bridge);
   const procedures: Partial<FakeActPort> = {};
-  /** One act answered by the switch: the kind's value, or the port's refusal or rejection. */
   const settled = (kind: PortActKind, outcome: FakeActAnswer): PortActResult<PortActKind> => {
     if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
     if (outcome.status === FAKE_ANSWER.REFUSED) throw refusedOnPort(outcome.reason);
@@ -327,15 +260,11 @@ export function fakeActs(
   };
   const answered = async (request: PortAct): Promise<PortActResult<PortActKind>> =>
     settled(request.kind, await answer(request));
-  // SAFETY: the contract's keys are exactly its kinds.
   for (const kind of Object.keys(actContract) as PortActKind[]) {
-    // Note that each kind is answered alike, whatever its own answer is, so it is assigned rather than typed by the kind.
     Object.assign(procedures, {
       [kind]: async (payload: WireBoundaryInput) => {
-        // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
         if (!QUIET_HOLDS.has(request.kind)) return answered(request);
-        // A hold the switch does not answer is held quietly, as the host holds one, its read laid on app state.
         const outcome = await answer(request);
         if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
         return quietHold();

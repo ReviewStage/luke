@@ -36,20 +36,10 @@ import {
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks.js";
 
-/**
- * agent-starter.test.ts -- an agent a teammate started says so: its card
- * names them by their disc and name, which hang their own card over the
- * agent's, a command it ran on a Mac says it ran on theirs, and a key its
- * turn failed on is theirs, which the reader is not sent to their own
- * Settings to mend. The reader's own agent reads as before. Synthetic
- * throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/photo-7";
 
-/** The workspace's members as the service's read lists them. */
 const MEMBERS: readonly WorkspaceMember[] = [
   { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER },
   {
@@ -100,7 +90,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** `element` drawn inside the workspace's members as `readerId` reads them, once the members have answered. */
 async function drawn(element: ReactElement, readerId: string | undefined): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -116,17 +105,14 @@ async function drawn(element: ReactElement, readerId: string | undefined): Promi
   return container;
 }
 
-/** Rests the pointer on `element`, as hovering it does. */
 function hover(element: Element): void {
   restOn(element);
 }
 
-/** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>(".ui-tooltip-card:not([data-leaving])")];
 }
 
-/** The agent named where `readerId` reads it, as the Inbox's thread names it, its card hung once the pointer rests on it, and how many times it was opened. */
 async function agentNamed(
   readerId: string | undefined,
   pullRequests: ReadonlyMap<string, AgentPullRequest> = new Map(),
@@ -157,7 +143,6 @@ test("a teammate's agent's card says it was started by them, their disc and name
   assert.equal(teammateStarter(AGENT.startedBy, DEAN.userId), "Charles Pan");
   assert.equal(teammateStarter(AGENT.startedBy, CHARLES.userId), undefined);
   assert.equal(teammateStarter(undefined, DEAN.userId), undefined);
-  // With no account id, whose agent it is cannot be told, so nobody is named and the reader's own key keeps its Settings.
   assert.equal(teammateStarter(AGENT.startedBy, undefined), undefined);
 
   const { card } = await agentNamed(DEAN.userId);
@@ -204,7 +189,6 @@ test("the starter's name on an agent's card hangs their own card over it, read o
   assert.equal(person.querySelector("button"), null);
 });
 
-/** Moves the pointer from `from` onto `to`, as the window tells it: out of the one, over the other. */
 function move(from: Element, to: Element): void {
   act(() => {
     from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
@@ -212,17 +196,14 @@ function move(from: Element, to: Element): void {
   });
 }
 
-/** Lets `ms` pass on the faked clock a card waits and lingers on. */
 function pass(ms: number): void {
   act(() => {
     vi.advanceTimersByTime(ms);
   });
 }
 
-/** Longer than a card waits to show and lingers once left (`--ui-hint-delay`, `CARD_LINGER`). */
 const PAST_ANY_WAIT = 1_000;
 
-/** The agent's card and the starter's card over it, the pointer resting on the starter's, each shown past its wait. */
 async function stacked() {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   const { card } = await agentNamed(DEAN.userId);
@@ -234,7 +215,6 @@ async function stacked() {
   move(card, starter);
   pass(PAST_ANY_WAIT);
   const theirs = cards()[1] ?? assert.fail("the starter's card hangs over the agent's");
-  // The pointer crosses the gap between the starter and their card, which stands on neither card.
   const gap = document.body.appendChild(document.createElement("div"));
   move(starter, gap);
   move(gap, theirs);
@@ -352,7 +332,6 @@ test("a failure that carries no reason says the run ended without saying why", (
   );
 });
 
-/** A Mac command's place, as its row's pill says it, in the transcript of an agent `startedBy` started, as `readerId` reads it. */
 async function macPlace(
   startedBy: typeof CHARLES | undefined,
   readerId: string | undefined,

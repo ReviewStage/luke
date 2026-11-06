@@ -31,15 +31,6 @@ import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 
-/**
- * sidebar-pinned-tab.test.ts -- an agent's pin in the sidebar shows the pull
- * request its agent opened as the task list holds it, so neither a pointer
- * crossing the row nor its card asks the service anything. A Changes pin on
- * the open task hangs the Changes tab's own card from the pull request the
- * tab reads, and keeps the pin's own card for a pin of another task. The
- * service is a script at the act boundary; synthetic ids throughout.
- */
-
 const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace",
@@ -59,7 +50,6 @@ const PIN: SidebarPin = {
   model: "anthropic/claude-opus-5.5",
 };
 
-/** Each part of a pull request the window asked the host to hold, by agent. */
 let reads: string[] = [];
 let root: Root | undefined;
 
@@ -85,7 +75,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The pin's row drawn in the sidebar's list, answering its press. */
 function drawPin(
   pin: SidebarPin = PIN,
   task: TaskSummary = TASK,
@@ -119,7 +108,6 @@ async function settled(): Promise<void> {
   });
 }
 
-/** The pointer leaving the row for somewhere else, as a browser tells the row and the press. */
 function leave(press: HTMLElement): void {
   const outside = document.body.appendChild(document.createElement("div"));
   act(() => {
@@ -322,7 +310,6 @@ describe("a pinned Changes tab's card", () => {
     deletions: 1,
     changedFiles: 3,
   };
-  /** The open task, which has read its agent's pull request. */
   const openTask = (agents: readonly AgentSummary[]): TasksControl => {
     const base = tasksControl({ tasks: [TASK] });
     return {
@@ -354,7 +341,6 @@ describe("a pinned Changes tab's card", () => {
       },
     };
     handState({}, listed);
-    // Note that the test's Query client is handed the document at once, since its timers are held still.
     writeAppState(stateWith({}, listed));
     restOn(drawPin(pin));
     await settled();

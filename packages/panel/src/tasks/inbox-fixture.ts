@@ -1,21 +1,3 @@
-/**
- * inbox-fixture.ts -- the synthetic Inbox a fixture run's Inbox and person profiles draw, and the answers its items and agents are read by in place of the service's.
- *
- * A fixture run signs in to nothing and holds no inbox, so the window's
- * Inbox says only that nothing needs you, an item never opens, and a
- * person's page has no tasks to list. Under these profiles the window's
- * document holds a synthetic account signed in, the owner of the fixture's
- * first workspace, and main's read of the account names the tasks holding
- * items; the account's feed of every item holds each of those tasks'
- * items whole, which every surface draws from; and the list holds the
- * account's tasks assigned to it, created by it, and worked on by its
- * agents, which its own page lists. The items are an ask of each kind (a decision, an
- * approval, steps to do, an answer in words, and a form), a notice whose
- * message carries code, a long thread, one answered, and one closed. Every
- * name, address, and repository here is invented; nothing is read from an
- * account.
- */
-
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
@@ -45,24 +27,16 @@ import {
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 
-/**
- * When the fixture landed, from which every instant here is counted back.
- * Note that it is read once, as the fixture's chunk lands, rather than fixed,
- * because the Inbox says each item's age against the clock, and a capture
- * taken any later day should still say "2h", not a month.
- */
 const LANDED = Date.now();
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** The profiles this fixture stages. */
 const STAGED_PROFILES: ReadonlySet<string> = new Set<string>([
   RUN_PROFILE.INBOX,
   RUN_PROFILE.PERSON,
 ]);
 
-/** The account signed in: the owner of the fixture's first workspace, which is named for it. */
 const ADA = { userId: "user-ada", name: "Ada Lovelace" } as const;
 const ACCOUNT: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
@@ -72,14 +46,12 @@ const ACCOUNT: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
-/** The tasks holding items: the reference journey's, and two of the account's own beside it. */
 const TASK = {
   INVITES: FIXTURE_IDS.TASK,
   DIGEST: "3c9d5f7b-1e4a-4b62-8d8a-4f5a6b7c8d93",
   ROUNDING: "4dae6081-2f5b-4c73-9e9b-5a6b7c8d9ea4",
 } as const;
 
-/** The agents that posted the items, one at work on each task. */
 const AGENT = {
   INVITES: "5ebf7192-3a6c-4d84-8fac-6b7c8d9eafb5",
   DIGEST: "6fc08203-4b7d-4e95-90bd-7c8d9eafb0c6",
@@ -88,14 +60,10 @@ const AGENT = {
 
 const MODEL = "anthropic/claude-opus-5.5";
 
-/* ----- The items ----- */
-
-/** A uuid of the fixture's, numbered, for the ids of items and messages nothing else names. */
 function fixtureId(n: number): string {
   return `81e2a425-6d9f-4ab7-92df-${n.toString(16).padStart(12, "0")}`;
 }
 
-/** The agent's message on an item's thread, `ago` before the fixture landed. */
 function agentSaid(n: number, ago: number, text: string, ask?: InboxMessage["ask"]): InboxMessage {
   return {
     id: fixtureId(n),
@@ -106,7 +74,6 @@ function agentSaid(n: number, ago: number, text: string, ask?: InboxMessage["ask
   };
 }
 
-/** The account's message on an item's thread, `ago` before the fixture landed, carrying its answer where it answers. */
 function adaSaid(
   n: number,
   ago: number,
@@ -123,7 +90,6 @@ function adaSaid(
   };
 }
 
-/** An item of the account's, posted with the first message of its thread and changed with its last. */
 function item(
   n: number,
   agentId: string,
@@ -134,7 +100,6 @@ function item(
 ): InboxItem {
   const first = thread[0]?.createdAt ?? LANDED;
   const last = thread.at(-1)?.createdAt ?? first;
-  // Note that the agent hears the answer to every ask and never a notice's nod, as the service stores its latest post.
   const latestPost = thread.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
   return {
     id: fixtureId(n),
@@ -156,7 +121,6 @@ function item(
 
 const OPEN = { status: INBOX_ASK_STATUS.OPEN } as const;
 
-/** The reference journey's task's items: a decision, an approval, a form, a notice with code, and a long thread. */
 const INVITES_ITEMS: readonly InboxItem[] = [
   item(
     1,
@@ -293,7 +257,6 @@ const INVITES_ITEMS: readonly InboxItem[] = [
   ]),
 ];
 
-/** The digest task's items: steps to do, an answer in words, and one answered. */
 const DIGEST_ITEMS: readonly InboxItem[] = [
   item(11, AGENT.DIGEST, "sender-domain", "Verify the digest's sender domain", [
     agentSaid(
@@ -344,7 +307,6 @@ const DIGEST_ITEMS: readonly InboxItem[] = [
   ),
 ];
 
-/** The rounding task's one item, closed by its agent once the question no longer stood. */
 const ROUNDING_ITEMS: readonly InboxItem[] = [
   item(
     21,
@@ -372,14 +334,12 @@ const ROUNDING_ITEMS: readonly InboxItem[] = [
   ),
 ];
 
-/** Each task's inbox, by the task's id. */
 const INBOXES: ReadonlyMap<string, readonly InboxItem[]> = new Map([
   [TASK.INVITES, INVITES_ITEMS],
   [TASK.DIGEST, DIGEST_ITEMS],
   [TASK.ROUNDING, ROUNDING_ITEMS],
 ]);
 
-/** Whether the item is a question waiting on the account: open, its thread holding an ask still open, as the service counts one (`askingReader`); a notice is not. */
 function asking(item: InboxItem): boolean {
   return (
     item.status === INBOX_STATUS.OPEN &&
@@ -387,12 +347,10 @@ function asking(item: InboxItem): boolean {
   );
 }
 
-/** When an inbox last changed: its newest item's change. */
 function newest(items: readonly InboxItem[]): number {
   return Math.max(...items.map((each) => each.updatedAt));
 }
 
-/** Every task holding items as main's read of the account names it, the latest changed first. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   .map(([taskId, items]) => ({
     taskId,
@@ -402,7 +360,6 @@ const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   }))
   .toSorted((a, b) => b.updatedAt - a.updatedAt);
 
-/** What waits on the account, as main counts it: each task's open items. */
 const WAITING: readonly AppInboxTask[] = HOLDINGS.flatMap(({ taskId }) => {
   const open = (INBOXES.get(taskId) ?? []).filter((each) => each.status === INBOX_STATUS.OPEN);
   return open.length === 0
@@ -418,9 +375,6 @@ const WAITING: readonly AppInboxTask[] = HOLDINGS.flatMap(({ taskId }) => {
       ];
 });
 
-/* ----- The tasks and their agents ----- */
-
-/** An agent on a task, as the task's list and its agents read name it, started by the account. */
 function agentOn(
   id: string,
   taskId: string,
@@ -463,7 +417,6 @@ const AGENTS: ReadonlyMap<string, AgentSummary> = new Map([
   ],
 ]);
 
-/** A task's agents as its row in the list names them. */
 function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
   const agent = AGENTS.get(taskId);
   if (agent === undefined) return {};
@@ -490,7 +443,6 @@ function agentsLine(taskId: string): Pick<TaskSummary, "agents"> {
   };
 }
 
-/** The account's own tasks beside the reference journey's: one in progress assigned to it, and one done it created. */
 const OWN_TASKS: readonly TaskSummary[] = [
   {
     id: TASK.DIGEST,
@@ -524,12 +476,6 @@ const OWN_TASKS: readonly TaskSummary[] = [
   },
 ];
 
-/**
- * The list as these profiles draw it, from the list the tasks fixture draws:
- * the reference journey's task assigned to the account and its agent at
- * work, and the account's own two tasks after it, so every task holding an
- * item is listed. The same list under any other profile.
- */
 export function inboxTasksView(profile: string, list: TasksView): TasksView {
   if (!STAGED_PROFILES.has(profile)) return list;
   const tasks = list.tasks.map((task) =>
@@ -540,18 +486,10 @@ export function inboxTasksView(profile: string, list: TasksView): TasksView {
   return { ...list, tasks: [...tasks, ...OWN_TASKS] };
 }
 
-/* ----- The window's document ----- */
-
-/**
- * The account these profiles sign in as, which reads the fixture's tasks as
- * its own, so its page and its items say "you"; none under any other
- * profile, whose invented tasks are nobody's.
- */
 export function inboxReader(profile: string): string | undefined {
   return STAGED_PROFILES.has(profile) ? ADA.userId : undefined;
 }
 
-/** Main's inbox slice with the staged tasks laid over it, one object for each of main's. */
 const STAGED_INBOX = new WeakMap<AppStateSnapshot["inbox"], AppStateSnapshot["inbox"]>();
 
 function stagedInbox(inbox: AppStateSnapshot["inbox"]): AppStateSnapshot["inbox"] {
@@ -562,24 +500,15 @@ function stagedInbox(inbox: AppStateSnapshot["inbox"]): AppStateSnapshot["inbox"
   return staged;
 }
 
-/** Each of `workspaceIds` held with no automation, nor any run of one, as a read of them holds them once read. */
 function noneHeldIn(workspaceIds: readonly string[]): AppHeldById<readonly never[]> {
   return Object.fromEntries(workspaceIds.map((id) => [id, { rows: [] }]));
 }
 
-/**
- * Main's document as these profiles draw it: the account signed in, its
- * read of what waits naming the tasks holding items, and each of
- * `workspaceIds` held with no automation, so the person page and the
- * sidebar list none rather than reading for good. The same document, the
- * very object, under any other profile.
- */
 export function inboxAppState(
   state: AppStateSnapshot,
   workspaceIds: readonly string[],
 ): AppStateSnapshot {
   if (!STAGED_PROFILES.has(state.run.profile)) return state;
-  // Note that the account's feed of every item, which the window's Inbox draws from, holds each staged task's items whole.
   const fed = Object.fromEntries([...INBOXES].filter(([, items]) => items.length > 0));
   return {
     ...state,
@@ -593,43 +522,27 @@ export function inboxAppState(
   };
 }
 
-/* ----- The act door ----- */
-
-/** One kind's staged answer: its result. */
 type StagedAnswer<Kind extends PortActKind> = (
   payload: PortActPayload<Kind>,
 ) => PortActResult<Kind>;
 
-/**
- * Every read the Inbox, its items, and the person page ask, answered as the
- * service would answer it for this account. Note that the workspace's members
- * are not among them, because the tasks fixture's own answer names them
- * (`settings-fixture.ts`), and the page names the account by its tasks meanwhile.
- */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
   },
-  // Note that a mark is taken as the service takes one, the item's state echoed, though nothing here moves, so its dot stays as staged: the host draws a mark, and none stands behind a fixture run's act door.
   [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
   [ACT_KIND.AGENTS_INBOX_READ_ALL]: () => ({
     marked: [...INBOXES.values()].flat().filter(({ unread }) => unread === true).length,
   }),
 };
 
-/**
- * What these profiles answer an act with, in place of main, held in a box so
- * an act that answers nothing is told from one left to main; none for a kind
- * the Inbox and the person page do not read, and under any other profile.
- */
 export function inboxActAnswer(
   profile: string,
   kind: PortActKind,
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   if (!STAGED_PROFILES.has(profile)) return undefined;
-  // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its result.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;
   return answer === undefined ? undefined : { answer: answer(payload) };
 }

@@ -21,15 +21,6 @@ import { agentForkDoors, ForkProvider } from "./fork-action.js";
 import type { AgentFork } from "./fork-model.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
-/**
- * fork-action.test.ts -- Fork to new agent stands on an agent's own
- * messages, settled ones whole, wordless ones among them, and the reply a
- * running turn is still writing as far as it stood, on a tab of a task that
- * is not archived and that opens a draft, and nowhere else; its press forks
- * at that message; and under each message a line names the agents forked at
- * it, each opening its tab.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const TURN = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
@@ -65,7 +56,6 @@ const SETTLED: AgentTranscriptMessage = {
   finishedAt: 61_000,
 };
 
-/** The message drawn in an agent's tab handing it forking as `doors` builds it, or as a place handing none, every fork and opening recorded. */
 function drawn(input: {
   message?: AgentTranscriptMessage;
   moving?: boolean;
@@ -224,7 +214,6 @@ test("a message no agent was forked at names none", () => {
   assert.equal(view.container.querySelector("[data-forked-to]"), null);
 });
 
-/** An agent's reply as its transcript carries it, its words whole or still being written. */
 function reply(id: string, text: string): AgentTranscriptMessage {
   return {
     id,
@@ -239,7 +228,6 @@ function line(id: string, text: string): AgentTranscriptMessage {
   return { id, role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] };
 }
 
-/** The ids of the messages an agent's tab offers to fork at, over a page of `messages`, for an agent of `status`. */
 async function forkedAtInTab(
   status: AgentStatus,
   messages: readonly AgentTranscriptMessage[],
@@ -327,7 +315,6 @@ test("while an agent works, the newest of its replies, which the running turn ma
     { messageId: TURN },
     { messageId: LATEST },
   ]);
-  // A reply that has begun no step yet holds nothing to keep, so it offers no fork until it does.
   assert.deepEqual(
     await forkedAtInTab(AGENT_STATUS.RUNNING, [
       line("task", "Queue the invite email."),

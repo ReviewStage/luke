@@ -12,23 +12,11 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserPane } from "./cloud-browser-pane.js";
 
-/**
- * The agent's pointer over a cloud Browser tab's live view: drawn at the
- * agent's point scaled onto the drawn page, out of the recording and the
- * pointer's way; hidden while a member drives the tab, faded once the agent
- * has stood idle, and held still where motion is reduced. A synthetic task
- * and tab throughout, the live view over a fake door, the clock pinned, and
- * the pane's body 640 by 600 pixels, which fits a 1280 by 800 page at half
- * its size.
- */
-
 const AGENT = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 const TAB = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
 
-/** Now, by the pinned clock, in epoch milliseconds. */
 const NOW = 1_800_000_000_000;
 
-/** A tab the agent clicked on a moment ago, at (640, 300) of its 1280 by 800 page. */
 const CLICKED: AgentBrowserTab = {
   id: TAB,
   agentId: AGENT,
@@ -64,14 +52,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Lets the window's reads, and the redraws they cause, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/** The pane of `tab`, its page painted at 1280 by 800, and a door to say more on its live view. */
 async function paneOf(tab: AgentBrowserTab): Promise<{
   say: (message: object) => Promise<void>;
   redraw: (next: AgentBrowserTab) => Promise<void>;
@@ -119,7 +105,6 @@ async function paneOf(tab: AgentBrowserTab): Promise<{
   };
 }
 
-/** The agent's pointer as drawn, if it is. */
 function pointer(): HTMLElement | null {
   return document.querySelector<HTMLElement>(".cloud-browser-cursor");
 }
@@ -175,7 +160,6 @@ test("the agent's pointer hides while a member drives the tab, and fades once th
   assert.equal(pointer()?.hasAttribute("data-shown"), false, "faded once the agent is idle");
 });
 
-// Reduced motion leaves its durations at 1ms, and a capture run zeroes them: the tokens say both, the OS setting only the first.
 test.each(["1ms", "0s"])(
   "where the motion tokens stand at %s the agent's pointer is held still: it neither rocks, glides, nor ripples",
   async (duration) => {

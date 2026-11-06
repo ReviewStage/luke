@@ -25,68 +25,35 @@ import { SETUP_GATE, SETUP_STEP, type SetupGate, setupGate, setupSteps } from ".
 import { TeamForm, useTeamForm } from "./setup-team.js";
 import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
 
-/**
- * setup-steps.tsx -- a new account's setup, alone in the window after sign-in: who it is for, a team's workspace where there is one, an agent, GitHub, and the tools, one card each.
- *
- * Each card is the sign-in's own, so setup reads as the sign-in going on,
- * and each offers a quiet Sign out, since setup stands with no sidebar.
- * An account invited into a team's workspace starts on Connect an agent
- * alone. An agent is required: its step goes on only once Claude or Codex
- * is connected. A team's workspace is required too, once With my team is
- * chosen, since Back leads to Just me for anyone who changed their mind;
- * once made, its step coming back holds it to change rather than make again.
- * GitHub may be skipped, and the tools need nothing done. Where setup
- * stands is kept on the account (`APP_SETTING_SCHEMA.setupPlace`), so setup
- * left partway resumes at the same step on another machine or on the web,
- * and a team's workspace made is not offered to be made again. Finish lets
- * the app in and keeps, on the account (`APP_SETTING_SCHEMA.setupFinished`),
- * that it finished setup, so it stands once on every machine.
- */
-
-/**
- * The accounts that finished setup on this device, by id: the account's own
- * `setupFinished` read ahead of its preferences arriving.
- */
 const SETUP_FINISHED = keptKey(
   "app.setupFinished",
   Schema.fromJsonString(Schema.Array(Schema.String)),
 );
 
-/** Where setup starts, for an account of its own or one a team invited. */
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 const INVITED_START: SetupPlace = { audience: SETUP_AUDIENCE.INVITED, at: 0 };
 
-/** Whether the account belongs to a team's workspace; nothing before its workspaces are read, and none where that read failed. */
 function invitedOf(tasks: TasksControl): boolean | undefined {
   const { workspaces } = tasks.newTask;
   if (workspaces.length === 0) return tasks.workspacesFailed ? false : undefined;
   return workspaces.some((workspace) => workspace.personal !== true);
 }
 
-/**
- * What the window does about setup for the account signed in (`setupGate`):
- * it reads whether an agent is connected, asking for the models where no
- * read has, only for an account that could still be new.
- */
 export function useSetupGate(
   tasks: TasksControl,
   accountId: string | undefined,
-  /** Whether setup was finished in this window, before the account's setting comes back from its write. */
   finishedHere: boolean,
 ): SetupGate {
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
   const [startedHere, setStartedHere] = useState<string>();
   const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
   const finishedOnAccount = settings?.setupFinished === true;
-  // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
   const finished =
     finishedHere ||
     finishedOnAccount ||
     (accountId !== undefined && finishedOnDevice.includes(accountId));
-  // Note that the models are the ones the host holds for the account, so nothing here asks for them.
   const { models, modelsFailed } = tasks.newTask;
   const fresh = welcomed(tasks);
-  // Note that a read that failed is taken as an agent standing, so a hitch never stands setup before an account that has worked.
   const agent =
     models !== undefined
       ? models.some((model) => model.credentialMissing !== true)
@@ -98,14 +65,12 @@ export function useSetupGate(
     fresh,
     finished,
     accountRead: settings?.accountRead === true,
-    // Note that the place is the account's, so setup started on another machine stands here once its preferences are read.
     started:
       accountId !== undefined &&
       (startedHere === accountId || setupPlaceFrom(settings?.setupPlace) !== undefined),
     invited: invitedOf(tasks),
     agent,
   });
-  // Setup once standing in this window stays until finished, whatever it connects meanwhile, though the account keeps its place only from its first move.
   useEffect(() => {
     if (gate === SETUP_GATE.OWED && accountId !== undefined) setStartedHere(accountId);
   }, [gate, accountId]);
@@ -117,11 +82,6 @@ const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
   { value: SETUP_AUDIENCE.TEAM, label: "With my team" },
 ];
 
-/**
- * Setup, step by step; `onFinish` lets the app in. Note that its words show
- * in a screen recording, because they are the app's own, but for a person's,
- * which each step masks where it draws them.
- */
 export function SetupSteps(props: SetupStepsProps): React.JSX.Element {
   return (
     <ReplayUnmask>
@@ -130,27 +90,22 @@ export function SetupSteps(props: SetupStepsProps): React.JSX.Element {
   );
 }
 
-/** What setup is handed. */
 interface SetupStepsProps {
   tasks: TasksControl;
-  /** The account set up, whose finish this device keeps under its id. */
   accountId: string;
   onFinish: () => void;
 }
 
-/** The step setup stands at. */
 function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
   const { mutate: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: signOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   const stored = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data?.setupPlace;
   const kept = setupPlaceFrom(stored);
-  // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
   const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
   const place = kept ?? start;
   const { audience, team } = place;
   const personal = tasks.newTask.workspaces.find((workspace) => workspace.personal === true)?.id;
-  // Note that each move is merged over the last one written, because two may land before the account's place comes back, as a team's workspace made and the step after it do.
   const written = useRef<SetupPlace | undefined>(undefined);
   useEffect(() => {
     written.current = setupPlaceFrom(stored);
@@ -162,9 +117,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     },
     [updateSetting],
   );
-  // Note that the place is first kept on the first move rather than as setup opens, because a preferences read that failed lets setup open without the account's place, and nothing written unasked may then put back another machine's.
   const move = (change: Partial<SetupPlace>) => keep({ ...(written.current ?? place), ...change });
-  // A team's workspace made stands listed only while setup is for the team, so Just me goes back to the account's own.
   const setAudience = (chosen: SetupAudience) => {
     move({ audience: chosen });
     const listed = chosen === SETUP_AUDIENCE.TEAM ? team : personal;
@@ -176,23 +129,18 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const onConnected = useCallback((connected: boolean) => setAgent(connected), []);
   const onReached = useCallback((now: boolean) => setReached(now), []);
   const steps = setupSteps(audience);
-  // A place kept by another window or an earlier build may stand past the last step, which is held to it.
   const at = Math.min(Math.max(place.at, 0), steps.length - 1);
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
   const finish = () => {
-    // Note that the account's place stands once finished, since finished is read ahead of it on every machine.
-    // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
     updateSetting({ field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
     keepFinished((finished) => [...finished, accountId]);
     onFinish();
   };
   const forward = () => (last ? finish() : setAt(at + 1));
   const back = at === 0 ? undefined : () => setAt(at - 1);
-  // A team's workspace made and then left for Just me is not the one GitHub is installed on.
   const workspaceId =
     (audience === SETUP_AUDIENCE.TEAM ? team : personal) ?? tasks.newTask.workspaceId;
-  // Note that a skippable step offers Skip until done and Continue after it; the team's draws its own foot.
   const foot = (done: boolean, label = "Continue", skippable = false) => (
     <AuthStepFoot
       at={at + 1}
@@ -218,7 +166,6 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
       move({ team: made });
       tasks.onChooseWorkspace(made);
     },
-    // Note that the step stays where something was refused, so each refusal is read beside its address.
     onDone: (failed) => {
       if (failed.length === 0) setAt(at + 1);
     },
@@ -244,7 +191,6 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     );
   }
   if (step === SETUP_STEP.TEAM) {
-    // Note that the press makes the workspace until it stands, then saves what was changed in it, or goes on.
     return (
       <AuthPage
         mark={<ProductMark />}

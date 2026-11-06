@@ -4,33 +4,14 @@ import { Fragment, type Node as PmNode, Slice } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import type { PictureNode, PictureTaken, DescriptionEditorPictures } from "./contract.js";
 
-/**
- * picture-node.ts -- a picture in the description's text: TipTap's image held inline in its own paragraph, written back escaped, drawn by the panel, and laid in from a paste, a drop, or a file chosen.
- *
- * A picture stands in the description's Markdown as `![alt](address "caption")`
- * (`@repo/features/description-attachment-link`). The editor keeps it as TipTap's
- * image node, inline, in a paragraph of its own, and writes it back with
- * its alt text's brackets, its address's parentheses, and its caption's
- * quotes escaped, which TipTap's own writer does not. A picture laid in from
- * a paste, a drop, or a file chosen has no address yet: it waits on an
- * upload the panel names, writes nothing to the text meanwhile, and takes
- * its address once the panel kept it (`settled`). A picture of another description
- * pasted in is kept again on this one, so its new readers can see it. The
- * node's element is the panel's to draw into, as a mention's is: its
- * picture, its upload, and its tools while selected.
- */
-
 const PICTURE_NODE = "image";
 
-/** What a picture laid in from a pasted screenshot is called until it is described. */
 const PASTED_ALT = "Screenshot";
 
-/** Escapes the characters that would end a picture's alt text, address, or title early. */
 function escaped(words: string, ends: RegExp): string {
   return words.replace(ends, "\\$&");
 }
 
-/** A picture as Markdown writes it: nothing while it waits on its upload. */
 function pictureMarkdown(attrs: JSONContent["attrs"]): string {
   if (String(attrs?.upload ?? "") !== "") return "";
   const alt = escaped(String(attrs?.alt ?? ""), /[\\[\]]/gu);
@@ -39,7 +20,6 @@ function pictureMarkdown(attrs: JSONContent["attrs"]): string {
   return `![${alt}](${src}${title})`;
 }
 
-/** The node's picture as the panel draws it. */
 function pictureOf(node: PmNode): PictureNode {
   return {
     src: String(node.attrs.src ?? ""),
@@ -49,27 +29,19 @@ function pictureOf(node: PmNode): PictureNode {
   };
 }
 
-/** A new upload's name, which ties a picture laid in to the panel's keeping of it. */
 function uploadName(): string {
   return crypto.randomUUID();
 }
 
-/** What a picture laid in from a file is called: its name without its type, or "Screenshot" for a paste that has none worth keeping. */
 function altOf(file: File): string {
   const stem = file.name.replace(/\.[^.]*$/u, "").trim();
   return stem === "" || stem === "image" ? PASTED_ALT : stem;
 }
 
-/** The image files among a paste's or a drop's, in their order. */
 function imageFiles(list: FileList | null | undefined): File[] {
   return [...(list ?? [])].filter((file) => file.type.startsWith("image/"));
 }
 
-/**
- * The picture node: TipTap's image, inline, with the upload it waits on;
- * drawn into its own element by the panel where it can draw one, and as an
- * image element where it cannot, as in a template.
- */
 export function pictureNode(pictures: DescriptionEditorPictures | undefined) {
   const node = Image.extend({
     addAttributes() {
@@ -115,7 +87,6 @@ export function pictureNode(pictures: DescriptionEditorPictures | undefined) {
             selected = false;
             drawing.redraw(pictureOf(current), false);
           },
-          // Note that the panel's own controls inside the picture, its alt text's field among them, keep their events from the editor.
           stopEvent: (event) =>
             event.target instanceof Element &&
             event.target.closest("button, input, textarea") !== null,
@@ -127,7 +98,6 @@ export function pictureNode(pictures: DescriptionEditorPictures | undefined) {
   });
 }
 
-/** The picture at `pos` taken out, with the paragraph it stood alone in. */
 function removedAt(view: EditorView, pos: number): void {
   const $pos = view.state.doc.resolve(pos);
   const alone = $pos.parent.type.name === "paragraph" && $pos.parent.childCount === 1;
@@ -136,11 +106,6 @@ function removedAt(view: EditorView, pos: number): void {
   view.dispatch(view.state.tr.delete(from, to));
 }
 
-/**
- * Pictures laid in, each in a paragraph of its own, after the top-level
- * block that `pos` stands in, or after the caret's where none is given; each
- * waits on a new upload, which is handed to the panel with its file.
- */
 export function laidInPictures(
   view: EditorView,
   files: readonly File[],
@@ -162,7 +127,6 @@ export function laidInPictures(
   pictures.take(taken);
 }
 
-/** The position of the picture waiting on `upload`; none where the text no longer holds it. */
 function waitingAt(view: EditorView, upload: string): number | undefined {
   let found: number | undefined;
   view.state.doc.descendants((node, pos) => {
@@ -173,7 +137,6 @@ function waitingAt(view: EditorView, upload: string): number | undefined {
   return found;
 }
 
-/** The picture waiting on `upload` given its address, which the text now writes; nothing where it was taken out meanwhile. */
 export function settledPicture(view: EditorView, upload: string, src: string): void {
   const pos = waitingAt(view, upload);
   const node = pos === undefined ? undefined : view.state.doc.nodeAt(pos);
@@ -181,13 +144,11 @@ export function settledPicture(view: EditorView, upload: string, src: string): v
   view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, src, upload: "" }));
 }
 
-/** The picture waiting on `upload` taken out of the text. */
 export function removedPicture(view: EditorView, upload: string): void {
   const pos = waitingAt(view, upload);
   if (pos !== undefined) removedAt(view, pos);
 }
 
-/** A paste of image files laid in as pictures after the caret's block; answers whether it was one. */
 export function pastedPictures(
   view: EditorView,
   event: ClipboardEvent,
@@ -199,7 +160,6 @@ export function pastedPictures(
   return true;
 }
 
-/** A drop of image files from outside the editor laid in as pictures after the block they landed on; answers whether it was one. */
 export function droppedPictures(
   view: EditorView,
   event: DragEvent,
@@ -213,7 +173,6 @@ export function droppedPictures(
   return true;
 }
 
-/** A fragment with each picture in it made again by `change`, at any depth, every other node as it was. */
 function withPictures(fragment: Fragment, change: (picture: PmNode) => PmNode): Fragment {
   const nodes: PmNode[] = [];
   fragment.forEach((child) => {
@@ -223,11 +182,6 @@ function withPictures(fragment: Fragment, change: (picture: PmNode) => PmNode): 
   return Fragment.fromArray(nodes);
 }
 
-/**
- * A pasted slice's pictures of another description, each made to wait on a new
- * upload that keeps it again on this description, and handed to the panel to keep;
- * every other picture as it was.
- */
 export function copiedPictures(slice: Slice, pictures: DescriptionEditorPictures): Slice {
   const taken: PictureTaken[] = [];
   const content = withPictures(slice.content, (picture) => {

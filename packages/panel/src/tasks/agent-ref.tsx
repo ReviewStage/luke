@@ -36,56 +36,19 @@ import { agentTranscript } from "./transcript-copy.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/**
- * agent-ref.tsx -- an agent named anywhere in the window: the card its tab hangs, read from what the place naming it knows, and its mark and name as the one button that hangs that card and opens its tab.
- *
- * An agent is named in many places beside its tab: the Inbox's thread, its
- * crumbs, and its list's rows, a call's row in a transcript, the task's
- * summary. Each hangs the agent's tab's own card (`agent-tab-card.tsx`)
- * while the pointer rests on the name, and a press or Enter opens the
- * agent's tab, as a press on the tab itself would. The card is read from what the place holds of
- * the agent: its summary, where the task's list holds it, an archived
- * agent's among them, which says it was archived and when; the line the
- * sidebar's list names it by, which says where it stands but holds no
- * transcript; or nothing, where the task's list was read and holds no such
- * agent, when the card says so under the name it goes by. A press on an
- * archived agent, whose tab is never drawn, opens its own page, where its
- * transcript is read and Unarchive brings it back; one on an agent gone
- * opens its task, as the column does for any tab whose subject is missing
- * (`use-main-tabs.ts`).
- * A name inside a row whose press does something of its own, an Inbox
- * row's mark, hangs the card alone and leaves the press to its row.
- */
-
-/** What a card's corner says of an archived agent, whose tab is gone. */
 const ARCHIVED_WORDS = "Archived";
 
-/** What a card's corner says of an agent the task's list, once read, does not hold. */
 const UNLISTED_WORDS = "Not found";
 
-/** What a place that draws no agent's tab holds of their transcripts: nothing, so its cards preview no step. */
 export const NOTHING_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
 
-/** An agent as a place names it: the name it goes by, its tile, what its card says, read as the card is hung, and its summary where the task's list holds it. */
 export interface AgentSubject {
   readonly name: string;
-  /** The agent's tile, as every place naming an actor draws it (`actor-ref.tsx`). */
   readonly tile: Actor;
   readonly read: () => CardReading;
   readonly agent?: AgentSummary | undefined;
 }
 
-/**
- * What an agent's card says, read from what its tab last held as the card
- * is hung (`heldLatest`): where it stands and when it last moved, its pair,
- * and its latest step; an archived agent's says it was archived, and when.
- * It wears the agent's tile, names the automation whose run started it, or
- * a teammate who did, as the reader `agents.me` tells them apart, and leads its corner with the pull
- * request the task holds for it. Its tab's card and every other place naming it say it, `chosen` telling
- * whether its tab is the one shown, whose transcript follows the run. Note
- * that an agent with no turn finished in what its tab holds last moved
- * when its newest run began, the latest moment its summary knows.
- */
 export function agentCardReading(
   agent: AgentSummary,
   label: string,
@@ -127,7 +90,6 @@ export function agentCardReading(
   };
 }
 
-/** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
 export function lineSubject(
   line: TaskAgentLine,
   models: readonly CatalogModel[] | undefined,
@@ -151,14 +113,6 @@ export function lineSubject(
   return { name, tile: agentActor(line, name), read: () => reading };
 }
 
-/**
- * An agent with no task as the sidebar's list carries it, as its row's card
- * says it: its tab's card (`agentCardReading`), but that it last moved when
- * the list says it did, the end of its newest run included, and that it
- * shows the pull request the list carries for it, as a task's row's card
- * shows its own, since no tab of it holds either; a read of what it
- * published that the control holds since stands before the list's.
- */
 export function tasklessRowSubject(
   agent: TasklessAgent,
   agents: Pick<AgentsControl, "models" | "me" | "pullRequests">,
@@ -180,21 +134,12 @@ export function tasklessRowSubject(
         movedAt: archivedAt ?? agent.activityAt,
         state: archivedAt === undefined ? agentStateWords(agent.status) : ARCHIVED_WORDS,
       }),
-      // Note that a read of what it published since, held by the control, is newer than the list's.
       pullRequest: reading.pullRequest ?? pullRequest,
     };
   };
   return { name, tile, agent: summary, read };
 }
 
-/**
- * An agent with no task as the Inbox names it (`TasklessInboxAgent`): its
- * title, else the name of the automation
- * the reader may read that started it, else its model (`agentName`), its
- * harness's tile at rest, and that automation. Note that the line says
- * nothing of where the agent stands, so its card's corner says nothing
- * either.
- */
 export function tasklessSubject(
   line: {
     readonly agentTitle: string | null;
@@ -233,7 +178,6 @@ export function tasklessSubject(
   return { name, tile, read: () => reading };
 }
 
-/** An agent as a line read beside its thread names it: its title, null where it has none; its model; the automation whose run started it, which an untitled one goes by; and where it stands, where the line says so. */
 export interface AgentLine {
   readonly title: string | null;
   readonly model: string;
@@ -241,17 +185,6 @@ export interface AgentLine {
   readonly status?: AgentStatus | undefined;
 }
 
-/**
- * An agent named by id on the task whose agents `agents` reads, archived
- * or not, its card read from what its tab last held. Where the list holds
- * no such agent, it is named as `line` names it, on its harness's mark
- * wearing where it stands, at rest where the line says nothing of that;
- * else by the name an agent no read names goes by. Its
- * card says it is not found once the list has been read and no line names
- * it, and nothing more before. Every place drawing an Inbox thread's agent
- * names it through here, its pane and its messages alike, so no two
- * name one agent two ways.
- */
 export function agentSubject(
   agents: Pick<AgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
   agentId: string,
@@ -285,7 +218,6 @@ export function agentSubject(
   return { name, tile, read: () => reading };
 }
 
-/** The agent's tab's card, as a place naming the agent hangs it: what it says, with no way to the tab, since the name it hangs from is that way. */
 export function AgentCard({
   subject,
   models,
@@ -293,18 +225,11 @@ export function AgentCard({
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
-  /** One row at the foot, said by a place naming the agent off its task's page: the task it works on. */
   foot?: CardFoot | undefined;
 }): React.JSX.Element {
   return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} foot={foot} />;
 }
 
-/**
- * An agent named in place: its glyph and the words it is named by, as one
- * button that hangs its tab's card while the pointer rests on it and opens
- * its tab on a press. With no `onOpen` it stands inside a row whose press is
- * the row's own, and hangs the card alone.
- */
 export function AgentRef({
   subject,
   models,
@@ -313,12 +238,9 @@ export function AgentRef({
   label,
 }: {
   subject: AgentSubject;
-  /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
-  /** Opens the agent's tab; none inside a row whose own press does something else. */
   onOpen: (() => void) | undefined;
   glyph: React.ReactNode;
-  /** The words it is named by: its name, or where its work stands. */
   label: string;
 }): React.JSX.Element {
   return (
@@ -334,17 +256,11 @@ export function AgentRef({
   );
 }
 
-/**
- * An agent's mark alone, at the head of a row whose press is the row's own:
- * it hangs the agent's tab's card while the pointer rests on it, and says
- * nothing a reader of the row would hear twice.
- */
 export function AgentMarkRef({
   subject,
   models,
 }: {
   subject: AgentSubject;
-  /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   return (
@@ -356,11 +272,6 @@ export function AgentMarkRef({
   );
 }
 
-/**
- * An agent named in a line as every actor is: its tile and its name as one
- * button (`ActorRef`), hanging its tab's card and opening its tab on a
- * press.
- */
 export function AgentActorRef({
   subject,
   models,
@@ -368,11 +279,8 @@ export function AgentActorRef({
   nameOnly = false,
 }: {
   subject: AgentSubject;
-  /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
-  /** What opens its tab; none for an agent the place holds no tab of, whose name hangs its card alone. */
   onOpen: (() => void) | undefined;
-  /** Whether the name stands without its tile, whose face the line already draws. */
   nameOnly?: boolean;
 }): React.JSX.Element {
   return (
@@ -385,14 +293,6 @@ export function AgentActorRef({
   );
 }
 
-/**
- * An agent of the workspace's own card, as a place that holds no tab of it
- * hangs it: its tab's card as the task list carries the agent
- * (`mentioned-agent-card.tsx`), its tile and name standing until the list
- * first answers, and where it carries no such agent. Note that the tile
- * leads the head at a card's size in every state, as the loaded card wears
- * it, so the head does not move as the list lands.
- */
 export function AgentHoverCard({
   actor,
   agentId,
@@ -415,12 +315,6 @@ export function AgentHoverCard({
   );
 }
 
-/**
- * Another coding agent named as a line's sender, by the id the service
- * answered for it: its harness's mark and its name, as it sent the line,
- * hanging its tab's card as the task list carries it now
- * (`mentioned-agent-card.tsx`), and opening its tab on a press.
- */
 export function SendingAgent({
   actor,
   agentId,
@@ -428,7 +322,6 @@ export function SendingAgent({
 }: {
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
   agentId: string;
-  /** Whether the name stands without its mark, whose face the line already draws. */
   nameOnly?: boolean;
 }): React.JSX.Element {
   const openPlace = useOpenPlace();

@@ -12,13 +12,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
 
-/**
- * The sidebar's head as the developer meets it: the workspace listed, by its
- * tile and name and who shares it, and the menu of every workspace, New
- * workspace, and Workspace settings, whoever the account is in the workspace. Each press is written
- * down where the sidebar would hand it on.
- */
-
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Personal",
@@ -48,7 +41,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The switcher over the tasks given, in sight or folded away. */
 function mount(tasks: Partial<TasksControl>) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -74,7 +66,6 @@ function mount(tasks: Partial<TasksControl>) {
   };
 }
 
-/** The items of the menu standing open. */
 function menuItems(): HTMLButtonElement[] {
   return [
     ...document.querySelectorAll<HTMLButtonElement>(
@@ -83,18 +74,15 @@ function menuItems(): HTMLButtonElement[] {
   ];
 }
 
-/** Opens the switcher's menu. */
 function open(switcher: HTMLButtonElement | null): void {
   assert.ok(switcher, "the switcher heads the plans");
   act(() => switcher.click());
 }
 
-/** An item's label, the words beside its glyph. */
 function labelOf(item: HTMLElement): string | null {
   return item.querySelector(".ui-menu-item-label")?.textContent ?? null;
 }
 
-/** Chooses the open menu's item by its label. */
 function choose(label: string): void {
   const item = menuItems().find((candidate) => labelOf(candidate) === label);
   assert.ok(item, `the menu offers ${label}`);
@@ -206,7 +194,6 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
       .map((item) => item.querySelector(".ui-avatar[data-shape='tile']"))
       .filter((tile) => tile !== null)
       .map((tile) => [tile.textContent, tile.getAttribute("data-hue")]);
-    // Each reading stands alone, so the next finds only its own menu.
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";
     return drawn;
@@ -221,7 +208,6 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
   const renamed = tiles([PERSONAL, { ...CONNECTED, name: "Zenith" }]);
   assert.equal(renamed[1]?.[0], "Z");
   assert.equal(renamed[1]?.[1], before[1]?.[1], "the hue is the workspace's, not its name's");
-  // An emoji is one character to a reader, though two to a string.
   assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
 });
 

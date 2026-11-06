@@ -3,37 +3,12 @@ import { type Editor, Mark } from "@tiptap/core";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import type { EditorAnchor, EditorAnchors } from "./contract.js";
 
-/**
- * comment-anchors.ts -- the words a comment thread is on, carried in the open editor as a mark, so they move with their words and come back with them on undo.
- *
- * The service keeps a thread's anchor as offsets into the description's Markdown
- * (`@repo/features/description-comment-anchor`); the editor holds its words as a
- * mark naming the thread, laid on as the editor opens, or as a thread opens
- * or closes while it stands, outside the developer's undo, so no undo takes
- * them off. From then on the mark is part
- * of the words: typing inside them widens it, deleting them takes it, and
- * undoing the deletion brings it back with them, which no carrying-over of
- * the text alone could tell. Each draft reports where every mark stands in
- * the Markdown the draft is (`anchorsOf`), and the save hands that to the
- * service, which takes it for the threads the editor carried. The mark
- * writes nothing to the Markdown: a mark without a Markdown form is left out
- * of what TipTap prints.
- *
- * Offsets are carried between the Markdown and the editor's words by laying
- * the two texts over each other, so emphasis, links, and chips in between
- * put nothing off.
- */
-
-/** The mark's name, and the class the read view's comment marks wear, which it shares. */
 const COMMENT_ANCHOR = { MARK: "commentAnchor", CLASS: "description-comment-mark" } as const;
 
-/** What stands for an inline node that holds no words, a chip or a picture, in the editor's words. */
 const ATOM = "\uFFFC";
 
-/** The words a thread is on, as the editor holds them: a mark naming its thread, drawn as the read view draws one. */
 export const commentAnchorMark = Mark.create({
   name: COMMENT_ANCHOR.MARK,
-  // Note that two threads may stand on the same words, and that words typed at an anchor's edge are not its.
   excludes: "",
   inclusive: false,
   addAttributes() {
@@ -49,10 +24,8 @@ export const commentAnchorMark = Mark.create({
   },
 });
 
-/** The editor's words in order, a block's end a line break, and where each letter of them stands in the document. */
 interface EditorWords {
   readonly text: string;
-  /** The document position each letter of `text` stands at. */
   readonly at: readonly number[];
 }
 
@@ -80,18 +53,6 @@ function editorWords(doc: PmNode): EditorWords {
   return { text, at };
 }
 
-/**
- * The threads' marks made to stand for the `open` threads, outside the
- * developer's undo: a mark whose thread is not open taken off, and one laid
- * on the words each of `anchors` names in `markdown`, the text its offsets
- * are counted in, for a thread the editor does not carry yet. Answers the
- * threads the editor carries afterwards; a thread none of whose words could
- * be found is left to the service to carry. A thread it carries that is
- * still open stays carried, its mark having followed its words since it was
- * laid, even with no anchor of the service's: one whose words were deleted
- * here, which undo may bring back. So is an open thread whose mark stands,
- * which undo brought back while it was closed.
- */
 export function anchorsLaidIn(
   editor: Editor,
   markdown: string,
@@ -103,7 +64,6 @@ export function anchorsLaidIn(
   if (type === undefined) return [];
   const { doc } = editor.state;
   const tr = editor.state.tr.setMeta("addToHistory", false);
-  // Note that a mark undo brought back for a thread no longer open goes too, so no closed thread stays marked.
   const marked = new Set<string>();
   doc.descendants((node, pos) => {
     if (!node.isInline) return true;
@@ -115,7 +75,6 @@ export function anchorsLaidIn(
     }
     return false;
   });
-  // Note that an open thread whose mark stands is carried, though the editor let it go: one closed and reopened after undo brought its deleted words back, whose anchor the service no longer holds.
   const kept = [...new Set([...carried.filter((thread) => open.has(thread)), ...marked])];
   const fresh = anchors.filter((anchor) => !kept.includes(anchor.thread));
   const words = fresh.length === 0 ? undefined : editorWords(doc);
@@ -133,11 +92,6 @@ export function anchorsLaidIn(
   return [...kept, ...laid];
 }
 
-/**
- * Where each mark stands in the Markdown the editor would hand over now,
- * `markdown`, from its first letter to its last, and the threads the editor
- * carries: a carried thread with no mark had its words deleted here.
- */
 export function anchorsOf(
   doc: PmNode,
   markdown: string,
@@ -170,12 +124,6 @@ export function anchorsOf(
   return { anchors, carried };
 }
 
-/**
- * Where the editor's document stretch from `from` to `to` stands in
- * `markdown`, the text the editor would hand over now, from its first letter
- * to its last: what a thread started on the editor's words is anchored to.
- * Nothing where the stretch holds no letter the text keeps.
- */
 export function spanIn(
   doc: PmNode,
   markdown: string,
@@ -183,7 +131,6 @@ export function spanIn(
   to: number,
 ): { readonly from: number; readonly to: number } | undefined {
   const words = editorWords(doc);
-  // Note that a block's break, written where the block starts, is no letter of the stretch's.
   const first = words.at.findIndex((pos, index) => pos >= from && words.text[index] !== "\n");
   const last = words.at.findLastIndex((pos, index) => pos < to && words.text[index] !== "\n");
   if (first < 0 || last < first) return undefined;

@@ -25,22 +25,10 @@ import { handState, stateWith } from "../testing/app-state.js";
 import { appStateFirstRead } from "../use-app-state.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks-fixture-loader.js";
 
-/**
- * inbox-fixture.test.ts -- a fixture run's Inbox and person profiles sign
- * the window in as a synthetic account whose tasks hold Inbox items, which
- * the account's feed on the window's document holds whole in place of
- * main's read: an ask of each kind, a form, a notice with code, a long
- * thread, an answered item and a closed one, every item one the wire
- * carries; and the list holds the account's own tasks, which its page
- * lists. Any other profile leaves main's document as it is.
- */
-
 afterEach(() => {
-  // The window's one registry holds the document it read, so the next test's window reads its own.
   rendererRegistry.reset();
 });
 
-/** Main's document for a fixture run on `profile`: signed out, nothing read, nothing waiting. */
 function fixtureRun(profile: string): AppStateSnapshot {
   const { run } = stateWith({}, {});
   return stateWith(
@@ -54,7 +42,6 @@ function fixtureRun(profile: string): AppStateSnapshot {
   );
 }
 
-/** Hands the window main's document for a fixture run on `profile`, every act main would answer refused, and lands the fixture. */
 function standFixtureRun(profile: string): Effect.Effect<void> {
   return Effect.gen(function* () {
     fakeActPortAnswering(() => Promise.reject(refusedOnPort("Not here.")));
@@ -65,7 +52,6 @@ function standFixtureRun(profile: string): Effect.Effect<void> {
   });
 }
 
-/** The items the account's feed holds of a task on the staged document, which must hold the task. */
 function fedItems(state: AppStateSnapshot, taskId: string): readonly InboxItem[] {
   const items = state[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN][taskId];
   assert.ok(items !== undefined, `the feed holds ${taskId}`);
@@ -87,7 +73,6 @@ it.effect(
       for (const holding of state.inbox.tasks) {
         const held = fedItems(state, holding.taskId);
         assert.equal(held.length, holding.items, `${holding.taskId} holds what main counts`);
-        // Note that a task main says changed later than its newest item stands as still being read.
         assert.ok(Math.max(...held.map((each) => each.updatedAt)) >= holding.updatedAt);
         items.push(...held);
       }
@@ -165,7 +150,6 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
       }),
       { answer: { id: itemId, unread: false } },
     );
-    // Two of the staged items are unread.
     assert.deepEqual(
       fixture.fixtureActAnswer(run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
       { answer: { marked: 2 } },
@@ -182,7 +166,6 @@ it.effect(
       assert.ok(fixture);
       const tasks = fixtureRun(RUN_PROFILE.TASKS);
 
-      // Note that every profile holds the fixture workspaces' people (`settings-fixture.ts`), so the document is laid over, its account and Inbox untouched.
       const staged = fixture.fixtureAppState(tasks);
       assert.equal(staged.account, tasks.account);
       assert.equal(staged.inbox, tasks.inbox);

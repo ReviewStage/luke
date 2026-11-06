@@ -58,44 +58,6 @@ import {
 } from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
-/**
- * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
- *
- * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan, under the person it waits on, or in one
- * run with no groups, the items its tab takes: what needs the reader, what
- * they are not done with, everything, or what they set a reminder on, each tab
- * counting its own.
- * An item is the reader's where it waits on them: they are its task's
- * assignee, or, on a task nobody is assigned or an agent's with no task,
- * they started the agent that asks it; or where the service does not say, as main counts what waits on
- * the account (`agent-notices.ts`), and only the reader's open items need
- * them: Needs you lists only those, though the steps through any tab keep the
- * item chosen, while a teammate's open item stands in the list as waiting
- * on them. An item is its title and its thread, each answer a member's
- * message under the ask it answers, and a settled one says how it ended.
- * A task's board, which counts what waits, holds what waits the
- * oldest posted first, since it has held its agent longest, and what is
- * settled, answered or taken back by its agent, the latest changed first.
- * Every item the task's inbox holds is
- * drawn, whether or not the window's list of agents has caught up with the
- * agent that posted it, since the service reads the inbox by task and an
- * agent's items go with it. A reply's answer is held to the same rule the
- * service holds it to (`inbox-wire.ts`'s `inboxAnswersRefusal`), so a press
- * the service would refuse is never sent, and a version 4 answer to its
- * response's (`inboxReplyRefusal`). A code block's lines
- * are read as the File tab reads a file, at the block's commit, with a few
- * of the file around them, the lines it points at lit. Nothing here draws.
- */
-
-/**
- * What the developer has put on a card so far: the options picked on a
- * choice, the fields filled on a form, their note, and the files they
- * attached to it; the steps ticked in its open `do` ask and the
- * answer pressed in it and attached to the reply (Mark done or Couldn't
- * do it), a `decide`'s pick being its choices and an `answer`'s fields
- * filled its values.
- */
 export interface InboxDraft {
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
@@ -103,36 +65,23 @@ export interface InboxDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going with the close as its note. */
   readonly resolving?: true | undefined;
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
 
-/** Why a card's last send did not go, or was not taken: its words, and the refusal they say where the service refused it. */
 export interface InboxNote {
   readonly words: string;
   readonly failure?: AgentCallFailure | undefined;
 }
 
-/** What a card says under its box: the note's words, and whether Unarchive follows them. */
 export interface InboxNoteReading {
   readonly words: string;
   readonly unarchive: boolean;
 }
 
-/** What a card says of a send refused because its agent is archived on its own. */
 const AGENT_ARCHIVED_NOTE = "This agent is archived.";
 
-/**
- * What a card says of its last send, by its agent as the window lists it.
- * Note that the service refuses a send to an agent archived on its own as
- * one that names nothing, so a refusal naming no agent says the agent is
- * archived, with Unarchive after it, where the list reads it archived, and
- * that the agent no longer exists only where it does not. A send no answer
- * came back for says the developer is offline while the app does not reach
- * the service, since the Offline mark says why.
- */
 export function inboxNoteReading(
   note: InboxNote,
   agent: AgentSummary | undefined,
@@ -144,16 +93,8 @@ export function inboxNoteReading(
   return { words: offline ? UNHEARD_OFFLINE.ALONE : note.words, unarchive: false };
 }
 
-/** One file a message on the thread carried, as an item read names it. */
 type InboxFile = NonNullable<InboxMessage["files"]>[number];
 
-/**
- * The files a message on the thread carried as chips, in the
- * order they were attached: each by its name and type, its bytes as the
- * `data:` URL its read came back as where it did, and none while it is
- * read or where the read did not answer, which draws the chip by its name
- * alone.
- */
 export function inboxFileChips(
   files: readonly InboxFile[],
   urls: ReadonlyMap<string, string>,
@@ -165,23 +106,11 @@ export function inboxFileChips(
   }));
 }
 
-/** A comment's files as they are drawn after its words: its pictures, and every other file. */
 export interface InboxCommentFiles {
   readonly pictures: readonly InboxFile[];
   readonly others: readonly InboxFile[];
 }
 
-/**
- * A comment's files as they are drawn after its words, each in the order
- * attached: a picture its words already draw left out, since it stands
- * where they draw it, as an agent's pictures do, then the pictures and
- * every other file apart, as each is drawn in its own way. A WebM an agent
- * recorded is drawn as a picture is, played in its place (`inbox-pictures.tsx`),
- * so one the words draw is not named again as a file. Note that only
- * a picture the words draw as one is left out (`picturesDrawn`): a file
- * they only link to, quote in code, or name as a picture though it is
- * none is still drawn here, so it can still be opened.
- */
 export function inboxCommentFiles(
   files: readonly InboxFile[],
   words: string | undefined,
@@ -200,15 +129,12 @@ export function inboxCommentFiles(
   };
 }
 
-/** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
-  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
   readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
 export function inboxBoard(
   items: readonly InboxItem[],
   readerId: string | undefined,
@@ -225,11 +151,6 @@ export function inboxBoard(
   };
 }
 
-/**
- * The thread a call's row names by its key among a board's items: the
- * latest posted under it, of the agent whose row it was where the row names
- * one, since more than one agent may post under the same key.
- */
 export function keyedItem(
   board: InboxBoardView,
   key: string,
@@ -243,12 +164,10 @@ export function keyedItem(
     );
 }
 
-/** What the draft holds for the field, or nothing where it is untouched. */
 export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
   return draft.values.find((each) => each.label === label)?.value;
 }
 
-/** The draft with the field set to the value, or cleared where none. */
 export function withValue(
   draft: InboxDraft,
   label: string,
@@ -258,12 +177,6 @@ export function withValue(
   return { ...draft, values: value === undefined ? others : [...others, { label, value }] };
 }
 
-/**
- * The answer's kind for what the card holds: a press where one was given,
- * else the decision an approval or a to-do holds, the nod a note is
- * answered by, the options picked, the form filled, or the developer's
- * words or files.
- */
 function replyKindOf(
   response: InboxResponse,
   draft: InboxDraft,
@@ -283,7 +196,6 @@ function replyKindOf(
     : INBOX_REPLY.ANSWERED;
 }
 
-/** A form's values as sent, in the form's own order: words trimmed, a field left blank left out, and a switch left alone sent as no. */
 function sentValues(form: Pick<InboxForm, "fields">, draft: InboxDraft): readonly InboxFormValue[] {
   return form.fields.flatMap((field) => {
     const held = fieldValueOf(draft, field.label);
@@ -295,20 +207,11 @@ function sentValues(form: Pick<InboxForm, "fields">, draft: InboxDraft): readonl
   });
 }
 
-/**
- * Whether the developer filled any field of a form: a value of theirs it
- * sends. Note that a switch left alone fills nothing, though it is sent as no.
- */
 function formFilledIn(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
   const held = new Set(draft.values.map((value) => value.label));
   return sentValues(form, draft).some((value) => held.has(value.label));
 }
 
-/**
- * Whether a form holds something to send: every required field filled, or,
- * where some are left empty, a field the developer filled, or words or
- * files of their own, since a form filled in part sends what was filled.
- */
 function formSendable(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
   const sent = new Set(sentValues(form, draft).map((value) => value.label));
   if (form.fields.every((field) => field.required !== true || sent.has(field.label))) return true;
@@ -316,16 +219,6 @@ function formSendable(form: Pick<InboxForm, "fields">, draft: InboxDraft): boole
   return formFilledIn(form, draft);
 }
 
-/**
- * The answer the card holds, or nothing where it holds none the response
- * takes, as a version 4 response is answered: a choice is answered by its options, with the note beside them,
- * or by the developer's own words; an approval and a task by the decision
- * picked, or a press given, and an item asking nothing by its nod, with the
- * note beside them; words by words; a
- * form by its fields, with the note beside them. The files attached go
- * beside any of these, and stand for the developer's own words where they
- * wrote none, as a message's do; they travel apart from the answer.
- */
 export function inboxReply(
   response: InboxResponse,
   draft: InboxDraft,
@@ -334,7 +227,6 @@ export function inboxReply(
   const reply = replyKindOf(response, draft, press);
   if (reply === undefined) return undefined;
   const note = draft.note.trim();
-  // A note past the wire's bound is no answer the service would take, so the card offers no send for it.
   if (note.length > INBOX_BOUNDS.MAX_NOTE_CHARS) return undefined;
   const answer: InboxReply = {
     reply,
@@ -347,16 +239,6 @@ export function inboxReply(
   return inboxReplyRefusal(response, answer, draft.attachments) === undefined ? answer : undefined;
 }
 
-/**
- * What the open ask's answer still lacks where the box holds nothing it can
- * send (`inboxThreadSend`), or nothing where it sends, no ask it knows
- * waits, or the developer wrote or attached something of their own, which
- * a box refuses only past its bound, as its counter says: a `decide` with
- * no pick lacks an option, and a `do` with nothing ticked or pressed its
- * decision, an option of its two; an `answer`'s fields their first required
- * field left empty, or their first empty where none is, since a form filled
- * in part sends what was filled; and an `answer` of words alone its words.
- */
 export function inboxMissing(
   thread: readonly InboxMessage[],
   draft: InboxDraft,
@@ -372,7 +254,6 @@ export function inboxMissing(
       return { kind: INBOX_MISSING.OPTION };
     case INBOX_ASK.ANSWER: {
       if (ask.fields === undefined) return { kind: INBOX_MISSING.WORDS };
-      // Note that a yes-or-no left alone sends no, so it is never what a form lacks.
       const sent = new Set(sentValues({ fields: ask.fields }, draft).map((value) => value.label));
       const empty = ask.fields.filter((field) => !sent.has(field.label));
       const first = empty.find((field) => field.required === true) ?? empty[0];
@@ -381,13 +262,11 @@ export function inboxMissing(
   }
 }
 
-/** A response decided by a pick of two, the one going ahead and the one holding back: an approval, or a to-do. */
 type InboxDecided = Extract<
   InboxResponse,
   { type: typeof INBOX_RESPONSE.APPROVAL | typeof INBOX_RESPONSE.TODO }
 >;
 
-/** What an approval or a to-do may be decided as, the one going ahead first, as its cards stand. */
 function decisionsOf(
   response: InboxDecided,
 ): readonly { readonly reply: InboxReplyKind; readonly label: string }[] {
@@ -395,22 +274,11 @@ function decisionsOf(
   return [ahead, back];
 }
 
-/**
- * The decision the card holds for an approval or a to-do, or none yet.
- * Note that the draft holds it as its one pick, by its reply's kind, so it
- * is kept with the card's words as a choice's pick is.
- */
 function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | undefined {
   const held = draft.choices[0];
   return decisionsOf(response).find((decision) => decision.reply === held)?.reply;
 }
 
-/**
- * The draft after the option labeled is picked by its number: the one
- * pick of a choice of one, which picking again keeps, or one more of a
- * choice of several, which picking again lets go, as a press on its row
- * would.
- */
 export function withChoice(
   choice: Pick<InboxChoice, "multiple">,
   draft: InboxDraft,
@@ -423,41 +291,24 @@ export function withChoice(
   return { ...draft, choices };
 }
 
-/** An ask this build knows, as a read carries it, with where it stands. */
 export type InboxKnownAsk = Extract<InboxReadAsk, { type: InboxAsk["type"] }>;
 
-/** A `decide` ask as a read carries it. */
 export type InboxDecideAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DECIDE }>;
 
-/** A `do` ask as a read carries it. */
 export type InboxDoAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DO }>;
 
-/** Whether an ask read off the wire is one this build knows, which its type decides. */
 export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
   return Object.values<string>(INBOX_ASK).includes(ask.type);
 }
 
-/**
- * Whether the item is a notice waiting on the reader's nod: open, and its
- * thread holding no ask open, so Got it settles it and reaches nobody, and
- * a reply settles it as it reaches the agent.
- */
 export function awaitsNod(item: InboxItem): boolean {
   return item.status === INBOX_STATUS.OPEN && openAskOf(item.thread ?? []) === undefined;
 }
 
-/** What an option the agent recommends is called: the badge it wears, as a choice's or a form's option or as one of two small buttons, and the word after it on its row. */
 export const RECOMMENDED = "Recommended";
 
-/** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
 
-/**
- * Whether a `decide` is a yes or no in other words, approve or decline,
- * approve or request changes: exactly two short options of one pick with no
- * detail, drawn as two small buttons, the first going ahead and the second
- * holding back.
- */
 export function decideButtons(ask: Pick<InboxDecideAsk, "options" | "multiple">): boolean {
   return (
     ask.multiple !== true &&
@@ -468,24 +319,15 @@ export function decideButtons(ask: Pick<InboxDecideAsk, "options" | "multiple">)
   );
 }
 
-/** How many steps a `do` ask shows: its own, or one, the item's title, for a to-do from before version 5 that named none. */
 function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
   return Math.max(ask.steps.length, 1);
 }
 
-/** A fenced block a to-do's step holds: its code, its lines kept, and the language its fence names, none where it names none. */
 interface StepFence {
   readonly code: string;
   readonly lang: string | undefined;
 }
 
-/**
- * A to-do's step as its box draws it: its words, the box's label, and the
- * fenced blocks standing at its top level, each drawn under the words as a
- * card to copy from, so a command keeps its lines rather than running into
- * the label's one line. Note that a fence inside a list or a quote stays in
- * the words, as a part of the block holding it.
- */
 export function stepParts(step: string): {
   readonly say: string;
   readonly fences: readonly StepFence[];
@@ -493,7 +335,6 @@ export function stepParts(step: string): {
   const fences = markdownTree(step).children.filter(
     (node): node is Extract<typeof node, { type: "code" }> => node.type === "code",
   );
-  // Note that the words are what stands between the fences, each run apart from the next as a paragraph.
   const ends = [
     0,
     ...fences.flatMap((fence) => [
@@ -511,17 +352,14 @@ export function stepParts(step: string): {
   };
 }
 
-/** The steps the draft ticks, in order, each once. */
 function tickedSteps(draft: Pick<InboxDraft, "steps">): readonly number[] {
   return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
 }
 
-/** Every step a `do` ask shows, by place, in order. */
 function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
   return Array.from({ length: shownSteps(ask) }, (_, at) => at);
 }
 
-/** Whether the reader ticked every step a `do` ask shows by hand. */
 function everyStepTicked(
   ask: Pick<InboxDoAsk, "steps">,
   draft: Pick<InboxDraft, "steps">,
@@ -530,12 +368,6 @@ function everyStepTicked(
   return everyStep(ask).every((at) => ticked.has(at));
 }
 
-/**
- * The decision a `do` ask's draft holds: the press given, Mark done or
- * Couldn't do it, or else Mark done where every step is ticked by hand,
- * which nothing stores, so letting a step go takes it back off. Note that
- * a press given wins, so Couldn't do it stands with every step ticked.
- */
 export function doDecision(
   ask: Pick<InboxDoAsk, "steps">,
   draft: Pick<InboxDraft, "steps" | "press">,
@@ -544,11 +376,6 @@ export function doDecision(
   return everyStepTicked(ask, draft) ? INBOX_REPLY.DONE : undefined;
 }
 
-/**
- * The steps a `do` ask's card shows ticked: every one while Mark done is
- * pressed, which ticks them all, or else those the reader ticked by hand,
- * which the draft keeps apart so Couldn't do it still sends only those.
- */
 export function shownTicks(
   ask: Pick<InboxDoAsk, "steps">,
   draft: Pick<InboxDraft, "steps" | "press">,
@@ -556,11 +383,6 @@ export function shownTicks(
   return draft.press === INBOX_REPLY.DONE ? everyStep(ask) : tickedSteps(draft);
 }
 
-/**
- * The draft with the step at `at` ticked, or let go where the card shows
- * it ticked. Note that letting a step go under Mark done takes the press
- * off and keeps the others ticked, as the card showed them.
- */
 export function withStep(
   ask: Pick<InboxDoAsk, "steps">,
   draft: InboxDraft,
@@ -574,12 +396,6 @@ export function withStep(
     : { ...draft, steps };
 }
 
-/**
- * The draft after a `do` ask's Mark done or Couldn't do it is pressed: the
- * decision it holds (`doDecision`) taken off where it is the one pressed,
- * or else given. Note that taking off a Mark done every step's hand tick
- * stands for lets those ticks go, or it would stand again at once.
- */
 export function withDoPress(
   ask: Pick<InboxDoAsk, "steps">,
   draft: InboxDraft,
@@ -592,16 +408,6 @@ export function withDoPress(
     : released;
 }
 
-/**
- * The answer the draft attaches to the reply for the open ask, or none: a
- * `decide`'s options picked, a `do`'s Mark done with every step ticked,
- * pressed or every step ticked by hand, Couldn't do it with the steps
- * ticked, or, with no press, the steps ticked as an answer deciding
- * nothing, an `answer`'s fields' values once
- * any is filled, as a form filled in part sends what was filled, or its
- * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
- * one step is ticked on the card alone, since the ask names no such step.
- */
 function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
   const { ask } = asking;
   if (!knownAsk(ask)) return undefined;
@@ -619,13 +425,11 @@ function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers |
       }
       const ticked = named(tickedSteps(draft));
       if (decision === INBOX_REPLY.NOT_DONE) return { ask: id, reply: decision, steps: ticked };
-      // Steps ticked with no press go as they stand, an answer that decides nothing.
       return ticked.length === 0
         ? undefined
         : { ask: id, reply: INBOX_REPLY.ANSWERED, steps: ticked };
     }
     case INBOX_ASK.ANSWER:
-      // A form's fields attach as they are filled, with no press, any filled in part sending what was filled.
       if (ask.fields !== undefined) {
         return formFilledIn({ fields: ask.fields }, draft)
           ? {
@@ -635,20 +439,12 @@ function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers |
             }
           : undefined;
       }
-      // An ask of words alone is answered by the reply's own words or files, which the box holds as its one field.
       return draft.note.trim() === "" && draft.attachments.length === 0
         ? undefined
         : { ask: id, reply: INBOX_REPLY.ANSWERED };
   }
 }
 
-/**
- * A settled ask's answer as the draft its controls held when it was sent,
- * which its box draws them filled in with: a `decide`'s picks, a `do`'s
- * steps ticked and its press, the title standing as the one step of a
- * `do` that names none ticked where it was marked done, and an `answer`'s
- * values. A field or a step the answer left empty stands empty.
- */
 export function answeredDraft(ask: InboxAsk, answers: InboxAnswers): InboxDraft {
   const titleStep = ask.type === INBOX_ASK.DO && ask.steps.length === 0;
   const done = answers.reply === INBOX_REPLY.DONE;
@@ -661,11 +457,6 @@ export function answeredDraft(ask: InboxAsk, answers: InboxAnswers): InboxDraft 
   };
 }
 
-/**
- * The draft after the open ask's option numbered `number`, counted from
- * one, is picked by its key: a `decide`'s, as `withChoice` picks it, the
- * first of two buttons going ahead; none for any other ask.
- */
 export function askNumberedPick(
   ask: InboxReadAsk,
   draft: InboxDraft,
@@ -676,19 +467,12 @@ export function askNumberedPick(
   return option === undefined ? undefined : withChoice(ask, draft, option.label);
 }
 
-/** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
 export interface InboxThreadSend {
   readonly text: string;
   readonly attachments: readonly AgentAttachment[];
   readonly answers?: InboxAnswers;
 }
 
-/**
- * What the box sends on a thread, or nothing where the service would take
- * nothing: a plain reply of words or files or both, never neither, or the
- * answer attached, with whatever words and files go with it, which the ask
- * must take as it stands (`inboxAnswersRefusal`); words within the bound.
- */
 export function inboxThreadSend(
   thread: readonly InboxMessage[],
   draft: InboxDraft,
@@ -705,7 +489,6 @@ export function inboxThreadSend(
   return refusal === undefined ? { text, attachments, answers } : undefined;
 }
 
-/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in gray, since holding back failed nothing. */
 export const ANSWER_TONE = {
   AHEAD: "ahead",
   BACK: "back",
@@ -713,20 +496,17 @@ export const ANSWER_TONE = {
 
 export type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
 
-/** An answer as words: what the reply's stamp says, attached or sent, and which way it goes. */
 export interface AnswerStamp {
   readonly tone: AnswerTone;
   readonly words: string;
 }
 
-/** The pick of two buttons' past tense, where its words are an act this build can say done; nothing for another. */
 const DONE_WORDS: ReadonlyMap<string, string> = new Map([
   ["Approve", "Approved"],
   ["Decline", "Declined"],
   ["Request changes", "Changes requested"],
 ]);
 
-/** The two buttons' pick an answer makes, and which of the two it is; none where the ask is no pair of buttons. */
 function buttonPick(
   answers: InboxAnswers,
   ask: InboxReadAsk | undefined,
@@ -739,19 +519,16 @@ function buttonPick(
   return { label, tone: at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK };
 }
 
-/** The steps a `do` answer ticked of those its ask shows, "2/3"; nothing where the ask named none. */
 function stepCount(answers: InboxAnswers, ask: InboxReadAsk | undefined): string | undefined {
   if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DO) return undefined;
   if (ask.steps.length === 0) return undefined;
   return `${(answers.steps ?? []).length}/${ask.steps.length}`;
 }
 
-/** Words with a count after them where there is one. */
 function counting(words: string, count: string | undefined): string {
   return count === undefined ? words : `${words} ${count}`;
 }
 
-/** Whether an answer holds back: Couldn't do it, or the second of two buttons. */
 function toneOf(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerTone {
   const pick = buttonPick(answers, ask);
   if (pick !== undefined) return pick.tone;
@@ -760,7 +537,6 @@ function toneOf(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerTon
     : ANSWER_TONE.AHEAD;
 }
 
-/** What each answer but a pick or a to-do's says it was, once sent. */
 const SENT_WORDS = {
   [INBOX_REPLY.CHOSE]: "chose",
   [INBOX_REPLY.APPROVED]: "approved",
@@ -772,13 +548,6 @@ const SENT_WORDS = {
   [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged",
 } as const satisfies Record<InboxReplyKind, string>;
 
-/**
- * What a sent answer's stamp says on the thread, in the past: "Approved",
- * "Changes requested", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
- * a to-do's steps ticked with no press, "Ticked 2/3", "Submitted", or
- * "Answered". The ask it answers is read where the thread
- * still carries it.
- */
 export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
   const tone = toneOf(answers, ask);
   const pick = buttonPick(answers, ask);
@@ -792,7 +561,6 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
       case INBOX_REPLY.NOT_DONE:
         return counting("Couldn't do it", stepCount(answers, ask));
       case INBOX_REPLY.ANSWERED: {
-        // A to-do's steps ticked with no press decided nothing, so they say what was ticked.
         const count = answers.steps === undefined ? undefined : stepCount(answers, ask);
         return count === undefined ? sentenceCased(SENT_WORDS[answers.reply]) : `Ticked ${count}`;
       }
@@ -803,7 +571,6 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
   return { tone, words };
 }
 
-/** The message that answers an ask, where the thread read carries it. */
 export function answerOf(
   thread: readonly InboxMessage[],
   messageId: string,
@@ -811,10 +578,6 @@ export function answerOf(
   return thread.find((message) => message.answers?.ask === messageId);
 }
 
-/**
- * The two ways an approval and a to-do are decided, the one that holds
- * back and the one that goes ahead, as a version 4 response names them.
- */
 const INBOX_PRESSES = {
   [INBOX_RESPONSE.APPROVAL]: {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
@@ -826,11 +589,6 @@ const INBOX_PRESSES = {
   },
 } as const;
 
-/**
- * Whether an item was closed by a member without an answer rather than taken
- * back by its agent. Note that the agent's close always says why, so a closed
- * item with no reason is a member's, whose account may be gone since.
- */
 function closedByMember(item: InboxItem): boolean {
   return (
     item.status === INBOX_STATUS.CLOSED &&
@@ -838,33 +596,22 @@ function closedByMember(item: InboxItem): boolean {
   );
 }
 
-/** A member named on an item, as an answer's or a message's writer. */
 type InboxMember = NonNullable<InboxItem["answeredBy"]>;
 
-/** What an item a member closed without an answer says of it, after who closed it. */
 export const CLOSED_WORDS = "Resolved without an answer";
 
-/** What parts a preview's words, as a menu's detail parts them. */
 const PREVIEW_PART = " · ";
 
-/** What files alone say where a message or an answer carried no words. */
 function filesWords(files: readonly unknown[] | undefined): string | undefined {
   const count = files?.length ?? 0;
   if (count === 0) return undefined;
   return count === 1 ? "Sent a file" : `Sent ${count} files`;
 }
 
-/** A word set as the start of a sentence. */
 function sentenceCased(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/**
- * The item's own pictures a message's words draw, where each is drawn: a
- * picture, `![alt](address)`, whose address names one of the item's, as
- * the pane draws it (`inbox-pictures.tsx`). Note that one written in code
- * is code, which the pane draws as words, and a bare address is a link.
- */
 function picturesDrawn(
   text: string,
   itemId: string,
@@ -876,18 +623,6 @@ function picturesDrawn(
   });
 }
 
-/**
- * An item's row's second line, what it asks or how it ended rather than who
- * said it last, since the row's tile names the agent and its title asks the
- * question. While an ask waits, the ask itself (`askLine`): a choice's
- * options, the recommended one said so, "7 days (recommended) / 14 days"; a to-do's
- * steps left and the next, as the reader's draft ticks them (`ticked`), "2
- * steps left · Open Vercel"; a form's fields, "Fill in Name, Domain"; or
- * "Write an answer". Else the thread's latest message: an answer by its
- * answerer and its stamp, "You: Chose 7 days · and say it in the docs", a
- * member's words by their writer, and the agent's words alone, its tile
- * saying who.
- */
 export function inboxPreview(
   item: InboxItem,
   nameOf: (member: InboxMember | undefined) => string,
@@ -897,12 +632,6 @@ export function inboxPreview(
   return previewOf(line, nameOf, ticked, line.words);
 }
 
-/**
- * What a reader hears of an item's row's second line (`inboxPreview`): the
- * same words, but a message cut to its first line, the one the eye reads
- * before the row cuts it short, so a code block under it is never heard
- * whole.
- */
 export function inboxPreviewHeard(
   item: InboxItem,
   nameOf: (member: InboxMember | undefined) => string,
@@ -912,7 +641,6 @@ export function inboxPreviewHeard(
   return previewOf(line, nameOf, ticked, line.heard);
 }
 
-/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
 export const INBOX_LINE = {
   DECIDE: "decide",
   DO: "do",
@@ -923,22 +651,15 @@ export const INBOX_LINE = {
 
 export type InboxLineKind = (typeof INBOX_LINE)[keyof typeof INBOX_LINE];
 
-/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, or none. */
 export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
 }
 
-/** What an item's hover card reads of its thread: the agent's latest words, plain. */
 export function inboxCardWords(item: InboxItem): string {
   const said = (item.thread ?? []).findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
   return said === undefined ? "" : plainWords(said.text);
 }
 
-/**
- * The steps of an item's open to-do its row shows ticked, as its box
- * shows them (`shownTicks`): every one while Mark done is pressed in its
- * draft, else those ticked by hand; none where no draft stands.
- */
 export function inboxShownTicks(
   item: InboxItem,
   draft: Pick<InboxDraft, "steps" | "press"> | undefined,
@@ -949,13 +670,6 @@ export function inboxShownTicks(
   return shownTicks(ask, draft);
 }
 
-/**
- * How a settled item ended, as its hover card says it, whatever its row's
- * glyph: the latest answer on its thread by its answerer, even with words
- * after it; an ask the agent took back, and why; or a member's close. None
- * while it is open, or where its thread says nothing of how it ended, as a
- * notice nodded to with Got it.
- */
 export function inboxSettledWords(
   item: InboxItem,
   nameOf: (member: InboxMember | undefined) => string,
@@ -969,7 +683,6 @@ export function inboxSettledWords(
     const words = plainWords(answering.text);
     return `${nameOf(answering.member)}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
   }
-  // Note that a close naming its closer is a member's, though it withdrew the ask it left open; otherwise an ask the agent took back says so before a close is read as a member's, since a close naming no closer reads as one.
   if (item.closedBy !== undefined) return `${nameOf(item.closedBy)}: ${CLOSED_WORDS}`;
   const withdrawn = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN);
   if (withdrawn?.ask !== undefined) {
@@ -980,7 +693,6 @@ export function inboxSettledWords(
   return undefined;
 }
 
-/** A settled item's standing in one word: answered, sent by the member who started it, resolved by a member without an answer, or withdrawn by its agent. */
 export const INBOX_SETTLED_STANDING = {
   ANSWERED: "Answered",
   STARTED: "Sent",
@@ -988,18 +700,10 @@ export const INBOX_SETTLED_STANDING = {
   WITHDRAWN: "Withdrawn",
 } as const;
 
-/**
- * Where a settled item stands, as its row's card says it over how it ended
- * (`inboxSettledWords`), in that line's own word, read in that line's
- * order: a close naming its closer is a member's, though it withdrew the
- * ask it left open, then an ask the agent took back, so the card never
- * calls one ending two names.
- */
 export function inboxSettledStanding(
   item: InboxItem,
 ): (typeof INBOX_SETTLED_STANDING)[keyof typeof INBOX_SETTLED_STANDING] {
   if (item.status === INBOX_STATUS.ANSWERED) {
-    // A thread a member started stands settled on their own nod until its agent writes on it.
     const thread = item.thread ?? [];
     const sent =
       thread.length > 0 &&
@@ -1015,7 +719,6 @@ export function inboxSettledStanding(
     : INBOX_SETTLED_STANDING.WITHDRAWN;
 }
 
-/** What an open ask asks, as its row's second line says it (`inboxPreview`). */
 function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
@@ -1042,42 +745,23 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
   }
 }
 
-/** The glyph an open ask's line leads with, by the kind of ask. */
 const ASK_LINE = {
   [INBOX_ASK.DECIDE]: INBOX_LINE.DECIDE,
   [INBOX_ASK.DO]: INBOX_LINE.DO,
   [INBOX_ASK.ANSWER]: INBOX_LINE.ANSWER,
 } as const satisfies Record<InboxKnownAsk["type"], InboxLineKind>;
 
-/** What an item's row says of its thread as the item alone says it, read once and kept with it (`itemLine`). */
 interface ItemLine {
   readonly kind: InboxLineKind;
-  /** The open ask the line says, where one waits that this build knows. */
   readonly ask: InboxKnownAsk | undefined;
-  /** The ask's words with no step ticked, or the latest message's words without who said them. */
   readonly words: string;
-  /** The same words as a reader hears them: the latest message's first line alone. */
   readonly heard: string;
-  /** Whether the latest message is the agent's, whose words its row says alone, its tile saying who. */
   readonly byAgent: boolean;
-  /** The member who said the latest message, where the agent did not. */
   readonly member: InboxMember | undefined;
 }
 
-/** Each item's line as `itemLine` last read it, kept for as long as the item stands. */
 const itemLines = new WeakMap<InboxItem, ItemLine>();
 
-/**
- * What an item's row says of its thread, as the item alone says it: the
- * glyph its line leads with, the ask that waits, and the words of the ask
- * or of the thread's latest message: an answer by its stamp's words first,
- * "Chose 7 days · and say it in the docs", a message's words, or its files
- * where it said nothing. Note that it is read from the thread's markdown
- * once and kept with the item, as its search words are (`inboxItemWords`),
- * because every row of a long Inbox asks for it as it draws, and an item
- * that changes arrives as a new one; who said it, and the steps a draft
- * ticks, are the row's to add (`inboxPreview`).
- */
 function itemLine(item: InboxItem): ItemLine {
   const held = itemLines.get(item);
   if (held !== undefined) return held;
@@ -1106,7 +790,6 @@ function itemLine(item: InboxItem): ItemLine {
   return line;
 }
 
-/** An item's second line from its line's `words`: the ask, as the draft ticks it, or the message's words after who said them where the agent did not. */
 function previewOf(
   line: ItemLine,
   nameOf: (member: InboxMember | undefined) => string,
@@ -1119,7 +802,6 @@ function previewOf(
   return line.byAgent ? words : `${nameOf(line.member)}: ${words}`;
 }
 
-/** A message's first line that says anything, as plain words (`plainWords`): a fence's line is passed over, and nothing under the first is kept. */
 function firstWords(text: string): string {
   return (
     text
@@ -1129,11 +811,6 @@ function firstWords(text: string): string {
   );
 }
 
-/**
- * A thread's latest message as its row says it, before who said it: an
- * answer by its stamp's words first, "Chose 7 days · and say it in the
- * docs", a message's words, and its files where it said nothing.
- */
 function lastWords(
   thread: readonly InboxMessage[],
   last: InboxMessage,
@@ -1146,35 +823,24 @@ function lastWords(
   return words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`;
 }
 
-/**
- * The Inbox's one name for an item waiting on the developer's answer, in
- * each form its surfaces say it: the list's filter, a count's words after
- * its figure, and the line where nothing is listed. A settled item reads
- * as answered. Every surface reads its words here, so the name is changed in
- * this one place.
- */
 export const NEEDS_YOU = {
   LABEL: "Needs you",
   COUNT: { one: "needs you", many: "need you" } satisfies CountNoun,
   NONE: "Nothing needs you",
 } as const;
 
-/** What the Inbox, the window's or a task's own, says where a read of its items did not answer. */
 export const INBOX_NOT_READ = "The inbox could not be read.";
 
-/** A count of what waits on the developer with its words, as a card's corner or a badge says it: "1 needs you", "3 need you". */
 export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** What a line of threads waiting on the developer says: "1 thread needs you", "3 threads need you". */
 export function threadsWaitingWords(waiting: number): string {
   return waiting === 1
     ? `1 thread ${NEEDS_YOU.COUNT.one}`
     : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
 }
 
-/** The items given that wait on the developer, by the agent that posted each, in their order. */
 export function waitingByAgent(
   waiting: readonly InboxItem[],
 ): ReadonlyMap<string, readonly InboxItem[]> {
@@ -1184,19 +850,11 @@ export function waitingByAgent(
   return byAgent;
 }
 
-/** What holds an item: the task its agent works on, or, for an agent with no task, the agent itself. */
 export const INBOX_HOLDER = {
   TASK: "plan",
   AGENT: "agent",
 } as const;
 
-/**
- * An agent with no task as the Inbox names it: what its row names it by,
- * the automation whose run started it, which its group stands under, the
- * repository it works in, and the workspace whose list holds it, where the
- * service names it; one with an item waiting, or one a link names whose
- * items are all settled.
- */
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
@@ -1208,12 +866,6 @@ export type TasklessInboxAgent = Pick<
   | "workspaceId"
 >;
 
-/**
- * An agent with no task as the Inbox names it, from its own row where main
- * lists none of its items, a link naming one whose items are all settled:
- * its title, as main's read names it; the automation that started it, by
- * the name its run kept; and its repository and workspace where they are known.
- */
 export function inboxAgentOf(agent: {
   readonly id: string;
   readonly title: string | null;
@@ -1234,24 +886,12 @@ export function inboxAgentOf(agent: {
   };
 }
 
-/**
- * What holds an item: the task its agent works on, or the agent itself
- * where it works on none.
- */
 export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
   | { readonly kind: typeof INBOX_HOLDER.AGENT; readonly agent: TasklessInboxAgent };
 
-/**
- * Each task's and each agent's holder as last made, kept for as long as what
- * it holds for stands. Note that a list read again from the same task or
- * agent is held by the same holder, because the window's document keeps the
- * identity of what a delivery did not change (`keepIdentity`), and every
- * object the list makes of a holder is kept by it in turn.
- */
 const keptHolders = new WeakMap<TaskSummary | TasklessInboxAgent, InboxHolder>();
 
-/** The agent with no task as the holder of its items. */
 export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
   const kept = keptHolders.get(agent);
   if (kept !== undefined) return kept;
@@ -1260,13 +900,11 @@ export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
   return holder;
 }
 
-/** The automation whose group an agent's items stand in; none for a task, and the agents no automation the reader may read names. */
 export function holderAutomationId(holder: InboxHolder): string | null {
   if (holder.kind === INBOX_HOLDER.TASK) return null;
   return holder.agent.automationId;
 }
 
-/** A task as the holder of its items, kept as an agent's is (`keptHolders`). */
 export function taskHolder(task: TaskSummary): InboxHolder {
   const kept = keptHolders.get(task);
   if (kept !== undefined) return kept;
@@ -1275,38 +913,28 @@ export function taskHolder(task: TaskSummary): InboxHolder {
   return holder;
 }
 
-/**
- * The workspace an item belongs to: its plan's, or, for an agent with no
- * plan, the agent's own, where the service named it; none where it did not,
- * since the Inbox may list an item whose workspace it does not know.
- */
 export function itemWorkspaceId(holder: InboxHolder): string | undefined {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.workspaceId : holder.agent.workspaceId;
 }
 
-/** A holder's name as its group's header and a row's context say it: the task's, the automation's, or the name of the agents no automation names. */
 export function holderName(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.name;
   const { automationId, automationName } = holder.agent;
   return automationId === null ? NO_AUTOMATION_NAME : (automationName ?? NO_AUTOMATION_NAME);
 }
 
-/** The words options say: each one's label and the trade-off written under it. */
 function optionWords(options: readonly { label: string; detail?: string }[]): readonly string[] {
   return options.flatMap((option) => [option.label, option.detail ?? ""]);
 }
 
-/** The words a form's fields say: each one's label and a select's options. */
 function fieldWords(fields: readonly InboxForm["fields"][number][]): readonly string[] {
   return fields.flatMap((field) => [field.label, ...(field.options ?? [])]);
 }
 
-/** The words a filled form says: each field's label and its value as words. */
 function valueWords(values: readonly InboxFormValue[] | undefined): readonly string[] {
   return (values ?? []).flatMap((each) => [each.label, fieldValueWords(each.value)]);
 }
 
-/** The words an ask offers: a decision's options, a to-do's steps, and an answer's fields; none of an ask this build does not know. */
 function askWords(ask: InboxReadAsk | undefined): readonly string[] {
   if (ask === undefined || !knownAsk(ask)) return [];
   if (ask.type === INBOX_ASK.DECIDE) return optionWords(ask.options);
@@ -1314,18 +942,8 @@ function askWords(ask: InboxReadAsk | undefined): readonly string[] {
   return fieldWords(ask.fields ?? []);
 }
 
-/** Each item's words as `inboxItemWords` last read them, kept for as long as the item stands. */
 const itemWords = new WeakMap<InboxItem, readonly string[]>();
 
-/**
- * Every line of words an item says, as a search reads it: its title, and
- * each message of its thread and what that asks, picks, or fills in. Note
- * that it names no address, id, or member, because a query typed is about
- * what was said, and an address holds letters enough to match almost
- * anything. Note too that an item's words are read from its markdown once
- * and kept with it, because a search asks for every item's words on each
- * key, and an item that changes arrives as a new one.
- */
 export function inboxItemWords(item: InboxItem): readonly string[] {
   const kept = itemWords.get(item);
   if (kept !== undefined) return kept;
@@ -1340,22 +958,14 @@ export function inboxItemWords(item: InboxItem): readonly string[] {
   return words;
 }
 
-/** Whether an item answers a list's search: every word of it somewhere in the item's words (`inboxItemWords`) or its holder's name; any item answers none. */
 function searchedItem(holder: InboxHolder, item: InboxItem, search: readonly string[]): boolean {
   return (
     search.length === 0 || matchesTokens([holderName(holder), ...inboxItemWords(item)], search)
   );
 }
 
-/** What the group of agents no automation the reader may read started is called. */
 const NO_AUTOMATION_NAME = "Other agents";
 
-/**
- * Whether a waiting item of an agent with no task is listed in the workspace
- * given: one of that workspace's agents', or one whose workspace the service
- * does not name. Note that with no workspace listed every agent's items
- * stand, as every task's do.
- */
 export function listedIn(
   entry: Pick<AppInboxTasklessItem, "workspaceId">,
   workspaceId: string | undefined,
@@ -1367,12 +977,6 @@ export function listedIn(
   );
 }
 
-/**
- * Each agent with no task as the holder of its items, once whatever many
- * of its items main lists, holding every item its read holds, settled ones
- * too; only the listed workspace's agents, where the service names an
- * agent's workspace, so another workspace's list holds none of them.
- */
 export function agentGroups(
   agents: readonly TasklessInboxAgent[],
   read: ReadonlyMap<string, readonly InboxItem[]>,
@@ -1387,19 +991,6 @@ export function agentGroups(
   return [...holders].map(([agentId, holder]) => inboxGroup(holder, read.get(agentId) ?? NO_ITEMS));
 }
 
-/**
- * Which items an Inbox lists, as its view's menu chooses: Needs you, the
- * questions whose ask waits on the reader's answer (`threadNeedsReader`),
- * which Addressed to never narrows; Open, every
- * thread the reader is not done with, a question not yet answered, a notice
- * not yet opened, or a thread they have not read since it changed or marked
- * unread, bar a withdrawn ask they left alone, which Addressed to then narrows; All, every item, open and
- * settled; or Reminders, the items the reader set a reminder on, which the other three
- * leave out until they come back. Note that Open keeps the value To do was kept by, so a scope
- * kept before it reads as Open. Note too that no scope asks where the
- * item's task stands: an item of a task done or canceled is listed and
- * counted as any other, the Inbox being a feed of what the agents got done.
- */
 export const INBOX_SHOW = {
   NEEDS_ME: "needs-me",
   OPEN: "to-do",
@@ -1409,7 +1000,6 @@ export const INBOX_SHOW = {
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
 
-/** Whom the window's Inbox lists items addressed to: anyone, the reader, or one teammate, by their account and the name they had when chosen, which names them once they leave. */
 export const INBOX_WHOSE = {
   EVERYONE: "everyone",
   MINE: "mine",
@@ -1421,13 +1011,10 @@ export type InboxWhose =
   | { readonly kind: typeof INBOX_WHOSE.MINE }
   | { readonly kind: typeof INBOX_WHOSE.PERSON; readonly userId: string; readonly name: string };
 
-/** Anyone's items, as a task's own Inbox lists them. */
 export const EVERYONES: InboxWhose = { kind: INBOX_WHOSE.EVERYONE };
 
-/** The reader's own items, as the window's Inbox lists them until told otherwise. */
 export const MINE: InboxWhose = { kind: INBOX_WHOSE.MINE };
 
-/** How many items each scope lists, filtered out by the scope shown or not. */
 export interface InboxCounts {
   readonly [INBOX_SHOW.NEEDS_ME]: number;
   readonly [INBOX_SHOW.OPEN]: number;
@@ -1435,29 +1022,20 @@ export interface InboxCounts {
   readonly [INBOX_SHOW.REMINDERS]: number;
 }
 
-/** One holder, a task or an agent, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
   readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
 }
 
-/** One item the list draws, with what holds it. */
 export interface InboxListed {
   readonly holder: InboxHolder;
   readonly item: InboxItem;
 }
 
-/** A holder holding nothing, the one empty list every such group holds. */
 export const NO_ITEMS: readonly InboxItem[] = [];
 
-/** Each holder's group as last made, kept while it holds the same items (`inboxGroup`). */
 const keptGroups = new WeakMap<InboxHolder, InboxGroup>();
 
-/**
- * A holder and every item it holds as one group: the one made last for the
- * holder while its items are the same list, so a list read again from items
- * that did not move groups them in the objects it grouped them in before.
- */
 export function inboxGroup(holder: InboxHolder, items: readonly InboxItem[]): InboxGroup {
   const kept = keptGroups.get(holder);
   if (kept?.items === items) return kept;
@@ -1466,15 +1044,8 @@ export function inboxGroup(holder: InboxHolder, items: readonly InboxItem[]): In
   return group;
 }
 
-/** Each item as last listed, kept while the same holder holds it (`inboxListed`). */
 const keptListed = new WeakMap<InboxItem, InboxListed>();
 
-/**
- * An item listed under what holds it: the one listed last while its holder
- * is the same, so a list drawn again lists an item that did not move in the
- * object it listed it in before, and the item's row, which is drawn again
- * only for another (`InboxItemRow`), stands as it was.
- */
 function inboxListed(holder: InboxHolder, item: InboxItem): InboxListed {
   const kept = keptListed.get(item);
   if (kept?.holder === holder) return kept;
@@ -1483,33 +1054,16 @@ function inboxListed(holder: InboxHolder, item: InboxItem): InboxListed {
   return listed;
 }
 
-/**
- * The list as it is drawn: every item it shows in one run, the latest
- * changed first; and the reader it was drawn for, whose items alone need
- * them.
- */
 export interface InboxListView {
   readonly readerId: string | undefined;
   readonly items: readonly InboxListed[];
 }
 
-/**
- * Whether an item is the reader's: it waits on them (`inboxWaitsOn`), or on
- * nobody the service names, or is read before the reader's own id is known,
- * as main counts what waits on the account and as every item read before.
- */
 export function readersItem(item: InboxItem, readerId: string | undefined): boolean {
   const waitsOn = inboxWaitsOn(item)?.userId;
   return waitsOn === undefined || readerId === undefined || waitsOn === readerId;
 }
 
-/**
- * Whether an open item of an agent with no task, as main lists it, waits on
- * the reader: addressed to them, or else its agent started by them, or by
- * nobody the service names, or listed before the reader's own id is known,
- * as `readersItem` reads an item. Main lists every member's, as the Inbox
- * lists them, and counts only these.
- */
 export function waitsOnReader(
   entry: Pick<AppInboxTasklessItem, "startedBy" | "waitsOn">,
   readerId: string | undefined,
@@ -1518,50 +1072,30 @@ export function waitsOnReader(
   return waitsOn === undefined || readerId === undefined || waitsOn === readerId;
 }
 
-/**
- * Whether an open item main lists holds an ask open rather than being a
- * notice: what the Inbox's number and the Dock's badge count. One from a
- * service before it, which says nothing, counts as asking, as every item did.
- */
 export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
   return item.asking !== false;
 }
 
-/** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
 }
 
-/**
- * Whether opening the item acknowledges it, as Got it did: a notice that
- * offers Got it (`awaitsNod`), the reader's own (`needsReader`) by an id already
- * known, since an acknowledgment settles it for every member, and one
- * whose agent does not wait to hear back (`needsReply`), since a notice
- * that asks to be heard back would reach its agent on a mere open. A box
- * holding no words or files for it offers no Got it.
- */
 export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
   return (
     readerId !== undefined && needsReader(item, readerId) && awaitsNod(item) && !item.needsReply
   );
 }
 
-/** Whether a listed item needs the reader (`needsReader`), whatever its task's status. */
 export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
   return needsReader(listed.item, readerId);
 }
 
-/** The groups of an Inbox narrowed to one task: that task's alone, as a task's "needs you" count opens it. */
 export function taskGroups(groups: readonly InboxGroup[], taskId: string): readonly InboxGroup[] {
   return groups.filter(
     ({ holder }) => holder.kind === INBOX_HOLDER.TASK && holder.task.id === taskId,
   );
 }
 
-/**
- * Every open item, whoever's, the latest changed first, as Home and a
- * person's page list what waits (`use-waiting-items.ts`).
- */
 export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
   return groups
     .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
@@ -1569,28 +1103,18 @@ export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[]
     .toSorted((a, b) => newestFirst(a.item, b.item));
 }
 
-/** The latest change first. */
 function newestFirst(a: InboxItem, b: InboxItem): number {
   return b.updatedAt - a.updatedAt;
 }
 
-/**
- * Where a listed item stands in a list's order: when it changed, as the
- * list first drew it. A list held still while it is shown is drawn from
- * this rather than from the item as it is now, so an answer, which changes
- * it, moves no row (`inboxPlaces`).
- */
 export interface InboxPlace {
   readonly at: number;
 }
 
-/** No item's place held: every item stands where it is now. */
 export const NO_PLACES: ReadonlyMap<string, InboxPlace> = new Map();
 
-/** No search: every item answers it. */
 const NO_SEARCH: readonly string[] = [];
 
-/** Whether an item is one Addressed to lists: anyone's, the reader's own (`readersItem`), or one that waits on the teammate (`inboxWaitsOn`). */
 function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefined): boolean {
   switch (whose.kind) {
     case INBOX_WHOSE.EVERYONE:
@@ -1602,12 +1126,10 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
   }
 }
 
-/** Whether Addressed to narrows a scope: every scope but Needs you, which names the reader already. */
 export function narrowedByWhose(show: InboxShow): boolean {
   return show !== INBOX_SHOW.NEEDS_ME;
 }
 
-/** Whether a scope lists the item (`showsItem`) addressed to whom Addressed to names where it narrows the scope (`narrowedByWhose`). */
 function scopedItem(
   show: InboxShow,
   whose: InboxWhose,
@@ -1619,31 +1141,14 @@ function scopedItem(
   );
 }
 
-/**
- * The list from every task's items, in one run, the latest changed first.
- * The scope shown lists only the items it takes addressed to whom Addressed
- * to names where it narrows the scope (`scopedItem`) that its search finds
- * (`searchedItem`), and the
- * item chosen where one is given. Note that the rows a list draws are given
- * only the chosen item they drew already, kept while it stays chosen
- * (`use-held-inbox-list.ts`), so a settled item leaves a list filtered to
- * exclude it once another is chosen, while the steps through the list are
- * given the item the pane shows, which keeps its place among them so K, J,
- * and Next still reach the rows either side of it. An item whose place is
- * held (`places`) stands there, rather than where it changed last.
- */
 export function inboxList(
   tasks: readonly InboxGroup[],
   view: {
     readonly show: InboxShow;
     readonly chosen: string | undefined;
-    /** The signed-in account's id, whose own open items alone need them; none counts every item as theirs. */
     readonly readerId: string | undefined;
-    /** Whom the items listed are addressed to; anyone where none is given. */
     readonly whose?: InboxWhose | undefined;
-    /** The words of the list's search (`searchTokens`), each somewhere in every item listed; none narrows nothing. */
     readonly search?: readonly string[] | undefined;
-    /** Where the items held still stand (`inboxPlaces`), each other item where it is now; none holds every item where it is now. */
     readonly places?: ReadonlyMap<string, InboxPlace> | undefined;
   },
 ): InboxListView {
@@ -1663,12 +1168,6 @@ export function inboxList(
   return { items, readerId };
 }
 
-/**
- * Where each row of a list stands, to hold it still while the list is
- * shown: the place held for it where it has one, else where it is now. An
- * item the list no longer draws holds no place, so once it is listed again
- * it stands where it is then.
- */
 export function inboxPlaces(
   view: InboxListView,
   held: ReadonlyMap<string, InboxPlace>,
@@ -1678,31 +1177,20 @@ export function inboxPlaces(
   );
 }
 
-/** Whether an item is unread for the reader: changed since they last read it, or marked unread; an item from a service before read state reads as read. */
 export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
 }
 
-/** Whether the reader set a reminder on the item and it has not come back, as `inboxAtNow` leaves its reminder on it. */
 export function hasReminder(item: InboxItem): boolean {
   return item.remindAt !== undefined;
 }
 
-/**
- * An item as it stands for the reader at `now`: put away while its reminder is
- * ahead, read or unread alike; and back where it has passed, as changed
- * then, so it lists at the top, read or unread as it was. A change ends a
- * reminder early by the service answering none. Only an item with a reminder keeps
- * `remindAt` (`hasReminder`), and an item it leaves as it was is the very
- * one handed in.
- */
 function itemAtNow(item: InboxItem, now: number): InboxItem {
   const { remindAt, ...rest } = item;
   if (remindAt === undefined || remindAt > now) return item;
   return { ...rest, updatedAt: Math.max(item.updatedAt, remindAt) };
 }
 
-/** Every holder's items as they stand for the reader at `now` (`itemAtNow`), each group handed in kept where none of its items moved. */
 export function inboxAtNow(groups: readonly InboxGroup[], now: number): readonly InboxGroup[] {
   return groups.map((group) => {
     const items = group.items.map((item) => itemAtNow(item, now));
@@ -1710,42 +1198,15 @@ export function inboxAtNow(groups: readonly InboxGroup[], now: number): readonly
   });
 }
 
-/**
- * Whether a thread closed without an answer, its ask withdrawn by its agent,
- * a member, or its task's or agent's settle, says nothing new to the
- * reader: they neither marked it unread nor missed a message written on it
- * since it closed. Note that an item from a service before `settledAt` was
- * kept reads its last change as its close, as the service does.
- */
 function closedQuietly(item: InboxItem): boolean {
   if (item.status !== INBOX_STATUS.CLOSED || item.markedUnread === true) return false;
   return item.updatedAt <= (item.settledAt ?? item.updatedAt);
 }
 
-/**
- * Whether the reader is done with an item, as its row is drawn gray:
- * settled, answered or closed, and read since, or closed without an answer
- * and saying nothing new (`closedQuietly`), since a withdrawn ask asks
- * nothing of them however unread it stands.
- */
 export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && (!isUnread(item) || closedQuietly(item));
 }
 
-/**
- * Whether a scope lists the item: Needs you every question whose ask waits
- * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those with a reminder, a notice never; Open every
- * thread the reader is not done with (`isDone`), one still open, one
- * answered since they last read it, or one closed without an answer that
- * they marked unread or that was written on since it closed, as a mail
- * app's inbox keeps what is unread; and All all of them, each leaving out what the
- * reader set a reminder on (`hasReminder`), which Reminders alone lists. Note that Open
- * reads the reader's own read state rather than the thread's status alone,
- * because a notice settles as it is opened (`acknowledgedOnOpen`), so a
- * thread marked unread comes back to Open whatever settled it, and a row
- * drawn gray is one Open has let go.
- */
 function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.NEEDS_ME:
@@ -1759,7 +1220,6 @@ function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefine
   }
 }
 
-/** How many of every task's items each scope lists, of those addressed to whom Addressed to names where it narrows the scope (`scopedItem`). */
 export function inboxCounts(
   tasks: readonly InboxGroup[],
   readerId: string | undefined,
@@ -1778,17 +1238,14 @@ export function inboxCounts(
   };
 }
 
-/** Whether any task's item is unread, listed or filtered out. */
 export function anyUnread(tasks: readonly InboxGroup[]): boolean {
   return tasks.some(({ items }) => items.some(isUnread));
 }
 
-/** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   return view.items;
 }
 
-/** Where the chosen item stands among those listed, counted from one, and the items either side of it in the list's order. */
 export interface InboxSteps {
   readonly at: number;
   readonly total: number;
@@ -1796,7 +1253,6 @@ export interface InboxSteps {
   readonly next: InboxListed | undefined;
 }
 
-/** The chosen item's place among the rows, in the list's own order and filter as drawn; none where the list does not hold it. */
 export function inboxSteps(
   view: InboxListView,
   chosen: string | undefined,
@@ -1807,7 +1263,6 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
-/** The list's first and last rows, in its own order and filter as drawn; none where it draws no row. */
 export function inboxEnds(
   view: InboxListView,
 ): { readonly first: InboxListed; readonly last: InboxListed } | undefined {
@@ -1816,14 +1271,11 @@ export function inboxEnds(
   return first === undefined || last === undefined ? undefined : { first, last };
 }
 
-/** How many lines of the file a code block's card draws above and below the lines it points at. */
 const CODE_CONTEXT_LINES = 3;
 
-/** Where a code block's card stands with its lines. */
 export const CODE_READ = {
   READING: "reading",
   READY: "ready",
-  /** The lines are not drawn, for the reason the card says. */
   NOTICE: "notice",
 } as const;
 
@@ -1833,18 +1285,11 @@ export type CodeRead =
   | {
       readonly kind: typeof CODE_READ.NOTICE;
       readonly line: string;
-      /** Whether reading again may draw the lines, which the card offers. */
       readonly again: boolean;
     };
 
-/** What a code block's card says where its lines did not come back. */
 const CODE_UNREAD = "These lines could not be read.";
 
-/**
- * The window a code block's card reads: the lines it points at with a few
- * of the file around them, at the block's commit. Note that the window may
- * run past the file's end, which the service answers with the lines it has.
- */
 export function codeWindow(block: InboxCodeBlock): TaskFileRequest {
   return {
     path: block.path,
@@ -1854,14 +1299,6 @@ export function codeWindow(block: InboxCodeBlock): TaskFileRequest {
   };
 }
 
-/**
- * Why a code block's lines are not read at all, or nothing where they are
- * read: the task reads its own repository alone, which the agent's
- * repository was when it started but may not be once the task names
- * another, and lines that run backwards or past the bound are no window
- * the File tab's read takes. Note that GitHub spells a repository's name in
- * any case.
- */
 export function codeNotice(block: InboxCodeBlock, repository: string | null): string | undefined {
   if (repository === null || repository.toLowerCase() !== block.repo.toLowerCase()) {
     return `These lines are in ${block.repo}, which this task no longer reads.`;
@@ -1870,12 +1307,6 @@ export function codeNotice(block: InboxCodeBlock, repository: string | null): st
   return undefined;
 }
 
-/**
- * A code block's lines as its card holds them once the read answered: the
- * window the service read at the block's commit, the block's lines lit in
- * it; or why they are not drawn, a file that ends before they do included, and
- * whether reading again may draw them.
- */
 export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): CodeRead {
   if ("refusal" in answer) {
     return {
@@ -1886,8 +1317,6 @@ export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): Code
   }
   if (!("file" in answer)) return { kind: CODE_READ.NOTICE, line: CODE_UNREAD, again: true };
   const { file } = answer;
-  // Note that a file ending inside the lines is said too, because a card
-  // drawing some of them would read, and copy, as all the agent meant.
   if (file.firstLine + file.lines.length <= block.endLine) {
     return {
       kind: CODE_READ.NOTICE,
@@ -1905,7 +1334,6 @@ export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): Code
   };
 }
 
-/** A code block's card where the read did not land at all, as main refusing the act leaves it. */
 export const CODE_READ_FAILED: CodeRead = {
   kind: CODE_READ.NOTICE,
   line: CODE_UNREAD,

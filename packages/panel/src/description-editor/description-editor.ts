@@ -57,54 +57,20 @@ import { descriptionSlash } from "./description-slash.js";
 import { editorFormatting, formatReports } from "./writing-format.js";
 import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
-/**
- * description-editor.ts -- a Markdown document's text, a description's or another's, edited in place on TipTap, drawn exactly as the document draws it.
- *
- * What the text may hold, and every Markdown rule for writing it, is
- * TipTap's own: StarterKit, `@tiptap/markdown`, task lists, tables, and
- * pictures (`./picture-node.ts`), each inline in a paragraph even where it
- * stands alone on its line; its chords are the writing vocabulary's
- * (`./writing-keys.ts`), in place of TipTap's, and neither a chord nor a
- * Markdown rule lays a block into a table's cell;
- * underline alone is left out, because Markdown cannot store it and the
- * document could not draw it. A heading wears the read view's own class and
- * level, so the editor's words stand where the drawn words stood and opening
- * the text moves nothing. Each untouched block keeps its exact source
- * (`./document-source.ts`). A format toolbar over the text hears its
- * selection and acts on it (`./writing-format.ts`), and a `/` at a line's
- * start or after a space opens the panel's block menu (`./description-slash.ts`),
- * which an empty line under the caret offers in its placeholder, as an empty
- * heading names its level. A Mermaid code block stays code, its diagram
- * previewed under it where the panel draws one (`./diagram-preview.ts`).
- * A document's own `/` blocks lay in the Markdown they name. Esc and the
- * send finish, naming the section the caret stood in, the send ⌘↩ in a
- * document and Enter in a message box's text (`sendsOnEnter`); ↑ on the text's first line
- * goes to the title above it, where one stands. What a description alone takes
- * (mentions, pictures, comment threads, a diagram's preview, and the title
- * above) is each left out where the document takes none, which leaves a
- * Markdown editor that keeps every untouched block's source.
- */
-
-/** The key code a browser gives a key an input method takes. */
 const COMPOSING_KEY_CODE = 229;
 
-/** The class the editor's own element wears beside the read view's, which `tasks.css` styles. */
 const EDITOR_CLASS = "description-document-text";
 
-/** What an empty line under the caret says where the `/` menu stands over the text. */
 const LINE_PLACEHOLDER = "Write, or press / for blocks";
 
-/** What an empty heading says, by its level: the block's own name. */
 const HEADING_PLACEHOLDERS: ReadonlyMap<number, string> = new Map([
   [1, WRITING_SHORTCUTS[WRITING_BLOCK.HEADING_1].label],
   [2, WRITING_SHORTCUTS[WRITING_BLOCK.HEADING_2].label],
   [3, WRITING_SHORTCUTS[WRITING_BLOCK.HEADING_3].label],
 ]);
 
-/** The heading levels that open a section, as `descriptionSections` counts them. */
 const SECTION_LEVELS = new Set([1, 2]);
 
-/** A heading in the read view's own look: its class and its level, which the document's styles key on. */
 const DocumentHeading = Heading.extend({
   renderHTML({ node }) {
     const level = Number(node.attrs.level);
@@ -112,13 +78,6 @@ const DocumentHeading = Heading.extend({
   },
 });
 
-/**
- * A paragraph that keeps a picture standing alone on its line as its one
- * inline child. Note that TipTap's own unwraps such a picture into a block,
- * which a task's inline image cannot be, so the document opened invalid and
- * the first edit beside the picture threw; every other paragraph reads as
- * TipTap's does.
- */
 const DocumentParagraph = Paragraph.extend({
   parseMarkdown(token, helpers) {
     const tokens = token.tokens ?? [];
@@ -129,25 +88,10 @@ const DocumentParagraph = Paragraph.extend({
   },
 });
 
-/** What an empty task item's words are written as: TipTap's own mark for an empty paragraph. */
 const EMPTY_TASK_WORDS = "&nbsp;";
 
-/** How many characters TipTap's task item mark, `- [ ] ` or `- [x] `, takes before its words. */
 const TASK_MARK_LENGTH = "- [ ] ".length;
 
-/**
- * A task item that stays one when it holds no words. Note that TipTap's own
- * writes an empty one as `- [ ] `, which GFM, and so the read view, reads as
- * a bullet saying "[ ]", and which loses its trailing space the moment a
- * block's ending is trimmed; so its words are written as `&nbsp;`, which
- * GFM reads as a task, and read back as no words. They are laid in after
- * the mark rather than as a text node, which would escape the `&`. Its
- * Markdown rule is kept out of a table's cell before it is extended, because
- * extending it after would hand its own writing to itself as its parent's.
- * It takes a list nested under its words, because TipTap's Markdown reader
- * lays an indented list into the item whatever it takes, so one that took
- * words alone opened invalid and ticking its checkbox threw.
- */
 const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
   addOptions() {
     const parent = this.parent?.();
@@ -170,10 +114,8 @@ const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
   },
 });
 
-/** What names a task item's box where its item holds no words, as the read view names it. */
 const UNNAMED_TASK = "Task";
 
-/** A task item's box as the panel draws it: its item's own words, without a list nested in it, whether it is ticked, and the door that ticks it. */
 function taskBoxOf(node: PmNode, toggle: (checked: boolean) => void) {
   const words = node.firstChild?.textContent.trim() ?? "";
   return {
@@ -183,17 +125,6 @@ function taskBoxOf(node: PmNode, toggle: (checked: boolean) => void) {
   };
 }
 
-/**
- * TipTap's task item view with its box drawn by the panel, as the read view
- * draws it, the shared `Checkbox` in the read view's box
- * (`MARKDOWN_CLASS.TASK_BOX`), in place of TipTap's own label and the
- * browser's checkbox in it, so the box looks and stands the same as the text
- * opens to be edited. The item is otherwise TipTap's own view, its words and
- * its attributes kept as TipTap keeps them. A tick is TipTap's own change,
- * the attribute set on the item with the caret kept where it stood. Note
- * that the box's own presses and keys are its own and not the editor's, and
- * that its drawing changes nothing the editor reads.
- */
 function drawnTaskView(tiptap: NodeViewRenderer, drawTaskBox: TaskBoxDrawer): NodeViewRenderer {
   return (props) => {
     const view = tiptap(props);
@@ -201,7 +132,6 @@ function drawnTaskView(tiptap: NodeViewRenderer, drawTaskBox: TaskBoxDrawer): No
     const box = document.createElement("span");
     box.className = MARKDOWN_CLASS.TASK_BOX;
     box.contentEditable = "false";
-    // Note that a press keeps the caret where it stands, as TipTap's own box does.
     box.addEventListener("mousedown", (event) => event.preventDefault());
     view.dom.firstChild?.replaceWith(box);
     const toggle = (checked: boolean) => {
@@ -240,11 +170,9 @@ function drawnTaskView(tiptap: NodeViewRenderer, drawTaskBox: TaskBoxDrawer): No
   };
 }
 
-/** The task item, its box drawn by the panel where it draws one (`drawnTaskView`), and TipTap's own elsewhere. */
 function drawnTaskItem(drawTaskBox: TaskBoxDrawer | undefined) {
   if (drawTaskBox === undefined) return DocumentTaskItem;
   return DocumentTaskItem.extend({
-    // Note that `this` is named, because `extend` infers its config from this method, which then cannot infer `this` from the config.
     addNodeView(this: { parent?: (() => NodeViewRenderer | null) | undefined }) {
       const tiptap = this.parent?.();
       return tiptap == null ? null : drawnTaskView(tiptap, drawTaskBox);
@@ -252,20 +180,8 @@ function drawnTaskItem(drawTaskBox: TaskBoxDrawer | undefined) {
   });
 }
 
-/** The class a link whose target names a mention wears in the editor, which `tasks.css` draws in a chip's light look. */
 const MENTION_LINK_CLASS = "description-mention-link";
 
-/**
- * How a link looks in the editor: a link whose target names a mention,
- * which the read view draws as its chip, wears a chip's light look, so
- * opening a section to edit it does not turn its chips into underlined
- * words; a web page's is the plain link every place draws, and any other,
- * a `mailto:` one say, its words alone, as the read view draws it
- * (`linkMarkAttributes`). Note that one attribute decides between them, so a mention's link
- * never wears the plain link's class beside its own, that only a class and
- * the link's look are added, never the target in an attribute of its own, and that the
- * attribute is drawn alone and never read or written as markdown.
- */
 function linkLook(namesMention: ((target: string) => boolean) | undefined) {
   return Extension.create({
     name: "linkLook",
@@ -291,13 +207,6 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
   });
 }
 
-/**
- * What the text may hold, read and written as the editor reads and writes
- * it: the mention among the rest, drawn by the panel where it can draw one,
- * a link naming one in a chip's light look where the panel says which,
- * every other link a plain one, and a task item's box drawn by the panel
- * where it draws one.
- */
 export function markdownExtensions(
   drawMention?: MentionDrawer | undefined,
   namesMention?: ((target: string) => boolean) | undefined,
@@ -328,13 +237,6 @@ export function markdownExtensions(
   ];
 }
 
-/**
- * What the empty block under the caret says: a heading its level's name,
- * the empty text `description`'s words, and a line, where the menu stands over the
- * text, how to open it; nothing in code. Note that only a top-level block
- * is asked, as TipTap asks only the block under the caret, so a list's or a
- * table's empty line says nothing.
- */
 function placeholderOf(description: string, offersBlocks: boolean) {
   return ({ editor, node }: { editor: Editor; node: PmNode }): string => {
     if (node.type.name === "heading")
@@ -344,12 +246,10 @@ function placeholderOf(description: string, offersBlocks: boolean) {
   };
 }
 
-/** Whether a top-level block opens a section. */
 function opensSection(node: PmNode): boolean {
   return node.type.name === "heading" && SECTION_LEVELS.has(Number(node.attrs.level));
 }
 
-/** The top-level index each section starts at: the first block, and each heading after it that opens one. */
 function sectionStarts(doc: PmNode): number[] {
   const starts: number[] = [0];
   doc.forEach((node, _offset, index) => {
@@ -358,29 +258,21 @@ function sectionStarts(doc: PmNode): number[] {
   return starts;
 }
 
-/** The section the caret stands in. */
 function caretSection(editor: Editor): number {
   const index = editor.state.selection.$from.index(0);
   return sectionStarts(editor.state.doc).filter((start) => start <= index).length - 1;
 }
 
-/** The top-level blocks a section holds, by index: from its first to the next section's first. */
 function sectionBlocks(doc: PmNode, section: number): { first: number; next: number } | undefined {
   const starts = sectionStarts(doc);
   const first = starts[section];
   return first === undefined ? undefined : { first, next: starts[section + 1] ?? doc.childCount };
 }
 
-/** Whether a text node stands in a code block. */
 function inCode(text: Node): boolean {
   return text.parentElement?.closest("pre") != null;
 }
 
-/**
- * Where the words a click landed on stand in the editor: in the same
- * section, the node of the same words as many such nodes in, at the same
- * offset; none where the section holds no such node.
- */
 function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
   const { view } = editor;
   const blocks = sectionBlocks(view.state.doc, words.section);
@@ -405,7 +297,6 @@ function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
   return found;
 }
 
-/** The text node and offset the caret stands at, where it stands in one; none where it stands between blocks. */
 function caretText(editor: Editor): { text: Text; offset: number } | undefined {
   const { node, offset } = editor.view.domAtPos(editor.state.selection.head);
   if (node instanceof Text) return { text: node, offset };
@@ -415,11 +306,6 @@ function caretText(editor: Editor): { text: Text; offset: number } | undefined {
   return before instanceof Text ? { text: before, offset: before.data.length } : undefined;
 }
 
-/**
- * The words the caret stands in, counted as `wordsAt` finds them, so the
- * drawn text finds them again, and where their line stands in the window;
- * none off any words, or where nothing is laid out to measure.
- */
 function caretWords(editor: Editor): PlacedWords | undefined {
   const { view } = editor;
   const at = caretText(editor);
@@ -443,16 +329,10 @@ function caretWords(editor: Editor): PlacedWords | undefined {
     const { top } = view.coordsAtPos(view.state.selection.head);
     return { section, text: at.text.data, occurrence, offset: at.offset, code, top };
   } catch {
-    // Note that a view with no layout, as a test's page is, measures nothing.
     return undefined;
   }
 }
 
-/**
- * Where the caret goes as the editor opens on the words a click landed on,
- * where it finds them, the words its press selected selected again where it
- * finds where they start too; none where it does not find the words.
- */
 function placedOnWords(
   editor: Editor,
   placement: DescriptionEditorPlacement | undefined,
@@ -467,7 +347,6 @@ function placedOnWords(
     : TextSelection.between(doc.resolve(from), doc.resolve(at));
 }
 
-/** Where the caret goes as the editor opens, the words a click landed on aside. */
 function placed(editor: Editor, placement: DescriptionEditorPlacement | undefined): Selection {
   const { doc } = editor.state;
   if (placement === undefined) return Selection.atStart(doc);
@@ -488,12 +367,6 @@ function placed(editor: Editor, placement: DescriptionEditorPlacement | undefine
   return TextSelection.near(doc.resolve(end), -1);
 }
 
-/**
- * What the editor holds of its sources after a change that only laid or took
- * off marks, which writes nothing to the Markdown: each block that changed
- * keeps the source it held, found by its place, since such a change moves no
- * block.
- */
 function heldAcrossMarks(before: PmNode, after: PmNode, held: HeldSources): HeldSources {
   if (before === after) return held;
   const sources = new Map<PmNode, string>();
@@ -504,10 +377,6 @@ function heldAcrossMarks(before: PmNode, after: PmNode, held: HeldSources): Held
   return { ...held, sources };
 }
 
-/**
- * The text's editor mounted into `host`, in place of its drawn sections, its
- * caret where the placement says, and focused if it is asked to be.
- */
 export function mountDescriptionEditor(
   host: HTMLElement,
   props: DescriptionEditorProps,
@@ -538,7 +407,6 @@ export function mountDescriptionEditor(
     drawTaskBox,
   );
   const manager = documentManager(extensions);
-  // Filled once the editor is built, since a block's source is known by the node it opened as.
   let held: HeldSources = { sources: new Map(), lead: "", ending: "" };
   const picking =
     mentions === undefined
@@ -548,22 +416,17 @@ export function mountDescriptionEditor(
     blocks === undefined
       ? undefined
       : descriptionSlash(blocks, (markdown) => manager.parse(markdown).content ?? []);
-  // Note that the text is read with LF line endings and written back with its own, so a body saved with CRLF comes back as it was.
   const ending = lineEndingOf(markdown);
   const source = withLf(markdown);
   const written = () => withLineEnding(documentMarkdown(manager, editor.state.doc, held), ending);
   const opened = documentOpened(manager, source);
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
-  // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
   let carried: readonly string[] = [];
   let laying = false;
-  // Whether a Shift+Enter is being laid in as Enter, whose key the editor's own commands hear and this handler lets by.
   let breaking = false;
-  // What ties the text to the `@` list or the `/` menu over it, which the panel hands over as either opens and closes.
   let aria: EditorAria = {};
   const editor: Editor = new Editor({
     element: host,
-    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; `planning.css` styles the text instead.
     injectCSS: false,
     extensions: [
       ...extensions,
@@ -575,13 +438,11 @@ export function mountDescriptionEditor(
     content: opened.content,
     contentType: "json",
     editorProps: {
-      // Note that the attributes are read again on every update, so the text names itself a combobox while a list over it stands.
       attributes: () => ({
         class: `${className} ${EDITOR_CLASS}`,
         ...rootAria(aria),
         "aria-label": label,
       }),
-      // Note that image files pasted are laid in as pictures, and an address of our own or a page of an integration's pasted whole as its mention, as the box lays it in.
       handlePaste: (view, event) => {
         if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
         return mentions === undefined ? false : pastedMention(view, event, mentions.pasted);
@@ -591,7 +452,6 @@ export function mountDescriptionEditor(
       transformPasted: (slice) =>
         pictures === undefined ? slice : copiedPictures(slice, pictures),
       handleKeyDown: (view, event) => {
-        // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
         if (
           breaking ||
           event.isComposing ||
@@ -600,7 +460,6 @@ export function mountDescriptionEditor(
         ) {
           return false;
         }
-        // The keys a mention's list or the block menu takes are its own first, Escape among them, which closes it.
         if (mentions?.onKey(event) === true) return true;
         if (blocks?.onKey(event) === true) return true;
         if (event.key === "Escape") {
@@ -611,7 +470,6 @@ export function mountDescriptionEditor(
           onFinish(caretSection(editor), FINISH.SUBMIT);
           return true;
         }
-        // Note that a message box's Shift+Enter lays in what Enter does in a document, a paragraph, a list's next item or a code block's line, rather than the line break TipTap gives it.
         if (sendsOnEnter && event.key === "Enter" && event.shiftKey) {
           breaking = true;
           editor.commands.keyboardShortcut("Enter");
@@ -628,8 +486,6 @@ export function mountDescriptionEditor(
     },
     onUpdate: ({ editor: updated }) => {
       if (laying) return;
-      // Note that the threads' words are counted in the text as it is handed over, its own line endings and all, as their anchors were counted in the text it opened on.
-      // Note that a draft reports no anchors while the editor carries no thread, since mapping every marked word on each keystroke would be for nothing.
       const markdown = written();
       onDraft(
         markdown,
@@ -637,7 +493,6 @@ export function mountDescriptionEditor(
       );
     },
   });
-  // Note that the threads' marks are laid on before each block's source is known by its node, so a block marked as it opens still writes its source.
   laying = true;
   carried =
     anchors === undefined
@@ -649,9 +504,6 @@ export function mountDescriptionEditor(
   held = sourcesOf(editor.state.doc, opened);
   const onWords = placedOnWords(editor, placement);
   editor.view.dispatch(editor.state.tr.setSelection(onWords ?? placed(editor, placement)));
-  // The text and caret as the editor opened on the words a click landed on,
-  // which stand for those words only until either changes: a merged answer
-  // laid in, a word typed, or the caret moved.
   let onWordsAs = onWords === undefined ? undefined : editor.state;
   if (focus) editor.view.focus();
   return {
@@ -675,7 +527,6 @@ export function mountDescriptionEditor(
     setAria: (next) => {
       if (sameAria(aria, next) || editor.isDestroyed) return;
       aria = next;
-      // Note that an input method's words are never redrawn under it: the next change it makes names the list.
       if (!editor.view.composing) editor.view.updateState(editor.state);
     },
     focusAt: (placement) => {
@@ -692,7 +543,6 @@ export function mountDescriptionEditor(
       try {
         return editor.view.coordsAtPos(editor.state.selection.head).top;
       } catch {
-        // Note that a view with no layout, as a test's page is, measures nothing.
         return undefined;
       }
     },
@@ -711,7 +561,6 @@ export function mountDescriptionEditor(
       const at = editor.view.posAtDOM(element, 0);
       const resolved = doc.resolve(Math.min(Math.max(at, 0), doc.content.size));
       if (resolved.depth < 1) return undefined;
-      // A bullet is its own words, up to any list nested under it, as the read view comments on one.
       for (let depth = resolved.depth; depth >= 1; depth -= 1) {
         const node = resolved.node(depth);
         if (LIST_ITEMS.has(node.type.name)) {
@@ -726,10 +575,8 @@ export function mountDescriptionEditor(
   };
 }
 
-/** The nodes a list's bullets are, each commented on alone. */
 const LIST_ITEMS: ReadonlySet<string> = new Set(["listItem", "taskItem"]);
 
-/** The document's stretch from `from` to `to` as a thread started on it anchors it, in `text`, the Markdown the editor would hand over now; nothing where it holds no word the text keeps. */
 function editorSpan(
   editor: Editor,
   text: string,

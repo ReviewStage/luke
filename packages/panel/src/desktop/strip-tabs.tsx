@@ -38,51 +38,16 @@ import type { MenuAction, MenuEnds, MenuEntry } from "./action-menu.js";
 import { type AgentMenuDoors, agentMenuGroups } from "./agent-actions.js";
 import { MenuTab } from "./tab-strip.js";
 
-/**
- * strip-tabs.tsx -- what the task's column's strip and the side panel's draw alike: a tab with its actions, the "+" after the last tab and the menu it drops, a transcript's copy, and what the agents' tabs last drew.
- *
- * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
- * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
- * the tab's own keeping first, Close, Close others, and Pin or Unpin, then
- * what the tab offers on what it shows: the one agent menu
- * (`agent-actions.tsx`'s `agentMenuGroups`) over the doors the tab has, an
- * agent's whole menu, a subagent's Copy link and copies, a file's or a
- * page's Copy link; or, on the Plan tab, which shows the task, the task's
- * one document menu (`task-actions.tsx`), handed to the tab whole
- * (`DocumentMenu`), its Pin the task's own rather than the tab's, with what
- * the tab's own body hands up while it is drawn, a Pull request tab's
- * Refresh and Open on GitHub (`useHandedTabActions`). No ⋯ stands on either
- * strip's toolbar: the right-click is every tab's menu. On a phone a tab's body draws
- * no bar of its own and hands every control of it up the same way, and the
- * strip hands the tab it shows up (`DoorsTab`'s `onShown`), so the
- * task's header's ⋯ offers them (`task-pane-switcher.tsx`). Each strip
- * ends in a "+" that drops the shared searchable menu over what the strip
- * may open. The columns' own modules say which tabs and rows those are
- * (`main-tabs.tsx`, `side-panel.tsx`).
- *
- * What an agent's or a delegated worker's tab last drew is held here for as
- * long as the task's page is drawn, whichever column the tab stands in, so
- * its card can preview its latest step once another tab is shown, and a
- * delegated worker's card can read its model from the call its agent's tab
- * last drew. Where a delegated worker stands is what its own tab's pages
- * say, held here for its glyph the same way.
- */
-
-/** What the toast says once a tab's transcript, concise or full, is on the clipboard. */
 const TRANSCRIPT_COPIED_NOTE = "Transcript copied";
 
-/** What the toast says when a tab's transcript could not be read whole for a copy. */
 const TRANSCRIPT_UNREAD_NOTE = "The transcript could not be copied. Try again.";
 
-/** A tab's pin to the sidebar, as its menu offers it: whether it stands, and the press that sets it or takes it away. */
 export interface TabPin {
   pinned: boolean;
   onToggle: () => void;
-  /** Whether the pin is the agent's own, as a task column's agent tab pins its agent, rather than the tab's. */
   agent?: boolean;
 }
 
-/** The Pin or Unpin a tab's menu offers, named for what it pins, since a tab's pin and an agent's are not the same thing. */
 function pinItem(pin: TabPin): MenuAction {
   const pinned = pin.agent === true ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.UNPIN_TAB;
   const unpinned = pin.agent === true ? PANEL_COMMAND.PIN_AGENT : PANEL_COMMAND.PIN_TAB;
@@ -93,23 +58,10 @@ function pinItem(pin: TabPin): MenuAction {
   };
 }
 
-/**
- * The task's document menu, as the Plan tab is handed it whole
- * (`task-actions.tsx`'s `useTaskMenuItems`): its groups, read as the menu
- * is drawn, since its items are made anew on every draw, and what the menu
- * draws beyond them, the task it acts on and who created and last edited it.
- */
 export interface DocumentMenu extends MenuEnds {
   readonly groups: () => readonly (readonly MenuEntry[])[];
 }
 
-/**
- * A tab's menu, as either strip offers it: the tab's own keeping, Close,
- * Close others, and its pin, and the doors of what it shows, the agent
- * menu's (`AgentMenuDoors`): an agent's whole set, a subagent's Copy link
- * and copies, a file's or a page's Copy link; or, for the Plan tab, the
- * task's document menu, which stands in place of every agent door.
- */
 export interface TabDoors
   extends Pick<
     AgentMenuDoors,
@@ -122,56 +74,29 @@ export interface TabDoors
     | "deletion"
     | "copyLink"
   > {
-  /** Whether the tab is the one chosen, which ⌘W closes and ⌘J opens the terminal of. */
   chosen: boolean;
-  /** Closes the tab; none for the plan's, which always stands. */
   onClose: (() => void) | undefined;
-  /** Closes every other tab that closes, none where there is none. */
   onCloseOthers: (() => void) | undefined;
-  /** The tab's pin to the sidebar, for a fixed tab's, an agent's, and a file's; none for the Plan tab, whose Pin is the task's own, in its document menu. */
   pin: TabPin | undefined;
-  /** What the tab's body offers on what it shows while it is drawn (`useHandedTabActions`), which its toolbar's ⋯ alone offers, first. */
   handed?: TabActionGroups | undefined;
-  /** The task's document menu, for the Plan tab, which shows the task; its ⋯ and its right-click draw it in the agent menu's place. */
   document?: DocumentMenu | undefined;
 }
 
-/**
- * What a strip hands up of the tab it shows, for a phone's header, whose
- * one ⋯ offers what the tab's own ⋯ offers where a bar stands
- * (`task-pane-switcher.tsx`): what the tab is called, and, read as the
- * header's ⋯ opens, what it offers on what it shows.
- */
 export interface ShownTab {
   readonly label: string;
-  /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
   readonly groups: (opener: HTMLElement) => MenuEntry[][];
 }
 
-/**
- * One action a tab's body hands its ⋯: a menu item, or one that opens a
- * menu or a field of the body's own where the ⋯ stood (`onAsk`), as a
- * phone's View options opens from its header's ⋯ (`phone-head.tsx`).
- */
 export type TabAction =
   | MenuEntry
   | (Omit<MenuAction, "onSelect"> & { readonly onAsk: (opener: HTMLElement) => void });
 
-/** What a tab's body offers, in the groups a rule divides. */
 export type TabActionGroups = readonly (readonly TabAction[])[];
 
-/** Hears the actions a tab's body offers on what it shows, none once it is no longer drawn. */
 export type HandTabActions = (actions: TabActionGroups | undefined) => void;
 
-/**
- * Where a tab's body hands what it offers, as the side panel draws it
- * (`side-panel.tsx`), so a body drawn at any depth of the tab, a task's
- * Inbox's list or a terminal's, hands it without a prop through every
- * layer; none outside a panel's tab.
- */
 export const HandTabActionsContext = createContext<HandTabActions | undefined>(undefined);
 
-/** The press of the action a tab's body hands up that runs `command`, as a Pull request tab's Open on GitHub runs ⇧⌘O; none where it hands none. */
 export function handedCommand(
   groups: TabActionGroups,
   command: KeyedCommand,
@@ -182,7 +107,6 @@ export function handedCommand(
   return undefined;
 }
 
-/** The menu items a ⋯ drops for `groups`, an item opening a menu of the body's own opening it under `opener`. */
 export function tabActionItems(
   groups: readonly (readonly TabAction[])[],
   opener: HTMLElement,
@@ -196,46 +120,20 @@ export function tabActionItems(
   );
 }
 
-/**
- * A tab's actions in the groups a rule divides, as an editor's tab offers
- * them on a right-click: the tab's own keeping first, Close and Close
- * others, and Pin or Unpin, which puts it in the sidebar or takes it out;
- * then what it offers on what it shows, its body's own hand first
- * (`tabContentGroups`). Close others is left out where nothing else would
- * close, and on the Plan tab, whose right-click is the task's menu alone.
- */
 function tabActionGroups(doors: TabDoors): TabActionGroups {
   const { onClose } = doors;
   const close: MenuAction[] =
-    onClose === undefined
-      ? []
-      : [
-          // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
-          commandAction(PANEL_COMMAND.CLOSE_TAB, onClose, doors.chosen),
-        ];
+    onClose === undefined ? [] : [commandAction(PANEL_COMMAND.CLOSE_TAB, onClose, doors.chosen)];
   const pin: MenuAction[] = doors.pin === undefined ? [] : [pinItem(doors.pin)];
-  // Note that Close others stands only where it would close something, and never on the Plan tab, whose menu is the task's.
   const closeOthers: MenuAction[] =
     doors.onCloseOthers === undefined || doors.document !== undefined
       ? []
-      : [
-          // ⌥⌘W closes the others of the tab chosen, so only its Close others says it.
-          commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, doors.onCloseOthers, doors.chosen),
-        ];
+      : [commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, doors.onCloseOthers, doors.chosen)];
   return [[...close, ...closeOthers, ...pin], ...tabContentGroups(doors)].filter(
     (group) => group.length > 0,
   );
 }
 
-/**
- * What a tab offers on what it shows: the one agent
- * menu (`agentMenuGroups`) over the doors the tab has, which act on what it
- * shows, or the task's document menu on the Plan tab, and none of the tab's
- * own keeping, Close, Close others, and Pin. An agent's own page offers the same
- * on its title's right-click (`desktop-agent-page.tsx`), so a taskless agent is
- * acted on as a task's is. Note that the tab's pin is not the agent's,
- * which a taskless agent's row has, so it is left out of the menu's doors.
- */
 export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuEntry[][] {
   const { onCopy, onRename, onOpenTerminal, onOpenInTask, archive, deletion, copyLink, chosen } =
     doors;
@@ -253,12 +151,6 @@ export function contentActionGroups(doors: Omit<TabDoors, "handed">): MenuEntry[
   });
 }
 
-/**
- * The chosen tab's actions on what it shows: what its body hands
- * up while it is drawn (`handed`), first, then `contentActionGroups`. Note
- * that a tab's Copy link leads even what its body hands up, alone in its
- * group, because Copy link leads every menu that holds one.
- */
 export function tabContentGroups(doors: TabDoors): TabActionGroups {
   const { handed, copyLink } = doors;
   if (handed === undefined || copyLink === undefined) {
@@ -269,7 +161,6 @@ export function tabContentGroups(doors: TabDoors): TabActionGroups {
   );
 }
 
-/** Whether two items draw alike: named, said, and standing the same, a submenu by its items, and a panel by its name alone, since it draws its own. */
 function sameAction(one: TabAction, other: TabAction | undefined): boolean {
   if (other === undefined || one.label !== other.label) return false;
   if ("panel" in one || "panel" in other) return "panel" in one && "panel" in other;
@@ -292,7 +183,6 @@ function sameAction(one: TabAction, other: TabAction | undefined): boolean {
   );
 }
 
-/** Whether two hands of actions draw alike: the same items in the same groups, in the same order. */
 function sameActions(a: TabActionGroups | undefined, b: TabActionGroups | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
   return (
@@ -308,7 +198,6 @@ function sameActions(a: TabActionGroups | undefined, b: TabActionGroups | undefi
   );
 }
 
-/** `actions` as handed on: each item's press reaching the body's latest, so a hand made anew on every draw is handed again only as it draws otherwise. */
 function throughLatest(
   actions: TabActionGroups,
   latest: React.RefObject<TabActionGroups | undefined>,
@@ -337,14 +226,6 @@ function throughLatest(
   );
 }
 
-/**
- * Hands the chosen tab's toolbar ⋯ the actions its body offers on what it
- * shows (`TabDoors.handed`), again each time they draw otherwise, and none
- * once the body is no longer drawn. Note that `hand` and each item's press
- * are read through refs, so a body making its actions anew on every draw,
- * as a phone's bar handed up does, hands them again only when an item's
- * words or standing change, and a press always reaches the latest.
- */
 export function useHandedTabActions(
   hand: HandTabActions | undefined,
   actions: TabActionGroups | undefined,
@@ -362,17 +243,10 @@ export function useHandedTabActions(
   useEffect(() => () => told.current?.(undefined), []);
 }
 
-/** Hands the actions to the panel tab the body is drawn in (`HandTabActionsContext`); nothing outside one. */
 export function useTabActions(actions: TabActionGroups | undefined): void {
   useHandedTabActions(useContext(HandTabActionsContext), actions);
 }
 
-/**
- * Hands a phone's header the tab while it is the one shown: its name as it
- * changes, and what it offers on what it shows, read as the header's ⋯
- * opens, since those actions are made anew on every draw; and nothing once
- * it is no longer shown, or gone.
- */
 function useShownTab(
   onShown: ((shown: ShownTab | undefined) => void) | undefined,
   look: TabLook,
@@ -390,42 +264,25 @@ function useShownTab(
   }, [onShown, selected, label]);
 }
 
-/** What a tab of either strip draws, beyond its menu. */
 export interface TabLook {
-  /** The id the tab stands under, which the panel it shows is labeled by (`Tab`'s). */
   id?: string | undefined;
-  /** The id of the panel the tab shows (`Tab`'s). */
   controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
-  /** Whether the label is the app's own word, a fixed kind's (Inbox, New agent, Pull request), which a screen recording shows as it reads, and the detail with it; a tab named for a task, an agent, a file, or a page leaves this off (`Tab`'s). */
   labelReplayUnmasked?: boolean | undefined;
-  /** Words after the label, dimmed (`Tab`'s). */
   detail?: string | undefined;
-  /** The detail's status tone (`Tab`'s): attention for the Inbox's count. */
   detailTone?: StatusTone | undefined;
-  /** A mark at the tab's end, in its ×'s place: a failed agent's (`Tab`'s). */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
   unread?: boolean;
   card?: React.ReactNode;
-  /** Draws no fill at rest: the plan's tab while it is its column's only one. */
   quiet?: boolean;
-  /** Stands first in its strip, never dragged nor dropped before. */
   anchored?: boolean;
-  /** Stands as its strip's preview (`Tab`'s). */
   preview?: boolean;
   onSelect: () => void;
-  /** Keeps a preview as a tab of its own (`Tab`'s). */
   onKeep?: (() => void) | undefined;
 }
 
-/**
- * One tab of either strip, whatever its kind, with its menu on a
- * right-click (`tabActionGroups`), and, where a phone's header stands for
- * the toolbar, the tab handed up to it while it is the one shown
- * (`onShown`), whose ⋯ offers what the right-click would on what it shows.
- */
 export function DoorsTab({
   look,
   doors,
@@ -437,7 +294,6 @@ export function DoorsTab({
   doors: TabDoors;
   editor?: React.ReactNode;
   tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
-  /** Hears the tab while it is the one shown, and nothing once it is not; none where no phone's header asks. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const content = tabContentGroups(doors);
@@ -454,38 +310,18 @@ export function DoorsTab({
   );
 }
 
-/** One row of a "+" menu, and what picking it does. */
 export interface AddEntry {
   row: MenuRow;
-  /** The mark at the row's end where the row says where its work stands, as the summary and the palette draw it: a failure's (`state-glyph.tsx`). */
   endMark?: React.JSX.Element | undefined;
-  /** The card the row hangs beside it while the pointer rests on it, as its tab hangs its own; none where the row has none yet. */
   card?: React.ReactNode;
   onPick: () => void;
-  /** The agent the row names, for a row of the task's agents, whose menu archives it. */
   agent?: AgentSummary | undefined;
 }
 
-/** An entry as a menu draws its row: its end mark and its card drawn where `MenuRow` draws them, so a "+" menu, ⌘K and the summary say the same of a row. */
 export function entryRow({ row, endMark, card }: AddEntry): MenuRow {
   return { ...row, end: endMark ?? row.end, card: card ?? row.card };
 }
 
-/**
- * The "+" after a strip's last tab, and the menu it drops: the shared
- * searchable one, as the repository and model pickers drop, over the rows
- * its column lists. It hangs under the "+" in `@repo/ui`'s anchored
- * popover, from the "+"'s left edge, or from its right where what is seen
- * of the window ends before the menu would, or pushed back inside where
- * neither edge keeps it there, as a phone's row leaves a "+" mid-way along
- * it. It keeps to the window rather than the side panel, so on the desktop
- * the side panel's menu still hangs over the column beside it. Opening it
- * asks `onOpen` to read what the rows say again, as the Start menu reads
- * its models, so an agent whose tab is not shown, which
- * nothing follows, says where it stands now rather than where it last did.
- * ⌘T's ask opens it as a press does, once its column is on screen to take
- * it (`answers`).
- */
 export function AddTabButton({
   label,
   placeholder,
@@ -496,7 +332,6 @@ export function AddTabButton({
   answers,
   onAnswered,
 }: {
-  /** What the "+" and its menu are called. */
   label: string;
   placeholder: string;
   noMatch: string;
@@ -512,9 +347,6 @@ export function AddTabButton({
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
 
-  // Note that the ask is answered once and then let go, because the "+"
-  // stands again each time its column is shown, and an ask still standing
-  // would open the menu on a column shown much later.
   useEffect(() => {
     if (!asked || !answers) return;
     onAnswered();
@@ -522,8 +354,6 @@ export function AddTabButton({
     onOpen?.();
   }, [asked, answers, onAnswered, onOpen]);
 
-  // Note that we hand focus back to the "+", as a native menu returns it to
-  // its trigger, because closing takes the focused field away with it.
   const close = () => {
     setOpen(false);
     opener.current?.focus();
@@ -578,13 +408,10 @@ export function AddTabButton({
   );
 }
 
-/** A transcript read on demand for a copy, or why it could not be read; nothing where no read says why. */
 export type TranscriptRead = () => Promise<CopiedTranscript | TranscriptUnread | undefined>;
 
-/** A copy of a transcript as the strips' tabs and the sidebar's pins offer it: read, then put on the clipboard as concise or full markdown. */
 export type TranscriptCopier = (read: TranscriptRead) => (copy: TranscriptCopy) => void;
 
-/** The copy of a transcript read on demand, answered with the window's toast: copied, or not read. */
 export function useTranscriptCopier(): TranscriptCopier {
   const copyWithToast = useCopyToast();
   const toast = useToast();
@@ -605,28 +432,21 @@ export function useTranscriptCopier(): TranscriptCopier {
   };
 }
 
-/** The transcripts the agents' and the delegated workers' tabs last drew, by agent and by the call that started each worker, read as a card is hung; the same value from page to page until a title it names moves. */
 export interface HeldTranscripts {
   agents: ReadonlyMap<string, HeldTranscript>;
   workers: ReadonlyMap<string, HeldTranscript>;
 }
 
-/** Where the open delegated workers stand, by the call that started each, as their tabs' pages last said. */
 export type WorkerStandings = ReadonlyMap<string, AgentStatus>;
 
-/** What the agents' and the workers' tabs last drew and said, and the presses that keep it. */
 export interface TabViews {
   held: HeldTranscripts;
   standings: WorkerStandings;
-  /** An agent's tab drew its transcript anew, which its hover card previews. */
   onAgentHeld: (agentId: string, held: HeldTranscript) => void;
-  /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: (callId: string, held: HeldTranscript) => void;
-  /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: AgentStatus) => void;
 }
 
-/** Whether two readings name the same workers by the same titles. */
 function sameTitles(
   a: ReadonlyMap<string, string> | undefined,
   b: ReadonlyMap<string, string> | undefined,
@@ -637,15 +457,6 @@ function sameTitles(
   return true;
 }
 
-/**
- * What the agents' and the workers' tabs last drew and said, held for as
- * long as the task's page is drawn. Note that what a tab holds is kept in
- * maps of the page's own rather than in its state, because a card reads it
- * only as it is hung (`agentCardReading`), and a page landing in a tab would
- * otherwise draw the whole task's page again, every tab's transcript among
- * it. The held value is a new one only when a title it names moves, which a
- * subagent's tab is labeled by as it is drawn (`drawnSubagent`).
- */
 export function useTabViews(): TabViews {
   const [standings, setStandings] = useState<WorkerStandings>(() => new Map());
   const [kept] = useState(() => ({
@@ -679,7 +490,6 @@ export function useTabViews(): TabViews {
     },
     [kept, retitled],
   );
-  // The same views across draws while nothing held moves, so the panes they are handed to hold.
   return useMemo(
     () => ({ held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus }),
     [held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus],

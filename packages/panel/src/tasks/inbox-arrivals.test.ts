@@ -8,14 +8,6 @@ import { afterEach, test } from "vitest";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
 
-/**
- * inbox-arrivals.test.ts -- the Inbox on screen says what lands in it once,
- * politely: items that landed together by their count, one by its title,
- * nothing of where it stood when first read, of a thread the reader opened
- * themselves, or of what landed while it was not on screen. Synthetic items
- * throughout.
- */
-
 let root: Root | undefined;
 
 afterEach(() => {
@@ -53,7 +45,6 @@ function Harness({
   return null;
 }
 
-/** An Inbox drawn over `items`, and how to hand it its next push. */
 function inbox(taskId: string, items: readonly InboxItem[], onScreen = true) {
   mountAnnouncer();
   const container = document.body.appendChild(document.createElement("div"));
@@ -88,7 +79,6 @@ test("a thread the reader started from an item's box lands read, and says nothin
 });
 
 test("an item that landed while the Inbox was not on screen is not said once it is", () => {
-  // Note that the item is one no other test says, since an item said once is said by no Inbox again.
   const unseen = item("55555555-5555-4555-8555-555555555555", "Close the stale branch?");
   const push = inbox("plan-d", [], false);
   push([unseen], false);
@@ -101,7 +91,6 @@ test("an item its agent posts again under the same key, at a newer revision, is 
   const push = inbox("plan-e", []);
   push([first]);
   assert.equal(announcedPolitely(), "New in your inbox: Merge the release?");
-  // Answered, it leaves the list; posted again, it comes back at its next revision.
   push([]);
   push([{ ...first, revision: 2, title: "Merge the hotfix too?" }]);
   assert.equal(announcedPolitely(), "New in your inbox: Merge the hotfix too?");

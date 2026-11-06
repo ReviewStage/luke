@@ -10,28 +10,8 @@ import type { DescriptionEditorModule } from "./description-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import type { TerminalModule } from "./terminal/contract.js";
 
-/**
- * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
- *
- * The panel's editors (`description-editor/`), a File tab's tree (`file-tree/`), a
- * Terminal tab's screen (`terminal/`), a description's diagrams (`diagram/`), and a
- * Files changed diff (`diff-view/`) are each
- * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
- * and loads from wherever it put it, so nothing here names a file. Where a
- * bundle has a stylesheet, its entry imports it. A bundle that landed is
- * kept, so leaving the surface and coming back loads nothing; one that
- * failed is not, so the next surface to read it imports it again, as a
- * connection that dropped for a moment has come back.
- *
- * A surface reads its bundle through `useSideBundles`, whose atoms are built
- * over `SIDE_BUNDLE_IMPORTERS` unless a `SideBundlesContext` above it hands
- * others, as a test does to stand a bundle in or to have one fail.
- */
-
-/** How a bundle is reached: its entry imported, answering the module it exports. */
 export type BundleImporter<A> = () => Promise<A>;
 
-/** How each bundle of the panel's own is reached. */
 export interface SideBundleImporters {
   readonly descriptionEditor: BundleImporter<DescriptionEditorModule>;
   readonly fileTree: BundleImporter<FileTreeModule>;
@@ -40,26 +20,20 @@ export interface SideBundleImporters {
   readonly diffView: BundleImporter<DiffViewModule>;
 }
 
-/** Each bundle of the panel's own, as the module its entry exports once imported, or why it could not be. */
 export type SideBundles = {
   readonly [Bundle in keyof SideBundleImporters]: Atom.Atom<
     AsyncResult.AsyncResult<Awaited<ReturnType<SideBundleImporters[Bundle]>>, Error>
   >;
 };
 
-/** What a File tab's tree and breadcrumbs say where their bundle failed to load; a type icon keeps its placeholder. */
 export const TREE_LOAD_FAILED = "The files could not be shown.";
 
-/** What a Terminal tab says where its bundle failed to load. */
 export const TERMINAL_LOAD_FAILED = "The terminal could not be shown.";
 
-/** What the Files changed view says where its bundle failed to load. */
 export const DIFF_LOAD_FAILED = "The diff could not be shown.";
 
-/** What a fence says over its code where the diagram bundle failed to load, as it says where Mermaid refused the code. */
 export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 
-/** Why each bundle could not be had, where its import failed. */
 const LOAD_FAILED = {
   descriptionEditor: "The editor could not be loaded.",
   fileTree: TREE_LOAD_FAILED,
@@ -68,7 +42,6 @@ const LOAD_FAILED = {
   diffView: DIFF_LOAD_FAILED,
 } as const satisfies { readonly [Bundle in keyof SideBundleImporters]: string };
 
-/** Each bundle's entry, imported where the bundler put it. */
 const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   descriptionEditor: () =>
     import("./description-editor/index.js").then((entry) => entry.descriptionEditor),
@@ -78,19 +51,11 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   diffView: () => import("./diff-view/index.js").then((entry) => entry.diffView),
 };
 
-/**
- * A bundle imported the first time it is read, as the module its entry
- * exports, or the failure given. Note that the module is kept here rather
- * than by keeping the atom alive, so a bundle imported once is had at once
- * by every later reader, as a script that has run is, while a failure goes
- * with the last reader that saw it and the next one imports again.
- */
 function bundleAtom<A>(
   importer: BundleImporter<A>,
   failure: string,
 ): Atom.Atom<AsyncResult.AsyncResult<A, Error>> {
   let landed: { readonly module: A } | undefined;
-  // Note that the import's own error is kept as the cause, so a report names the chunk that failed.
   const imported = Effect.tryPromise({
     try: importer,
     catch: (cause) => new Error(failure, { cause }),
@@ -106,7 +71,6 @@ function bundleAtom<A>(
   );
 }
 
-/** The bundles, each imported through the importer given and the rest through their own entries. */
 export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideBundles {
   const reach: SideBundleImporters = { ...SIDE_BUNDLE_IMPORTERS, ...importers };
   return {
@@ -118,22 +82,14 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
   };
 }
 
-/** The window's bundles, each through its own entry: what every surface reads unless a context hands others. */
 export const SIDE_BUNDLES = sideBundles();
 
-/** The bundles the surfaces under it read. */
 export const SideBundlesContext = createContext<SideBundles>(SIDE_BUNDLES);
 
-/** The bundles this surface reads. */
 export function useSideBundles(): SideBundles {
   return useContext(SideBundlesContext);
 }
 
-/**
- * Starts the editor bundle loading, where it has not started already: the
- * panel calls it as it first paints, and a description's text as the pointer comes
- * over it, so the editor is there by the time it is opened.
- */
 export function usePrefetchEditorBundle(): () => void {
   const registry = useContext(RegistryContext);
   const { descriptionEditor } = useSideBundles();

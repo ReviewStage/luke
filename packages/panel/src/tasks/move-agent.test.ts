@@ -24,24 +24,16 @@ import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import type { AgentsControl } from "./use-agents.js";
 
-/**
- * move-agent.test.ts -- an agent's menu offers Move to › while Bring your own host is on and a Continue of the agent is offered: Cloud and each of the member's devices but the one it runs on, a device not ready dimmed and saying why, and from a device each place saying only pushed work comes along; a pick continues the agent at that place. It is offered nowhere while the agent works, where no Continue is, or with the experiment off.
- *
- * Synthetic agents and devices throughout.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const STUDIO = "3f2e1d0c-9b8a-4c7d-8e6f-5a4b3c2d1e0f";
 const ATTIC = "4a3b2c1d-0e9f-4a8b-9c7d-6e5f4a3b2c1d";
 
-/** A device ready for agents, and one still getting ready. */
 const MACS: readonly MacOffer[] = [
   { deviceId: STUDIO, name: "Studio", providers: [] },
   { deviceId: ATTIC, name: "Attic", providers: [], setup: DEVICE_SETUP.PREPARING },
 ];
 
-/** The agent at rest in the cloud. */
 const AT_REST: AgentSummary = {
   id: AGENT,
   planId: TASK,
@@ -54,14 +46,12 @@ const AT_REST: AgentSummary = {
   brief: AGENT_BRIEF.DESCRIPTION,
 };
 
-/** The same agent on Studio. */
 const ON_STUDIO: AgentSummary = {
   ...AT_REST,
   machine: AGENT_MACHINE.DEVICE,
   mac: { name: "Studio", deviceId: STUDIO },
 };
 
-/** Every continue the menu asked, in order. */
 let continued: { agentId: string; runsOn: AgentRunsOnRequest | undefined }[] = [];
 
 afterEach(() => {
@@ -69,7 +59,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The control of the agent's task, listing it, which continues into `continued`. */
 function controlOf(agent: AgentSummary, overrides: Partial<AgentsControl> = {}): AgentsControl {
   return agentsControl({
     agents: [agent],
@@ -83,7 +72,6 @@ function controlOf(agent: AgentSummary, overrides: Partial<AgentsControl> = {}):
   });
 }
 
-/** The agent's menu as its tab offers it once the window's state landed, with Bring your own host on unless `experimentOn` is false. */
 async function menuOf(
   agent: AgentSummary,
   control: AgentsControl,
@@ -91,7 +79,6 @@ async function menuOf(
 ): Promise<MenuEntry[]> {
   const experiments = experimentOn ? experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST) : {};
   handState(experiments);
-  // Note that the menu is read once, so the document is in the client from its first frame.
   writeAppState(stateWith(experiments, {}));
   let groups: MenuEntry[][] = [];
   function Probe(): null {
@@ -112,7 +99,6 @@ async function menuOf(
   return groups.flat();
 }
 
-/** The menu's Move to ›, none where it offers none. */
 function moveTo(entries: readonly MenuEntry[]) {
   const entry = entries.find((each) => each.label === "Move to");
   return entry !== undefined && "items" in entry ? entry : undefined;

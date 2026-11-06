@@ -27,15 +27,6 @@ import {
 } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
-/**
- * origin-senders.test.ts -- in a task's column, an agent's tab opens on its
- * description as a message the task sent: the task's name under the card, which
- * opens the plan, with the teammate who started the agent beside it and
- * never the reader; and a worker's tab in the side panel opens on its task
- * as a message the agent that delegated it sent, whose name opens that
- * agent's tab. Synthetic throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
@@ -61,7 +52,6 @@ const AGENT: AgentSummary = {
   startedBy: CHARLES,
 };
 
-/** When the description was handed to the agent. */
 const BRIEF_SENT_AT = Date.UTC(2026, 9, 14, 16, 5);
 
 const BRIEF: AgentTranscriptMessage = {
@@ -80,7 +70,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's page as `reader` sees it, `main` chosen in its column and `side` in its panel, every tab either is asked to show recorded. */
 async function mount(input: {
   reader: string;
   main: MainTab | undefined;
@@ -142,7 +131,6 @@ async function mount(input: {
   return { container, chosen };
 }
 
-/** What a line says, its actors' faces left out, as a reader reads it. */
 function words(line: Element | null | undefined): string {
   if (line == null) return "";
   const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
@@ -153,7 +141,6 @@ function words(line: Element | null | undefined): string {
   return said;
 }
 
-/** The line under the card a transcript opens on, in `place`. */
 function senderLine(place: Element): HTMLElement {
   return (
     place.querySelector<HTMLElement>(".agent-origin .ui-message-line-sender") ??

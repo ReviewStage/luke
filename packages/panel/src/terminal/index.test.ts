@@ -6,14 +6,6 @@ import { afterEach, beforeEach, test } from "vitest";
 import type { TerminalHandle } from "./contract.js";
 import { terminal } from "./index.js";
 
-/**
- * The terminal bundle, through the one door a Terminal tab mounts it by
- * (its entry's `terminal`): which keys reach the shell, which pass to the
- * window, and a palette color drawn by its class rather than a style
- * attribute.
- */
-
-/** A key press as the window reports one: the key, its legacy code, and the modifiers held. */
 interface Press {
   readonly key: string;
   readonly keyCode: number;
@@ -27,13 +19,11 @@ const ENTER = { key: "Enter", keyCode: 13 } as const;
 let mounted: TerminalHandle | undefined;
 
 beforeEach(() => {
-  // jsdom has no constructed-sheet adoption and no media queries; the window has both.
   Object.defineProperty(document, "adoptedStyleSheets", {
     configurable: true,
     writable: true,
     value: [],
   });
-  // The terminal asks after the appearance and the display's resolution, which never change here.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -52,7 +42,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A terminal mounted in a host of its own, with what it sent the shell and what the window heard. */
 function mountTerminal() {
   const host = document.createElement("div");
   document.body.append(host);
@@ -83,7 +72,6 @@ function mountTerminal() {
 test("a Command chord passes to the window, and the shell hears nothing of it", () => {
   const terminal = mountTerminal();
   const palette = terminal.press({ key: "k", keyCode: 75, metaKey: true });
-  // ⇧⌘⏎ fills the window with the panel, a Return the terminal would otherwise send the shell.
   const fullScreen = terminal.press({ ...ENTER, metaKey: true, shiftKey: true });
   terminal.done();
   assert.deepEqual(terminal.sent, []);
@@ -143,7 +131,6 @@ test("Escape and Control chords are the shell's, and Escape never reaches the wi
 test("without WebGL a palette color is drawn by its class, never by a style attribute the panel's policy refuses", async () => {
   const terminal = mountTerminal();
   terminal.done();
-  // The default palette's black on its black ground, a pair that falls short of any contrast asked for.
   await new Promise<void>((resolve) => mounted?.write("\x1b[30mshadow\x1b[0m", resolve));
   await new Promise((resolve) => requestAnimationFrame(resolve));
   const cell = [...terminal.host.querySelectorAll(".xterm-rows span")].find(
@@ -153,14 +140,12 @@ test("without WebGL a palette color is drawn by its class, never by a style attr
   assert.equal(cell.getAttribute("style"), null);
 });
 
-/** The face the screen's rows are drawn in, as the DOM renderer's own rules name it. */
 function drawnFace(host: HTMLElement): string | undefined {
   const rules = [...host.querySelectorAll("style")].map((style) => style.textContent ?? "");
   const rows = rules.find((text) => text.includes(".xterm-rows {"));
   return rows?.match(/font-family: ([^;]+);/)?.[1];
 }
 
-/** A host whose window's monospace stack is a web font, as the web app's profile names it. */
 function webFontHost(): HTMLElement {
   const host = document.createElement("div");
   host.style.setProperty("--ui-font-mono", '"JetBrains Mono Variable", monospace');

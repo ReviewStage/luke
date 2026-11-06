@@ -27,13 +27,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
-/**
- * agent-tab-rewind.test.ts -- an edited message sent from an agent's tab asks
- * before it drops the messages after it, as Revert to here does: Cancel keeps
- * every later message and sends nothing, Send takes the agent back and sends,
- * and the last message is sent at once. Synthetic throughout.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -105,7 +98,6 @@ async function settle(): Promise<void> {
   await settleQueries();
 }
 
-/** The agent's tab over the transcript, every rewind and send it makes written down in order. */
 async function drawnTab(holdSends = false) {
   fakeAppBridge({});
   const calls: string[] = [];
@@ -125,7 +117,6 @@ async function drawnTab(holdSends = false) {
     },
     onMessage: (_agentId, text) => {
       calls.push(`send:${text}`);
-      // A send held never answers, so its line stays sent and not yet read back.
       return holdSends ? new Promise(() => undefined) : Promise.resolve(REWOUND);
     },
   });
@@ -151,7 +142,6 @@ async function drawnTab(holdSends = false) {
   const message = (id: string) =>
     container.querySelector<HTMLElement>(`[data-message-id="${id}"]`) ??
     assert.fail(`${id} is drawn in the transcript`);
-  /** Opens the message for writing again, replaces its words, and presses Send in its box. */
   const editAndSend = async (id: string, words: string) => {
     const edit = message(id).querySelector<HTMLButtonElement>('button[aria-label="Edit"]');
     assert.ok(edit, `${id} offers Edit`);
@@ -174,7 +164,6 @@ async function drawnTab(holdSends = false) {
     await act(async () => button.click());
     await settle();
   };
-  /** Sends words from the box at the tab's foot. */
   const sendFromFoot = async (words: string) => {
     typeInComposer(container, words);
     pressInComposer(container, "Enter");

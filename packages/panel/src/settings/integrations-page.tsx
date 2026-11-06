@@ -51,86 +51,13 @@ import { useIntegrationToolReads } from "../integration-tools.js";
 import { focusSearchField } from "../search-field.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 
-/**
- * integrations-page.tsx -- Settings › Integrations: the services the account connects so our agents can use them.
- *
- * One row per account at a provider (two Notion workspaces are two rows,
- * "Notion · Acme" and "Notion · Personal", each its own grant, and an
- * account alone is named the same way where it carries a name, such as a
- * Google account's email: "Gmail · dean@example.com"), and one for
- * a provider where the account holds none, under Connected or Not connected as the MCP popover
- * sections its servers (`@repo/ui/agent-servers-model`), each section
- * in the order of the providers' names: its mark and name, and under it where its connection
- * stands once that needs saying — connected with the count of its server's
- * tools, a sign-in under way, or one expired. A sign-in begun waits on the
- * browser with Reopen and Cancel, and one that failed or never finished
- * says so with Try again (`integration-sign-in.ts`). A row that connects or
- * disconnects glides from one section into the other (`ListMotion`), and
- * holds still under reduced motion. A connection is said to be
- * connected only once its server answered with its tools; one whose server
- * answered why it would not says why instead (`integration-health.ts`). A
- * row's button is for the problem state alone: Connect while none stands,
- * and Reconnect where a sign-in expired or a broken connection is mended by
- * one. A connected row that works stands quiet, and its ⋯ (or a right-click
- * on it) keeps Reconnect, which signs in with the provider again, beside
- * Disconnect, which asks first in the confirm dialog and ends that account
- * alone. Where the provider offers more than one account, the ⋯ keeps Add
- * another account, which begins a sign-in for a new one that stands pending
- * as a row of its own until it settles; and where it holds more than one,
- * Rename, which names the account in place. GitHub is granted by the
- * account's own GitHub (`integration-grant.ts`), which lets agents use
- * GitHub's tools as the developer and is linked nowhere else, as its ⋯ says
- * over its acts: its Connect links that GitHub in the browser, and its
- * Disconnect unlinks it under the Mac's session, a refusal saying why in a
- * toast. A workspace's repositories are not this; they come from the GitHub
- * connected in Settings › Workspace. The window never sees a sign-in
- * address; the host opens it. Where every
- * connection stands is read once for the page (`integration-statuses.ts`),
- * when it is drawn and whenever the window is focused, which is how the
- * developer comes back from the browser. A provider this deployment does not
- * offer the account has no row, as its agents are never handed it. Every
- * line is fixed by the build, but for the one-line reason a provider's
- * server gave, which the service passes on only where it carries no
- * credential, and its tools' names and descriptions, which its server gave.
- *
- * A connected row whose server answered with its tools opens in place onto
- * them, drawn as the MCP popover draws a server's page
- * (`../integration-tool-list.tsx`): alphabetical, one line each, badged only
- * by its server's own annotations, and beside the list the page of the tool
- * it holds, drawn as the popover draws a tool's page: the first at first,
- * then whichever a press or the arrows move to. The list is one stop for
- * Tab, whose arrows, Home, and End move through the tools; Return or Right
- * hands the focus to the tool's page, whose arrows scroll it, and Escape or
- * Left hands it back.
- *
- * The page has a search of its own above its rows, for the integrations and
- * their tools, apart from Settings' search in the sidebar, which finds pages
- * and rows: it finds what the MCP popover's search finds, by the same words
- * (`../integration-search.ts`). Command-F lands in it while the page shows,
- * and Escape clears it, then lets go of the caret. While a query stands, the
- * page keeps only the rows it found, in their sections, and a row with a
- * tool it found opens by itself onto just those, the words marked and the
- * count of them on its line; a query that finds nothing says so. Settings'
- * own search hands its query down when one of its results opens a row here
- * (`../desktop/desktop-settings.tsx`).
- *
- * The search is `@repo/ui`'s `SearchField`, each section its
- * `SettingsSection`, and each row `MenuRow`'s `SettingsRow`, led by the
- * provider's mark, its line the row's description. A row's Connect,
- * Reconnect, Try again, and Cancel are the outline `Button`, and Reopen the
- * quiet one beside Cancel.
- */
-
-/** The page's search: the query standing in its field, held by Settings so its own search can hand one down. */
 export interface IntegrationsFilter {
   readonly query: string;
   readonly onQueryChange: (query: string) => void;
 }
 
-/** How the page's search field is found by the seek that lands Command-F's caret in it. */
 const FILTER_INPUT_ID = "integrations-filter-input";
 
-/** What the page's search field asks for. */
 const FILTER_PLACEHOLDER = "Search integrations and tools";
 
 const PAGE_LINE = {
@@ -139,16 +66,8 @@ const PAGE_LINE = {
   NONE_OFFERED: "No integrations available",
 } as const;
 
-/** How many of the offered providers' rows stand as connected while the statuses are read; the rest stand as not. */
 const CONNECTED_SKELETON_ROWS = 2;
 
-/**
- * The sections that stand while the statuses are read, a row to each offered
- * provider: a few connected, each ending in its ⋯ under its line, and the
- * rest not, each in its Connect under the line saying what it gives agents,
- * every one led by its mark, so the rows land in the height they
- * stood in.
- */
 const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: true,
@@ -168,15 +87,8 @@ const INTEGRATIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   },
 ];
 
-/** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
 const GITHUB = INTEGRATION_PROVIDER.GITHUB;
 
-/**
- * The page's search field: a magnifier, the field, and a clear button while
- * a query stands, else Command-F's chord, which lands the caret here while
- * the page shows. Escape clears a query, then lets go of the caret, kept in
- * the field either way so it never leaves Settings behind it.
- */
 function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   const { query, onQueryChange } = filter;
@@ -202,29 +114,20 @@ function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Elem
   );
 }
 
-/** One account the page draws, and the tools a search found among its server's. */
 interface FoundRow {
   readonly row: ServerRow;
   readonly health: ConnectionHealth;
   readonly all: readonly IntegrationTool[];
-  /** The tools the search found, else every one. */
   readonly shown: readonly IntegrationTool[];
-  /** The search found some of its tools, so the row opens onto them by itself. */
   readonly toolsFound: boolean;
 }
 
-/**
- * A provider's row as a query finds it (`../integration-search.ts`), or
- * nothing where it finds neither the integration nor any of its tools:
- * opened onto the tools it found, else onto every one.
- */
 function foundRow(
   row: ServerRow,
   health: ConnectionHealth,
   tokens: readonly string[],
 ): FoundRow | undefined {
   const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
-  // An account's label finds its row too, so "personal" finds Notion · Personal.
   const labeled =
     row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token));
   const match =
@@ -240,18 +143,15 @@ function foundRow(
   };
 }
 
-/** A set with `server` turned: taken out where it stood, put in where it did not. */
 function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
   const next = new Set(set);
   if (!next.delete(server)) next.add(server);
   return next;
 }
 
-/** What stands where the search finds nothing, said politely as it lands and as the query changes. */
 function NoMatchNote({ query }: { query: string }): React.JSX.Element {
   const words = `No integrations or tools match “${query.trim()}”`;
   useAnnounceShown(ANNOUNCE.POLITE, words);
-  // Note that the note quotes the query, so it stays masked in a screen recording.
   return (
     <ReplayMask>
       <PageNote>{words}</PageNote>
@@ -259,10 +159,8 @@ function NoMatchNote({ query }: { query: string }): React.JSX.Element {
   );
 }
 
-/** The rows each section stands, by its heading, as the connections the rows are followed by. */
 type SectionPlaces = readonly (readonly [string | undefined, readonly string[]])[];
 
-/** Whether two placings stand the same rows in the same sections, in the same order. */
 function samePlaces(one: SectionPlaces, other: SectionPlaces): boolean {
   return (
     one.length === other.length &&
@@ -277,15 +175,6 @@ function samePlaces(one: SectionPlaces, other: SectionPlaces): boolean {
   );
 }
 
-/**
- * The page's sections, which move (`ListMotion`): a row that connects or
- * disconnects glides from the section it stood in to the other, followed
- * by its connection, and the sections and rows it moved glide with it.
- * Note that only a change in where the rows stand plays here, because a row
- * opening onto its tools is the row's own `Reveal`, whose area this is
- * (`own`, since the page's outer area would leave the rows between it and
- * the tools to this root), so the rows under it glide down with its edge.
- */
 function MovingSections({
   found,
   children,
@@ -299,7 +188,6 @@ function MovingSections({
     group.rows.map((each) => each.row.connection),
   ]);
   const [placed, setPlaced] = useState(() => ({ places, change: {} }));
-  // Note that the placing follows the rows as they render, React's way of keeping what an earlier render drew, so the commit that moves a row is the one that plays.
   let { change } = placed;
   if (!samePlaces(placed.places, places)) {
     change = {};
@@ -316,15 +204,6 @@ function MovingSections({
   );
 }
 
-/**
- * Every offered provider's row, once where they stand has been read, so each
- * row is drawn whole at once, under the page's search; a read that failed
- * draws them all, offering nothing, and says so above them, with the way to
- * read again. A provider read as unavailable is not offered to the account
- * and has no row. Note that a row opened or closed while nothing is searched
- * keeps that through a search, and one turned during a search is turned
- * against how the search opened it, forgotten when the search changes.
- */
 function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const { reads, retry } = useIntegrationToolReads(
@@ -341,7 +220,6 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   }>({ query: "", providers: new Set() });
   const { query } = filter;
 
-  // A turn belongs to the search it was made in: a query that changes, even back to an earlier one, starts afresh.
   useEffect(() => {
     setTurnedInSearch({ query, providers: new Set() });
   }, [query]);
@@ -357,9 +235,6 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   }
   const healthOf = (server: string) =>
     connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]);
-  // Note that the rows stand in the order of their names within each
-  // section, so no provider is pinned above the rest by the order its value
-  // set happens to list it in.
   const groups = serverGroups(
     serverRows({
       statusOf: statuses.statusOf,
@@ -380,7 +255,6 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
       }),
     }))
     .filter((group) => group.rows.length > 0);
-  // A turn made under an older query is forgotten with it.
   const turnedNow: ReadonlySet<string> =
     turnedInSearch.query === query ? turnedInSearch.providers : new Set();
   const expanded = (found: FoundRow) =>
@@ -433,7 +307,6 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   );
 }
 
-/** A line the page says in its sections' place, in a description's muted words. */
 function PageNote({ children }: { children: string }): React.JSX.Element {
   return (
     <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -442,7 +315,6 @@ function PageNote({ children }: { children: string }): React.JSX.Element {
   );
 }
 
-/** The page's rows under its own search, the query held here where Settings does not hand the page one. */
 function SearchedRows({ filter }: { filter: IntegrationsFilter | undefined }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const shown = filter ?? { query, onQueryChange: setQuery };
@@ -459,7 +331,6 @@ export function IntegrationsSection({
   filter,
 }: {
   signedIn: boolean;
-  /** The page's search, where Settings holds its query. */
   filter?: IntegrationsFilter | undefined;
 }): React.JSX.Element {
   return signedIn ? <SearchedRows filter={filter} /> : <PageNote>{PAGE_LINE.SIGNED_OUT}</PageNote>;

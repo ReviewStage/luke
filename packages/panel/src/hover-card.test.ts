@@ -23,13 +23,6 @@ import { holdFrames, settleFrames } from "./testing/frames.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
-/**
- * hover-card.test.ts -- every hover card heads itself alike: a task's, a
- * skill's, an agent tab's, and a pull request's each name their subject in
- * the one head, with the line under the name and the corner in the same
- * places.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const STARTED_AT = Date.UTC(2026, 9, 14, 12, 0, 0);
@@ -37,7 +30,6 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Note that a skill chip is drawn through the markdown parser, which lands as its own chunk, so the suite waits for it once rather than racing it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
@@ -53,7 +45,6 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
 });
 
-/** What a card's head says, part by part, as a reader finds it. */
 interface HeadWords {
   readonly glyph: boolean;
   readonly name: string | undefined;
@@ -61,7 +52,6 @@ interface HeadWords {
   readonly corner: string | undefined;
 }
 
-/** What a corner says to a reader: its text, or, where it holds marks alone, as a task's does, their words. */
 function cornerWords(corner: Element | null): string | undefined {
   if (corner === null) return undefined;
   if (corner.textContent !== "") return corner.textContent;
@@ -71,7 +61,6 @@ function cornerWords(corner: Element | null): string | undefined {
   return marks.map((each) => each.getAttribute("aria-label")).join(", ");
 }
 
-/** The one head of the card drawn in `within`, read part by part. */
 function headOf(within: ParentNode): HeadWords {
   const heads = within.querySelectorAll(".ui-hover-card > .ui-hover-card-head");
   assert.equal(heads.length, 1, "the card has one head");
@@ -89,7 +78,6 @@ function headOf(within: ParentNode): HeadWords {
   };
 }
 
-/** The card `element` draws, mounted. */
 function drawn(element: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -99,7 +87,6 @@ function drawn(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** The card hung once the element `selector` finds in `view` is hovered. */
 function hung(view: HTMLElement, selector: string): HTMLElement {
   const anchor = view.querySelector(selector);
   assert.ok(anchor, `${selector} is drawn`);
@@ -130,7 +117,6 @@ const PULL_REQUEST = {
 };
 
 test("a working agent's card says only how long its run has gone at its corner, its tile wearing the working mark in its harness's place", async () => {
-  // Note that only the date is faked, so the count's clock reads it while its ticks still run.
   vi.useFakeTimers({ now: STARTED_AT + 65_000, toFake: ["Date"] });
   const card = drawn(
     createElement(AgentTabCard, {
@@ -205,7 +191,6 @@ test("a plan's, a skill's, an agent tab's, and a pull request's cards each name 
   );
   assert.match(agentHead.sub ?? "", /High/u, "the model and effort stand under the name");
 
-  // Note that the pull request's card wears its mark as its glyph and keys itself by its repository, the agent whose it is standing on a row under the head rather than in it.
   const pullRequest = drawn(
     createElement(PullRequestCard, {
       pullRequest: PULL_REQUEST,

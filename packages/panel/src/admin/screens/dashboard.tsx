@@ -46,21 +46,10 @@ import { windowedReadQuery } from "../routing.js";
 
 const METRICS_ERROR = readFailedWords("the overview");
 
-/** What the page is called, in the sidebar and over the page alike. */
 const OVERVIEW_TITLE = "Overview";
 
-/**
- * How many accounts the most-active table's skeleton stands a row for, the
- * service's `ADMIN_OVERVIEW_ACCOUNTS_LIMIT`, not imported because the module
- * exporting it carries query code the client bundle must not.
- */
 const TOP_ACCOUNTS_SKELETON_ROWS = 10;
 
-/**
- * The most active accounts' own columns after Active days: what each did in
- * the window, and when it last signed in. The table is ranked by the server
- * and draws no sort, so no ordering rides these but the column's own.
- */
 const OVERVIEW_ACCOUNT_COLUMNS: readonly AccountsDetailColumn<AdminOverviewAccount>[] = [
   {
     key: ACCOUNTS_SORT_KEY.TASKS,
@@ -92,7 +81,6 @@ function percentOf(part: number, whole: number): string {
   return formatPercent(part / whole);
 }
 
-/** A tile's move against the run before, and what else it says. */
 function TrendHint({
   trend,
   detail,
@@ -108,7 +96,6 @@ function TrendHint({
   );
 }
 
-/** A headline tile's figure, the recent run's, and its title, the run before it. */
 function trendTile(
   key: string,
   label: (headline: AdminOverview["headline"]) => string,
@@ -125,11 +112,6 @@ function trendTile(
   };
 }
 
-/**
- * The four headline tiles, each over the last seven UTC days against the
- * seven before: who is active, and the tasks, agents, and pull requests the
- * product exists to move.
- */
 const HEADLINE_STATS: readonly StatSpec<AdminOverview["headline"]>[] = [
   trendTile(
     "active-developers",
@@ -161,12 +143,6 @@ const HEADLINE_STATS: readonly StatSpec<AdminOverview["headline"]>[] = [
   ),
 ];
 
-/**
- * The page's sections under its toolbar, drawn from `metrics` once it is
- * read and as their skeletons until then. The live sections come first; the
- * retention the retired hosted tier counted stands last, under a retired
- * heading, since both grids ride every answer.
- */
 function DashboardSections({
   metrics,
   windowDays,
@@ -286,7 +262,6 @@ export function DashboardScreen({
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
   onOpenDay: (day: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();
@@ -331,9 +306,6 @@ export function DashboardScreen({
           {error}
         </AdminPage>,
       ),
-    // A refetch dims the answer already on screen rather than replacing it:
-    // the numbers below stay the last ones actually read, and the dimming
-    // says so while the next read is in flight.
     ready: (metrics, refreshed) =>
       frame(
         <AdminPage title={OVERVIEW_TITLE} note={windowWords(windowDays)} controls={controls}>

@@ -20,21 +20,12 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { InboxCodeCard } from "./inbox-code-card.js";
 
-/**
- * code-snippet.test.ts -- an inbox item's code drawn by the diff bundle in
- * its code card: numbered from where its lines sit in the file, the lines
- * named lit, under a header naming the file and its lines with the one Copy
- * and the file's opening. The real bundle draws in jsdom on the window's
- * own thread, since no worker text was built in.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** Line 5 of `src/seats.ts` at a commit, as an Inbox item names it. */
 const BLOCK: InboxCodeBlock = {
   type: "code",
   repo: "acme/relay",
@@ -44,7 +35,6 @@ const BLOCK: InboxCodeBlock = {
   endLine: 5,
 };
 
-/** Lines 2 to 8 of the file, as the File tab's read answers them. */
 const ANSWER: TasksFileAnswer = {
   file: {
     path: "src/seats.ts",
@@ -56,7 +46,6 @@ const ANSWER: TasksFileAnswer = {
   },
 };
 
-/** The item's code card, reading the file's lines through `ANSWER`. */
 function inboxCode(): ReactElement {
   fakeActPort({ [ACT_KIND.TASKS_FILE]: () => Promise.resolve(ANSWER) });
   return createElement(InboxCodeCard, {
@@ -74,9 +63,6 @@ const roots: Root[] = [];
 
 beforeAll(async () => {
   bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(diffView) }));
-  // Note that the highlighter is loaded first, in the default themes and on the
-  // highlighter the bundle picks, so Pierre draws the first card within the
-  // test's own ticks rather than whenever a cold load lets it on a busy machine.
   await getSharedHighlighter({
     themes: ["github-dark-default", "github-light-default"],
     langs: ["typescript"],
@@ -91,7 +77,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Lets the settings' read and Pierre's next frame land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -99,7 +84,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The element drawn over the landed bundle. */
 async function draw(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -109,28 +93,24 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** The shadow root Pierre drew a card's lines in. */
 function drawnRoot(container: HTMLElement): ShadowRoot {
   const root = container.querySelector(".code-snippet diffs-container")?.shadowRoot;
   assert.ok(root, "the lines are drawn by the diff bundle");
   return root;
 }
 
-/** The numbers of the rows of code drawn, in order, those matching `selector`. */
 function drawnLines(container: HTMLElement, selector = "[data-line]"): number[] {
   return [...drawnRoot(container).querySelectorAll(selector)].map((row) =>
     Number(row.getAttribute("data-line")),
   );
 }
 
-/** The lines lit. */
 function litLines(container: HTMLElement): number[] {
   return drawnLines(container, "[data-line][data-selected-line]");
 }
 
 test("an inbox item's code draws the lines it read numbered from where they sit in the file, those it named lit", async () => {
   const container = await draw(inboxCode());
-  // Note that the code card's colors land through a query, so its lines are read once drawn.
   await vi.waitFor(() => assert.deepEqual(drawnLines(container), [2, 3, 4, 5, 6, 7, 8]));
   assert.equal(drawnRoot(container).querySelector('[data-line="5"]')?.textContent, "line 5");
   assert.deepEqual(litLines(container), [5]);
@@ -145,7 +125,6 @@ test("an inbox item's code is a code card: its header names the file and the lin
   assert.match(head.textContent ?? "", /Line 5/u);
   assert.ok(head.querySelector('button[aria-label="Open file"]'), "the file opens from the header");
   const copies = () => [...head.querySelectorAll<HTMLButtonElement>('button[aria-label^="Copy"]')];
-  // Note that the lines' Copy stands once the file's read has landed through its query.
   await vi.waitFor(() =>
     assert.deepEqual(
       copies().map((button) => button.getAttribute("aria-label")),

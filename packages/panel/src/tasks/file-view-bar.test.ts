@@ -8,13 +8,6 @@ import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { FileViewBar } from "./file-view.js";
 
-/**
- * file-view-bar.test.ts -- a file's page on GitHub, opened from the bar of a
- * File tab or of a pull request's Files changed, is a link to that page that
- * the window opens through its own door, and stands dimmed where no page is
- * known yet.
- */
-
 const PAGE = "https://github.com/acme/relay/pull/42/files";
 
 const roots: Root[] = [];
@@ -24,7 +17,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws the bar over the GitHub page it is handed. */
 function barOver(github: { href: string; open: (url: string) => void } | undefined): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -47,7 +39,6 @@ test("Open on GitHub is a link to the page, which the window opens itself rather
   const link = bar.querySelector<HTMLAnchorElement>('a[aria-label="Open on GitHub"]');
   assert.equal(link?.getAttribute("href"), PAGE);
   assert.equal(bar.querySelector('button[aria-label="Open on GitHub"]'), null);
-  // Note that a click the window stopped is one the browser does not follow.
   const clicked = new MouseEvent("click", { bubbles: true, cancelable: true });
   act(() => {
     link?.dispatchEvent(clicked);

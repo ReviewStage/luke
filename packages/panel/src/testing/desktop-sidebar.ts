@@ -6,10 +6,6 @@ import { SIDEBAR_OVERLAY } from "../desktop/sidebar-collapse.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
-/**
- * desktop-sidebar.ts -- the sidebar's props on the Plans tab, open and pinned, signed in, listing what `plans` lists, every other press ignored.
- */
-
 const ignore = () => undefined;
 
 export function sidebarProps(tasks: TasksControl): ComponentProps<typeof DesktopSidebar> {

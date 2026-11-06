@@ -29,19 +29,8 @@ import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
-/**
- * description-format-toolbar.test.ts -- the format toolbar over words selected in
- * the description's open text: standing once the pointer is let go over them, never
- * in code, and in place of the read view's Comment bubble; its marks, Turn
- * into, and Comment acting on the words; and ⌘K linking them, or left to the
- * window's command palette where no words are selected. The editor is the
- * real one, from its bundle. Synthetic text.
- */
-
-// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
 vi.hoisted(() => {
   Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
 });
@@ -63,12 +52,10 @@ const TEXT = [
 
 const PLAN: Task = { ...DOCUMENT_TASK, document: { body: TEXT, assumptions: [] } };
 
-/** The plan's own page's links, which say the page is the plan's own and so takes comments. */
 const PAGE_LINKS = { workspace: "acme", onOpen: () => undefined, reveal: undefined };
 
 const roots: Root[] = [];
 
-// Landed before the description renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -89,14 +76,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's keymap, its command palette's every opening recorded. */
 function KeyedWindow({ opened }: { opened: string[] }): ReactElement | null {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.COMMAND_PALETTE, () => opened.push("command palette"));
   return null;
 }
 
-/** The plan's page with its text open in the editor from the Goal block's Enter, each thread started kept, and each palette opened. */
 async function opened() {
   const started: DescriptionCommentStartRequest[] = [];
   const palette: string[] = [];
@@ -128,7 +113,9 @@ async function opened() {
             children: createElement(DescriptionBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              edit: descriptionEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
+              edit: descriptionEditMutation(PLAN.id, () =>
+                Promise.resolve({ saved: true } as const),
+              ),
             }),
           }),
         ),
@@ -147,7 +134,6 @@ async function opened() {
   return { container, element: element as TiptapEditorHTMLElement, editor, started, palette };
 }
 
-/** Where `words` stand in the editor's text, as positions. */
 function positionsOf(editor: Editor, words: string): { from: number; to: number } {
   let found: { from: number; to: number } | undefined;
   editor.state.doc.descendants((node, pos) => {
@@ -157,19 +143,16 @@ function positionsOf(editor: Editor, words: string): { from: number; to: number 
   return found ?? assert.fail(`${words} is in the text`);
 }
 
-/** `words` selected in the editor, as the keyboard selects them. */
 function select(editor: Editor, words: string): void {
   act(() => {
     editor.commands.setTextSelection(positionsOf(editor, words));
   });
 }
 
-/** The toolbar over the selection, where it stands. */
 function toolbarIn(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="toolbar"][aria-label="Formatting"]');
 }
 
-/** The standing toolbar's button named `name`. */
 function press(container: HTMLElement, name: string): HTMLButtonElement {
   const toolbar = toolbarIn(container) ?? assert.fail("the toolbar stands");
   const button = [...toolbar.querySelectorAll("button")].find(
@@ -178,7 +161,6 @@ function press(container: HTMLElement, name: string): HTMLButtonElement {
   return button ?? assert.fail(`the toolbar holds ${name}`);
 }
 
-/** The block named `block` chosen from the standing toolbar's Turn into. */
 function turnInto(container: HTMLElement, block: string): void {
   const toolbar = toolbarIn(container) ?? assert.fail("the toolbar stands");
   const opener =
@@ -195,7 +177,6 @@ function turnInto(container: HTMLElement, block: string): void {
   act(() => row.click());
 }
 
-/** The element the words stand in, by its tag, and whether a list or a quote holds it. */
 function blockOf(element: HTMLElement, words: string): { tag: string; wrapped: boolean } {
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
@@ -206,7 +187,6 @@ function blockOf(element: HTMLElement, words: string): { tag: string; wrapped: b
   return assert.fail(`${words} is drawn`);
 }
 
-/** ⌘K pressed in the editor, answering the press. */
 function commandK(element: HTMLElement): KeyboardEvent {
   const event = new KeyboardEvent("keydown", {
     key: "k",

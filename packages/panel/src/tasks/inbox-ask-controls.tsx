@@ -64,39 +64,17 @@ import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { useOpenLink } from "./use-open-link.js";
 
-/**
- * inbox-ask-controls.tsx -- what an ask asks for, drawn as the Inbox draws it: a `decide`'s options or its two presses, a `do`'s steps and presses, an `answer`'s fields, open or as an answer left them, and the words an ask stands at once it no longer waits.
- *
- * The pieces here are the Inbox's own (`inbox-pane.tsx`). An open ask's controls attach its answer to a draft as they
- * are pressed, picked, ticked, or filled, the box's Send sending it; an
- * answered ask's stand as the answer left them, read-only and at full
- * strength. Enter on an option or in a field sends the box the controls
- * stand in (`DraftQuestion`), a form of several fields too, where Space or
- * a press picks an option. An ask's words, its options, its steps, and its
- * fields' names, select and copy whether it is open or not
- * (`ReadableControls`), as do the presses an answer gave and the values it
- * filled in, a drag over them picking and ticking nothing, and stand Reply
- * over them as the words around them do (`reply-to-selection.tsx`), a
- * field's own typing aside.
- */
-
-/** An ask's box, in an Inbox thread, which gives way to its column. */
 export const INBOX_ASK_BOX = "inbox-ask min-w-0";
 
-/** An ask's kind at its head, in the label's weight. */
 export const INBOX_ASK_KIND = "inbox-ask-kind font-ui-medium text-foreground";
 
-/** Where an ask stands at its head, its glyph at the caption's glyph size before its words. */
 export const INBOX_ASK_STANDING =
   "inbox-ask-standing inline-flex min-w-0 items-center gap-tight-gap [&>svg]:size-ui-12 [&>svg]:flex-none";
 
-/** An ask's presses on one line, wrapping where the column is narrow. */
 const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
 
-/** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
 
-/** A choice's options as `@repo/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
 ): ChoiceOption<string>[] {
@@ -108,10 +86,8 @@ function choiceOptions(
   }));
 }
 
-/** Where a choice's open options stand, which a number key and Enter's way to what is missing find them by. */
 const OPTIONS_ATTRIBUTE = "data-inbox-options";
 
-/** The options of the open item's choice, in their order. */
 export function optionRows(pane: HTMLElement): HTMLButtonElement[] {
   return [
     ...pane.querySelectorAll<HTMLButtonElement>(
@@ -120,14 +96,6 @@ export function optionRows(pane: HTMLElement): HTMLButtonElement[] {
   ];
 }
 
-/**
- * A choice's options, a radio list where it takes one and a checkbox list
- * where it takes several, each pressed to pick it and pressed again to let
- * it go. Where `numbered`, each of the first nine wears the number that
- * picks it, which the Inbox's pane answers (`useOptionNumbers`). Read-only,
- * it is the choice as it was answered, the picks checked, which no press,
- * key, or number reaches, and which Enter's way to an option passes by.
- */
 function ChoiceOptions({
   choice,
   draft,
@@ -167,12 +135,10 @@ function ChoiceOptions({
   );
 }
 
-/** Whether a field may be left empty, since most must be filled. */
 function optionalField(field: InboxField): boolean {
   return field.required !== true;
 }
 
-/** A yes or no's name, and "Optional" after it where it may be left empty, in the muted caption `FormField` sets it in. */
 function CheckboxWords({ field }: { field: InboxField }): React.JSX.Element {
   return (
     <>
@@ -189,14 +155,8 @@ function CheckboxWords({ field }: { field: InboxField }): React.JSX.Element {
   );
 }
 
-/** How a form's text fields are drawn where the caller draws its own: the Inbox's composer field. */
 type FormText = (props: FormTextProps) => React.ReactNode;
 
-/**
- * The parts of a field a frame's attributes name, which Enter's way to an
- * empty field finds it by; a field filled in as answered is named apart,
- * so that way never lands on one.
- */
 function fieldFrame(field: InboxField, readOnly: boolean) {
   return readOnly
     ? ({
@@ -210,15 +170,6 @@ function fieldFrame(field: InboxField, readOnly: boolean) {
       } as const);
 }
 
-/**
- * A text or number field's value as an answer gave it, in the field's own
- * frame: drawn as the agent's tab draws a sent message, so a mention it
- * holds is its chip, and empty where the field was left empty. Note that
- * the composer's editor is not loaded for it, since nothing is written
- * here, and that a number is words here rather than a read-only field,
- * since a reply quotes no selection inside a field
- * (`reply-to-selection.tsx`).
- */
 function AnsweredText({
   control,
   words,
@@ -244,16 +195,6 @@ function AnsweredText({
   );
 }
 
-/**
- * One field of a form, its name over its control and left-aligned as every
- * field is, "Optional" after the name of one that may be left empty: a
- * text field the caller's own or `@repo/ui`'s, a number a short field, a
- * select its options as pills that wrap, the one the agent recommends
- * wearing its badge, its pick taken back by pressing it again, since a
- * field left empty, required or not, is sent without it, and a yes or no a
- * checkbox beside its name. Read-only, each
- * control stands as the answer filled it, which nothing changes.
- */
 function InboxFormField({
   field,
   draft,
@@ -370,7 +311,6 @@ function InboxFormField({
   }
 }
 
-/** A form's fields, stacked in the agent's order; its text fields drawn by `text` where it is given; read-only, as an answer filled them. */
 function FormFields({
   form,
   draft,
@@ -403,48 +343,30 @@ function FormFields({
   );
 }
 
-/** Answers no change, for the controls of an answer already given. */
 function heldStill(): void {}
 
-/** What an editor's own element matches, its words written in place, and a field of several lines. */
 const WRITES_LINES = 'textarea, [contenteditable]:not([contenteditable="false"])';
 
-/** Whether a key goes to whatever takes typing: a field, a select, or an editor. */
 export function takesTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || target.matches(`input, select, ${WRITES_LINES}`);
 }
 
-/** Whether a key goes to something written in lines, whose own Enter breaks one: an editor or a field of several lines. */
 function writesLines(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || target.matches(WRITES_LINES);
 }
 
-/** Whether a key comes alone, with no modifier but perhaps Shift. */
 export function bareKey(event: { metaKey: boolean; ctrlKey: boolean; altKey: boolean }): boolean {
   return !event.metaKey && !event.ctrlKey && !event.altKey;
 }
 
-/**
- * Sends the open item's answer from wherever in its pane the developer
- * pressed Enter, through its box's own send, so the box's checks stand: an
- * answer complete goes, and one that is not takes the keyboard to what it
- * lacks (`InboxAnswerBox`).
- */
 export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
 }
 
-/** What a field's own control matches, which takes the keyboard where the field is missing. */
 const FIELD_CONTROL = 'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)';
 
-/**
- * Takes the keyboard, in the answer box `box`, to what its unfinished
- * answer lacks: the option a reader's Tab lands on, or the first of an
- * ask's two presses; the missing field's first control; or the note line
- * the box's words are written on, which stands outside the question's own.
- */
 export function focusMissing(box: HTMLElement | null, missing: InboxMissing): void {
   if (box === null) return;
   switch (missing.kind) {
@@ -471,38 +393,27 @@ export function focusMissing(box: HTMLElement | null, missing: InboxMissing): vo
   }
 }
 
-/** Whether a key goes to a link, a step's say, whose own Enter opens it. */
 function opensLink(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.matches("a[href]");
 }
 
-/**
- * Enter in an open item's question, on an option or in a form's field,
- * sends the answer, and never presses the option it stands on, which Space
- * or a press picks. Shift+Enter is no send, and an editor's Enter and a
- * link's are their own to hand on.
- */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
   if (writesLines(event.target) || opensLink(event.target)) return;
-  // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
 }
 
-/** The keys 1 to 9, each the option of its number. */
 export const OPTION_NUMBER = /^[1-9]$/u;
 
-/** What the presses closing an open ask say. */
 const ASK_PRESS = {
   DONE: "Mark done",
   NOT_DONE: "Couldn't do it",
 } as const;
 
-/** What an open ask's presses send, and what they are drawn with. */
 interface AskDoors {
   readonly draft: InboxDraft;
   readonly disabled: boolean;
@@ -510,13 +421,6 @@ interface AskDoors {
   readonly onDraft: (draft: InboxDraft) => void;
 }
 
-/**
- * A press of a two-press ask, open or as an answer left it, wearing the
- * glyph of the way it goes (`ToneGlyph`) either way, so a press reads the
- * same before and after it is given. Open, it attaches its answer to the
- * reply while pressed and takes it off pressed again; with no `onPress`, it
- * records the press given and takes none.
- */
 function AskPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
@@ -528,12 +432,10 @@ function AskPress({
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
-  /** Whether the agent recommends it, which its badge says. */
   recommended?: boolean;
   tone: AnswerTone;
   pressed: boolean;
   disabled?: boolean;
-  /** Attaches or takes off its answer; none where it records an answer already given. */
   onPress?: (() => void) | undefined;
 }): React.JSX.Element {
   return (
@@ -552,17 +454,8 @@ function AskPress({
   );
 }
 
-/** What a step's card is headed where its fence names no language. */
 const STEP_CODE_TITLE = "code";
 
-/**
- * A to-do's step as its box and the box's words: its inline Markdown drawn,
- * bold, code, and links among it, a list in it run into the line (`inline`),
- * and a link pressed opening its page without ticking the box (`TextLink`).
- * Each fence standing in the step draws under the words as the window's one
- * code card, its lines kept and its Copy taking them whole, outside the
- * box's press (`stepParts`); a step of a fence alone is named by its place.
- */
 function StepBox({
   step,
   at,
@@ -584,7 +477,6 @@ function StepBox({
     fences.length === 0 ? undefined : (
       <Stack gap={GAP.CONTROL}>
         {fences.map((fence, place) => (
-          // A step's fences have no key of their own, and are never reordered.
           <CodeCard
             key={place}
             title={fence.lang ?? STEP_CODE_TITLE}
@@ -607,7 +499,6 @@ function StepBox({
   );
 }
 
-/** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
 function AskWords({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="inbox-ask-words contents" {...{ [REPLY_SCOPE]: "" }}>
@@ -616,19 +507,8 @@ function AskWords({ children }: { children: React.ReactNode }): React.JSX.Elemen
   );
 }
 
-/**
- * An open ask's controls, each attaching its answer to the reply rather
- * than sending it, and each press taking it off again: a `decide`'s options
- * numbered for the keys, or its two small buttons where it is a yes or no
- * in other words; a `do`'s steps as
- * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
- * an `answer`'s fields, whose values attach to the reply as they are
- * filled, with no press, a form filled in part sending what was filled;
- * nothing for an `answer` of words alone, whose reply's words are the answer.
- */
 export function AskControls(props: {
   ask: InboxAsk;
-  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
   title: string | undefined;
   doors: AskDoors;
 }): React.JSX.Element {
@@ -639,7 +519,6 @@ export function AskControls(props: {
   );
 }
 
-/** An open ask's controls, as `AskControls` holds them. */
 function OpenControls({
   ask,
   title,
@@ -689,7 +568,6 @@ function OpenControls({
           {steps.length === 0 ? null : (
             <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL} aria-label="Steps">
               {steps.map((step, at) => (
-                // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
                   <StepBox
                     step={step}
@@ -702,7 +580,6 @@ function OpenControls({
               ))}
             </Stack>
           )}
-          {/* Note that the two presses are the to-do's options, which Enter's way to what is missing finds. */}
           <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
             <AskPress
               label={ASK_PRESS.DONE}
@@ -724,7 +601,6 @@ function OpenControls({
       );
     }
     case INBOX_ASK.ANSWER:
-      // An ask of words alone has no controls: the box's line is its answer.
       return ask.fields === undefined ? null : (
         <div className="inbox-ask-fields">
           <FormFields
@@ -739,12 +615,6 @@ function OpenControls({
   }
 }
 
-/**
- * The glyph a press wears for the way it goes, as the answer's stamp does:
- * a check going ahead, a turn back holding back. Only the press given spends
- * its answer's tone (`ANSWER_STATUS_TONE`), green or gray; the rest wear
- * their words' ink.
- */
 function ToneGlyph({ tone, pressed }: { tone: AnswerTone; pressed: boolean }): React.JSX.Element {
   return (
     <span
@@ -760,17 +630,8 @@ function ToneGlyph({ tone, pressed }: { tone: AnswerTone; pressed: boolean }): R
   );
 }
 
-/**
- * An ask's controls as they were left, in the look they had while it
- * waited and taking nothing: a `decide`'s options with `draft`'s picks
- * checked, or its two small buttons with the one pressed marked; a `do`'s
- * steps ticked as `draft` holds them, over Mark done and Couldn't do it
- * with the one `draft` pressed marked; an `answer`'s fields, each holding
- * what `draft` gives it. An `answer` of no fields has none, and draws nothing.
- */
 export function HeldControls(props: {
   ask: InboxAsk;
-  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
   title: string | undefined;
   draft: InboxDraft;
 }): React.JSX.Element {
@@ -781,7 +642,6 @@ export function HeldControls(props: {
   );
 }
 
-/** An ask's controls as they were left, as `HeldControls` holds them. */
 function LeftControls({
   ask,
   title,
@@ -816,7 +676,6 @@ function LeftControls({
           {steps.length === 0 ? null : (
             <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL} aria-label="Steps">
               {steps.map((step, at) => (
-                // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
                   <StepBox
                     step={step}
@@ -858,26 +717,16 @@ function LeftControls({
   }
 }
 
-/** Whether an ask draws any controls once it no longer waits: every one but an `answer` of words alone. */
 export function hasControls(ask: InboxAsk): boolean {
   return ask.type !== INBOX_ASK.ANSWER || ask.fields !== undefined;
 }
 
-/**
- * The open question's controls as the draft reply's card's body, over its
- * foot, with no card, border, or head of their own, since the agent's
- * message says what it asks: an Enter on an option or in a field sends the
- * card, a form of several fields too. Its × at the top end, where the item
- * can be closed, resolves it without answering, asked first
- * (`inbox-close.tsx`); its Enter presses the × rather than sending.
- */
 export function DraftQuestion({
   pane,
   close,
   children,
 }: {
   pane: React.RefObject<HTMLElement | null>;
-  /** The × that resolves the item without answering; none where it cannot be closed. */
   close?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -898,19 +747,10 @@ export function DraftQuestion({
   );
 }
 
-/** What the strip says in the open question's place once its × staged a resolve. */
 const RESOLVING = "Resolving without answering";
 
-/** What the strip's press, which takes the staged resolve back, is called. */
 const UNDO_RESOLVE = "Undo";
 
-/**
- * The strip that stands in the open question's place once its × staged
- * resolving the item without an answer (`InboxDraft`'s `resolving`): its
- * words and Undo, which brings the question back as it was left, picks
- * and all, since nothing goes until the box's Send. Undo takes the focus
- * the × had where the strip came of its press (`takesFocus`).
- */
 export function DraftResolving({
   takesFocus,
   onUndo,
@@ -919,7 +759,6 @@ export function DraftResolving({
   onUndo: () => void;
 }): React.JSX.Element {
   const undo = useRef<HTMLButtonElement>(null);
-  // Note that only the mount reads it, so a strip drawn from a kept draft takes no focus from where the reader stands.
   const focused = useRef(takesFocus);
   useEffect(() => {
     if (focused.current) undo.current?.focus();
@@ -942,33 +781,22 @@ export function DraftResolving({
   );
 }
 
-/** The steps a `do` ask shows: its own, or the one its title names where it names none; none where nothing names that step. */
 function stepsOf(ask: Extract<InboxAsk, { type: typeof INBOX_ASK.DO }>, title: string | undefined) {
   if (ask.steps.length > 0) return ask.steps;
   return title === undefined ? [] : [title];
 }
 
-/**
- * The ask a member's reply answered, at the head of that reply under their
- * face and name, in the reply's stamp's place: the ask's controls alone
- * (`HeldControls`), standing in the reply with no card around them, as the
- * answer left them, which say how it was answered. An `answer` of no fields
- * draws no card, its reply's words being the answer and the agent's message
- * saying it was answered (`AskBox`).
- */
 export function AnsweredCard({
   ask,
   title,
   answers,
 }: {
   ask: InboxAsk;
-  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
   title: string | undefined;
   answers: InboxAnswers;
 }): React.JSX.Element | null {
   if (!hasControls(ask)) return null;
   return (
-    // Note that it is no `inbox-ask` card: the controls stand in the reply itself, at its words' left edge.
     <div
       className="inbox-ask-answered mb-tight-gap flex min-w-0 flex-col gap-block-gap"
       data-inbox-answered=""
@@ -978,10 +806,8 @@ export function AnsweredCard({
   );
 }
 
-/** What an ask's line says of one answered, where the answer itself is not drawn beside it. */
 export const ANSWERED = "Answered";
 
-/** Why an ask was taken back, as a muted sentence under the line saying so; nothing where none was said. */
 export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.JSX.Element | null {
   if (reason === undefined) return null;
   return (
@@ -994,7 +820,6 @@ export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.
   );
 }
 
-/** The quiet words an ask waiting on someone else ends its message with: "Waiting on" them. */
 export function WaitingMarker({ on }: { on: string }): React.JSX.Element {
   return (
     <span data-inbox-marker="">

@@ -12,9 +12,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-// Note that the Admin place is loaded as the window loads it, on first use
-// (`admin-route.lazy.tsx`), so the module is read here first and its load settles
-// within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/admin-route.lazy.js";
 import "./desktop/person-route.lazy.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
@@ -22,17 +19,6 @@ import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
-
-/**
- * app-admin-link.test.ts -- a link to the Admin place the system hands the
- * window, as a reload on an Admin address does, opens the place while the
- * account's access is still being read, the place waiting on that read, and
- * stands it once the account is an admin; the place gives the window back
- * once the read says it is not, and a link opened for an account known to be
- * no admin opens nothing. A person's page loaded under a workspace the
- * reader is not in, as a reload of another's address is, opens the same
- * person under the workspace listed, as a link to them does.
- */
 
 const ACME = {
   id: "workspace-acme",
@@ -42,7 +28,6 @@ const ACME = {
   github: null,
 };
 
-/** Main's document for a signed-in account in Acme, its access not yet read. */
 const FIRST: AppStateSnapshot = stateWith(
   {},
   { tasks: { ...IDLE_TASKS_VIEW, workspaces: [ACME] }, access: { admin: false, pending: true } },
@@ -95,7 +80,6 @@ beforeEach(() => {
       };
     },
   } satisfies Partial<AppBridge>);
-  // Every act is refused, as a service that answers nothing would: the place stands all the same.
   fakeActPortAnswering(() => Promise.reject(refusedOnPort("Not here.")));
 });
 
@@ -121,7 +105,6 @@ async function drawWindow(at?: string): Promise<TestWindowRouter> {
   return router;
 }
 
-/** Delivers `snapshot` as main would, and lets the window draw what it draws. */
 async function deliver(snapshot: AppStateSnapshot): Promise<void> {
   act(() => {
     for (const listener of listeners) listener(structuredClone(snapshot));
@@ -129,17 +112,14 @@ async function deliver(snapshot: AppStateSnapshot): Promise<void> {
   await settle();
 }
 
-/** Whether the Admin place stands, drawn or its loading frame, by the bar of its sections. */
 function adminOpen(): boolean {
   return document.querySelector('[role="radiogroup"][aria-label="Admin sections"]') !== null;
 }
 
-/** Whether the Admin place stands drawn, its views under the recording's block, rather than its loading frame. */
 function adminStands(): boolean {
   return document.querySelector(".desktop-main .ph-no-capture") !== null;
 }
 
-/** Whether the Admin place stands waiting on the account's access, its loading frame up. */
 function adminWaits(): boolean {
   return adminOpen() && !adminStands();
 }

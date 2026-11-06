@@ -36,15 +36,6 @@ import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane } from "./page-pane.js";
 
-/**
- * A page's tab as the developer meets it: the page drawn in a frame that
- * runs its scripts and nothing else, out of the screen recording, at its
- * newest version until they step back through the earlier ones, or its
- * HTML drawn as a File tab draws a file. Synthetic tasks and pages
- * throughout; main's read of a version's source is a door answering each
- * version's HTML as colored lines.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "0c4e2b1d-9f3a-4e6b-8d7c-1a2b3c4d5e6f";
 
@@ -63,7 +54,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One version's HTML as main colors it: its tag in a color of its own, its words plain. */
 function sourceOf(version: number): CodeLines {
   return [
     [{ text: "<h1>", color: "#7ee787", lightColor: "#116329" }, { text: `Funnel v${version}` }],
@@ -71,17 +61,14 @@ function sourceOf(version: number): CodeLines {
   ];
 }
 
-/** Reads one version's source, as the service answers it. */
 type ReadPageSource = (version: number) => Promise<TasksPageSourceAnswer>;
 
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
 
-/** Answers the pane's source reads through `read`, over the act port its window reads through. */
 function answerSources(read: ReadPageSource): void {
   fakeActPort({ [ACT_KIND.TASKS_PAGE_SOURCE]: (payload) => read(payload.version) });
 }
 
-/** Mounts the pane over the page as the task lists it, its links written under `acme`, answering what it draws and a way to list it again. */
 function mount(
   page: PageLine,
   read: ReadPageSource = readSource,
@@ -94,7 +81,6 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // What the tab hands the strip's one ⋯, as its groups' names.
   let held: TabActionGroups | undefined;
   const handed = () => (held ?? []).map((group) => group.map((each) => each.label));
   const chooseHanded = (label: string) => {
@@ -139,7 +125,6 @@ function mount(
     assert.ok(button);
     await act(async () => button.click());
   };
-  // The source's lines as drawn, each its number then its text, once Pierre has drawn them.
   const sourceLines = async () => {
     await wholeFileDrawn(container);
     return wholeFileLines(container);
@@ -151,7 +136,6 @@ const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUN
 
 beforeEach(() => {
   fakeAppPlatform({ pageFrameUrl });
-  // View settings opens its syntax theme on the window's appearance, here the dark one.
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query.includes("dark"),
     addEventListener: () => undefined,
@@ -233,7 +217,6 @@ test("over the source, View settings offers the settings its lines follow, and t
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
   assert.deepEqual(
     [...popover.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
-      // A pop-up's name ends with the value it names, which is not the row's.
       (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
     [
@@ -317,7 +300,6 @@ test("a source the service did not answer says so in its place, and Retry reads 
   assert.deepEqual(await sourceLines(), ["1 <h1>Funnel v3", "2 <p>Invites sent</p>"]);
 });
 
-/** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
   const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field, "the find bar stands open");
@@ -327,13 +309,11 @@ function typeFind(text: string): void {
   });
 }
 
-/** What the find bar's tally says. */
 function findTally(): string | null | undefined {
   return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
 }
 
-/** What the panel asks of a frame's find, each ask in the order it was posted. */
 function framePosts(frame: HTMLIFrameElement): unknown[] {
   const posted: unknown[] = [];
   const window = frame.contentWindow ?? assert.fail("the frame has no window");
@@ -343,7 +323,6 @@ function framePosts(frame: HTMLIFrameElement): unknown[] {
   return posted;
 }
 
-/** A message posted to the panel's window from `from`, as a frame's page posts one. */
 function postFrom(
   from: Window | null,
   data: typeof pageFindAnswerSchema.Type | typeof pagePickAnswerSchema.Type,
@@ -423,7 +402,6 @@ test("⌘F and ⌘G pressed in the page, which the window's keys never hear, ope
 
 test("a click into the page, which stirs only the window's blur, is told as a focus in the tab, which hands its column the keys", () => {
   const { container, frame } = mount(FUNNEL);
-  // Note that jsdom tells a focus moved into a frame itself, which Chromium's click does not.
   act(() => frame().focus());
   const heard: EventTarget[] = [];
   container.addEventListener("focusin", (event) => {
@@ -558,7 +536,6 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   });
   postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, marks: [{ path, box }] });
   await press("Comment on the page");
-  // The press in the frame is the developer's, which the window holds as the pick lands.
   vi.stubGlobal("navigator", { ...navigator, userActivation: { isActive: true } });
   postFrom(frame().contentWindow, {
     type: PAGE_PICK_TYPE,
@@ -578,7 +555,6 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   assert.ok(field, "the comment is started by the element");
   assert.match(field.textContent ?? "", /Totals/);
 
-  // A press in the page, selecting nothing, is a press away, which lets go of a comment holding no words of its own.
   postFrom(frame().contentWindow, { type: PAGE_PICK_TYPE, pressed: true });
   const standing = container.querySelector(
     ".ui-rect-float:not([data-leaving]) .page-comment-float",

@@ -36,82 +36,40 @@ import type { MenuEntry } from "./action-menu.js";
 import { type RelatedTaskRow, RelatedTasks } from "./related-tasks.js";
 import { chipSubmenu } from "./standing-submenus.js";
 
-/**
- * plan-relations.tsx -- the open task's sub-tasks and the tasks related to it at the head of its description, each a group of the Tasks list's own rows.
- *
- * Two groups stand under the byline, ahead of the Agents, each the shape
- * every group of the head takes, a `GroupHeader` over a list
- * (`related-tasks.tsx`), and each drawn only while it holds a row, so a
- * task with neither draws no empty heads. Sub-tasks, by the list-tree
- * glyph, counts how many of the task's own sub-tasks are finished of all of
- * them in a badge, as a sub-task row with sub-tasks of its own and a Board
- * card count theirs, and nests theirs under each to any depth, folded until opened, as
- * the sidebar nests and folds them; it reads the task list's
- * `parentTaskId` and nothing more. Task relations, by the network glyph, holds a
- * row for each task the task waits on and each that waits on it, led by its
- * kind as a compact pill by its icon, its words, and a chevron, so the row
- * reads as a sentence, Blocked by, the task's key, its status, its name: an
- * open blocker's pill in the attention tone, and a blocker that is done or
- * canceled muting its row. The pill drops the four kinds, the current one checked,
- * and Remove relation; a kind picked is moved in one call
- * (`onChangeTaskRelation`), so nothing is taken away and added again, and a
- * row moved to Parent leaves for the path's crumb, where a parent stands.
- * A related row's ⋯, right-click, and menu key lead its task's menu with
- * the same: Change relation, its four kinds, and Remove relation, which
- * acts at once and offers Undo in a toast. Each group's +, standing at rest
- * on its head, drops the add menu (`task-relation-menu.tsx`): Sub-tasks' on
- * Add sub-task's search, Task relations' on the kinds. A refusal, a loop or
- * another repository, is the service's, said in the toast its door raises.
- */
-
-/** What each group is called, and its list for a reader moving between lists. */
 const GROUP_WORDS = {
   SUB_TASKS: "Sub-tasks",
   RELATIONS: "Task relations",
 } as const;
 
-/** What each group's + is called, said beside its glyph. */
 const ADD_WORDS = {
   SUB_TASK: "Add sub-task",
   RELATION: "Add task relation",
 } as const;
 
-/** What the Task relations group's count counts, said to a reader beside the figure. */
 const RELATIONS_NOUN = { one: "task relation", many: "task relations" } as const;
 
-/** What a row's menu and a pill's menu name the relation's change and its taking away. */
 const CHANGE_RELATION = "Change relation";
 const REMOVE_RELATION = "Remove relation";
 
-/** What a related task the list does not hold yet is called on its row. */
 const UNLISTED_TASK_NAME = "Task";
 
-/** The words a sub-task's fold is named by, before its name. */
 const SUB_TASKS_OF = "Sub-tasks of";
 
-/** The four kinds as a menu's rows, each by its icon. */
 const KIND_ROWS: readonly MenuRow[] = TASK_RELATION_ORDER.map((kind) => ({
   id: kind,
   label: TASK_RELATION_WORDS[kind],
   icon: <TaskRelationIcon kind={kind} />,
 }));
 
-/** The kind a picked row names; none for a row that names none. */
 function kindOf(id: string): TaskRelationKind | undefined {
   return TASK_RELATION_ORDER.find((kind) => kind === id);
 }
 
-/** What a relation's row changes it through: a kind moved, or the relation taken away. */
 interface RelationDoors {
   readonly onChange: (to: TaskRelationKind) => void;
   readonly onRemove: () => void;
 }
 
-/**
- * The doors that change how `other` stands to `task`, as `kind`, through
- * the task list's own: a kind moved in one call, and a block taken away or
- * a sub-task taken out from under the task, each offering Undo.
- */
 function relationDoors(
   tasks: TasksControl,
   task: Task,
@@ -139,7 +97,6 @@ function relationDoors(
   };
 }
 
-/** A related row's menu groups: Change relation, its four kinds with the current one checked, and Remove relation. */
 function relationMenu(kind: TaskRelationKind, doors: RelationDoors): readonly MenuEntry[][] {
   const change = chipSubmenu(CHANGE_RELATION, KIND_ROWS, kind, (id) => {
     const picked = kindOf(id);
@@ -148,11 +105,6 @@ function relationMenu(kind: TaskRelationKind, doors: RelationDoors): readonly Me
   return [[change, { label: REMOVE_RELATION, icon: <GLYPH.CLOSE />, onSelect: doors.onRemove }]];
 }
 
-/**
- * A group's +, standing at rest on its head: a glyph's button dropping the
- * add menu on `kind`, or on the kinds where none is said, the menu hanging
- * from the button and handing focus back to it once closed.
- */
 function RelationAdd({
   task,
   door,
@@ -208,11 +160,6 @@ function RelationAdd({
   );
 }
 
-/**
- * The task's sub-tasks as rows, each nested under its parent to any depth,
- * those under a folded row passed by, in the order they were made; a loop
- * of parents, which nothing writes, is cut where it closes.
- */
 function subTaskRows(
   tasks: readonly TaskSummary[],
   task: Task,
@@ -228,7 +175,6 @@ function subTaskRows(
       walked.add(subTask.id);
       const under = subTasksOf(tasks, subTask.id).filter((each) => !walked.has(each.id));
       const open = opened.has(subTask.id);
-      // Note that only the task's own sub-tasks are related to it, so a deeper row's menu is its task's alone.
       const menu = depth === 0 ? menuOf(subTask) : undefined;
       rows.push({
         task: subTask,
@@ -253,20 +199,11 @@ function subTaskRows(
   return rows;
 }
 
-/** A task a block names, and whether the list holds it. */
 interface BlockTask {
   readonly task: TaskSummary;
   readonly listed: boolean;
 }
 
-/**
- * The tasks a side of the task's blocks names, as the list holds them. Note
- * that one the list does not hold yet, while it is still read or after a
- * read failed, still stands, named "Task" in the task's own workspace until
- * the list names it, because the open document is read apart from the list
- * and a relation it holds must not vanish meanwhile; its row draws only
- * what acts on the relation, since its standing is not known.
- */
 function blockTasks(
   task: Task,
   byId: ReadonlyMap<string, TaskSummary>,
@@ -287,12 +224,6 @@ function blockTasks(
   });
 }
 
-/**
- * The open task's Sub-tasks and Task relations groups at the head of its description,
- * each only while it holds a row; nothing for a task with neither. Its
- * relations change through the task list's doors, and each group's + adds
- * one through the add menu's `door`.
- */
 export function PlanRelations({
   task,
   tasks,
@@ -303,9 +234,7 @@ export function PlanRelations({
   task: Task;
   tasks: TasksControl;
   door: TaskRelationDoor;
-  /** Where the description's head stands, whose scroller its lists draw only the rows near the view of. */
   room: DescriptionRoom;
-  /** Opens a row's task, as the description's head opens a task. */
   onOpenTask: (taskId: string) => void;
 }): React.JSX.Element | null {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
@@ -355,7 +284,6 @@ export function PlanRelations({
   );
   if (subTasks.length === 0 && relations.length === 0) return null;
   return (
-    // Note that the groups are pulled out by a row's inset on each side, so their marks stand on the title's edge, as the Agents group's do.
     <div className="plan-relations -mx-row-inset mb-block-gap flex flex-col gap-block-gap">
       {subTasks.length === 0 ? null : (
         <ReplayUnmask>

@@ -41,15 +41,8 @@ import { agentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 
-/**
- * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, offers every action its tab and its page offer but those `NOT_ON_A_ROW` names, a local agent's Terminal only where it runs on This Mac, and is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; deleted for good once asked, last and alone in its menu; and hanging its card while rested on.
- *
- * The service is a script at the act boundary; synthetic agents throughout.
- */
-
 const AGENT_ID = "4b2e7c1d-9a3f-4e6b-8c5d-1f0a2b3c4d5e";
 
-/** An automation's run's agent at rest, as the sidebar lists it. */
 const RUN: TasklessAgent = {
   id: AGENT_ID,
   planId: null,
@@ -66,25 +59,16 @@ const RUN: TasklessAgent = {
   activityAt: 2,
 };
 
-/** Who reads the sidebar, and a teammate who started an agent of theirs. */
 const ME = "user-me";
 const ADA = { userId: "user-ada", name: "Ada Lovelace" };
 
-/** Where the agent stands as its own page reads it, which may have moved since the list was read. */
 let standing: TasklessAgent = RUN;
-/** Every archive or Unarchive asked, in order. */
 let archives: { agentId: string; archived: boolean }[] = [];
-/** Every agent marked read by hand in main, in order. */
 let seen: string[] = [];
-/** Every read mark asked of the service, in order, as `<mark>:<agent>`. */
 let readMarks: string[] = [];
-/** Every rename asked, in order. */
 let renames: { agentId: string; title: string }[] = [];
-/** Whether the service takes the names the rows ask for. */
 let renameTaken = true;
-/** Every delete asked, in order. */
 let deletes: string[] = [];
-/** How many times a delete that landed left the agent's page. */
 let left = 0;
 let root: Root | undefined;
 
@@ -124,7 +108,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The row of `agent`, drawn among the sidebar's tasks, whose archive is heard into `archives`. */
 function mount(
   agent: TasklessAgent,
   pullRequests: AgentsControl["pullRequests"] = new Map(),
@@ -177,14 +160,12 @@ function mount(
   return container;
 }
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** What the row's right-click offers, by label. */
 function rightClick(row: HTMLElement): HTMLButtonElement[] {
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   act(() => {
@@ -193,12 +174,10 @@ function rightClick(row: HTMLElement): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 }
 
-/** What a menu item says, its chord left out. */
 function wordsOf(item: Element | undefined): string | null | undefined {
   return item?.querySelector(".ui-menu-item-label")?.textContent ?? item?.textContent;
 }
 
-/** The item under `label` among those offered, or a failure saying it is not offered. */
 function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonElement {
   return (
     items.find((each) => wordsOf(each) === label) ??
@@ -287,7 +266,6 @@ test("a refused rename reopens the row's field holding the name typed, and says 
   });
   await settle();
 
-  // Note that the refusal reaches the row through the rename's mutation, a moment after the write is refused.
   await vi.waitFor(() =>
     assert.equal(
       row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]')?.value,
@@ -306,7 +284,6 @@ test("rested on, the row hangs the agent's card beside it, naming it as its tab'
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Remove the stale copy");
 });
 
-/** Writes words into the agent's box's draft, as typing on its page would. */
 function DraftInBox({ words }: { words: string }): null {
   const writer = useDraftWriter();
   useEffect(() => {
@@ -407,13 +384,11 @@ test("the row's card shows a pull request read since the list was, before the li
   assert.match(mark?.closest(".ui-hover-card-row")?.textContent ?? "", /^#43/u);
 });
 
-/** Presses `label` in the row's right-click menu. */
 async function choose(row: HTMLElement, label: string): Promise<void> {
   const pick = item(rightClick(row), label);
   await act(async () => pick.click());
 }
 
-/** What a reader of the screen hears the row say, which names it unread. */
 function heard(row: HTMLElement): string {
   return row.textContent ?? "";
 }
@@ -450,7 +425,6 @@ test("an archived agent's row offers the read mark too, as a task's does", () =>
   assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
 });
 
-/** The open dialog's button with these words, or a failure saying it offers none. */
 function dialogAnswer(words: string): HTMLButtonElement {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("a dialog asks");
@@ -501,7 +475,6 @@ test("an archived agent's row offers Permanently delete too, and Cancel deletes 
   assert.equal(left, 0);
 });
 
-/** Hands `onActions` the agent's actions as its tab and its page offer them, every door they open on offered. */
 function OfferedActions({
   agent,
   onActions,
@@ -518,7 +491,6 @@ function OfferedActions({
   return null;
 }
 
-/** The labels of the agent's actions, as its tab and its page offer them, that a row does not leave out by name. */
 function sharedOnRow(agent: TasklessAgent): string[] {
   let offered: AgentActions | undefined;
   const container = document.createElement("div");
@@ -605,11 +577,9 @@ test("a local agent offers Terminal only where it runs on This Mac", async () =>
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(signedInOnThisMac),
   });
-  /** Whether the local agent on the device given offers Terminal, once the window holds This Mac. */
   const offersTerminal = async (deviceId: string) => {
     let offered: AgentActions | undefined;
     const agent = { ...RUN, machine: AGENT_MACHINE.DEVICE, mac: { name: "Studio", deviceId } };
-    // Note that the actions are read once, so the document is in the client from their first frame.
     writeAppState(signedInOnThisMac);
     const held = createRoot(document.createElement("div"));
     act(() =>

@@ -11,13 +11,6 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
 
-/**
- * history-buttons.test.ts -- Back and Forward list the steps along their
- * way on a right-click, a held press, or the menu key, as a browser's do, each named as the
- * window called it, a page's steps gathered together, and any of them gone
- * to at once; a plain press still takes one step.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -58,7 +51,6 @@ const BACK: readonly HistoryStep[] = [
   },
 ];
 
-/** Back and Forward over a history standing on the steps given, each step gone to and each press recorded. */
 function mount(steps: readonly HistoryStep[]) {
   const went: number[] = [];
   const pressed: string[] = [];
@@ -87,7 +79,6 @@ function mount(steps: readonly HistoryStep[]) {
   return { back, went, pressed };
 }
 
-/** The menu standing, its items' words in order and the rules between its groups. */
 function menuWords(): string[] {
   const menu = document.querySelector('[role="menu"]');
   assert.ok(menu, "the list stands");
@@ -220,7 +211,6 @@ test("a press held into the list and let go there leaves the list's first click 
     );
   });
   act(() => vi.advanceTimersByTime(1000));
-  // Let go over the list rather than over Back, which clicks nothing.
   act(() => {
     document.body.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
   });

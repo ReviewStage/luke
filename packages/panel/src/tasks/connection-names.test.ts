@@ -19,14 +19,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { toolCallView } from "./tool-call-model.js";
 
-/**
- * connection-names.test.ts -- a call of an MCP server's tool says the server
- * by the name its card gives: "Notion · Work" where the provider holds two
- * labeled accounts or one alone that carries a label, the provider's name
- * where its one account carries none, and the name its
- * connection's id gives where the accounts were not read. Synthetic accounts.
- */
-
 const roots: Root[] = [];
 
 const NOTION = INTEGRATION_PROVIDER.NOTION;
@@ -38,9 +30,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Where the integrations stand: Notion connected, the rest unavailable. */
 function statuses(): Record<IntegrationProvider, IntegrationStatus> {
-  // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
   return Object.fromEntries(
     INTEGRATION_PROVIDER_LIST.map((provider) => [
       provider,
@@ -49,13 +39,6 @@ function statuses(): Record<IntegrationProvider, IntegrationStatus> {
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
-/**
- * Waits for the rows of calls of a provider's tool, one per connection, drawn
- * in one tree, to say each ran on its `said`, once the accounts are read.
- * Note that one Query client holds a test's document across its mounts, so a
- * test asks first for a name only the read gives, and a name the unread
- * fallback shares too is asked beside one only the read gives, in the same render.
- */
 async function serversSay(
   calls: readonly { connection: string; said: string }[],
   accounts: readonly { connection: string; label?: string }[],

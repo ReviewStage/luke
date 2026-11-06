@@ -4,12 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TurnCard } from "./turn-card.js";
 
-/**
- * A finished turn's card as a developer reads it: a turn that ran a fast
- * step at standard speed says so on a line of its own, and any other turn
- * says nothing of speed.
- */
-
 const STARTED_AT = Date.UTC(2026, 9, 14, 12, 0, 0);
 const ENDED_AT = STARTED_AT + 90_000;
 

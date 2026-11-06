@@ -11,21 +11,6 @@ import { fileFolder, fileName, fileRefText, lineRangeText } from "./file-ref-mod
 import { FileTypeIcon } from "./file-type-icon.js";
 import { useTaskMentions } from "./task-mentions.js";
 
-/**
- * file-ref.tsx -- a file named anywhere in the window: its look as a row wears it, the card its tab hangs, and its mark, path, and lines as the one button that hangs that card and opens its tab.
- *
- * A file of the task's repository is named in many places beside its own
- * tab: an inbox item's code, a mention, and ⌘K. Each wears
- * the file's type icon, as the file tree draws it (`file-type-icon.tsx`),
- * before its name, says its lines one way (`lineRangeText`), and hangs the
- * file's tab's own card while the pointer rests on it: the file's whole
- * path. A press or
- * Enter shows the file's tab through the side panel's one door for it
- * (`SidePanelControl.onOpenFile`): the tab it has, or a new one at the
- * strip's end, on the lines the place names, where it names any.
- */
-
-/** A file as a row names it, in a menu, the summary, or ⌘K: its type's icon, its name, its folder after the name, and the whole path a search finds it by. */
 export interface FileLook {
   readonly icon: React.JSX.Element;
   readonly label: string;
@@ -33,7 +18,6 @@ export interface FileLook {
   readonly terms: readonly string[];
 }
 
-/** How a file is named in a row, and its tab's icon and name the same. */
 export function fileLook(path: string): FileLook {
   const name = fileName(path);
   return {
@@ -44,22 +28,13 @@ export function fileLook(path: string): FileLook {
   };
 }
 
-/**
- * A file's card, its tab's and every place naming it, drawn from the parts
- * every hover card is (`@repo/ui`'s `HoverCard`): the file's type icon and its
- * whole path, its repository under the path where the place names one, and
- * under them where the file is read, where the place says, as a mention's
- * lines and commit (`thing-card.tsx`).
- */
 export function FileCard({
   path,
   repository,
   note,
 }: {
   path: string;
-  /** The repository the file is of, under its path, where the place names one. */
   repository?: string | undefined;
-  /** Where the file is read, under the path; none where the place says nothing of it. */
   note?: string | undefined;
 }): React.JSX.Element {
   return (
@@ -70,25 +45,15 @@ export function FileCard({
   );
 }
 
-/**
- * A file named in place: its type's icon, its path, cut from the left so
- * the file's own name stays in sight, and the lines it points at, as one
- * button that hangs the file's card while the pointer rests on it and shows
- * the file's tab on a press. With no `onOpen` the file cannot be opened
- * from here, and it is plain words that hang the card alone.
- */
 export function FileRef({
   codeRef,
   repository: named,
   onOpen,
 }: {
   codeRef: CodeRef;
-  /** The repository the lines were read from, where the place knows it; the task's where it does not. */
   repository?: string | undefined;
-  /** Shows the file's tab on the reference's lines; none where the file cannot be opened from here. */
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
-  // Note that a file named with no repository of its own is of the task's, which its card names as a mention's does.
   const task = useTaskMentions()?.repository ?? undefined;
   const repository = named ?? task;
   return (

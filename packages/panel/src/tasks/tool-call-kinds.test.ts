@@ -13,12 +13,6 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { toolCallView } from "./tool-call-model.js";
 
-/**
- * tool-call-kinds.test.ts -- every tool an agent can call reads on its row as
- * its own verb behind its own mark, never as "Used" and a tool's name behind
- * a wrench, and a call of an MCP server's tool says which server it ran on.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => fakeAppPlatform(QUIET_PANEL));
@@ -28,7 +22,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The first line of the row an agent's turn draws for one finished call: its words, and the mark it leads with. */
 function rowOf(tool: string, input: WireRecord, output: WireRecord) {
   const message: AgentTranscriptMessage = {
     id: "turn",

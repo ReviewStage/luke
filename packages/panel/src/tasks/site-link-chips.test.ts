@@ -12,17 +12,9 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * site-link-chips.test.ts -- a link to a well-known site's page in words is
- * drawn as its chip: its site's own mark, and the place, route, code, or
- * author its address spells, a labeled link keeping its label. Synthetic
- * places and pages.
- */
-
 const PLACE = "https://www.google.com/maps/place/Ferry+Building/@37.79,-122.39,17z/data=!3m1";
 const ROUTE = "https://www.google.com/maps/dir/SFO/Ferry+Building/@37.7,-122.3,11z";
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 let root: Root | undefined;
@@ -33,7 +25,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn. */
 async function drawn(text: string): Promise<HTMLElement> {
   const state = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   fakeAppBridge({

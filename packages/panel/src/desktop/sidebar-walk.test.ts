@@ -13,18 +13,10 @@ import { layScrollerOut } from "../testing/scroller.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-walk.test.ts -- the sidebar's rows are one walk across the lists
- * that draw only the rows near the view: Home and a step past either end
- * reach the first or last row any list holds, drawn or not, wrapping as a
- * list's walk does.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
-  // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -43,7 +35,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One of sixty tasks with no repository, the newest first, so the list holds them in one run. */
 function task(at: number): TaskSummary {
   return {
     id: `t-${at}`,
@@ -55,7 +46,6 @@ function task(at: number): TaskSummary {
   };
 }
 
-/** The name of the row holding the keyboard. */
 function focusedName(): string | undefined {
   return (
     document.activeElement?.closest("li")?.querySelector(".ui-list-row-title")?.firstChild
@@ -80,7 +70,6 @@ test("Home from the last row reaches the first one left undrawn, and ↑ and ↓
       onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
     ),
   );
-  // Note that jsdom lays nothing out, so the column is given a view and a length, then scrolled to its end, drawing only the last rows.
   const scroller = container.querySelector<HTMLElement>(
     ".desktop-sidebar [data-slot='scroll-area']",
   );

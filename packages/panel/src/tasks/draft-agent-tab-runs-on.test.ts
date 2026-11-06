@@ -26,18 +26,6 @@ import { DraftAgentTab } from "./draft-agent-tab.js";
 import { continueFork } from "./fork-model.js";
 import type { AgentDraft } from "./use-agents.js";
 
-/**
- * draft-agent-tab-runs-on.test.ts -- a draft agent's Runs on, with Bring
- * your own host on and the member's Studio online: the chip starts where
- * the member's newest agent on the task runs, a teammate's newer one aside,
- * and a send left on it names no place, leaving it to the service; a place
- * picked is sent with the start; a continue's draft starts on its source's
- * place, named as the source names it where the member's list does not, and
- * sends a pick with the continue. With the experiment off no chip
- * stands and a send names no place, one picked before among them.
- * Synthetic throughout.
- */
-
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const ME = "user-me";
 const TEAMMATE = "user-teammate";
@@ -61,7 +49,6 @@ const DRAFT: AgentDraft = {
   disabledServers: [],
 };
 
-/** An agent of the task started by `userId` at `createdAt`, in the cloud unless it names the Studio. */
 function agent(id: string, userId: string, createdAt: number, onStudio: boolean): AgentSummary {
   return {
     id,
@@ -79,7 +66,6 @@ function agent(id: string, userId: string, createdAt: number, onStudio: boolean)
   };
 }
 
-/** The member's older agent in the cloud, their newest on the Studio, and a teammate's newer one in the cloud. */
 const AGENTS = [
   agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d21", ME, 1, false),
   agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d22", ME, 2, true),
@@ -110,7 +96,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The draft's tab over the task's agents, its chips held as its owner holds them, each start's place written down. */
 async function mount(draft: AgentDraft, agents: readonly AgentSummary[] = AGENTS) {
   const starts: (AgentRunsOnRequest | undefined)[] = [];
   const forks: (AgentRunsOnRequest | undefined)[] = [];

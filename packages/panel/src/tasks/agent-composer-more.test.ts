@@ -23,22 +23,9 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * The agent's message box on a card too narrow for every press: the ⋯
- * offers each press the card had no room for, a popover it opens standing
- * as its own press would have opened it, and it closes once the card changes
- * width. jsdom lays nothing out, so each width is the stylesheets' container
- * queries resolved for a card that wide (`testing/container-width.ts`).
- * Synthetic throughout.
- */
-
-/** The card's width under a column or a panel this wide, less the composer's inset either side. */
 const CARD = {
-  /** A 220px column, the side panel dragged wide. */
   NARROWEST: 178,
-  /** A 320px column. */
   NARROW: 278,
-  /** The main column of a wide window. */
   WIDE: 720,
 } as const;
 
@@ -81,7 +68,6 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -96,7 +82,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** An agent's box with everything its foot can carry: a pull request, a model, and a step's context. */
 function Box({ status }: { status: AgentStatus }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -117,7 +102,6 @@ function Box({ status }: { status: AgentStatus }): ReactNode {
   });
 }
 
-/** The box drawn on a card `width` pixels wide. */
 async function drawnAt(width: number, status: AgentStatus = AGENT_STATUS.COMPLETED) {
   layContainersAt({ composer: width });
   const container = document.body.appendChild(document.createElement("div"));
@@ -185,7 +169,6 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
   const box = await drawnAt(CARD.NARROW);
   const width = vi.spyOn(box.card, "getBoundingClientRect");
   width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROW }));
-  // What the standing menu offers; a closed one, held drawn while its exit plays, is inert.
   const offered = () =>
     [...document.querySelectorAll('[role="menuitem"]')]
       .filter((item) => item.closest("[inert]") === null)
@@ -193,7 +176,6 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
   act(() => box.press("Composer actions").click());
   assert.deepEqual(offered(), ["62% of context used", "Dictate"]);
 
-  // Laid out again at the same width, as a scroll would, it stays.
   act(() => relayout());
   assert.equal(offered().length, 2);
 
@@ -203,7 +185,6 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
 });
 
 test("a card too narrow for the model's words has its chip draw the harness's mark in their place, and one widened draws the words alone again", async () => {
-  // Note that the card's form is given a width as the window would lay it, since jsdom lays out nothing.
   const laid = vi.spyOn(HTMLFormElement.prototype, "clientWidth", "get");
   laid.mockReturnValue(CARD.NARROW);
   const box = await drawnAt(CARD.NARROW);

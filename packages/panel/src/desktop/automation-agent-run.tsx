@@ -30,42 +30,17 @@ import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 
-/**
- * automation-agent-run.tsx -- what an agent's page says of the automation run that started it: the path to its automation, the run's bar under the page's, and the arrows through the automation's other runs.
- *
- * An agent an automation's run started stands on a page of its own with no
- * task to place it, so its bar leads with where it came from, Automations
- * and then its automation, each a press back to that page (the
- * automation's editor), the agent's own name last. Under the bar the run's
- * own bar, a tab's (`PaneBar`), says what fired its run, as the automation's runs panel says it (the
- * firing's glyph and words), when it fired, and where the agent stands as a
- * badge, whose hint is the run's line as that panel reads it. At the bar's
- * end, before its ⋯, two arrows step to the agents of the automation's runs
- * either side, older to the left and newer to the right, with "Run 3 of 5"
- * between them, counted from the oldest. Only runs that started an agent are
- * stepped through, each agent once, at its newest run. The runs are the
- * automation's own, followed live as its runs panel follows them, so a
- * newer run lands while the page stands; an agent whose run is not among
- * them (an automation deleted, or a run older than the runs read) keeps its
- * path and draws no run's bar and no arrows.
- */
-
-/** What the trail's outer place is called, as the automation editor's names it. */
 const AUTOMATIONS_PLACE = "Automations";
 
-/** What the arrows are called. */
 const OLDER_RUN = "Older run";
 const NEWER_RUN = "Newer run";
 
-/** What the place between the arrows counts, as it says it: "Run 3 of 5". */
 const RUN_NOUN = "Run";
 
-/** The trail an agent an automation started leads its bar with; none for any other agent. */
 export function automationTrail(
   agent: Pick<AgentSummary, "automationId" | "automationName">,
   tasks: Pick<TasksControl, "automationsView">,
 ): readonly ToolbarPlace[] | undefined {
-  // Note that a run from before its origin was kept has no name to lead with, so it draws none.
   const name = automationRun(agent)?.name;
   if (name === undefined) return undefined;
   const { automationId } = agent;
@@ -75,7 +50,6 @@ export function automationTrail(
     icon: <GLYPH.AUTOMATION />,
     onPress: () => onOpen({ kind: AUTOMATIONS_PAGE.LIST }),
   };
-  // Note that an automation deleted since keeps its name on the agent, but there is no page to open.
   if (automationId === undefined) return [automations];
   return [
     automations,
@@ -86,7 +60,6 @@ export function automationTrail(
   ];
 }
 
-/** Where the page's agent's run stands among its automation's runs, followed live; none for an agent no automation started, or while its run is not read. */
 export function useAutomationRunPlace(
   agent: Pick<AgentSummary, "id" | "automationId"> | undefined,
 ): AutomationRunPlace | undefined {
@@ -95,13 +68,11 @@ export function useAutomationRunPlace(
   return automationRunPlace(read.runs, agent.id);
 }
 
-/** The run's bar under the page's, as tall and on the same ground as a tab's: what fired the run, when, and where its agent stands. */
 export function AutomationRunStrip({
   place,
   status,
 }: {
   place: AutomationRunPlace;
-  /** The agent's own status, read live with the page's agent rather than off the run. */
   status: AgentSummary["status"];
 }): React.JSX.Element {
   const now = useMinute();
@@ -131,7 +102,6 @@ export function AutomationRunStrip({
   );
 }
 
-/** The arrows through the automation's runs, older to the left and newer to the right, each stepped back at its end, and where this run stands between them. */
 export function AutomationRunSteps({
   place,
   onOpenAgent,

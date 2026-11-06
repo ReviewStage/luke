@@ -38,45 +38,13 @@ import type {
 import { MENTION_MENU_SIDE, type MentionMenuSide, wordBox } from "./mention-picker.js";
 import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-ref.js";
 
-/**
- * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the task's repository keeps, and the chips the chosen ones are drawn as.
- *
- * The list opens the way an @-mention list does in every chat: at the
- * caret, as soon as a `/` starts a word (`skill-mention.ts`), with one row
- * per skill (`skillOption`): the book, its name, a muted line of what it is
- * for, and where it comes from, with the skill's card beside it, narrowed as
- * the name is typed. ↑ and ↓ move the highlight, Enter or Tab writes the
- * highlighted skill into the message as its chip, and Escape closes the
- * list until the caret leaves that word; the caret stays in the box
- * throughout, so the keys the list does not take are the box's own. The
- * skills are read the first time a `/` is typed in the box, from the
- * task's repository as the service finds them, then the member's
- * installed ones, and kept for the task (`repository-skills.ts`), so
- * nothing is read for a message that names none. Where there are none it
- * says so, and where one is installed or added.
- *
- * The box is an editor (`../description-editor/composer-editor.ts`), which finds
- * the `/` word the caret ends and says where its slash stands in the
- * window, so the list hangs over that line (`@repo/ui`'s `RectFloat`), as
- * the box stands at the foot of its tab, and closes on a press outside it
- * and the box as on Escape. A chosen skill is a chip in the
- * words, an atom one Backspace takes out whole, which reads out as `/name`,
- * so the message sent is the words it always was; the editor draws each
- * through the box (`chip`), as the one pill a sent message's chip is (`skill-ref.tsx`), a press on which opens the skill's
- * `SKILL.md` in a File tab (`skill-chip.tsx`).
- */
-
-/** The skills the composer offers, the repository's and the installed ones, as it reads them: the skills, or why they were not read. */
 export type SkillsRead = { readonly skills: readonly SkillOption[] } | { readonly unread: string };
 
-/** Reads the task's repository's skills; asked the first time a `/` is typed. */
 export type SkillSource = () => Promise<SkillsRead>;
 
-/** What the list says where it has no row to offer. */
 const SKILL_MENU_NOTE = {
   READING: "Reading skills…",
   NONE: "No skills yet",
-  /** Where a skill comes from, naming the page one is installed on by its link. */
   noneHint: (page: ReactNode) => (
     <>
       Install one in {page} settings, or add one at {".agents/skills/<name>/SKILL.md"}
@@ -85,55 +53,39 @@ const SKILL_MENU_NOTE = {
   NO_MATCH: noMatchWords(TERM.SKILL),
 } as const;
 
-/** The list's own name, which its listbox is read by. */
 const SKILL_MENU_LABEL = "Skills";
 
-/** The keys the list hears, said at its foot. */
 const SKILL_MENU_KEYS: readonly MenuKey[] = [
   menuKey("Move", SHORTCUT_KEY.UP, SHORTCUT_KEY.DOWN),
   menuKey("Insert", SHORTCUT_KEY.ENTER, SHORTCUT_KEY.TAB),
   menuKey("Close", SHORTCUT_KEY.ESCAPE),
 ];
 
-/** No skill is known, before the read lands or where it did not. */
 const NO_NAMES: ReadonlySet<string> = new Set();
 
-/** The highlight as it was moved, held against the word it was moved in, so a word typed on starts it again at the first row. */
 interface Highlight {
   readonly start: number;
   readonly query: string;
   readonly at: number;
 }
 
-/** What the composer draws and wires: the list while it is open, the chips, and what the editor hears and is told. */
 export interface SkillPicker {
-  /** The list, while a `/` word is being typed and not closed; nothing otherwise. */
   readonly menu: ReactNode;
-  /** The editor's attributes that tie it to the list, for assistive technology. */
   readonly aria: Readonly<Record<string, string | undefined>>;
-  /** The skills a `/name` names, which the editor draws as chips. */
   readonly names: ReadonlySet<string>;
-  /** Hears the `/` word the caret ends, as the editor reports it. */
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
-  /** Takes a key the list answers, and says whether it did. */
   readonly onKey: (event: KeyboardEvent) => boolean;
-  /** A chip the editor draws, as the box draws it. */
   readonly chip: (chip: ComposerChip) => ReactNode;
-  /** The repository's skills as read; nothing before they are, or where they could not be. */
   readonly known: readonly SkillOption[] | undefined;
-  /** Whether the read of the skills came back unread, which an `@` list says could not be read; asking again reads them again. */
   readonly unread: boolean;
-  /** Asks for the skills to be read, as an `@` list offering them does once it opens. */
   readonly ask: () => void;
 }
 
-/** The rows the list offers for the word under the caret; none while the skills are not read, or could not be. */
 function offered(read: SkillsRead | undefined, trigger: ComposerTrigger | undefined) {
   if (read === undefined || "unread" in read || trigger === undefined) return [];
   return matchingSkills(read.skills, trigger.query);
 }
 
-/** What the list says where it offers no row. */
 function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
   if (read === undefined) return SKILL_MENU_NOTE.READING;
   if ("unread" in read) return read.unread;
@@ -150,7 +102,6 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
   );
 }
 
-/** The list itself: a row per skill offered, the highlighted one washed, or the line saying why there is none. */
 function SkillMenu({
   id,
   rows,
@@ -186,11 +137,6 @@ function SkillMenu({
   );
 }
 
-/**
- * A chosen skill in the box: the one chip a sent message draws (`SkillRef`),
- * which a press opens the skill's `SKILL.md` from where the box stands on a
- * task's page. Note that it hangs the placeholder card until the skill is read.
- */
 function BoxChip({
   name,
   skill,
@@ -200,7 +146,6 @@ function BoxChip({
   skill: SkillOption | undefined;
   onOpen: ((skill: SkillWithFile) => void) | undefined;
 }): React.JSX.Element {
-  // Note that an installed skill names no file of the repository's, so its chip opens nothing.
   const file = skill !== undefined && opensFile(skill) ? skill : undefined;
   return (
     <SkillRef
@@ -219,17 +164,11 @@ export function useSkillPicker({
   onOpen,
   side = MENTION_MENU_SIDE.ABOVE,
 }: {
-  /** The box's editor, which a chosen skill is written into; nothing until it has mounted. */
   editor: RefObject<ComposerEditorHandle | undefined>;
-  /** The box's field, a press in which is the box's own rather than one away from the list. */
   room: RefObject<HTMLElement | null>;
-  /** The box's words, which say whether a skill is named already, so its chip wants the skills read. */
   draft: string;
-  /** Where the skills are read from; nothing where the box offers none. */
   source: SkillSource | undefined;
-  /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no task's page. */
   onOpen: ((skill: SkillWithFile) => void) | undefined;
-  /** Which side of the slash's line the list stands: over it, as at the foot of an agent's tab, or under it, as on Home. */
   side?: MentionMenuSide;
 }): SkillPicker {
   const listId = useId();
@@ -239,7 +178,6 @@ export function useSkillPicker({
   >();
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
-  // Each opening of an `@` list that asks for the skills, counted, so a read that failed is asked again by the next.
   const [asked, setAsked] = useState(0);
   const ask = useCallback(() => setAsked((count) => count + 1), []);
 
@@ -261,12 +199,8 @@ export function useSkillPicker({
     () => (known === undefined ? NO_NAMES : new Set(known.map((each) => each.name))),
     [known],
   );
-  // Note that a message already naming a skill reads them too, so its chips are drawn.
   const wantsSkills = source !== undefined && (asked > 0 || holdsSlashWord(draft));
 
-  // A word closed with Escape stays closed only while the caret is in it,
-  // and a word left is no longer the one the skills were read for, so a `/`
-  // typed again where it stood opens the list as another word does.
   const inWord = mention !== undefined;
   useEffect(() => {
     if (inWord) return;
@@ -274,13 +208,7 @@ export function useSkillPicker({
     setRead((was) => (was?.start === undefined ? was : { ...was, start: undefined }));
   }, [inWord]);
 
-  // The skills are read as a `/` word opens the list, and again each time
-  // another `/` word opens it, the skills last read drawn meanwhile, so a
-  // skill added on GitHub is offered the next time the list opens.
   const start = open ? mention.start : undefined;
-  // Note that a read waits for a `/` word other than the one it was read
-  // for to open the list, or, while none is open, for another opening of an
-  // `@` list where it failed, never for a list to close or the caret to move.
   const settled =
     read !== undefined &&
     read.source === source &&
@@ -296,7 +224,6 @@ export function useSkillPicker({
     };
   }, [source, open, wantsSkills, settled, start, asked]);
 
-  // Note that a name the message has no room left for is not written, as a key typed past the bound is not.
   const choose = (skill: SkillOption) => editor.current?.chooseSkill(skill.name);
 
   const onKey = (event: KeyboardEvent): boolean => {
@@ -320,7 +247,6 @@ export function useSkillPicker({
     return false;
   };
 
-  // The list hangs by the slash's line, on the side asked; a press outside it and the box closes it as Escape does, and it fades as it closes.
   const menu = (
     <RectFloat
       open={open}

@@ -120,30 +120,10 @@ import { PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js
 import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
 import { AUTOMATION_DELETE_MUTATION, useAutomations } from "./use-automations.js";
 
-/**
- * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
- *
- * It stands in the task's place beside the sidebar, as the Inbox does, and
- * its sidebar row is marked while it does. Who owns an automation is the
- * one thing the list must never leave in doubt, so the workspace's
- * automations stand first and the account's personal ones after, under a
- * heading each where both stand, and every row names its owner besides, a
- * building for the workspace and a lock for Only you. A row's glyph wears
- * where its newest run stands, a failure keeps its mark at the row's end,
- * and an automation turned off reads "Off" where its next run would.
- * Beside New automation, Create with an agent opens New task's own card for
- * the agent that makes one: what to automate in the member's own words, the
- * repository and the model, then Start agent, a new task's agent handed the
- * brief to make it (`new-task-composer.tsx`).
- */
-
-/** What an automation's row is, which names its ⋯ and its menu. */
 const ROW_THING = "Automation";
 
-/** What the list is called, and a phone's way back from an automation's page names it. */
 const AUTOMATIONS = "Automations";
 
-/** Why a row's Delete did not land, as its question goes on saying until it is tried again or let go. */
 const DELETE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be deleted. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
@@ -157,31 +137,24 @@ const DELETE_REFUSAL_WORDS = {
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/** What the list's acts are called, on their buttons and a phone's ⋯ alike. */
 const NEW_AUTOMATION = "New automation";
 const CREATE_WITH_AGENT = "Create with an agent";
 
-/** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
 
-/** What the Runs tab says where its runs could not be read, and while they are first read. */
 const RUNS_UNREAD_LINE = "The runs could not be read.";
 const READING_RUNS = "Reading the runs…";
 
-/** What the pages say where no workspace is listed because the workspaces could not be read. */
 const WORKSPACES_UNREAD_LINE = "The workspaces could not be read.";
 
-/** Why the bar's two acts are unavailable while no workspace is chosen. */
 const NO_WORKSPACE_HINT = "Choose a workspace first";
 
-/** The hint a folding act of the bar hangs while no workspace is chosen: why it is off, after its words where they are folded. */
 const NoWorkspaceHint: FoldingButtonHint = ({ label, children }) => (
   <Tooltip label={label === undefined ? NO_WORKSPACE_HINT : `${label}: ${NO_WORKSPACE_HINT}`}>
     {children}
   </Tooltip>
 );
 
-/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Only you, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
   mine,
@@ -214,12 +187,6 @@ function OwnerCell({
   );
 }
 
-/**
- * Who made an automation, as its row's column says it: their face and their
- * name, or You, its owner and their whole name on hover where the column cuts
- * it short. One whose maker the members do not name says its owner instead
- * (`OwnerCell`), as the column did before it named makers.
- */
 function MakerCell({
   automation,
   workspace,
@@ -251,11 +218,6 @@ function MakerCell({
   );
 }
 
-/**
- * Run now from a row of the list, dimmed while one is out: the run it makes
- * is pushed to the row as it lands, and a refusal is said in a toast, since
- * the row has no line of its own to say it in, as the editor does.
- */
 function useRunNow(automationId: string): { readonly running: boolean; readonly run: () => void } {
   const runAutomation = useMutation(actMutation(ACT_KIND.AUTOMATIONS_RUN));
   const toast = useToast();
@@ -282,21 +244,6 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
   return { running: runAutomation.isPending, run };
 }
 
-/**
- * One automation's row: its tile, the glyph of what fires it wearing where its newest run
- * stands, its name over what fires it, who made it, when it runs next with a
- * failure's mark before it, and its switch, hanging the automation's card. The maker and the next run each keep a column of their
- * own, so they line up down the list whatever each row says. Everything but the switch is one press
- * that opens its page, as a sidebar task's row is, so the row opens wherever
- * it is pressed and the switch beside the press only switches. Its ⋯,
- * right-click, long press and menu key offer Copy link, then Delete in red,
- * which asks first, and
- * hands focus back to its press as the menu closes; a right-click on the switch is the switch's own and opens
- * nothing. A narrow room, a phone's, has no width for the two columns beside
- * the name, so the row keeps its name whole and says when it runs next in
- * the line under it, its maker said by its card's foot instead. A finger's
- * row draws its switch and no ⋯, so what fires it keeps the room.
- */
 function AutomationRow({
   automation,
   workspace,
@@ -312,7 +259,6 @@ function AutomationRow({
   narrow: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => Promise<AutomationView>;
-  /** Asks whether to delete it. */
   onDelete: () => void;
 }): React.JSX.Element {
   const runNow = useRunNow(automation.id);
@@ -320,7 +266,6 @@ function AutomationRow({
   const next = automationNext(automation);
   const nextWords = automationNextText(automation, now);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
-  // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
   const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
@@ -399,7 +344,6 @@ function AutomationRow({
   );
 }
 
-/** What every row of the list is handed: the room it stands in, and the presses on it. */
 interface AutomationRowsShown {
   workspace: Workspace | undefined;
   now: number;
@@ -409,12 +353,10 @@ interface AutomationRowsShown {
   onDelete: (automation: AutomationSummary) => void;
 }
 
-/** An automation's key, by which its row leaves the list (`ListMotion`). */
 function automationKey({ id }: AutomationSummary): string {
   return id;
 }
 
-/** One owner's rows, a row no longer listed drawn on until its exit has played (`useLeaving`). */
 function AutomationGroupRows({
   automations,
   shown,
@@ -441,13 +383,6 @@ function AutomationGroupRows({
   );
 }
 
-/**
- * The list, each owner's automations in a list, under its own heading where
- * both stand, or in a narrow room, whose rows name no owner. Note that a
- * lone owner's list is still a region named by its owner, as a headed one is
- * by its heading, so a reader moving by landmark hears whose automations
- * they are either way.
- */
 function AutomationList({
   groups,
   ...shown
@@ -462,7 +397,6 @@ function AutomationList({
           shown.workspace?.name,
           group.automations.every((automation) => automation.mine === true),
         );
-        // A phone's lone owner's list is headed too, since its rows name no owner.
         return (
           <AutomationGroupList
             key={group.owner}
@@ -478,7 +412,6 @@ function AutomationList({
   );
 }
 
-/** What the list's page shows: the workspaces or the list unread, the list still being read, or the list. */
 function listState(
   workspacesUnread: boolean,
   read: ReturnType<typeof useAutomations>["read"],
@@ -488,12 +421,6 @@ function listState(
   return "failure" in read ? COLLECTION_STATE.ERROR : COLLECTION_STATE.READY;
 }
 
-/**
- * The question a row's Delete asks, held for the list: which automation it
- * asks about, standing only while that one is still listed, so one deleted
- * elsewhere withdraws it, and the deletion itself, which the history hears
- * of (`onDeleted`) so it passes over the automation's page from then on.
- */
 function useRowDeletion(
   groups: readonly AutomationGroup[],
   onDeleted: (automationId: string) => void,
@@ -533,7 +460,6 @@ function useRowDeletion(
   return { asked, confirm, ask };
 }
 
-/** The Automations page's head on both its tabs: its title and its acts, New automation and Create with an agent; on a phone, the place's own head. */
 function AutomationsHead({
   tasks,
   room,
@@ -545,7 +471,6 @@ function AutomationsHead({
   const workspace = tasks.workspace;
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   return room === SHELL_ROOM.NARROW ? (
-    // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centered, and a ⋯.
     <PhoneHead
       place="automations"
       start={
@@ -605,7 +530,6 @@ function AutomationsHead({
   );
 }
 
-/** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
   tasks,
   automations,
@@ -685,11 +609,6 @@ function ListPage({
 
 type AutomationsTabKind = typeof AUTOMATIONS_PAGE.LIST | typeof AUTOMATIONS_PAGE.RUNS;
 
-/**
- * The bar over both tabs that moves between them, Runs counting the runs
- * still working on either tab, and what narrows the tab standing beside it
- * a section's room away, so the two troughs never read as one bar.
- */
 function AutomationsTabs({
   tasks,
   children,
@@ -723,19 +642,12 @@ function AutomationsTabs({
   );
 }
 
-/** What the Runs tab shows: the workspaces or the runs unread, the runs still being read, or the runs. */
 function runsState(workspacesUnread: boolean, read: WorkspaceRunsRead): CollectionState {
   if (workspacesUnread) return COLLECTION_STATE.ERROR;
   if (read === undefined) return COLLECTION_STATE.LOADING;
   return "failed" in read ? COLLECTION_STATE.ERROR : COLLECTION_STATE.READY;
 }
 
-/**
- * The Runs tab: every run of the listed workspace's automations, newest
- * first, narrowed by the bar beside the tabs, each opening its agent. A run
- * of the reader's own automation ran on their keys; any other's names its
- * creator's, as the automation's own runs say it.
- */
 function RunsPage({
   tasks,
   automations,
@@ -755,7 +667,6 @@ function RunsPage({
     automations.read !== undefined && "automations" in automations.read
       ? automations.read.automations
       : [];
-  // Note that an automation the list does not hold yet is taken for the reader's own, so no run names a creator it may not have.
   const mine = (automationId: string) =>
     listed.find((automation) => automation.id === automationId)?.mine !== false;
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
@@ -816,11 +727,9 @@ function RunsPage({
   );
 }
 
-/** What the way back to the list is called, and where it leads as its hint names it. */
 const AUTOMATIONS_PLACE = "Automations";
 const AUTOMATIONS_PLACE_NAME = "automations";
 
-/** The bar of an automation's page that has no automation to show: its way back to the list, at the column's edge; on a phone, the back's glyph alone in its corner (`phone-head.tsx`). */
 function backBar(onBack: () => void, phone: boolean): ToolbarProps {
   const back = (
     <BackButton
@@ -834,14 +743,12 @@ function backBar(onBack: () => void, phone: boolean): ToolbarProps {
   return { lead: back, start: TOOLBAR_INSET.COLUMN };
 }
 
-/** One automation's page that has no automation to show: its way back over `children`, which say why. */
 function AutomationAbsentPage({
   onBack,
   phone,
   children,
 }: {
   onBack: () => void;
-  /** Whether a phone heads the page, its way back the glyph alone. */
   phone: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -859,7 +766,6 @@ function AutomationAbsentPage({
   );
 }
 
-/** One automation's page whose list, or the workspaces it is read in, could not be read: said so, with Retry, rather than called gone. */
 function UnreadPage({
   line,
   onBack,
@@ -869,7 +775,6 @@ function UnreadPage({
   line: string;
   onBack: () => void;
   onRetry: () => void;
-  /** Whether a phone heads the page, its way back the glyph alone. */
   phone: boolean;
 }): React.JSX.Element {
   return (
@@ -885,7 +790,6 @@ function UnreadPage({
   );
 }
 
-/** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
@@ -895,7 +799,6 @@ function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): Re
   );
 }
 
-/** One automation's page opened before the list is first read: the editor's own frame as quiet blocks (`AutomationPageSkeleton`), and its way back. */
 function ReadingPage({
   onBack,
   room,
@@ -909,21 +812,13 @@ function ReadingPage({
   return <AutomationPageSkeleton room={room} offersOwner={offersOwner} onBack={onBack} />;
 }
 
-/**
- * The window's Automations pages, in the task's place: the list, or one
- * automation's editor, or a new one's. The list is read once for all of
- * them, so an automation opened from it opens as it was listed, and an
- * edit is in the list the moment it lands.
- */
 export function AutomationsPage({
   tasks,
   room,
 }: {
   tasks: TasksControl;
-  /** The room the panel's stage gives, narrow where an automation's runs are a screen of their own. */
   room: ShellRoom;
 }): React.JSX.Element {
-  // Every Copy link on these pages is written under the listed workspace, whose automations they are, and their makers named by its members.
   return (
     <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
@@ -933,7 +828,6 @@ export function AutomationsPage({
   );
 }
 
-/** The workspace's Sentry while no workspace is listed: unread, with nothing to install on. */
 const SENTRY_UNREAD: SentryOffer = {
   read: undefined,
   failed: false,
@@ -943,17 +837,10 @@ const SENTRY_UNREAD: SentryOffer = {
   onInstall: () => undefined,
 };
 
-/**
- * A listed workspace's Sentry as its automations' editor offers it: held
- * by the host while the editor shows, followed live on the service, so an
- * install finished in the browser draws as it lands, and installed in the
- * browser, a refusal (only owners and admins install) said at its row.
- */
 function useWorkspaceSentry(workspaceId: string): SentryOffer {
   const installSentry = useMutation(actMutation(ACT_KIND.WORKSPACE_SENTRY_INSTALL));
   const integrations = useQuery(workspaceIntegrationsQuery(workspaceId));
   const { mutate: retryIntegrations } = useMutation(workspaceIntegrationsRetryMutation());
-  // Note that a read that failed offers what one still out does, so a saved Sentry trigger stays editable; the editor says the failure above its rows.
   const read = integrations.data?.sentry;
   const failed = read === undefined && integrations.isError;
   const retry = () => retryIntegrations({ workspaceId });
@@ -966,12 +853,10 @@ function useWorkspaceSentry(workspaceId: string): SentryOffer {
   return { read, failed, onRetry: retry, installing, refusal, onInstall };
 }
 
-/** Whether a listed workspace's Slack bot is connected, held as Sentry is; not while the read is out or failed. */
 function useWorkspaceSlackBot(workspaceId: string): boolean {
   return useQuery(workspaceIntegrationsQuery(workspaceId)).data?.slack.team !== undefined;
 }
 
-/** The editor over a listed workspace, offered that workspace's Sentry and Slack bot. */
 function WorkspaceEditor({
   workspaceId,
   editor,
@@ -982,7 +867,6 @@ function WorkspaceEditor({
   return editor(useWorkspaceSentry(workspaceId), useWorkspaceSlackBot(workspaceId));
 }
 
-/** The Automations pages themselves, under the workspace their links are written in. */
 function AutomationsPages({
   tasks,
   room,
@@ -992,12 +876,7 @@ function AutomationsPages({
 }): React.JSX.Element {
   const view = tasks.automationsView;
   const workspace = tasks.workspace;
-  // Note that no list is asked for while no workspace is listed, which is
-  // while the workspaces are still read, so the pages stand as quiet blocks
-  // until one is, rather than calling the list empty or an automation gone;
-  // a workspaces read that did not land says so instead.
   const automations = useAutomations(workspace?.id);
-  // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
   const [made, setMade] = useState<string | undefined>(undefined);
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
@@ -1033,7 +912,6 @@ function AutomationsPages({
     place.kind === AUTOMATIONS_PAGE.EDIT
       ? listedAutomations.find((automation) => automation.id === place.automationId)
       : undefined;
-  // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && tasks.workspaces[0]?.id !== workspace.id;
   if (place.kind === AUTOMATIONS_PAGE.EDIT && opened === undefined) {
     return read === undefined ? (
@@ -1070,7 +948,6 @@ function AutomationsPages({
     />
   );
   return (
-    // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
     <Fragment key={workspace?.id}>
       {workspace === undefined ? (
         editor(SENTRY_UNREAD, false)

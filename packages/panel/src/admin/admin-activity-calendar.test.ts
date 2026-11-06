@@ -5,28 +5,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ActivityCalendar, CALENDAR_MEASURE } from "./charts/activity-calendar.js";
 
-/**
- * admin-activity-calendar.test.ts -- the activity calendar describes every day
- * it draws in words, today's as a day still running, and shows as many
- * trailing weeks as its card holds, its heading naming the span shown. jsdom
- * lays nothing out, so the card's width is the one this test gives it.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A synthetic three weeks, Sunday 2026-09-27 to Saturday 2026-10-17, read at noon on the last. */
 const DAILY: AdminDailyCount[] = Array.from({ length: 21 }, (_, index) => ({
   day: new Date(Date.UTC(2026, 8, 27 + index)).toISOString().slice(0, 10),
   count: index % 7 === 0 ? 0 : index,
 }));
 const GENERATED_AT = Date.UTC(2026, 9, 17, 12);
 
-/** The weekday column (28px) and whole 15px week columns: room for `weeks` of them. */
 function widthFor(weeks: number): number {
   return 28 + weeks * 15;
 }
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: a resize is fired by hand. */
 let resize: (() => void) | undefined;
 class HandResizeObserver {
   constructor(callback: () => void) {
@@ -69,7 +59,6 @@ function render(): HTMLElement {
   return container;
 }
 
-/** What each day cell says to a screen reader, in the grid's own order. */
 function dayDescriptions(page: HTMLElement): string[] {
   return Array.from(
     page.querySelectorAll<HTMLElement>("[role='img']"),

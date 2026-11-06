@@ -1,19 +1,3 @@
-/**
- * expired-server-toasts.ts -- one toast for each MCP server whose sign-in expired, standing until it is reconnected, with Reconnect on each.
- *
- * Every server the signed-in account holds whose provider's grant stopped
- * working is said in a toast of its own, led by the provider's mark, that
- * persists until the server is connected again or the developer dismisses
- * it, so each is reconnected with one press wherever the window is.
- * Reconnect begins the same sign-in Settings' row and the servers popover
- * begin (`integration-grant.ts`): while the browser holds it the toast says
- * the reconnect is under way, and once the server stands connected it
- * leaves. A sign-in given up on brings the server's toast back, and one that
- * could not begin says so in its place, with Retry. One the developer
- * dismissed is not said again until the server has stood otherwise and
- * expires anew.
- */
-
 import { SIGN_IN } from "@repo/features/integration-sign-in";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -24,7 +8,6 @@ import { GRANT_OUTCOME, useIntegrationGrant } from "./integration-grant.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "./integration-statuses.js";
 import { useToast, useWithdrawToast } from "./toast.js";
 
-/** Where a server said in a toast stands: its sign-in expired, a reconnect under way, or neither, as once it is connected again. */
 const STANDS = {
   EXPIRED: "expired",
   RECONNECTING: "reconnecting",
@@ -33,7 +16,6 @@ const STANDS = {
 
 type Stands = (typeof STANDS)[keyof typeof STANDS];
 
-/** What a server's toast says: its sign-in expired, a reconnect beginning or under way, or one that could not begin. */
 const SAYS = {
   EXPIRED: "expired",
   BEGINNING: "beginning",
@@ -43,20 +25,17 @@ const SAYS = {
 
 type Says = (typeof SAYS)[keyof typeof SAYS];
 
-/** What a server's toast is pressed by. */
 const ACTION = {
   RECONNECT: "Reconnect",
   RETRY: "Retry",
 } as const;
 
-/** A server's toast as it stands: the server, what the toast is about, which withdraws it, and what it says. */
 interface Said {
   readonly server: NamedServer;
   readonly subject: string;
   says: Says;
 }
 
-/** Where `connection` stands: a sign-in waited on or pending is a reconnect under way, ahead of the read's word. */
 function standsOf(statuses: IntegrationStatuses, connection: string): Stands {
   const status = statuses.statusOf(connection);
   if (statuses.signInOf(connection)?.kind === SIGN_IN.WAITING) return STANDS.RECONNECTING;
@@ -64,12 +43,6 @@ function standsOf(statuses: IntegrationStatuses, connection: string): Stands {
   return status === INTEGRATION_STATUS.EXPIRED ? STANDS.EXPIRED : STANDS.CLEAR;
 }
 
-/**
- * Says each expired server in a toast of its own, with Reconnect, until it
- * is connected again. Note that it compares what each server's toast says
- * with where the server stands after every render, and changes only what
- * moved, because a toast outlives the render that showed it.
- */
 export function useExpiredServerToasts(): void {
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
@@ -81,7 +54,6 @@ export function useExpiredServerToasts(): void {
   latest.current = { grant, toast, withdraw };
 
   useEffect(() => {
-    /** The server's toast turned to say `says`, shown by `show` under a subject of its own, in place of what it said. */
     const say = (server: NamedServer, says: Says, show: (subject: string) => void) => {
       const was = said.current.get(server.connection);
       if (was !== undefined) latest.current.withdraw(was.subject);
@@ -90,9 +62,7 @@ export function useExpiredServerToasts(): void {
       show(subject);
     };
 
-    /** Begins the server's reconnect, saying in its toast where it could not begin. */
     const reconnect = (server: NamedServer) => {
-      // Note that pressing a toast's action dismisses it first, which is no dismissal of the server.
       dismissed.current.delete(server.connection);
       const entry = said.current.get(server.connection);
       if (entry !== undefined) entry.says = SAYS.BEGINNING;
@@ -120,7 +90,6 @@ export function useExpiredServerToasts(): void {
       });
     };
 
-    /** Says the server's sign-in expired, with Reconnect, unless the developer dismissed it. */
     const sayExpired = (server: NamedServer) => {
       if (dismissed.current.has(server.connection)) {
         const was = said.current.get(server.connection);
@@ -173,13 +142,11 @@ export function useExpiredServerToasts(): void {
           }),
         );
       } else if (stands === STANDS.EXPIRED && entry.says === SAYS.RECONNECTING) {
-        // A sign-in given up on, or past its wait: the server is offered again.
         sayExpired(entry.server);
       }
     }
   });
 
-  // Note that the toasts leave with the window that said them, as when the account signs out.
   useEffect(
     () => () => {
       for (const entry of said.current.values()) latest.current.withdraw(entry.subject);

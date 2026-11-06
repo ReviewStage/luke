@@ -182,42 +182,9 @@ import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { type CutBody, WHOLE_PART } from "./whole-parts.js";
 import { WorkingTime } from "./working-time.js";
 
-/**
- * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on a coding agent's tab and a subagent's alike.
- *
- * Each tab decides what its rows say from its own wire
- * (`agent-model.ts` with `tool-call-model.ts`); how a block of each kind looks is decided here
- * once, over the AI Elements components (`../ai-elements/`): words as
- * markdown at the panel's scale with a web link opening in the browser, reasoning folded under one quiet line
- * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
- * (`turn-rows.ts`) that opens onto its input and its answer, a run of
- * calls folded under one line saying how many, a finished turn's lead
- * folded under what it holds, a subagent's row as one line like a call's
- * that opens its tab, a call about something drawn in a tab of its own as
- * its line that opens that tab, an agent's to-do list as a call's row that opens onto
- * the list, and a note between the rows. A
- * tab that drew one of these its own way would be a second transcript
- * style, which is what this file is here to refuse.
- */
-
-/**
- * An address the window opens nothing for, a file's say: a link's line,
- * dotted, with the address as its hint.
- */
 export const INERT_LINK_CLASS =
   "text-link-inert underline decoration-dotted decoration-inert-link decoration-1 underline-offset-[0.24em]";
 
-/**
- * A link in a transcript's words. A web page, such as the pull request an
- * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
- * that opens in the browser over the act channel (`use-open-link.ts`), as
- * it is in a description, bare or labeled; any other address is drawn as words
- * that go nowhere, with the address as its hint. `words` are its label's,
- * which say whether it is its own address.
- * Note that the press is ours rather than Streamdown's, because Streamdown's
- * link asks in a modal of its own and then calls `window.open`, which the
- * window denies (`hardened-window.ts`), so its link opened nothing.
- */
 function TranscriptLink({
   href,
   words,
@@ -242,13 +209,6 @@ function TranscriptLink({
   );
 }
 
-/**
- * A page of the web as a chip: a globe and its site, its whole address in
- * its hint, opening in the browser (`use-open-link.ts`). Note that it
- * fetches no favicon, because that would tell a third party every page a
- * transcript names; and that the press stops at the chip, because a call's
- * row it stands in would fold.
- */
 function SiteChip({ href }: { href: string }): ReactNode {
   const openLink = useOpenLink();
   return (
@@ -269,13 +229,11 @@ function SiteChip({ href }: { href: string }): ReactNode {
   );
 }
 
-/** The element a mention's link is drawn as, and the one attribute that carries its target to the chip. */
 const MENTION_ELEMENT = {
   TAG: "app-mention",
   TARGET: "to",
 } as const;
 
-/** The element a picture's Markdown is drawn as, and the attributes that carry its address, its words, and its caption. */
 const PICTURE_ELEMENT = {
   TAG: "app-picture",
   ADDRESS: "to",
@@ -283,20 +241,17 @@ const PICTURE_ELEMENT = {
   CAPTION: "caption",
 } as const;
 
-/** The element a paragraph holding a link alone is drawn as in words drawn as a document, and the attributes that carry the link's target and its words. */
 const LONE_LINK_ELEMENT = {
   TAG: "app-lone-link",
   TARGET: "to",
   WORDS: "words",
 } as const;
 
-/** The element a paragraph holding pictures alone is drawn as in words drawn as a document, which stands them side by side. */
 const PICTURE_ROW_ELEMENT = {
   TAG: "app-pictures",
   CLASS: "transcript-pictures",
 } as const;
 
-/** The mention's element and the picture's, and a document's paragraphs of either, let through the drawing's sanitizer with what each carries. */
 const MENTION_TAGS = {
   [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET],
   [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS, PICTURE_ELEMENT.CAPTION],
@@ -305,14 +260,12 @@ const MENTION_TAGS = {
   [PICTURE_ROW_ELEMENT.TAG]: [],
 };
 
-/** A node of the words, as markdown reads them or as they are drawn, as much of one as its words are told by. */
 interface WordsNode {
   readonly type: string;
   readonly value?: string;
   readonly children?: readonly WordsNode[];
 }
 
-/** A node of the words as markdown reads them, which a mention's link is marked on: a link's target, or the label a reference link and its definition share. */
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
   readonly alt?: string | null;
@@ -322,25 +275,11 @@ interface MarkdownNode extends WordsNode {
   data?: { hName?: string; hProperties?: Record<string, string> };
 }
 
-/** The words under a node, however they are formatted. */
 function wordsOf(node: WordsNode): string {
   if (node.type === "text") return node.value ?? "";
   return (node.children ?? []).map((child) => wordsOf(child)).join("");
 }
 
-/**
- * Marks every link in the words whose target may name a mention, or is an
- * app link to any place (`readLink`), to be drawn as its own element,
- * which reads what it names against the plan its page is of (`linkChip`):
- * the same rule for a developer's `@`
- * mention, an agent's link, a reference link, and a bare address. A target
- * is read here before the page's repository is known (`mayNameMention`),
- * so every page of GitHub's is marked, and every other link is drawn as
- * the library draws it. Note that the mark is made on the markdown, before
- * it is drawn, because the drawing's sanitizer keeps no address on a link
- * but the web's, so a mention's target would never reach a link of ours.
- * Code holds no link, so a mention in code stays code.
- */
 function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, MarkdownNode>): void {
   const target =
     node.type === "link"
@@ -358,7 +297,6 @@ function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, Markd
   for (const child of node.children ?? []) markMentions(child, definitions);
 }
 
-/** Each link definition in the words, its address and its title, by the label a reference names it with, the first standing where one is defined twice, as markdown reads them. */
 function definitionsIn(
   node: MarkdownNode,
   found: Map<string, MarkdownNode> = new Map(),
@@ -370,21 +308,7 @@ function definitionsIn(
   return found;
 }
 
-/**
- * Marks every picture in the words to be drawn as its own element, which
- * names it as a link to where it points and never fetches it, because a
- * picture an agent writes is a request to wherever its address points the
- * moment the tab opens, and a model's words must make none; the pictures an
- * agent shows are its `show_image` calls'. The pictures drawn are a description's
- * own, inside the description's card, and an Inbox item's own, inside its pane,
- * each read through the host (`description-pictures.tsx`, `inbox-pictures.tsx`)
- * rather than from its address. Note that the mark is
- * made on the markdown, before the drawing's hardening reads a picture at
- * all, which draws a relative one as a placeholder of its own and an
- * absolute one as nothing.
- */
 function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, MarkdownNode>): void {
-  // A reference's address and caption are its definition's.
   const source =
     node.type === "image"
       ? node
@@ -405,7 +329,6 @@ function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, Markd
   for (const child of node.children ?? []) markPictures(child, definitions);
 }
 
-/** Holds each link marked as a mention with the punctuation written against it (`link-glue.ts`), under a node and every node below it. */
 function glueMentions(node: MarkdownNode): void {
   if (node.children === undefined) return;
   for (const child of node.children) glueMentions(child);
@@ -416,23 +339,14 @@ function glueMentions(node: MarkdownNode): void {
   });
 }
 
-/** Whether a node of a paragraph says nothing: a run of whitespace, or a line break. */
 function blank(node: MarkdownNode): boolean {
   return node.type === "break" || (node.type === "text" && (node.value ?? "").trim() === "");
 }
 
-/** Whether a node of a paragraph is a picture, written whole or by reference. */
 function isPicture(node: MarkdownNode): boolean {
   return node.type === "image" || node.type === "imageReference";
 }
 
-/**
- * Marks each paragraph of words drawn as a document that holds pictures
- * alone, the line breaks and spaces between them aside, to be drawn as a
- * row of them, so two written next to each other, a before and an after,
- * stand side by side. Note that the spaces between them go, since a row
- * lays out its pictures and nothing else.
- */
 function markPictureRows(node: MarkdownNode): void {
   const said = (node.children ?? []).filter((child) => !blank(child));
   if (node.type === "paragraph" && said.length > 0 && said.every(isPicture)) {
@@ -443,13 +357,6 @@ function markPictureRows(node: MarkdownNode): void {
   for (const child of node.children ?? []) markPictureRows(child);
 }
 
-/**
- * Marks each paragraph of words drawn as a document that holds one link
- * and nothing else, the spaces around it aside, to be drawn as the card of
- * what the link names (`lone-link-card.tsx`). Note that only a paragraph
- * standing on its own counts, never one in a list or a quote, where a
- * link is one of a run rather than a line of its own.
- */
 function markLoneLinks(tree: MarkdownNode, definitions: ReadonlyMap<string, MarkdownNode>): void {
   for (const paragraph of tree.children ?? []) {
     const said = (paragraph.children ?? []).filter((child) => !blank(child));
@@ -469,16 +376,8 @@ function markLoneLinks(tree: MarkdownNode, definitions: ReadonlyMap<string, Mark
   }
 }
 
-/**
- * What a task's key written among the words stands as once it is marked:
- * a node of its own rather than a link of markdown's, so it is drawn as its
- * task's chip (`MentionElement`) and held with its punctuation as a mention
- * is, yet never read as a link standing alone in its paragraph, which a
- * document draws as a card.
- */
 const KEY_NODE = "taskKey";
 
-/** The nodes whose words hold no key: code, which is read literally, links and pictures, which already go somewhere, raw HTML, and a key already marked. */
 const KEYLESS_NODES: ReadonlySet<string> = new Set([
   "code",
   "inlineCode",
@@ -491,7 +390,6 @@ const KEYLESS_NODES: ReadonlySet<string> = new Set([
   KEY_NODE,
 ]);
 
-/** A run of text with each key `targets` holds in it marked as its task's chip, the words between left as they were. */
 function keyedRun(text: MarkdownNode, targets: ReadonlyMap<string, string>): MarkdownNode[] {
   const value = text.value ?? "";
   const spans = keySpansIn(value, targets);
@@ -511,13 +409,6 @@ function keyedRun(text: MarkdownNode, targets: ReadonlyMap<string, string>): Mar
   return run;
 }
 
-/**
- * Marks each listed task's key written among the words (`ACME-42`) to be
- * drawn as that task's chip, which says the key as written, wears the
- * task's status, and hangs its card. Note that the words themselves are
- * left as written, so an agent reading them reads the key, and that a key
- * in code, a link, or a picture's words is left alone.
- */
 function markTaskKeys(node: MarkdownNode, targets: ReadonlyMap<string, string>): void {
   if (node.children === undefined || KEYLESS_NODES.has(node.type)) return;
   node.children = node.children.flatMap((child) => {
@@ -527,19 +418,10 @@ function markTaskKeys(node: MarkdownNode, targets: ReadonlyMap<string, string>):
   });
 }
 
-/** A serial for each set of keys the words were read with, which a transcript is drawn again under once the set changes. */
 const keySerials = new WeakMap<ReadonlyMap<string, string>, number>();
 
-/** How many sets of keys have been seen, the last one's serial. */
 let keySetsSeen = 0;
 
-/**
- * The serial of a set of keys, counted from one as each is first seen.
- * Note that a transcript is drawn again under it, because its library reads
- * each block of words once and does not read it again for a change of
- * steps alone, so words drawn before the tasks were listed would never
- * chip a key; the set changes only as a key does (`useWordTargets`).
- */
 function keySerial(targets: ReadonlyMap<string, string>): number {
   const held = keySerials.get(targets);
   if (held !== undefined) return held;
@@ -548,12 +430,10 @@ function keySerial(targets: ReadonlyMap<string, string>): number {
   return keySetsSeen;
 }
 
-/** The step that marks the listed tasks' keys among the words, named apart as every step is. */
 function markTaskKeysStep(targets: ReadonlyMap<string, string>): (tree: MarkdownNode) => void {
   return (tree) => markTaskKeys(tree, targets);
 }
 
-/** The step that marks a transcript's links and its pictures, a reference's read through its definition, and holds each mention with its punctuation. */
 function markLinks(tree: MarkdownNode): void {
   const definitions = definitionsIn(tree);
   markMentions(tree, definitions);
@@ -561,7 +441,6 @@ function markLinks(tree: MarkdownNode): void {
   glueMentions(tree);
 }
 
-/** The step that marks words drawn as a document: a transcript's marks, then its rows of pictures and its links standing alone. */
 function markDocument(tree: MarkdownNode): void {
   const definitions = definitionsIn(tree);
   markMentions(tree, definitions);
@@ -571,16 +450,8 @@ function markDocument(tree: MarkdownNode): void {
   glueMentions(tree);
 }
 
-/** What a picture with no words of its own is called where it is named. */
 const UNNAMED_PICTURE = "Picture";
 
-/**
- * A picture in a transcript's words: a description's own picture drawn as the description
- * draws it where its words stand inside `DescriptionPictures`, as the description's card
- * does, and an Inbox item's own where they stand inside `InboxPictures`
- * (`inbox-pictures.tsx`); any other a link to where it points, with the
- * picture's glyph, never drawn.
- */
 function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   const descriptionPicture = useDescriptionPictureDrawer();
   const inboxPicture = useInboxPictureDrawer();
@@ -590,7 +461,6 @@ function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   if (descriptionPicture !== undefined && descriptionAttachmentOf(address) !== undefined) {
     return descriptionPicture(address, said, caption === "" ? undefined : caption);
   }
-  // An Inbox item's own picture, where its words stand inside `InboxPictures`.
   const itemPicture = inboxPicture?.(address, said, caption === "" ? undefined : caption);
   if (itemPicture !== undefined) return itemPicture;
   const words = said === "" ? UNNAMED_PICTURE : said;
@@ -602,32 +472,14 @@ function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   );
 }
 
-/** The plugin that marks a transcript's links. */
 function markLinksStep(): (tree: MarkdownNode) => void {
   return markLinks;
 }
 
-/**
- * The plugin that marks a document's links, pictures, and paragraphs. Note
- * that each step is a function named apart, because the library keeps one
- * processor per list of plugins and tells two lists apart by their plugins'
- * names alone, so two unnamed steps would draw a transcript with a
- * document's processor.
- */
 function markDocumentStep(): (tree: MarkdownNode) => void {
   return markDocument;
 }
 
-/**
- * The steps words are read with: the library's own; for words a person
- * typed, each line break typed kept as one; the listed tasks' keys, where
- * any are known; then the marks on its links, a document's own marks among
- * them where the words are drawn as one. Note that Markdown joins two lines
- * with no blank line between them into one, which is right for words a
- * model wrote and wrong for words a person typed line by line into a box
- * whose Enter is a new line, as GitHub keeps a comment's line breaks for the
- * same reason.
- */
 function remarkPluginsFor(
   typed: boolean,
   asDocument: boolean,
@@ -641,12 +493,6 @@ function remarkPluginsFor(
   ];
 }
 
-/**
- * A link in a transcript's words: the chip that opens what it names
- * (`mention-chip.tsx`) where its target names a mention, read against the
- * task's page it is drawn on, or the window's doors off one; a link as any
- * other is where it names none.
- */
 function MentionElement({
   node,
   children,
@@ -664,7 +510,6 @@ function MentionElement({
   );
 }
 
-/** A link standing alone in its paragraph of a document: the card of what it names, or the paragraph as it was where it earns none (`lone-link-card.tsx`). */
 function LoneLinkElement({
   node,
   children,
@@ -674,9 +519,7 @@ function LoneLinkElement({
   return <LoneLinkCard target={target} words={words} fallback={<p>{children}</p>} />;
 }
 
-/** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
 function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
-  // Side by side, sharing the column's width, so a before and an after read as a pair, and wrapping where more would leave each too narrow; each still hugs its own picture, and none grows past its own size (tasks.css).
   return (
     <div
       className={`${PICTURE_ROW_ELEMENT.CLASS} my-block-gap grid grid-cols-picture-row items-start gap-block-gap`}
@@ -686,19 +529,10 @@ function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactN
   );
 }
 
-/** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
 function LinkGlueElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   return <span className={LINK_GLUE.CLASS}>{children}</span>;
 }
 
-/**
- * How a transcript's markdown is drawn: at the panel's scale, its code and
- * tables as `transcript-markdown.tsx` draws them, its links as
- * {@link TranscriptLink}, and its pictures as links to where they point
- * ({@link PictureElement}), never as an image, because an image is a
- * request to wherever its address points the moment the tab opens, and
- * nothing said on a call or written by a model should make one.
- */
 const TRANSCRIPT_COMPONENTS: MarkdownComponents = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
@@ -715,23 +549,14 @@ const TRANSCRIPT_COMPONENTS: MarkdownComponents = {
   img: () => null,
 };
 
-/**
- * How a picture GitHub's rendering names is drawn by the place drawing the
- * words: its own image, read through the service, or nothing where the
- * place draws none, which draws its link instead. `linked` says it stands
- * inside a link the words keep, which a press on it follows, so the place
- * gives it no press of its own.
- */
 export type GitHubPictureDrawer = (
   src: string,
   alt: string,
   linked: boolean,
 ) => ReactNode | undefined;
 
-/** Whether what is drawn stands inside a link of GitHub's words. */
 const InsideGitHubLink = createContext(false);
 
-/** A picture of GitHub's words, drawn by its place, or as its link where the place draws none. */
 function GitHubImage({
   src,
   alt,
@@ -745,7 +570,6 @@ function GitHubImage({
   return picture(src, alt, linked) ?? <GitHubPictureLink src={src} alt={alt} />;
 }
 
-/** A picture GitHub's rendering names that its place draws none of: a link to where it points, as a transcript's picture is. */
 export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): ReactNode {
   const words = alt === "" ? UNNAMED_PICTURE : alt;
   return (
@@ -756,12 +580,6 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
   );
 }
 
-/**
- * The steps GitHub's rendering is drawn through: the library's own HTML
- * parse, GitHub's dress reshaped into the window's own while its classes
- * still say what each part is (`@repo/ui/github-html`), then the library's
- * own sanitizer, GitHub's own allowlist, and its link hardening.
- */
 const GITHUB_REHYPE_PLUGINS: MarkdownSteps = [
   MARKDOWN_HTML_STEP.PARSE,
   githubShapes,
@@ -769,17 +587,8 @@ const GITHUB_REHYPE_PLUGINS: MarkdownSteps = [
   MARKDOWN_HTML_STEP.HARDEN,
 ];
 
-/** The one markdown step GitHub's rendering takes: handed over whole, as HTML. */
 const GITHUB_REMARK_PLUGINS = [wholeRendering];
 
-/**
- * Words GitHub rendered (`body_html`), drawn as a transcript's words are,
- * at the panel's scale, their code and tables the transcript's, their links
- * the transcript's: GitHub's own HTML read through the library's parse and
- * sanitizer, never set as HTML. Mentions, references, emoji, task lists,
- * and folded details stand as GitHub rendered them. A picture is the
- * place's to draw (`picture`), and stands as its link where it draws none.
- */
 export function GitHubWords({
   html,
   picture,
@@ -814,13 +623,6 @@ export function GitHubWords({
   );
 }
 
-/**
- * An element of the transcript's own the words are drawn with, as a skill
- * named in a sent message is drawn as its chip (`skill-chip.tsx`): the words
- * with the element written in where it stands, its tag and the attributes it
- * carries, and what draws it. Its words are taken as they are, never as
- * markdown.
- */
 export interface TranscriptElement {
   readonly markdown: string;
   readonly tag: string;
@@ -828,7 +630,6 @@ export interface TranscriptElement {
   readonly components: MarkdownComponents;
 }
 
-/** The components and tags an element of the transcript's own is drawn with beside the transcript's own, the same objects while the element names the same. */
 function useElementDraw(element: TranscriptElement | undefined): {
   components: MarkdownComponents;
   allowedTags: Record<string, string[]>;
@@ -850,12 +651,6 @@ function useElementDraw(element: TranscriptElement | undefined): {
   );
 }
 
-/**
- * A turn's words as markdown, with an element of the transcript's own
- * written in where one is given. Words still being written are read as
- * they stream (`streaming`), so each block already drawn is not parsed
- * again as the next lands; settled words are read once, whole.
- */
 export function TranscriptWords({
   text,
   element,
@@ -866,13 +661,9 @@ export function TranscriptWords({
 }: {
   text: string;
   element?: TranscriptElement | undefined;
-  /** Whether a person typed the words, whose every line break is kept (`remarkPluginsFor`). */
   typed?: boolean | undefined;
-  /** Whether the words are drawn as a document, as an Inbox item's are: pictures written next to each other side by side, and a link alone in its paragraph as its card (`lone-link-card.tsx`). */
   asDocument?: boolean | undefined;
-  /** Whether the words are still being written, as a running turn's newest are. */
   streaming?: boolean | undefined;
-  /** Whether the words are drawn on one line, as a queued message's row draws them. */
   line?: boolean | undefined;
 }): ReactNode {
   const keyTargets = useWordTargets();
@@ -881,7 +672,6 @@ export function TranscriptWords({
     [typed, asDocument, keyTargets],
   );
   const { components, allowedTags, literal } = useElementDraw(element);
-  // Note that the source stays the words as written, because a code block's copy reads it.
   return (
     <TranscriptMarkdownSource markdown={text}>
       <MessageResponse
@@ -898,38 +688,15 @@ export function TranscriptWords({
   );
 }
 
-/** The blank lines a reasoning may open on, up to the first line with words. */
 const LEADING_BLANK_LINES = /^(?:[^\S\n]*\n)+/u;
 
-/**
- * How many characters of a thought its closed line is handed: more than the
- * widest column shows, since the line cuts the rest itself. Note that the
- * words are cut here as well, because a transcript holds hundreds of closed
- * thoughts, and a long first paragraph whole in each line would put back in
- * the page what the fold keeps out of it.
- */
 const REASONING_PREVIEW_LENGTH = 400;
 
-/**
- * A model's reasoning, folded under one line until opened, its words as they
- * are but for the blank lines a model leaves around them. Note that only
- * whole blank lines go at the start, because the words keep their line breaks
- * and indents, and a trailing break would draw as an empty line under the last.
- *
- * The closed line previews the thought by its first line of words, as
- * plain words, as a task is named on its card: a model's thought often opens
- * on a bold title of its own, which a preview of every paragraph would run
- * into the sentence after it. Note that the preview keeps to that first line
- * rather than following the newest words while the thought streams, so it
- * stands still once the line fills the row, because a line rewritten word by
- * word draws the eye from the reply it sits in.
- */
 export function TranscriptReasoning({
   text,
   cut,
 }: {
   text: string;
-  /** For a thought its page carried cut, its ends and its whole read, which its body asks for as it opens. */
   cut?: CutBody | undefined;
 }): ReactNode {
   const shown = cut === undefined ? text : cut.head;
@@ -949,22 +716,15 @@ export function TranscriptReasoning({
   );
 }
 
-/** What a cut part's body says while its whole is read, and between its two ends where it could not be. */
 const CUT_WORDS = {
   THOUGHT: "Reading the whole thought…",
   OUTPUT: "Reading the whole output…",
 } as const;
 
-/** A cut part's two ends, the middle that could not be read said between them. */
 function cutText(cut: CutBody): string {
   return `${cut.head}\n\n… ${formatBytes(cut.bytes)} in all; only its start and end could be read …\n\n${cut.tail}`;
 }
 
-/**
- * A cut part's body: it asks for the part whole once its fold stands open,
- * not while a find only looks through it, and says so while the read is
- * under way; where the read failed, it draws the part's two ends.
- */
 function CutWords({
   cut,
   waiting,
@@ -972,7 +732,6 @@ function CutWords({
 }: {
   cut: CutBody;
   waiting: string;
-  /** The two ends as the part draws them, where its whole could not be read. */
   children: ReactNode;
 }): ReactNode {
   const { open } = useDisclosureState();
@@ -988,7 +747,6 @@ function CutWords({
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -1054,20 +812,6 @@ const CALL_ICON = {
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, ComponentType<{ "aria-hidden"?: "true" }>>;
 
-/**
- * The coding agent a call about one names, drawn on its row in the place of
- * "the coding agent" as its mention's chip is drawn in words: its tile and
- * its name on the chip's raised fill. On a row that is itself the press
- * that opens the agent it is no target of its own, since a second press or
- * card inside it would be two targets for one thing, so it takes the row's
- * pointer and lifts with the row's hover. On a row that folds open what the
- * call sent (`opens`), the chip is the way to the agent: its press opens
- * the agent's tab and its hover hangs the agent's card, and the press stops
- * at the chip, so it never folds the row it stands on. On a row that folds
- * open the call's own input and answer, the chip hangs the agent's `card`
- * where the place gives one, and takes no hint where it gives none, since
- * the pill would only say its name again.
- */
 function AgentCallChip({
   agent,
   opens,
@@ -1090,7 +834,6 @@ function AgentCallChip({
     );
   }
   const press = (event: MouseEvent<HTMLElement>) => {
-    // The press is the chip's alone: the summary it stands in would fold.
     event.preventDefault();
     event.stopPropagation();
     opens.onOpen();
@@ -1108,20 +851,17 @@ function AgentCallChip({
   );
 }
 
-/** How a chip on a row that folds open reaches its agent: what its hover says, the card it hangs, and its press. */
 interface AgentOpening {
   readonly hint: string;
   readonly card: ReactNode;
   readonly onOpen: () => void;
 }
 
-/** A call's line, and the chip after its verb where it names its agent by one. */
 interface ChippedLine {
   readonly line: CallLine;
   readonly chip: ReactNode | undefined;
 }
 
-/** A call's line and the chip it names its agent by: the agent's chip after the verb alone, for a call about one coding agent whose agent is known, opening the agent where `opens` says how, and the call's own words otherwise. */
 function chippedLine(
   kind: CallKind,
   subject: string | undefined,
@@ -1139,20 +879,12 @@ function chippedLine(
   };
 }
 
-/** The kinds of call that name files, which a row names by the first one's chip. */
 const FILE_CALLS: ReadonlySet<CallKind> = new Set([
   CALL_KIND.READ_FILE,
   CALL_KIND.WRITE_FILE,
   CALL_KIND.EDIT,
 ]);
 
-/**
- * The chip a call's row names what it read or wrote by: the first file's,
- * of the task's repository, with its hover card, or the website chip of the
- * page it fetched; nothing where it names neither, or the place knows no
- * repository, or the path is no file of it, as an absolute one or one that
- * climbs out is not, and the row says its subject as words.
- */
 function calledChip(
   kind: CallKind,
   files: readonly string[] | undefined,
@@ -1168,62 +900,35 @@ function calledChip(
   const repository = doors.place.repository;
   if (first === undefined || repository === null) return undefined;
   const target = encodeMention({ kind: MENTION_KIND.FILE, path: first }, doors.place);
-  // Note that a path that climbs out of the checkout reads back as no file, or as some other page of GitHub's, so it stays words.
   if (decodeMention(target, repository)?.kind !== MENTION_KIND.FILE) return undefined;
   return linkChip(target, target, doors);
 }
 
-/** How many files a call named past the first, which its row says after the first one's chip; none for one file. */
 function moreFiles(files: readonly string[] | undefined): string | undefined {
   return files === undefined || files.length < 2 ? undefined : `+${files.length - 1}`;
 }
 
-/** Whose Mac a transcript's Mac commands ran on, its agent's starter, the reader's own among them (`macOwnerOf`); none where the window cannot tell, whose ran on the reader's own as far as it knows. */
 const MacOwnerContext = createContext<Actor | undefined>(undefined);
 
-/** Names whose Mac the transcript under it ran its Mac commands on. */
 export const MacOwnerProvider = MacOwnerContext.Provider;
 
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
-    /** For a call of an integration's own tool, the integration, whose mark the row wears in its kind's icon's place. */
     provider?: IntegrationProvider | undefined;
-    /** For a call of an MCP server's tool, the server's name, which the row says it ran on beside its line. */
     server?: string | undefined;
-    /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
-    /** For a call about one coding agent, the agent, whose chip the row names it by in the place of "the coding agent"; none where the agent is not known. */
     agent?: Actor | undefined;
-    /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
     agentCard?: ReactNode;
-    /** For a call that made or is about a page, the description, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
     made?: { readonly kind: MadeCallKind; readonly chip: ReactNode } | undefined;
-    /** For a call that read, wrote, or edited files, their paths, which the row names by the first one's chip and how many more. */
     files?: readonly string[] | undefined;
-    /** For a read of a web page, its whole address, which the row names by its website chip. */
     page?: string | undefined;
     input: ToolBlock;
-    /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
     errorText: string | undefined;
-    /** For a call whose answer its page carried cut, its ends and its whole read, which its body asks for as it opens. */
     cut?: CutBody | undefined;
   };
 
-/**
- * One tool call: its row saying what it did, closed until clicked, and its
- * input and answer under it once opened, a command's as one terminal card
- * (`ToolTerminal`). A command is the closed row's
- * preview, dropped once the body under it shows the command whole behind
- * its prompt, or by a find, which draws that body hidden, and so is any
- * subject the input says whole, a read's path or a search's pattern
- * (`blockSays`); a description stays, since the body does not say it. A
- * call that made something names it by its chip, as a call about an agent
- * names the agent by its own; one that read, wrote, or edited files names
- * the first by its chip, and one that fetched a page names it by its
- * website chip (`calledChip`), which stays as the row opens.
- */
 export function TranscriptTool({
   state,
   kind,
@@ -1313,18 +1018,6 @@ export function TranscriptTool({
   );
 }
 
-/**
- * A call whose subject stands in a tab of its own, as a coding agent's start
- * does once the agent began, or a skill once loaded: the
- * call's line as a call's row draws it, its icon, what it did, and where it
- * stands, as the one button that opens that tab rather than folding its
- * input and answer open in place, its hover saying what it opens, or
- * hanging the card that tab hangs, an agent's, where it is given one. A
- * call about one coding agent names the agent by its chip, which the row's
- * press and card are for (`AgentCallChip`). A call that sent the agent
- * words is a row that folds them open instead, and its chip opens the agent
- * (`SentCall`).
- */
 export function TranscriptOpeningCall({
   callId,
   kind,
@@ -1339,14 +1032,10 @@ export function TranscriptOpeningCall({
   callId: string;
   kind: CallKind;
   subject: string | undefined;
-  /** For a call about one coding agent, the agent, whose chip the row names it by; none where the agent is not known. */
   agent?: Actor | undefined;
   state: ToolState;
-  /** What the hover says the row opens. */
   hint: string;
-  /** The card the hover hangs in the hint's place: the tab's own, where the tab it opens hangs one. */
   card?: ReactNode;
-  /** What the call sent another agent, whole, which a press on the row folds open under it; none for a call that sent no words of its own. */
   sent?: SentWords | undefined;
   onOpen: () => void;
 }): ReactNode {
@@ -1381,12 +1070,10 @@ export function TranscriptOpeningCall({
   );
 }
 
-/** The heading over a start's note. */
 const SENT_WORDS = {
   NOTE: "Note",
 } as const;
 
-/** The agent a call that sent words names where the place knows it by no name yet, as a start the place has not listed: a coding agent, as its card names it. */
 const UNNAMED_AGENT: Actor = {
   kind: ACTOR_KIND.AGENT,
   name: TAB_WORDS.AGENT,
@@ -1394,17 +1081,6 @@ const UNNAMED_AGENT: Actor = {
   state: ACTOR_STATE.REST,
 };
 
-/**
- * A call that sent another agent words, a message or a start: a call's row
- * that folds the words open whole under it, as any call's row folds its
- * input, its line's preview giving way while they are shown. The agent is
- * reached from its chip (`AgentCallChip`), whose press opens its tab and
- * whose hover hangs its card, so the row keeps one press, the fold, and
- * wears no toggle of its own at its end. What it sent is drawn as the
- * transcript's own quote, as a quote in an agent's words is. Note that an agent the place knows
- * by no name yet still gets its chip, named as its card names it, because
- * the chip is the row's one way to the agent.
- */
 function SentCall({
   callId,
   kind,
@@ -1454,18 +1130,6 @@ function SentCall({
   );
 }
 
-/**
- * How a to-do of each status is drawn: its glyph and what the glyph says
- * aloud; its ink and its words' are the item's status's (tasks.css's
- * `.todo-item`). Pending is an empty
- * circle, done a check in the muted ink with its words muted beside it, as
- * Linear and Things mark a finished item, and in progress a dotted circle
- * in the full ink, so the one item the list is at is the one that stands
- * out; while the agent is at it, the working mark an agent at work wears
- * (`state-glyph.tsx`) takes the dot's place (`TodoItems`). Note that a
- * done item is not struck through, because a rule through two or three
- * wrapped lines reads as noise over words the muted ink already quiets.
- */
 const TODO_LOOK = {
   [AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
   [AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotDashedIcon, label: "In progress" },
@@ -1476,21 +1140,9 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
   Pick<ToolHeaderProps, "state" | "subject"> & {
     todos: AgentTodos["todos"];
     errorText: string | undefined;
-    /** Whether this is the list the agent is at now: its newest while it works. */
     live: boolean;
   };
 
-/**
- * A to-do list's items, each behind the glyph of where it stands. The
- * glyph sits in a 16px column, as a call's icon does, with the call's 8px
- * gap after it, so a list set at a row's text column, or at its card's
- * icon, keeps its words on that row's words. The glyph is centered on its
- * item's first line, which at a 20px line centers it on the capitals, and
- * a wrapped line hangs under the words rather than the glyph. The item in
- * progress wears the moving working mark only on a `live` list, because a
- * list the agent wrote over or stopped at is a record, and a mark frozen
- * mid-lap there reads as a spinner that broke.
- */
 function TodoItems({
   todos,
   live,
@@ -1498,7 +1150,6 @@ function TodoItems({
 }: {
   todos: AgentTodos["todos"];
   live: boolean;
-  /** Whether it stands in the dock over the composer, where it keeps to under a third of what is seen and scrolls past it, so a long list leaves the transcript its room in a short window. */
   docked?: boolean;
 }): ReactNode {
   return (
@@ -1508,21 +1159,12 @@ function TodoItems({
       className={`todo-items leading-body${docked ? " max-h-todos-dock overflow-y-auto overscroll-contain" : ""}`}
     >
       {todos.map((todo, index) => (
-        // Note that an item's place is its identity, so a write that moves
-        // an item on is drawn as that item changing where it stands.
         <TodoItem key={index} todo={todo} live={live} />
       ))}
     </Stack>
   );
 }
 
-/**
- * One item behind the glyph of where it stands. An item that changes where
- * it stands while drawn has its glyph arrive (`GlyphSlot`'s `arrival`), a
- * check springing in as the item is done and a smaller arrival as it is
- * taken up; its words ease to their ink alike (tasks.css). An item drawn as it
- * stands is still, so a list opened or read back does not play its history.
- */
 function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boolean }): ReactNode {
   const [first] = useState(todo.status);
   const look = TODO_LOOK[todo.status];
@@ -1531,7 +1173,6 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
   const done = todo.status === AGENT_TODO_STATUS.DONE;
   return (
     <li className="todo-item flex items-start gap-icon-gap" data-todo-status={todo.status}>
-      {/* Keyed by where it stands, so each change mounts the glyph anew and its arrival runs. */}
       <GlyphSlot
         key={todo.status}
         line
@@ -1554,15 +1195,6 @@ function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boo
   );
 }
 
-/**
- * One write of an agent's to-do list: a call's row saying how far the list
- * has got, which opens onto the list itself, set bare at the row's text
- * column as Claude Code and Codex hang theirs under the call, since it is
- * words rather than the code a call's card holds, and selectable as a
- * call's body is; a failure is said under it as a subagent's is. It starts
- * folded, as every call's row does, and whether it is `live`, the list the
- * agent is at, whose item in progress wears the moving mark, is the caller's.
- */
 export function TranscriptTodos({
   state,
   subject,
@@ -1593,25 +1225,11 @@ export function TranscriptTodos({
   );
 }
 
-/**
- * The list the agent is working through, docked above the composer while
- * it works, as Claude Code keeps its list over the prompt and VS Code's
- * chat over its log: one line saying how far the list has got and the
- * item it is at, which opens onto the whole list, led by the chevron as
- * every fold's line is. Closed by default, as
- * VS Code's collapses to the item in progress, so it costs the log one
- * line. It is a card on the task card's look, since it stands outside the
- * log, and it is drawn by the caller only while the list is worked. It
- * opens upward off the composer, as one sheet (tasks.css). How far it has
- * got is said as the transcript's row says it (`todosSummary`), its counts
- * rolling as they change, so a step done is seen to tick over.
- */
 export function TranscriptTodosDock({
   todos,
   focus,
 }: {
   todos: AgentTodos["todos"];
-  /** The item the list is at; none once every item is done. */
   focus: string | undefined;
 }): ReactNode {
   const { done, total } = todosCount(todos);
@@ -1634,11 +1252,6 @@ export function TranscriptTodosDock({
   );
 }
 
-/**
- * The item the dock's line says the list is at, cut to the line, which
- * gives way while the list under it is drawn, since the list says it
- * there; the count before it stays, since the list says none.
- */
 function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
   const previewed = useDisclosurePreviewShown(focus !== undefined);
   if (focus === undefined || !previewed) return null;
@@ -1649,56 +1262,25 @@ function TodosDockFocus({ focus }: { focus: string | undefined }): ReactNode {
   );
 }
 
-/** What a subagent's row says it runs on: the model and effort, and the catalog the model is named from. */
 interface SubagentPair {
   readonly choice: ModelChoice;
   readonly models: readonly CatalogModel[];
 }
 
 export type TranscriptSubagentProps = {
-  /** The call that started the subagent, which the row carries as `data-call-id`. */
   callId: string;
-  /** The job the subagent was handed, as its tab names it. */
   job: string;
-  /** What it runs on; none where the row knows no pair. */
   pair: SubagentPair | undefined;
   state: ToolState;
-  /** When the subagent began, which a running row counts from beside its working mark; none where unknown or not counted, when the mark stands alone. */
   startedAt?: number | undefined;
-  /** Why the call failed, drawn under the row, since a call refused before its worker began leaves no tab to read it in. */
   errorText: string | undefined;
-  /** Opens the subagent's tab, or chooses it where it is open; none where the row stands in a tab that opens no tab. */
   onOpen: (() => void) | undefined;
-  /** The card the hover hangs in its hint's place, the subagent's tab's own; none where the row knows none. */
   card?: ReactNode;
-  /**
-   * The task and the answer, for a row that opens no tab, which folds them
-   * open under its line as a call's row does: a native harness's subagent,
-   * whose own work we keep no transcript of.
-   */
   body?: { readonly input: ToolBlock; readonly output: ToolBlock | undefined } | undefined;
 };
 
-/** What the hover over a subagent's row says it opens. */
 const SUBAGENT_HINT = "Open the subagent";
 
-/**
- * A subagent's row on a coding agent's tab, running
- * or finished: one line drawn as a call's row is, in its muted ink, wearing
- * the mark of the harness its model runs in (the worker's robot where the
- * model is unknown), the job in the full ink as a call's verb is, fading
- * where the line cuts it, the model and effort it runs on as every pair is
- * drawn (`model-label.tsx`), and the mark a call's
- * row wears for where it stands, with how long it has worked beside the
- * working mark while it runs (`working-time.tsx`). The whole line is
- * the one button that opens the subagent's tab, its hover hanging that
- * tab's card, or saying what it opens where it is given none, and the tab
- * is where its steps and its answer are read, so it folds nothing open in
- * place. Where it
- * opens no tab it is the same line, pressed by nothing, or, given the task
- * and the answer, a fold that opens onto them as a call's row does. A call that failed
- * says why in red under the line, open from the start.
- */
 export function TranscriptSubagent({
   callId,
   job,
@@ -1740,7 +1322,6 @@ export function TranscriptSubagent({
         </ToolContent>
       </Tool>
     ) : onOpen === undefined ? (
-      // The same line as the one that opens a subagent's tab, pressed by nothing.
       <LineRow data-subagent-row="" data-call-id={callId}>
         {line}
       </LineRow>
@@ -1763,18 +1344,6 @@ export function TranscriptSubagent({
   );
 }
 
-/**
- * A line that folds the rows beneath it: a run of calls, or a finished
- * turn's lead. Note that it stays in the muted ink, summary and all,
- * unlike a call's line, because it counts rows rather than saying what one
- * did, and the rows it opens onto are what a reader scans. It wears the
- * fold's chevron in a row's icon column, as the description's card does at its
- * head, because its count already says what it holds, so what is left to
- * say is whether it is open, and an icon of its own would read as one more
- * of the calls it opens onto. Note that it says nothing of a call that
- * failed, because the call's own row marks it and says why, and a failure
- * the agent went on past is not news on the line that folds its work away.
- */
 function TurnFold({
   summary,
   running,
@@ -1796,7 +1365,6 @@ function TurnFold({
   );
 }
 
-/** One row of a turn: a block drawn by its tab, a run of calls, or a folded lead. */
 function TurnRowView<B>({
   row,
   children,
@@ -1824,28 +1392,17 @@ function TurnRowView<B>({
   }
 }
 
-/**
- * A turn's row, drawn again only where it reads otherwise than it did, or
- * the tab draws its blocks another way: a running turn's page touches its
- * newest row alone, so every row before it is kept as it was drawn.
- */
 const SteadyTurnRow = memo(TurnRowView, (a, b) =>
   sameFieldsBy(a, b, { row: sameTurnRow }),
 ) as typeof TurnRowView;
 
-/**
- * A turn's rows (`turn-rows.ts`): each block drawn by its tab, a run of
- * calls and a folded lead drawn here.
- */
 export function TranscriptRows<B>({
   rows,
   children,
 }: {
   rows: readonly TurnRow<B>[];
-  /** How the tab draws one of its own blocks. */
   children: (block: B) => ReactNode;
 }): ReactNode {
-  // Note that a group is keyed by whether it opens, because the fold reads `defaultOpen` once, and a group that stops being the turn's latest work has to fold.
   return rows.map((row) => (
     <SteadyTurnRow
       key={row.kind === TURN_ROW.GROUP ? `${row.key}-${String(row.open)}` : row.key}
@@ -1856,7 +1413,6 @@ export function TranscriptRows<B>({
   ));
 }
 
-/** A quiet note between a transcript's rows: what was left out, or what stands in a row's place. */
 export function TranscriptNote({ children }: { children: ReactNode }): ReactNode {
   return <NoteLine look={NOTE_LINE_LOOK.INSET}>{children}</NoteLine>;
 }

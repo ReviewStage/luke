@@ -14,12 +14,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PullRequestLine, taskCardOf } from "./task-card.js";
 
-/**
- * task-card.test.ts -- a task's hover card says where the task stands by
- * its board card's marks, its status, its priority, and who is on it, each
- * heard by a screen reader, and a pull request's line counts its size.
- */
-
 const ACME = {
   id: "workspace-acme",
   name: "Acme",
@@ -54,7 +48,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The card of `task`, read under Acme among `others`, which a press on a task it names opens through `opened`. */
 function drawn(
   task: TaskSummary,
   others: readonly TaskSummary[] = [],

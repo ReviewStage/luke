@@ -22,26 +22,12 @@ import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
-/**
- * agent-arrived-lines.test.ts -- in an agent's tab, a message that reached
- * the agent while its turn ran, GitHub's among them, is drawn where it
- * arrived, between the steps before it and the steps after it, rather than
- * ahead of the turn: in a finished turn it splits the fold, the work before
- * it folded above it and the work after it below, and in a turn still
- * running it stands between the work. The service keeps such a line ahead
- * of the turn's journal, which closes behind every line its turn took, so
- * the tab reads where the line arrived off the line itself; a line from a
- * service older than that stands where the order puts it.
- * Synthetic throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 
 const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 1 };
 
 const JOURNAL = "journal";
 
-/** The words GitHub's line says, as a review on the agent's pull request reaches it. */
 const REVIEWED = "@devin-ai-integration[bot] reviewed your pull request #3016.";
 
 function agentOf(status: AgentStatus): AgentSummary {
@@ -59,7 +45,6 @@ function agentOf(status: AgentStatus): AgentSummary {
   };
 }
 
-/** One answered command the agent ran, under its own call id. */
 function ran(callId: string): WireRecord {
   return {
     type: "tool-run_command",
@@ -72,7 +57,6 @@ function ran(callId: string): WireRecord {
 
 const STEP: WireRecord = { type: "step-start" };
 
-/** The turn's journal: a command a step, A, B, then C, and its last words once it has finished. */
 function journal(finished: boolean): AgentTranscriptMessage {
   return {
     id: JOURNAL,
@@ -91,7 +75,6 @@ function journal(finished: boolean): AgentTranscriptMessage {
   };
 }
 
-/** GitHub's line, which the turn took in after its second step. */
 const GITHUB_LINE: AgentTranscriptMessage = {
   id: "github",
   role: MESSAGE_ROLE.USER,
@@ -115,7 +98,6 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-/** The tab drawn over one page of `messages`, as the service answers it for an agent of `status`. */
 async function drawnTab(
   messages: readonly AgentTranscriptMessage[],
   status: AgentStatus,
@@ -157,7 +139,6 @@ async function drawnTab(
   return container;
 }
 
-/** What the tab draws, top to bottom: each of the developer's lines by its id, at either side, each fold's line, and each call by its id. */
 function drawnOrder(container: HTMLElement): readonly string[] {
   return [
     ...container.querySelectorAll(
@@ -171,7 +152,6 @@ function drawnOrder(container: HTMLElement): readonly string[] {
   });
 }
 
-/** Opens every closed fold of the turn, outermost first, as a reader pressing each line would. */
 function openEveryFold(container: HTMLElement): void {
   for (const line of container.querySelectorAll<HTMLElement>("[data-turn-fold] > summary")) {
     if (line.getAttribute("aria-expanded") === "false") act(() => line.click());
@@ -179,7 +159,6 @@ function openEveryFold(container: HTMLElement): void {
 }
 
 test("in a finished turn, a line GitHub sent while it ran splits its fold, the steps before it folded above it and the steps after it below", async () => {
-  // The service keeps the line ahead of the journal, which closed behind it.
   const container = await drawnTab([TASK, GITHUB_LINE, journal(true)], AGENT_STATUS.COMPLETED);
   const task = "line: task";
   const github = "line: github";
@@ -230,7 +209,6 @@ test("a line sent to steer a turn still running stands inside the turn, which st
     ...journal(false),
     parts: [...journal(false).parts, { type: "text", text: "Checking the ratio." }],
   };
-  // The service keeps a line awaiting its place after the open journal.
   const container = await drawnTab([TASK, writing, steer], AGENT_STATUS.RUNNING);
 
   assert.equal(drawnOrder(container).at(-1), "line: steer", "at the turn's end");

@@ -30,19 +30,6 @@ import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import type { AgentsControl } from "./use-agents.js";
 
-/**
- * agent-tab-virtual.test.ts -- a long agent transcript draws only the rows
- * near its view: it opens on its newest rows, a find counts and reaches a
- * match in a row it has not drawn and one past a long fence's cut, a page that lands leaves every message it
- * did not touch undrawn again, and older messages put before the first leave
- * the reader where they were.
- *
- * jsdom lays nothing out, so a row is as tall as the log takes one to be
- * before it is measured, every log box is laid out as a long scroller from
- * before it is drawn, and its scroll position is a value each scroll writes
- * and is heard from.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -51,13 +38,11 @@ beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-// A fence is drawn once the markdown parser it is read with has landed.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 let root: Root | undefined;
 
 beforeEach(() => {
-  // jsdom paints no highlights; the find's are kept as a browser keeps them.
   vi.stubGlobal("CSS", { highlights: new Map(), escape: (words: string) => words });
   vi.stubGlobal("Highlight", Set);
   Range.prototype.getBoundingClientRect = () => new DOMRect();
@@ -87,7 +72,6 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-/** The transcript's `index`th message: the developer's line on the even ones, the agent's reply on the odd. */
 function message(index: number, words = `Line ${index} of the run.`): AgentTranscriptMessage {
   return index % 2 === 0
     ? { id: `m-${index}`, role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: words }] }
@@ -100,7 +84,6 @@ function message(index: number, words = `Line ${index} of the run.`): AgentTrans
       };
 }
 
-/** Messages `from` up to but not including `to`. */
 function messages(from: number, to: number): AgentTranscriptMessage[] {
   return Array.from({ length: to - from }, (_, at) => message(from + at));
 }
@@ -118,10 +101,8 @@ function page(
   };
 }
 
-/** The agent's own transcript, which its tab holds. */
 const TRANSCRIPT: AgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
 
-/** A host whose first page of the transcript stands at once and each later one lands when the test hands it. */
 function following(first: AgentMessagesAnswerView) {
   const telling = tellingTranscripts();
   telling.tell(TRANSCRIPT, first);
@@ -141,15 +122,9 @@ async function settled(): Promise<void> {
   await settleQueries();
 }
 
-/** The scroll each log box stands at, and the writes heard on each box a test listens to (`layOut`). */
 const logTops = new WeakMap<Element, number>();
 const logWrites = new WeakMap<Element, number[]>();
 
-/**
- * Lays out every log box drawn from now on as the window would: the room it
- * shows over a long length, and every scroll written to it heard as the
- * browser hears one, from before the log is first drawn, where it opens.
- */
 function layLogsOut(): void {
   const isLog = (element: Element) => element.getAttribute("role") === "log";
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
@@ -165,7 +140,6 @@ function layLogsOut(): void {
   vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
     return logTops.get(this) ?? 0;
   });
-  // Note that a write that moves the box is heard as a scroll, as the browser hears one, whoever wrote it.
   vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
     this: Element,
     to: number,
@@ -176,7 +150,6 @@ function layLogsOut(): void {
     logTops.set(this, to);
     this.dispatchEvent(new Event("scroll"));
   });
-  // jsdom has no `scrollTo` on an element, which the virtualizer writes through.
   Object.defineProperty(HTMLElement.prototype, "scrollTo", {
     configurable: true,
     value(this: HTMLElement, options?: ScrollToOptions) {
@@ -185,14 +158,12 @@ function layLogsOut(): void {
   });
 }
 
-/** Every scroll written to the log's box from now on. */
 function layOut(box: HTMLElement): { readonly writes: number[] } {
   const writes: number[] = [];
   logWrites.set(box, writes);
   return { writes };
 }
 
-/** Scrolls the log to `top` as a reader would, so the log and its rows hear it. */
 async function scrollTo(box: HTMLElement, top: number): Promise<void> {
   await act(async () => {
     box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - box.scrollTop }));
@@ -201,7 +172,6 @@ async function scrollTo(box: HTMLElement, top: number): Promise<void> {
   });
 }
 
-/** Draws the agent's tab over `control`, inside `wrap` where one is handed, and waits for its first page. */
 async function drawTab(
   control: AgentsControl,
   wrap: (tab: ReactElement) => ReactElement = (tab) => tab,
@@ -227,7 +197,6 @@ async function drawTab(
   };
 }
 
-/** The keys of the rows the log draws now. */
 function drawnRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll("[data-row-key]")].map(
     (row) => row.getAttribute("data-row-key") ?? "",
@@ -244,7 +213,6 @@ test("a transcript of two thousand messages opens on its newest and draws a boun
   assert.equal(container.querySelector('[data-message-id="m-0"]'), null, "the first is not");
 });
 
-/** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
   const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field, "the find bar stands open");
@@ -254,7 +222,6 @@ function typeFind(text: string): void {
   });
 }
 
-/** What the find bar's tally says. */
 function findTally(): string | null | undefined {
   return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
@@ -288,7 +255,6 @@ test("⌘F finds words in a row the log has not drawn, scrolls the log to it, an
 });
 
 test("a running turn of a thousand parts draws only the pieces near its view, and ⌘F lights a match in a piece it had not drawn", async () => {
-  // An orchestrator's turn is its whole run: one message, each of its steps a line of words.
   const turn: AgentTranscriptMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -332,7 +298,6 @@ test("a running turn of a thousand parts draws only the pieces near its view, an
 });
 
 test("⌘F counts a line the voice said over a long turn's first piece after that piece was cut", async () => {
-  // A finished turn the voice read aloud, which lines from elsewhere reached as it ran, each splitting its fold, so it is cut into pieces.
   const turn: AgentTranscriptMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -352,7 +317,6 @@ test("⌘F counts a line the voice said over a long turn's first piece after tha
       arrivedIn: { journalId: "turn", afterStep: step + 1 },
     }),
   );
-  // A line the voice said on a call, reading the turn aloud, which the log draws ahead of it.
   const said = (id: string, text: string): AgentTranscriptMessage => ({
     id,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -376,7 +340,6 @@ test("⌘F counts a line the voice said over a long turn's first piece after tha
   });
   typeFind("done");
   await act(settled);
-  // A second line the voice said lands while the find stands open, reading the same turn.
   await push(page([said("said-2", "The lantern is lit.")]));
   typeFind("lantern");
   await act(settled);
@@ -429,7 +392,6 @@ test("⌘F counts a match in a closed call's answer far up the log, steps to it,
   assert.equal(output.closest("[hidden]"), null, "the fold around the answer stands open");
 });
 
-/** A finished reply of the agent's at index 7 of `messages`, holding `parts`. */
 function farReply(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return {
     id: "m-7",
@@ -440,7 +402,6 @@ function farReply(parts: readonly WireRecord[]): AgentTranscriptMessage {
   };
 }
 
-/** The tally a find for `query` reads over a 400-message log whose eighth message is `far`, while that row is not drawn. */
 async function farTally(far: AgentTranscriptMessage, query: string) {
   const held = messages(0, 400);
   held[7] = far;
@@ -538,7 +499,6 @@ test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the
 });
 
 test("older messages put before the first under a long log leave the row the reader was on where it stood", async () => {
-  // The older page lands once the test hands it, after the reader has scrolled.
   let release: () => void = () => undefined;
   const handed = new Promise<void>((resolve) => {
     release = resolve;
@@ -556,7 +516,6 @@ test("older messages put before the first under a long log leave the row the rea
   telling = following(page(messages(100, 160), "100")).telling;
   const { container, box } = await drawTab(agentsControl({ agents: [AGENT] }));
   layOut(box);
-  // The log stands at its newest line, and the reader scrolls up near its top, onto the second message.
   await scrollTo(box, 1_000_000 - 600);
   await scrollTo(box, 300);
   assert.ok(drawnRows(container).includes("m-101"), "the row the reader is on is drawn");
@@ -565,12 +524,10 @@ test("older messages put before the first under a long log leave the row the rea
     await settled();
   });
   assert.ok(drawnRows(container).includes("m-99"), "the older messages landed");
-  // Ten rows landed above, each a row and the step between two.
   assert.equal(box.scrollTop, 300 + 10 * (160 + 12));
   assert.ok(drawnRows(container).includes("m-101"), "the row the reader was on is still drawn");
 });
 
-/** A read the test answers when it hands the answer. */
 function handed<T>(): {
   readonly read: () => Promise<T>;
   readonly hand: (answer: T) => Promise<void>;
@@ -606,7 +563,6 @@ test("the log draws while the agent's pull request is still read, and its dock l
       changedFiles: number;
     } | null;
   }>();
-  // The host holds what the agent published, its answer landing once the test hands it.
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.PUBLISHED]: published.read,
   });

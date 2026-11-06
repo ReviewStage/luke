@@ -33,25 +33,10 @@ import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { ReplyToSelection } from "./reply-to-selection.js";
 import { type HeldComposer, type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * Words selected in an agent's message, answered from its box: Reply stands
- * over a selection inside the agent's words and nowhere else, not over its
- * thoughts or the developer's words; each press lays a quote block in where
- * the caret stands and hands the box the caret on a line under it, the
- * message sent holds each quote as a Markdown blockquote set apart, a
- * message that did not go comes back with its quotes as blocks, a quote's
- * way off takes it out, and a typed `>` line alone sends; on a touch
- * screen, whose handles may let go with no pointerup, Reply stands under a
- * selection once it rests, and with a mouse only once the pointer lets it
- * go; and on the agent's own tab, Reply stands while a message is out;
- * and R does what Reply does while it stands, and nothing while it does not.
- */
-
 const AGENT_WORDS = "Option A ships today. Option B waits for review.";
 const AGENT_THOUGHT = "Weighing the release calendar.";
 const DEVELOPER_WORDS = "Which one is safer?";
 
-/** The agent's turn: a thought, then its words. */
 const TURN: AgentTranscriptMessage = {
   id: "turn",
   role: MESSAGE_ROLE.ASSISTANT,
@@ -63,10 +48,8 @@ const TURN: AgentTranscriptMessage = {
 
 const ignore = () => undefined;
 
-/** How long past its last change a finger's selection is sure to have rested: well past the panel's own settle, a third of a second. */
 const RESTED = Duration.seconds(1);
 
-/** The device's main pointer answered as a finger's or a mouse's, which jsdom answers no media query for. */
 function answerPointer(coarse: boolean): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -80,7 +63,6 @@ function answerPointer(coarse: boolean): void {
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -106,8 +88,6 @@ async function settle(): Promise<void> {
   await settleQueries();
 }
 
-/** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box, under the window's keymap. */
-/** The box's control as the tab last drew it, whose Edit a line that did not go offers from its transcript, which this tab draws none of. */
 let drawnComposer: HeldComposer | undefined;
 
 function Tab({ sender }: { sender: MessageSender }): ReactNode {
@@ -140,7 +120,6 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
   );
 }
 
-/** The tab mounted, every message its box sends written down and answered by `answer`. */
 async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promise(ignore)) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -158,7 +137,6 @@ async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promi
   return {
     container,
     sent,
-    /** The words of the text drawn as `words`, from `from` through `to`, selected as a drag lets them go, or as a finger's handles do where `released` is false: with no pointerup. */
     select: (words: string, from: string, to: string, released = true) => {
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let text: Node | null = walker.nextNode();
@@ -179,19 +157,16 @@ async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promi
         text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
       });
     },
-    /** Reply, where it stands over the window. */
     reply: () =>
       [...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button")].find(
         (each) => each.textContent === "Reply",
       ),
-    /** The box's blocks, in order: each quote as `> ` and its words, each line as typed. */
     blocks: () =>
       [...composerEditor(container).children].map((each) =>
         each.matches("[data-quote]")
           ? `> ${each.querySelector(".composer-quote-words")?.textContent ?? ""}`
           : each.textContent,
       ),
-    /** Presses Reply where it stands. */
     pressReply: async () => {
       const reply = [
         ...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button"),
@@ -315,7 +290,6 @@ test("a triple-click's selection is offered Reply past words no selection takes,
     (each) => each.textContent === DEVELOPER_WORDS,
   );
   assert.ok(words && next?.firstChild);
-  // The developer's words led by a letter drawn as an Inbox comment's avatar draws it.
   const letter = document.createElement("span");
   letter.style.userSelect = "none";
   letter.textContent = "D";
@@ -365,7 +339,6 @@ test("a message that did not go comes back on Edit with its quotes as blocks, a 
   pressInComposer(tab.container, "Enter");
   await settle();
 
-  // A `>` line the developer typed is words, as the quote it reads back as is.
   composerEditor(tab.container).editor?.commands.clearContent(true);
   typeInComposer(tab.container, "> Ship today?");
   pressInComposer(tab.container, "Enter");
@@ -397,7 +370,6 @@ test("on a touch screen Reply stands under a selection once it rests, though no 
 test("on a touch screen Reply stands under the selection, clear of the system's menu over it, or over it where the window ends first", async () => {
   answerPointer(true);
   const tab = await mounted();
-  /** Where Reply stands once the words are selected at `top` to `bottom`. */
   const pressAt = (top: number, bottom: number) => {
     Range.prototype.getBoundingClientRect = () => new DOMRect(40, top, 120, bottom - top);
     tab.select(AGENT_WORDS, "Option B", "review.");
@@ -425,7 +397,6 @@ test("with a mouse, a selection resting is offered nothing until the pointer let
   assert.ok(tab.reply(), "the pointer letting go offers Reply");
 });
 
-/** An agent of the developer's, handed a prompt and answered with one turn. */
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -454,8 +425,6 @@ test("on the agent's tab, Reply quotes its words into the tab's own box, and sta
   ]);
   const control = agentsControl({
     agents: [AGENT],
-    // The transcript ends on a page with nothing on it, as an ended agent's does.
-    // The message never answers, so it stays out.
     onMessage: (_agentId, text) => {
       sent.push(text);
       return new Promise(ignore);
@@ -510,7 +479,6 @@ test("on the agent's tab, Reply quotes its words into the tab's own box, and sta
   await settle();
   assert.deepEqual(sent, ["> Option A ships today.\n\nShip it"]);
 
-  // Note that the box takes words while the message is out, so Reply stands as well.
   select("Option B", "review.");
   const again = reply();
   assert.ok(again, "Reply stands while the message is out");

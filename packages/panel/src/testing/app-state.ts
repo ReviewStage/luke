@@ -1,7 +1,3 @@
-/**
- * app-state.ts -- what a test of a surface gated by an experiment or a platform capability, or one that names the signed-in account or draws a call, stands on: main's document as the bridge hands it, with the account's experiments, the platform's capabilities, its identity, and its call as given.
- */
-
 import { RegistryContext } from "@effect/atom-react";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AccountPreferencesLive } from "@repo/features/account-preferences-live";
@@ -101,10 +97,8 @@ import {
 } from "./app-bridge.js";
 import { holdAppStateForFile, writeAppState } from "./copy-feedback.js";
 
-/** What the desktop offers: every capability there is. */
 export const DESKTOP_CAPABILITIES: readonly HostCapability[] = Object.values(HOST_CAPABILITY);
 
-/** Main's document for a signed-in account in a panel on the desktop, idle, its experiments as given. */
 function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
   return {
     version: 1,
@@ -185,13 +179,11 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
   };
 }
 
-/** A document as main's push delivers it to a window that holds none of it yet: every entry. */
 export function deliveryOf(snapshot: AppStateSnapshot): AppStateDelivery {
   const { version, ...entries } = snapshot;
   return { version, entries };
 }
 
-/** Main's document with the account's experiments as given and the slices patched, the window's facts among them. */
 export function stateWith(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot>,
@@ -199,7 +191,6 @@ export function stateWith(
   return { ...snapshotWith(experiments), ...patch };
 }
 
-/** Main's document for the account signed in as given, no experiment on. */
 export function signedInAs(account: {
   readonly id: string;
   readonly email: string;
@@ -209,7 +200,6 @@ export function signedInAs(account: {
   return { ...snapshot, account: { ...snapshot.account, ...account } };
 }
 
-/** Hands the window main's document with the account's experiments as given and the slices patched, beside whatever else the bridge already holds. */
 export function handState(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot> = {},
@@ -222,7 +212,6 @@ export function handState(
   });
 }
 
-/** The registry a surface drawn under no `RegistryContext.Provider` reads from. */
 function defaultRegistry(): AtomRegistry.AtomRegistry {
   let held: AtomRegistry.AtomRegistry | undefined;
   const Probe = () => {
@@ -234,23 +223,13 @@ function defaultRegistry(): AtomRegistry.AtomRegistry {
   return held;
 }
 
-/**
- * Hands the window main's document with the account's experiments as given,
- * as `handState` does, and reads it into `registry` before it answers, the
- * default one where none is named: for a suite whose draws are synchronous,
- * so a surface an experiment gates stands in its first frame. Note that the
- * document is held for the registry's life, so a suite drawing under the
- * default registry reads it once (`beforeAll`).
- */
 export async function readExperiments(
   experiments: ExperimentChoices,
   registry: AtomRegistry.AtomRegistry = defaultRegistry(),
 ): Promise<void> {
   handState(experiments);
-  // Note that every test's Query client of this file starts on the same document, so a reader through Query draws it at once too.
   holdAppStateForFile(stateWith(experiments, {}));
   const release = registry.mount(APP_SLICE.SETTINGS);
-  // Note that the read lands a task after it is asked for, since the renderer's runtime runs it.
   await vi.waitFor(
     () => {
       if (registry.get(APP_SLICE.SETTINGS) === undefined)
@@ -261,27 +240,18 @@ export async function readExperiments(
   release();
 }
 
-/**
- * A registry whose settings hold these experiments from its first draw, for
- * a case that draws under a registry of its own synchronously. Note that the
- * settings are read again once main's document lands, so the bridge must hand
- * the same experiments (`handState`, `readExperiments`) for them to stand.
- * `initialValues` are laid beside them, as a case's own clock is.
- */
 export function registryWith(
   experiments: ExperimentChoices,
   initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
 ): AtomRegistry.AtomRegistry {
   const snapshot = snapshotWith(experiments);
   const { settings } = snapshot;
-  // Note that the test's Query client is handed the same document, so a reader through Query draws it at once too.
   writeAppState(snapshot);
   return AtomRegistry.make({
     initialValues: [[APP_SLICE.SETTINGS, settings], ...initialValues],
   });
 }
 
-/** Hands the window main's document on a platform offering `capabilities`, the experiments given on and no other, beside whatever else the bridge already holds. */
 export function handCapabilities(
   capabilities: readonly HostCapability[],
   experiments: ExperimentChoices = {},
@@ -290,14 +260,6 @@ export function handCapabilities(
   handState(experiments, { run: { ...snapshot.run, capabilities } });
 }
 
-/**
- * Hands the window main's document with its settings as given, its other
- * slices patched, and answers each settings write as main does: stored,
- * then the document delivered again to every listener, so a surface draws
- * the setting it wrote and the next surface drawn reads it. Every other act
- * and procedure is answered as the window's fakes answered it before. The
- * write is answered as accepted.
- */
 export function handSettings(
   settings: Partial<AppSettingsView> = {},
   patch: Partial<AppStateSnapshot> = {},
@@ -327,7 +289,6 @@ export function handSettings(
   });
 }
 
-/** How the host's reads are delivered again as each moves, as the host tells them. */
 export interface HostReadsHanded {
   readonly deliverItems: (next: AppHostRead<AppInboxItems>) => void;
   readonly deliverHolders: (next: AppHolderInboxes) => void;
@@ -338,11 +299,8 @@ export interface HostReadsHanded {
   readonly deliverComments: (next: AppDescriptionComments) => void;
   readonly deliverTools: (next: AppIntegrationTools) => void;
   readonly deliverParts: (next: Partial<AppPullRequestParts>) => void;
-  /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
-  /** The models the signed-in account is offered and its devices, held under its id. */
   readonly deliverModels: (next: AppHostRead<ModelsAnswer>) => void;
-  /** The signed-in account's preferences row, held under its id. */
   readonly deliverPreferences: (next: AppHostRead<AccountPreferencesLive>) => void;
   readonly deliverRepositoryLists: (next: AppRepositoryLists) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
@@ -351,30 +309,17 @@ export interface HostReadsHanded {
   readonly deliverInvitations: (next: AppWorkspaceInvitations) => void;
   readonly deliverTokenRepositories: (next: AppTokenRepositories) => void;
   readonly deliverTranscripts: (next: AppTranscripts) => void;
-  /** The account's task list, as the host lays it whole. */
   readonly deliverTasks: (next: TasksView) => void;
 }
 
-/** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
 const HELD_ACCOUNT_ID = "user-held";
 
-/** The document with its signed-in account given an id where it names none. */
 function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
   const { account } = snapshot;
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN || account.id !== undefined) return snapshot;
   return { ...snapshot, account: { ...account, id: HELD_ACCOUNT_ID } };
 }
 
-/**
- * Lays the host's reads as given, the account's feed of every item, the
- * holders' own inboxes, the pull requests' chapters, the servers' tools, the
- * signed-in account's keys, preferences, and models, the workspaces' people and token
- * repositories, and the agents' transcripts, over whatever document the window was handed, its
- * experiments and the reads handed before among it, and answers with how
- * each is delivered again as it moves, as the host tells it; what the bridge
- * delivered before still reaches the window. The account is given an id
- * where the document names none, since the host holds its keys by it.
- */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
   readonly holders?: AppHolderInboxes;
@@ -390,13 +335,11 @@ export function handHostReads(first: {
   const handed = fakeAppBridgeCalls().requestAppState;
   const earlier = fakeAppBridgeCalls().onAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
-  /** Everything delivered here, which what the bridge delivered before never takes back. */
   let laid: AppStateDelivery["entries"] = {};
   let version = 1;
   let account = HELD_ACCOUNT_ID;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    // Note that the document answers at the version it was asked at, so a read delivered while the handed one was awaited stands over it.
     requestAppState: async () => {
       const asked = version;
       const snapshot = withAccountId(handed === undefined ? snapshotWith({}) : await handed());
@@ -434,7 +377,6 @@ export function handHostReads(first: {
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
-      // Note that what the bridge delivered before, a test's settings among it, still reaches the window, stamped as newer than all delivered here, with what was delivered here laid over it.
       const off = earlier?.((delivery) => {
         version += 1;
         listener({ version, entries: { ...delivery.entries, ...laid } });
@@ -474,37 +416,23 @@ export function handHostReads(first: {
   };
 }
 
-/** The automations' read each kind of hold names, by the kind. */
 const AUTOMATIONS_READ_OF = {
   [AUTOMATION_FOLLOW.WORKSPACE]: LIVE_READ.AUTOMATIONS,
   [AUTOMATION_FOLLOW.RUNS]: LIVE_READ.AUTOMATION_RUNS,
   [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: LIVE_READ.AUTOMATION_WORKSPACE_RUNS,
 } as const satisfies Record<AutomationFollow["kind"], keyof AppAutomationReads>;
 
-/** What a test's host reads of each of the automations' holds, by its kind: the key's read, none while it answers nothing. */
 export type AutomationReadsOf = {
   readonly [Kind in AutomationFollow["kind"]]?: (
     id: string,
   ) => AppAutomationReads[(typeof AUTOMATIONS_READ_OF)[Kind]][string] | undefined;
 };
 
-/** One hold the window asked of the automations' reads, and whether it has let it go. */
 export interface AutomationsHold {
   readonly held: AutomationFollow;
   closed: boolean;
 }
 
-/**
- * Answers the window's holds on the automations' reads as the host does,
- * beside whatever acts the test answers by now: each key `readsOf`
- * answers laid on the document through `deliver` as it is held, as a
- * window opened anew draws it where it stands, and again as Try again
- * reads it, and every key held since laid again as `lay` asks, as the host
- * lays a read that moved, each staying laid once let go; a read that
- * fails over rows keeps them, as the host keeps them. Answers with every
- * hold asked for, in order, and every read asked for, by a hold or a Try
- * again, in order.
- */
 export function holdAutomations(
   deliver: HostReadsHanded["deliverAutomations"],
   readsOf: AutomationReadsOf,
@@ -520,7 +448,6 @@ export function holdAutomations(
     [LIVE_READ.AUTOMATION_RUNS]: {},
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: {},
   };
-  /** Lays the key's read as the test's host reads it now, answering whether it read any. */
   const layKey = ({ kind, id }: AutomationFollow) => {
     const read = readsOf[kind]?.(id);
     if (read === undefined) return false;
@@ -530,7 +457,6 @@ export function holdAutomations(
     laid[slice] = { ...laid[slice], [id]: read };
     return true;
   };
-  // SAFETY: each read's keys hold what its kind's `readsOf` answered, which is that read's (`AutomationReadsOf`).
   const delivered = () => deliver({ ...laid } as Partial<AppAutomationReads>);
   fakeActPort({
     ...fakeActPortCalls(),
@@ -538,7 +464,6 @@ export function holdAutomations(
       const hold: AutomationsHold = { held, closed: false };
       holds.push(hold);
       asked.push(held);
-      // Note that the host lays what it read once the hold is taken, never inside it.
       if (layKey(held)) void Promise.resolve().then(delivered);
       return heldUntilClosed(() => {
         hold.closed = true;
@@ -560,11 +485,9 @@ export function holdAutomations(
   };
 }
 
-/** What a test's service answers one part of a pull request with, by the part, as the read it replaces did. */
 type PartAnswerOf<Part extends PullRequestPart> =
   AppHostReads[(typeof PULL_REQUEST_PART_READ)[Part]];
 
-/** How a test's service answers each part of a pull request, by the part, for the agent and the number the tab names; a part it does not answer is held quietly. */
 export type PullRequestPartAnswers = {
   readonly [Part in PullRequestPart]?: (
     agentId: string,
@@ -572,15 +495,6 @@ export type PullRequestPartAnswers = {
   ) => Promise<PartAnswerOf<Part>>;
 };
 
-/**
- * Answers the window's holds on the parts of a pull request, and its Try
- * again on one, as the host does, beside whatever acts the test answers by
- * now: each part asked of `answers` as it is first held and again on Try
- * again, which settles once its answer is laid, and laid on the document
- * through `deliver`; an answer that is a failure keeps an answer the part
- * held, but for the viewed marks, which hold every answer as the host's do,
- * and one that rejects is a failure. Answers with every ask made, in order.
- */
 export function holdPullRequestParts(
   deliver: HostReadsHanded["deliverParts"],
   answers: PullRequestPartAnswers,
@@ -612,7 +526,6 @@ export function holdPullRequestParts(
       was !== undefined &&
       !("failure" in was);
     if (kept) return;
-    // SAFETY: what lands for a part is that part's read (`PartAnswerOf`), laid at its key's path.
     held = {
       ...held,
       [read]: {
@@ -625,7 +538,6 @@ export function holdPullRequestParts(
   fakeActPort({
     ...fakeActPortCalls(),
     [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: (params) => {
-      // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() => ask(params));
       return quietHold();
     },
@@ -634,19 +546,10 @@ export function holdPullRequestParts(
   return asked;
 }
 
-/** What a test's service answers a server's tools read with, as the act it replaces did; nothing for a read that never answers. */
 type ToolsAnswer = (
   server: IntegrationServer,
 ) => IntegrationToolsView | Promise<IntegrationToolsView> | undefined;
 
-/**
- * Answers the window's holds on each server's tools, and its Try again on
- * one, as the host does, beside whatever acts the test answers by now: each
- * server asked of `toolsOf` as it is first held and again on Try again, and
- * laid on the document through `deliver`; an answer that is no list keeps
- * what the server held, and fails one that never answered. Answers with
- * every server asked, by its name, in order.
- */
 export function holdIntegrationTools(
   deliver: HostReadsHanded["deliverTools"],
   toolsOf: ToolsAnswer,
@@ -672,7 +575,6 @@ export function holdIntegrationTools(
   fakeActPort({
     ...fakeActPortCalls(),
     [INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW]: (server) => {
-      // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() => ask(server));
       return quietHold();
     },
@@ -688,26 +590,14 @@ export function holdIntegrationTools(
   return asked;
 }
 
-/** What a test's service answers a workspace's repositories read with: the list whole, or that it did not answer. */
 export type RepositoriesRead =
   | { readonly repositories: GitHubRepositoriesAnswer }
   | { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED };
 
-/** What a test's service answers each list's read with, by the list's key; nothing for a read that never answers. */
 type RepositoriesAnswer = (
   workspace: string,
 ) => RepositoriesRead | Promise<RepositoriesRead> | undefined;
 
-/**
- * Answers the window's holds on each workspace's repositories, and its Try
- * again on one, as the host does, beside whatever acts the test answers by
- * now: each list asked of `listOf` by the workspace it names, or
- * `EVERY_WORKSPACE` where it names none, as it is first held, again on Try
- * again, and again with every list held as `again` asks, as the host asks
- * as a window comes forward, and laid on the document through `deliver`;
- * an answer that is no list keeps what the list held, and fails one that
- * never answered. Answers with every list asked, by its key, in order.
- */
 export function holdRepositoryLists(
   deliver: HostReadsHanded["deliverRepositoryLists"],
   listOf: RepositoriesAnswer,
@@ -735,7 +625,6 @@ export function holdRepositoryLists(
     ...fakeActPortCalls(),
     [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: (scope) => {
       scopes.set(scope.workspaceId ?? EVERY_WORKSPACE, scope);
-      // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() => ask(scope));
       return quietHold();
     },
@@ -756,13 +645,6 @@ export function holdRepositoryLists(
   };
 }
 
-/**
- * Answers the window's holds on a workspace's people as the host does,
- * beside whatever acts the test answers by now: where `membersOf` holds
- * them, their read laid on the document through `deliver` as they are first
- * held, and staying there once let go, as `holdPages` lays pages. Answers
- * with every workspace held, in order.
- */
 export function holdMembers(
   deliver: HostReadsHanded["deliverMembers"],
   membersOf: (workspaceId: string) => AppWorkspaceMembersRead | undefined,
@@ -774,7 +656,6 @@ export function holdMembers(
     [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: ({ workspaceId }) => {
       asked.push(workspaceId);
       const read = membersOf(workspaceId);
-      // Note that the host pushes what it read once the hold is taken, never inside it.
       if (read !== undefined && held[workspaceId] === undefined) {
         held = { ...held, [workspaceId]: read };
         const laid = held;
@@ -786,25 +667,12 @@ export function holdMembers(
   return asked;
 }
 
-/**
- * Lays each workspace's people as `membersOf` holds them, as the host lays
- * them once the window holds them (`holdMembers`), over whatever document
- * and acts the test handed the window by now. Answers with every workspace
- * held, in order.
- */
 export function handMembers(
   membersOf: (workspaceId: string) => AppWorkspaceMembersRead | undefined,
 ): readonly string[] {
   return holdMembers(handHostReads({}).deliverMembers, membersOf);
 }
 
-/**
- * Answers the window's holds on a task's or an agent's pages as the host
- * does, beside whatever acts the test answers by now: where `pagesOf` holds
- * each, its rows or that the host was refused them, laid on the document
- * through `deliver` as it is first held, and staying there once let go.
- * Answers with every hold asked for, in order.
- */
 export function holdPages(
   deliver: HostReadsHanded["deliverPages"],
   pagesOf: (place: PagePlace) => AppHolderPages | undefined,
@@ -818,7 +686,6 @@ export function holdPages(
       const read = pagesOf(place);
       const kind = "taskId" in place ? PAGE_OWNER.TASK : PAGE_OWNER.AGENT;
       const id = "taskId" in place ? place.taskId : place.agentId;
-      // Note that the host pushes what it read once the hold is taken, never inside it.
       if (read !== undefined && held[kind][id] === undefined) {
         held = { ...held, [kind]: { ...held[kind], [id]: read } };
         const laid = held;
@@ -830,13 +697,6 @@ export function holdPages(
   return asked;
 }
 
-/**
- * Answers the window's holds on a task's or an agent's cloud Browser tabs
- * as the host does, beside whatever acts the test answers by now: where
- * `tabsOf` names a place's tabs, laid on the document through `deliver` as
- * it is first held, and staying there once let go. Answers with how the
- * test's host lays a place's tabs anew, as the host does when they move.
- */
 export function holdBrowserTabs(
   deliver: HostReadsHanded["deliverBrowserTabs"],
   tabsOf: (place: BrowserTabsPlace) => readonly AgentBrowserTab[],
@@ -851,7 +711,6 @@ export function holdBrowserTabs(
     ...fakeActPortCalls(),
     [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: (place) => {
       const tabs = tabsOf(place);
-      // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(() => lay(place, tabs));
       return quietHold();
     },
@@ -859,21 +718,12 @@ export function holdBrowserTabs(
   return lay;
 }
 
-/** How a test's host lays one transcript anew, as the host does as its read moves, every hold the window asked, and every hold it let go, each in order. */
 export interface TranscriptsHeld {
   readonly lay: (transcript: AgentTranscriptKey, read: AppHostRead<AppTranscript>) => void;
   readonly asked: readonly AgentTranscriptKey[];
   readonly closed: readonly AgentTranscriptKey[];
 }
 
-/**
- * Answers the window's holds on an agent's or a worker's transcript as the
- * host does, beside whatever acts the test answers by now: where
- * `transcriptOf` names a transcript's read, laid on the document through
- * `deliver` each time it is held, and staying there once let go. Answers
- * with how the test's host lays a transcript anew, and the holds asked and
- * let go.
- */
 export function holdTranscripts(
   deliver: HostReadsHanded["deliverTranscripts"],
   transcriptOf: (transcript: AgentTranscriptKey) => AppHostRead<AppTranscript> | undefined,
@@ -892,7 +742,6 @@ export function holdTranscripts(
     [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: (transcript) => {
       asked.push(transcript);
       const read = transcriptOf(transcript);
-      // Note that the host lays what it read once the hold is taken, never inside it.
       if (read !== undefined) void Promise.resolve().then(() => lay(transcript, read));
       return heldUntilClosed(() => closed.push(transcript));
     },
@@ -900,25 +749,14 @@ export function holdTranscripts(
   return { lay, asked, closed };
 }
 
-/** Lays the account's feed of every item as given over the window's document, and answers with how it is delivered again as it moves. */
 export function handInboxItems(
   first: AppHostRead<AppInboxItems>,
 ): (next: AppHostRead<AppInboxItems>) => void {
   return handHostReads({ items: first }).deliverItems;
 }
 
-/** The id the account a test's beats are held for goes by, where the document handed names none. */
 const BEATING_ACCOUNT_ID = "user-beating";
 
-/**
- * Lays the signed-in account's beats as the host holds them over whatever
- * document the window was handed: each device named having beat `ageMs` ago
- * on the window's clock, by a read that landed `askedAgoMs` ago (now where
- * not given), the latest ask failed after it as `stale` says, or, where none
- * are given, the read failed before it ever answered. The account
- * is given an id where the document names none, since the beats are held by
- * it.
- */
 export function handBeats(
   ages: Readonly<Record<string, number>> | undefined,
   { askedAgoMs = 0, ...options }: { readonly stale?: true; readonly askedAgoMs?: number } = {},
@@ -955,31 +793,16 @@ export function handBeats(
   });
 }
 
-/** The id the account a test's own reads are held for goes by, where the document handed names none. */
 const HELD_FOR_ACCOUNT_ID = "user-integrations";
 
-/** The window's hold on a read keyed by the account signed in, as a test's host answers it. */
 export interface IntegrationsHeld {
-  /** Lays the read as the test's host reads it now, as the host lays a read that moved. */
   readonly lay: () => void;
-  /** How many holds the window took. */
   readonly holds: () => number;
-  /** How many Try agains the window asked. */
   readonly retries: () => number;
 }
 
-/** A read keyed by the account signed in, as a test's host holds it. */
 export type AccountReadHeld = IntegrationsHeld;
 
-/**
- * Lays the read `readOf` answers on the document under the account signed
- * in, given an id where the document names none, as the window first asks
- * for the document, and again as the answered `lay` asks, as the host lays
- * a read that moved; none is laid while it answers none. Note that each read
- * is laid under the newest version the window was handed, by the document or
- * a delivery of the helpers beneath this one, which a delivery repeating it
- * is adopted at, so it never puts another helper's later delivery behind it.
- */
 function heldForAccount<Rows>(
   sliceOf: (held: Readonly<Record<string, AppHostRead<Rows>>>) => Partial<AppStateSnapshot>,
   readOf: () => AppHostRead<Rows> | undefined,
@@ -1020,13 +843,6 @@ function heldForAccount<Rows>(
   };
 }
 
-/**
- * Answers the window's hold on the account's integrations as the host does,
- * beside whatever acts the test answers by now: the read `readOf` answers
- * laid on the document under the account signed in (`heldForAccount`), as
- * the window first asks for the document, again as Try again asks, and
- * again as `lay` asks.
- */
 export function holdIntegrations(
   readOf: () => AppHostRead<IntegrationStatusesAnswer> | undefined,
 ): IntegrationsHeld {
@@ -1048,13 +864,6 @@ export function holdIntegrations(
   return { lay, holds: () => holds, retries: () => retries };
 }
 
-/**
- * Answers the window's hold on the account's GitHub token as the host does,
- * beside whatever acts the test answers by now: the read `readOf` answers
- * laid on the document under the account signed in (`heldForAccount`), as
- * the window first asks for the document, again as Try again asks, and
- * again as `lay` asks, as the host lays a save's or a removal's answer.
- */
 export function holdGitHubToken(
   readOf: () => AppHostRead<AppGitHubToken> | undefined,
 ): AccountReadHeld {

@@ -22,41 +22,20 @@ import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.j
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * add-to-description.test.ts -- a picture an agent showed, added to its description from
- * the window's viewer: kept on the description, its line written at the end of the
- * description's text as the developer's edit, again on the text as it stands where
- * the description moved on, said in a toast that stands from the press and turns
- * into Added with Undo once the line is written, which takes the line back
- * out; a recording kept as it is, within what a description may be sent, and
- * refused in words past it or past the description's videos; and offered only where
- * the transcript stands on a plan's page.
- *
- * Synthetic descriptions and pictures throughout: the picture is a PNG's first
- * bytes, kept as they are, since they are under the description's bound.
- */
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-/** The description's text as the page last read it; the service's moves on under it where a test says. */
 const PAGE_TEXT = "## Approach\n\nThe invite email follows the mock.\n";
 
-/** A recording's first bytes, a WebM's, which is all the window reads of one. */
 const WEBM_BASE64 = "GkXfow==";
 
-/** The description's text as the service holds it. */
 let held = PAGE_TEXT;
-/** Every picture the description was sent to keep, as its `data:` URL. */
 let keeping: string[] = [];
-/** What a keep answers, a kept id unless a test says otherwise. */
 let keepAnswer: TasksPictureKeepAnswer = { id: "" };
-/** The kind of every act the description was sent, whichever side carried it, in order. */
 let sent: (AnyAct["kind"] | PortActKind)[] = [];
 const roots: Root[] = [];
 
@@ -74,7 +53,6 @@ beforeEach(() => {
     },
     [ACT_KIND.TASKS_EDIT]: ({ edit }) => {
       sent.push(ACT_KIND.TASKS_EDIT);
-      // The one edit this page sends is the document's whole text.
       assert.ok("document" in edit);
       const { base, value } = edit.document;
       if (base !== held) return Promise.resolve({ conflict: { current: held } });
@@ -134,7 +112,6 @@ const SHOWN: AgentTranscriptMessage = {
   ],
 };
 
-/** A recording the agent showed, which its door answers as the bytes given. */
 function recorded(base64: string): { shown: AgentTranscriptMessage; door: AgentPictureDoor } {
   const door: AgentPictureDoor = {
     owner: `agent-add-video-${String(base64.length)}`,
@@ -167,7 +144,6 @@ function recorded(base64: string): { shown: AgentTranscriptMessage; door: AgentP
   return { shown, door };
 }
 
-/** The agent's turn drawn with its pictures' door, on the plan's page where `page` is given. */
 async function drawn(
   page: TaskMentionsValue | undefined,
   { shown, door }: { shown: AgentTranscriptMessage; door: AgentPictureDoor } = {
@@ -205,9 +181,7 @@ async function drawn(
   return container;
 }
 
-/** The viewer opened over the picture, by a press on it, or over the recording, by its Expand. */
 async function opened(container: HTMLElement) {
-  // Note that a recording opens by its bar's Expand, and a picture by its tile.
   const pressed = () =>
     container.querySelector<HTMLButtonElement>('.picture-block button[aria-label="Expand"]') ??
     container.querySelector<HTMLButtonElement>(".picture-block button");
@@ -219,7 +193,6 @@ async function opened(container: HTMLElement) {
   await act(async () => picture.click());
 }
 
-/** Lets the press's reads land: the picture's bytes through the Mac's reader, then each act's answer, as the page waits on them. */
 async function settled(done: () => boolean): Promise<void> {
   for (let tries = 0; tries < 40 && !done(); tries += 1) {
     await act(async () => {
@@ -292,7 +265,6 @@ test("a planless agent's transcript, whose page names a workspace and no plan, o
   assert.equal(viewerButton("Add to description"), undefined);
 });
 
-/** Runs the body with the window's `blob:` addresses stood in, which jsdom makes none of. */
 async function withBlobs(body: () => Promise<void>): Promise<void> {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   URL.createObjectURL = () => "blob:recording";
@@ -323,7 +295,6 @@ test("Add to description keeps a recording as it is, never re-encoded, and write
 
 test("a recording past what a description may be sent, or one past the description's videos, is refused in words and the description is not written", () =>
   withBlobs(async () => {
-    // Three zero bytes for every four characters, one more than a sent video may hold.
     const large = "AAAA".repeat(1_100_001);
     await opened(await drawn(PAGE, recorded(large)));
     await act(async () => viewerButton("Add to description")?.click());

@@ -21,12 +21,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
-/**
- * Who wrote a description's version, as its history names them: a member who left
- * is drawn by their own face, grayed, which a screen reader cannot see, so
- * their name says they left. Synthetic description and people.
- */
-
 const ignore = (): void => undefined;
 
 const ACME = {
@@ -39,7 +33,6 @@ const ACME = {
 
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
-/** A revision of the description by Lee, who has since left. */
 function line(seq: number) {
   return {
     seq,
@@ -65,7 +58,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The description's version history over the window, its versions by Lee read, and the sections of version 3 open. */
 function drawn(): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
@@ -85,7 +77,6 @@ function drawn(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  // Note that each draw reads main's document on a registry of its own, as the window does, so the people the test lays are the ones it reads.
   act(() =>
     root.render(
       onRegistry(
@@ -137,7 +128,6 @@ test("a version by a member who left names them as one, in its row and over its 
 
   const said = (selector: string) =>
     [...view.querySelectorAll(selector)].map((each) => each.textContent);
-  // Note that who left is named once the workspace's people reach their query.
   await vi.waitFor(() =>
     assert.deepEqual(said('[aria-label="Version list"] .version-row-author'), [
       "Lee Park (former member)",
@@ -158,7 +148,6 @@ test("a version by a member hangs their card beside its row while the pointer re
 
   const row = view.querySelector<HTMLElement>('[aria-label="Version list"] button');
   assert.ok(row, "a version is listed");
-  // Note that the card names the member once the workspace's people reach their query, each rest drawing it afresh.
   await vi.waitFor(() => {
     restOn(row);
     const card = document.querySelector('.ui-tooltip-card [data-actor-card="person"]');

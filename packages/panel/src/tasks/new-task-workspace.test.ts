@@ -16,15 +16,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 
-/**
- * new-task-workspace.test.ts -- New task starts in the workspace listed and
- * offers no other: its head row's repository chip lists that workspace's
- * repositories, and the task starts there. Where the owner's workspace
- * changes under the composer, as Home's does, a repository of the other's
- * is let go. Each test starts a bare task, ⌘Return on
- * an empty box, which starts with or without a repository. Synthetic
- * throughout.
- */
 const PERSONAL: Workspace = {
   id: "ws-personal",
   name: "Personal",
@@ -40,7 +31,6 @@ const ACME: Workspace = {
 
 const roots: Root[] = [];
 
-// Landed before any card renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -62,7 +52,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** What the service answers each workspace's repositories with: Acme's installation's, and none for Personal, which has no GitHub. */
 function listOf(workspace: string): RepositoriesRead {
   const installationUrl = "https://github.com/apps/luke/installations/new";
   if (workspace !== ACME.id) {
@@ -86,7 +75,6 @@ function listOf(workspace: string): RepositoriesRead {
   };
 }
 
-/** The chooser each workspace's repository chip is handed, the host holding Acme's installation's repositories and Personal's none. */
 function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   const base = tasksControl().repositories;
   if (workspaceId !== ACME.id) {
@@ -116,13 +104,11 @@ test("New task offers no workspace picker, and its head row's repository chip li
   assert.deepEqual(dialog.starts, [["acme-corp/relay", ACME.id]]);
 });
 
-/** New task open over the two workspaces, starting in `workspaceId` until `rehome` lists another, each start's repository and workspace written down. */
 async function openNewTask(workspaceId: string, preset?: string) {
   const starts: [string | null, string | undefined][] = [];
   const control = tasksControl();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  // The window's document is read on a registry of this test's own, so what the host lays reaches it.
   const registry = AtomRegistry.make();
   const draw = (listed: string) =>
     act(() =>
@@ -151,12 +137,10 @@ async function openNewTask(workspaceId: string, preset?: string) {
   const repositoryChip = () =>
     document.querySelector<HTMLButtonElement>(".repository-chip .ui-chip") ??
     assert.fail("the repository chip stands");
-  // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
   const create = async () => {
     pressInComposer(document, "Enter", { metaKey: true });
     await settle();
   };
-  /** Stands the card again with the owner listing another workspace. */
   const rehome = async (listed: string) => {
     draw(listed);
     await settle();
@@ -167,7 +151,6 @@ async function openNewTask(workspaceId: string, preset?: string) {
 test("a repository group's + whose repository the workspace's GitHub does not reach opens New task on none", async () => {
   const dialog = await openNewTask(PERSONAL.id, "ReviewStage/luke");
 
-  // Note that the chip lets the repository go once the read that leaves it out reaches its query.
   await vi.waitFor(() => assert.equal(dialog.repositoryChip().textContent, "No repository"));
   await dialog.create();
 

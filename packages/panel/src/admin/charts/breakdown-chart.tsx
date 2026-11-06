@@ -1,9 +1,3 @@
-/**
- * breakdown-chart.tsx -- counts of failures by their fixed class, as
- * horizontal bars, one stacked part per series where a class counts more
- * than one way.
- */
-
 import { formatCount } from "@repo/features/number-format";
 import {
   type ChartConfig,
@@ -14,38 +8,25 @@ import {
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
-/** The room each class's bar takes, the sign-in methods chart's own. */
 const BREAKDOWN_ROW_HEIGHT = 36;
 
-/**
- * How many classes a breakdown's skeleton stands a bar for: its height is
- * the answer's, which no read has given yet, so it stands a few classes'
- * worth, a usual week's.
- */
 const BREAKDOWN_SKELETON_ROWS = 4;
 
-/** A legend for a breakdown counting more than one way, and none for a single series. */
 function breakdownLegend(parts: readonly BreakdownSeries[]): React.ReactNode {
   return parts.length > 1 ? <SeriesLegend series={parts} /> : undefined;
 }
 
-/** One series of the breakdown: its key in each row's counts, its name, and its ink. */
 export interface BreakdownSeries {
   key: string;
   label: string;
   color: string;
 }
 
-/** One class: its label, and its count under each series key. */
 export interface BreakdownRow {
   label: string;
   counts: Readonly<Record<string, number>>;
 }
 
-/**
- * The classes as bars, most first as the service orders them, with each
- * row's total at its end. A breakdown with nothing to count says so.
- */
 export function BreakdownChart({
   title,
   series: parts,
@@ -53,7 +34,6 @@ export function BreakdownChart({
   empty,
 }: {
   title: string;
-  /** One entry per series, stacked in its order; more than one wears a legend. */
   series: readonly BreakdownSeries[];
   rows: readonly BreakdownRow[];
   empty: string;
@@ -74,8 +54,6 @@ export function BreakdownChart({
     label: row.label,
     ...row.counts,
     total: formatCount(series.reduce((total, key) => total + (row.counts[key] ?? 0), 0)),
-    // Note that the total rides the row's last part with a count, since a
-    // part of nothing draws no bar for a label to stand beside.
     labelAt: series.findLast((key) => (row.counts[key] ?? 0) > 0),
   }));
   return (
@@ -111,7 +89,6 @@ export function BreakdownChart({
   );
 }
 
-/** A breakdown while it is read: its heading and its legend, which the page declares, over a few classes' block. */
 export function BreakdownChartSkeleton({
   title,
   series,

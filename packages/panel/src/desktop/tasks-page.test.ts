@@ -41,21 +41,6 @@ import { ToastHost } from "../toast.js";
 import { useInboxWaiting } from "./places-waiting.js";
 import { TasksPage } from "./tasks-page.js";
 
-/**
- * tasks-page.test.ts -- the Tasks page the sidebar's Tasks row opens: its List runs the pinned tasks first, then the rest under
- * their status from the work under way, the settled left out until asked;
- * each row says how many Inbox threads of its task wait on the reader; a
- * press opens the task; the switch beside the title shows the Board; the
- * Filter narrows the tasks and its chips lift it; View options groups them,
- * shows the settled, and draws a row's properties; and the view, the
- * filter, and the display are kept on this Mac. Every row draws a cell for
- * each property the view draws, so the columns line up down the page; a
- * row's chips send the priority and status picked, and a right-click drops
- * the task's own menu; a group's head folds it, kept on this Mac; and a row
- * dragged onto another group is sent its status, pinned, or kept in its
- * section, leaving Pinned or its section where it came from one.
- */
-
 const DEAN = "user-dean";
 
 const ACME = {
@@ -74,25 +59,18 @@ const MEMBERS: readonly WorkspaceMember[] = [
 
 const roots: Root[] = [];
 
-/** The tasks the page opened, in order. */
 let opened: string[] = [];
 
-/** How many times the page was closed. */
 let closed = 0;
 
-/** Each change of where a task stands the page sent, in order. */
 let sent: [string, TaskStanding][] = [];
 
-/** Each pin, unpin, or archive the page sent, in order. */
 let marked: [string, TaskMark][] = [];
 
-/** Each batch of section writes the page sent, in order. */
 let written: (readonly TaskSectionWrite[])[] = [];
 
-/** The account's sections the page is drawn over. */
 let sections: TaskSections = NO_TASK_SECTIONS;
 
-/** Whether the service keeps the changes of where a task stands sent. */
 let keeps = true;
 
 beforeEach(() => {
@@ -118,7 +96,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A task of Acme's, numbered `number`, standing in `status` at `priority`. */
 function task(
   number: number,
   name: string,
@@ -151,12 +128,6 @@ const TASKS = [
   task(35, "Migrate auth SDK", TASK_STATUS.DONE, TASK_PRIORITY.HIGH),
 ];
 
-/**
- * Main's read of the open items that wait on the reader: two questions on
- * the invitations' task; on Safari's a notice, beside a question of
- * Charles's agent that waits on him alone, so main lists it nowhere and
- * counts it only among the task's items; and one question on billing's.
- */
 const WAITING: readonly AppInboxTask[] = [
   {
     taskId: "t-44",
@@ -183,14 +154,12 @@ const WAITING: readonly AppInboxTask[] = [
   },
 ];
 
-/** What main counts on each of those tasks as Dean's to do. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [
   { taskId: "t-44", items: 2, toDo: 2, updatedAt: 3 },
   { taskId: "t-42", items: 2, toDo: 0, updatedAt: 1 },
   { taskId: "t-40", items: 1, toDo: 1, updatedAt: 1 },
 ];
 
-/** The Tasks page over Acme's tasks, or `tasks`, read by Dean, once the members have answered. */
 async function mountPage(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
@@ -244,10 +213,8 @@ async function mountPage(
   return container;
 }
 
-/** Lists another workspace on the page last mounted, as the sidebar's switcher does. */
 let listWorkspace: (workspace: Workspace) => void = () => undefined;
 
-/** Each group of the List: its name and its rows' keys, in order. */
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].map((group) => [
     group.getAttribute("aria-label") ?? "",
@@ -255,7 +222,6 @@ function groups(page: HTMLElement): [string, string[]][] {
   ]);
 }
 
-/** The row of the task keyed `key`, its press. */
 function rowOf(page: HTMLElement, key: string): HTMLElement {
   const row = [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")].find(
     (each) => each.querySelector("[data-task-key]")?.textContent === key,
@@ -264,7 +230,6 @@ function rowOf(page: HTMLElement, key: string): HTMLElement {
   return row;
 }
 
-/** The toolbar's button named `name`. */
 function buttonNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const button = [...page.querySelectorAll<HTMLButtonElement>("button, [role='radio']")].find(
     (each) => each.textContent?.trim() === name,
@@ -317,7 +282,6 @@ test("a row and a card count the questions waiting on the reader, a notice and a
   const sidebarRoot = createRoot(document.createElement("div"));
   roots.push(sidebarRoot);
   act(() => sidebarRoot.render(onRegistry(AtomRegistry.make(), createElement(Sidebar))));
-  // Note that the badge's words are read as a text of their own, since a row's key runs into them.
   const says = (holder: Element | undefined) => {
     const texts = document.createTreeWalker(
       holder ?? document.createElement("i"),
@@ -350,14 +314,12 @@ test("a press on a row opens its task", async () => {
   assert.deepEqual(opened, ["t-40"]);
 });
 
-/** The toolbar's button named `label`, Filter or View options, pressed. */
 function openOptions(page: HTMLElement, label: string): void {
   const button = page.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
   assert.ok(button, `${label} is offered`);
   act(() => button.click());
 }
 
-/** Presses the open menus' items named `names`, in order: a submenu, then its items, or a searched panel's rows. */
 function choose(...names: string[]): void {
   for (const name of names) {
     const item = [
@@ -373,7 +335,6 @@ function choose(...names: string[]): void {
   }
 }
 
-/** Closes whatever menus stand, a submenu and then its menu, as Escape does each. */
 function closeMenus(): void {
   while (document.querySelector('[role="menu"]:not([data-leaving])') !== null) {
     act(() => {
@@ -432,7 +393,6 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
   assert.equal(again.querySelector("[data-dot='true']"), null);
 });
 
-/** The list motion's tokens, as the app's sheets set them, and an engine that records each motion rather than playing it; answers what was played and a way to take both away. */
 function recordMotions() {
   const tokens = {
     "--ui-duration-exit": "90ms",
@@ -620,7 +580,6 @@ test("on a phone the page is headed by one ⋯, its title centered before it, an
   choose("Filter");
   choose("Priority", "High", "Urgent");
   closeMenus();
-  // Note that a phone's rows draw no key, so the groups are read by name and the filter by its chip.
   assert.deepEqual(
     groups(page).map(([name]) => name),
     ["In progress", "Todo"],
@@ -677,7 +636,6 @@ test("a row's words said to a screen reader alone are left out of find, so a key
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
 });
 
-/** The chip on a task's row that changes its `standing`, Priority or Status. */
 function rowChip(page: HTMLElement, key: string, standing: string): HTMLButtonElement {
   const chip = rowOf(page, key).querySelector<HTMLButtonElement>(
     `button[aria-label^="${standing}:"]`,
@@ -701,12 +659,10 @@ test("a row's Priority chip sends the priority picked, and its Status chip the s
   assert.deepEqual(opened, [], "a pick opens no task");
 });
 
-/** The rows of the searched panel standing open now: a field's people or repositories. */
 function searchedRows(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('[role="option"]')];
 }
 
-/** A searched row's words, and the words beside them. */
 function searchedWords(row: HTMLElement): [string | null | undefined, string | null] {
   return [
     row.querySelector(".ui-combobox-option-label")?.textContent,
@@ -714,14 +670,12 @@ function searchedWords(row: HTMLElement): [string | null | undefined, string | n
   ];
 }
 
-/** The words of the menu items standing open now. */
 function menuLabels(): (string | null)[] {
   return [
     ...document.querySelectorAll('[role="menu"]:not([data-leaving]) .ui-menu-item-label'),
   ].map((label) => label.textContent);
 }
 
-/** A row's ⋯, named for what a row's thing is. */
 function rowMore(page: HTMLElement, key: string): HTMLButtonElement {
   const more = rowOf(page, key).querySelector<HTMLButtonElement>(
     "button[aria-label='Task actions']",
@@ -730,7 +684,6 @@ function rowMore(page: HTMLElement, key: string): HTMLButtonElement {
   return more;
 }
 
-/** Presses `name` on `target` as the keyboard does. */
 function pressKey(target: HTMLElement, name: string, shiftKey = false): void {
   act(() => {
     target.dispatchEvent(
@@ -820,7 +773,6 @@ test("a group's head folds it, its count still standing, and the fold is kept on
     return button;
   };
 
-  // Note that a wide page counts a group open and folded alike, never only under the pointer.
   const count = () => fold().querySelector(".ui-group-header-count");
   assert.equal(count()?.getAttribute("data-shown"), "always");
 
@@ -837,21 +789,18 @@ test("a group's head folds it, its count still standing, and the fold is kept on
   assert.deepEqual(groups(again)[2], ["Todo", []], "the fold is kept");
 });
 
-/** The press of the row of the task keyed `key`. */
 function pressOf(page: HTMLElement, key: string): HTMLElement {
   const press = rowOf(page, key).querySelector<HTMLElement>("[data-card-press]");
   assert.ok(press, `the row of ${key} has a press`);
   return press;
 }
 
-/** The keys of the rows Tab stops on, in the order drawn. */
 function tabStops(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLElement>(".tasks-list-group li")]
     .filter((row) => row.querySelector<HTMLElement>("[data-card-press]")?.tabIndex === 0)
     .map((row) => row.querySelector("[data-task-key]")?.textContent ?? "");
 }
 
-/** The key of the row whose press holds the keyboard, if one does. */
 function focusedKey(page: HTMLElement): string | undefined {
   const row = document.activeElement?.closest(".tasks-list-group li");
   return row === null || !page.contains(row ?? null)
@@ -859,7 +808,6 @@ function focusedKey(page: HTMLElement): string | undefined {
     : (row?.querySelector("[data-task-key]")?.textContent ?? undefined);
 }
 
-/** Presses `key` where the keyboard stands, with `held` modifiers. */
 function pressHere(key: string, held: KeyboardEventInit = {}): void {
   const target = document.activeElement ?? document.body;
   act(() => {
@@ -906,8 +854,6 @@ test("↓ passes over a folded group's rows, and a key held with ⌘ is left to 
 });
 
 test("End reaches the last task of a List longer than the window, though its row is not drawn until then", async () => {
-  // Note that jsdom lays nothing out, so each row is taken at its estimate and the view at the window's
-  // 768px: a run of forty rows draws its first two dozen, the latest moved first.
   const chores = Array.from({ length: 40 }, (_, at) =>
     task(at + 1, `Chore ${at + 1}`, TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE),
   );
@@ -921,19 +867,12 @@ test("End reaches the last task of a List longer than the window, though its row
   assert.equal(focusedKey(page), "ACME-40");
 });
 
-/** The page's one scroller, which holds the List's rows or the Board's columns. */
 function scroller(page: HTMLElement): HTMLElement {
   const found = page.querySelector<HTMLElement>(".ui-collection-page-scroll");
   assert.ok(found, "the page scrolls");
   return found;
 }
 
-/**
- * The List laid out for a drag: each group 200px tall, one under another
- * from the window's top, 1000px wide, each row 30px tall, 36px apart, from
- * 40px down its group. jsdom lays nothing out and captures no pointer, so
- * this answers the geometry and the capture the browser would.
- */
 function layRowsOut(page: HTMLElement): void {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const all = [...document.querySelectorAll(".tasks-list-group")];
@@ -951,12 +890,10 @@ function layRowsOut(page: HTMLElement): void {
   }
 }
 
-/** A pointer event at a point in the window, as the primary button makes one. */
 function pointer(type: string, x: number, y: number): PointerEvent {
   return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
 }
 
-/** Presses a task's row, drags it into the group named `onto`, and lets it go at the top of its rows. */
 function dragRow(page: HTMLElement, key: string, onto: string): void {
   const press = rowOf(page, key).querySelector("button") ?? assert.fail("the row stands");
   const box = press.closest("li")?.getBoundingClientRect() ?? assert.fail("the row stands");
@@ -992,7 +929,6 @@ test("a row dragged out of Pinned onto Todo is unpinned and sent todo, and one d
   dragRow(page, "ACME-36", "Pinned");
   await act(async () => undefined);
 
-  // Note that the row leaves Pinned at once, as its new status is drawn, before the service answers.
   assert.deepEqual(marked, [
     ["t-44", TASK_MARK.UNPIN],
     ["t-36", TASK_MARK.PIN],
@@ -1028,13 +964,11 @@ test("a row dragged into a section is kept there, and one dragged out of its sec
   assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.BACKLOG }]]);
 });
 
-/** A task of `TASKS` assigned to Dean, the reader. */
 function deans(key: number): TaskSummary {
   const held = TASKS.find((each) => each.number === key) ?? assert.fail(`no ACME-${key}`);
   return { ...held, assignee: { userId: DEAN, name: "Dean Stratakos" } };
 }
 
-/** The properties a row drew before it drew the assignee, every one of them, as an earlier build kept them. */
 const BEFORE_ASSIGNEE = [
   "priority",
   "key",
@@ -1076,7 +1010,6 @@ test("a row's Assignee chip sends the member picked, and No assignee assigns it 
   const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
 
   act(() => rowChip(page, "ACME-40", "Assignee").click());
-  // Note that the members are offered once their read reaches its query.
   await vi.waitFor(() =>
     assert.equal(
       [...document.querySelectorAll(".ui-menu-item-label")].some(
@@ -1134,7 +1067,6 @@ test("on a phone grouped by assignee, a row keeps its Assignee chip, which moves
     SHELL_ROOM.NARROW,
   );
 
-  // Note that a phone's row draws no key, so the row is found by its task.
   const chip = page.querySelector<HTMLButtonElement>(
     'li[data-task-id="t-39"] button[aria-label^="Assignee:"]',
   );
@@ -1157,7 +1089,6 @@ test("a Board display kept before its cards offered Agents and Needs you draws t
   assert.equal(card?.querySelector("[data-task-key]"), null, "the key stays off, as kept");
 });
 
-/** The section writes sent, each as its kind, its task, and its section. */
 function writesSent(): unknown[] {
   return written.map((writes) =>
     writes.map((write) => [
@@ -1176,7 +1107,6 @@ test("a row dragged out of its section or Pinned onto a status the service refus
     agentEntries: [],
   };
   keeps = false;
-  // Note that the sections are drawn as written, as the tab draws a write at once, so the refusal finds the row where the drop left it.
   const page = await mountPage(TASKS, SHELL_ROOM.WIDE, {
     onWriteSections: (writes) => {
       written.push(writes);
@@ -1210,7 +1140,6 @@ test("a row dragged out of its section or Pinned onto a status the service refus
   assert.match(document.body.textContent ?? "", /The task could not be changed/);
 });
 
-/** The pins' order, by number, once the task numbered `key` among `pinned` is dragged out of Pinned, refused, and pinned again later than any, as the service would stand them. */
 async function pinsAfterRefusedDrop(pinned: readonly TaskSummary[], key: number) {
   keeps = false;
   const moved: PinMove[] = [];
@@ -1236,7 +1165,6 @@ async function pinsAfterRefusedDrop(pinned: readonly TaskSummary[], key: number)
 }
 
 test("a pin dragged onto a status the service refuses is pinned again where it stood, though a pin given anew would lead the pins", async () => {
-  // Note that Rate limit search was pinned last, so it leads, and the invitations' task, pinned before it, stands under it.
   const pinned = TASKS.map((each) => (each.number === 39 ? { ...each, pinnedAt: 6 } : each));
 
   const { before, after } = await pinsAfterRefusedDrop(pinned, 44);

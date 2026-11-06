@@ -19,20 +19,11 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { NO_LOOKS, useAgentLook, useTaskLooks, useUnreadTasks } from "./use-task-looks.js";
 
-/**
- * use-task-looks.test.ts -- the sections a reader is shown as changed since
- * they last looked: a teammate's saves, the app's and an agent's, never the
- * reader's own; a task read unread against the mark the account keeps; and a
- * plan's look sent as it opens, as its agents move, and as it is left, never
- * on each save.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const LOOKED_AT = 1_000;
 
 const roots: Root[] = [];
-/** Every read mark the window asked of the service, in order, as `<mark>:<task>`. */
 let readMarks: string[] = [];
 
 beforeEach(() => {
@@ -56,7 +47,6 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
 });
 
-/** A window drawing `open`, or no plan, for `readerId`, from the row the list carries: a render each call, on one registry. */
 function windowOn(): {
   readonly draw: (
     open: Task | undefined,
@@ -88,7 +78,6 @@ function windowOn(): {
   };
 }
 
-/** The sections `readerId` is shown as changed on a task whose row reads it through before every save here. */
 function changedFor(
   readerId: string | undefined,
   edits: readonly Omit<DescriptionSectionEdit, "at" | "duringCall">[],
@@ -166,7 +155,6 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
   assert.deepEqual(stay(true), []);
 });
 
-/** A task's agents as its row names them, one agent's pull request standing `state`, its agents' newest settled activity at `activityAt`. */
 function agentsAt(
   activityAt: number,
   state: TaskAgentsSummary["pullRequests"][number]["state"] = PULL_REQUEST_STATE.OPEN,
@@ -200,7 +188,6 @@ test("a plan's look is sent as it opens, as its agents move while it stays open,
   window.draw(saved, DEAN.userId, { readThrough: LOOKED_AT, agents: agentsAt(LOOKED_AT + 2) });
   window.draw(undefined, DEAN.userId);
 
-  // Note that each look reaches the act port a few steps after it is sent, as its mutation sends it.
   await vi.waitFor(() =>
     assert.deepEqual(readMarks, [`read:${task.id}`, `seen:${task.id}`, `seen:${task.id}`]),
   );

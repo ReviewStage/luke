@@ -29,16 +29,6 @@ import { listedAgent } from "../testing/tasks-control.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * place-link-chips.test.ts -- a link to a place in the app written in words,
- * an agent's, a page's, an Inbox item's, a member's, is drawn as a chip
- * called by the name the window already holds for the place: the task's
- * title for a bare task link, the agent's, the page's, the item's, the
- * member's; by its kind where the window holds none; and by the words it
- * was labeled with where it was. A press opens the place in the window.
- * Nothing is read for a name. Synthetic workspace, task, and people.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const UNNAMED_AGENT = "9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f";
@@ -46,14 +36,12 @@ const TRIAGE_AGENT = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
 const TRIAGE = "4e3d2c1b-0a9f-4e8d-9c7b-6a5f4e3d2c1b";
 const PAGE = "26494df1-595a-4364-abf7-85781c65a9f8";
 
-/** A page of the plan the window holds no title for. */
 const UNHELD_PAGE = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
 const ITEM = "item_4b9e";
 const SAM = "user-sam";
 const AT = 1_792_000_000_000;
 const HOME = "https://vespin.dev/acme";
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const ACME: Workspace = {
@@ -94,7 +82,6 @@ const TASK: TaskSummary = {
   },
 };
 
-/** Main's document holding the task, its agent, its page, and an Inbox item waiting on it. */
 const STATE: AppStateSnapshot = (() => {
   const snapshot = signedInAs({ id: SAM, email: "sam@example.com", name: "Sam Okafor" });
   return {
@@ -150,7 +137,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn as a transcript draws them, in a window holding `state`, every place a chip opened kept. */
 async function drawn(
   text: string,
   opened: LinkPlace[],
@@ -162,7 +148,6 @@ async function drawn(
     act: (): Promise<FakeActAnswer> =>
       Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined }),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
   writeAppState(state);
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
@@ -189,7 +174,6 @@ async function drawn(
   return container;
 }
 
-/** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
@@ -273,7 +257,6 @@ test("a press on a place's chip opens the place in the window", async () => {
   ]);
 });
 
-/** An archived agent as the task list carries it, on the task given or none, on the model given. */
 function archivedAgent(id: string, planId: string | null, model: string) {
   return {
     id,

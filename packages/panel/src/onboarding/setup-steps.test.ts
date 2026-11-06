@@ -13,12 +13,6 @@ import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { SetupSteps } from "./setup-steps.js";
 
-/**
- * Setup's Welcome as the developer walks back to it: a team's workspace
- * made and then left for Just me lists the account's own workspace again,
- * so GitHub is not installed on the team's. Synthetic throughout.
- */
-
 const ACCOUNT = "account-dana";
 
 const OWN: Workspace = {
@@ -52,7 +46,6 @@ afterEach(() => {
 });
 
 test("Just me after a team's workspace was made lists the account's own workspace again", () => {
-  // Setup stands at Welcome, for the team, whose workspace was made before Back, as the account keeps it.
   const place = JSON.stringify({ audience: "team", at: 0, team: PAPERSTAR.id });
   writeAppState(stateWith({}, { settings: appSettingsWire(settingsView({ setupPlace: place })) }));
   const chosen: string[] = [];

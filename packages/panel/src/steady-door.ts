@@ -1,21 +1,5 @@
-/**
- * steady-door.ts -- a door that stands across draws while the one handed over is made afresh on each, and calls the newest.
- *
- * A page drawn again on each delivery of the window's state makes its
- * callbacks afresh, and a part drawn from one is drawn again for the new
- * one, though it does what the last did. A part that holds while what it is
- * handed does (`memo`) is handed the steady door instead.
- */
-
 import { useCallback, useRef } from "react";
 
-/**
- * The door handed over, standing across draws and calling the newest one;
- * none while none is handed over. Note that a door taken away and handed
- * over again is the same door, and that a call landing after one is taken
- * away reaches the last handed over, as a callback held from an earlier
- * draw would.
- */
 export function useSteadyDoor<Args extends readonly unknown[], Answer>(
   door: (...args: Args) => Answer,
 ): (...args: Args) => Answer;
@@ -29,7 +13,6 @@ export function useSteadyDoor<Args extends readonly unknown[], Answer>(
   if (door !== undefined) latest.current = door;
   const steady = useCallback((...args: Args): Answer => {
     const newest = latest.current;
-    // Note that the steady door is handed out only once a door has been, so one always stands here.
     if (newest === undefined)
       throw new Error("A steady door was called before any was handed over.");
     return newest(...args);
@@ -37,7 +20,6 @@ export function useSteadyDoor<Args extends readonly unknown[], Answer>(
   return door === undefined ? undefined : steady;
 }
 
-/** What `useSteadyDoors` kept of one place in the value it was handed: what it was handed there, what it handed back, and what it kept beneath. */
 interface KeptPlace {
   readonly handed: unknown;
   readonly steady: unknown;
@@ -45,16 +27,13 @@ interface KeptPlace {
   readonly within: ReadonlyMap<string | number, KeptPlace> | undefined;
 }
 
-/** A steady door, standing across draws, and the newest door it calls. */
 interface KeptDoor {
   newest: (...args: never[]) => unknown;
   readonly call: (...args: never[]) => unknown;
 }
 
-/** A door's name: `onOpen`, `onChoose`, the press handlers a part is handed, whose identity no reader keys a read on. */
 const DOOR_NAME = /^on[A-Z]/;
 
-/** An object `useSteadyDoors` looks into: one made of plain fields, not a React element, a class's instance, or a collection. */
 function isPlainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   if ("$$typeof" in value) return false;
@@ -113,18 +92,6 @@ function keptPlace(
   return { handed, steady: handed, door: undefined, within: undefined };
 }
 
-/**
- * The value handed over, made afresh on each draw, handed back as the one
- * handed back last wherever it says the same, as the window's document keeps
- * the identity of what a delivery did not change (`use-app-state.ts`'s
- * `adopted`): every object and array whose fields and items are the same as
- * they were is the one handed back last, and every door, a function under an
- * `on…` name, is a steady door calling the newest. A part that holds while
- * what it is handed does (`memo`) then holds for every draw that changed
- * nothing it reads. Note that only doors are made steady: a reader such as
- * `readSkills` is handed back as it is, because a new one means something
- * new to read.
- */
 export function useSteadyDoors<Value>(value: Value): Value {
   const kept = useRef<KeptPlace | undefined>(undefined);
   const place = keptPlace(kept.current, value, false);
@@ -132,11 +99,6 @@ export function useSteadyDoors<Value>(value: Value): Value {
   return place.steady as Value;
 }
 
-/**
- * A set of doors handed over afresh on each draw, every one of them a
- * steady door calling the newest, whatever it is named: the ways back a
- * window's history hands its screens, which no reader keys a read on.
- */
 export function useSteadyDoorSet<Doors extends object>(doors: Doors): Doors {
   const kept = useRef<KeptPlace | undefined>(undefined);
   const place = keptPlace(kept.current, doors, false, () => true);

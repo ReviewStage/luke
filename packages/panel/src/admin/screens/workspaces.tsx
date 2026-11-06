@@ -58,26 +58,14 @@ import { useSettledSearch } from "../settled-search.js";
 import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
 import { WorkspaceCell } from "../workspace-cell.js";
 
-/**
- * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,
- * whether they are active, invite each other, and installed the GitHub App,
- * over a table of the workspaces themselves, busiest week first.
- *
- * A row names its workspace, its owner, counts, and the GitHub account it
- * connected; opening one opens the workspace's own page, and its owner's
- * name opens the owner's account.
- */
-
 const WORKSPACES_ERROR = readFailedWords("workspaces");
 
 const WORKSPACE: Noun = { one: "workspace", many: "workspaces" };
 
-/** What the table says when no workspace answers the search, and when it holds none. */
 function workspacesEmpty(searched: boolean): string {
   return searched ? noMatchWords(WORKSPACE) : noneYetWords(WORKSPACE);
 }
 
-/** The table's columns by key; a fixed set, so a heading never carries a free string. */
 const WORKSPACE_COLUMN = {
   NAME: "name",
   OWNER: "owner",
@@ -177,7 +165,6 @@ function workspaceColumns(
   ]);
 }
 
-/** The four headline counts, in the stat row's two wrapping pairs. */
 const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
   {
     key: "shared",
@@ -212,10 +199,8 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
   },
 ];
 
-/** How many workspaces the table's skeleton stands a row for, enough to fill a window. */
 const WORKSPACES_SKELETON_ROWS = 10;
 
-/** What the table's figures mean, and where its bound cut it. */
 function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Element {
   const truncated = list.total > list.rows.length;
   return (
@@ -229,12 +214,6 @@ function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
   );
 }
 
-/**
- * The page's sections under its filters, drawn from `list` once it is read
- * and as their skeletons until then: the tiles, which stand whatever the
- * search narrows, over the table of `rows`, the answer's rows the search
- * keeps.
- */
 function WorkspacesSections({
   list,
   rows,
@@ -244,7 +223,6 @@ function WorkspacesSections({
 }: {
   list: AdminWorkspaceList | undefined;
   rows: readonly AdminWorkspaceRow[];
-  /** Whether the box holds a search, which is what an empty table is worded by. */
   searched: boolean;
   onOpenAccount: (id: string) => void;
   onOpenWorkspace: (id: string) => void;
@@ -299,11 +277,8 @@ export function WorkspacesScreen({
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
   onOpenWorkspace: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  // The search follows the roster's: the box filters what is loaded at once,
-  // the debounced read searches every workspace, and the mount's address keeps it.
   const { reads, gate, address } = useAdminDoors();
   const [query, setQuery] = useState(address.search);
   const changeQuery = (typed: string) => {
@@ -399,8 +374,6 @@ export function WorkspacesScreen({
             </Text>
           </>
         ),
-        // An empty answer stands where the table stands, in its own frame
-        // under the tiles, as the Users roster's does.
         state: COLLECTION_STATE.READY,
         children: refreshed(
           <WorkspacesSections

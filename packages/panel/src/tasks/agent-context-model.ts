@@ -2,25 +2,6 @@ import { AGENT_BRIEF, type AgentBrief, type AgentContext } from "@repo/features/
 import { formatCompact } from "@repo/features/number-format";
 import { agoText } from "@repo/features/time-format";
 
-/**
- * agent-context-model.ts -- what the agent box's context ring and its popover say of the agent's model's context.
- *
- * The service tells what the agent's newest step read, as its provider
- * counted it, against the window of the model the agent runs on now and
- * the count past which eve compacts the conversation
- * (`agentContextSchema`). The ring fills with the share of the
- * window that step read, turns amber within a tenth of the window of the
- * compaction, and red at or past it, since the next step compacts. The
- * popover divides the read into the parts the service could name: the
- * instructions, the tool definitions, and the description or task while eve has
- * never compacted, each an estimate, and the conversation as what is left,
- * which leans on the estimates and so is one too; estimates that outrun the
- * count are scaled down to it, so the parts never add up to more. A "~" marks every count
- * that is an estimate, and the total, which was counted at the last step
- * and has grown by that step's answer since.
- */
-
-/** How the ring reads: room to spare, near eve's compaction, or at or past it. */
 export const CONTEXT_LEVEL = {
   ROOM: "room",
   NEAR: "near",
@@ -29,7 +10,6 @@ export const CONTEXT_LEVEL = {
 
 export type ContextLevel = (typeof CONTEXT_LEVEL)[keyof typeof CONTEXT_LEVEL];
 
-/** The parts the popover divides the context into, in the bar's order. */
 export const CONTEXT_PART = {
   SYSTEM_PROMPT: "system-prompt",
   TOOL_DEFINITIONS: "tool-definitions",
@@ -39,45 +19,36 @@ export const CONTEXT_PART = {
 
 export type ContextPart = (typeof CONTEXT_PART)[keyof typeof CONTEXT_PART];
 
-/** How far short of the compaction, as a share of the window, the ring turns amber. */
 const NEAR_SHARE = 0.1;
 
-/** The mark an estimated count wears. */
 const ESTIMATE_MARK = "~";
 
-/** What the brief's row is called, by what the agent was handed. */
 const BRIEF_LABEL = {
   [AGENT_BRIEF.DESCRIPTION]: "Description",
   [AGENT_BRIEF.PROMPT]: "Prompt",
   [AGENT_BRIEF.BLANK]: "First message",
 } as const satisfies Record<AgentBrief, string>;
 
-/** One part of the context as the popover's bar and legend draw it. */
 export interface ContextRow {
   readonly part: ContextPart;
   readonly label: string;
   readonly tokens: number;
-  /** Whether the count is an estimate, which its legend row marks. */
   readonly estimated: boolean;
 }
 
-/** One line of what the popover says under the legend: a name and its value. */
 export interface ContextStat {
   readonly label: string;
   readonly value: string;
 }
 
-/** The share of the window the last step read, past one where it read more than the window holds. */
 export function contextShare(context: AgentContext): number {
   return context.inputTokens / context.windowTokens;
 }
 
-/** The share as a whole percentage: 62. */
 function contextPercent(context: AgentContext): number {
   return Math.round(contextShare(context) * 100);
 }
 
-/** How the ring reads: at or past eve's threshold, within a tenth of the window of it, or short of that. */
 export function contextLevel(context: AgentContext): ContextLevel {
   const { inputTokens, compactionThresholdTokens, windowTokens } = context;
   if (inputTokens >= compactionThresholdTokens) return CONTEXT_LEVEL.OVER;
@@ -87,27 +58,19 @@ export function contextLevel(context: AgentContext): ContextLevel {
   return CONTEXT_LEVEL.ROOM;
 }
 
-/** The ring's hover: "62% of context used", and ", near the limit" once the ring has turned amber or red, so the warning is not color alone. */
 export function contextHint(context: AgentContext): string {
   const used = `${contextPercent(context)}% of context used`;
   return contextLevel(context) === CONTEXT_LEVEL.ROOM ? used : `${used}, near the limit`;
 }
 
-/** The popover's headline: "62% full". */
 export function contextFullLine(context: AgentContext): string {
   return `${contextPercent(context)}% full`;
 }
 
-/** The popover's total: "~620K / 1M tokens". */
 export function contextTotalLine(context: AgentContext): string {
   return `${ESTIMATE_MARK}${formatCompact(context.inputTokens)} / ${formatCompact(context.windowTokens)} tokens`;
 }
 
-/**
- * The parts of what the last step read, in the bar's order: the three the
- * service estimated, the brief only while it stands apart, and the
- * conversation as what the estimates leave of the provider's count.
- */
 export function contextRows(context: AgentContext, brief: AgentBrief | undefined): ContextRow[] {
   const { systemPromptTokens, toolDefinitionTokens, briefTokens } = context.estimated;
   const rows: ContextRow[] = [
@@ -133,8 +96,6 @@ export function contextRows(context: AgentContext, brief: AgentBrief | undefined
     });
   }
   const named = rows.reduce((sum, row) => sum + row.tokens, 0);
-  // Note that estimates that outrun the provider's count are scaled down to it, because the
-  // count is the one measured figure and the parts must not add up to more than it.
   const scale = named > context.inputTokens ? context.inputTokens / named : 1;
   const fitted = rows.map((row) => ({ ...row, tokens: Math.round(row.tokens * scale) }));
   const left = context.inputTokens - fitted.reduce((sum, row) => sum + row.tokens, 0);
@@ -147,17 +108,14 @@ export function contextRows(context: AgentContext, brief: AgentBrief | undefined
   return fitted;
 }
 
-/** A legend row's count: "~1.2K" for an estimate, "1.2K" for a count. */
 export function rowCount(row: ContextRow): string {
   return row.estimated ? `${ESTIMATE_MARK}${formatCompact(row.tokens)}` : formatCompact(row.tokens);
 }
 
-/** How wide a part's stretch of the bar is, as a percentage of the bar: of the window, or of the read where it overran the window. */
 export function rowWidth(row: ContextRow, context: AgentContext): number {
   return (row.tokens / Math.max(context.windowTokens, context.inputTokens)) * 100;
 }
 
-/** What the popover says under the legend, at the time given: the cache, the step's answer, where eve compacts, and when it last did. */
 export function contextStats(context: AgentContext, now: number): ContextStat[] {
   const stats: ContextStat[] = [];
   if (context.cachedInputTokens !== undefined) {

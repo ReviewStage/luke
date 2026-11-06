@@ -1,13 +1,3 @@
-/* sources.css -- what a stylesheet takes on when it mounts the admin screens alone.
-
-   Tailwind generates only the utilities it finds in the sources it reads, and
-   an app's own sources stop at its own directory. This line is resolved
-   against this file, so the web's standalone `/admin` page, which mounts these
-   screens without the rest of the panel, reads their utilities and no other
-   panel module's but the window's file viewer, which an account's photo
-   opens in (`screens/account.tsx`): its sources and its own sheet. A shell
-   that mounts the whole panel takes `@repo/panel/sources.css` instead, which
-   covers this directory too, and the viewer's sheet with the panel's. */
 @import "../styles/attachment-viewer.css";
 @source "./";
 @source "../tasks/attachment-viewer.tsx";

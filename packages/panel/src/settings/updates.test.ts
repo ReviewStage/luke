@@ -16,13 +16,6 @@ import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { UpdatesSection } from "./updates.js";
 
-/**
- * Settings › About's update row as a check runs: a press at rest starts one,
- * and the row says so and turns its press busy; while busy, the press stays
- * where the keyboard can reach it, named for the check in progress, and asks
- * the main process for no second check until the first answers.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -30,20 +23,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The About group as drawn, and the checks the main process was asked for so far. */
 interface AboutGroup {
   page: HTMLElement;
   asked: () => number;
-  /** How many times the release page was asked for through the update control. */
   openedLatest: () => number;
-  /** How many times the move to Applications was asked for through the update control. */
   moved: () => number;
 }
 
-/**
- * The About group drawn over `initial`, beside a main process that, asked to
- * check, answers the snapshot a running check does, as the updater's does.
- */
 function about(initial: UpdateSnapshot): AboutGroup {
   let asked = 0;
   let openedLatest = 0;
@@ -82,21 +68,18 @@ function about(initial: UpdateSnapshot): AboutGroup {
   return { page, asked: () => asked, openedLatest: () => openedLatest, moved: () => moved };
 }
 
-/** The button a reader is told is named `name`, or nothing while none is. */
 function button(page: HTMLElement, name: string): HTMLButtonElement | undefined {
   return [...page.querySelectorAll("button")].find(
     (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === name,
   );
 }
 
-/** The link a reader is told is named `name`, or nothing while none is. */
 function link(page: HTMLElement, name: string): HTMLAnchorElement | undefined {
   return [...page.querySelectorAll("a")].find(
     (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === name,
   );
 }
 
-/** Presses a link as a click does, answering whether the browser was left free to follow it. */
 function pressed(target: HTMLAnchorElement | undefined): boolean {
   const click = new MouseEvent("click", { bubbles: true, cancelable: true });
   act(() => {

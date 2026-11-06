@@ -20,17 +20,6 @@ import { INBOX_COLUMNS, type InboxColumnsShown, useInboxRowPresses } from "./inb
 import { InboxList } from "./inbox-list.js";
 import { INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
-/**
- * inbox-list-menu.test.ts -- an Inbox item's row offers its menu the one way
- * every row does (`ListRow`'s `menu`): a right-click on the row, its ⋯ named
- * "Inbox item actions", which the keyboard reaches and a reader hears
- * described by the item's title, and the menu key all open the same menu,
- * its items worded as ⌘K words them, and none opens the item. The list alone
- * over two unread items of one task, the first of which the list marks; a
- * finger's list standing alone draws no row open, and its rows draw no ⋯,
- * their menu a long press away.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -46,7 +35,6 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** An open item of one agent's, the `number`th. */
 function item(number: number): InboxItem {
   return {
     id: `a1b2c3d4-0000-4000-8000-00000000000${number}`,
@@ -92,7 +80,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The list drawn over `VIEW`, with what it was asked to open, `chosen` the item it has chosen and `columns` which of the Inbox's columns stand. */
 function mount(
   chosen?: string,
   columns: InboxColumnsShown = INBOX_COLUMNS.BOTH,
@@ -135,28 +122,24 @@ function mount(
   return { opened, marked };
 }
 
-/** The first row of the list, its item. */
 function firstRow(): HTMLElement {
   const row = document.querySelector<HTMLElement>(".ui-list-row");
   if (row === null) throw new Error("No row drawn");
   return row;
 }
 
-/** The row's ⋯, named for what the row is. */
 function moreOf(row: HTMLElement): HTMLButtonElement {
   const more = row.querySelector<HTMLButtonElement>("button[aria-label='Inbox item actions']");
   if (more === null) throw new Error("The row offers no ⋯");
   return more;
 }
 
-/** The words of the items of the menu standing open, none while there is none. */
 function menuItems(): string[] {
   return [...document.querySelectorAll('[role="menu"]:not([data-leaving]) [role="menuitem"]')].map(
     (entry) => entry.textContent ?? "",
   );
 }
 
-/** Closes the menu standing open, as Escape does. */
 function closeMenu(): void {
   act(() => {
     document.activeElement?.dispatchEvent(

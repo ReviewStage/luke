@@ -20,27 +20,8 @@ import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { appStateQuery, selectCapability, selectPortForwarding } from "../use-app-state.js";
 
-/**
- * agent-forward.tsx -- the Forward chip an agent's message box wears beside its Cloud chip: whether the agent's cloud ports are forwarded to this Mac's localhost, and the menu that turns it on and opens them.
- *
- * Only the desktop's host listens on the Mac's loopback
- * (`HOST_CAPABILITY.PORT_FORWARDS`), and only an agent in a cloud sandbox
- * has ports to forward, so the chip stands nowhere else. Off, it reads
- * "Forward" beside a plug; on, it reads the first forwarded port's local
- * address ("localhost:3000") and its plug wears a dot in the complete tone.
- * A press raises a menu with the Forward to localhost switch and, while it
- * is on, one row per port, "3000 → localhost:3000", whose press opens that
- * address in the default browser; "No ports detected" where none listens,
- * and "Sandbox not running" while the sandbox is stopped. The host keeps
- * how forwarding stands in app state (`portForwarding`), following the
- * sandbox's ports itself, so the chip only reads it. Every word it draws is the app's own, port
- * numbers among them, so a screen recording shows them as they read.
- */
-
-/** What an agent forwarding is off for reads. */
 const OFF: PortForwardingAnswer = { on: false, running: false, ports: [] };
 
-/** What the chip and its menu say. */
 const WORDS = {
   FORWARD: "Forward",
   MENU: "Forward to localhost",
@@ -51,19 +32,16 @@ const WORDS = {
   NO_LOCAL_PORT: "No local port free",
 } as const;
 
-/** The local address a port is forwarded to. */
 function localAddress(localPort: number): string {
   return `localhost:${localPort}`;
 }
 
-/** What the chip reads: the first forwarded port's local address while on, "Forward" otherwise. */
 function forwardChipWords(answer: PortForwardingAnswer): string {
   if (!answer.on) return WORDS.FORWARD;
   const first = answer.ports.find((each) => each.localPort !== undefined);
   return first?.localPort === undefined ? WORDS.FORWARD : localAddress(first.localPort);
 }
 
-/** The rows under the switch while forwarding is on: one per port, or the line saying why there are none. */
 function portRows(answer: PortForwardingAnswer, onOpen: (localPort: number) => void): MenuAction[] {
   if (!answer.on) return [];
   const none = (label: string): MenuAction[] => [{ label, disabled: true, onSelect: () => {} }];
@@ -87,13 +65,11 @@ function portRows(answer: PortForwardingAnswer, onOpen: (localPort: number) => v
   );
 }
 
-/** The agent's forwarding as the host keeps it: off for any agent but the one forwarded. */
 function useForwarding(agentId: string): PortForwardingAnswer {
   const forwarding = useQuery({ ...appStateQuery, select: selectPortForwarding }).data;
   return forwarding?.agentId === agentId ? forwarding : OFF;
 }
 
-/** The chip and its menu. */
 function ForwardControl({
   agentId,
   narrow,
@@ -145,13 +121,11 @@ function ForwardControl({
   );
 }
 
-/** The Forward chip for an agent in a cloud sandbox, on a platform that forwards ports; nothing otherwise. */
 export function AgentForward({
   agent,
   narrow = false,
 }: {
   agent: Pick<AgentSummary, "id" | "machine">;
-  /** Whether the box is too narrow for the chip's words, so it draws its glyph alone. */
   narrow?: boolean;
 }): React.JSX.Element | null {
   const offered =

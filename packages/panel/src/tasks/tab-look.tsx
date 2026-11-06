@@ -14,67 +14,37 @@ import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js"
 import { type FixedSidePanelTab, SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
-/**
- * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the task's summary, and its row in ⌘K.
- *
- * Every place that offers a tab draws it through `tabLook`, from what that
- * place knows of the thing the tab shows, so a kind wears one glyph and one
- * name wherever it is offered. A coding agent and a subagent wear their
- * harness's mark, wearing where they
- * stand (`AgentGlyph`, `SubagentGlyph`) in every one of those places, the
- * "+" menus' rows included: a row is
- * offered beside a strip that may not hold its tab. A task wears its
- * status's mark (`PlanGlyph`), and so does a pin of its Description tab, which is
- * named for the task wherever the place knows it; the task's Overview, which
- * holds its description in its column, wears the document's glyph and its word. Each place adds what
- * only it says beside the look: a tab's card and end mark, a row's detail
- * and section, ⌘K's task name.
- */
-
-/** The kinds of tab, each drawn its own way. */
 export const TAB_KIND = {
-  /** One of the side panel's fixed kinds: Description, Inbox, Board, Code, or Comments. */
   PANEL: "panel",
-  /** A task, as a row naming it does. */
   PLAN: "plan",
   INBOX: "inbox",
-  /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
-  /** The task's Overview, which leads its column and shows its description. */
   OVERVIEW: "overview",
   AGENT: "agent",
   SUBAGENT: "subagent",
   CHANGES: "changes",
-  /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
   TERMINAL: "terminal",
-  /** One cloud agent's shells on this Mac in its mirror, which wears the agent's own glyph too. */
   LOCAL: "local",
   FILE: "file",
   PAGE: "page",
-  /** A Browser tab, named by its page's title once it has one. */
   BROWSER: "browser",
 } as const;
 
-/** Where an agent stands as its glyph wears it: its model, and where it stands where that is known. */
 interface AgentStanding {
   readonly model: string;
   readonly status?: AgentStatus | undefined;
 }
 
-/** A task as its tab or its row names it: its name, and its status where the place knows it. */
 export interface PlanStanding {
   readonly name: string;
   readonly status: TaskStatus | undefined;
 }
 
-/** What a place knows of the thing a tab shows, by its kind. */
 export type TabSubject =
   | {
       readonly kind: typeof TAB_KIND.PANEL;
       readonly tab: FixedSidePanelTab;
-      /** The task the panel stands beside, whose name and status its Description tab wears; none where the place does not know it, and the tab says Description. */
       readonly plan?: PlanStanding | undefined;
-      /** Whether the Inbox kind holds one thread open, as it does beside the window's Inbox, which it is named for, under the thread's glyph, rather than any task's Inbox. */
       readonly thread?: boolean | undefined;
     }
   | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
@@ -83,55 +53,39 @@ export type TabSubject =
   | { readonly kind: typeof TAB_KIND.OVERVIEW }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
-      /** Its tab's label (`agentName`), or what a pin last called it; the word for an agent where none is known. */
       readonly name: string | undefined;
       readonly agent: AgentStanding | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.SUBAGENT;
-      /** Its title, or its task's first line until it has one. */
       readonly name: string;
       readonly model: string | undefined;
       readonly state: GlyphState;
     }
   | {
       readonly kind: typeof TAB_KIND.CHANGES;
-      /** The pull request, which names the tab by its number and title and whose mark it wears for where it stands; none before it is read. */
       readonly pullRequest?: (PullRequestMarked & Pick<AgentPullRequest, "title">) | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL | typeof TAB_KIND.LOCAL;
-      /** Where the agent whose sandbox or mirror it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string }
   | {
       readonly kind: typeof TAB_KIND.BROWSER;
-      /** Its page's title, or its address until it has one; none before a page is opened. */
       readonly title: string | undefined;
     };
 
-/** A tab's look: its glyph and its name. */
 export interface KindLook {
   readonly icon: React.JSX.Element;
   readonly label: string;
 }
 
-/**
- * A task's glyph wherever a task is named: its status's mark
- * (`TaskStatusMark`), or the document where its status is not known, as a
- * task the window does not list.
- */
 export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
   return status === undefined ? <DocumentIcon /> : <TaskStatusMark status={status} />;
 }
 
-/**
- * The open task as its Description tab wears it: its name, and its status as the
- * task list holds it, which a status set from the sidebar moves first; none
- * while no task is open.
- */
 export function openPlanStanding(
   tasks: Pick<TasksControl, "region" | "tasks">,
 ): PlanStanding | undefined {
@@ -141,50 +95,25 @@ export function openPlanStanding(
   return { name: task.name, status: listed.status };
 }
 
-/**
- * A coding agent's mark at rest: the mark of the harness its model runs
- * in, or the worker's robot in the muted ink (`AgentPlaceholderIcon`) until
- * the app knows the harness. A place offering the agent wears it inside
- * `AgentGlyph`; one that knows nothing of where it stands, as a revision's
- * author, wears it bare.
- */
 export function AgentMark({ provider }: { provider: ModelProvider | undefined }) {
   return provider === undefined ? <AgentPlaceholderIcon /> : <HarnessMark provider={provider} />;
 }
 
-/**
- * A subagent's mark: the mark of the harness its model runs in, or the
- * worker's robot where its model is not known. Note that the harness is read
- * from the model's id, as an agent's is, so the mark stands before the
- * catalog is read. A transcript's row wears it bare, beside a working mark
- * of its own.
- */
 export function SubagentMark({ model }: { model: string | undefined }) {
   const provider = model === undefined ? undefined : providerOf(model);
   return provider === undefined ? <BotIcon /> : <HarnessMark provider={provider} />;
 }
 
-/**
- * An agent's glyph wearing where it stands: its mark (`AgentMark`) at its
- * full size, giving way to the working mark while the agent may still write
- * (`state-glyph.tsx`). A failed agent keeps its mark, and its row or tab
- * says the failure at its end (`agentEndMark`). An agent whose standing is
- * not known, a pin's whose task is not open, wears its mark at rest, and one
- * this window does not list, one another Mac started, the mark of no known
- * harness, so a row naming it keeps the glyph's column.
- */
 export function AgentGlyph({ agent }: { agent: AgentStanding | undefined }) {
   const provider = agent === undefined ? undefined : providerOf(agent.model);
   const state = agent?.status === undefined ? GLYPH_STATE.REST : agentGlyphState(agent.status);
   return <StateGlyph glyph={<AgentMark provider={provider} />} state={state} />;
 }
 
-/** A subagent's glyph wearing where it stands, as `AgentGlyph` wears an agent's. */
 function SubagentGlyph({ model, state }: { model: string | undefined; state: GlyphState }) {
   return <StateGlyph glyph={<SubagentMark model={model} />} state={state} />;
 }
 
-/** The mark at the end of an agent's row or tab: the failed mark once its turn failed, nothing otherwise (`stateEndMark`). */
 export function agentEndMark(
   agent: { readonly status: AgentStatus },
   hinted: boolean,
@@ -192,7 +121,6 @@ export function agentEndMark(
   return stateEndMark(agentGlyphState(agent.status), hinted);
 }
 
-/** How a tab of the kind looks, from what the place drawing it knows of what it shows. */
 export function tabLook(subject: TabSubject): KindLook {
   switch (subject.kind) {
     case TAB_KIND.PANEL: {
@@ -238,13 +166,10 @@ export function tabLook(subject: TabSubject): KindLook {
             : pullRequestLabelOf(subject.pullRequest),
       };
     case TAB_KIND.TERMINAL:
-      // Note that the agent's name is not the label, because the tab says
-      // what it is first; each place drawing it names the agent beside it.
       return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
     case TAB_KIND.LOCAL:
       return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.LOCAL };
     case TAB_KIND.FILE: {
-      // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);
       return { icon, label };
     }

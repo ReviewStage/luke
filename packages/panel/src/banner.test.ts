@@ -7,11 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { ArchivedComposerNote } from "./tasks/archived-note.js";
 
-/**
- * banner.test.ts -- an archived agent's notice: the strip is named by its
- * words and carries the presses it offers. Synthetic throughout.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +21,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws a strip, answering the strip. */
 function drawn(strip: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -36,14 +30,12 @@ function drawn(strip: ReactNode): HTMLElement {
   return section;
 }
 
-/** What a reader hears the strip named: the words it is labeled by. */
 function named(section: HTMLElement): string | undefined {
   return (
     document.getElementById(section.getAttribute("aria-labelledby") ?? "")?.textContent ?? undefined
   );
 }
 
-/** The press a strip carries with these words. */
 function press(section: HTMLElement, words: string): HTMLButtonElement {
   const found = [...section.querySelectorAll("button")].find(
     (button) => button.textContent === words,

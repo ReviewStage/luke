@@ -1,15 +1,3 @@
-/**
- * account-support.tsx -- the account page's support sections: its work over
- * the window, its newest agents, its workspaces, keys and connections,
- * defaults and experiments, and its recent failures.
- *
- * Each section draws what `@repo/features/admin-answer-wire`'s `AdminAccountSupport` says and
- * nothing more: counts, statuses, models, names of workspaces and
- * repositories, and the service's own enumerated words for why something
- * failed, drawn as they are spelled so a maintainer can search the code
- * for them.
- */
-
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
@@ -61,21 +49,14 @@ import {
 } from "../status-words.js";
 import { WorkspaceCell } from "../workspace-cell.js";
 
-/** What the page draws where a value is absent. */
 const NONE = "—";
 
-/**
- * How many rows each table's skeleton stands, about an active account's:
- * how many it holds is the answer's alone.
- */
 const SKELETON_ROWS = { AGENTS: 5, WORKSPACES: 2, CREDENTIALS: 2, FAILURES: 3 } as const;
 
-/** The defaults' line bones, about their sentences' width. */
 const SKELETON_DEFAULTS_WIDTH = "320px";
 
 const SKELETON_EXPERIMENTS_WIDTH = "192px";
 
-/** What each kind of failure is called on the timeline. */
 const FAILURE_SUBJECT = {
   [ADMIN_FAILURE_KIND.AGENT]: "Agent failed",
   [ADMIN_FAILURE_KIND.KEY]: "Provider key",
@@ -83,7 +64,6 @@ const FAILURE_SUBJECT = {
   [ADMIN_FAILURE_KIND.AUTOMATION]: "Automation run failed",
 } as const satisfies Record<AdminAccountFailure["kind"], string>;
 
-/** What a fast-access word says beside a key's status. */
 const FAST_ACCESS_WORDS = {
   [FAST_ACCESS.ENABLED]: "fast mode enabled",
   [FAST_ACCESS.NOT_ENABLED]: "fast mode not enabled",
@@ -92,17 +72,14 @@ const FAST_ACCESS_WORDS = {
   string
 >;
 
-/** The window a model runs on, said only where it is the smaller one. */
 function windowWords(contextWindow: string | null): string {
   return contextWindow === CONTEXT_WINDOW.STANDARD ? " · standard window" : "";
 }
 
-/** A share of a whole as a whole percentage, or nothing where there is no whole. */
 function percentOf(part: number, whole: number): string | undefined {
   return whole === 0 ? undefined : formatPercent(part / whole);
 }
 
-/** The window's work as three stat cards: tasks, agents, and pull requests. */
 function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[] {
   return [
     {
@@ -234,20 +211,16 @@ function workspaceColumns(
   ]);
 }
 
-/** One key or connection as the credentials table draws it. */
 interface CredentialRow {
-  /** Where the row stands in the table, which is all that tells two connections at one provider apart here. */
   order: number;
   kind: string;
   provider: string;
   status: string;
-  /** Whether the status is a failure, a key that is not verified, which wears the failure glyph. */
   failed: boolean;
   detail: string | undefined;
   at: number;
 }
 
-/** The account's keys and connections as one table's rows, keys first. */
 function credentialRows(support: AdminAccountSupport): CredentialRow[] {
   const keys = support.providerKeys.map(
     (key): Omit<CredentialRow, "order"> => ({
@@ -302,13 +275,11 @@ const CREDENTIAL_COLUMNS = credentialColumn.columns([
   }),
 ]);
 
-/** What failed, with the provider where a key or a connection did. */
 function failureSubject(failure: AdminAccountFailure): string {
   const subject = FAILURE_SUBJECT[failure.kind];
   return "provider" in failure ? `${subject} · ${failure.provider}` : subject;
 }
 
-/** One failure with where it stands on the timeline, which is what keys its row. */
 interface FailureRow {
   order: number;
   failure: AdminAccountFailure;
@@ -351,7 +322,6 @@ const FAILURE_COLUMNS = failureColumn.columns([
   }),
 ]);
 
-/** The account's agent defaults and the experiments it turned on. */
 function DefaultsLines({ support }: { support: AdminAccountSupport }): React.JSX.Element {
   const { defaults } = support;
   const choice =
@@ -375,7 +345,6 @@ function DefaultsLines({ support }: { support: AdminAccountSupport }): React.JSX
   );
 }
 
-/** The defaults while they are read: bones for the model line and the experiments' line under it. */
 function DefaultsLinesSkeleton(): React.JSX.Element {
   return (
     <Stack gap={GAP.CONTROL}>
@@ -389,7 +358,6 @@ function DefaultsLinesSkeleton(): React.JSX.Element {
   );
 }
 
-/** One support table: its label, its columns, its rows from the answer, and what it says with none. */
 function SupportTable<Row extends RowData>({
   label,
   columns,
@@ -424,10 +392,6 @@ function SupportTable<Row extends RowData>({
   );
 }
 
-/**
- * Every support section, in the order a maintainer reads an account by,
- * drawn from `support` once it is read and as their skeletons until then.
- */
 export function AccountSupportSections({
   support,
   windowDays,

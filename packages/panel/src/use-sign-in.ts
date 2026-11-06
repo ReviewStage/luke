@@ -9,18 +9,11 @@ import { appPlatform } from "./app-platform.js";
 
 export interface SignIn {
   signInWait: AccountProvider | undefined;
-  /** Why the last attempt ended without landing, as the key the gate words and reports. */
   signInFailure: SignInFailure | undefined;
   beginSignIn: (provider: AccountProvider) => void;
   cancelSignIn: () => void;
 }
 
-/**
- * The account sign-in the gate begins and waits on. Choosing a provider sends
- * the browser to it and the gate waits in place, the pressed button saying
- * so; the window comes back forward when the browser hands the answer back,
- * signed in or not.
- */
 export function useSignIn(): SignIn {
   const { mutateAsync: beginAccountSignIn } = useMutation(
     actMutation(ACT_KIND.ACCOUNT_BEGIN_SIGN_IN),
@@ -29,18 +22,9 @@ export function useSignIn(): SignIn {
     pressMutation(ACT_KIND.ACCOUNT_CANCEL_SIGN_IN),
   );
 
-  /**
-   * Whose sign-in the gate is waiting on. Held as app state with a ref
-   * because the attempt's own reply has to read whether it is still the one
-   * being waited on.
-   */
   const [signInWait, setSignInWait, signInWaitNow] = useStateWithRef<AccountProvider | undefined>(
     undefined,
   );
-  /**
-   * Which attempt any reply answers. Cancel advances it, so the outcome of a
-   * sign-in already withdrawn is spent rather than reported.
-   */
   const signInAttempt = useRef(0);
   const [signInFailure, setSignInFailure] = useState<SignInFailure>();
 
@@ -50,16 +34,11 @@ export function useSignIn(): SignIn {
       const attempt = ++signInAttempt.current;
       setSignInFailure(undefined);
       setSignInWait(provider);
-      // Note that a sign-in that ended without landing answers why, as a
-      // key said in the words module's own words; a refusal is the port's
-      // own fault, which says only that it did not finish.
       beginAccountSignIn({ provider }).then(
         (answer) => {
           if (signInAttempt.current !== attempt) return;
           setSignInWait(undefined);
           if ("failure" in answer) setSignInFailure(answer.failure);
-          // The browser has the focus the sign-in finished in, and signing in
-          // is an arrival at the tasks it just unlocked.
           appPlatform().focusPanel();
         },
         () => {
@@ -73,12 +52,6 @@ export function useSignIn(): SignIn {
     [setSignInWait, signInWaitNow, beginAccountSignIn],
   );
 
-  /**
-   * Takes the wait back. The main process withdraws the loopback and signs the
-   * attempt back out; the gate is offered again at once rather than after
-   * that round trip, and the attempt's eventual rejection finds itself
-   * already spent.
-   */
   const cancelSignIn = useCallback(() => {
     if (signInWaitNow() === undefined) return;
     signInAttempt.current += 1;

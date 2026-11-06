@@ -26,74 +26,37 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { messageFailureWords } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
 
-/**
- * inbox-close.tsx -- an open Inbox item closed without an answer, from its row's menu or its pane's ⋯ menu, asked first.
- *
- * A close goes to the service as an act, under a key kept for the item at
- * the revision it was pressed on, so a press again after a lost reply is
- * the same close. The host draws it into every read the window draws the
- * moment it is confirmed (`@repo/host`'s `inbox-collections.ts`), so the
- * item leaves what needs the developer at once. A close taken lets go of
- * the item's draft, wherever its task stands; one the service did not take
- * lands on the item as the service answered it, the agent's newer word or
- * another member's settling, and a toast says why; one that did not reach
- * the service is taken back, the item standing again. Only the agent
- * can open an item again, by posting under its key, so every way to close
- * asks first (`packages/panel/AGENTS.md`'s Confirms), the question going
- * with the surface it was asked on, with the item once it is no longer
- * open, and with the revision it was asked on once the agent changes it.
- */
-
-/** What a close the act channel refused hears, as the service not answering, with the error beneath. */
 const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
-/**
- * What the close is called in a menu and on its question card's ×, which
- * is its tooltip too. Note that it is not called Close, because the bar of a side
- * panel or a window standing it full screen already holds a Close that only
- * puts the panel away.
- */
 const CLOSE_ITEM_LABEL = "Resolve without answering";
 
-/** What a toast says of a close the service did not take, by what had become of the item: still open, the agent having changed it; answered; or resolved. */
 const NOT_TAKEN = {
   [INBOX_STATUS.OPEN]: "The agent changed this item before you resolved it.",
   [INBOX_STATUS.ANSWERED]: "This item was already answered.",
   [INBOX_STATUS.CLOSED]: "This item was already resolved.",
 } as const satisfies Record<InboxStatus, string>;
 
-/** How a close says what became of it: aloud, a toast saying why one was not taken, or not at all, for a batch of closes that counts its refusals in one toast. */
 interface CloseSaying {
   readonly quiet?: boolean | undefined;
 }
 
-/** The note a close carries: the words and files the box held beside a staged resolve, which reach the agent in the close's one message. */
 export interface CloseNote {
   readonly text: string;
   readonly attachments: readonly AgentAttachment[];
 }
 
-/**
- * Closes an open item without an answer, with the note given beside it,
- * and answers once the service did whether it was closed, with what refused
- * it where it was not; a close of it already on its way answers as closed,
- * since that one answers its own press, and one of an item no longer open
- * as not.
- */
 export type InboxCloser = (
   item: InboxItem,
   saying?: CloseSaying,
   note?: CloseNote,
 ) => Promise<Kept>;
 
-/** A close's key and the revision and note it was made for, kept so a press again on the same item with the same note goes under the same key. */
 interface Attempt {
   readonly key: string;
   readonly revision: number;
   readonly words: string;
 }
 
-/** The Inbox's closes, each sent on the close's mutation. */
 export function useInboxCloser(): InboxCloser {
   const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_CLOSE));
   const writer = useDraftWriter();
@@ -114,7 +77,6 @@ export function useInboxCloser(): InboxCloser {
         was?.revision === item.revision && was.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, revision: item.revision, words });
       out.current.add(item.id);
-      // Note that what the box held as the close was pressed is read now, so only that goes once it is taken.
       const pressed = writer.heldAt(
         (place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id,
       );
@@ -149,7 +111,6 @@ export function useInboxCloser(): InboxCloser {
           if (!answer.taken) {
             return say(NOT_TAKEN[answer.item.status], { failure: answer.item.status });
           }
-          // Note that only the answer the box held as the close was pressed goes, since a message on the thread may have been begun while the close was out.
           if (pressed !== undefined) {
             writer.update(pressed.place, (now) =>
               now.text === pressed.text && Equal.equals(now.attachments, pressed.attachments)
@@ -164,7 +125,6 @@ export function useInboxCloser(): InboxCloser {
   );
 }
 
-/** What the close asks first: which item, and whether its agent is told now or reads it later. */
 function closeQuestion(item: InboxItem): DialogQuestion {
   return {
     title: `Resolve “${cardTitle(item.title)}” without answering?`,
@@ -175,16 +135,10 @@ function closeQuestion(item: InboxItem): DialogQuestion {
     running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
     replayUnmasked: true,
-    // Note that the title names the item.
     titleReplayMasked: true,
   };
 }
 
-/**
- * What a close of every item chosen in a list asks first, once for them all:
- * how many, and that their agents are told, red since none can be opened
- * again but by its agent; one item's own question where one is chosen.
- */
 export function closeAllQuestion(items: readonly InboxItem[]): DialogQuestion {
   const [only] = items;
   if (items.length === 1 && only !== undefined) return closeQuestion(only);
@@ -198,35 +152,22 @@ export function closeAllQuestion(items: readonly InboxItem[]): DialogQuestion {
   };
 }
 
-/** What one toast says of a close of several items the service refused some of: how many it took, and how many not. */
 export function closedNote(landed: number, refused: number): string {
   return landed === 0
     ? `Could not resolve ${countWords(refused, TERM.INBOX_ITEM)}`
     : `${countWords(landed, TERM.INBOX_ITEM)} resolved, ${refused} could not be`;
 }
 
-/** The closes a surface asks first, of whichever of its items asked last, through one question it draws once. */
 interface InboxCloseAsk {
-  /** Asks to close the item given, as it stands now. */
   readonly ask: (item: InboxItem) => void;
   readonly dialog: React.JSX.Element;
 }
 
-/**
- * The closes of the items a surface draws, each asked first through the one
- * question, so a list of a thousand rows draws one rather than a thousand
- * standing shut; `current` finds an item as the surface draws it now, none
- * once it draws it no longer. The question goes once the surface is put
- * away, or the item it asks about is drawn, open, or at the revision it was
- * asked on no longer, so the agent's change while it stands withdraws it
- * rather than closing what the reader never saw.
- */
 export function useInboxCloseAsk(
   closer: InboxCloser | undefined,
   surfaceOpen: boolean,
   current: (itemId: string) => InboxItem | undefined,
 ): InboxCloseAsk {
-  // The item as it stood when the question was asked, whose words the question says through its fade.
   const [asked, setAsked] = useState<InboxItem | undefined>(undefined);
   const now = asked === undefined ? undefined : current(asked.id);
   const standing =
@@ -259,11 +200,6 @@ export function useInboxCloseAsk(
   };
 }
 
-/**
- * An item's close as its menu offers it, last: while the item is open and
- * the surface hands an ask, which one that answers nothing, an archived
- * task's say, hands none of.
- */
 export function closeAction(
   item: InboxItem,
   ask: ((item: InboxItem) => void) | undefined,
@@ -273,19 +209,12 @@ export function closeAction(
     : { label: CLOSE_ITEM_LABEL, icon: <GLYPH.CLOSE />, onSelect: () => ask(item) };
 }
 
-/** One item's close as a menu and its question card's × offer it, and the question it asks through, which the caller draws beside them. */
 export interface InboxClose {
-  /** The menu's item, and what the × presses; none where the item cannot be closed. */
   readonly action: MenuAction | undefined;
-  /** Asks to close the item; none where it cannot be closed. */
   readonly ask: ((item: InboxItem) => void) | undefined;
   readonly dialog: React.JSX.Element;
 }
 
-/**
- * One item's close, asked first (`useInboxCloseAsk`), as the pane that shows
- * it offers it: offered while the item is open and a closer is handed.
- */
 export function useInboxClose(
   item: InboxItem,
   closer: InboxCloser | undefined,

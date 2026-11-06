@@ -8,13 +8,6 @@ import { afterEach, test, vi } from "vitest";
 import { Message, MessageAction, MessageContent } from "../ai-elements/message.js";
 import { layContainersAt } from "../testing/container-width.js";
 
-/**
- * touch-controls.test.ts -- a transcript message's actions stay hidden on a
- * screen with no hover until the message is tapped, and go with another
- * tap. jsdom answers no media query, so the sheets are laid for a touch
- * screen (`testing/container-width.ts`).
- */
-
 const roots: Root[] = [];
 let laid: HTMLStyleElement | undefined;
 
@@ -26,28 +19,23 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Lays the sheets for a touch screen or a mouse. */
 function layFor(touch: boolean): void {
   laid = layContainersAt({}, { touch });
 }
 
-/** How opaque `element` is drawn, from 0 to 1, whether its rule spells the number or a percentage, as a utility does (`opacity-0` is `0%`). */
 function opacityOf(element: Element): number {
   const opacity = getComputedStyle(element).opacity;
   return opacity.endsWith("%") ? Number.parseFloat(opacity) / 100 : Number.parseFloat(opacity);
 }
 
-/** Whether `element` is drawn to be seen and pressed: opaque, and it or what it holds to press taking the pointer. */
 function standing(element: Element, press: Element = element): boolean {
   return opacityOf(element) === 1 && getComputedStyle(press).pointerEvents !== "none";
 }
 
-/** Whether `element` is drawn faded out. */
 function faded(element: Element): boolean {
   return opacityOf(element) === 0;
 }
 
-/** A message drawn as the transcript draws it, its words and its actions in the line under it, worked by a finger. */
 function tappableMessage() {
   layFor(true);
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(hover: none)" }));

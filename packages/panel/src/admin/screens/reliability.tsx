@@ -71,30 +71,18 @@ import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
 import { connectionWord, INSTALLATION_LABEL } from "../status-words.js";
 
-/**
- * reliability.tsx -- the admin Reliability screen: how often the service's
- * own work failed, why, which accounts hold something broken, and what the
- * deployment is configured with. It draws counts, rates, and fixed words
- * alone; no failure's detail reaches it.
- */
-
 const RELIABILITY_ERROR = readFailedWords("reliability");
 
-/** How many providers the health list's skeleton stands a row for, about the list a deployment draws. */
 const HEALTH_SKELETON_ROWS = 12;
 
-/** How many accounts the attention table's skeleton stands a row for, about a usual week's. */
 const ATTENTION_SKELETON_ROWS = 5;
 
-/** The attention table's account column, the one whose cell is an account's. */
 const ATTENTION_ACCOUNT_COLUMN = "account";
 
-/** The bones standing for a status's words and a provider's name. */
 const SKELETON_STATUS_WIDTH = "64px";
 
 const SKELETON_PROVIDER_WIDTH = "192px";
 
-/** A coding agent's failure class, as the breakdown names it. */
 const AGENT_FAILURE_LABEL = {
   [AGENT_FAILURE.MODEL]: "Model call",
   [AGENT_FAILURE.SANDBOX]: "Sandbox or checkout",
@@ -109,7 +97,6 @@ const AGENT_FAILURE_LABEL = {
   [AGENT_FAILURE.OTHER]: "Other",
 } as const satisfies Record<AgentFailure, string>;
 
-/** An automation run's skip or failure reason, as the breakdown names it. */
 const AUTOMATION_REASON_LABEL = {
   [AUTOMATION_RUN_REASON.CONCURRENCY]: "Agents still at work",
   [AUTOMATION_RUN_REASON.DAILY_CAP]: "Daily cap reached",
@@ -131,20 +118,14 @@ const AUTOMATION_REASON_LABEL = {
 
 const NO_REASON_LABEL = "No reason recorded";
 
-/** The failure classes no agent fails with now, which only older rows still hold. */
 const RETIRED_AGENT_FAILURES: readonly AgentFailure[] = [AGENT_FAILURE.FAST_ON_OWN_KEY];
 
-/** The automation reasons no run is given now, which only older rows still hold. */
 const RETIRED_AUTOMATION_REASONS: readonly AutomationRunReason[] = [
   AUTOMATION_RUN_REASON.NO_REPOSITORY,
   AUTOMATION_RUN_REASON.GITHUB_SIGN_IN,
   AUTOMATION_RUN_REASON.AGENT_GONE,
 ];
 
-/**
- * A breakdown's rows with the retired ones moved under every live one, each
- * marked retired, the answer's order otherwise kept.
- */
 function retiredLast<Row>(
   rows: readonly Row[],
   retired: (row: Row) => boolean,
@@ -167,7 +148,6 @@ const AUTOMATION_REASONS_SERIES: readonly BreakdownSeries[] = [
   { key: "failed", label: "Failed", color: "var(--ui-color-danger)" },
 ];
 
-/** The model providers an account's own key is for, as a problem names them. */
 const KEY_PROVIDER_LABEL = {
   [MODEL_PROVIDER.ANTHROPIC]: "Anthropic",
   [MODEL_PROVIDER.OPENAI]: "OpenAI",
@@ -183,7 +163,6 @@ const KEY_STATUS_LABEL = {
   [PROVIDER_KEY_STATUS.INELIGIBLE]: "ineligible",
 } as const;
 
-/** One broken thing, by its kind and status alone. */
 function problemLabel(problem: AdminAttentionProblem): string {
   switch (problem.kind) {
     case ADMIN_ATTENTION_KIND.PROVIDER_KEY:
@@ -195,7 +174,6 @@ function problemLabel(problem: AdminAttentionProblem): string {
   }
 }
 
-/** One provider in the health card's list: its name, and whether its keys are set. */
 function IntegrationRow({ integration }: { integration: AdminIntegration }): React.JSX.Element {
   return (
     <ListRow
@@ -205,7 +183,6 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
   );
 }
 
-/** "412 of 29,880 turns", or that nothing of the kind ended in the window. */
 function ofHint(count: { failed: number; total: number }, noun: string, windowDays: number) {
   return count.total === 0
     ? `no ${noun} ended in ${windowDays} days`
@@ -251,11 +228,6 @@ function attentionColumns(onOpen: (id: string) => void): DataTableColumns<AdminA
   ]);
 }
 
-/**
- * The app's own turns failed, the one card the retired section holds: every
- * conversation the service starts now is an agent's, so only turns from
- * before that still land here.
- */
 const APP_TURN_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "app-turns",
@@ -265,7 +237,6 @@ const APP_TURN_STATS: readonly StatSpec<AdminReliability>[] = [
   },
 ];
 
-/** The headline failure cards, in the order they stand. */
 const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "agent-runs",
@@ -293,7 +264,6 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   },
 ];
 
-/** One breakdown of why work failed: its heading, its series, and its rows as the answer counts them. */
 interface Breakdown {
   title: string;
   series: readonly BreakdownSeries[];
@@ -301,7 +271,6 @@ interface Breakdown {
   empty: string;
 }
 
-/** The two breakdowns, side by side in this order. */
 const BREAKDOWNS: readonly Breakdown[] = [
   {
     title: "Agent failures by class",
@@ -330,11 +299,6 @@ const BREAKDOWNS: readonly Breakdown[] = [
   },
 ];
 
-/**
- * Where per-request error rates live, a link to the product analytics where
- * the deployment names its console and the plain words where it does not
- * or before the answer says.
- */
 function AnalyticsNote({
   consoleUrl,
 }: {
@@ -355,7 +319,6 @@ function AnalyticsNote({
   );
 }
 
-/** What the attention table's figures mean, and where its bound cut it once the answer says so. */
 function AttentionNote({
   attention,
 }: {
@@ -375,12 +338,6 @@ function AttentionNote({
   );
 }
 
-/**
- * What the read found in the service's own rows: the failures, why they
- * happened, and the accounts that need attention, drawn from `reliability`
- * once it is read and as their skeletons until then. Drawn only where the
- * database answered, since its silence says nothing about failures.
- */
 function ReliabilityRecords({
   reliability,
   onOpenAccount,
@@ -449,11 +406,6 @@ function ReliabilityRecords({
   );
 }
 
-/**
- * A status's quiet words while they are read: the words' own line with a
- * bone for them. Note that it stands in a row of its own, as the database's
- * loaded words do, so the bone sits on the line its words will.
- */
 function StatusWordsSkeleton(): React.JSX.Element {
   return (
     <Inline>
@@ -464,7 +416,6 @@ function StatusWordsSkeleton(): React.JSX.Element {
   );
 }
 
-/** The database's card while the probe's answer is read: bones for its badge and its round-trip. */
 function DatabaseCardSkeleton(): React.JSX.Element {
   return (
     <MetricCardSkeleton>
@@ -473,7 +424,6 @@ function DatabaseCardSkeleton(): React.JSX.Element {
   );
 }
 
-/** The integrations' card while their list is read: a row of bones for each provider a deployment lists. */
 function IntegrationsCardSkeleton(): React.JSX.Element {
   return (
     <MetricCardSkeleton hint={false}>
@@ -490,7 +440,6 @@ function IntegrationsCardSkeleton(): React.JSX.Element {
   );
 }
 
-/** The deployment's health, the database's probe beside its integrations, once read and as skeletons until then. */
 function SystemHealth({
   health,
 }: {
@@ -529,11 +478,6 @@ function SystemHealth({
   );
 }
 
-/**
- * The page under its header: the records where the database answered its
- * probe, or before any answer, and a plain word that nothing could be read
- * where it did not, with System health beneath either way.
- */
 function ReliabilityBody({
   reliability,
   onOpenAccount,
@@ -582,7 +526,6 @@ export function ReliabilityScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const shownWindow = reliabilityWindow(windowDays);

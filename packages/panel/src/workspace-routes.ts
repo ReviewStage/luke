@@ -1,50 +1,26 @@
-/**
- * workspace-routes.ts -- a workspace's Board and a person's page as the router stands them: whether each stands, what its address names, and the navigation that opens it.
- *
- * Both are routed places (`panel-router.tsx`) under the workspace their
- * address names, read from the address alone, as Admin is
- * (`admin/admin-route.ts`). Opening one is a visit; opening the one already
- * standing moves nothing, as pressing the place standing always has. A
- * person's page is opened with the name the place that opened it knew them
- * by, which names someone who left; the address holds no name, so the
- * window keeps each one it was handed for as long as it lives, and a step
- * back to the page finds it there.
- */
-
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useRef } from "react";
 import { ROUTED_PLACE } from "./route-gates.js";
 import { useRoutedLocation } from "./routed-location.js";
 
-/** A workspace's Board as the router stands it. */
 export interface BoardRoute {
   readonly open: boolean;
-  /** The address step of the workspace whose Board stands, while it stands. */
   readonly standingIn: string | undefined;
-  /** Opens the Board of the workspace whose address step is `workspace`. */
   readonly onOpen: (workspace: string) => void;
   readonly onClose: () => void;
-  /** Stands the Board of `workspace` in the step's place, as another workspace listed under the Board does. */
   readonly onTurn: (workspace: string) => void;
-  /** Reads the Board ahead of a press the pointer says is coming. */
   readonly onPreload: (workspace: string) => void;
 }
 
-/** A person's page as the router stands it. */
 export interface PersonRoute {
-  /** The person whose page stands, none while none does. */
   readonly userId: string | undefined;
-  /** The name the page was opened with, where it was handed one. */
   readonly name: string | undefined;
-  /** The address step of the workspace the page is the person's in, while it stands. */
   readonly workspace: string | undefined;
   readonly onOpen: (userId: string, name: string | undefined, workspace: string) => void;
   readonly onClose: () => void;
-  /** Reads the page ahead of a press the pointer says is coming. */
   readonly onPreload: (userId: string, workspace: string) => void;
 }
 
-/** The Board as the router stands it, left by `onClose`. */
 export function useBoardRoute(input: { onClose: () => void }): BoardRoute {
   const router = useRouter();
   const navigate = useNavigate();
@@ -65,12 +41,10 @@ export function useBoardRoute(input: { onClose: () => void }): BoardRoute {
   return { open, standingIn, onOpen, onClose: input.onClose, onTurn, onPreload };
 }
 
-/** A person's page as the router stands it, left by `onClose`. */
 export function usePersonRoute(input: { onClose: () => void }): PersonRoute {
   const router = useRouter();
   const navigate = useNavigate();
   const here = useRoutedLocation();
-  // Only grows: each name a page was opened with, by the person, which the address leaves out.
   const names = useRef(new Map<string, string>()).current;
   const open = here.place === ROUTED_PLACE.PERSON;
   const userId = open ? here.params.userId : undefined;

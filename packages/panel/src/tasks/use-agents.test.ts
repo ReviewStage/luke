@@ -60,16 +60,13 @@ interface Standing {
   list?: { readonly read: boolean; readonly failed: boolean; readonly onRetry: () => void };
 }
 
-/** Any kind the hook asks. */
 type AnyKind = PortActKind;
 
-/** One act as the hook asked it. */
 interface Asked {
   kind: AnyKind;
   payload: unknown;
 }
 
-/** The kinds the hook sends on mutations or reads through Query rather than its `act`. */
 const SENT_ON_MUTATIONS: readonly AnyKind[] = [
   ACT_KIND.AGENTS_START,
   ACT_KIND.AGENTS_STOP,
@@ -85,7 +82,6 @@ const SENT_ON_MUTATIONS: readonly AnyKind[] = [
   ACT_KIND.AGENTS_INBOX_ANSWER,
   ACT_KIND.AGENTS_INBOX_MESSAGE,
   ACT_KIND.AGENTS_INBOX_START,
-  // The reads asked through fetchQuery reach the act port too.
   ACT_KIND.TASKS_SKILLS,
   ACT_KIND.AGENTS_PAGE,
   ACT_KIND.AGENTS_MESSAGES,
@@ -108,12 +104,6 @@ async function settle(): Promise<void> {
   await settleFrames();
 }
 
-/**
- * Mounts the hook over a service the test scripts act by act: each kind
- * answers from its own queue of answers, and every ask is written down. The
- * window's toast stands beside it, its atoms on `registry`, one of its own,
- * as a window's, where none is given.
- */
 function mount(
   initial: Standing,
   registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
@@ -121,23 +111,19 @@ function mount(
 ) {
   const asked: Asked[] = [];
   const started: string[] = [];
-  /** An answer as a test queues it: at once, or a promise it settles when it chooses. */
   type Queued = WireBoundaryInput | Promise<WireBoundaryInput>;
   const answers = new Map<AnyKind, Queued[]>();
   let keys = 0;
   let control: AgentsControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
-  /** One ask answered from its kind's queue, and written down. */
   const scripted = (kind: AnyKind, payload: unknown): Promise<WireBoundaryInput> => {
     asked.push({ kind, payload });
     const next = answers.get(kind)?.shift();
     if (next === undefined) return Promise.reject(new Error("Not answered in this test."));
     return Promise.resolve(next);
   };
-  // Note that the writes the hook sends on its mutations reach the act port, which answers them from the same script.
   fakeActPort({
     ...fakeActPortCalls(),
-    // SAFETY: the test scripts each kind's answer in that kind's own shape.
     ...(Object.fromEntries(
       SENT_ON_MUTATIONS.map((kind) => [kind, (payload: unknown) => scripted(kind, payload)]),
     ) as Partial<FakeActPort>),
@@ -169,7 +155,6 @@ function mount(
   return {
     asked,
     started,
-    /** Queues the answers one kind gives, in order. */
     answer: (kind: AnyKind, ...queued: Queued[]) => {
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
     },
@@ -189,18 +174,12 @@ function mount(
   };
 }
 
-/** The Starts the hook asked, each with the payload its kind takes. */
 function startPayloads(
   asked: readonly Asked[],
 ): readonly PortActPayload<typeof ACT_KIND.AGENTS_START>[] {
   const starts = asked.filter((each) => each.kind === ACT_KIND.AGENTS_START);
-  // SAFETY: an ask recorded under the Start kind carries the payload the hook built for that kind.
   return starts.map((each) => each.payload as PortActPayload<typeof ACT_KIND.AGENTS_START>);
 }
-
-// Note that the refusal raises the window's toast, whose waits stand on the test's clock.
-
-// Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
 test("an ask of the models that never lands is said as failed past its bound, one that lands on models never read as failed, and one that lands on models read as read, no device as none", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -215,7 +194,6 @@ test("an ask of the models that never lands is said as failed past its bound, on
     await settle();
     assert.equal(tab.control().modelsRead.state, MODELS_READ.READING);
 
-    // The bound the requirement sets: fifteen seconds, past the host's own ten on the call.
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     assert.equal(tab.control().modelsFailed, true);
 
@@ -286,7 +264,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // The words, the choice, and the servers off are the draft's, held while another task opens a draft of its own.
   const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
@@ -317,7 +294,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
-  // The files attached to the words are the draft's too, and go with the prompt.
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
@@ -361,7 +337,6 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
   assert.deepEqual(tab.control().agentIds, ["key-1"]);
   assert.deepEqual(tab.started, ["key-1"], "its tab is chosen on the press");
 
-  // The host answers the Start once the list carries its agent.
   await tab.stand({ listedAgents: [STARTED] });
   await act(async () => land({ agent: STARTED }));
   await settle();
@@ -435,7 +410,6 @@ test("two windows' draft agents on one plan each keep their own words under thei
   act(() => first.control().onDiscardDraft("first-1"));
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  // The other window's draft, kept apart and outliving the first's, is the one a relaunch opens on.
   const relaunched = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await relaunched.mount();
   assert.deepEqual(
@@ -465,7 +439,6 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
 
 test("with no plan open, the agent the list carries is drawn from its row, on a task as with none, reading nothing of it, and a / reads its own repository's skills through the workspace the list names", async () => {
   handState(experimentsOn(EXPERIMENT.SKILLS));
-  // An agent on a task works in its own repository, which its task's may have moved on from since it started.
   const place = { id: AGENT, workspaceId: "workspace-1", repository: "acme/relay-legacy" };
   const tab = mount({
     taskId: undefined,
@@ -493,7 +466,6 @@ test("with no plan open, the agent the list carries is drawn from its row, on a 
     },
   ]);
 
-  // The list's row of it moving moves the page's agent too.
   await tab.stand({
     taskId: undefined,
     agentId: AGENT,
@@ -573,7 +545,6 @@ test("a pull request's chapters are generated for the agent's own pull request o
   await tab.mount();
 
   assert.deepEqual(await tab.control().generateChapters(AGENT, 41), generating);
-  // Nothing more is queued, so the port refuses this one.
   assert.deepEqual(await tab.control().generateChapters(AGENT), {
     failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
   });
@@ -654,7 +625,6 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
   tab.answer(ACT_KIND.AGENTS_START, { failure: AGENT_CALL_FAILURE.UNANSWERED }, { agent: forked });
   await tab.mount();
 
-  // A draft already written in takes the fork, and keeps its words.
   let draft = "";
   act(() => {
     draft = tab.control().onNewDraft();
@@ -680,7 +650,6 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
   };
   assert.deepEqual(tab.control().draft, forkDraft, "its chips start on the source's");
 
-  // The fork stays with the draft while another task is open, and through a change of its chips.
   await tab.stand({ taskId: OTHER_TASK });
   assert.equal(tab.control().draft, undefined);
   await tab.stand({ taskId: TASK });
@@ -693,7 +662,6 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
     failed = await tab.control().startFork(joined, fork, ` ${words} `, undefined, [notes], []);
   });
   assert.equal(failed?.text, "The agent could not be started.");
-  // Note that the fork kept is the same fork, though the tab hands back the one it already held where its fields are the same (`useSteadyDoors`).
   assert.deepEqual(tab.control().draft?.fork, fork, "a send that did not start keeps the fork");
   await act(async () => {
     failed = await tab.control().startFork(joined, fork, "", undefined, [], []);
@@ -796,7 +764,6 @@ test("a continue opens the task's draft with the closed box's words and files af
   const before = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [source] });
   await before.mount();
 
-  // Words already in the task's draft stay, the box's laid in after them.
   act(() => {
     before.control().onNewDraft();
   });
@@ -834,7 +801,6 @@ test("a continue opens the task's draft with the closed box's words and files af
   assert.deepEqual(kept.fork, fork, "still a continue");
   assert.equal(kept.prompt, "Check the logs first.\n\nNow add the dark variant.");
 
-  // The developer empties the box and sends: the continue goes on nothing more.
   let failed: Failure | undefined;
   await act(async () => {
     failed = await after.control().startFork(draft, fork, "", undefined, [], []);
@@ -900,7 +866,6 @@ test("continuing an agent starts on the task from its whole transcript under the
   });
   assert.equal(failed?.text, "The agent could not be started.");
   assert.deepEqual(tab.started, []);
-  // The host answers the Start once the list carries the agent it made.
   await tab.stand({ listedAgents: [continued] });
   await act(async () => {
     failed = await continueAgent(SOURCE);
@@ -1088,7 +1053,6 @@ test("a second continue of an agent once the first landed mints a key of its own
     await continueAgent(SOURCE);
   });
   await settle();
-  // A third from the task's draft, opened as the end line's press opens it.
   let draft = "";
   act(() => {
     draft = tab.control().onContinueDraft(SOURCE, "", []);

@@ -28,26 +28,15 @@ import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { AgentServersButton } from "./agent-servers.js";
 
-/**
- * The MCP servers popover over a bridge answering each connected server's
- * tools as the service would: the servers under Connected and Not
- * connected, a connected server's page in the popover's place with its
- * tools and the badges its server's annotations earn them, a search that
- * finds a tool and opens its server's page, and the keys that move through
- * it. Synthetic servers and tools.
- */
-
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
 const VERCEL = INTEGRATION_PROVIDER.VERCEL;
 
-/** Where each provider stands; one absent here is not offered. */
 const STANDING = new Map<string, IntegrationStatus>([
   [LINEAR, INTEGRATION_STATUS.CONNECTED],
   [VERCEL, INTEGRATION_STATUS.CONNECTED],
   [INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.DISCONNECTED],
 ]);
 
-/** Each connected server's tools, as its server listed them. */
 const TOOLS = new Map<string, readonly IntegrationTool[]>([
   [
     LINEAR,
@@ -91,12 +80,10 @@ const TOOLS = new Map<string, readonly IntegrationTool[]>([
 
 const roots: Root[] = [];
 
-/** Each server's tools as the host holds them, its service answering as `toolsOf` says, beside the acts the test answers by now. */
 function holdTools(toolsOf: (server: IntegrationServer) => IntegrationToolsView): void {
   holdIntegrationTools(handHostReads({}).deliverTools, toolsOf);
 }
 
-/** Each server's tools as `TOOLS` lists them. */
 const listed = (server: IntegrationServer): IntegrationToolsView => ({
   tools: TOOLS.get(server.connection ?? server.provider) ?? [],
 });
@@ -127,14 +114,12 @@ const statuses: IntegrationStatuses = {
   cancelSignIn: () => Promise.resolve(true),
 };
 
-/** The chip over the servers, opened once every tools read has answered, keeping each switch it was asked for. */
 async function opened(standing: IntegrationStatuses = statuses) {
   const switched: (readonly string[])[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Note that each draw stands on a registry of its own, so the document the test hands is read afresh.
   const registry = AtomRegistry.make();
   const render = (statuses: IntegrationStatuses) =>
     act(() =>
@@ -159,7 +144,6 @@ async function opened(standing: IntegrationStatuses = statuses) {
       .querySelector<HTMLButtonElement>('.agent-servers button[aria-haspopup="dialog"]')
       ?.click(),
   );
-  // Note that the servers' tools land on the document once their holds are taken, and each connected row says how its server answered once they reach its query.
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
   });
@@ -181,19 +165,16 @@ async function opened(standing: IntegrationStatuses = statuses) {
   const type = (text: string) =>
     act(() => {
       const input = field();
-      // React hears a typed value through the native setter and an input event, as a keystroke would land.
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, text);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
   return { container, switched, field, key, type, render };
 }
 
-/** Each section's heading and its rows' names, as drawn. */
 function sections(container: HTMLElement) {
   return [...container.querySelectorAll(".agent-servers-list ul")].map((group) => [
     group.getAttribute("aria-label"),
     [...group.querySelectorAll(".agent-servers-name")].map((name) => {
-      // Note that a row names its account beside its provider, so the two read together as "Notion · Acme".
       const account = name.nextElementSibling?.classList.contains("ui-account-words")
         ? name.nextElementSibling.textContent
         : undefined;
@@ -202,7 +183,6 @@ function sections(container: HTMLElement) {
   ]);
 }
 
-/** Each tool on a server's page: its name and its badge, where it wears one. */
 function tools(container: HTMLElement) {
   return [...container.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
     (tool.querySelector(".integration-tool-id") ?? tool.querySelector(".integration-tool-title"))
@@ -211,7 +191,6 @@ function tools(container: HTMLElement) {
   ]);
 }
 
-/** The press of the home's row whose words hold `name`. */
 function serverPress(container: HTMLElement, name: string): HTMLElement | undefined {
   return (
     [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")]
@@ -220,7 +199,6 @@ function serverPress(container: HTMLElement, name: string): HTMLElement | undefi
   );
 }
 
-/** The button saying `words` on the home's row whose name holds `name`. */
 function serverButton(container: HTMLElement, name: string, words: string): HTMLButtonElement {
   const row = [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((each) =>
     each.textContent?.includes(name),
@@ -232,12 +210,10 @@ function serverButton(container: HTMLElement, name: string, words: string): HTML
   );
 }
 
-/** Opens Vercel's page from the popover's home. */
 function openVercel(container: HTMLElement) {
   act(() => serverPress(container, "Vercel")?.click());
 }
 
-/** The name of the tool a server's page holds highlighted. */
 function highlighted(container: HTMLElement) {
   const row = container.querySelector('ul[aria-label$=" tools"] > li:has([aria-current="true"])');
   return (
@@ -245,7 +221,6 @@ function highlighted(container: HTMLElement) {
   )?.textContent;
 }
 
-/** A key pressed wherever the focus stands, as a keyboard's lands. */
 function keyAtFocus(name: string) {
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
@@ -353,7 +328,6 @@ test("a pointer's press on a server page's switch leaves the focus in the filter
     container.querySelector<HTMLButtonElement>('.agent-servers-page-head [role="switch"]') ??
     assert.fail("no switch on the page");
 
-  // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.
   const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {
     toggle.dispatchEvent(press);
@@ -473,7 +447,6 @@ test("a press on a tool opens its page with the popover standing open, and its b
     ].find((button) => button.textContent?.startsWith("delete_project")) ??
     assert.fail("delete_project has its row");
 
-  // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.
   const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {
     head.dispatchEvent(press);
@@ -537,7 +510,6 @@ test("two accounts at a provider stand as two rows, each named by its label, and
   assert.deepEqual(switched, [["notion-2"]]);
 });
 
-/** The host holding where each provider stands, and the act port answering each server's tools, Linear's with `problem`, as the service would. */
 function answerLinear(problem: {
   readonly reason: IntegrationToolsProblemReason;
   readonly message?: string;
@@ -548,7 +520,6 @@ function answerLinear(problem: {
   );
   holdIntegrations(() => ({
     rows: {
-      // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
       integrations: Object.fromEntries(
         INTEGRATION_PROVIDER_LIST.map((provider) => [
           provider,
@@ -559,7 +530,6 @@ function answerLinear(problem: {
   }));
 }
 
-/** The act port answering as `answerLinear` does, Linear's sign-in refused. */
 function answerLinearRefused(): void {
   answerLinear({ reason: INTEGRATION_TOOLS_PROBLEM.REFUSED });
 }
@@ -640,12 +610,10 @@ test("a server that is not connected hangs its card too, though its press is no 
   );
 });
 
-/** The words on each button standing on `name`'s row, with whether it is busy or off. */
 function buttonsOf(container: HTMLElement, name: string) {
   const row = [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")].find((each) =>
     each.textContent?.includes(name),
   );
-  // Note that the row's own press holds its name; what stands beside it is the row's buttons.
   const beside = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].filter(
     (button) => button.querySelector(".agent-servers-name") === null,
   );
@@ -734,12 +702,10 @@ test("a connected server that lists no tools has no page to open, so a press on 
   assert.deepEqual(switched, [[LINEAR]]);
 });
 
-/** The popover's panel in `container`, while it is drawn. */
 function panelIn(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** One exit running on every panel that is ending, as the engine would run its fade, until `finish` ends them: jsdom plays no motion of its own. */
 function holdPanelExits() {
   const exits: EventTarget[] = [];
   Object.defineProperty(Element.prototype, "getAnimations", {
@@ -794,10 +760,8 @@ test("Escape from the home takes the popover away at once where motion is held",
   assert.equal(panelIn(container), null);
 });
 
-/** How tall a row is drawn, in the layout given. */
 const ROW = 40;
 
-/** Each row standing under the rows before it in the list, as a layout would; jsdom lays nothing out. */
 function layRowsInOrder() {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -808,7 +772,6 @@ function layRowsInOrder() {
   });
 }
 
-/** The statuses with `provider` standing as `standing`. */
 function withStanding(provider: string, standing: IntegrationStatus): IntegrationStatuses {
   return {
     ...statuses,

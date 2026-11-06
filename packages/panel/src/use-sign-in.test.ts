@@ -1,9 +1,5 @@
 // @vitest-environment jsdom
 
-/**
- * use-sign-in.test.ts -- a sign-in that ends without landing says why on the sign-in screen, each reason in words of its own; a Cancel main refuses says why in a toast.
- */
-
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
@@ -19,7 +15,6 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 import { useSignIn } from "./use-sign-in.js";
 
-/** What the screen says for each reason, as a person reads it. */
 const SAID = {
   [SIGN_IN_FAILURE.TIMED_OUT]: "Sign-in timed out waiting for your browser. Try again.",
   [SIGN_IN_FAILURE.BROWSER]: "Couldn't open the sign-in page in your browser. Try again.",
@@ -43,7 +38,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The sign-in screen as the window stands it: the gate, over the sign-in it begins. */
 function SignInScreen(): React.JSX.Element {
   const signIn = useSignIn();
   return createElement(SignInGate, {
@@ -55,7 +49,6 @@ function SignInScreen(): React.JSX.Element {
   });
 }
 
-/** The screen over a host that answers every sign-in with `answer`, after one press on Google. */
 async function pressedOver(answer: FakeActAnswer): Promise<HTMLElement> {
   fakeActs({
     act: async (request) =>
@@ -76,7 +69,6 @@ async function pressedOver(answer: FakeActAnswer): Promise<HTMLElement> {
   return container;
 }
 
-/** What the screen's alert region says; empty while nothing went wrong. */
 function alertWords(container: HTMLElement): string | null | undefined {
   return container.querySelector('[role="alert"]')?.textContent;
 }
@@ -109,7 +101,6 @@ test("a Cancel main refuses says why in a toast, and the gate is offered again a
   const refusal = "The sign-in could not be withdrawn.";
   fakeActs({
     act: (request) => {
-      // The sign-in waits on the browser for as long as the test runs.
       if (request.kind === ACT_KIND.ACCOUNT_BEGIN_SIGN_IN) return new Promise(() => undefined);
       if (request.kind === ACT_KIND.ACCOUNT_CANCEL_SIGN_IN) {
         return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: refusal });

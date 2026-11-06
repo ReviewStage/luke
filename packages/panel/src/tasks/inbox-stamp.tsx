@@ -2,21 +2,8 @@ import { Badge, CHIP_LOOK, CHIP_SIZE, Chip, STATUS_TONE, type StatusTone } from 
 import { CheckIcon, Undo2Icon } from "@repo/ui/icons";
 import { ANSWER_TONE, type AnswerStamp, type AnswerTone } from "./inbox-model.js";
 
-/**
- * inbox-stamp.tsx -- an answer to an Inbox ask as a stamp: its glyph and its words, at the head of the reply that sent it or over the box it is attached to.
- *
- * A stamp is a `Badge`, or a removable `Chip` where it is attached, and the
- * only color it spends is its glyph's: a check in green for an answer that
- * goes ahead, and a turn back in the neutral gray for one that holds back,
- * since holding back failed nothing, so Approved and Changes requested read
- * apart at a glance. Attached to the box, it carries a × that takes it off
- * again.
- */
-
-/** What the × on an attached stamp says it does. */
 const TAKE_OFF = "Take off answer";
 
-/** The status tone each way an answer goes is drawn in: going ahead complete, holding back neutral. */
 export const ANSWER_STATUS_TONE = {
   [ANSWER_TONE.AHEAD]: STATUS_TONE.COMPLETE,
   [ANSWER_TONE.BACK]: STATUS_TONE.NEUTRAL,
@@ -27,7 +14,6 @@ export function InboxStamp({
   onRemove,
 }: {
   stamp: AnswerStamp;
-  /** Takes the answer off the box, where the stamp is attached rather than sent. */
   onRemove?: (() => void) | undefined;
 }): React.JSX.Element {
   const tone = ANSWER_STATUS_TONE[stamp.tone];

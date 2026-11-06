@@ -1,17 +1,6 @@
-/**
- * automation-agent-brief.ts -- what the Automations page's Create with an agent hands the agent it starts: a fixed brief, then the member's own words fenced as their request.
- *
- * The brief is the same for every request, written here rather than by a
- * model, so what the agent is told to do, and which automations tools it is
- * told to do it with, changes only with this file. The member's words follow
- * it whole, in a fence longer than any run of backticks they hold, so
- * nothing they wrote closes the fence and reads as the brief.
- */
-
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { fencedBlock } from "../tasks/markdown-fence.js";
 
-/** The brief every Create with an agent opens with, ahead of the request. */
 const BRIEF = `# Create an automation
 
 A member asked on the Automations page for an automation that does what their request below says. Make it for them:
@@ -22,10 +11,8 @@ A member asked on the Automations page for an automation that does what their re
 4. Create it with \`create_automation\`.
 5. Reply with what you made: its name as a link to it, \`[<name>](${LINK_ORIGIN}/<workspace>/automation/<id>)\`, by the id \`create_automation\` answered and the workspace in your task's own link, its trigger, and what each run does.`;
 
-/** What leads the member's words in. */
 const REQUEST_LEAD = "Their request, in their own words:";
 
-/** The agent's first message for a request: the brief, then the request fenced, trimmed of the space around it. */
 export function automationAgentBrief(request: string): string {
   return `${BRIEF}\n\n${REQUEST_LEAD}\n\n${fencedBlock(request.trim(), "text")}`;
 }

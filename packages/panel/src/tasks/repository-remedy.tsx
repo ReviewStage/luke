@@ -3,32 +3,10 @@ import { agentKeyLink, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { createContext, useContext } from "react";
 import { useOpenSettings } from "../open-settings.js";
 
-/**
- * repository-remedy.tsx -- what the press under a refused start or message does when the task's repository is out of reach.
- *
- * Each reason's remedy is one door of the window's (`App`'s, over the
- * Tasks tab), handed down on a context so the composer and the terminal
- * picker mend the task's repository without every surface between threading the
- * doors on: Settings › Workspace's GitHub for the task's workspace, the
- * installation's settings page on GitHub, the task's repository chip, or
- * the task moved to the workspace whose GitHub reaches it, after which the
- * same send goes again by itself. A member's own GitHub token is replaced
- * in Settings › Profile, through the window's Settings opener, and a
- * missing subscription or API key connected at its harness's row in
- * Settings › Agents, or authorized for an organization's SAML SSO on
- * GitHub. Outside the window, as in a test of one surface, every door does
- * nothing.
- */
-
-/** The window's doors a repository's remedy opens. */
 export interface RepositoryRemedyDoors {
-  /** Settings › Workspace at its GitHub, for the task's workspace. */
   readonly openWorkspaceGitHub: (taskId: string) => void;
-  /** A page of GitHub's in the browser. */
   readonly openGitHub: (url: string) => void;
-  /** The task's repository chip, opened on its menu. */
   readonly chooseRepository: (taskId: string) => void;
-  /** The task moved to the workspace; answers whether it moved. */
   readonly moveTask: (taskId: string, workspaceId: string) => Promise<boolean>;
 }
 
@@ -41,19 +19,12 @@ const NO_DOORS: RepositoryRemedyDoors = {
 
 const RepositoryRemedyContext = createContext<RepositoryRemedyDoors>(NO_DOORS);
 
-/** Hands the window's doors to everything under it. */
 export const RepositoryRemedyProvider = RepositoryRemedyContext.Provider;
 
-/** The window's door to Settings › Workspace at its GitHub, for a task's workspace. */
 export function useOpenWorkspaceGitHub(): (taskId: string) => void {
   return useContext(RepositoryRemedyContext).openWorkspaceGitHub;
 }
 
-/**
- * The press that mends a repository out of reach, by the failure's reason;
- * none for a failure whose remedy is the surface's own or that has none.
- * `retry` sends the same words again, which a move does once it lands.
- */
 export function useRepositoryRemedy(): (
   failure: Failure,
   retry?: () => void,

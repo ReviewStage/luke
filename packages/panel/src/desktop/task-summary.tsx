@@ -61,84 +61,15 @@ import { type CountNoun, foldedCount, sidebarFold } from "./sidebar-fold.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
 
-/**
- * task-summary.tsx -- the open task's summary at its column's right: everything the task's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
- *
- * The summary lists what the side panel's "+" and the task's column's "+"
- * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
- * `agentEntries`), under quiet headings: the task's Inbox, counting what
- * waits on the developer, and the panel's kinds the task has used, its
- * coding agents, and each agent's pull request whose Changes tab the panel
- * opens. An agent wears where it stands on its glyph,
- * and a failure at the row's end, as its tab does, since no tab stands
- * beside the row to say it. A row
- * opens what it names exactly as its "+" row does: a kind opens the side
- * panel on its tab, and an agent chooses its tab in the
- * column. An agent's row offers Archive on a right-click, and the
- * agents archived are folded under Archived at the foot of Coding agents
- * (`agent-archive.tsx`). Each heading folds its rows away as the
- * sidebar's groups fold (`GroupHeader`), counting them while folded, and
- * which headings are folded is one choice for every task's summary, kept
- * on this Mac.
- *
- * A plan with nothing yet to list draws no summary at all, rail or card,
- * rather than one saying so; it stands once the plan holds its first row.
- *
- * It is drawn expanded or collapsed wherever the column has room for its
- * rail. Expanded and
- * where the column has room to keep the document at its measure beside it,
- * side panel open or shut, it stands pinned at the column's right, as
- * Cursor's does: borderless on the column's own ground, the document or the
- * agent's transcript, centered again in the room it leaves, with a chevron at its top right, shown while the
- * pointer or the keys are on it, that collapses it from the very spot the
- * rail's expands it. Collapsed, or where the column has no such room, it is
- * a rail of the panel's kinds alone, each naming itself in its hint, under a
- * chevron that pins it again where it fits and otherwise hangs the whole
- * summary as a card over the rail's own footprint, the rail expanding in
- * place, with its own chevron back on the spot the rail's stood. The card
- * goes on that chevron, on Escape, on a row chosen, or on a press anywhere
- * outside it, which still lands where it was pressed. A column too narrow to
- * spare the rail's room draws no summary at all, the side panel's tabs and
- * the agents' strip holding what it would list. Whether it is pinned
- * is the window's preference, kept in the renderer's storage as the
- * sidebar's fold is, and a fixture run keeps none.
- *
- * Pinning or collapsing it changes the column's layout at once: the content
- * glides to its new middle and the summary to its new edge (pane-motion.tsx).
- */
-
-/**
- * The pin is kept on this Mac, pinned where none was. Note that a `false`
- * kept from when unpinning hid the summary now reads collapsed, the nearest
- * thing to hidden the summary still has.
- */
 const KEPT = {
   PINNED: keptKey("app.summary-pinned", keptFlag),
-  /** The headings the reader folded, one choice for every task's summary. */
   FOLDED: keptKey("app.summaryFoldedSections", Schema.fromJsonString(Schema.Array(Schema.String))),
 } as const;
 
-/**
- * The least width of the task's column, in CSS pixels, at which the summary
- * can stand pinned rather than as a rail: the document's measure and its page
- * insets either side (`@repo/ui`'s `--ui-page-measure`, 720, and
- * `--ui-page-inset`, 40) beside the column's own `--summary-width`, 240, so
- * making room for it never reads the document under its measure. Note that
- * the column is measured whole, the summary included, and the side panel
- * beside it is not, so an open panel narrows what is measured and the
- * summary's own width never moves it.
- */
 const SUMMARY_WIDE = 1040;
 
-/**
- * The least width of the task's column, in CSS pixels, at which the summary
- * stands as a rail rather than not at all. Note that below it the rail's
- * 56px and the document's page insets either side, 80, would leave the words
- * under 344px.
- */
 const SUMMARY_RAILED = 480;
 
-/** How the summary stands in the plan's column: pinned, a rail, or not drawn where the column has no room for one. */
 const SUMMARY_MODE = {
   COLUMN: "column",
   RAIL: "rail",
@@ -147,17 +78,14 @@ const SUMMARY_MODE = {
 
 export type SummaryMode = (typeof SUMMARY_MODE)[keyof typeof SUMMARY_MODE];
 
-/** What hung the card, which takes the focus back when Escape or its chevron takes the card down. */
 const CARD_FROM = {
   RAIL: "rail",
 } as const;
 
 type CardFrom = (typeof CARD_FROM)[keyof typeof CARD_FROM];
 
-/** The heading over the side panel's kinds, which their "+" menu lists under none. */
 const TABS_SECTION = "Tabs";
 
-/** The summary's headings, in the order it lists them. */
 const SECTION_ORDER = [
   TABS_SECTION,
   AGENTS_SECTION,
@@ -167,7 +95,6 @@ const SECTION_ORDER = [
 
 type SummaryHeading = (typeof SECTION_ORDER)[number];
 
-/** What a folded heading's count is read as. */
 const SECTION_NOUN = {
   [TABS_SECTION]: { one: "tab", many: "tabs" },
   [AGENTS_SECTION]: { one: "agent", many: "agents" },
@@ -175,22 +102,12 @@ const SECTION_NOUN = {
   [ADD_SECTION.PAGES]: { one: "page", many: "pages" },
 } as const satisfies Record<SummaryHeading, CountNoun>;
 
-/** No heading folded, as the summary first stands. */
 const NONE_FOLDED: readonly string[] = [];
 
-/** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
 
-/** What a row of the card opens over the window, drawn outside the card, so a press in it is no press outside: an agent's menu, its Archive's question, and a row's hover card. */
 const OPENED_FROM_CARD = '[role="menu"], [role="alertdialog"], [role="tooltip"]';
 
-/**
- * Whether the summary stands pinned where it fits, rather than collapsed to
- * its rail, and the press that turns it; and whether the task's column, as
- * last measured, has room for it pinned, which the column reports. Both are
- * held by the shell, whose panes glide as either turns how the summary
- * stands, the column's measure included.
- */
 export interface SummaryPin {
   pinned: boolean;
   onToggle: () => void;
@@ -198,10 +115,6 @@ export interface SummaryPin {
   onMeasured: (wide: boolean) => void;
 }
 
-/**
- * The pin, kept across launches. A fixture run starts pinned and keeps
- * nothing, so its frames never wear a developer's own choice.
- */
 export function useSummaryPin(fixtureMode: boolean): SummaryPin {
   const [kept, , changeKept] = useKept(KEPT.PINNED, true);
   const [staged, setStaged] = useState(true);
@@ -211,37 +124,19 @@ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
     [fixtureMode, changeKept],
   );
   const pinned = fixtureMode ? staged : kept;
-  // The same pin across draws while none of it moves, so the column it is handed to is not drawn again for a new one.
   return useMemo(() => ({ pinned, onToggle, wide, onMeasured: setWide }), [pinned, onToggle, wide]);
 }
 
-/** How the summary stands now, whether its card hangs, and the presses that change either. */
 export interface SummaryLayout {
   mode: SummaryMode;
-  /** Whether the summary lists anything, without which it is not drawn. */
   holds: boolean;
-  /** Whether the column has room for the summary pinned, which is what the rail's chevron turns. */
   wide: boolean;
-  /** What hung the card, while it hangs. */
   card: CardFrom | undefined;
-  /** The pinned summary's chevron, which collapses it to its rail. */
   onToggle: () => void;
-  /** The rail's chevron: the card while it hangs, else the pin where the summary fits, else the card. */
   onExpand: () => void;
   onDismiss: () => void;
 }
 
-/**
- * How the summary stands in the task's `column`, measured whole: pinned
- * while it is pinned and the column holds it beside the document's measure,
- * a rail where the column spares the rail's room, and not drawn otherwise,
- * nor while it `holds` nothing to list. A card hangs only where the summary
- * stands as its rail, and only while the column is drawn and the summary
- * holds something, so the summary pinned, the column narrowed past the
- * rail, a side panel `covering` the column, or its last row gone takes it
- * down. A column not laid out, hidden or not yet
- * drawn, measures nothing and changes nothing.
- */
 export function useSummaryLayout(
   pin: SummaryPin,
   column: HTMLElement | null,
@@ -271,9 +166,6 @@ export function useSummaryLayout(
       : railed
         ? SUMMARY_MODE.RAIL
         : SUMMARY_MODE.NONE;
-  // Note that the card's keys are heard on the window, so a card the
-  // column no longer shows, pinned or with no rail left to hang over, is let
-  // go rather than left taking Escape.
   const gone = mode !== SUMMARY_MODE.RAIL || covering || !holds;
   if (gone && hung !== undefined) setHung(undefined);
   const card = gone ? undefined : hung;
@@ -294,7 +186,6 @@ export function useSummaryLayout(
   };
 }
 
-/** The attributes of a control that hangs the card: whether it hangs, and which it is. */
 function cardControl(layout: SummaryLayout, cardId: string) {
   return {
     "aria-haspopup": "dialog" as const,
@@ -303,26 +194,15 @@ function cardControl(layout: SummaryLayout, cardId: string) {
   };
 }
 
-/** A row of the summary: its "+" row, and the card it hangs where the rest of the window hangs one for the same thing. */
 interface SummaryEntry extends AddEntry {
   card?: ReactNode;
 }
 
-/** A heading and the rows under it. */
 interface SummarySection<Entry extends AddEntry = SummaryEntry> {
   heading: SummaryHeading;
   entries: readonly Entry[];
 }
 
-/**
- * The card each row hangs, the one its tab hangs where it has one: an
- * agent's its tab's card, read from what its tab last held; a pull request's its title, number, and what it
- * changes, under the agent whose it is; a page's a preview of its newest
- * version; the Inbox's what waits; the plan's the task's card. Each is
- * the card its tab hangs (`tab-card.tsx`), so the row and the tab never
- * say different things; the panel's other kinds hang none, as their tabs
- * hang none, since their names say all there is.
- */
 function withCards(
   entries: readonly AddEntry[],
   input: {
@@ -330,9 +210,7 @@ function withCards(
     inbox: InboxBoardView;
     held: HeldTranscripts;
     changes: readonly ChangesOffer[];
-    /** Who each agent's pull request names, as its Changes tab last read them. */
     people: ReadonlyMap<string, HeldPeople>;
-    /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
     onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
@@ -352,7 +230,6 @@ function withCards(
     }
     if (row.id === INBOX_ROW) return card(entry, { kind: TAB_KIND.INBOX, inbox });
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
-      // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;
       const chosen = sameTab({ agent: offer.agent.id }, mainTabs.tab);
@@ -366,7 +243,6 @@ function withCards(
       });
     }
     if (row.section === ADD_SECTION.PAGES) {
-      // Note that a page's row is named by the page's id (`panelEntries`).
       const page = tasks.pages?.find((each) => each.id === row.id);
       const taskId = tasks.activeTaskId;
       if (page === undefined || taskId === undefined) return entry;
@@ -377,13 +253,6 @@ function withCards(
   });
 }
 
-/**
- * The rows the summary lists, before their cards: the plan's Inbox leads,
- * counting what waits on the developer and wearing the Draft pencil where
- * one of its items' boxes holds a draft (`inboxDrafted`), while it holds an
- * item, waiting or settled, and opens the window's Inbox narrowed to the
- * plan; then the panel's kinds and what they hold, then the agents.
- */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView, inboxDrafted = false) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
@@ -406,12 +275,10 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, inboxDrafted = 
   return { rows, changes };
 }
 
-/** `entries` under their headings in their order, each heading only where it has a row. */
 function sectionsOf<Entry extends AddEntry>(
   entries: readonly Entry[],
   agents: AgentsControl,
 ): SummarySection<Entry>[] {
-  // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
   return SECTION_ORDER.flatMap((heading) => {
     const own = entries.filter((entry) => (entry.row.section ?? TABS_SECTION) === heading);
@@ -420,7 +287,6 @@ function sectionsOf<Entry extends AddEntry>(
   });
 }
 
-/** What the summary lists, under its headings in their order, each row with the card it hangs. */
 function summarySections(
   tasks: TasksControl,
   inbox: InboxBoardView,
@@ -434,17 +300,10 @@ function summarySections(
   return sectionsOf(entries, tasks.agents);
 }
 
-/** Whether the plan's summary lists anything, which is whether it is drawn at all. */
 export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolean {
   return sectionsOf(summaryRows(tasks, inbox).rows, tasks.agents).length > 0;
 }
 
-/**
- * A row of the column or the card: its glyph, its label, and what tells it
- * apart, as its "+" row says it, after the label on its line, then a failed agent's mark or the Inbox's count. A row with a card
- * hangs it on hover beside the row, before its start where the window ends
- * past it, as the sidebar's rows hang theirs.
- */
 function SummaryRow({
   entry,
   onPick,
@@ -457,11 +316,8 @@ function SummaryRow({
   entry: SummaryEntry;
   onPick: () => void;
   menu?: ListRowMenu | undefined;
-  /** Whether the menu draws its ⋯, which a finger's agent row leaves out (`ListRow`'s `more`). */
   more?: boolean | undefined;
-  /** The field the row's name is edited in, in its title's place while a Rename is open. */
   editor?: ReactNode;
-  /** What stands under the title, in the row's own detail's place: a refused rename's note. */
   description?: ReactNode;
   rowRef?: ((element: HTMLElement | null) => void) | undefined;
 }) {
@@ -490,17 +346,8 @@ function SummaryRow({
   );
 }
 
-/** What an agent's row is, naming its ⋯ and menu "Agent actions". */
 const AGENT_THING = "Agent";
 
-/**
- * An agent's row, whose ⋯, right-click, long press and menu key offer the
- * agent's one menu over the doors a row has (`agent-actions.tsx`): Copy link,
- * Rename, which turns the row into its name's field as the sidebar's rows do,
- * Archive, asking first while a teammate's agent still works, and Permanently
- * delete, asked first. A finger's row draws no ⋯, so its name keeps the room,
- * as the sidebar's agent rows draw none.
- */
 function AgentSummaryRow({
   entry,
   agent,
@@ -556,7 +403,6 @@ function AgentSummaryRow({
   );
 }
 
-/** A row of the rail: its glyph alone, naming itself to a reader and in its hint, which its "+" row is searched by. */
 function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
@@ -571,7 +417,6 @@ function RailRow({ entry }: { entry: AddEntry }) {
   );
 }
 
-/** The summary's headings and rows, as the column and the card list them, each heading folding its rows as the sidebar's groups fold, an agent's row with its menu and the archived agents' fold under Coding agents; `onPicked` hears a row chosen before it opens. */
 function SummaryList({
   sections,
   agents,
@@ -581,9 +426,7 @@ function SummaryList({
 }: {
   sections: readonly SummarySection[];
   agents: AgentsControl;
-  /** Whether the summary is on screen, which a row's menu and its question stand on. */
   shown: boolean;
-  /** Opens an agent, an archived one's row among them, which opens on its own page. */
   onOpenAgent: (agentId: string) => void;
   onPicked?: () => void;
 }): React.JSX.Element {
@@ -649,17 +492,6 @@ function SummaryList({
   );
 }
 
-/**
- * The card, hung over the rail's footprint, its top and right edges the
- * rail's, over whatever the column shows, and its chevron, drawn while the
- * pointer is on the card, on the very spot of the rail's own, so the
- * pointer that expanded it collapses it without moving. It takes the focus
- * as it hangs, so the keys reach its rows, and gives it to the control that
- * hung it when Escape or its chevron takes it down. A press anywhere
- * outside it takes it down too, and still lands where it was pressed, but
- * one on a control that hangs it is that control's to answer. Taken down,
- * it is held drawn through its exit, `leaving`, inert and hearing nothing.
- */
 function SummaryCard({
   id,
   from,
@@ -677,7 +509,6 @@ function SummaryCard({
   onOpenAgent: (agentId: string) => void;
   onDismiss: () => void;
   leaving: boolean;
-  /** Hands the card's element to the hold that draws it through its exit. */
   ref: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
   const card = useRef<HTMLElement>(null);
@@ -688,7 +519,6 @@ function SummaryCard({
     },
     [hold],
   );
-  // Hung again while it was leaving, it takes the focus again.
   useLayoutEffect(() => {
     if (leaving) return;
     const element = card.current;
@@ -699,10 +529,8 @@ function SummaryCard({
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
-    // The opener is a box around its button, which takes the focus back.
     (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
-  // A press on a control that hangs the card, or on what the card opened, is that control's to answer.
   usePressAway(card, () => undefined, {
     onPressAway: leaving ? undefined : onDismiss,
     holds: (target) =>
@@ -712,12 +540,8 @@ function SummaryCard({
   });
   useEffect(() => {
     if (leaving) return;
-    // Note that the window's own Escape mutes a call or steps back a layer
-    // (app.tsx), so the card keeps the press, as a menu does, before it is
-    // heard there.
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      // A menu or a question a row opened is the nearest layer, and takes its Escape itself.
       if (event.target instanceof Element && event.target.closest(OPENED_FROM_CARD) !== null) {
         return;
       }
@@ -767,14 +591,6 @@ function SummaryCard({
   );
 }
 
-/**
- * The summary's own chevron at its top right, the one control of the column
- * and the rail, so a press on it keeps the focus as the summary turns. On
- * the rail it pins the summary where it fits, or hangs it as a card; pinned it
- * collapses the summary to the rail, kept as the pin is, drawn while the pointer or the keys are on the summary, on the very
- * spot of the rail's own, so the pointer that pinned it collapses it again
- * without moving.
- */
 function SummaryChevron({
   layout,
   cardId,
@@ -785,7 +601,6 @@ function SummaryChevron({
   const pinned = layout.mode === SUMMARY_MODE.COLUMN;
   const label = pinned ? "Collapse summary" : "Expand summary";
   const hangs = !pinned && !(layout.wide && layout.card === undefined);
-  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
     <span
       className="task-summary-chevron"
@@ -803,7 +618,6 @@ function SummaryChevron({
   );
 }
 
-/** The summary's room beside the column, as wide as its mode stands it; its words left out where it only keeps that room. */
 function SummaryRoom({
   mode,
   kept = false,
@@ -828,18 +642,10 @@ function SummaryRoom({
   );
 }
 
-/** The summary's room while the task is read, kept at the width it will stand at, so the column lands at its own. */
 export function SummarySkeleton({ mode }: { mode: SummaryMode }): React.JSX.Element | null {
   return mode === SUMMARY_MODE.NONE ? null : <SummaryRoom mode={mode} kept />;
 }
 
-/**
- * The summary in the plan's column, pinned or as its rail, or nothing where
- * the column spares no rail, and the card while it hangs. The rail lists the panel's kinds alone, one glyph after
- * another under its chevron at one even step, since a glyph tells an agent,
- * a subagent, or a file from its neighbors by nothing a reader could tell
- * at a glance.
- */
 export function TaskSummary({
   tasks,
   layout,
@@ -851,27 +657,20 @@ export function TaskSummary({
   tasks: TasksControl;
   layout: SummaryLayout;
   cardId: string;
-  /** The task's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
   inbox: InboxBoardView;
-  /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
-  /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const rowDrafts = useInboxRowDrafts();
-  // Note that a draft is read as its item's row reads it, so picks made on an ask since changed mark nothing.
   const inboxDrafted = [...inbox.open, ...inbox.settled].some((item) =>
     rowDrafted(rowDrafts.get(item.id), item),
   );
-  // Note that the pull requests offered are the agents', whose people their Changes tabs read.
   const pullRequests = tasks.agents.pullRequests;
   const people = useChangesPeopleOf(useMemo(() => [...pullRequests.keys()], [pullRequests]));
   const sections = summarySections(tasks, inbox, held, onOpenAgent, inboxDrafted, people);
-  // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,
   );
-  // The card is drawn through its exit, from the control that last hung it.
   const [hungFrom, setHungFrom] = useState(layout.card);
   if (layout.card !== undefined && layout.card !== hungFrom) setHungFrom(layout.card);
   const card = useDisclosure(layout.card !== undefined);
@@ -879,7 +678,6 @@ export function TaskSummary({
     <>
       {layout.mode === SUMMARY_MODE.NONE ? null : (
         <SummaryRoom mode={layout.mode}>
-          {/* Note that the chevron stands outside what scrolls, at one place in both modes, so its press keeps the focus as the summary turns and the fade never reaches it. */}
           <SummaryChevron layout={layout} cardId={cardId} />
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div

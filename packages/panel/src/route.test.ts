@@ -12,13 +12,6 @@ import {
   type Thing,
 } from "./route.js";
 
-/**
- * route.test.ts -- where a link pressed opens, one row per kind of address
- * and the surface it was pressed on: an Inbox item, a task's page, an
- * agent's page, the window past them, and the Tasks tab going to a place.
- * Synthetic ids.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
@@ -31,7 +24,6 @@ const PR = "https://github.com/acme/relay/pull/42";
 const FILE = "https://github.com/acme/relay/blob/HEAD/src/invites.ts";
 const APP = "https://vespin.dev/acme";
 
-/** A task's or an agent's: its repository, and one agent, which opened the pull request numbered 42. */
 const HOLDING = {
   repository: "acme/relay",
   pullRequests: new Map([[AGENT, { url: PR }]]),
@@ -39,7 +31,6 @@ const HOLDING = {
   heldIds: undefined,
 };
 
-/** The same, its agent archived: no longer drawn, though still held. */
 const ARCHIVED = { ...HOLDING, agentIds: [], heldIds: [AGENT] };
 
 const ITEM: Here = { kind: HERE.INBOX_ITEM, taskId: TASK, agentId: undefined, ...HOLDING };
@@ -52,7 +43,6 @@ const TASKLESS_ITEM: Here = {
 const ON_TASK: Here = { kind: HERE.TASK, taskId: TASK, ...HOLDING };
 const ON_AGENT: Here = { kind: HERE.AGENT, agentId: AGENT, ...HOLDING };
 
-/** The window, listing the task, and an agent on no task, which opened the pull request numbered 43. */
 const WINDOW: Here = {
   kind: HERE.WINDOW,
   opensPlaces: true,
@@ -62,7 +52,6 @@ const WINDOW: Here = {
   },
 };
 
-/** The Tasks tab showing the task with nothing over its plan. */
 const STANDING: Here = { kind: HERE.TASKS_TAB, taskId: TASK };
 
 const NOTHING: Route = { kind: ROUTE.NOTHING };

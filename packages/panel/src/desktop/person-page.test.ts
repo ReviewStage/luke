@@ -54,15 +54,6 @@ import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
-/**
- * A person's page lists what of theirs the listed workspace holds, and
- * nobody else's: their agents at work, the Inbox items their agents wait
- * on, the tasks assigned to them, the rest of the tasks they created, and
- * their other agents. It names them as the
- * members read does, the reader as You, and someone who left as a former
- * member. Synthetic accounts.
- */
-
 const NOW = Date.now();
 const MINUTE = 60_000;
 const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
@@ -70,7 +61,6 @@ const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, g
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const PRIYA = { userId: "user-priya", name: "Priya Raman" };
-/** An automation of the workspace's or of one member's own, made by `by`. */
 function automation(
   n: number,
   name: string,
@@ -116,7 +106,6 @@ const AUTOMATIONS = [
 ];
 
 const PRIYA_PICTURE = "https://lh3.googleusercontent.com/a/photo-11";
-/** Someone who left having only revised a task, whom no task or agent names. */
 const OLA = { userId: "user-ola", name: "Ola Berg" };
 const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }, OLA];
 const MEMBERS: readonly WorkspaceMember[] = [
@@ -217,7 +206,6 @@ const RETRY_429 = item(1, "Retry 429s too?", BACKOFF.id, 8 * MINUTE);
 const ROLLOUT = item(2, "Ship the limiter at 10%?", LIMITER.id, 20 * MINUTE);
 const INBOXES = new Map<string, readonly InboxItem[]>([[RETRIES.id, [RETRY_429, ROLLOUT]]]);
 
-/** An agent an automation started with no task, and the question it waits on in Acme. */
 const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 const SWEEP_ITEM: InboxItem = { ...item(9, "Quarantine the flaky test?", SWEEP_AGENT, MINUTE) };
 
@@ -227,21 +215,13 @@ const HOLDING: Pick<TasksControl, "inbox" | "inboxTasks"> = {
 };
 
 let root: Root | undefined;
-/** Whether the Inbox's reads are refused, as a read that failed is. */
 let inboxRefused = false;
-/** Whether the automations' reads are refused, as a read that failed is. */
 let automationsRefused = false;
-/** Whether the Inbox's reads are still out, answering nothing yet. */
 let inboxHeld = false;
-/** Whether the automations' reads are still out, answering nothing yet. */
 let automationsHeld = false;
-/** Whether the workspace's people are held back until the test lays them with `answerMembers`. */
 let membersHeld = false;
-/** Whether the read of the workspace's people is refused, as a read that failed is. */
 let membersRefused = false;
-/** Lays the held-back people on the document, the fixture's members and who left. */
 let answerMembers: () => void = () => undefined;
-/** Every text the page asked the window to copy, in order. */
 let copied: string[] = [];
 
 beforeEach(() => {
@@ -256,7 +236,6 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeAppBridge({});
   fakeActPort({
-    // An agent read by its own id stands at rest, as its page reads it.
     [ACT_KIND.AGENTS_PAGE]: ({ agentId }: { agentId: string }) =>
       Promise.resolve({
         agent: {
@@ -283,7 +262,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Every door the page opens, in order. */
 interface Opened {
   readonly tasks: string[];
   readonly agents: [string, string][];
@@ -291,8 +269,6 @@ interface Opened {
   readonly settings: SettingsLink[];
 }
 
-/** `userId`'s page over the fixture workspace, read by Dean, opened knowing `name`, every door it opens recorded. */
-/** The account's feed as the host holds it: each task's items and the sweep agent's, unless the test holds or refuses it. */
 function feedNow(): AppHostRead<AppInboxItems> {
   if (inboxHeld) return UNREAD;
   if (inboxRefused) return { failed: true };
@@ -306,11 +282,6 @@ function feedNow(): AppHostRead<AppInboxItems> {
   };
 }
 
-/**
- * The workspace's people as the host holds them once the page holds them:
- * held back until `answerMembers` where the test holds them, refused where
- * it refuses them, and laid anew by Try again.
- */
 function holdPeople(deliver: HostReadsHanded["deliverMembers"]): void {
   const people = (): AppWorkspaceMembersRead =>
     membersRefused ? { failed: true } : { rows: { members: MEMBERS, former: FORMER } };
@@ -332,7 +303,6 @@ function mount(userId: string, name?: string, memberCount = MEMBERS.length) {
   return mountWith({}, userId, name, memberCount);
 }
 
-/** Dean's page by default, over the fixture workspace with `overrides`, every door it opens recorded. */
 function mountWith(
   overrides: Partial<TasksControl>,
   userId = DEAN.userId,
@@ -342,7 +312,6 @@ function mountWith(
 ) {
   const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
   const reads = handHostReads({ items: feedNow() });
-  // Note that the workspace's automations are laid as the page holds them, unless the test holds or refuses them.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () => {
       if (automationsHeld) return undefined;
@@ -391,7 +360,6 @@ function mountWith(
   document.body.append(container);
   root = createRoot(container);
   draw(control({}));
-  /** Draws the page again over the workspace with `more` on top of what it was mounted with. */
   const redraw = (more: Partial<TasksControl>) => draw(control(more));
   return { page: container, opened, redraw };
 }
@@ -400,7 +368,6 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  // Note that the people and the automations the host holds reach their queries a tick after they land, unless the test holds them out.
   await vi.waitFor(() => {
     const text = document.body.textContent ?? "";
     assert.equal(
@@ -411,7 +378,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Each section the page draws, by its name, with its rows' names. */
 function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
@@ -423,31 +389,26 @@ function sections(page: HTMLElement): Record<string, string[]> {
   );
 }
 
-/** What an element says to a reader: its words without its marks, which are hidden from one. */
 function said(element: Element): string {
   const copy = element.cloneNode(true) as Element;
   for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
   return copy.textContent ?? "";
 }
 
-/** The page's header: its title, and the line under it. */
 function head(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".ui-page-header-heading > *")].map(said);
 }
 
-/** The page's headings of the first level. */
 function titles(page: HTMLElement): string[] {
   return [...page.querySelectorAll("h1")].map(said);
 }
 
-/** What each placeholder on the page says it is waiting on, in order. */
 function waits(page: HTMLElement): string[] {
   return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
     (region) => region.textContent ?? "",
   );
 }
 
-/** Opens the menu of the row named `name` by its ⋯, named for the row's `thing`, and answers its items' words. */
 function openRowMenu(page: HTMLElement, name: string, thing: string): string[] {
   const more = button(page, name)
     .closest("li")
@@ -456,14 +417,12 @@ function openRowMenu(page: HTMLElement, name: string, thing: string): string[] {
   return [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? "");
 }
 
-/** The words of every item of the menus standing, a menu playing its exit left out. */
 function standingMenuItems(): string[] {
   return [...document.querySelectorAll('[role="menu"]:not([data-leaving]) [role="menuitem"]')].map(
     (item) => item.textContent ?? "",
   );
 }
 
-/** A page over the fixture workspace with its slug, standing in it, as a link opens it. */
 function mountLinked(userId: string) {
   return mountWith(
     {
@@ -475,7 +434,6 @@ function mountLinked(userId: string) {
 }
 
 function button(page: HTMLElement, text: string): HTMLButtonElement {
-  // Note that a row is found by its title, since an Inbox item's row reads its task line first.
   const found = [...page.querySelectorAll("button")].find((each) =>
     (each.querySelector(".ui-list-row-title") ?? each).textContent?.startsWith(text),
   );
@@ -592,7 +550,6 @@ test("an Inbox that could not be read says so and offers Retry, and never passes
   const { page } = mount("user-sam");
   await settle();
 
-  // Note that the feed's refusal reaches its query one notify tick later.
   await vi.waitFor(() =>
     assert.match(page.textContent ?? "", /Some inbox items could not be read\./u),
   );
@@ -630,7 +587,6 @@ test("the reader's own page lists no question of an agent with no task, whose st
   assert.deepEqual(sections(page)["Needs you"], ["Ship the limiter at 10%?"]);
 });
 
-/** The sidebar's views as this Mac keeps them, by workspace. */
 function keptViews(): Record<string, { assignee?: unknown }> {
   return JSON.parse(window.localStorage.getItem("app.sidebarTaskViews") ?? "{}");
 }
@@ -644,7 +600,6 @@ test("Show their tasks in the sidebar lists the tasks assigned to them", async (
 });
 
 test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and its foot counts the two it leaves out and lists every one assigned in the sidebar", async () => {
-  // Six tasks Dean created for Charles, one more than the page draws, and one Charles made for himself.
   const handed = [5, 6, 7, 8, 9, 10].map((n) =>
     task(n, `Handed over ${n}`, DEAN, n * MINUTE, [], CHARLES),
   );
@@ -663,7 +618,6 @@ test("a person's tasks assigned to them stand above those they created, a task b
     [5, 6, 7, 8, 9].map((n) => `Handed over ${n}`),
   );
   assert.deepEqual(drawn.Created, ["Relay retries on 502", "Retry budget dashboard"]);
-  // Each section wears no face, the page's head saying whose they are.
   assert.equal(page.querySelector('section[aria-label="Assigned"] .actor-mark'), null);
 
   button(page, "Show 2 more").click();
@@ -711,7 +665,6 @@ test("the reader's own page offers nothing to edit: its header lists their tasks
     ),
     ["Show my tasks in the sidebar", "Person actions"],
   );
-  // Note that a filter act is quiet: only a page's one primary act is filled.
   assert.equal(
     page.querySelector(".ui-page-header-actions button")?.getAttribute("data-variant"),
     "quiet",
@@ -840,7 +793,6 @@ test("automations that could not be read leave the Inbox still being read saying
   await settle();
 
   assert.match(page.textContent ?? "", /Their automations could not be read\./u);
-  // The Inbox still being read stands as its own wait beside the automations' failure.
   assert.deepEqual(waits(page), ["Reading your inbox…"]);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });

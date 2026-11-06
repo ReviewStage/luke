@@ -28,14 +28,6 @@ import { ToastHost } from "../toast.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
-/**
- * task-list-view.test.ts -- the sidebar's Tasks section lists the work under
- * way, the reader's own until View options says otherwise, grouped as it
- * says, each row saying what its group does not, the pins standing apart in
- * a section of their own, and each workspace keeping its own view on this
- * Mac.
- */
-
 const DEAN = "user-dean";
 const CHARLES = "user-charles";
 
@@ -55,7 +47,6 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
 ];
 
-/** The Tasks section, called whose tasks it holds. */
 const TASK_LIST = 'nav[aria-label$="tasks"]';
 
 const roots: Root[] = [];
@@ -92,7 +83,6 @@ function unmountAll(): void {
   });
 }
 
-/** A task of the workspace's, by `creator`, on `repository`. */
 function task(
   id: string,
   name: string,
@@ -120,7 +110,6 @@ const TASKS = [
   task("t-4", "Release checklist", "acme/relay", DEAN, { createdAt: 5, updatedAt: 5 }, 900),
 ];
 
-/** `TASKS` with Dean on Fix flaky deploy and Charles on Retry webhooks, Billing empty states with no one on it. */
 const ASSIGNED = TASKS.map((each) =>
   each.id === "t-2"
     ? { ...each, assignee: { userId: DEAN, name: "Dean Stratakos" } }
@@ -129,7 +118,6 @@ const ASSIGNED = TASKS.map((each) =>
       : each,
 );
 
-/** An agent an automation of `starter`'s started with no task, on `repository`, last moving at `activityAt`. */
 function oneOff(
   id: string,
   title: string,
@@ -153,7 +141,6 @@ function oneOff(
     workspaceId: ACME.id,
     repository,
     activityAt,
-    // Its pull request still open, the finished run holds the reader, so it stands under Tasks (`finished-runs.ts`).
     pullRequest: {
       number: 7,
       title,
@@ -165,19 +152,14 @@ function oneOff(
   };
 }
 
-/** The agents' pages the sidebar opened, in order. */
 let openedAgents: string[] = [];
 
-/** What the window copied, in order. */
 let copied: string[] = [];
 
-/** Each agent's pin the sidebar asked for, in order, as `agentId:pinned`. */
 let pinsAsked: string[] = [];
 
-/** How many times the sidebar opened the Tasks page. */
 let tasksPageOpened = 0;
 
-/** Keeps Assigned to › Anyone for `workspace`, as a reader who chose it on an earlier launch has, for a test of what the list draws whoever's it is. */
 function keepAnyone(workspace: Workspace = ACME): void {
   window.localStorage.setItem(
     "app.sidebarTaskViews",
@@ -185,7 +167,6 @@ function keepAnyone(workspace: Workspace = ACME): void {
   );
 }
 
-/** The sidebar listing `plans` in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
   tasks: readonly TaskSummary[] = TASKS,
@@ -236,7 +217,6 @@ function mountSidebar(
   return container;
 }
 
-/** The words each standing menu item or searched row says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
   return (
     (
@@ -245,7 +225,6 @@ function itemLabel(item: HTMLElement): string {
   );
 }
 
-/** The menu item, or the searched panel's row, that says `label`, in whichever menu stands. */
 function menuItem(label: string): HTMLElement {
   const items = [
     ...document.querySelectorAll<HTMLElement>(
@@ -257,7 +236,6 @@ function menuItem(label: string): HTMLElement {
   return found;
 }
 
-/** Turns off Group by repository in the Tasks head's View options, listing the tasks in one run, and lets the menu go. */
 function listUngrouped(sidebar: HTMLElement): void {
   const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(button, "the Tasks head offers View options");
@@ -271,24 +249,20 @@ function listUngrouped(sidebar: HTMLElement): void {
   });
 }
 
-/** Chooses `choice` under `submenu` in the Tasks head's View options. */
 async function choose(sidebar: HTMLElement, submenu: string, choice: string): Promise<void> {
   const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(button, "the Tasks head offers View options");
   act(() => button.click());
   act(() => menuItem(submenu).click());
-  // Note that a member is offered once the workspace's members reach their query.
   const item = await vi.waitFor(() => menuItem(choice));
   act(() => item.click());
 }
 
-/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
 function heardName(button: Element): string {
   const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
   return heard?.textContent ?? "";
 }
 
-/** The Tasks section's group headers, in order. */
 function groupNames(sidebar: HTMLElement): string[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
@@ -297,7 +271,6 @@ function groupNames(sidebar: HTMLElement): string[] {
   ].map(heardName);
 }
 
-/** The rows of the Tasks section: each name, the repository it says, and whether it wears a face. */
 function taskRows(
   sidebar: HTMLElement,
 ): { name: string; repository: string | undefined; face: boolean }[] {
@@ -310,18 +283,15 @@ function taskRows(
   }));
 }
 
-/** `ASSIGNED`, and one more task Dean made that no one is on yet. */
 const MINE_UNASSIGNED = [
   ...ASSIGNED,
   task("t-5", "Audit logs", "acme/console", DEAN, { createdAt: 40, updatedAt: 300 }),
 ];
 
-/** The words a card hung now names its subject by. */
 function cardName(): string | undefined {
   return document.querySelector(".ui-tooltip-card .ui-hover-card-name")?.textContent ?? undefined;
 }
 
-/** The words of each item of the menu standing last, its glyph left out. */
 function lastMenuItems(): string[] {
   const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
   return [
@@ -329,7 +299,6 @@ function lastMenuItems(): string[] {
   ].map(itemLabel);
 }
 
-/** The sidebar once the workspace's members have answered. */
 async function mountRead(
   workspace: Workspace,
   tasks?: readonly TaskSummary[],
@@ -340,7 +309,6 @@ async function mountRead(
   return sidebar;
 }
 
-/** What the Tasks head says, which the list is called by too. */
 function headWords(sidebar: HTMLElement): string | undefined {
   const list = sidebar.querySelector(TASK_LIST);
   const said = list?.querySelector(".ui-group-header-lead")?.textContent ?? undefined;
@@ -506,7 +474,6 @@ test("in one run, a task with no repository says so on its row", async () => {
 
 test("an empty workspace says only that it holds no tasks", async () => {
   const sidebar = await mountRead(ACME, []);
-  // Note that the pinned section's own "Drag tasks here to pin them" is a line of the sidebar too.
   const notes = [...sidebar.querySelectorAll(".ui-note-line")]
     .map((note) => note.textContent)
     .filter((note) => !note?.startsWith("Drag tasks here"));
@@ -675,7 +642,6 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
-/** The menu a right-click on the agent's row named `title` opens, by its items' words. */
 function agentMenu(sidebar: HTMLElement, title: string): string[] {
   const row = [
     ...sidebar.querySelectorAll<HTMLButtonElement>(
@@ -724,7 +690,6 @@ test("a one-off agent's row offers the agent's one menu: Copy link, Rename and M
     "Permanently delete",
   ]);
   await act(async () => menuItem("Pin").click());
-  // Note that Sweep stands under Pinned, in a list that reorders, whose rows offer to move.
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
     "Copy link",
     "Rename",
@@ -739,7 +704,6 @@ test("a one-off agent's row offers the agent's one menu: Copy link, Rename and M
   assert.deepEqual(pinsAsked, ["a-1:true", "a-2:false"]);
 });
 
-/** The buttons a sidebar row named `title` draws at its end, by their names. */
 function rowMarks(sidebar: HTMLElement, title: string): string[] {
   const item = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li")].find(
     (each) => each.querySelector("button")?.textContent?.includes(title) === true,
@@ -766,7 +730,6 @@ test("a one-off agent's row draws Pin and Archive at its end where a task's row 
   assert.deepEqual(pinsAsked, ["a-1:true"]);
 });
 
-/** A task of the workspace's standing in `status`. */
 function standing(id: string, name: string, status: TaskStatus, updatedAt: number): TaskSummary {
   return { ...task(id, name, "acme/relay", DEAN, { createdAt: 1, updatedAt }), status };
 }
@@ -779,7 +742,6 @@ const BY_STATUS = [
   standing("s-5", "Retry webhooks", TASK_STATUS.DONE, 50),
 ];
 
-/** The quiet line under the list saying what it leaves out, if it stands. */
 function hiddenLine(sidebar: HTMLElement): HTMLButtonElement | null {
   return sidebar.querySelector<HTMLButtonElement>(".sidebar-hidden-statuses button");
 }
@@ -810,7 +772,6 @@ test("a task from a service before statuses stands among them", () => {
   assert.ok(taskRows(sidebar).some((row) => row.name === "No status"));
 });
 
-/** What a reader of the screen hears each row of the Tasks section say of whose face it wears, by the row's name. */
 function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
@@ -869,7 +830,6 @@ test("Assigned to says the members could not be read, with Retry, under Me and A
       (each) => each.textContent === "Retry",
     );
 
-  // Note that the refusal is said once it reaches the members' query.
   const offeredRetry = await vi.waitFor(() => retry() ?? assert.fail("the panel offers Retry"));
   const failed = offered();
   const said = document.body.textContent ?? "";

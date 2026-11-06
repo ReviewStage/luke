@@ -1,13 +1,3 @@
-/**
- * desktop-inbox.ts -- the window every `desktop-inbox-*.test.ts` stands the Inbox in: its fakes, `mount`, and the helpers more than one of those files reads.
- *
- * Importing it registers the `beforeEach` that answers the Inbox's acts,
- * the windows' holds on the holders' inboxes, and the account's feed of every item from `world`, and the `afterEach` that unmounts what a test
- * drew, as `announcer.ts` registers its own, so each file of the Inbox's
- * tests meets the same window. What one file alone reads stays in that file,
- * beside the assertions it serves.
- */
-
 import {
   AGENT_CALL_FAILURE,
   type AgentInboxAnswerView,
@@ -104,10 +94,8 @@ import { agentHoldingsOf, listedAgent, tasksControl, waitingOf } from "./tasks-c
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** Where the window's Inbox keeps the scope it shows. */
 export const SHOW_KEY = "app.inboxShow";
 
-/** Where the window's Inbox keeps whom the items it lists are addressed to. */
 export const WHOSE_KEY = "app.inboxWhose";
 
 export const AGENT: AgentSummary = {
@@ -128,7 +116,6 @@ export const BILLING: TaskSummary = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  // The sidebar's list names the task's agent, as the service sums a task's agents up.
   agents: {
     total: 1,
     working: 1,
@@ -154,7 +141,6 @@ export const INVITES: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** The retry choice the agent asks on its items, two options, the first recommended. */
 const RETRY_ASK: InboxAsk = {
   type: INBOX_ASK.DECIDE,
   options: [
@@ -164,12 +150,10 @@ const RETRY_ASK: InboxAsk = {
   recommended: "Retry 3 times over an hour",
 };
 
-/** The id of the agent's message opening the item given, which asks its choice. */
 export function askIdOf(itemId: string): string {
   return `f${itemId.slice(1)}`;
 }
 
-/** An item of the agent's, open, its thread the agent's one message asking a choice, as the service answers one. */
 export function item(id: string, title: string, updatedAt: number): InboxItem {
   return {
     id,
@@ -195,10 +179,8 @@ export function item(id: string, title: string, updatedAt: number): InboxItem {
 }
 
 export const THRESHOLD = item("a1b2c3d4-0000-4000-8000-000000000001", "Alert at 80%?", 3_000);
-/** The account reading the Inbox, who answered the retry question themselves. */
 export const READER = { userId: "user-reader", name: "Dana Reyes" };
 
-/** The item given answered by the member given, their reply picking `choice` with the words given, at `at`. */
 export function answeredBy(
   asked: InboxItem,
   member: typeof READER,
@@ -236,13 +218,10 @@ export const RETRY: InboxItem = answeredBy(
 );
 export const EXPIRY = item("a1b2c3d4-0000-4000-8000-000000000003", "Expire after 7 days?", 4_000);
 
-/** The Billing item chosen, as a press on its row chooses it. */
 export const ON_THRESHOLD = { taskId: BILLING.id, itemId: THRESHOLD.id } as const;
 
-/** The Invites item chosen. */
 export const ON_EXPIRY = { taskId: INVITES.id, itemId: EXPIRY.id } as const;
 
-/** The item given as a notice: its opening message asking nothing. */
 export function noticeOf(asked: InboxItem): InboxItem {
   const [opening, ...rest] = asked.thread ?? [];
   assert.ok(opening !== undefined, "the item opens with the agent's message");
@@ -250,7 +229,6 @@ export function noticeOf(asked: InboxItem): InboxItem {
   return { ...asked, thread: [said, ...rest] };
 }
 
-/** The item given with its opening message asking `ask` instead, open. */
 export function asking(asked: InboxItem, ask: InboxAsk): InboxItem {
   const [opening, ...rest] = asked.thread ?? [];
   assert.ok(opening !== undefined, "the item opens with the agent's message");
@@ -260,7 +238,6 @@ export function asking(asked: InboxItem, ask: InboxAsk): InboxItem {
   };
 }
 
-/** The item given with its opening message's words, and the files it carried, as given; its ask as it was. */
 export function saying(asked: InboxItem, text: string, files?: InboxMessage["files"]): InboxItem {
   const [opening, ...rest] = asked.thread ?? [];
   assert.ok(opening !== undefined, "the item opens with the agent's message");
@@ -275,7 +252,6 @@ const HOLDING: readonly AppInboxTaskHolding[] = [
   { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
 ];
 
-/** A page of the billing task's, as a read of its pages lists it. */
 export const FUNNEL = {
   id: "3c4d5e6f-0000-4000-8000-000000000001",
   title: "Invite funnel",
@@ -283,109 +259,60 @@ export const FUNNEL = {
   at: 1_000,
 };
 
-/**
- * What the Inbox's fakes answer and record, and the hands a test moves the
- * window by, set again before each test. They are one object's fields rather
- * than bindings of their own, because a test file cannot assign a binding it
- * imports.
- */
 class InboxWorld {
   root: Root | undefined;
-  /** Each task's pages as a read of them answers. */
   taskPages = new Map<string, readonly (typeof FUNNEL)[]>();
-  /** Each agent with no task's own pages as a read of them answers, none for an agent the reader cannot reach. */
   agentPages = new Map<string, readonly PageLine[]>();
-  /** The task's agents as the service lists them, archived ones among them. */
   listedAgents: readonly AgentSummary[] = [AGENT];
-  /** Each task's inbox as the service answers a read of it from the start. */
   inboxes = new Map<string, readonly InboxItem[]>();
-  /** Moves main's list of the tasks holding items, as its read of the account would. */
   setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefined;
-  /** Moves the account's list of tasks, as an archive on another Mac would. */
   setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
-  /** Lands the account's first read of its task list, where a test mounted the Inbox before it. */
   setListRead: (read: boolean) => void = () => undefined;
-  /** Leaves the Inbox for another place and comes back to it, as the window's sidebar does. */
   setInboxOpen: (open: boolean) => void = () => undefined;
-  /** Chooses an item from outside the list, as a notification's click does. */
   chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
-  /** Moves main's read of what waits on the agents with no task, and of the agents holding items, those it names unless given, as main does when an item opens or is answered. */
   setTaskless: (
     taskless: readonly AppInboxTasklessItem[],
     agents?: readonly AppInboxAgentHolding[],
   ) => void = () => undefined;
-  /** Whether an agent's own inbox read answers that it could not be read. */
   agentReadFails = false;
-  /** Whether the account's feed says it could not answer before it ever had, rather than holding every task's items. */
   feedRefused = false;
-  /** Whether the account's feed has not answered yet, as for a moment after a sign-in. */
   feedUnread = false;
-  /** The tasks and agents the account's feed leaves out, as it leaves out one whose items all settled past its bound. */
   feedLeavesOut: ReadonlySet<string> = new Set();
-  /** Delivers the account's feed to the window as it now stands, as main delivers a move of it; nothing before a mount. */
   deliverFeed: (read: AppHostRead<AppInboxItems>) => void = () => undefined;
-  /** Delivers the holders' own inboxes to the window as the host holds them, as main delivers a move of them; nothing before a mount. */
   deliverHolders: (held: AppHolderInboxes) => void = () => undefined;
-  /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
-  /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
   holdAgentRead: ((respond: () => void) => void) | undefined;
-  /** How a read of a task from the start answers, where a test holds it in its own hands. */
   startRead: ((taskId: string) => Promise<ReadOutcome> | undefined) | undefined;
-  /** Each agent with no task's items, as its own inbox read answers them. */
   agentInboxes = new Map<string, readonly InboxItem[]>();
-  /** Every agent whose own inbox was read from the start, in order. */
   agentReads: string[] = [];
-  /** The workspace the Inbox lists, and its automations as a read of them answers. */
   listedWorkspace: Workspace | undefined;
   automations: readonly AutomationSummary[] = [];
-  /** What the window copied, in order. */
   copied: string[] = [];
-  /** Each agent with no plan the task list carries, in the workspace and repository its row names. */
   tasklessAgents = new Map<string, AgentSummary>();
-  /** The host's held inboxes for the window, each pushed as it is held, as the knobs above say. */
   main = heldInboxes();
-  /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
   imageReads: (() => void)[] = [];
-  /** Every read mark the Inbox sent, in order: `read:<item>`, `unread:<item>`, or `all:<workspace>`. */
   readMarks: string[] = [];
-  /** Whether the service refuses a read mark, as one for an item it no longer holds. */
   readMarkRefused = false;
-  /** The listed workspace's members, as the host holds them read once the window holds them. */
   members: readonly WorkspaceMember[] = [];
-  /** Every read of a file's lines, in order, each answered with as many numbered lines as it asks for. */
   fileReads: TasksFileParams[] = [];
 }
 
 export const world = new InboxWorld();
 
-/** A read of a task's inbox as the act answers it: done, carrying the view the service answered. */
 export interface ReadOutcome {
   readonly status: typeof FAKE_ANSWER.DONE;
   readonly value: AgentInboxAnswerView;
 }
 
-/** A read's answer as main pushes it: the items, or why there are none. */
 export function pushedOf(answer: AgentInboxAnswerView) {
   return "failure" in answer ? { failure: answer.failure } : { items: answer.items };
 }
 
-/** A followed inbox as the host tells it: its items whole, or why there are none. */
 type Pushed = { readonly items: readonly InboxItem[] } | { readonly failure: string };
 
-/**
- * The host's held inboxes for the window: each holder's own read, pushed a
- * moment after the window holds it as the host pushes one, or nothing yet
- * where the knobs hold it, and kept once the window lets go, as the host
- * keeps the holders let go lately; `push` pushes a change of one. Its
- * procedures are spread into the test's `fakeActPort`: the hold, and Try
- * again, which reads the holder anew.
- */
 function heldInboxes() {
   let held: AppHolderInboxes = NO_HOLDER_INBOXES;
-  /** Every hold the window holds open, as `kind:id`, each once per open stream. */
   const open: string[] = [];
-  /** Every hold the window asked for, in order, as `kind:id`. */
   const asked: string[] = [];
   const keyOf = (scope: AgentInboxScope) => `${scope.kind}:${scope.id}`;
   const set = (scope: AgentInboxScope, read: AppHolderInbox) => {
@@ -394,12 +321,10 @@ function heldInboxes() {
   };
   const push = (scope: AgentInboxScope, pushed: Pushed) => {
     if ("items" in pushed) return set(scope, { rows: pushed.items });
-    // Note that a read that stops answering keeps its rows, as the host keeps them.
     if (held[scope.kind][scope.id]?.rows === undefined) set(scope, { failed: true });
   };
   const isFollowed = (scope: AgentInboxScope) => open.includes(keyOf(scope));
   const isHeld = (scope: AgentInboxScope) => held[scope.kind][scope.id] !== undefined;
-  /** Reads the holder as the knobs say, pushing what they answer now. */
   const read = (scope: AgentInboxScope) => {
     const pushed =
       scope.kind === INBOX_SCOPE_KIND.PLAN ? answerTask(scope.id) : answerAgent(scope.id);
@@ -412,7 +337,6 @@ function heldInboxes() {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: (scope) => {
       asked.push(keyOf(scope));
       open.push(keyOf(scope));
-      // Note that the host pushes a holder held again from where its read stands, so one held already is read anew by nothing.
       void Promise.resolve().then(() => {
         if (isFollowed(scope) && !isHeld(scope)) read(scope);
       });
@@ -433,13 +357,11 @@ function heldInboxes() {
           close();
         },
       };
-      // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
       return Promise.resolve(
         stream as unknown as PortActResult<typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW>,
       );
     },
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_RETRY]: (scope) => {
-      // Note that the host tells nothing of a holder that had failed while it is read again.
       if (held[scope.kind][scope.id]?.failed === true) set(scope, UNREAD);
       read(scope);
       return Promise.resolve();
@@ -449,20 +371,16 @@ function heldInboxes() {
     asked,
     push,
     isFollowed,
-    /** Whether the host holds the holder's read, for a window that holds it or let it go lately. */
     isHeld,
-    /** Every holder the host holds, as scopes. */
     heldScopes: (): AgentInboxScope[] =>
       [INBOX_SCOPE_KIND.PLAN, INBOX_SCOPE_KIND.AGENT].flatMap((kind) =>
         Object.keys(held[kind]).map((id) => ({ kind, id })),
       ),
-    /** The holders as the host holds them now, for a mount to hand the window first. */
     now: () => held,
     procedures,
   };
 }
 
-/** A task's inbox as main pushes it now: as `startRead` settles it, where it holds one, or as `inboxes` holds it. */
 function answerTask(taskId: string): Pushed | undefined {
   const held = world.startRead?.(taskId);
   if (held === undefined) return { items: world.inboxes.get(taskId) ?? [] };
@@ -472,7 +390,6 @@ function answerTask(taskId: string): Pushed | undefined {
   return undefined;
 }
 
-/** An agent's inbox as main pushes it now, the push counted: refused, held in the test's hands, or as `agentInboxes` holds it. */
 function answerAgent(agentId: string): Pushed | undefined {
   world.agentReads.push(agentId);
   if (world.agentReadFails) return { failure: AGENT_CALL_FAILURE.UNANSWERED };
@@ -483,12 +400,6 @@ function answerAgent(agentId: string): Pushed | undefined {
   return undefined;
 }
 
-/**
- * Every held item `drawn` changes, and every held inbox holding one
- * pushed so, as the host draws a write into every inbox it holds the
- * moment it is asked, reading none of them again; none where it leaves an
- * item alone.
- */
 function drawnByHost(drawn: (item: InboxItem) => InboxItem | undefined): void {
   const draw = (kind: AgentInboxScope["kind"], held: Map<string, readonly InboxItem[]>) => {
     for (const [id, items] of held) {
@@ -504,12 +415,10 @@ function drawnByHost(drawn: (item: InboxItem) => InboxItem | undefined): void {
   deliverFeed();
 }
 
-/** Each held item named marked read or unread, as the host draws a mark. */
 function marked(itemIds: ReadonlySet<string>, unread: boolean): void {
   drawnByHost((item) => (itemIds.has(item.id) ? { ...item, unread } : undefined));
 }
 
-/** Every held inbox, and the account's feed, pushed again as it now stands, as main pushes a change. */
 export function pushAgain(): void {
   deliverFeed();
   for (const scope of world.main.heldScopes()) {
@@ -519,7 +428,6 @@ export function pushAgain(): void {
   }
 }
 
-/** The account's feed of every item as the host holds it for the session: every task's and agent's with no task that holds one, or refused. */
 function feedNow(): AppHostRead<AppInboxItems> {
   if (world.feedUnread) return UNREAD;
   if (world.feedRefused) return { failed: true };
@@ -535,7 +443,6 @@ function feedNow(): AppHostRead<AppInboxItems> {
   };
 }
 
-/** The account's feed delivered to the window as it now stands, as main delivers a move of it. */
 function deliverFeed(): void {
   world.deliverFeed(feedNow());
 }
@@ -545,9 +452,6 @@ beforeEach(() => {
   installScrollIntoView();
   holdFrames();
   window.localStorage.clear();
-  // Note that the Inbox opens on All addressed to anyone here, so the tests of what an item shows
-  // meet settled items and a teammate's too; the tests of the scopes clear it to meet the Inbox as
-  // a fresh profile opens it.
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
   window.localStorage.setItem(WHOSE_KEY, JSON.stringify({ kind: "everyone" }));
   world.inboxes = new Map([
@@ -592,7 +496,6 @@ beforeEach(() => {
           : done({ agents: world.listedAgents });
       }
       if (request.kind === ACT_KIND.AGENTS_PAGE) {
-        // An agent the task list does not carry is looked up once by its id, answered as the world holds it.
         const agent = world.tasklessAgents.get(request.payload.agentId);
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
@@ -648,7 +551,6 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;
         world.readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
-        // Note that the host draws a mark into every inbox it follows as it is asked, and takes it back where the service refused it.
         if (!world.readMarkRefused) marked(new Set([itemId]), unread);
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
@@ -686,29 +588,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** What the Inbox was asked to open, leaving it. */
 interface Asked {
   readonly shownTasks: string[];
   readonly shownAgents: [string, string][];
-  /** The agents whose transcripts it was asked to show beside the item, as the panel's preview. */
   readonly previewedAgents: string[];
-  /** The automations whose pages it was asked to open. */
   readonly shownAutomations: string[];
-  /** How many times it was asked to close. */
   closed: number;
-  /** Each task it was asked to mark, by the mark, in order. */
   readonly marks: [string, TaskMark][];
-  /** How many times it was asked for New task. */
   newTasks: number;
 }
 
-/** Main's word of what waits on the reader on each task: the one open question on each. */
 const MAIN_WAITING: readonly AppInboxTask[] = [
   { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
   { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
 ];
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded, on nothing chosen or on `chosen`; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 export function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
   {
@@ -729,46 +623,30 @@ export function mount(
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
     room?: ShellRoom;
-    /** The side panel the Inbox opens what its item names in, where the test records what it opened. */
     panel?: SidePanelControl;
-    /** Main's first word of the tasks holding items. */
     holding?: readonly AppInboxTaskHolding[];
-    /** Main's word of each task's items that wait on the reader. */
     waiting?: readonly AppInboxTask[];
-    /** Whether the window's sidebar stands beside the Inbox page, its Inbox row counting. */
     withSidebar?: boolean;
-    /** Whether the window knows the reader's own account id, as an account stored without one does not. */
     readerKnown?: boolean;
-    /** Whether the window's toasts stand beside the Inbox, where the test presses one's action. */
     toasts?: boolean;
-    /** The item the Inbox opens on, as a row's press chose it before; none where nothing is chosen yet. */
     chosen?: InboxChoice;
-    /** Whether the Inbox is drawn only while open, as the shell draws it. */
     drawnWhileOpen?: boolean;
-    /** Main's first word of the agents with no task holding items; those the items given name where none are given. */
     agents?: readonly AppInboxAgentHolding[];
-    /** The bundles the window's surfaces load, where the test hands importers of its own; the window's where none are handed. */
     bundles?: SideBundles;
   } = {},
 ) {
-  // Note that a mount is a fresh window over a fresh host, holding no inbox yet, so a test mounting again reads what its knobs say now.
   world.main = heldInboxes();
-  // Note that the host's inbox holds are answered beside whatever acts the test answers by now.
   fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
-  // Note that the host's reads are laid over whatever document the test handed the window, its experiments among it.
   const reads = handHostReads({
     items: feedNow(),
     holders: world.main.now(),
   });
   world.deliverFeed = reads.deliverItems;
   world.deliverHolders = reads.deliverHolders;
-  // Note that a workspace's automations are laid on the document as the window holds them, as the host lays them.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: world.automations }),
   });
-  // Note that a workspace's people are laid on the document as the window holds them, as the host lays them.
   holdMembers(reads.deliverMembers, () => ({ rows: { members: world.members } }));
-  // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
   holdPages(reads.deliverPages, (place) => ({
     rows:
       "taskId" in place
@@ -785,7 +663,6 @@ export function mount(
     newTasks: 0,
   };
   function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
-    // The drafts are handed to the account signed in, none here, as the panel's root hands them.
     useDraftsOwner(undefined);
     const [chosen, setChosen] = useState<InboxChoice | undefined>(firstChosen);
     const [inboxOpen, setOpen] = useState(true);
@@ -795,7 +672,6 @@ export function mount(
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
     const [listRead, setRead] = useState(!listUnread);
     world.setListRead = setRead;
-    // Note that main's word of a change comes with the change pushed, as the host follows both.
     world.setHolding = (next) => {
       setHeld(next);
       pushAgain();
@@ -808,7 +684,6 @@ export function mount(
       pushAgain();
     };
     world.setTasks = setListed;
-    // The agents the task list carries, each in Acme's workspace and repository: the task's, and each with no task not among them.
     const { listedAgents, tasklessAgents } = world;
     const liveAgents = useMemo(
       () =>
@@ -824,7 +699,6 @@ export function mount(
       ...(readerKnown ? { me: READER.userId } : {}),
       workspace: world.listedWorkspace,
       tasks: listed,
-      // The agents the task list followed live carries, none while it has carried none yet.
       liveAgents: world.agentListHeld ? undefined : liveAgents,
       listRead,
       sidePanel: sidePanel ?? {
@@ -888,7 +762,6 @@ export function mount(
   const container = document.createElement("div");
   document.body.append(container);
   world.root = createRoot(container);
-  // Note that a panel handed in stands as handed, in whatever room, so a test can stand one open where a bare panel cannot open.
   const inbox =
     room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
@@ -899,25 +772,11 @@ export function mount(
   return { page: container, asked };
 }
 
-/**
- * Lets every promise settled so far run its continuations, the frames a
- * paint takes pass (`settleFrames`), and every notification TanStack Query
- * has queued reach the surfaces observing it (`settleQueries`). The Inbox's
- * tests act step after step on what each push left, an item chosen, marked,
- * or answered, so a `vi.waitFor` on one step's outcome alone left the next
- * step racing the notification after it; waiting out the queue here holds
- * every step.
- */
 export async function settle(): Promise<void> {
   await settleFrames();
   await settleQueries(settleFrames);
 }
 
-/**
- * Answers every image read the page asks for, as each is asked, until no
- * picture on it is still being read, as the window's queries ask for an
- * image a tick after its place is drawn and draw its answer a tick after it lands.
- */
 export async function landImageReads(page: HTMLElement): Promise<void> {
   await vi.waitFor(() => {
     for (const land of world.imageReads.splice(0)) act(() => land());
@@ -926,10 +785,8 @@ export async function landImageReads(page: HTMLElement): Promise<void> {
   await settle();
 }
 
-/** A row's title, as its ListRow draws it. */
 export const ROW_TITLE = ".ui-list-row-title";
 
-/** A row's title as the eye reads it, the words it says to a reader alone ("Unread") left out. */
 export function titleOf(row: Element): string {
   const title = row.querySelector(ROW_TITLE)?.cloneNode(true);
   if (!(title instanceof Element)) return "";
@@ -937,12 +794,6 @@ export function titleOf(row: Element): string {
   return title.textContent ?? "";
 }
 
-/**
- * What a reader hears of the nodes an `aria-labelledby` or `aria-describedby`
- * names: each one's words but what it hides from them, joined by spaces, and
- * the words drawn for a reader alone heard apart from those beside them, as
- * a browser hears a box of their own.
- */
 export function heardOf(ids: string | null): string {
   return (ids ?? "")
     .split(" ")
@@ -955,12 +806,6 @@ export function heardOf(ids: string | null): string {
     .join(" ");
 }
 
-/**
- * What marks a row as needing the developer: `*` where it says "Needs you"
- * to a reader and draws no attention mark, which its card says instead,
- * nothing where it does neither, and `?` where it draws the mark, so a mark
- * drawn on every open row again fails every listing.
- */
 export function needsYouMark(row: HTMLElement): string {
   const mark = row.querySelector(".ui-list-row-meta .attention-mark") !== null;
   const said = [...row.querySelectorAll(".ui-list-row-meta .ui-visually-hidden")].some(
@@ -970,7 +815,6 @@ export function needsYouMark(row: HTMLElement): string {
   return said ? "*" : "";
 }
 
-/** The list as a reader hears it: its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 export function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
@@ -980,7 +824,6 @@ export function listed(page: HTMLElement): string[] {
   );
 }
 
-/** What an element says to a reader, the discs beside the names in it left out; nothing for no element. */
 export function wordsOf(element: Element | null | undefined): string | null {
   if (element === null || element === undefined) return null;
   const copy = element.cloneNode(true);
@@ -997,28 +840,23 @@ export function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   return row;
 }
 
-/** Opens the list's View options. */
 export function openViewOptions(page: HTMLElement): void {
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
   act(() => options.click());
 }
 
-/** The scopes the view's menu may offer, in their order, and Archived, which it offered while tasks were archived, so a menu offering it again is heard. */
 export const SCOPE_NAMES = ["Open", "Needs you", "All", "Archived"] as const;
 
-/** The Inbox's name as the list's head says it. */
 export function headTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-tasks .ui-toolbar-title")?.textContent;
 }
 
-/** Shows the scope `name` from the list's View options. */
 export function showScope(page: HTMLElement, name: (typeof SCOPE_NAMES)[number]): void {
   openViewOptions(page);
   act(() => viewItem(name).click());
 }
 
-/** Chooses `choice` under `submenu` in the list's View options. */
 export function chooseView(page: HTMLElement, submenu: string, choice: string): void {
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
@@ -1027,7 +865,6 @@ export function chooseView(page: HTMLElement, submenu: string, choice: string): 
   act(() => viewItem(choice).click());
 }
 
-/** The item of the menus open now whose label ends in `label`, a choice or a submenu, after any face's initial. */
 export function viewItem(label: string): HTMLElement {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].findLast((each) =>
     (each.querySelector(".ui-menu-item-label") ?? each).textContent?.endsWith(label),
@@ -1036,7 +873,6 @@ export function viewItem(label: string): HTMLElement {
   return item;
 }
 
-/** The shown item's subject as a reader meets it: everything under the thread's subject, which is its title alone. */
 export function subjectOf(page: HTMLElement): string[] {
   const subject =
     page.querySelector(".inbox-view-items:not([hidden]) .inbox-subject") ??
@@ -1044,7 +880,6 @@ export function subjectOf(page: HTMLElement): string[] {
   return [...subject.children].map((child) => child.textContent ?? "");
 }
 
-/** Every close the Inbox sends, with the note's words where it carries one, answered as the service takes it: the item closed by the reader. */
 export function takenCloses(): { itemId: string; revision: number; text?: string }[] {
   const sent: { itemId: string; revision: number; text?: string }[] = [];
   const bridge = appBridge();
@@ -1058,9 +893,7 @@ export function takenCloses(): { itemId: string; revision: number; text?: string
       const asked = [...world.inboxes.values()]
         .flat()
         .find((each) => each.id === request.payload.itemId);
-      // The close withdraws the ask it leaves open, with no reason, and reads the item, as the service closes it.
       const closed = closedNow(asked ?? THRESHOLD, READER, 6_000);
-      // Note that the host lands the item as the service answered it in every inbox it follows before the close answers.
       drawnByHost((each) => (each.id === closed.id ? closed : undefined));
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
@@ -1071,7 +904,6 @@ export function takenCloses(): { itemId: string; revision: number; text?: string
   return sent;
 }
 
-/** The question Resolve asks, answered by its act, Resolve item or Resolve items. */
 export async function confirmClose(): Promise<void> {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ??
@@ -1084,7 +916,6 @@ export async function confirmClose(): Promise<void> {
   await settle();
 }
 
-/** The open item's options, a choice's radios or checkboxes, in order. */
 export function openOptions(pane: HTMLElement): HTMLButtonElement[] {
   return [
     ...pane.querySelectorAll<HTMLButtonElement>(
@@ -1093,14 +924,12 @@ export function openOptions(pane: HTMLElement): HTMLButtonElement[] {
   ];
 }
 
-/** The labels of the open item's options that stand checked. */
 export function checkedOptions(pane: HTMLElement): (string | null | undefined)[] {
   return openOptions(pane)
     .filter((option) => option.getAttribute("aria-checked") === "true")
     .map((option) => option.querySelector(".ui-choice-label")?.textContent);
 }
 
-/** The open item's Send, at its box's foot. */
 export function answerSend(pane: HTMLElement): HTMLButtonElement {
   return (
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
@@ -1108,18 +937,11 @@ export function answerSend(pane: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** Whether the open item's Send sends nothing as it stands: taking no press, or refusing it to say why (`aria-disabled`). */
 export function sendHeld(pane: HTMLElement): boolean {
   const send = answerSend(pane);
   return send.disabled || send.getAttribute("aria-disabled") === "true";
 }
 
-/**
- * What the open item's box says outside its controls, its files, and its
- * note line, its presses' words among it: nothing but a notice's Got it, or
- * what an unfinished answer lacks once a send of it was refused, since the
- * box carries no helper text, its Send held until it holds something to send.
- */
 export function footWords(pane: HTMLElement): string {
   const box = pane.querySelector("form.inbox-answer") ?? assert.fail("the box");
   const copy = box.cloneNode(true);
@@ -1132,11 +954,6 @@ export function footWords(pane: HTMLElement): string {
   return copy.textContent ?? "";
 }
 
-/**
- * The open item's box as a reader meets it, top to bottom: "controls" where
- * the open question's controls stand as its body, the note line by what it
- * asks for, then the foot's row of presses, left to right, each by its name.
- */
 export function boxParts(pane: HTMLElement): string[] {
   const form = pane.querySelector("form.inbox-answer") ?? assert.fail("the box");
   return [...form.children].flatMap((part) => {
@@ -1155,11 +972,6 @@ export function boxParts(pane: HTMLElement): string[] {
   });
 }
 
-/**
- * A key pressed on an element as the browser presses it: a button's Enter
- * and Space press the button unless a handler held the key back, which
- * jsdom does not do of itself.
- */
 export function keyOn(target: Element, key: string, init: KeyboardEventInit = {}): void {
   act(() => {
     const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
@@ -1169,8 +981,6 @@ export function keyOn(target: Element, key: string, init: KeyboardEventInit = {}
   });
 }
 
-/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
-/** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 export function openings(card: string): string[] {
   const standing = document.querySelector(`.ui-tooltip-card ${card}`);
   assert.ok(standing, "a card is hung");
@@ -1179,12 +989,10 @@ export function openings(card: string): string[] {
     .filter((words) => words.startsWith("Open"));
 }
 
-/** Whether a reference wears an agent's tile, the solid rounded square every agent is drawn on. */
 export function wearsAgentTile(element: Element): boolean {
   return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
-/** Lays the Inbox out this wide, as the window would, and tells it so. */
 export function layOut(page: HTMLElement, width: number): void {
   const view = page.querySelector<HTMLElement>(".inbox-view");
   assert.ok(view, "the Inbox is drawn");
@@ -1192,12 +1000,10 @@ export function layOut(page: HTMLElement, width: number): void {
   act(() => relayout());
 }
 
-/** The edge the list is resized by, while it stands. */
 export function listEdge(page: HTMLElement): HTMLElement | null {
   return page.querySelector<HTMLElement>('.inbox-tasks [role="separator"]');
 }
 
-/** Which of the Inbox's columns a reader finds standing: the list, the item, or both. */
 export function columnsShown(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   const item = page.querySelector(".inbox-view-items");
@@ -1207,21 +1013,18 @@ export function columnsShown(page: HTMLElement): string[] {
   ];
 }
 
-/** The item's bar's press named Inbox, the way back to the list, where there is one. */
 export function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
   return [
     ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .ui-toolbar button"),
   ].find((button) => button.textContent === "Inbox");
 }
 
-/** The way back from the item standing alone to the list. */
 export function backToList(page: HTMLElement): HTMLButtonElement {
   const back = wayBack(page);
   assert.ok(back, "the item standing alone has a way back");
   return back;
 }
 
-/** The window's keymap, standing beside the Inbox as the shell stands it; the root it is drawn in, to unmount. */
 export function standKeymap(): Root {
   function Keymap() {
     useAppKeymap(true);
@@ -1232,46 +1035,38 @@ export function standKeymap(): Root {
   return keys;
 }
 
-/** A key pressed alone where the keyboard stands, or into the target given. */
 export function pressKey(key: string, target: EventTarget = document.body): void {
   act(() => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
   });
 }
 
-/** The pager at the end of the item's bar, as it reads: "2 of 3", or none where it is not drawn. */
 export function pagerOf(page: HTMLElement): string | null {
   return page.querySelector(".inbox-view-items:not([hidden]) .ui-pager-count")?.textContent ?? null;
 }
 
-/** One of the pager's arrows, by its name. */
 export function arrowNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const arrow = page.querySelector<HTMLButtonElement>(`.ui-pager button[aria-label="${name}"]`);
   assert.ok(arrow, `the pager offers ${name}`);
   return arrow;
 }
 
-/** The title of the item the pane reads. */
 export function readTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]")?.textContent;
 }
 
-/** The open item's pane, where its box stands. */
 export function itemPane(page: HTMLElement): HTMLElement {
   return page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("the pane is drawn");
 }
 
-/** The names of the files attached in `within`, as each chip names its file. */
 export function attachedNames(within: Element): (string | null)[] {
   return [...within.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
 }
 
-/** Whether an item's row wears the Draft pencil. */
 export function rowDrafted(page: HTMLElement, title: string): boolean {
   return rowNamed(page, title).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
 
-/** Hands `files` to the open item's box: picked in its hidden picker, or dropped on its card. */
 export async function handFiles(page: HTMLElement, files: readonly File[], how: "pick" | "drop") {
   const pane = itemPane(page);
   if (how === "pick") {
@@ -1285,11 +1080,9 @@ export async function handFiles(page: HTMLElement, files: readonly File[], how: 
     Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files } });
     act(() => card.dispatchEvent(drop));
   }
-  // Note that a file is read off the disk before it lands in the box.
   for (let round = 0; round < 4; round += 1) await settle();
 }
 
-/** The repository's one skill read for the box, and every GitHub page a press opened, written down. */
 export function skillReads(): string[] {
   const opened: string[] = [];
   const bridge = appBridge();
@@ -1319,27 +1112,23 @@ export function skillReads(): string[] {
   return opened;
 }
 
-/** An agent with no task an automation started, and the question it asked. */
 export const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 export const QUARANTINE: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-000000000009", "Quarantine the flaky test?", 6_000),
   agentId: SWEEP_AGENT,
 };
 
-/** An agent with no task no automation the reader may read names, and its question. */
 export const STRAY_AGENT = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d";
 export const BUMP: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000c", "Bump the Node image?", 1_500),
   agentId: STRAY_AGENT,
 };
 
-/** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
 export function hoveredCard(control: Element, card: string): string | null {
   restOn(control);
   return wordsOf(document.querySelector(`.ui-tooltip-card ${card}`));
 }
 
-/** One waiting item of an agent with no task, as main's read lists it. */
 export function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
@@ -1355,10 +1144,8 @@ export function waitingTaskless(asked: InboxItem): AppInboxTasklessItem {
   };
 }
 
-/** A teammate of the reader's, who writes on a thread. */
 export const TEAMMATE = { userId: "user-teammate", name: "Charles Pan" };
 
-/** One message on a thread, by `author`, its words and when. */
 export function threadMessage(
   id: string,
   author: { readonly member: typeof READER } | "agent",
@@ -1370,19 +1157,16 @@ export function threadMessage(
     : { id, author: INBOX_MESSAGE_AUTHOR.MEMBER, member: author.member, text, createdAt };
 }
 
-/** The item's thread with the messages given among it, every message in the order it was written. */
 export function inOrder(on: InboxItem, messages: readonly InboxMessage[]): InboxMessage[] {
   return [...(on.thread ?? []), ...messages].toSorted((a, b) => a.createdAt - b.createdAt);
 }
 
-/** The kind of writer a comment's face draws, as its avatar's outline says it: a person's circle, or an agent's square. */
 export function faceKind(face: Element | null | undefined): string | undefined {
   const disc = face?.querySelector<HTMLElement>(".ui-avatar");
   if (disc === null || disc === undefined) return undefined;
   return disc.dataset.shape === "square" ? "agent" : "person";
 }
 
-/** Every message the pane sends, written down and answered by `answer`, the item as the service would hand it back by default. */
 export function heldMessages(
   answer: (params: AgentInboxMessageParams) => AgentInboxMessagedView,
 ): AgentInboxMessageParams[] {
@@ -1395,7 +1179,6 @@ export function heldMessages(
       if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       const value = answer(request.payload);
-      // Note that the host lands the item as the service answered it in every inbox it follows before the message answers.
       if (!("failure" in value))
         drawnByHost((each) => (each.id === value.item.id ? value.item : undefined));
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
@@ -1404,7 +1187,6 @@ export function heldMessages(
   return sent;
 }
 
-/** The message as the service answers it: written on the thread by the reader, the item otherwise as it stood. */
 export function writtenOn(item: InboxItem, id: string) {
   return (params: AgentInboxMessageParams): AgentInboxMessagedView => ({
     item: {
@@ -1429,7 +1211,6 @@ export function writtenOn(item: InboxItem, id: string) {
   });
 }
 
-/** A row's lines as a reader meets them: whether its title stands on a line of its own under the first, its task line, which holds its time, and the muted words of its last. */
 export function rowLines(page: HTMLElement, title: string): [boolean, string | null | undefined] {
   const row = rowNamed(page, title);
   const head = row.querySelector(".ui-list-row-head");
@@ -1440,7 +1221,6 @@ export function rowLines(page: HTMLElement, title: string): [boolean, string | n
   return [titled, row.querySelector(".ui-list-row-description")?.textContent];
 }
 
-/** A row's right-click menu as it reads: each item's words, its key where it names one, a rule between groups. */
 export function rowMenu(page: HTMLElement, title: string): string[] {
   act(() => {
     rowNamed(page, title).dispatchEvent(
@@ -1450,7 +1230,6 @@ export function rowMenu(page: HTMLElement, title: string): string[] {
   return menuWords();
 }
 
-/** The menu open now as it reads: each item's words, its key where it names one, and a rule between its groups. */
 export function menuWords(): string[] {
   const menu = [...document.querySelectorAll('[role="menu"]')].at(-1);
   assert.ok(menu, "a menu is open");
@@ -1459,7 +1238,6 @@ export function menuWords(): string[] {
   );
 }
 
-/** The menu item whose words start with `label`, in the menu open now. */
 export function menuItem(label: string): HTMLElement {
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
     each.textContent?.startsWith(label),
@@ -1468,7 +1246,6 @@ export function menuItem(label: string): HTMLElement {
   return item;
 }
 
-/** The workspace the marking tests list, whose Mark all as read names it. */
 export const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -1477,13 +1254,11 @@ export const ACME: Workspace = {
   github: null,
 };
 
-/** The replies the pane sent, and how the test answers the oldest still out, as the service would. */
 interface GatedAnswers {
   readonly sent: AgentInboxMessageParams[];
   readonly answer: (view: AgentInboxMessagedView) => void;
 }
 
-/** Every reply the pane sends, held until the test answers it as the service would. */
 export function gatedAnswers(): GatedAnswers {
   const sent: AgentInboxMessageParams[] = [];
   const waiting: ((view: AgentInboxMessagedView) => void)[] = [];
@@ -1498,7 +1273,6 @@ export function gatedAnswers(): GatedAnswers {
       const before = [...world.inboxes.values(), ...world.agentInboxes.values()]
         .flat()
         .find((each) => each.id === itemId);
-      // Note that the host draws a reply carrying an answer settled the moment it is sent, and a plain one read.
       drawnByHost((each) =>
         each.id !== itemId
           ? undefined
@@ -1508,7 +1282,6 @@ export function gatedAnswers(): GatedAnswers {
       );
       const reply = Promise.withResolvers<FakeActAnswer>();
       waiting.push((value) => {
-        // Note that the host takes back what it drew where the service refused it, and lands the item as the service answered it where it took it.
         const landed = "failure" in value ? before : value.item;
         drawnByHost((each) => (each.id === itemId ? landed : undefined));
         reply.resolve({ status: FAKE_ANSWER.DONE, value });
@@ -1519,7 +1292,6 @@ export function gatedAnswers(): GatedAnswers {
   return { sent, answer: (view) => waiting.shift()?.(view) };
 }
 
-/** Sends a reply from the open item's box carrying its first option as its answer, with the words given. */
 export function answerWithNote(page: HTMLElement, note: string): void {
   const pane = itemPane(page);
   act(() => openOptions(pane)[0]?.click());
@@ -1528,17 +1300,14 @@ export function answerWithNote(page: HTMLElement, note: string): void {
   pressInComposer(pane, "Enter");
 }
 
-/** The workspace the Whose tests list, shared with Charles, and its members as read. */
 export const SHARED_WORKSPACE: Workspace = { ...ACME, memberCount: 2 };
 export const SHARED_MEMBERS: readonly WorkspaceMember[] = [
   { ...READER, email: "dana@example.com", role: WORKSPACE_ROLE.OWNER },
   { ...TEAMMATE, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-/** The message of the agent's that asks, on the threads below. */
 export const ASKING_ID = "e1b2c3d4-0000-4000-8000-000000000001";
 
-/** The agent's message that opens a thread, ending with `ask`, open unless it says otherwise. */
 export function askingMessage(
   ask: InboxAsk,
   {
@@ -1569,7 +1338,6 @@ export function askingMessage(
   };
 }
 
-/** How long an invite lasts, the agent's choice of three. */
 export const EXPIRY_ASK: InboxAsk = {
   type: INBOX_ASK.DECIDE,
   options: [
@@ -1580,7 +1348,6 @@ export const EXPIRY_ASK: InboxAsk = {
   recommended: "7 days",
 };
 
-/** The waiting item, drawn as a thread from version 5: its question's title, no blocks, and `thread`. */
 export function threadItem(
   thread: readonly InboxMessage[],
   extra: Partial<InboxItem> = {},
@@ -1588,27 +1355,23 @@ export function threadItem(
   return { ...THRESHOLD, title: "How long should invites last?", thread, ...extra };
 }
 
-/** The pane showing the item given, chosen from its row. */
 export async function mountThread(shown: InboxItem): Promise<HTMLElement> {
   world.inboxes = new Map([
     [BILLING.id, [shown, RETRY]],
     [INVITES.id, [EXPIRY]],
   ]);
   const { page } = mount();
-  // Note that the item's row stands once the Inbox's reads have each landed, which may take more notifications than a settle waits out.
   const row = await vi.waitFor(() => rowNamed(page, shown.title));
   act(() => row.click());
   await settle();
   return itemPane(page);
 }
 
-/** Everything the thread's subject draws, a part a child: its title alone. */
 export function subjectParts(pane: HTMLElement): (string | null)[] {
   const subject = pane.querySelector(".inbox-subject") ?? assert.fail("the subject is drawn");
   return [...subject.children].map((part) => part.textContent);
 }
 
-/** Each ask's box on the thread: where it stands, then its head as a reader hears it; an answered ask's controls stand in its reply with no box, so they are none of these. */
 export function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
@@ -1616,7 +1379,6 @@ export function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   ]);
 }
 
-/** The thread's box's one button, by its words, or by its name where it is the round Send that shows none. */
 export function sendWords(pane: HTMLElement): string | null {
   const button =
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
@@ -1624,17 +1386,10 @@ export function sendWords(pane: HTMLElement): string | null {
   return button.textContent === "" ? button.getAttribute("aria-label") : button.textContent;
 }
 
-/** The open ask's marker ending the agent's message, as a reader hears it; none where no ask waits. */
 export function askMarker(pane: HTMLElement): string | null {
   return pane.querySelector("[data-inbox-marker]")?.textContent ?? null;
 }
 
-/**
- * The reader's draft reply, the thread's last comment: its head, then
- * "controls" where the open question's controls stand in its box over the
- * note, with no words of their own over them, such as what the question
- * asks or the keys that pick it, since the agent's message says it.
- */
 export function draftReply(pane: HTMLElement): (string | null)[] {
   const draft =
     pane.querySelector<HTMLElement>(".inbox-thread > li:last-child") ?? assert.fail("no thread");
@@ -1650,7 +1405,6 @@ export function draftReply(pane: HTMLElement): (string | null)[] {
   return [head, "controls"];
 }
 
-/** The press of the open ask's controls, in the draft reply, whose own words, a badge beside them aside, are `label`. */
 export function askPress(pane: HTMLElement, label: string): HTMLButtonElement {
   const found = [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
     (button) => button.querySelector(".ui-button-words")?.textContent === label,
@@ -1659,7 +1413,6 @@ export function askPress(pane: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
-/** A reply as the service answers it: the reader's message on the thread, its answer settling the ask it names. */
 export function repliedOn(item: InboxItem, id: string) {
   return (params: AgentInboxMessageParams): AgentInboxMessagedView => {
     const { answers } = params;

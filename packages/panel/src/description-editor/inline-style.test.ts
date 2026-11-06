@@ -6,14 +6,6 @@ import { installEditorLayout } from "../testing/composer.js";
 import { mountComposer } from "./composer-editor.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * inline-style.test.ts -- neither editor of the bundle writes a `<style>`
- * element into the page, which the panel's policy (`style-src 'self'`,
- * `../index.html`) refuses and the console reports as an error each time.
- * Synthetic text.
- */
-
-/** Every editor mounted, taken down after each test. */
 const mounted: { destroy: () => void }[] = [];
 
 beforeEach(installEditorLayout);
@@ -24,7 +16,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A fresh element in the page to mount an editor on. */
 function host(): HTMLElement {
   const element = document.createElement("div");
   document.body.append(element);

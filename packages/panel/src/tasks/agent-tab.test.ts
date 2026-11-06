@@ -39,17 +39,6 @@ import { TranscriptAgent } from "./line-cards.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
-/**
- * agent-tab.test.ts -- a call about an agent is a row that opens the
- * agent's tab, a call that made a page, a thread, a task, or a pull request
- * a row that folds open in place naming it by its chip, and every other
- * call a row that folds open in place; a run of calls and a finished turn's lead fold under
- * a line saying whether it is open. A row that opens an agent's or a
- * worker's tab hangs that tab's card. A call of an integration's own tool is one row
- * wearing the integration's mark, with the `connection_execute` that ran it
- * left out.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => fakeAppPlatform(QUIET_PANEL));
@@ -59,7 +48,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One stored tool part, answered where `output` is given and still running where not. */
 function toolPart(tool: string, input: WireRecord, output?: WireRecord): WireRecord {
   return {
     type: `tool-${tool}`,
@@ -74,7 +62,6 @@ function assistant(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
-/** The message drawn as an agent's turn is, every target its rows open recorded, in the transcript of `page`'s agent on its task's page where one is given. */
 function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMentionsValue) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
@@ -106,7 +93,6 @@ function drawn(message: AgentTranscriptMessage, moving = false, page?: TaskMenti
 
 const ACCEPTED = { status: "accepted" };
 
-/** A call that opens something: an agent's, whose row is one button that opens its tab, or what the call made, whose row folds as any call's and names it, after `verb`, by the chip `made` labels, whose press `opens` the link it leaves by, or the task it opens in place. */
 const OPENING_CALLS: readonly {
   readonly name: string;
   readonly tool: string;
@@ -420,7 +406,6 @@ test("a finished turn's lead folds under a line that opens as it is pressed", ()
   );
 });
 
-/** An agent of the task's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<AgentSummary> = {}) {
   return {
     id,
@@ -435,7 +420,6 @@ function listedAgent(id: string, title: string, overrides: Partial<AgentSummary>
   } satisfies AgentSummary;
 }
 
-/** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
 function cardOn(row: HTMLElement | null): readonly (string | boolean | null | undefined)[] {
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
@@ -499,13 +483,10 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   );
   const row = (callId: string) =>
     container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
-  // A call that sent words hangs the card from its chip, the row's way to the agent.
   const chip = (callId: string) =>
     container.querySelector<HTMLElement>(`[data-call-id="call-${callId}"] [data-tool-agent-ref]`);
-  // The calls run together fold under one line, which a press opens.
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   act(() => fold?.click());
-  // Note that a working agent's corner says no word: its tile's working mark says it.
   assert.deepEqual(cardOn(chip("message_coding_agent")), ["Invoice export", undefined, true]);
   const [archived, corner] = cardOn(row("read_coding_agent"));
   assert.equal(archived, "Retry audit");
@@ -550,13 +531,11 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
       ),
     ),
   );
-  // A call run alone is folded under its own line, which a press opens.
   act(() => container.querySelector<HTMLElement>("[data-turn-fold] > summary")?.click());
   const chip = container.querySelector<HTMLElement>(
     '[data-call-id="call-message_coding_agent"] summary [data-tool-agent-ref]',
   );
 
-  // Note that the chip is words, not a control, so the pointer is how it is reached.
   restOn(chip ?? assert.fail("the call's agent chip"));
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
 
@@ -655,7 +634,6 @@ test("a message or a start another agent was sent shows its words whole under it
       { status: "accepted", agent: { id: "agent-9", onYourTask: true } },
     ),
   ]);
-  // Note that a turn still moving draws its calls in the open, rather than folded under how many there were.
   const { container, opened } = drawn(message, true);
   const row = (callId: string) =>
     container.querySelector<HTMLElement>(`[data-call-id="call-${callId}"] summary`);
@@ -696,7 +674,6 @@ test("a message or a start another agent was sent shows its words whole under it
   assert.equal(sentNothing.container.querySelector("details"), null, "nothing was sent to show");
 });
 
-/** Main's document holding one agent on no task, running on Codex, as the plan list carries it. */
 function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   return {
@@ -730,13 +707,11 @@ test("a call about an agent the place lists not, whose answer names no model, we
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
   writeAppState(state);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // An answer from a service before it named the agent's model.
   const message = assistant([
     toolPart(
       "archive_agent",
@@ -771,7 +746,6 @@ test("a call about an agent the place lists not, whose answer names no model, we
   fakeAppBridge({});
 });
 
-/** The page of the task `taskId` in the workspace `acme`, whose transcript links what its calls made. */
 function onTask(taskId: string): TaskMentionsValue {
   return {
     ...TASK_PAGE,
@@ -780,7 +754,6 @@ function onTask(taskId: string): TaskMentionsValue {
   };
 }
 
-/** The chip a call's row names what the call made by. */
 function madeChip(container: HTMLElement, callId: string): HTMLElement {
   return (
     container.querySelector<HTMLElement>(
@@ -807,7 +780,6 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
   writeAppState(state);
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   const cards = taskCards({
@@ -901,7 +873,6 @@ test("a call about the plan or another task hangs that task's card as its Plan t
     pages: { taskId: "task-invoices" },
     task: { name: "Invoice export", status: undefined, card: undefined },
   });
-  // The window lists the plan and one other task, whose cards its sidebar rows hang.
   const listed = new Map([
     ["task-invoices", "Invoice export"],
     ["task-retries", "Retry audit"],
@@ -967,7 +938,6 @@ test("a call about the plan or another task hangs that task's card as its Plan t
   assert.deepEqual(cardOf("create_task"), { task: "", name: "Billing cleanup" });
 });
 
-/** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
 const LINEAR_RUN = [
   toolPart(
     "connection_execute",
@@ -983,7 +953,6 @@ const LINEAR_RUN = [
 
 test("a call of an integration's tool is one row wearing the integration's mark, saying the tool it used, and opening on the input that tool was sent", () => {
   const { container } = drawn(assistant(LINEAR_RUN), true);
-  // Note that an element is never handed to assert, because a failure would print all of jsdom.
   assert.ok(
     container.querySelector('[data-call-id="call-connection_execute"]') === null,
     "the connection_execute that ran it draws no row of its own",
@@ -1008,7 +977,6 @@ test("a connection_execute with no integration's call under it keeps its own row
   assert.ok(execute);
   const { container } = drawn(assistant([execute]), true);
   const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
-  // Note that it names the tool and the connection its own input names.
   assert.match(row?.textContent ?? "", /^Ran\s*list_issues\s*Linear$/u);
 });
 
@@ -1039,10 +1007,8 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
   );
 });
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-/** A message another agent sent with `message_agent`, steered into the agent's turn as `agent-message.ts` writes it. */
 const AGENT_MESSAGE: AgentTranscriptMessage = {
   id: "message",
   role: MESSAGE_ROLE.USER,
@@ -1060,7 +1026,6 @@ const AGENT_MESSAGE: AgentTranscriptMessage = {
   sentBy: { name: "Invite emails", agent: true },
 };
 
-/** The message drawn in an agent's transcript, on the task's page where one is given. */
 function agentMessageDrawn(
   message: AgentTranscriptMessage,
   page?: TaskMentionsValue,
@@ -1124,13 +1089,10 @@ test("a message from an agent the line keeps no chip of is named by the name its
   );
 });
 
-/** The agent whose transcript a task's page draws. */
 const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** The task whose page `TASK_PAGE` is. */
 const TASK_PAGE_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
-/** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {
   holder: { taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b" },
   taskName: "Invitations",
@@ -1219,12 +1181,10 @@ test("a comment that reached the agent is headed as a comment on the page it is 
   assert.doesNotMatch(content, /read_page/u, "the instructions stay the agent's");
 });
 
-/** The head that folds a GitHub card, by which a reader names it: who did what to which pull request. */
 function cardHead(card: HTMLElement): HTMLElement {
   return card.querySelector<HTMLElement>("summary") ?? assert.fail("The card has no head");
 }
 
-/** A GitHub line the agent was told, as the service steers one in. */
 function githubLine(
   id: string,
   text: string,

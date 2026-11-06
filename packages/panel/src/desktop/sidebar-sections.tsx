@@ -87,78 +87,31 @@ import { HiddenStatusesLine, NONE_MATCH } from "./sidebar-task-view.js";
 import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag, useRunRowDrag } from "./use-row-drag.js";
 
-/**
- * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks and agents kept in it, named and renamed in place, the dialog that makes one where no head is in sight, and the Move to section of a task's menu and an agent's.
- *
- * A section is the reader's own (`task-section-wire.ts`), so nothing here
- * is a teammate's. Each stands under a header like a repository's, its icon
- * where a repository's picture stands, or its title alone where it has none,
- * folded and kept as a repository's
- * fold is, with Rename and Change icon, which turn its head into its editor
- * in place (`GroupHeaderEditor`), the icon well in the glyph's cell and the
- * name where the title stood, and Delete section on its ⋯ and a right-click;
- * New section on the Tasks head names a new one the same way, at the foot of
- * the sections; and between them, while it holds rows, what acts
- * on all of them at once: Mark all as read while any task is unread, Status,
- * which sets its tasks all at one and asks nothing, as a repository's does,
- * and Move all to section, to another section or a new one, and Remove all
- * from section, which take its agents with its tasks. An agent with no task stands among its
- * tasks as a task does, in the one order, and is dragged as one.
- * Its rows stand in the order dragged, and a row is dragged within its
- * section, into another, onto Tasks, which takes it out of every section,
- * or onto Pinned, which pins it there and takes it out of every section too
- * (`use-row-drag.ts`'s drop zones); a section is dragged among the others
- * by its header. Every change is drawn at once and kept on the account
- * (`TasksControl.onWriteSections`). Deleting a section deletes no task and
- * asks nothing: it happens at once, and its toast's Undo makes the section
- * again under its id, with its title and icon, where it stood, holding the
- * rows it held that no other section has taken since.
- */
-
-/** The zone Tasks is as a drop zone, which takes a task out of every section; a section's is its id. */
 export const TASKS_DROP_ZONE = "tasks";
 
-/** The zone Pinned is as a drop zone, which pins a task where it is let go and takes it out of every section. */
 export const PINNED_DROP_ZONE = "pinned";
 
-/** What a press must land in to drag a section rather than one of its tasks. */
 const SECTION_HANDLE = ".ui-group-header-head";
 
-/** Why a blank title was not kept. */
 const TITLE_ASKED = "Name the section.";
 
-/** What the toast says once a section is deleted. */
 const SECTION_DELETED = "Section deleted";
 
-/** What makes a section, as the Tasks head's button and every Move to section name it. */
 export const NEW_SECTION = "New section";
 
-/** What the dialog was opened to do: make a section in a workspace, perhaps with more written with it, and the words saying what moves into it. */
 interface SectionAsk {
   readonly workspaceId: string;
   readonly after: ((sectionId: string) => readonly TaskSectionWrite[]) | undefined;
   readonly moving: ReactNode;
 }
 
-/** The section dialog's doors, and the card it opens. */
 export interface SectionDialogs {
-  /**
-   * Opens New section in a workspace; `after` is what to write with the
-   * section once made, a task moved into it, and `moving` says what that
-   * moves, as `movesInto` words it.
-   */
   askNew: (
     workspaceId: string,
     after?: (sectionId: string) => readonly TaskSectionWrite[],
     moving?: ReactNode,
   ) => void;
-  /** Deletes a section, focus going on from `from`, the control its menu was opened from, to the section after it, or the first. */
   askDelete: (section: TaskSection, from: HTMLElement | null) => void;
-  /**
-   * Writes `writes`, which move `members` into the section `movedTo`, or out
-   * of every section under null, and answers with one toast whose Undo puts
-   * each back where it stood. `members` are only the rows that move.
-   */
   move: (
     members: readonly SectionMember[],
     movedTo: string | null,
@@ -167,7 +120,6 @@ export interface SectionDialogs {
   dialog: React.JSX.Element;
 }
 
-/** The write that makes a section titled `title` in a workspace under a new id, wearing `icon` where one was chosen. */
 function createWrite(workspaceId: string, title: string, icon: TaskSectionIcon | undefined) {
   return {
     kind: TASK_SECTION_WRITE.CREATE,
@@ -178,13 +130,11 @@ function createWrite(workspaceId: string, title: string, icon: TaskSectionIcon |
   } satisfies TaskSectionWrite;
 }
 
-/** The writes the dialog's answer makes: the section, then what was asked to be written with it. */
 function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | undefined) {
   const made = createWrite(ask.workspaceId, title, icon);
   return [made, ...(ask.after?.(made.id) ?? [])];
 }
 
-/** What New section says moves into the section it makes: a task by its name, one agent, or how many. */
 export function movesInto(count: number, name?: string): ReactNode {
   if (count === 1) {
     if (name === undefined) return "The agent moves into it";
@@ -197,7 +147,6 @@ export function movesInto(count: number, name?: string): ReactNode {
   return `${count} tasks move into it`;
 }
 
-/** What the toast says once rows were moved into the section titled, or out of every section where there is none. */
 function movedNote(count: number, title: string | null): string {
   if (title === null) {
     return count === 1
@@ -207,15 +156,6 @@ function movedNote(count: number, title: string | null): string {
   return count === 1 ? `Moved to ${title}` : `${countWords(count, TERM.TASK)} moved to ${title}`;
 }
 
-/**
- * The writes an Undo of deleting `section` asks, read against the sections
- * as they stood before, `before`, and as they stand now, `current`: the
- * section made again under its id, stood back at its place among its
- * workspace's, and its rows put back in it in their order. A row put in
- * another section since stays there, since that was chosen anew. Note that
- * each row is given a position, as `placeAllWrites` gives one, because rows
- * put back together are stamped in the same instant.
- */
 function undeleteWrites(
   before: TaskSections,
   current: TaskSections,
@@ -242,18 +182,6 @@ function undeleteWrites(
   return [made, ...moved, ...placeAllWrites(remade, members, id, now)];
 }
 
-/**
- * New section's dialog, standing only while `surfaceOpen` and an account is
- * signed in, for where no sidebar head is in sight to name one in place:
- * Move to section's New section, from a task's menu, an agent's, a
- * selection's, or a section's Move all. It asks a name, held to the wire's
- * bound, beside the icon well, and says what moves into the section; Enter
- * in the name answers. And Delete section and every move into or out of a
- * section, which ask nothing and offer Undo, as an act that reaches only the
- * reader does. Every answer is drawn at once, so the card never waits on the
- * service. Note that an Undo reads the sections as they stand when it is
- * pressed (`latest`), since it lands renders after the act.
- */
 export function useSectionDialogs(
   tasks: Pick<TasksControl, "signedIn" | "taskSections" | "onWriteSections">,
   surfaceOpen: boolean,
@@ -330,13 +258,9 @@ export function useSectionDialogs(
                   maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
                   value={title}
                   disabled={form.settling}
-                  // Note that Enter on a blank name is asked anyway, so the field says why it was not kept.
                   onEnter={blank ? confirm.run : form.submit}
                   onChange={(next) => {
                     setTitle(next);
-                    // Note that a refused answer has settled, so the refusal alone holds
-                    // the card up: the question is asked again rather than cleared, or
-                    // the first key typed after it would close the card.
                     if (confirm.rejection !== undefined) confirm.ask();
                   }}
                 />
@@ -362,8 +286,6 @@ export function useSectionDialogs(
     },
     askDelete: (section, from) => {
       const before = tasks.taskSections;
-      // Note that focus goes on to the section beside it now, while this one
-      // still stands, rather than falling to the window as it is taken away.
       if (from !== null) nextRowOrHead(from)()?.focus({ preventScroll: true });
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: section.id }]);
       toast({
@@ -387,14 +309,12 @@ export function useSectionDialogs(
         const back = restoreWrites(before, now.taskSections, members, movedTo, Date.now());
         if (back.length > 0) now.onWriteSections(back);
       });
-      // Note that a move out of every section names no section, so its words are all the app's own.
       toast(title === null ? { ...undo, replayUnmasked: true } : undo);
     },
     dialog,
   };
 }
 
-/** What the sidebar names in place: a section being made in a workspace, from the control that asked, or one being renamed, its picker open where Change icon asked. */
 type InPlace =
   | {
       readonly kind: typeof TASK_SECTION_WRITE.CREATE;
@@ -406,21 +326,15 @@ type InPlace =
       readonly sectionId: string;
     };
 
-/** The sidebar's naming in place: what is being named, if anything, and the section whose head takes the focus once its edit ends by a key. */
 export interface SectionEdits {
   readonly inPlace: InPlace | undefined;
   readonly focusing: string | undefined;
-  /** Stands a new section's editor at the foot of the workspace's sections; Escape hands the focus back to `from`. */
   beginCreate: (workspaceId: string, from: HTMLElement | null) => void;
-  /** Turns a section's head into its editor, whose icon well opens its picker. */
   beginEdit: (sectionId: string) => void;
-  /** Ends the naming, the focus going to the head of `focus` where it names a section. */
   end: (focus?: string) => void;
-  /** Says the head asked for has the focus. */
   focused: () => void;
 }
 
-/** The sidebar's naming in place, one thing at a time. */
 export function useSectionEdits(): SectionEdits {
   const [inPlace, setInPlace] = useState<InPlace | undefined>(undefined);
   const [focusing, setFocusing] = useState<string | undefined>(undefined);
@@ -438,7 +352,6 @@ export function useSectionEdits(): SectionEdits {
   };
 }
 
-/** Whether two icons, either perhaps none, are the same: one emoji, or one glyph in one color. */
 function sameIcon(a: TaskSectionIcon | undefined, b: TaskSectionIcon | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
   if (a.kind === TASK_SECTION_ICON_KIND.EMOJI) {
@@ -447,12 +360,6 @@ function sameIcon(a: TaskSectionIcon | undefined, b: TaskSectionIcon | undefined
   return b.kind === TASK_SECTION_ICON_KIND.GLYPH && a.glyph === b.glyph && a.color === b.color;
 }
 
-/**
- * A section's head being named in place: the icon well in the glyph's cell,
- * which opens its picker, and the name field in the label's place, opened
- * over `title`. How it ended is heard with the icon
- * chosen meanwhile.
- */
 function SectionEditor({
   title,
   icon,
@@ -479,7 +386,6 @@ function SectionEditor({
           open={open}
           onOpenChange={(next, away) => {
             setOpen(next);
-            // Note that a press away from the picker took the focus before it put the picker away, so it ends the edit here.
             if (away) editor.current?.leave();
           }}
           onIcon={setChosen}
@@ -491,31 +397,21 @@ function SectionEditor({
   );
 }
 
-/** The row a sidebar row is in a section: its task, or its agent with no task. */
 export function rowMember(row: TaskRow): SectionMember {
   return row.kind === TASK_ROW.TASK
     ? { agent: false, id: row.task.id }
     : { agent: true, id: row.agent.id };
 }
 
-/** The New section row of a menu, which asks for a section and runs `onSelect`'s ask. */
 export function newSectionAction(onSelect: () => void): MenuAction {
   return { label: NEW_SECTION, icon: <FolderPlusIcon />, onSelect };
 }
 
-/**
- * The Move to section of a task's menu or an agent's: the row's workspace's
- * sections, the one it stands in checked, New section to make one with the
- * row in it, and Remove from section while it stands in one. A row moved
- * here lands on top of its new section, as one dragged onto its header
- * would, and the toast it answers with offers Undo.
- */
 export function moveToSectionEntry(
   tasks: Pick<TasksControl, "taskSections">,
   member: SectionMember,
   workspaceId: string,
   dialogs: Pick<SectionDialogs, "askNew" | "move">,
-  /** The task's name, which New section's card names; none for an agent, which it names as one agent. */
   name?: string | undefined,
 ): MenuEntry {
   const state = tasks.taskSections;
@@ -554,73 +450,47 @@ export function moveToSectionEntry(
   };
 }
 
-/** One section's rows as the sidebar draws them: the entries in its order, each with the task's or the agent's row the list holds, one for one. */
 export interface DrawnSection {
   readonly section: TaskSection;
   readonly entries: readonly SectionEntry[];
   readonly rows: readonly TaskRow[];
 }
 
-/** A section as the view draws it: the rows it leaves standing, and what it leaves out of the rest. */
 export interface ShownSection extends DrawnSection {
-  /** Its rows of the people Assigned to holds that the statuses shown leave out, counted by status, which the section says itself rather than the list's foot. */
   readonly hidden: readonly HiddenStatus[];
-  /** Whether it holds rows Assigned to leaves out, so that it holds nothing in view is no call to drag tasks in. */
   readonly othersHeld: boolean;
 }
 
-/** The tasks among a section's rows, in its order. */
 function drawnSectionTasks(drawn: DrawnSection): TaskSummary[] {
   return drawn.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
 }
 
-/** What every section is drawn with. */
 interface SectionContext {
   readonly tasks: TasksControl;
   readonly dialogs: SectionDialogs;
-  /** What the sidebar names in place. */
   readonly edits: SectionEdits;
-  /** Whether a row is the open one, the open task's or the agent's whose page stands, which a fold leaves standing. */
   readonly current: (row: TaskRow) => boolean;
-  /** Whether a task is unread, as its row's weight says. */
   readonly unread: (task: TaskSummary) => boolean;
-  /** Whether the sidebar is in sight, which the menus close without. */
   readonly inSight: boolean;
   readonly folded: (sectionId: string) => boolean;
   readonly onToggle: (sectionId: string) => void;
-  /** Whether a task's child tasks stand open under its row, folded until first opened. */
   readonly opened: (taskId: string) => boolean;
-  /** A task's row or an agent's, as it stands in any list of the sidebar, at the depth it stands nested at and in its place among its siblings (`nestsOf`). */
   readonly row: (
     row: DrawnTaskRow,
     nest: ListRowNest | undefined,
     place: VirtualRowPlace,
   ) => React.JSX.Element;
-  /** Where the column's runs of rows stand (`SidebarRun`). */
   readonly runs: SidebarRunsPlace;
-  /** Hears a row let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
-  /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
   readonly onCarried: (carried: boolean) => void;
-  /** Opens the Tasks page, where the tasks a section's view leaves out are browsed. */
   readonly onOpenBoard: () => void;
 }
 
-/** What a section's actions on all its tasks run through beyond the section's writes: each asks or reaches past the sections. */
 interface SectionDoors {
-  /** The section's ⋯, which its menu opens from and hands focus back to. */
   readonly opener: React.RefObject<HTMLElement | null>;
   readonly onMarkRead: () => void;
 }
 
-/**
- * A section's menu: Rename, which names it in place, its head turning into
- * its editor, whose icon well changes its icon, and Mark all as read; then
- * Delete section, which leaves every row where it stands and offers Undo.
- * Note that a status for every task in it at once, or a move of every row,
- * is the selection bar's, not the head's. Only the rows drawn are read, so
- * Mark all as read leaves one kept in it but pinned or archived alone.
- */
 function sectionActionGroups(
   drawn: DrawnSection,
   context: SectionContext,
@@ -645,14 +515,6 @@ function sectionActionGroups(
   return [[...edit, ...read], remove];
 }
 
-/**
- * A section's rows as drawn open or folded: open, every row, dragged among
- * its own and out of it; folded, only the open one, which a drop over lands
- * on top of rather than among. A task's child tasks in the section stand
- * nested under it (`nested-rows.ts`), so a row moves among its siblings as
- * they are drawn, its child tasks with it, and never out from under its
- * parent.
- */
 function SectionRows({
   drawn,
   context,
@@ -665,11 +527,9 @@ function SectionRows({
   folded: boolean;
 }): React.JSX.Element {
   const nested = useNestedRows(rows, context.opened, context.current);
-  // Note that a row on its way out has no place among the rows a drag or a menu moves.
   const shown = useLeaving(nested, ({ row }) => taskRowKey(row));
   const keys = useMemo(() => shown.map(({ key }) => key), [shown]);
   const listedAt = new Map(nested.map(({ row }, at) => [taskRowKey(row), at]));
-  // Note that a row is heard by its place among the rows drawn, rows on their way out among them, and found among those listed by its key, as the slot it is carried to is (`listedSlot`).
   const fromListed = (from: number) => {
     const key = shown[from]?.key;
     return key === undefined ? undefined : listedAt.get(key);
@@ -678,7 +538,6 @@ function SectionRows({
     const held = nested[at];
     return held === undefined ? -1 : drawn.rows.indexOf(held.row);
   };
-  // Note that a move lands the row's entry beside its sibling's, which alone orders the two as they are drawn.
   const besideSibling = (from: number, beside: number | undefined) => {
     if (beside === undefined) return;
     context.tasks.onWriteSections(placeWritesWithin(drawn, storedAt(from), storedAt(beside)));
@@ -732,12 +591,6 @@ function SectionRows({
   );
 }
 
-/**
- * What a section draws under its rows, or in their place while the view
- * leaves none standing: how many more its statuses hidden hold, which opens
- * the Tasks page as the list's foot does; else, holding none, that Assigned
- * to leaves out what it holds, or a word that tasks are dragged in.
- */
 function SectionFoot({
   drawn,
   onOpenBoard,
@@ -757,7 +610,6 @@ function SectionFoot({
   );
 }
 
-/** One section: its header, its menu, its rows, and what the view leaves out of them. */
 function SidebarSection({
   drawn,
   context,
@@ -765,7 +617,6 @@ function SidebarSection({
 }: {
   drawn: ShownSection;
   context: SectionContext;
-  /** Where the section stands among the sections, which its menu moves it from under a finger. */
   place: RowPlace;
 }): React.JSX.Element {
   const { section } = drawn;
@@ -785,7 +636,6 @@ function SidebarSection({
   const glyph = sectionGlyph(section.icon);
   const { edits } = context;
   const root = useRef<HTMLDivElement | null>(null);
-  // Note that a head named in place by a key takes the focus back once it is drawn again.
   useLayoutEffect(() => {
     if (edits.focusing !== section.id || edits.inPlace !== undefined) return;
     root.current?.querySelector<HTMLElement>(".ui-group-header-lead")?.focus();
@@ -798,7 +648,6 @@ function SidebarSection({
   const renamed = (end: GroupHeaderEditEnd, icon: TaskSectionIcon | undefined) => {
     edits.end(end.byKey ? section.id : undefined);
     if (!end.kept) return;
-    // Note that a name left blank keeps the one it had, as a rename never leaves a section nameless.
     const title = end.value === "" ? section.title : end.value;
     if (title === section.title && sameIcon(icon, section.icon)) return;
     tasks.onWriteSections([
@@ -817,7 +666,6 @@ function SidebarSection({
         glyph={glyph}
         label={<ReplayMask>{section.title}</ReplayMask>}
         fold={sidebarFold(folded, () => context.onToggle(section.id))}
-        // Note that a section the view leaves nothing standing in, though it holds rows, counts none, because a 0 would call it empty.
         count={
           drawn.rows.length === 0 && (drawn.hidden.length > 0 || drawn.othersHeld)
             ? undefined
@@ -857,33 +705,22 @@ function SidebarSection({
   );
 }
 
-/** The writes that stand the row at `from` in a section, as drawn, at `to`. */
 function placeWritesWithin(drawn: DrawnSection, from: number, to: number): TaskSectionWrite[] {
   const entry = drawn.entries[from];
   if (entry === undefined) return [];
   return placeWrites(drawn.entries, memberOf(entry), drawn.section.id, to, Date.now());
 }
 
-/** A section's key, by which it leaves the list. */
 function sectionKeyOf(drawn: DrawnSection): string {
   return drawn.section.id;
 }
 
-/**
- * The account's sections in the listed workspace, between Pinned and Tasks,
- * in the order dragged: a section's header is its handle, so a press on one
- * of its rows drags the row and not the section. A section being made
- * stands at their foot, where it will land, named in place: Return makes
- * it, the focus going to its head, and Escape, or the focus leaving with no
- * name typed, makes nothing.
- */
 export function SidebarSections({
   sections,
   workspaceId,
   context,
 }: {
   sections: readonly ShownSection[];
-  /** The listed workspace, in whose sections a new one is named in place. */
   workspaceId: string | undefined;
   context: SectionContext;
 }): React.JSX.Element | null {
@@ -892,7 +729,6 @@ export function SidebarSections({
     context.tasks.onWriteSections(sectionMoveWrites(order, from, to));
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
   const keys = useRowMoveKeys(move);
-  // Note that a section on its way out, deleted or moved away, is drawn on where it stood until its exit has played.
   const shown = useLeaving(sections, sectionKeyOf);
   const listedAt = new Map(sections.map((drawn, at) => [sectionKeyOf(drawn), at]));
   const { tasks, edits } = context;

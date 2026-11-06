@@ -17,23 +17,12 @@ import {
   type EditorFormat,
 } from "./contract.js";
 
-/**
- * The message box's editor through its mount and its handle: the words read
- * out as the one string a message is, every change from outside landing
- * once, Enter and an input method's Enter, the bound, a paste, a dictation's
- * mark, a skill's chip, which one Backspace takes out whole and whose
- * name stands in no attribute the recording would keep, and the inline
- * marks, typed, chorded, and read out and back as their Markdown.
- */
-
-// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
 vi.hoisted(() => {
   Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
 });
 
 const SKILLS: ReadonlySet<string> = new Set(["release", "deploy"]);
 
-/** Every box mounted, taken down after each test. */
 const boxes: { host: HTMLElement; handle: ComposerEditorHandle }[] = [];
 
 beforeEach(installEditorLayout);
@@ -45,14 +34,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The device's pointer as a phone's, a finger, or a mouse's, which the browser's media queries answer. */
 function pointerIs(coarse: boolean): void {
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: coarse && query === "(pointer: coarse)",
   }));
 }
 
-/** A box mounted on the words given, with everything it hands back written down. */
 function mounted(text: string, overrides: Partial<ComposerEditorProps> = {}) {
   const drafts: string[] = [];
   const triggers: (ComposerTrigger | undefined)[] = [];
@@ -95,18 +82,13 @@ function mounted(text: string, overrides: Partial<ComposerEditorProps> = {}) {
     triggers,
     pasted,
     sends,
-    /** The chips drawn now, by their words. */
     chips: () => [...chips].map((chip) => chip.textContent),
-    /** Puts the caret at a place in the document, as a press there would. */
     caretAt: (pos: number) => editor.commands.setTextSelection(pos),
-    /** Selects the document from one place to another, as a drag would. */
     select: (from: number, to: number) => editor.commands.setTextSelection({ from, to }),
-    /** Selects every word, as ⌘A does. */
     selectAll: () => editor.commands.selectAll(),
   };
 }
 
-/** The words typed one key at a time, as the browser's text input hands each to the editor, so a Markdown rule a key completes runs. */
 function typeKeys(host: HTMLElement, text: string): void {
   const view = composerEditor(host).editor?.view ?? assert.fail("the editor is running");
   for (const character of text) {
@@ -119,7 +101,6 @@ function typeKeys(host: HTMLElement, text: string): void {
   }
 }
 
-/** A chord pressed in the box, ⌘ with the letter, Shift where asked, as a Mac keyboard spells it; answers whether anything outside the editor heard it. */
 function chord(host: HTMLElement, letter: string, shift = false): boolean {
   let heard = false;
   const hear = () => {
@@ -137,7 +118,6 @@ function chord(host: HTMLElement, letter: string, shift = false): boolean {
   return heard;
 }
 
-/** What the box's words hold in each mark's element, by the element's tag. */
 function marked(host: HTMLElement): Record<string, string[]> {
   const found: Record<string, string[]> = {};
   for (const tag of ["strong", "em", "s", "code", "a"]) {
@@ -147,7 +127,6 @@ function marked(host: HTMLElement): Record<string, string[]> {
   return found;
 }
 
-/** A paste of the words and files given, as the system's clipboard hands one over, with the markup a copy from an editor carries beside them. */
 function paste(host: HTMLElement, text: string, files: readonly File[] = [], html = ""): void {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
@@ -287,7 +266,6 @@ test("a pasted image goes to the owner and not into the words, and pasted lines 
 
 test("a dictation's words land where the caret was marked, carried through changes since: between two chips, and at the end", () => {
   const box = mounted("/release /deploy");
-  // The document holds the first chip at 1, then a space, then the second chip.
   box.caretAt(2);
   const between = box.handle.mark();
   box.caretAt(1);
@@ -381,7 +359,6 @@ test("the list's word is reported again as the words scroll under it", () => {
   typeInComposer(box.host, "Run /rel");
   assert.equal(box.triggers.at(-1)?.rect.top, 0);
 
-  // The words scrolled up: the slash now stands 40 pixels lower in the window.
   Range.prototype.getBoundingClientRect = () => new DOMRect(10, 40, 0, 16);
   composerEditor(box.host).dispatchEvent(new Event("scroll"));
   assert.deepEqual(box.triggers.at(-1), {
@@ -391,7 +368,6 @@ test("the list's word is reported again as the words scroll under it", () => {
   });
 });
 
-/** A box mounted with mentions, every report and drawn mention written down. */
 function mountedWithMentions(text: string) {
   const reported: (ComposerTrigger | undefined)[] = [];
   const drawn: string[] = [];
@@ -403,14 +379,12 @@ function mountedWithMentions(text: string) {
         drawn.push(`${mention.name} ${mention.target}`);
         return () => undefined;
       },
-      // The panel reads the one page of an integration's this box is pasted.
       pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
   });
   return { ...box, reported, drawn };
 }
 
-/** A page of an integration's, as the panel names it. */
 const ISSUE_URL = "https://linear.app/acme/issue/ACME-142/fix-the-thing";
 const ISSUE = { name: "ACME-142/fix-the-thing", target: ISSUE_URL };
 
@@ -452,7 +426,6 @@ test("one Backspace right after a mention takes it out whole", () => {
 test("a pick right before a chip replaces the @ word alone, and the chip stays", () => {
   const box = mountedWithMentions(`See ${STORE_LINK}`);
 
-  // The caret right after "See ", before the chip: the paragraph opens at 1.
   box.caretAt(1 + "See ".length);
   typeInComposer(box.host, "@go");
   box.handle.chooseMention({ name: "Goal", target: "luke://plan/pl_1#Goal" });
@@ -475,7 +448,6 @@ test("an @ in code is the code's: no @ word is reported in a fence or a span", (
   typeInComposer(box.host, "```\n@ses");
   const inFence = box.reported.at(-1);
   box.handle.replace("Run `x @ses` now");
-  // Note that the code span's backticks are its mark's, which stand in no place of the document.
   box.caretAt(1 + "Run x @ses".length);
 
   assert.equal(inFence, undefined);
@@ -539,7 +511,6 @@ test("a mention laid in from elsewhere stands where the caret is, a space after 
   assert.deepEqual(full.drafts, []);
 });
 
-/** The quote blocks the box holds, by their words. */
 function quotesIn(host: HTMLElement): (string | null)[] {
   return [...host.querySelectorAll("[data-quote]")].map((element) => element.textContent);
 }
@@ -738,7 +709,6 @@ test("⌘K over words selected opens the owner's link field and links them, and 
 test("words selected past the box's scroller are measured by the lines it shows, so the toolbar stands by them", () => {
   const box = mounted("First line\nSecond line");
   const field = composerEditor(box.host);
-  // The box scrolls, standing 200 high at 600 from the window's top; the first line is scrolled away above it.
   field.style.overflowY = "auto";
   Object.defineProperty(field, "clientHeight", { value: 200 });
   Object.defineProperty(field, "clientWidth", { value: 500 });

@@ -13,12 +13,10 @@ import { useSettingRowWrite } from "./row-write.js";
 import { SelectRow } from "./select-row.js";
 import { SwitchRow } from "./switch-row.js";
 
-/** One value a choice's control offers, as the schema hands it. */
 type SettingOption = NonNullable<
   ReturnType<typeof settingRowsForPage>[number]["control"]
 >["options"][number];
 
-/** A toggle's row: the shared switch (`switch-row.tsx`), writing its setting through a mutation of its own. */
 function SchemaToggleRow({
   id,
   field,
@@ -53,12 +51,6 @@ function SchemaToggleRow({
   );
 }
 
-/**
- * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
- * where the schema gives the set a search field and reads whole where it
- * does not, each option wearing the faces its section hands it, where it
- * hands some, writing its setting through a mutation of its own.
- */
 function SchemaChoiceRow({
   id,
   field,
@@ -79,9 +71,7 @@ function SchemaChoiceRow({
   changed: boolean;
   value: string;
   options: readonly SettingOption[];
-  /** What an option's token shows beside its words, where it shows anything. */
   faces: ((token: string) => React.ReactNode) | undefined;
-  /** The searchable menu's empty field words, for a set long enough to search. */
   search: string | undefined;
 }): React.JSX.Element {
   const write = useSettingRowWrite(field, (token: string) => settingFromOption(field, token, view));
@@ -97,7 +87,6 @@ function SchemaChoiceRow({
           ? options
           : options.map((option) => ({ ...option, faces: faces(option.value) }))
       }
-      // A token the set does not hold, or the one already stored, is not written, so a stale menu or a repeat pick writes nothing.
       parse={(token) =>
         token !== value && options.some((option) => option.value === token) ? token : undefined
       }
@@ -108,15 +97,6 @@ function SchemaChoiceRow({
   );
 }
 
-/**
- * Every ordinary row one section of a settings page draws, from the schema and
- * nothing else: which page and section a setting stands in, where in that
- * section, whether it is drawn right now, what its control offers, and the
- * line drawn under its label are the entry's own answers. A page component that decided any of it for itself would
- * be a second record of the same fact, and the two would drift. What the
- * section may add is a choice's faces, read at run time from what the
- * schema cannot know, such as the account's own picture.
- */
 export function SchemaSettingRows({
   page,
   section = SETTING_SECTION.MAIN,
@@ -126,7 +106,6 @@ export function SchemaSettingRows({
   page: (typeof SCHEMA_SETTINGS_PAGE)[keyof typeof SCHEMA_SETTINGS_PAGE];
   section?: SettingSection;
   view: SettingsRowsInput;
-  /** What each of a choice's options shows beside its words, by the setting it stores and its token; none where its options are words alone. */
   faces?: ((field: AppSettingField, token: string) => React.ReactNode) | undefined;
 }): React.JSX.Element {
   const rows = settingRowsForPage(page, section, view).flatMap((row) => {

@@ -17,13 +17,6 @@ import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
 
-/**
- * Settings' doors to the host as the developer presses them: Restart, held
- * by a downloaded update, is an act pressed for, so a refusal main draws is
- * said in a toast in main's own words rather than swallowed. Synthetic
- * versions throughout.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -36,11 +29,9 @@ const DOORS: SettingsDoors = {
   onViewChange: () => undefined,
   onSignOut: () => Promise.resolve(),
   onRequestMicrophone: () => undefined,
-  // SAFETY: the doors under test never reach the workspace's own control.
   workspace: {} as SettingsDoors["workspace"],
 };
 
-/** Settings' props as drawn over a downloaded update, with main refusing every install in `sentence`, beside the window's toasts. */
 async function mountRefusingInstall(sentence: string): Promise<() => SettingsPanelProps> {
   handState(
     {},
@@ -79,7 +70,6 @@ async function mountRefusingInstall(sentence: string): Promise<() => SettingsPan
   return () => panel ?? assert.fail("Settings drew nothing");
 }
 
-/** What each toast standing says, oldest first. */
 function toasts(): string[] {
   return [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
     (words) => words.textContent ?? "",

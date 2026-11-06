@@ -1,76 +1,27 @@
 :root {
   font-family: var(--ui-font-sans);
   font-synthesis: none;
-  /* Note that every window draws its words without the Mac's font
-     smoothing, as Linear, Slack, and the website do, because the smoothing
-     thickens every stroke, light on dark most of all, until a regular reads
-     nearly as heavy as a semibold. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Note that a phone's browser draws every size as the tokens say, because
-     iOS Safari otherwise inflates the text of a block whose lines run past
-     the screen, a code block's above all, until its code reads larger than
-     the body. Tailwind's preflight would set this, but the panel takes none. */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* Note that a press shows only the control's own feedback, because Safari
-     otherwise flashes its gray tap box over it; `manipulation` keeps pinch
-     zoom but drops the double-tap zoom, and a `touch-action: none` area still
-     wins, since a touch's allowed actions are the intersection up the tree. */
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   background: transparent;
-  /* The palette every shared component draws in, the inks, grounds, fills,
-     edges, accent, states, and shadows, is `@repo/ui`'s desktop palette
-     (`tokens/palettes.css`), keyed on the root's `data-ui-profile` and
-     `data-ui-theme`: the desktop's theme is `system`, so it follows the
-     Mac's appearance and the app's own Theme setting through it, and the web's
-     is the account's Theme setting resolved (`@repo/ui`'s
-     `tokens/appearance.ts`). What stays here is the window's own: whose
-     voice is live, the code's and the terminal's inks, a file icon's. Each
-     color of its own that differs by appearance is one `light-dark()` pair,
-     light first, which the root's theme picks through `color-scheme`, so no
-     sheet here asks the machine's appearance: a page drawn in a chosen theme
-     draws every ink in it whatever the machine says. */
 
-  /* The app's own voice in a document it writes (`document-frame.tsx`): its
-     caret, its writing ring, and the wash on what changed since the last look,
-     in the brand's copper, the links' ink, rather than the working blue a
-     status draws in. */
   --voice-app: var(--ui-color-accent-text);
-  /* The keyboard's ring, how thick and how far off the edge, is the
-     profile's `--ui-focus-ring-*` (`tokens/profiles.css`). */
-  /* The code on screen, in the inks of GitHub's themes on its ground
-     (`--ui-color-code-ground`), and the mark beside a line changed in that
-     theme's blue. */
   --code-text: light-dark(#1f2328, #e6edf3);
   --code-pointed-edge: light-dark(#0969da, #388bfd);
-  /* A diff's lines on the code's ground, wherever one is drawn: a line
-     added tinted in the palette's green and one removed in its red, the
-     words a changed line changed in a deeper tint of the same, and the mark
-     at a changed line's edge in the color itself. Each is mixed from the
-     palette's own, which flips with the appearance, so none is restated. */
   --diff-added-mark: var(--ui-color-complete);
   --diff-removed-mark: var(--ui-color-danger);
   --diff-added-ground: color-mix(in srgb, var(--diff-added-mark) 14%, transparent);
   --diff-removed-ground: color-mix(in srgb, var(--diff-removed-mark) 14%, transparent);
   --diff-added-word: color-mix(in srgb, var(--diff-added-mark) 34%, transparent);
   --diff-removed-word: color-mix(in srgb, var(--diff-removed-mark) 34%, transparent);
-  /* A Terminal tab's screen (`terminal/`): the side panel's well for its
-     ground, the code's ink for its words and cursor, its selection in the
-     code's blue, and the sixteen ANSI colors a program prints in, from the
-     same GitHub theme the code is colored with. The terminal draws on a
-     canvas, which reads none of this itself, so the bundle reads the color
-     each resolves to off the host and draws again when the appearance flips
-     (`terminal/terminal-theme.ts`). */
-  /* The well read through its brand role, so a change of brand
-     (`@repo/brand`'s `brand-palette.mjs`) recolors the screen with it. */
   --terminal-ground: var(--ui-color-well);
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: light-dark(rgba(9, 105, 218, 0.2), rgba(56, 139, 253, 0.4));
-  /* The scrollbar's ink, restated rather than read through
-     `--ui-color-scrollbar` for the same reason. */
   --terminal-scrollbar: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.18));
   --terminal-black: light-dark(#24292f, #484f58);
   --terminal-red: light-dark(#cf222e, #ff7b72);
@@ -81,7 +32,6 @@
   --terminal-cyan: light-dark(#1b7c83, #39c5cf);
   --terminal-white: light-dark(#6e7781, #b1bac4);
   --terminal-bright-black: light-dark(#57606a, #6e7681);
-  /* The terminal's own notes, held to 4.5:1 on the ground in either appearance. */
   --terminal-note: light-dark(#57606a, #9198a1);
   --terminal-bright-red: light-dark(#a40e26, #ffa198);
   --terminal-bright-green: light-dark(#1a7f37, #56d364);
@@ -90,14 +40,8 @@
   --terminal-bright-magenta: light-dark(#a475f9, #d2a8ff);
   --terminal-bright-cyan: light-dark(#3192aa, #56d4dd);
   --terminal-bright-white: light-dark(#8c959f, #ffffff);
-  /* A find's tints in a terminal (`terminal-surface.ts`), opaque because
-     the terminal blends no alpha into its cells: the browser find's yellow
-     dimmed for every match, its orange for the one the find is at. */
   --terminal-find-match: light-dark(#fff0a3, #5c4a00);
   --terminal-find-current: light-dark(#ffb547, #b36b00);
-  /* A file's type icon in the file tree's own palette (`@pierre/trees`),
-     which its shadow root keeps to itself, said again for a file drawn
-     outside the tree (`tasks.css`). */
   --file-icon-gray: light-dark(#84848a, #adadb1);
   --file-icon-red: light-dark(#d52c36, #ff6762);
   --file-icon-vermilion: light-dark(#ff8c5b, #d5512f);
@@ -112,26 +56,10 @@
   --file-icon-pink: light-dark(#d32a61, #ff678d);
   --file-icon-mauve: light-dark(#594c5b, #79697b);
 
-  /* Springs, durations, delays, and the row fan arrive from `@repo/ui`'s motion tokens,
-     so no app ships a different vocabulary. One sampled damped spring drives every travel, at one
-     duration: a real spring's motion is a property of the spring, not of how
-     far it is asked to go, which is what makes every move read as the same
-     hand. */
-
-  /* A comment's anchored words (`tasks/description-comments.tsx`): a wash under
-     the words and an edge beneath them, both stronger while their thread is
-     open or the pointer is on them, in an amber that is neither the blue of
-     a selection, the yellow of a find, nor the orange of attention. */
   --comment-mark: light-dark(rgba(245, 176, 0, 0.14), rgba(255, 200, 87, 0.13));
   --comment-mark-edge: light-dark(rgba(196, 132, 0, 0.55), rgba(255, 200, 87, 0.5));
   --comment-mark-active: light-dark(rgba(245, 176, 0, 0.3), rgba(255, 200, 87, 0.28));
   --comment-mark-active-edge: light-dark(rgba(176, 112, 0, 1), rgba(255, 200, 87, 0.95));
-  /* The agent's pointer over a cloud Browser tab (`tasks/cloud-browser-cursor.tsx`),
-     drawn over someone else's page rather than the window, so it follows the
-     page under it rather than the theme: the light mode's accent, the dark
-     mode's brighter one over a dark page (`brand.css`'s accent on either
-     ground), a white edge and a small shadow that hold it apart from any page,
-     and a glow of its own copper while it types. */
   --agent-pointer: var(--ui-color-accent-on-light);
   --agent-pointer-on-dark: var(--ui-color-accent-on-dark);
   --agent-pointer-edge: #ffffff;
@@ -140,12 +68,6 @@
   --agent-pointer-glow-on-dark: color-mix(in srgb, var(--agent-pointer-on-dark) 50%, transparent);
 }
 
-/* Pierre's diff and file tree each ask for `color-scheme: light dark` in
-   their own shadow roots, which follows the machine; each takes the root's
-   scheme instead, so a theme chosen on the web reaches the `light-dark()`
-   inks they keep for themselves. The desktop's root is `light dark`
-   already. Note that a rule on the host from outside its shadow root
-   outweighs the root's own `:host` rule. */
 diffs-container,
 file-tree-container {
   color-scheme: inherit;
@@ -157,23 +79,11 @@ file-tree-container {
   height: 100%;
 }
 
-/* The element resets, in a `base` layer under the Tailwind layers
-   (styles/tailwind.css) as Tailwind's own preflight would sit: a rule outside
-   every layer outranks a layered one whatever its specificity, so a reset
-   left out here would beat the utility a component spells on the same
-   element, and the submit's `text-primary-foreground` would lose to the
-   button's `color: inherit` and draw its arrow in its disc's own color.
-   Every other rule in this sheet stays outside the layers and so still wins
-   over a utility of the same element. */
 @layer base {
   * {
     box-sizing: border-box;
   }
 
-  /* No user-agent padding either: a button keeps none it did not ask for, so a
-     glyph centered in a fixed box is never squeezed narrower than its own. It
-     gives the one press cursor, the Mac's arrow on the desktop and the hand
-     on the web (`--ui-cursor-press`). */
   button {
     padding: 0;
     border: 0;
@@ -186,11 +96,6 @@ file-tree-container {
     cursor: default;
   }
 
-  /* A field is typed into in the panel's own font, on no border and no
-     surface of the browser's: Tailwind's preflight, which would reset these,
-     is left out (styles/tailwind.css), so the reset is this sheet's, and the
-     box around the words is its owner's to draw. Without it a textarea is the
-     browser's monospace well behind a hard rectangle. */
   textarea {
     border: 0;
     background: none;
@@ -198,40 +103,26 @@ file-tree-container {
     font: inherit;
   }
 
-  /* One ring for every control, and for anything else in the tab order, so
-     no element given a tabindex is left to the engine's own ring.
-     `:focus-visible` alone guesses wrong in a window the app focuses for itself
-     and rings a button after a plain press, or a page's Back the page focused
-     on mount, so the ring is drawn only once the keyboard has actually moved
-     focus (`keyboard-modality.ts`). Note that the modality is part of this
-     selector rather than a gate after it, because a gate of lower specificity
-     in the same layer loses to it and lets the guess ring.
-     In the base layer, so a sheet's own rule for a control still wins: a
-     menu row marks its focus with a fill, and says so where it is drawn. */
   :root[data-keyboard="true"]
-  :is(
-    button,
-    a[href],
-    summary,
-    input:is([type="checkbox"], [type="radio"], [type="range"]),
-    [role="button"],
-    [role="tab"],
-    [role="switch"],
-    [role="option"],
-    [role="menuitem"],
-    [role="menuitemcheckbox"],
-    [tabindex]:not([tabindex="-1"])
-  ):focus-visible:not(:has(> [data-focus-ring])) {
+    :is(
+      button,
+      a[href],
+      summary,
+      input:is([type="checkbox"], [type="radio"], [type="range"]),
+      [role="button"],
+      [role="tab"],
+      [role="switch"],
+      [role="option"],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [tabindex]:not([tabindex="-1"])
+    ):focus-visible:not(:has(> [data-focus-ring])) {
     outline: var(--ui-focus-ring-width) solid var(--ui-color-focus-ring);
     outline-offset: var(--ui-focus-ring-offset);
   }
 
-  /* A control whose drawn shape is a part of it, a picture tile's picture
-     over its caption, rings that part alone, which says so with
-     `data-focus-ring`, so the ring takes the shape that is seen and the
-     control draws no second one around it. */
   :focus-visible:has(> [data-focus-ring]) {
-    outline: none; /* no ring: the part it names rings */
+    outline: none;
   }
 
   :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
@@ -239,12 +130,6 @@ file-tree-container {
     outline-offset: var(--ui-focus-ring-offset);
   }
 
-  /* The keyboard scrolls a control in with its ring's reach to spare, so a
-     row brought to a scroller's edge is not left with its ring sliced off
-     there; a scroller that fades an edge scroll-pads by the fade as well, so
-     the row is not left under it. Every control rather than the one focused,
-     because the scroll is measured as focus lands, before a rule on the
-     focus could take part. */
   :is(
     button,
     a[href],
@@ -262,24 +147,20 @@ file-tree-container {
   }
 
   :root:not([data-keyboard="true"]) :focus-visible {
-    outline: none; /* no ring: a press moved focus, not the keyboard */
+    outline: none;
   }
 
-  /* A field holding the caret wears no ring, however the caret got there:
-     the caret and the field's own ground say where typing goes. */
   :is(
     textarea,
     [contenteditable],
     input:not([type="checkbox"], [type="radio"], [type="range"])
   ):focus-visible {
-    outline: none; /* no ring: the caret marks the field */
+    outline: none;
   }
 }
 
 html,
 body {
-  /* A drag that starts where nothing scrolls must not bounce the app on iOS
-     or pull to refresh on Android. */
   overscroll-behavior: none;
 }
 
@@ -289,17 +170,10 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
-  /* `clip` rather than `hidden`: `hidden` leaves a scroll container that focus
-     or scrollIntoView can drag the whole window's content out of. */
   overflow: clip;
   background: transparent;
 }
 
-/* Words are selectable wherever they are read, so any line the window draws,
-   a failure's sentence, a heading, a row's detail, can be copied. A control
-   is pressed rather than read, so its words never select: a press, a tab, a
-   menu's row, a switch, a label that presses what it names, a glyph, and
-   whatever is dragged, where a selection would start in place of the drag. */
 :where(
   button,
   [role="button"],
@@ -321,31 +195,16 @@ body,
   user-select: none;
 }
 
-/* The product's mark --------------------------------------------------------- */
-
-/* The mark's ink is `@repo/ui`'s (`marks/product-mark.css`); its size where
-   nothing more particular lays it out is the window's, except where it is
-   asked to fill its box (`fill`) or to stand as a line glyph (`glyph`) at the
-   size its seat gives the glyphs beside it, which this unlayered size would
-   otherwise beat. */
 .ui-product-mark:not([data-fill="true"], [data-glyph="true"]) {
   width: 18px;
   height: 18px;
 }
 
-/* The mark handed to an auth card takes the artwork's size. */
 .ui-auth-mark .ui-product-mark {
   width: 52px;
   height: 52px;
 }
 
-/* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,
-   the working mark stands in the glyph's place, centered in the glyph's own
-   footprint, so a tab or a row moves nothing as its work starts or ends.
-   Failed, the glyph stands as at rest, and the failed mark at its row's end
-   says it (`.failed-mark`). In the `base` layer, so a shared component's
-   glyph slot that holds one sizes it as it sizes any glyph of its own, at
-   the size the slot says (`--ui-glyph-size`) where nothing nearer does. */
 @layer base {
   .state-glyph {
     position: relative;
@@ -364,15 +223,6 @@ body,
   height: 100%;
 }
 
-/* Session primitives ----------------------------------------------------- */
-
-/* Evidence capture screenshots a fixed moment after the renderer reports ready,
-   so without this a capture could land mid-transition and the PNGs would stop
-   being reproducible.
-   Zeroing the tokens every transition is written in terms of is enough — no
-   rule has to be overridden. They are zeroed on the body as well as on the
-   stage, so a hint, a menu, the palette, or a toast drawn at the body's end,
-   which none stands under, holds still too. */
 .app-stage[data-capture="true"],
 body:has(.app-stage[data-capture="true"]) {
   --ui-duration-shape: 0s;
@@ -382,20 +232,12 @@ body:has(.app-stage[data-capture="true"]) {
   --ui-duration-hover: 0s;
   --ui-duration-pane: 0s;
   --ui-row-stagger: 0s;
-  /* A late state, a hint and a delayed ring show at once, so a capture never
-     waits on their delay. */
   --ui-late-delay: 0s;
   --ui-hint-delay: 0s;
   --ui-settle-delay: 0s;
-  /* A confirmation stands for a beat and goes (a Saved, a landed check), so a
-     capture holds none rather than catching one wherever the shutter fell. */
   --ui-confirm-delay: 0s;
-  /* A video's key flash stands for a beat and goes the same way. */
   --ui-flash-delay: 0s;
-  /* The working rows' spinners loop with no end to wait for, so a capture
-     would otherwise land wherever in them the shutter happened to fall. */
   --ui-loop-motion: paused;
-  /* A toast's countdown says time passing, which a still frame cannot. */
   --ui-wait-motion: paused;
   --ui-scroll-glide: auto;
 }

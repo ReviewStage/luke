@@ -19,14 +19,6 @@ import { useTaskListView } from "./desktop/task-list-view.js";
 import { useSummaryPin } from "./desktop/task-summary.js";
 import { useConversationFilters } from "./tasks/conversation-filters.js";
 
-/**
- * kept-keys.test.ts -- a view choice kept before it moved onto `useKept` is
- * still kept: each is read from the name and in the shape an earlier build
- * wrote it, and written back under the same name in the same shape, so
- * nobody loses a fold, a width or a filter to the move. The stored texts
- * are spelled out here, never computed from the code under test.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -44,12 +36,10 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** What the hook answered on its last draw. */
 interface Drawn<T> {
   readonly now: () => T;
 }
 
-/** Draws a surface that calls `hook`, and answers what it last returned. */
 function draw<T>(hook: () => T): Drawn<T> {
   let latest: T | undefined;
   function Surface(): null {
@@ -186,7 +176,6 @@ test("a task list view an earlier build kept opens on the reader's own tasks, a 
     w1: { grouping: "repository" },
     w2: { grouping: "none", assignee: { kind: "anyone" } },
   });
-  // A later launch reads Anyone back.
   act(() => root?.unmount());
   const later = draw(() => useTaskListView("w2", false));
   expect(later.now().view.assignedTo).toEqual({ kind: "anyone" });

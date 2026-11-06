@@ -72,143 +72,13 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentModelControl } from "./use-agent-model.js";
 import { useModifierHeld } from "./use-modifier-held.js";
 
-/**
- * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
- *
- * The box is the shared composer card (../ai-elements/prompt-input.tsx),
- * at its default type, its files over its words and its foot as every message
- * box's (`@repo/ui`'s `ComposerBody` and `ComposerFoot`). Its foot is laid
- * out as ChatGPT's and Codex's are: at the left the "+", which raises a
- * menu of Attachment, which attaches files, and MCP servers, which opens
- * the servers popover beside the menu as its submenu, where the agent is
- * handed a switch for each server (`agent-servers.tsx`); and,
- * once the agent has pushed a branch with no pull request yet,
- * the branch's chip, which opens it on GitHub (`agent-published.tsx`); a
- * pull request, once one stands, is the row pinned over the card rather
- * than a chip here (`agent-tab.tsx`); at the right,
- * in this order, the model chip naming what the agent runs on, which opens
- * the menu that changes it for the next step (`agent-model-chip.tsx`),
- * the ring that shows, once a step has ended, how full the agent's model's
- * context is and opens what fills it (`agent-context.tsx`), the
- * microphone, and the round button. The box takes a message to the agent:
- * Enter sends it, Shift+Enter is a new line (on a coarse pointer Enter is,
- * and the round Send sends: `composer-editor.ts`), and Escape leaves the box; the
- * box is an editor (`composer-field.tsx`) that holds plain words and a
- * chosen skill's chip, and the message is its words as a string. A
- * message sent while a turn runs steers it, so the agent sees it at its
- * next step; sent idle, it opens a new turn. The box reads the same
- * whatever the agent is doing: one size, the same chips, no hint under it,
- * and one placeholder asking for a follow up, since a started agent's
- * conversation opens on its description or task, because the tab's glyph and the transcript's "Working…"
- * line already say where the agent stands. The one thing that follows the agent's state is
- * the button at the card's right, the way every chat draws it: Send while
- * there are words or files, disabled while there are neither and the agent
- * is idle, and Stop while there are neither and a turn runs, which is the
- * one Stop the tab has. A message that did not go stays in the box with why under the foot's
- * bar and what mends it (`@repo/ui`'s `ErrorState`): Retry, which sends it again
- * under the same key, so a send whose answer was lost reaches the agent
- * once, or, for a repository out of reach, the press its reason names
- * (`repository-remedy.tsx`), a move of the task sending it again by itself
- * once it lands; an agent that takes no message any more keeps the box,
- * disabled, with the reason under the bar and Continue in new agent under
- * that (`closedRemedy`); a change of model that did not take
- * says why in the same place; an editor bundle that could not be loaded
- * says so there too. A server whose sign-in expired is not said here but in
- * a toast of its own, wherever the window is (`expired-server-toasts.ts`).
- * The box takes
- * focus as the tab opens unless the developer is typing somewhere else, so
- * opening a tab never takes the caret out of the description, and a message sent
- * from the box, by Enter or by Send, hands the caret back to the box as it
- * opens again, unless the developer went somewhere else meanwhile, so the
- * next message is written at once. An agent's box never holds while a
- * message goes: the box empties, takes the next message at once, and each
- * agent's messages go one after another, the next once the one before it
- * answered (`use-agent-composer.ts`); a box whose send opens something,
- * New task's or a draft agent's, holds until it answers, its Send busy
- * meanwhile. A draft agent's tab
- * draws the same box over a start rather than a message, asking for the
- * first message of its still empty conversation, and its model chip once
- * the choice it starts on is known.
- *
- * Files go with a message the way every chat takes them: the "+" menu's
- * Attachment opens the system's file picker, an image pasted into the box
- * is taken, and files dropped on the card are, each drawn as a chip over
- * the foot's bar with its way off (`attached-file-chips.tsx`). A file that
- * cannot come says why under the bar while the rest still come
- * (`use-attached-files.ts`). A message is words, files, or both, as the wire
- * takes it (`hasWordsOrFiles`), so files alone send too.
- *
- * Words selected in one of the agent's messages and answered with Reply
- * are laid into the words as a quote block under the line the caret stands
- * on, and the caret goes to a fresh line under it, so the developer answers
- * there; Reply again without a word between stacks the quotes, and words
- * between them answer point by point (`reply-to-selection.tsx`). A quote
- * goes out as a Markdown blockquote set apart by a blank line. Note that
- * a quote is part of the words like any other, and sends as they do,
- * because the words cannot tell a Reply's quote from a `>` line the
- * developer typed or pasted, and one of those alone is a message.
- *
- * Words can be spoken into the box as well: the microphone left of the
- * round button records in place of the foot's controls until ✓ or Enter sends the clip
- * to be heard and the words land at the caret, or ✕ or Escape drops it
- * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
- * is said in the same note a file's refusal is.
- *
- * An `@` at the start of a word, on a task's page, or on any box whose
- * owner hands its mentions (`task-mentions.tsx`), as New task's does for
- * its workspace, opens the list of what
- * the message can mention, the task's repository's files and folders, the
- * description's sections, the pages agents showed on it, its other coding agents,
- * the repository's skills, and the account's connected MCP servers and
- * their tools
- * (`mention-picker.tsx`), and the one chosen is written into the words as
- * its link, drawn as its chip (`mention-chip.tsx`). The `@` and `/` lists and the
- * microphone are the Inbox's answer box's too (`composer-pickers.tsx`). A server mentioned is
- * handed to the agent's next turn even where its switch is off, and to that
- * turn alone.
- *
- * A `/` at the start of a word opens the list of the skills the task's
- * repository keeps, at the caret, and the one chosen is written into the
- * words as its chip, read as `/name`, which the agent loads before it acts
- * and a press opens the `SKILL.md` of (`skill-picker.tsx`).
- *
- * The foot answers the card's own width, not the window's, so the box
- * holds in the main column and the side panel alike, the way Cursor's and
- * ChatGPT's narrow panes do (planning.css's `composer` container). As the
- * card narrows, the branch's chip draws its mark alone, and so does New
- * task's Runs on chip, which stands in its place; then a ⋯ takes in, in this order, the
- * context ring and the microphone, where the ring stands, since a ⋯ holding
- * the microphone alone would be one press behind two; then the model chip draws
- * its harness's mark alone; and last the + goes into the ⋯ too, the ⋯
- * offering the + menu's rows in its place. The field
- * and the round Send or Stop always stand whole. The chips drawing their
- * marks alone are `FOLD_WIDTH`'s, read off the card's width here; what the
- * ⋯ takes in is the stylesheet's, which it offers as it opens, read off the
- * card itself; a popover it opens hangs where the ⋯ stands, at the right
- * of the owner's presses, where its own hidden press stood.
- *
- * New task's composer is this same box over a start rather than a message
- * (`new-task-composer.tsx`): its owner names what the box asks for and
- * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`), handed whether the card is too narrow for its words,
- * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
- * says what Escape does (`onLeave`), hands its workspace's mentions and
- * the chosen repository's skills to its `@` and `/` lists, and hands the
- * MCP servers' switches its first agent starts with, which its "+" menu
- * opens as an agent's does, with no Built in section, since no agent has
- * started yet, and after them Task relation, which its owner hands the
- * menu (`plus`).
- */
-
-/** What the box's note says while the editor bundle could not be loaded. */
 const EDITOR_LOAD_FAILED = "The message box could not be loaded.";
 
-/** What the box says it takes: the first message of an empty conversation, then a follow up. */
 export const PLACEHOLDER = {
   FIRST: "Ask to make changes",
   FOLLOW_UP: "Send a follow up",
 } as const;
 
-/** What a box other than an agent's own asks for, calls its field, and calls its round button, and the chord its button's hint names. */
 export interface ComposerWords {
   readonly placeholder: string;
   readonly label: string;
@@ -216,7 +86,6 @@ export interface ComposerWords {
   readonly chord?: ShortcutChord | undefined;
 }
 
-/** The buttons' names, which are their tooltips too. */
 export const BUTTON = {
   SEND: "Send",
   STOP: "Stop",
@@ -230,15 +99,6 @@ export const BUTTON = {
   SAVE: "Save",
 } as const;
 
-/**
- * The card widths below which a press draws its mark alone: the branch's
- * chip first, and the owner's tools after the "+" with it (New task's Runs
- * on chip), then the owner's presses that carry words (New task's Plan
- * toggle, at the step the ⋯ stands), then the model
- * chip. Note that they are steps of the same order as the stylesheet's
- * `composer` queries (tasks.css's, and New task's in desktop.css, at 400
- * and 240), because the room each leaves is counted on the steps before it.
- */
 const FOLD_WIDTH = {
   PUBLISHED: 520,
   ACTIONS: 400,
@@ -247,10 +107,8 @@ const FOLD_WIDTH = {
 
 type FoldWidth = (typeof FOLD_WIDTH)[keyof typeof FOLD_WIDTH];
 
-/** The fold widths, narrowest first. */
 const FOLD_LINES = Object.values(FOLD_WIDTH).toSorted((a, b) => a - b);
 
-/** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
 const OVERFLOW_PRESS = {
   ATTACH: "agent-composer-attach",
   CONTEXT: "agent-context-button",
@@ -259,13 +117,11 @@ const OVERFLOW_PRESS = {
 
 type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
 
-/** A press the ⋯ may take in, and the rows the menu offers in its place. */
 interface OverflowOffer {
   press: OverflowPress;
   entries: readonly MenuEntry[];
 }
 
-/** The presses standing on the card's foot that the stylesheet hid for want of room. */
 function hiddenPresses(card: HTMLElement | null): readonly OverflowPress[] {
   if (card === null) return [];
   return Object.values(OVERFLOW_PRESS).filter((press) => {
@@ -274,14 +130,6 @@ function hiddenPresses(card: HTMLElement | null): readonly OverflowPress[] {
   });
 }
 
-/**
- * The narrowest fold width the card's form lays its foot out under, in the
- * box the stylesheet's `composer` queries read, followed as it resizes;
- * nothing before it was laid out, or where it is wider than every fold, which
- * draws every chip whole. Note that it holds the fold rather than the width,
- * because the form resizes as every pane beside it lands, and a width held
- * would draw the whole box again mid-glide for the chips it already draws.
- */
 function useFootFold(card: RefObject<HTMLDivElement | null>): FoldWidth | undefined {
   const [under, setUnder] = useState<FoldWidth | undefined>(undefined);
   useEffect(() => {
@@ -303,38 +151,11 @@ function useFootFold(card: RefObject<HTMLDivElement | null>): FoldWidth | undefi
   return under;
 }
 
-/**
- * The composer's room around its card, on the transcript's own inset, and
- * the boxes its foot lays its presses in: the attach press's, at the
- * foot's left, which the narrowest card folds into the ⋯, and the right's
- * row, the model chip through Send. The box and its placeholder
- * (`agent-tab-skeleton.tsx`) both stand in these, so the placeholder lands
- * where the box does. The card is a drop target alone; the keys it hears
- * come from its own field and buttons.
- */
-/**
- * The room the composer's card stands in, a note under it, on the
- * transcript's own inset so the card and the column line up, with none above
- * it, since the log meets the card itself. A new task's and an Inbox
- * draft's box take the room in as their own sheets say.
- */
 export const COMPOSER_ROOM_CLASS =
   "agent-composer relative flex flex-col gap-control-gap px-ui-16 pt-0 pb-list-inset";
 
-/**
- * What docks over the composer, the to-do list, the pull request's row, and
- * a forked draft's chip, on the composer's own inset, so each card and the
- * composer's line up; a column or a panel that pads the composer in pads
- * these in alike.
- */
 export const COMPOSER_DOCK_CLASS = "px-ui-16 pt-0 pb-row-inset";
 
-/**
- * A log that runs right up to the card's top edge, its words dissolving
- * over `--ui-scroll-fade` just above it rather than being sliced short of
- * the card: its foot pads past the fade, so the newest line stands whole
- * above it.
- */
 export const LOG_OVER_COMPOSER_CLASS = "agent-log-over-composer";
 
 export function ComposerCard({
@@ -348,14 +169,11 @@ export function ComposerCard({
   );
 }
 
-/** The attach press's own box at the foot's left, which the narrowest card hides as the ⋯ takes the press in. */
 export function ComposerAttach({ children }: { children: ReactNode }): React.JSX.Element {
   return <span className="agent-composer-attach flex">{children}</span>;
 }
 
-/** The owner's presses at the foot's right, before Send: the model chip, the context ring, the microphone, and the ⋯. */
 export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
-  // It may narrow, so a long model name is cut short before the presses are.
   return (
     <div className="agent-composer-actions relative flex min-w-0 flex-initial items-center gap-tight-gap">
       {children}
@@ -363,13 +181,6 @@ export function ComposerActions({ children }: { children: ReactNode }): React.JS
   );
 }
 
-/**
- * The foot's ⋯, which the stylesheet shows only once the card is too narrow
- * for every press: opened, it offers each press the stylesheet hid, read as
- * it opens, so it never offers one still standing beside it. The card
- * changing width closes it, since what it offers was read at the old
- * width; the panel beside it may be dragged with no window resize.
- */
 function ComposerMore({
   card,
   offers,
@@ -420,24 +231,13 @@ function ComposerMore({
   );
 }
 
-/**
- * How an agent's box queues a message behind the turn under way, and edits
- * one queued already (`agent-queue-dock.tsx`); none for a box that queues
- * nothing, as an eve agent's or New task's.
- */
 export interface ComposerQueueing {
-  /** Whether a turn is under way or about to start, a line the box sent still on its way among them: what Queue is offered by. */
   readonly working: boolean;
-  /** Whether Enter queues while a turn runs, as Settings says (`agentEnter`); ⌘↩ does the other. */
   readonly enterQueues: boolean;
-  /** Queues the box's message behind the turn. */
   readonly onQueue: () => void;
-  /** Whether the box holds a queued message's words being edited, which Send saves back into its place and ⌘↩ steers. */
   readonly editing: boolean;
   readonly onSave: () => void;
-  /** Sends the edited message now with the box's words, as that message. */
   readonly onSteer: () => void;
-  /** Gives the edit up, as Escape with no list open does; the row's own Cancel does the same. */
   readonly onCancel: () => void;
 }
 
@@ -478,71 +278,40 @@ export function AgentComposer({
   listSide = MENTION_MENU_SIDE.ABOVE,
   queueing,
 }: {
-  /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
   status: AgentStatus;
-  /** Whether Stop stands in Send's place while the box is empty: while the agent runs where unsaid, and only while a Stop has something to stop where the tab knows (`offersStop`). */
   stoppable?: boolean;
   composer: AgentComposerControl;
-  /** What the agent runs on and its chip's change; nothing while it is not yet known, which draws no chip. */
   model: AgentModelControl | undefined;
-  /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
-  /** Whether the last read of the catalog did not land, which the chip's menu says with Retry. */
   modelsFailed: boolean;
   readModels: () => void;
-  /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: AgentUsage | undefined;
-  /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
   payer?: AgentPayer | undefined;
-  /** The MCP servers the agent is handed and their switches, which the + menu opens; none where the box offers none, whose + opens the file picker itself. */
   servers: AgentServersControl | undefined;
-  /** Rows the + menu offers after MCP servers, its owner's: New task's Task relation. */
   plus?: readonly MenuEntry[] | undefined;
-  /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: AgentContext | undefined;
-  /** What the agent was handed, which names the brief's part of the context. */
   brief?: AgentBrief | undefined;
-  /** What the agent published, once the service has said; nothing before. */
   published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
-  /** Stops the agent, answering whether the service took the Stop. */
   onStop: () => Promise<boolean>;
-  /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
   followsUp: boolean;
-  /** The words a dictation is likely to say, read off the description (`dictation-keywords.ts`). */
   keywords?: readonly string[] | undefined;
-  /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
   skills?: SkillSource | undefined;
-  /** Where the box hands the transcript's Reply the door that lays a quote in at its caret; none where nothing replies. */
   replyDoor?: RefObject<((words: string) => void) | undefined> | undefined;
-  /** Whether an empty box sends too, as a fork's draft does, which needs no words of its own. */
   sendsEmpty?: boolean;
-  /** What mends a box closed for good, drawn after its note: Continue in new agent (`continue-agent.tsx`); none where nothing does. */
   closedRemedy?: ReactNode;
-  /** What the box asks for, calls its field, and calls its round button, where its owner says other than an agent's box does, as New task's does. */
   wording?: ComposerWords | undefined;
-  /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
   maxLength?: number;
-  /** What stands after the "+" at the foot's left, handed whether the card is too narrow for its words: New task's Runs on chip. */
   tools?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is. */
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
-  /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
-  /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
   onKey?: ((event: KeyboardEvent) => boolean) | undefined;
-  /** What Escape in the field does where no list or dictation takes it; the field gives up the caret where none is given. */
   onLeave?: (() => void) | undefined;
-  /** Whether the owner hands the field focus where it stands as the box first draws, as a dialog's card does, so the field takes it itself only where its editor lands later. */
   focusedByOwner?: boolean;
-  /** Whether the field takes the caret as it mounts at all; none on a phone's Home, where the keyboard would cover the places bar. */
   takesFocus?: boolean;
-  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on Home. */
   listSide?: MentionMenuSide;
-  /** How the box queues behind the turn and edits a queued message; none where it queues nothing. */
   queueing?: ComposerQueueing | undefined;
 }): React.JSX.Element {
   const connected = useConnected();
@@ -552,24 +321,16 @@ export function AgentComposer({
   const picker = useRef<AttachPicker>(null);
   const footFold = useFootFold(card);
   const folds = (below: FoldWidth) => footFold !== undefined && footFold <= below;
-  // The popover the ⋯ may open in place of its hidden press.
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
-  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
-  // list carries the stop a moment after the answer.
   if (stopping && !stoppable) setStopping(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
   const [filesRefused, setFilesRefused] = useState(false);
-  // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
-  // Note that a move's retry is read through a ref, because it lands a while
-  // after its press and the box it retries is whichever render is current by then.
   const latest = useRef(composer);
   latest.current = composer;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  // Note that Send waits while files are read, so no message goes without a file the developer already handed the box.
   const files = useAttachedFiles({
     holder: { attachments: composer.attachments, update: composer.setAttachments },
     held,
@@ -579,22 +340,17 @@ export function AgentComposer({
     },
   });
   const editingQueued = queueing?.editing === true;
-  // Whether Send takes nothing now: the box held, unable to send, or still reading a file handed to it.
   const sendHeld = held || !sendable || files.reading;
-  // Note that an edit's Save stands with the box emptied, since saving nothing gives the edit up.
   const empty =
     !sendsEmpty && !editingQueued && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending && !editingQueued;
-  // While a turn runs and the box holds a message it may go two ways; holding ⌘ says on Send which a send takes.
   const queues = queueing?.working && !empty && !held && !files.reading && !editingQueued;
   const modifierHeld = useModifierHeld(queues || editingQueued);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
   const { descriptionEditor } = useSideBundles();
   const bundle = useAtomValue(descriptionEditor);
-  // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
   const retryBundle = useAtomRefresh(descriptionEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
-  // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);
   const statuses = useIntegrationStatuses();
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
@@ -602,18 +358,13 @@ export function AgentComposer({
   const words =
     composer.closed ??
     refusal ??
-    // Note that a send's failure keeps its words and its Retry over the cut paste's, since a paste into a full box changes nothing a send's failure could be taken down by.
     (cut && sendNote === undefined ? pasteCutWords(maxLength) : undefined) ??
     unloaded ??
     (sendNote === undefined ? model?.note : undefined);
   const note: Failure | undefined =
     words !== undefined ? { reason: FAILURE_REASON.OTHER, text: words } : sendNote;
-  // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === sendNote;
-  // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
   const reloads = unloaded !== undefined && words === unloaded;
-  // Note that a cut paste is the person's input checked, and an editor that did not load, a send that
-  // did not go, and every other note are failures of the app's, each reported under its own surface.
   const noteFailure: ReportedFailure | Unreported | undefined =
     note === undefined
       ? undefined
@@ -623,9 +374,7 @@ export function AgentComposer({
         : reloads
           ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
           : note === sendNote
-            ? // Note that a send's failure is reported as the answer that refused it, where its note holds one,
-              // so a refusal the service worded is sent as its word rather than as an unexpected failure.
-              failureShown({
+            ? failureShown({
                 surface: FAILURE_SURFACE.AGENT_SEND,
                 cause: sendNote?.cause ?? note,
                 about: { agentId },
@@ -640,26 +389,15 @@ export function AgentComposer({
   const remedy =
     note === undefined
       ? undefined
-      : // Note that a move's retry is the box's as the move lands, and only while the refusal it
-        // was pressed for still stands, so an edit or a later send meanwhile is never sent over.
-        repositoryRemedy(note, () => {
+      : repositoryRemedy(note, () => {
           if (latest.current.note === note) latest.current.retry();
         });
-  // Note that a remedy finished where we cannot watch keeps Retry beside it, since the same send goes once it is done.
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
-  // Note that a closed box asks for nothing, since it takes nothing.
   const placeholder = closed
     ? ""
     : (wording?.placeholder ?? (followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST));
   const sendLabel = wording?.send ?? BUTTON.SEND;
 
-  // Note that a held box gives up the caret, because a field that takes no
-  // words, and a Send disabled under the press, can hold none; a send made
-  // from the box hands it back as soon as the box takes words again, which
-  // is at once where the send holds nothing, as an agent's never does, and
-  // as the answer lands where it holds the box, unless the caret went
-  // somewhere else meanwhile: to another field, or to a press or a menu in
-  // the box's own foot, such as the model chip's search.
   const refocus = useRef(false);
   const [sends, setSends] = useState(0);
   useEffect(() => {
@@ -678,7 +416,6 @@ export function AgentComposer({
     }
   }, [held, sends]);
 
-  // The transcript's Reply lays its quote in where the caret stands, for as long as the box stands.
   useEffect(() => {
     if (replyDoor === undefined) return undefined;
     replyDoor.current = (words) => {
@@ -689,7 +426,6 @@ export function AgentComposer({
     };
   }, [replyDoor]);
 
-  // The `@` and `/` lists, dictation, and the keys that work them, as the Inbox's answer box has them.
   const pickers = useComposerPickers({
     editor,
     room,
@@ -698,7 +434,6 @@ export function AgentComposer({
     self: agentId,
     skills,
     keywords,
-    // A server's chip in the box says what a send now does with it: opens a turn, or steers the one running.
     servers: {
       statuses,
       place: {
@@ -710,12 +445,10 @@ export function AgentComposer({
       setRefusal(words);
       setFilesRefused(false);
     },
-    // Escape with no list open gives up an edit of a queued message, the box keeping the caret.
     onLeave: editingQueued ? queueing?.onCancel : onLeave,
     side: listSide,
   });
   const { dictation, dictating } = pickers;
-  // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
 
   const stop = () => {
@@ -726,12 +459,6 @@ export function AgentComposer({
     );
   };
 
-  /**
-   * The box's message gone the way `go` takes it: sent, queued behind the
-   * turn, or an edit of a queued message saved or steered. Note that every
-   * way is the one step, so the box's notes go and its caret comes back
-   * alike whichever way its message went.
-   */
   const sentBy = (go: () => void) => {
     setRefusal(undefined);
     setCut(false);
@@ -739,21 +466,17 @@ export function AgentComposer({
     go();
     setSends((count) => count + 1);
   };
-  /** The box's message sent now: into the turn under way, or opening one. */
   const steer = () => sentBy(composer.send);
-  /** Send as it stands: an edit saved, the message queued where a send queues now, or sent. */
   const submit = () => {
     if (editingQueued) return sentBy(queueing.onSave);
     if (queuesNow) return sentBy(queueing.onQueue);
     steer();
   };
-  /** The other way than a send that queues where `pressQueues` says, which ⌘↩ and a touch held on Send take: an edit steered, or the message steered or queued. */
   const sendOtherWay = (pressQueues: boolean) => {
     if (editingQueued) return sentBy(queueing.onSteer);
     if (pressQueues) return steer();
     if (queueing !== undefined) sentBy(queueing.onQueue);
   };
-  /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter, held where Send is. */
   const queueKey = (event: KeyboardEvent): boolean => {
     if (queueing === undefined) return false;
     if (!modEnterSends(event)) return false;
@@ -765,8 +488,6 @@ export function AgentComposer({
     sendOtherWay(queueing.enterQueues);
     return true;
   };
-  // Send says what a send does while it is other than steering, as its glyph alone in the round send's place:
-  // Save for an edit, and Queue or Steer as ⌘ turns it.
   const sendWay =
     editingQueued && !modifierHeld
       ? { label: BUTTON.SAVE, icon: <GLYPH.DONE /> }
@@ -776,9 +497,6 @@ export function AgentComposer({
           ? { label: BUTTON.STEER, icon: <GLYPH.STEER /> }
           : undefined;
 
-  // Note that a popover closed by key while the ⋯ stands hands focus to the
-  // ⋯, after its own close has handed it to its hidden press, because a
-  // hidden press can hold no keyboard; with the press drawn, the ⋯ is not.
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
     const more = card.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const press = more?.querySelector<HTMLElement>("button") ?? null;
@@ -790,7 +508,6 @@ export function AgentComposer({
     }
   };
 
-  // What the + offers beside files, its menu's rows after Attachment: the servers' popover, where the box hands servers, then its owner's.
   const plusRows: readonly MenuEntry[] = [
     ...(servers === undefined ? [] : [serversMenuPanel(servers, statuses)]),
     ...plus,
@@ -799,7 +516,6 @@ export function AgentComposer({
   const offers: OverflowOffer[] = [
     {
       press: OVERFLOW_PRESS.ATTACH,
-      // Note that a + folded away hands the ⋯ its menu's rows, or its own press where it opens the picker itself.
       entries:
         plusRows.length === 0
           ? [{ label: BUTTON.ATTACH, icon: <PlusIcon />, disabled: held, onSelect: openPicker }]
@@ -839,7 +555,6 @@ export function AgentComposer({
       data-closed={closed ? "" : undefined}
       {...files.drop.target}
     >
-      {/* A box closed for good wears the held look a box sending does, faded, so the note and Continue under it read as the way on. */}
       <PromptInput
         className={closed ? "opacity-60" : undefined}
         dropping={files.drop.dropping}
@@ -858,7 +573,6 @@ export function AgentComposer({
             editor={editor}
             room={room}
             draft={composer.draft}
-            // Note that the words changing again takes the cut note down, so it never outlives the paste it was said of.
             setDraft={(text) => {
               setCut(false);
               composer.setDraft(text);
@@ -879,7 +593,6 @@ export function AgentComposer({
             onKey={(event) =>
               pickers.field.onKey(event) ||
               queueKey(event) ||
-              // A file still being read holds the owner's keys too, as it holds Send.
               (!files.reading && onKey?.(event) === true)
             }
             onEnter={() => {
@@ -940,7 +653,6 @@ export function AgentComposer({
             label: sendWay?.label ?? sendLabel,
             ...(sendWay === undefined ? undefined : { icon: sendWay.icon }),
             chord: wording?.chord,
-            // Note that a hold takes the other way than Send as it reads, which a held ⌘ may already have turned.
             onHold: queues || editingQueued ? () => sendOtherWay(queuesNow === true) : undefined,
             empty,
             held: sendHeld,

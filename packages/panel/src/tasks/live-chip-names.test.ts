@@ -20,19 +20,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * live-chip-names.test.ts -- a chip of a plan, an agent, a page, or a
- * section is called by what it is called now wherever the window holds it,
- * whatever words its link was written with: a plan written while still
- * Untitled by its name, an agent by its tab's name (its model for one
- * untitled), a page by its title, a section by its
- * heading; one the window cannot read keeps the words it was written with.
- * A chip naming a plan before the window ever read its task list has the
- * list followed, once between every chip and every draw, so the name lands;
- * a window already following it asks nothing. Synthetic
- * workspace, plans, agents, and page.
- */
-
 const AT = 1_792_000_000_000;
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -41,7 +28,6 @@ const TITLED_AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const UNTITLED_AGENT = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e60";
 const TASKLESS_AGENT = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f61";
 
-/** A plan the window lists, still Untitled, and one it lists not. */
 const UNTITLED_TASK = "4e5f6a7b-8c9d-4e0f-8a1b-2c3d4e5f6a72";
 const UNLISTED_TASK = "5f6a7b8c-9d0e-4f1a-8b2c-3d4e5f6a7b83";
 
@@ -79,10 +65,8 @@ const TASK: TaskSummary = {
   },
 };
 
-/** A plan whose agents have not named it yet. */
 const { agents: _agents, ...UNNAMED } = TASK;
 
-/** Main's document: the plans listed, an agent on no task, and the open plan's page. */
 const STATE: AppStateSnapshot = stateWith(
   {},
   {
@@ -117,7 +101,6 @@ const STATE: AppStateSnapshot = stateWith(
   },
 );
 
-/** The plan's page, whose heading was renamed after a section's link was written. */
 const PAGE: TaskMentionsValue = {
   holder: { taskId: TASK_ID },
   taskName: TASK.name,
@@ -143,7 +126,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn on the plan's page in a window holding `STATE`. */
 async function drawn(text: string): Promise<{ container: HTMLElement }> {
   fakeAppBridge({
     onAppState: () => () => undefined,
@@ -161,7 +143,6 @@ async function drawn(text: string): Promise<{ container: HTMLElement }> {
   const registry = AtomRegistry.make();
   act(() => root?.render(onRegistry(registry, words(text))));
   await settle();
-  // Drawn again, as a transcript is drawn as its turn streams.
   act(() => root?.render(onRegistry(registry, words(`${text} `))));
   await settle();
   return { container };
@@ -173,7 +154,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,

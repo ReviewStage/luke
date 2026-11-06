@@ -1,30 +1,3 @@
-/**
- * panel-router.tsx -- the panel's route tree: one typed route per address a link of ours names, under a root that draws `App`.
- *
- * Every path is the one `linkOf` (`@repo/features/link-grammar`) writes
- * under its workspace, `/<workspace>/task/<id>` and the rest, a pairing's
- * `/connect/<code>`, and the bare `/app`, the address of a place with no
- * link (`navigation-history.ts`'s `NO_LINK_ADDRESS`), so a link written
- * before the router stood reads the same through it; Settings stands at
- * `/app/settings` too, while the window lists no workspace, and the
- * Automations pages hold the places no link names, their Runs tab, a new
- * automation's page, and an automation's runs alone. A place's leaf
- * is an index route under the path it shares with the places beneath it,
- * so `/task/<id>` and `/task/<id>/version/<n>` are both a route of their own.
- *
- * The root draws `App`, whose shell draws the route standing through its
- * `Outlet` (`desktop-shell.tsx`). Every place but Settings stands beside the
- * sidebar, under the pathless `places` layout, which stays drawn as the
- * window moves between them. Settings, Admin, a workspace's Board, a
- * person's page, and the Automations pages are routed places: the router alone says the window stands
- * on them, their routes draw them as lazy routes, and each gate is a
- * `beforeLoad` over a predicate the window's Back and Forward ask too
- * (`route-gates.ts`). Every other place
- * is still the window's state's, which its routes draw through one
- * component (`StatePlace`), so moving a place onto the router swaps its
- * route's component and deletes its place kind from `navigation-history.ts`.
- */
-
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { ReloadState } from "@repo/ui/error-boundary";
 import type { QueryClient } from "@tanstack/react-query";
@@ -61,19 +34,16 @@ import {
 } from "./route-gates.js";
 import { pathUnder } from "./routed-location.js";
 
-/** A task's link naming one of its comment threads, `?comment=<threadId>`; every other key the address carries is left as it stands. */
 const taskSearchSchema = Schema.toStandardSchemaV1(
   Schema.StructWithRest(Schema.Struct({ comment: Schema.optionalKey(Schema.String) }), [
     Schema.Record(Schema.String, Schema.String),
   ]),
 );
 
-/** Note that a query is read as `URLSearchParams` reads it, every value the string it is, because the router's default reading makes an all-digit id a number and JSON-quotes what it writes back. */
 function readSearch(search: string): Record<string, string> {
   return Object.fromEntries(new URLSearchParams(search));
 }
 
-/** A query written as `linkOf` writes one, through `URLSearchParams`, with its `?` where it holds anything. */
 function writeSearch(search: Record<string, unknown>): string {
   const written = new URLSearchParams(
     Object.entries(search).flatMap(([key, value]) =>
@@ -83,25 +53,15 @@ function writeSearch(search: Record<string, unknown>): string {
   return written === "" ? "" : `?${written}`;
 }
 
-/** What every route reads from the router's `context`: the window's one TanStack Query client (`query-client.tsx`), and the access its gates read (`route-gates.ts`), which `PanelRouterProvider` hands it as it moves. */
 interface PanelRouterContext {
   readonly queryClient: QueryClient;
   readonly access: RouteAccess;
 }
 
-/** The window's own reload: its document read again from the start, every chunk among it. */
 function reloadDocument(): void {
   location.reload();
 }
 
-/**
- * What a lazy route stands where it failed: `ReloadState`, whose Reload
- * reloads the window where the route's chunk failed to load, because
- * Chromium keeps a module whose fetch failed in the document's module map
- * and answers every later import of it with the same failure, and
- * otherwise, a route that landed and threw while drawing, draws it again in
- * place, as `lazy-route.ts` does.
- */
 function RouteFailed({ reset }: ErrorComponentProps): React.JSX.Element {
   const router = useRouter();
   const loadFailed = useMatch({ strict: false, select: (match) => match.status === "error" });
@@ -116,7 +76,6 @@ function RouteFailed({ reset }: ErrorComponentProps): React.JSX.Element {
   return <ReloadState onReload={reload} />;
 }
 
-/** A lazy route's options: its own frame stands at once while its chunk loads, as the `Suspense` it replaces did, and `RouteFailed` where it fails. */
 export const LAZY_ROUTE = {
   pendingMs: 0,
   pendingMinMs: 0,
@@ -125,12 +84,6 @@ export const LAZY_ROUTE = {
 
 const rootRoute = createRootRouteWithContext<PanelRouterContext>()({ component: App });
 
-/**
- * The window's places beside the sidebar, every one but Settings, which
- * takes the whole window: a pathless layout, so the shell they share stays
- * drawn as the window moves between them, its content slot the `Outlet`
- * the place standing draws in.
- */
 const placesRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "places",
@@ -157,14 +110,6 @@ const homeRoute = createRoute({
   component: StatePlace,
 });
 
-/**
- * A workspace's Board, the Tasks page, of one of the reader's workspaces
- * (`workspaceRouteStands`): an address naming none of theirs gives way to
- * that address's Home, which says the workspace is not there for them. Its
- * page is a chunk of its own, read ahead as the pointer comes to its row,
- * and once the signed-in window is idle; what stands while it loads is the
- * page's own frame.
- */
 const boardRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "tasks",
@@ -269,16 +214,6 @@ const inboxTaskRoute = createRoute({ getParentRoute: () => inboxRoute, path: "ta
 
 const inboxItemRoute = createRoute({ getParentRoute: () => inboxRoute, path: "$itemId" });
 
-/**
- * The Automations pages of one of the reader's workspaces: the list, its
- * Runs tab, a new automation's page, and an automation's, its runs alone
- * where a narrow room stands them apart, or one of its runs. One layout
- * draws them all, so the new page's editor stands on as the automation it
- * made takes its step, and moving between them draws no new page. An
- * address naming none of the reader's workspaces opens the same page under
- * the workspace listed, as a link to it does. Its pages are a chunk of
- * their own, opened seldom, whose list's frame stands while it loads.
- */
 const automationPagesRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   id: "automation-pages",
@@ -318,12 +253,6 @@ const automationRunRoute = createRoute({
   path: "run/$runId",
 });
 
-/**
- * A person's page in one of the reader's workspaces: an address naming none
- * of theirs opens the same person under the workspace listed, as a link to
- * them does. Its page is a chunk of its own, read ahead as the pointer comes
- * to a person's name, its frame standing while it loads.
- */
 const personRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "person/$userId",
@@ -340,13 +269,6 @@ const personRoute = createRoute({
   ...LAZY_ROUTE,
 }).lazy(() => import("./desktop/person-route.lazy.js").then((loaded) => loaded.personLazyRoute));
 
-/**
- * Admin, an admin's alone (`adminRouteStands`): an address of it loaded or
- * landed on by any other account gives way to the workspace's Home. Its
- * screens are a chunk of their own, which carries its charts, so an account
- * that is no admin never reads it; what stands while it loads is the
- * place's own frame.
- */
 const adminRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "admin",
@@ -371,15 +293,6 @@ const adminWorkspaceRoute = createRoute({
 
 const adminDayRoute = createRoute({ getParentRoute: () => adminRoute, path: "day/$day" });
 
-/**
- * Settings, over the whole window rather than beside the sidebar, under the
- * workspace whose Workspace page it shows, or under `/app` while the window
- * lists none. Its list is the index, which a narrow room stands alone, and
- * each page a `$page`. A page an experiment holds stands only while the
- * account has it on (`settingsPageRouteStands`), and gives way to Profile
- * otherwise. Its pages are a chunk of their own, opened seldom, whose frame
- * stands while it loads.
- */
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/$workspace/settings",
@@ -404,7 +317,6 @@ const settingsPageRoute = createRoute({
   },
 });
 
-/** Settings while the window lists no workspace, as the desktop's does with no account. */
 const appSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/app/settings",
@@ -483,12 +395,6 @@ const routeTree = rootRoute.addChildren([
   appSettingsRoute.addChildren([appSettingsIndexRoute, appSettingsPageRoute]),
 ]);
 
-/**
- * The panel's router over `history`, a window's own, which its root makes, one per window, its routes handed the window's `queryClient`.
- * Note that it starts on the unread access and reads no state, because the desktop's entry makes it as the module loads, before
- * its root installs the bridge, and a read then would keep the bridge's absence as the window's first read; `PanelRouterProvider`
- * hands it the window's access as it draws, before the router first loads.
- */
 export function createPanelRouter(history: RouterHistory, queryClient: QueryClient) {
   return createRouter({
     routeTree,
@@ -496,20 +402,12 @@ export function createPanelRouter(history: RouterHistory, queryClient: QueryClie
     context: { queryClient, access: UNREAD_ROUTE_ACCESS },
     parseSearch: readSearch,
     stringifySearch: writeSearch,
-    // Every scroller stands where it stood as the window comes back to a step, as TanStack Router's docs set it up.
     scrollRestoration: true,
   });
 }
 
-/** The router the panel's hooks and links are typed against. */
 export type PanelRouter = ReturnType<typeof createPanelRouter>;
 
-/**
- * The window's router, drawn as its root mounts it, handed the account's
- * access as it moves, so a gate (`route-gates.ts`) reads what the window
- * draws by; the routes standing are asked again as it moves, so a place a
- * gate no longer lets stand gives way.
- */
 export function PanelRouterProvider({ router }: { router: PanelRouter }): React.JSX.Element {
   const access = useRouteAccess();
   const asked = useRef(access);

@@ -7,22 +7,10 @@ import { restOn } from "../testing/hint-rest.js";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "./accounts-table/accounts-table.js";
 import { type AdminDoors, AdminDoorsProvider } from "./admin-doors.js";
 
-/**
- * admin-accounts-table.test.ts -- the one table both account lists draw
- * through: a row names its account, marks an admin in words, and counts its
- * active days; a sortable header's press reorders the rows, says the
- * order it chose, and is remembered for the next visit; a press on a row or
- * on its name opens the account, a modified press on the name is left to the
- * browser, and a star's press asks to star without opening the row.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A mount that keeps an address for each account's page, as the web page does; the table reads nothing else of it. */
 const ADDRESSED: AdminDoors = {
-  // SAFETY: the table reads no read and no gate, only an account's address.
   reads: {} as AdminDoors["reads"],
-  // SAFETY: as above.
   gate: {} as AdminDoors["gate"],
   address: {
     accountHref: (id) => `/admin?user=${id}`,
@@ -75,7 +63,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The table over `rows`, sortable and starred where asked, with Zed starred. */
 function mount(
   rows: readonly AccountsTableRow[],
   { sortable = false, starred = false }: { sortable?: boolean; starred?: boolean } = {},
@@ -116,7 +103,6 @@ function remount(rows: readonly AccountsTableRow[], options: { sortable: boolean
   return mount(rows, options);
 }
 
-/** Whose each body row is, top to bottom, by the email it shows. */
 function order(table: HTMLElement): string[] {
   return [...table.querySelectorAll("tbody tr")].map(
     (row) =>

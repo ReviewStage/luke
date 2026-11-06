@@ -19,14 +19,12 @@ import { NewTaskComposer } from "./new-task-composer.js";
 
 const roots: Root[] = [];
 
-// Landed before any card renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
-  // The `/` list stands only while the account has the Skills experiment on.
   handState(experimentsOn(EXPERIMENT.SKILLS));
   fakeActPort({});
 });
@@ -45,7 +43,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card on a repository, its lists opening under the line as Home's do, or over it as the dialog's do. */
 async function mount(listSide: MentionMenuSide = MENTION_MENU_SIDE.BELOW): Promise<HTMLElement> {
   const control = tasksControl();
   const container = document.body.appendChild(document.createElement("div"));
@@ -72,13 +69,11 @@ async function mount(listSide: MentionMenuSide = MENTION_MENU_SIDE.BELOW): Promi
   return container;
 }
 
-/** Which side of the caret's line a list opened in the card hangs on, as the layer it hangs in says. */
 function sideOf(list: HTMLElement): string | null {
   const layer = list.closest(".ui-rect-float") ?? assert.fail("the list hangs in a layer");
   return layer.getAttribute("data-side");
 }
 
-/** The list a word typed at the start of the box opens, by its class. */
 async function listOpenedBy(container: HTMLElement, word: string, list: string) {
   typeInComposer(container, word);
   await settle();

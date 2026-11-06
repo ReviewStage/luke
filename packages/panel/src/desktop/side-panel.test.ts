@@ -29,7 +29,6 @@ import {
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** An agent at rest on the task, named by its title. */
 function agent(id: string, title: string, createdAt: number): AgentSummary {
   return {
     id,
@@ -43,7 +42,6 @@ function agent(id: string, title: string, createdAt: number): AgentSummary {
   };
 }
 
-/** An open pull request, numbered. */
 function pullRequest(number: number, title: string): AgentPullRequest {
   return {
     number,
@@ -61,7 +59,6 @@ const FIRST = agent("8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", "Invite flow", 1);
 const SECOND = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invite fixes", 2);
 const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 
-/** The task's agents, the first two on one pull request and the third on its own. */
 function agents(): AgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {
@@ -80,12 +77,10 @@ test('an agent\'s pull request chip opens the one tab the "+" offers for its pul
   const control = agents();
   const offered = changesOffers(control).map((offer) => ({ changes: offer.agentId }));
   assert.deepEqual(offered, [{ changes: FIRST.id }, { changes: THIRD.id }]);
-  // The second agent shares the first's pull request, so its chip opens the first's tab.
   assert.deepEqual(
     [FIRST, SECOND, THIRD].map((each) => changesTabOf(control, each.id, [])),
     [{ changes: FIRST.id }, { changes: FIRST.id }, { changes: THIRD.id }],
   );
-  // An agent whose pull request is not held yet opens its own.
   assert.deepEqual(changesTabOf({ ...control, pullRequests: new Map() }, SECOND.id, []), {
     changes: SECOND.id,
   });
@@ -125,7 +120,6 @@ test("a pull request named by its number opens a Pull request tab of its own for
     ["view", { changes: THIRD.id }, PULL_REQUEST_VIEW.CONVERSATION],
     ["preview", { changes: THIRD.id }],
   ]);
-  // A tab naming another pull request is not the agent's own, so the agent's own still opens its own.
   assert.deepEqual(changesTabOf(control, SECOND.id, [{ changes: SECOND.id, number: 40 }]), {
     changes: FIRST.id,
   });
@@ -155,7 +149,6 @@ test("an archived agent's merged pull request is offered as any other, in the or
 });
 
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {
-  // Read apart, the later agent's snapshot of the shared pull request is the newer one.
   const newer = { ...pullRequest(41, "Teammate invitations, with expiry"), changedFiles: 9 };
   const read = agents();
   const control = { ...read, pullRequests: new Map([...read.pullRequests, [SECOND.id, newer]]) };

@@ -16,24 +16,14 @@ import { openingLineOf } from "./agent-model.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { StartingAgentTab, type TranscriptCards } from "./agent-tab.js";
 
-/**
- * starting-agent-tab.test.ts -- the tab of an agent New task is still
- * starting draws the developer's words as its first line and says it is
- * starting, before the service has made the agent, and the column draws a
- * Start on the description still out as that tab under the press's key. Synthetic
- * throughout.
- */
-
 const roots: Root[] = [];
 
-/** No row of a transcript hangs a card. */
 const NO_CARDS: TranscriptCards = {
   target: () => undefined,
   worker: () => undefined,
   agent: () => undefined,
 };
 
-// The first line is a reply drawn at once, so the parser lands first, as the panel lands it before a transcript opens.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => installScrollIntoView());

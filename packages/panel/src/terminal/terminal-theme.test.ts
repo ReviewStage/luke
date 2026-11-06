@@ -4,11 +4,6 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { terminalTheme } from "./terminal-theme.js";
 
-/**
- * A terminal's colors as the stylesheet's tokens resolve them. jsdom
- * resolves no `var()`, so the platform's answer is staged: each token is
- * the color a browser would compute for it.
- */
 const TOKENS: Record<string, string> = {
   "--terminal-ground": "rgb(0, 0, 0)",
   "--terminal-text": "rgb(200, 100, 50)",

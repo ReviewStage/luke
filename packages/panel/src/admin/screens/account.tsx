@@ -55,43 +55,27 @@ import { AccountSupportSections } from "./account-support.js";
 
 const ACCOUNT_ERROR = readFailedWords("this account");
 
-/** What the page is called until its account is read, or where it cannot be. */
 const ACCOUNT_TITLE = "Account";
 
-/** The masthead avatar's bone, the masthead avatar's size (`AVATAR_SIZE.MASTHEAD`). */
 const SKELETON_AVATAR_WIDTH = "56px";
 
-/** The masthead's line bones, about an email's and the joined line's width. */
 const SKELETON_EMAIL_WIDTH = "224px";
 
 const SKELETON_JOINED_WIDTH = "160px";
 
-/** The size, in device pixels, an account's photo is asked for at to be enlarged, which its provider answers at up to the photo's own. */
 const ENLARGED_PHOTO_PIXELS = 512;
 
-/** What the viewer takes an account's photo as: some picture, its exact type its provider's to say. */
 const PHOTO_MEDIA_TYPE = "image/*";
 
-/** What the usage chart is headed. */
 const USAGE_LABEL = "This account's calls per day";
 
-/** What the live activity section is headed. */
 const ACTIVITY_TITLE = "Activity";
 
-/**
- * A streak as long as the series it is read off may run past it; the page
- * says so rather than posing the truncation as the exact count.
- */
 function streakWords(days: number, capped: boolean): string {
   const streak = capped ? `${formatCount(days)}+` : formatCount(days);
   return `${streak} ${days === 1 ? "day" : "days"}`;
 }
 
-/**
- * When the account first acted in the trailing year: its first active day
- * ever where it joined inside the year, and only the year's earliest where
- * it joined before, since the read reaches no further back.
- */
 function firstActiveWords(detail: AdminUserDetail): string {
   const { firstActiveDay, calendarDaily } = detail.actions;
   if (firstActiveDay === null) return "none in the past year";
@@ -101,11 +85,6 @@ function firstActiveWords(detail: AdminUserDetail): string {
   return `${joinedInYear ? "first active" : "earliest in the past year"} ${formatDayTick(firstActiveDay)}`;
 }
 
-/**
- * The live activity's cards, in the two pairs they stand in, each read off
- * the account's meaningful actions. A streak caps where it reaches the
- * year's first day, which today not yet active leaves one short of its length.
- */
 const ACTIVITY_STATS: readonly StatSpec<AdminUserDetail>[] = [
   {
     key: "active-days-window",
@@ -137,7 +116,6 @@ const ACTIVITY_STATS: readonly StatSpec<AdminUserDetail>[] = [
   },
 ];
 
-/** The hosted tier's daily-use cards, in the two pairs they stand in. */
 const DAILY_USE_STATS: readonly StatSpec<AdminUserDetail>[] = [
   {
     key: "active-days-window",
@@ -173,7 +151,6 @@ const DAILY_USE_STATS: readonly StatSpec<AdminUserDetail>[] = [
   },
 ];
 
-/** The hosted tier's volume cards, side by side, under its calendar. */
 const VOLUME_STATS: readonly StatSpec<AdminUserDetail>[] = [
   {
     key: "calls",
@@ -188,7 +165,6 @@ const VOLUME_STATS: readonly StatSpec<AdminUserDetail>[] = [
   },
 ];
 
-/** The masthead's frame: `avatar` beside the email line over the joined line and the account's pages elsewhere. */
 function MastheadFrame({
   avatar,
   email,
@@ -212,19 +188,12 @@ function MastheadFrame({
   );
 }
 
-/**
- * The account's avatar, which, where the account has a photo that loads,
- * enlarges it over the window when pressed, as a picture in a transcript
- * opens: the window's file viewer (`attachment-viewer.tsx`) grown from the
- * disc, showing the photo asked for at a viewer's size rather than the disc's.
- */
 function MastheadAvatar({ account }: { account: ViewerAccount }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const avatar = (
     <AccountAvatar account={account} size={AVATAR_SIZE.MASTHEAD} onFail={() => setFailed(true)} />
   );
-  // Note that a photo that failed stands as the letter, which has nothing to enlarge.
   if (account.image === undefined || failed) return avatar;
   const label = accountLabel(account);
   const photo = {
@@ -249,16 +218,11 @@ function MastheadAvatar({ account }: { account: ViewerAccount }): React.JSX.Elem
   );
 }
 
-/**
- * Whether the member's grant of support access stood as the account was
- * read: a maintainer may sign in as them only while it does.
- */
 function supportAccessLive(detail: AdminUserDetail): boolean {
   const until = detail.account.supportAccessUntil;
   return until !== null && until > detail.generatedAt;
 }
 
-/** What the masthead says of the member's grant of support access. */
 function supportAccessWords(detail: AdminUserDetail): string {
   const until = detail.account.supportAccessUntil;
   return until !== null && supportAccessLive(detail)
@@ -266,14 +230,8 @@ function supportAccessWords(detail: AdminUserDetail): string {
     : "no support access";
 }
 
-/** What the page says where Impersonate failed with no words of the service's. */
 const IMPERSONATE_FAILED = "Couldn't sign in as this account. Try again.";
 
-/**
- * Impersonate: signs the maintainer in as the member through the mount's
- * door, which leaves the page where it lands, so only a refusal comes back,
- * said beside the press in the service's own words.
- */
 function ImpersonateControl({
   impersonate,
   userId,
@@ -312,16 +270,10 @@ function ImpersonateControl({
   );
 }
 
-/**
- * Whether the page offers Impersonate for `detail`, where the mount can sign
- * in as a member at all: the account is no admin, and its grant of support
- * access stands.
- */
 function offersImpersonate(detail: AdminUserDetail): boolean {
   return !detail.account.admin && supportAccessLive(detail);
 }
 
-/** Who the account is: its avatar, its email with an admin's badge, and when it joined, was last seen, signs in with, and grants support access until. */
 function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
   const subject = detail.account;
   return (
@@ -370,7 +322,6 @@ function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
   );
 }
 
-/** The masthead while the account is read: bones for its avatar and its two lines. */
 function MastheadSkeleton(): React.JSX.Element {
   return (
     <MastheadFrame
@@ -390,11 +341,6 @@ function MastheadSkeleton(): React.JSX.Element {
   );
 }
 
-/**
- * The account's sections under its toolbar, drawn from `detail` once it is
- * read and as their skeletons until then; `windowDays` is the window asked
- * for, which the answer's own replaces once it lands.
- */
 function AccountSections({
   detail,
   windowDays,
@@ -433,8 +379,6 @@ function AccountSections({
         onOpenWorkspace={onOpenWorkspace}
       />
 
-      {/* Note that the hosted tier stands last, under everything the account
-      does today, because only dictation still writes its rows. */}
       <AdminSection title={retiredTitle("Hosted tier")}>
         <StatCards layout={STAT_LAYOUT.PAIRS} stats={DAILY_USE_STATS} data={detail} />
         {detail === undefined ? (
@@ -447,10 +391,6 @@ function AccountSections({
             generatedAt={detail.generatedAt}
           />
         )}
-        {/* The calendar spans its own trailing year, so it draws whatever
-        window is chosen above — and an account with no calls at all draws
-        the all-neutral year, because at a year's span the quiet grid is the
-        answer rather than a restatement of the chart's empty notice. */}
         {detail === undefined ? (
           <ActivityCalendarSkeleton measure={CALENDAR_MEASURE.HOSTED_CALLS} />
         ) : (
@@ -484,7 +424,6 @@ export function AccountScreen({
   onSignOut: () => Promise<void>;
   onBack: () => void;
   onOpenWorkspace: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const { reads, gate, impersonate } = useAdminDoors();

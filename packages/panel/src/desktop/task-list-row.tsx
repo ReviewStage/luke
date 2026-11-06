@@ -61,38 +61,6 @@ import {
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
 
-/**
- * task-list-row.tsx -- one task's row as every list of tasks draws it: the Tasks page's List and a task's related tasks alike, so the two never drift.
- *
- * It is `@repo/ui`'s `TaskRow` (`task-row.tsx`) filled with the task: its
- * press opens it; the chips that change its priority, its status, and its
- * assignee stand where it stands, each changing it there
- * (`task-row-parts.tsx`); its key; and each of its open pull requests as the
- * compact chip the plan's Agents list draws (`pull-request-chip.tsx`),
- * hanging the pull request's card and opening it as a link to it does
- * (`use-open-link.ts`); its repository, led by its owner's picture; how its
- * agents stand (`TaskAgentsMark`); and when it last moved. The rest of a
- * list's cells are the list's own (`content`): the Tasks page's what waits
- * on the reader and its creator; a related task's kind at its end. Each
- * cell stands only where the row's list draws it (`cells`). Beside its
- * name stands the stop sign of a task blocked by another (`BlockedMark`),
- * which the press says after the status, and in its own cell how many of
- * its sub-tasks are finished, "1/3", as a badge, as a Board card says it.
- *
- * Its menu is the task's own, after any groups its list leads it with (a
- * related task's Change relation), whose Rename makes its name its field until
- * the edit ends; chosen among several, its ⋯, right-click, and menu key
- * offer the selection bar's acts on every task chosen, as a Mac's list
- * does, and one not chosen keeps its own menu. Its list may leave its ⋯
- * out (`more`), as both lists do for a finger, its menu then a long press,
- * a right-click, or the menu key away. A list that counts its rows unread
- * as the sidebar does, Home's Recent, hands the row whether it is (`unread`),
- * its name then in the heavier weight and its menu's Mark as read agreeing,
- * and may hang the task's card beside it while the pointer rests on it
- * (`card`).
- */
-
-/** A pull request still open on GitHub, a draft or one in its merge queue among them, whose page the service sent, which its chip links to. */
 function stillOpen(
   pullRequest: TaskPullRequestLine,
 ): pullRequest is TaskPullRequestLine & { readonly url: string } {
@@ -101,20 +69,16 @@ function stillOpen(
   return open && pullRequest.url !== undefined;
 }
 
-/** A task's pull requests still open on GitHub, which its row draws a chip for each of. */
 export function openPullRequests(task: TaskSummary) {
   return (task.agents?.pullRequests ?? []).filter(stillOpen);
 }
 
-/** Each of a task's open pull requests as its chip, hanging its card; nothing where it has none. */
 function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | null {
-  // Its page opens as a link to it does: in its agent's Pull request tab where the window knows the agent, else on GitHub.
   const openLink = useOpenLink();
   const open = openPullRequests(task);
   if (open.length === 0) return null;
   return (
     <>
-      {/* Note that a pull request's number names the person's work, so it is masked in a screen recording. */}
       {open.map((pullRequest) => (
         <ReplayMask key={pullRequest.url}>
           <PullRequestChip
@@ -136,7 +100,6 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
   );
 }
 
-/** One task's row, its cells those its list draws. */
 export function TaskListRow({
   tasks,
   task,
@@ -164,44 +127,26 @@ export function TaskListRow({
 }: {
   tasks: TaskRowTab;
   task: TaskSummary;
-  /** The task the window has open (`openedTaskOf`), which its menu reads where it is this one. */
   opened: OpenedTask | undefined;
   workspaceName: string;
-  /** The cells its list draws, the same for every row of it. */
   cells: readonly TaskRowCell[];
-  /** What its list stands in the cells only that list draws, beside the chips, key, and pull requests every row draws. */
   content?: Partial<Record<TaskRowCell, ReactNode>> | undefined;
-  /** The task's repository as its menu's head says it: its name alone, unless another repository the list draws shares it. */
   repositoryName?: string | undefined;
-  /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld?: boolean | undefined;
-  /** How many of its sub-tasks are finished, of all of them, in the cell that says it; none where it has none. */
   subTasks?: ChildTaskCount | undefined;
-  /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
-  /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
-  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
-  /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
-  /** Whether it stands settled beside the rows still open, its name muted. */
   settled?: boolean | undefined;
-  /** Its list's own groups, ahead of the task's menu: a related task's relation to change. */
   menuGroups?: readonly (readonly MenuEntry[])[] | undefined;
-  /** Whether the window does not list the task yet, so only its name, its list's own cells, and its list's own menu groups stand, none of what its standing would say or change. */
   unlisted?: boolean | undefined;
-  /** Whether it draws its menu's ⋯, as its list says (`TaskRows`'s `more`). */
   more?: boolean | undefined;
-  /** What room it keeps at its edges, as its list says (`TaskRows`'s `edges`). */
   edges?: TaskRowEdges | undefined;
-  /** Whether its list counts it unread as the sidebar's row does, its name in the heavier weight; where its list counts none, its menu reads whether it is marked so and its name stands in the label's weight. */
   unread?: boolean | undefined;
-  /** The task's card, hung beside the row while the pointer rests on its press; none where its list hangs none. */
   card?: ReactNode;
-  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   const marked = useMarkedUnread(task.id);
@@ -227,7 +172,6 @@ export function TaskListRow({
     task.repository === null
       ? undefined
       : (repositoryName ?? repositoryLabel(task.repository, [{ repository: task.repository }]));
-  // Note that a task not listed yet offers only its list's groups, because the task's own acts read the listed task, which is not there to read.
   const own = unlisted
     ? rowMenu("Task", menuGroups, tasks.shown, true)
     : {
@@ -241,7 +185,6 @@ export function TaskListRow({
       ? own
       : chosenRowMenu(own.thing, chosen, tasks.shown);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
-  // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
     drawn(TASK_ROW_CELL.KEY) ? key : undefined,
     drawn(TASK_ROW_CELL.STATUS) && !unlisted ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
@@ -267,7 +210,6 @@ export function TaskListRow({
         unlisted
           ? { ...content }
           : {
-              // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
               [TASK_ROW_CELL.PRIORITY]: (
                 <ReplayUnmask>
                   <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
@@ -348,6 +290,5 @@ export function TaskListRow({
       {actions.dialog}
     </TaskRow>
   );
-  // Note that the card reaches the row's hint by its options, because the row takes its hint as a component, which must stay one across renders.
   return card === undefined ? row : <RowHintOptions card={card}>{row}</RowHintOptions>;
 }

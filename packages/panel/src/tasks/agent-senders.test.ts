@@ -42,30 +42,16 @@ import { agentsControl, listedAgent, pushedTranscripts } from "../testing/tasks-
 import { AgentTab } from "./agent-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
- * agent carries their face and name under its bubble, as a teammate's line
- * on a call does, and the reader's own carries none; the app's carries
- * its tile, an automation's its own, GitHub's the login it names, another
- * coding agent's its harness's mark by its name, where the service says
- * the model it runs on, and a member's who has left the quiet
- * outline, and a message from before senders were kept names nobody.
- * Synthetic throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const MEMBER = AGENT_SENDER.MEMBER;
 
-/** Charles's sign-in picture, which the members read lists. */
 const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/charles=s96-c";
 
-/** When Charles sent his line. */
 const CHARLES_SENT_AT = Date.UTC(2026, 9, 14, 16, 5);
 
 const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 2 };
 
-/** The workspace's members as the members read answers them: Dean, and Charles with his picture. */
 const MEMBERS: readonly WorkspaceMember[] = [
   { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER },
   {
@@ -76,11 +62,9 @@ const MEMBERS: readonly WorkspaceMember[] = [
   },
 ];
 
-/** The agent that sent the Claude line, on a task of its own. */
 const SENDER_ID = "2f9e8d7c-6b5a-4c3d-9e8f-7a6b5c4d3e2f";
 const SENDER_TASK = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 
-/** That agent as the task list carries it now: renamed since it sent the line, and moved to another model. */
 const SENDER_NOW: AgentSummary = {
   id: SENDER_ID,
   planId: SENDER_TASK,
@@ -107,7 +91,6 @@ const AGENT: AgentSummary = {
   startedBy: DEAN,
 };
 
-/** The automation whose runs go to the same agent, which started it. */
 const TRIAGE: AutomationSummary = {
   id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
   planId: null,
@@ -125,7 +108,6 @@ const TRIAGE: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** One of the developer's messages, with what sent it where its row kept it. */
 function line(id: string, text: string, sentBy?: AgentSender): AgentTranscriptMessage {
   return {
     id,
@@ -154,7 +136,6 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
     name: "devin-ai-integration[bot]",
     kind: AGENT_SENDER.GITHUB,
   }),
-  // A line GitHub's webhook told carries the avatar GitHub named for who caused it, an App's logo among them.
   {
     ...line("app-review", "@review-app[bot] reviewed your pull request #12.", {
       name: "review-app[bot]",
@@ -173,25 +154,21 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
   },
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   line("agent", "Thanks, that's everything I need.", { name: "Add PR overview tab", agent: true }),
-  // A service that keeps the sending agent answers the model it ran on, which its harness is read off, and the agent.
   line("claude-agent", "The split view is merged.", {
     name: "Split view",
     agent: true,
     model: "anthropic/claude-opus-5.5",
     agentId: SENDER_ID,
   }),
-  // A service older than the sender's kind names the app by name alone.
   line("older", "Rebase again.", { name: "Vespin" }),
 ];
 
-/** A message's sender as a reader sees it: what kind of mark it wears, the name beside it, and the picture on it. */
 type Seen = readonly [id: string, kind: string, name: string, picture?: string];
 
 let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
-  // The log draws only the lines near its view, which jsdom never lays out, so the window is tall enough to show every line.
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(10_000);
 });
 
@@ -202,7 +179,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The developer's messages as `reader` sees the tab drawn, one element for each of `messages`, every place a press opened kept in `opened`, and every automation's page in `automations`' own, where the workspace lists them. */
 async function drawnFor(
   reader: string,
   opened: LinkPlace[] = [],
@@ -246,7 +222,6 @@ async function drawnFor(
             readerId: reader,
             children: createElement(AutomationDirectory, {
               workspace: { id: ACME.id, name: "Acme" },
-              // Note that the place around the tab reads no automations, since no agent of it was started by one.
               wanted: false,
               onOpen: (automationId: string) => automations?.opened.push(automationId),
               children: createElement(AgentTab, {
@@ -271,10 +246,8 @@ async function drawnFor(
   return drawn;
 }
 
-/** Where a line names its sender: over its bubble, on the line under it, or in GitHub's card's head. */
 const SENDER = ":is(.ui-message-head-sender, .ui-message-line-sender, .github-line-head)";
 
-/** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
 async function sendersFor(
   reader: string,
   agent: AgentSummary = AGENT,
@@ -298,12 +271,10 @@ test("each member sees a teammate's face and name under the teammate's messages 
   const charlesSees = await sendersFor(CHARLES.userId);
   fakeAppBridge({});
 
-  // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
   const others: readonly Seen[] = [
     ["app", ACTOR_KIND.APP, "Vespin"],
     ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
     ["gone", ACTOR_KIND.SOMEONE, "Former member"],
-    // GitHub names who caused what it told the agent of: a person by their login and its avatar, a bot by its App's.
     [
       "reviewer",
       ACTOR_KIND.GITHUB,
@@ -317,9 +288,7 @@ test("each member sees a teammate's face and name under the teammate's messages 
       "review-app",
       "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
     ],
-    // A member the workspace no longer lists has left it, and keeps their name.
     ["left", ACTOR_KIND.SOMEONE, "Ana Ruiz"],
-    // Another coding agent of the workspace is drawn as an agent, not a person, under its name.
     ["agent", ACTOR_KIND.AGENT, "Add PR overview tab"],
     ["claude-agent", ACTOR_KIND.AGENT, "Split view"],
     ["older", ACTOR_KIND.SOMEONE, "Vespin"],
@@ -329,7 +298,6 @@ test("each member sees a teammate's face and name under the teammate's messages 
     ...others,
   ]);
   assert.deepEqual(charlesSees, [
-    // The task is Dean's, whose agent it is, as "Started by" says.
     ["task", ACTOR_KIND.PERSON, "Dean Stratakos"],
     ["dean", ACTOR_KIND.PERSON, "Dean Stratakos"],
     ...others,
@@ -351,7 +319,6 @@ test("another agent's message wears the mark of the harness its model runs in, a
   fakeAppBridge({});
 });
 
-/** What a sent message draws, in the order a reader meets it: who sent it, its words, when, and its Copy, in whatever order they stand. */
 function readingOrder(message: Element, words: string): readonly string[] {
   const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
   let text: Node | null = walker.nextNode();
@@ -390,7 +357,6 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   act(() => sender.click());
 
   assert.ok(card.includes("Split view, merged"), card);
-  // The line still wears Claude's mark it was sent under, though the agent runs on Codex now.
   assert.equal(
     sender.querySelector(".ui-harness-mark")?.getAttribute("data-provider"),
     MODEL_PROVIDER.ANTHROPIC,
@@ -440,7 +406,6 @@ test("a teammate's message names them over its bubble, with when and its Copy on
     charles.querySelector("time")?.getAttribute("datetime"),
     new Date(CHARLES_SENT_AT).toISOString(),
   );
-  // The reader's own message names nobody, and still offers its Copy under the bubble; one from a service older than the time names none.
   assert.deepEqual(readingOrder(own, "Use seven days."), ["words", "Copy"]);
   fakeAppBridge({});
 });
@@ -453,7 +418,6 @@ test("an agent started blank draws its first line as a line, no description's ca
   };
   const typed = line("typed", "Keep the old copy.", { ...DEAN, kind: MEMBER });
 
-  // Every line is drawn as a line of the developer's, the first among them, and none as the description's card.
   assert.deepEqual(await sendersFor(CHARLES.userId, blank, [spoken, typed]), [
     ["typed", ACTOR_KIND.PERSON, "Dean Stratakos"],
   ]);

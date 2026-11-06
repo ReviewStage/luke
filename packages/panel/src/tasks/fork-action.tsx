@@ -26,21 +26,6 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/**
- * fork-action.tsx -- a coding agent forked at one of its messages: the message's Fork to new agent, the draft's chip naming what it forks, and the line under a message saying which agents it was forked to.
- *
- * An agent's tab hands its messages what forking takes (`ForkProvider`):
- * the press that forks one into the task's draft, offered only on an
- * agent's tab of a task that is not archived, and the agents each message
- * was forked to, read off the task's agents (`fork-model.ts`). A worker's
- * tab and an agent of no task hand none, so their messages
- * offer no fork and name none. The draft's chip names the source by its
- * chip and the message by its opening words, either one opening the
- * source's tab at that message (`message-links.tsx`), and its × lets the
- * fork go, leaving an ordinary draft with its words.
- */
-
-/** What an agent's tab hands its messages: the press that forks one, none where forking is not offered, the chips of the agents each was forked to, and the press that opens the agent's continue as a draft, none where no draft opens. */
 interface ForkDoors {
   readonly onFork:
     | ((messageId: string, words: string, cut: ForkCut | undefined) => void)
@@ -49,19 +34,12 @@ interface ForkDoors {
   readonly onContinue?: ContinueDoor | undefined;
 }
 
-/** Opens the task's draft as a continue of the agent, prefilled with the words and files given. */
 export type ContinueDoor = (words: string, attachments: readonly AgentAttachment[]) => void;
 
 const ForkContext = createContext<ForkDoors | undefined>(undefined);
 
-/**
- * Whether the tab offers to fork, apart from the doors themselves, which
- * the window hands anew on every draw: every message reads it, and a
- * message kept as it was is not drawn again for a new set of doors.
- */
 const ForkOfferedContext = createContext(false);
 
-/** Hands an agent's messages what forking takes. */
 export function ForkProvider({
   value,
   children,
@@ -78,12 +56,10 @@ export function ForkProvider({
   );
 }
 
-/** The press that opens the agent's continue as the task's draft, where its tab hands one. */
 export function useContinueDoor(): ContinueDoor | undefined {
   return useContext(ForkContext)?.onContinue;
 }
 
-/** An agent as its chip wears it where the place hands no cards: by its tab's name where the task lists it, else by the title its source's summary names, and else as a coding agent. */
 function bareActor(
   agentId: string,
   known: AgentSummary | undefined,
@@ -99,7 +75,6 @@ function bareActor(
   };
 }
 
-/** One of the task's agents as a chip, hanging its card, its press `open`, none where it opens nothing. */
 function agentChip(
   agentId: string,
   known: AgentSummary | undefined,
@@ -118,18 +93,10 @@ function agentChip(
   );
 }
 
-/**
- * What an agent's tab hands its messages for forking: the press, where
- * what the agent stands under, its task or, with none, the agent itself, is
- * not archived and the place opens a draft, and the task is not a pilot's
- * (`startsOwnAgents`, `offersContinue`), and the agents started from each
- * of its messages as chips.
- */
 export function agentForkDoors(input: {
   agent: AgentSummary;
   control: Pick<AgentsControl, "agents" | "archived" | "onUnarchive" | "mode">;
   onFork: ((fork: AgentFork) => void) | undefined;
-  /** Opens the draft, the task's or the agent page's, as a continue of an agent, by its id, with the words and files given; none where no draft opens. */
   onContinue?:
     | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
@@ -140,18 +107,13 @@ export function agentForkDoors(input: {
   const standing = new Set(control.agents?.map((each) => each.id));
   const listed = [...(control.agents ?? []), ...(control.archived ?? [])];
   const forks = new Map(forksOf(listed, agent.id));
-  // An agent's page lists that agent alone, so the forks its own summary names stand beside the list's.
   const named = agent.continuedBy ?? [];
   for (const each of named) {
     if (each.messageId === undefined || listed.some((one) => one.id === each.agentId)) continue;
     forks.set(each.messageId, [...(forks.get(each.messageId) ?? []), each.agentId]);
   }
-  // An agent with no task opens on its own page, listed or not; on a task, an unlisted one is archived.
   const opens = (agentId: string) => standing.has(agentId) || agent.planId === null;
-  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
   const drafts = control.onUnarchive === undefined;
-  // Note that a local agent has no sandbox snapshot to fork from, so it offers no fork, and
-  // that a pilot task's agents fork to none, since a fork is an agent of the developer's own.
   const forkable =
     onFork !== undefined &&
     drafts &&
@@ -177,7 +139,6 @@ export function agentForkDoors(input: {
             agentId,
             listed.find((each) => each.id === agentId),
             cards,
-            // An archived agent of a task is named alone, since no tab of the task draws it.
             opens(agentId) ? open : undefined,
             named.find((each) => each.agentId === agentId)?.title ?? null,
           )}
@@ -186,12 +147,10 @@ export function agentForkDoors(input: {
   };
 }
 
-/** Whether the tab a message is drawn in offers to fork it. */
 export function useForkOffered(): boolean {
   return useContext(ForkOfferedContext);
 }
 
-/** A message's Fork to new agent, after its Copy and Copy link; nothing where its tab offers no fork. */
 export function ForkMessageAction({
   messageId,
   words,
@@ -199,7 +158,6 @@ export function ForkMessageAction({
 }: {
   messageId: string;
   words: string;
-  /** Where the fork cuts the message, where it is a reply still being written (`forkCutOf`); none for a settled one, kept whole. */
   cut?: ForkCut | undefined;
 }): ReactNode {
   const onFork = useContext(ForkContext)?.onFork;
@@ -215,7 +173,6 @@ export function ForkMessageAction({
   );
 }
 
-/** The quiet trail under a message naming the agents forked at it, a list's gap under its foot (tasks.css); nothing where none was. */
 export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
   const chips = useContext(ForkContext)?.forkedTo(messageId) ?? [];
   if (chips.length === 0) return null;
@@ -223,7 +180,6 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
     <NoteLine look={NOTE_LINE_LOOK.TRAIL} glyph={<SplitIcon />} data-forked-to="">
       <span>{FORK_WORDS.TO}</span>
       {chips.map((chip, index) => (
-        // Note that each chip holds the comma after it, so no gap opens before the comma.
         <span key={index} className="inline-flex items-center">
           {chip}
           {index === chips.length - 1 ? null : <span aria-hidden="true">,</span>}
@@ -233,14 +189,6 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
   );
 }
 
-/**
- * The draft's chip over its box naming what it forks: the source's chip and
- * the message's opening words, either opening the source's tab at that
- * message where the window can, and an × that lets the fork go. A continue
- * names no message, so its chip says Continue of the source's chip alone,
- * behind the arrow Continue in new agent and Continued in wear, the chip
- * opening the source's tab.
- */
 export function ForkChip({
   fork,
   source,
@@ -248,7 +196,6 @@ export function ForkChip({
   onDrop,
 }: {
   fork: AgentFork;
-  /** The source as the task lists it, whose task its message is opened under; none where the list does not hold it. */
   source: AgentSummary | undefined;
   cards: TranscriptCards | undefined;
   onDrop: () => void;
@@ -256,7 +203,6 @@ export function ForkChip({
   const openPlace = useOpenPlace();
   const taskId = source?.planId ?? null;
   const { agentId, messageId } = fork;
-  // A source with no task, or none the list holds, is opened on its own page.
   const task = taskId === null ? undefined : { planId: taskId };
   const open =
     openPlace === undefined

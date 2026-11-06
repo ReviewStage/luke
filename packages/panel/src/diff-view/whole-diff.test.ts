@@ -1,16 +1,8 @@
-/**
- * whole-diff.test.ts -- a file drawn whole is one hunk holding every line,
- * its changes among them, and a file that only moved, its texts alike, is
- * every one of its lines as context rather than no hunk at all. Synthetic
- * files only.
- */
-
 import assert from "node:assert/strict";
 import { parsePatchFiles } from "@pierre/diffs";
 import { test } from "vitest";
 import { wholeOf } from "./whole-diff.js";
 
-/** A patch as the list reads it, of one file named as given. */
 function read(patch: string) {
   const file = parsePatchFiles(patch)[0]?.files[0];
   return file ?? assert.fail("the patch reads");

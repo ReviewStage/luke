@@ -14,27 +14,8 @@ import { appStateQuery, selectAccess, selectAccount } from "../use-app-state.js"
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/**
- * privacy-section.tsx -- whether this copy of the app shares its usage data, and whether a maintainer may sign in as the member to help, the Profile page's Privacy group under Links.
- *
- * The switch is kept on this device, but the counts it stops are sent under
- * the account, so it stands on Profile beside what is the account's. The
- * grant of support access is the account's on the service, read on its
- * access and written through the host under the account's own session.
- */
-
-/** What granting means, said beside the row whether or not it stands. */
 const SUPPORT_ACCESS_MEANING = `A ${PRODUCT_NAME} maintainer may sign in as you, for up to an hour at a time, to help.`;
 
-/**
- * The member's grant of support access: whether it stands and until when,
- * and the one press that turns it, granting it for seven days or revoking
- * it. Either acts on the press, since the row's other press turns it back.
- * A grant is not offered while a maintainer is already signed in as the
- * member, since the service refuses one then, nor before the access is read,
- * since a grant standing unread would be extended; a revoke still is, and
- * ends that sign-in.
- */
 function SupportAccessRow(): React.JSX.Element {
   const access = useQuery({ ...appStateQuery, select: selectAccess }).data;
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;

@@ -45,41 +45,8 @@ import { useTaskCard } from "./chip-cards.js";
 import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js";
 import { TaskRelationAsked, type TaskRelationsDoor } from "./task-relation-menu.js";
 
-/**
- * task-standing.tsx -- a task's head over its description: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
- *
- * Over the title stands the task's path (`TaskPath`), a caption-size
- * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
- * Choose a repository while the task has none, which drops the search over
- * every repository the workspace reaches (`repository-chip.tsx`), and which
- * ⌘K's Change repository opens the same way; then the task it is a child
- * of, where it has one, by its status mark, key and name, which opens it
- * and hangs its card; then its own key (`ACME-42`), where the reader stands.
- * Under the title stand three chips on one line, each a toolbar's chip,
- * quiet until the pointer is on it or its menu is open, dropping the
- * window's own menu (`picker-row.tsx`): the status, each of the five with
- * its mark, the priority, each with its bars, and the assignee, each member
- * of the workspace by face and name, the reader first, and No assignee on
- * the dashed unassigned mark; then, where the page hands their door, the
- * box the add menu hangs from when the task's menus or ⌘K ask for it
- * (`task-relation-menu.tsx`). The task's sub-tasks and relations stand as
- * groups of their own under the byline (`plan-relations.tsx`). A pick
- * is handed back for the page to send; without a door to send it, as on an
- * archived task, the chips only say. S, pressed while not typing, opens the
- * status chip's menu, as Linear's S does, and a task row's menu lists what
- * each chip lists (`standing-submenus.tsx`). Where its agents run is said
- * on each agent's row instead (`plan-agents.tsx`).
- * A task from a service before statuses has no key and no chips.
- */
-
-/**
- * A task's card's lead, where it stands: its key, its status, its priority,
- * and who is on it, each a Badge of its mark and its words, wrapping where
- * the card is narrow. An Inbox row's card holds it on one line instead.
- */
 export const TASK_CARD_STANDING = "task-card-standing flex flex-wrap items-center gap-tight-gap";
 
-/** Each status as its chip, its menu's row, the Board's column, and the sidebar's filter say it. */
 export const TASK_STATUS_WORDS = {
   [TASK_STATUS.BACKLOG]: "Backlog",
   [TASK_STATUS.TODO]: "Todo",
@@ -88,7 +55,6 @@ export const TASK_STATUS_WORDS = {
   [TASK_STATUS.CANCELED]: "Canceled",
 } as const satisfies Record<TaskStatus, string>;
 
-/** Each priority as its chip, its menu's row, and a Board card's say it. */
 export const TASK_PRIORITY_WORDS = {
   [TASK_PRIORITY.NONE]: "No priority",
   [TASK_PRIORITY.URGENT]: "Urgent",
@@ -97,41 +63,30 @@ export const TASK_PRIORITY_WORDS = {
   [TASK_PRIORITY.LOW]: "Low",
 } as const satisfies Record<TaskPriority, string>;
 
-/** The status chip's rows, each status by its mark, which a task row's Status submenu lists too. */
 export const STATUS_ROWS: readonly MenuRow[] = TASK_STATUS_ORDER.map((status) => ({
   id: status,
   label: TASK_STATUS_WORDS[status],
   icon: <TaskStatusMark status={status} />,
 }));
 
-/** The priority chip's rows, each priority by its bars, which a task row's Priority submenu lists too. */
 export const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priority) => ({
   id: priority,
   label: TASK_PRIORITY_WORDS[priority],
   icon: <TaskPriorityMark priority={priority} />,
 }));
 
-/** The status a picked row names; none for a row that names no status. */
 function statusOf(id: string): TaskStatus | undefined {
   return TASK_STATUS_ORDER.find((status) => status === id);
 }
 
-/** The priority a picked row names; none for a row that names no priority. */
 function priorityOf(id: string): TaskPriority | undefined {
   return TASK_PRIORITY_ORDER.find((priority) => priority === id);
 }
 
-/** The row of the assignee's menu that assigns the task to no one, apart from every account's id. */
 export const NO_ASSIGNEE = "no-assignee";
 
-/** What the assignee's chip and its first row say of a task no one is assigned to, as its hover card does, and what the Tasks page calls the tasks with none. */
 export const NO_ASSIGNEE_WORDS = "No assignee";
 
-/**
- * The assignee's menu: No assignee, then the workspace's members as every
- * people menu lists them (`memberRows`), each hanging their card; only No assignee while the members
- * are unread. The Tasks page's compact assignee chip drops the same rows.
- */
 export function assigneeRows(
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
@@ -154,12 +109,6 @@ export function assigneeRows(
   ];
 }
 
-/**
- * The assignee's menu for a task (`assigneeRows`), with the member it is
- * assigned to after them where the members do not name them, as while they
- * are unread, so they still stand checked by the name the task carries: what
- * a row's assignee chip and a task row's Assignee submenu both list.
- */
 export function useAssigneeRows(assignee: TaskSummary["assignee"]): readonly MenuRow[] {
   const { members, readerId } = useMemberDirectory();
   const person = usePerson(assignee);
@@ -177,17 +126,11 @@ export function useAssigneeRows(assignee: TaskSummary["assignee"]): readonly Men
   ];
 }
 
-/**
- * The assignee chip: the member the task is assigned to by face and name, or
- * No assignee, dropping the workspace's members (`assigneeRows`); a pick of
- * anyone else is handed to `onPick` by their id, and No assignee as null.
- */
 function TaskAssigneePicker({
   assignee,
   onPick,
 }: {
   assignee: TaskSummary["assignee"];
-  /** Where a pick is sent; without one the chip only says. */
   onPick: ((assigneeId: string | null) => void) | undefined;
 }): React.JSX.Element {
   const { members, readerId, reading, refused, retry } = useMemberDirectory();
@@ -221,44 +164,24 @@ function TaskAssigneePicker({
   );
 }
 
-/** The repository crumb's doors, as the page hands them: what its menu offers, where a pick is sent, the asks from elsewhere to open its menu, and why the service refused the last pick, said beside it. */
 export interface TaskRepositoryDoor {
   readonly chooser: RepositoryChooser;
   readonly onChoose: (repository: string) => void;
-  /** Counts the asks from elsewhere to open the menu, ⌘K's Change repository, each opening it. */
   readonly openRequest?: number | undefined;
-  /** Hears each ask the crumb opened its menu for, so the page lets it go. */
   readonly onAsked?: ((request: number) => void) | undefined;
-  /** Why the service refused the last pick; none once one is kept. */
   readonly note?: string | undefined;
 }
 
-/** What the page hands the task's head: its workspace's name, which the keys are drawn from, the door a pick is sent through, none where the task takes no change, the repository crumb's doors, none where the task's repository is not changed from here, and the workspace's tasks, which name its parent. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
-  /** Settles once the service has answered, where the page waits on it. */
   readonly onSet?: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
-  /** The workspace's tasks, which name the task's parent in its path; none where it is not named. */
   readonly tasks?: readonly TaskSummary[] | undefined;
-  /** Opens a task, as a press on the parent's crumb does; none where it opens nothing. */
   readonly onOpenTask?: ((taskId: string) => void) | undefined;
-  /** The add menu's door, and the ask from the task's menus or ⌘K to open it; none where no relation is added here. */
   readonly relations?: TaskRelationsDoor | undefined;
-  /** Whether the description is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
   readonly inSight?: boolean | undefined;
 }
 
-/**
- * A task's key, “ACME-42”, as every place in the window draws it: the task's
- * page over its title, its hover card and an Inbox row's card at the head,
- * the Tasks list's row, the board's card, and ⌘K's row, where the words
- * typed that found it are marked in it. Plain caption-size words in the
- * muted ink, monospace with even figures, never a chip, and never shrunk by
- * what stands beside it, so a chip there gives way instead. Nothing for a
- * task from a service before keys, or where the window holds no such
- * workspace.
- */
 export function TaskKey({
   workspaceName,
   number,
@@ -267,9 +190,7 @@ export function TaskKey({
 }: {
   workspaceName: string | undefined;
   number: number | undefined;
-  /** Hidden from a screen reader, where the row says the key in words of its own. */
   decorative?: boolean;
-  /** The words a search typed, marked where the key holds them. */
   tokens?: readonly string[] | undefined;
 }): React.JSX.Element | null {
   if (workspaceName === undefined || number === undefined) return null;
@@ -291,21 +212,13 @@ export function TaskKey({
   );
 }
 
-/** What the path is named for a reader moving between landmarks. */
 const PATH_LABEL = "Task path";
 
-/**
- * The task the open one is a child of, as the workspace's tasks list it: by
- * the open task's own row's parent where the list holds it, else by the
- * plan's; none for a task at the top, or one whose parent the list does not
- * hold yet.
- */
 function parentOf(task: Task, tasks: readonly TaskSummary[]): TaskSummary | undefined {
   const parentId = tasks.find((each) => each.id === task.id)?.parentTaskId ?? task.parentTaskId;
   return parentId === undefined ? undefined : tasks.find((each) => each.id === parentId);
 }
 
-/** The parent's crumb: its status mark, then its key and name, which opens it and hangs its card. */
 function useParentCrumb(
   parent: TaskSummary | undefined,
   workspaceName: string,
@@ -323,13 +236,11 @@ function useParentCrumb(
   };
 }
 
-/** The key's crumb, where the reader stands, kept whole however narrow the path; none for a task from a service before keys. */
 function keyCrumb(task: Task, workspaceName: string): Crumb | undefined {
   if (task.number === undefined) return undefined;
   return { label: taskKey(workspaceName, task.number), current: true, fixed: true };
 }
 
-/** The path's line: its crumbs, the menu a crumb drops hung from the line's own box, and the refusal of the last pick under it. */
 function PathLine({
   crumbs,
   room,
@@ -343,8 +254,6 @@ function PathLine({
 }): React.JSX.Element | null {
   const drawn = crumbs.filter((crumb) => crumb !== undefined);
   if (drawn.length === 0) return null;
-  // Note that the menu hangs from the line rather than from its crumb, because the path clips what stands inside it,
-  // and that the line is pulled back by a crumb's inset, so its first mark stands on the title's edge.
   return (
     <div className="plan-task-path mb-ui-4">
       <div className="relative -ms-breadcrumb-pill-inline flex min-w-0" ref={room}>
@@ -366,7 +275,6 @@ function PathLine({
   );
 }
 
-/** The path led by the task's repository as plain words, whose menu (`useRepositoryMenu`) opens only where the page asks, under the path: ⌘K's and a task row's Change repository. */
 function RepositoryPath({
   task,
   door,
@@ -384,18 +292,12 @@ function RepositoryPath({
     onAsked: door.onAsked,
     align: POPOVER_ALIGN.START,
   });
-  // Note that the crumb is kept, because words that name the repository must not be folded away, yet it may still be cut short, so a long name never pushes the key out of the path.
   const repository: Crumb = { label: menu.label, glyph: menu.glyph, kept: true };
   return (
     <PathLine crumbs={[repository, ...rest]} room={menu.room} menu={menu.menu} note={door.note} />
   );
 }
 
-/**
- * The task's path over its title: its repository's crumb where the page
- * hands the repository's doors, its parent's where it has one, and its own
- * key, current; nothing where none of them stands.
- */
 export function TaskPath({
   task,
   door,
@@ -412,27 +314,19 @@ export function TaskPath({
   return door.repository === undefined ? (
     <PathLine crumbs={rest} />
   ) : (
-    // Keyed by the task, so another task starts the crumb's menu afresh and the same task keeps it.
     <RepositoryPath key={task.id} task={task} door={door.repository} rest={rest} />
   );
 }
 
-/**
- * A status chip dropping the five statuses, each with its mark, the one
- * `status` names checked; a pick other than it is handed to `onPick`.
- */
 function TaskStatusPicker({
   label = "Status",
   status,
   openRequest,
   onPick,
 }: {
-  /** The chip's name for a reader; the task page's own where none is named. */
   label?: string | undefined;
   status: TaskStatus;
-  /** Counts the S key's asks to open the menu, each opening it. */
   openRequest?: number | undefined;
-  /** Where a pick is sent; without one the chip only says. */
   onPick: ((status: TaskStatus) => void) | undefined;
 }): React.JSX.Element {
   return (
@@ -459,12 +353,6 @@ function TaskStatusPicker({
   );
 }
 
-/**
- * The task's status, priority, and assignee chips on one line under its
- * title, each a toolbar's chip, then the box the add menu hangs from, where
- * the page hands its door. A task from a service before statuses draws no
- * chips, and still that box.
- */
 export function TaskStandingChips({
   task,
   onSet,
@@ -472,16 +360,12 @@ export function TaskStandingChips({
   inSight = true,
 }: {
   task: Task;
-  /** Where a pick is sent, settling once the service has answered where the page waits on it; without one the chips only say. */
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
-  /** The add menu's door; without it the menu hangs nowhere here. */
   relations?: TaskRelationsDoor | undefined;
-  /** Whether the description is in sight, which S waits on, so it never opens a menu behind another tab. */
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
   const standing = status !== undefined && priority !== undefined;
-  // S opens the status chip's menu while the chip is in sight and takes a pick, each press counted so it opens it again.
   const [statusAsks, setStatusAsks] = useState(0);
   useAppCommand(
     APP_COMMAND.SET_STATUS,
@@ -489,7 +373,6 @@ export function TaskStandingChips({
       ? () => setStatusAsks((asks) => asks + 1)
       : undefined,
   );
-  // The box the add menu hangs from, standing with or without the chips, so the task's menus and ⌘K open it on any task.
   const asked =
     relations === undefined ? null : (
       <TaskRelationAsked
@@ -502,7 +385,6 @@ export function TaskStandingChips({
   if (status === undefined || priority === undefined) return asked;
   return (
     <div className="plan-task-standing">
-      {/* Note that the line is pulled back by a chip's inset, so the status's mark stands on the title's edge. */}
       <Inline gap={GAP.TIGHT} className="-ms-chip-lead">
         <TaskStatusPicker
           status={status}
@@ -528,7 +410,6 @@ export function TaskStandingChips({
             }}
           />
         </ReplayUnmask>
-        {/* Note that the chip names the assignee where there is one, so it shows only while it says No assignee. */}
         <ReplayWords unmasked={task.assignee === undefined}>
           <TaskAssigneePicker
             assignee={task.assignee}

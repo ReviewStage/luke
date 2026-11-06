@@ -38,21 +38,10 @@ import {
   steppedChapter,
 } from "./chapters-model.js";
 
-/**
- * chapters-model.test.ts -- the Chapters view draws one state at a time from
- * its read and its own Generate, chapters made for an older head as stale,
- * "Other changes" last; a chapter is viewed once all its files are, and
- * marking it marks the rest or unmarks them all; a key change's press goes
- * to its first lines in the chapter's order, lit where the chapter's diff
- * draws them and its file's header where it does not. Synthetic chapters
- * only.
- */
-
 const HEAD = "b".repeat(40);
 const OLDER = "a".repeat(40);
 const BASE = "c".repeat(40);
 
-/** A modified file of two hunks, two lines apart. */
 const STORE: AgentChangedFile = {
   path: "src/store.ts",
   previousPath: null,
@@ -73,7 +62,6 @@ const LOCK: AgentChangedFile = {
   patch: ["@@ -3,1 +3,1 @@", "-x", "+y"].join("\n"),
 };
 
-/** A chapter of the story holding the hunks named. */
 function chapter(title: string, hunkRefs: Chapter["hunkRefs"]): Chapter {
   return {
     kind: CHAPTER_KIND.STORY,
@@ -94,7 +82,6 @@ const OTHER: Chapter = {
   risk: null,
 };
 
-/** A read answering the pull request's newest chapters as given. */
 function answering(
   chapters: PullRequestChaptersState,
   generatable = true,
@@ -102,7 +89,6 @@ function answering(
   return { pullRequest: { number: 42, generatable, chapters } };
 }
 
-/** Ready chapters made for `headSha`. */
 function ready(headSha: string, chapters: readonly Chapter[]): PullRequestChaptersState {
   return {
     status: PULL_REQUEST_CHAPTERS_STATE.READY,

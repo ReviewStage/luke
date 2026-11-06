@@ -43,46 +43,8 @@ import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type RowMark, RowMarks, useFocusedRowKeys } from "./task-actions.js";
 import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
 
-/**
- * sidebar-agent.tsx -- an agent an automation started with no task, as a row among the sidebar's tasks.
- *
- * The row is a task's row in every way it can be (`task-actions.tsx`'s
- * `SidebarTask`): its name, its repository where its group does not say
- * it, and its time, under the same view. What tells it apart leads it: the
- * agent's harness mark, as its tab wears it, giving way to the working mark
- * while it works. Its end wears who started it, the automation's clock, or a
- * teammate's face where it ran on no automation, the Draft pencil while a
- * draft waits in its box and its page is not the one open, and the failed
- * mark once its turn failed. Pin and Archive, or Unarchive once it is archived, stand
- * in place of all of that while the row is hovered or reached from the
- * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
- * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
- * press opens the agent's own page, and it reads in semibold while it moved
- * after the reader's mark (`use-task-looks.ts`), or while it is marked unread by hand. Its actions are the agent's one menu
- * (`agent-actions.tsx`'s `agentMenuGroups`), opened alike by
- * the row's ⋯, a right-click, a long press, and the menu key, a finger's
- * row drawing neither its ⋯ nor Pin and Archive, as a task's: Copy link; Rename, which turns
- * the row into its name's field until the edit ends, the new name drawn at
- * once and a refused one saying so under the field it reopens, as a task's
- * row does, and Mark as unread
- * or Mark as read, through a task's marks (`agent-read-marks.ts`); Pin or Unpin,
- * the reader's own, and Move to section, the reader's
- * own sections, as a task's (`sidebar-sections.tsx`); Archive, asked first while a teammate's agent works
- * (`agent-archive.tsx`), or Unarchive; and last and alone,
- * Permanently delete, always asked first (`agent-delete.tsx`), which leaves
- * the agent's page where it is the one standing. Its agent's actions are the
- * ones its tab and its page offer (`useAgentActions`), but for those a row
- * leaves out by name (`NOT_ON_A_ROW`), and the row hands the builder only its own doors: the
- * read mark, the pin, and the section. An archived agent
- * offers neither a pin, a rename, nor a section, as an archived task. Note that the agent is read again
- * by its own id before it is archived unasked, because the row's status is
- * the list's and the task open's agents never hold it.
- */
-
-/** What a reader hears of the Slack mark an agent started from Slack wears. */
 const FROM_SLACK = "(from Slack)";
 
-/** Who started the agent, as its row's end wears them: its automation, or a teammate's face where it has none and `face` allows it. */
 function starterOf(
   agent: TasklessAgent,
   face: boolean,
@@ -94,13 +56,6 @@ function starterOf(
   return teammateCreator({ createdBy: agent.startedBy, ownerId: agent.startedBy?.userId }, reader);
 }
 
-/**
- * The agent's card, as its tab hangs it on a task (`agent-ref.tsx`): its
- * name, where it stands and when it last moved, who started it, and its
- * pull request, read from the list's row as a task's row's card is. Note
- * that it is a component of its own, so what the card reads is worked out
- * only once the card is drawn, never on a render of the row.
- */
 function SidebarAgentCard({
   agent,
   agents,
@@ -111,7 +66,6 @@ function SidebarAgentCard({
   return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
 
-/** One agent with no task among the sidebar's tasks. */
 export function SidebarAgent({
   agent,
   agents,
@@ -129,30 +83,18 @@ export function SidebarAgent({
   onDeleted,
 }: {
   agent: TasklessAgent;
-  /** The window's agent control, whose archive and rename act on any agent by its id. */
   agents: AgentsControl;
-  /** Whether this agent's page is the one standing. */
   current: boolean;
-  /** The time the row's time is counted back from. */
   now: number;
-  /** The time the row shows, which the list's order chooses. */
   at: number;
-  /** The repository the row names, its owner's picture and its name, muted before its time, where its group does not say it. */
   repository?: React.ReactNode;
-  /** Whether a teammate's agent wears their face, which a group by creator says instead. */
   face?: boolean;
-  /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
-  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
   place?: VirtualRowPlace | undefined;
-  /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
   onOpen: () => void;
-  /** Pins the agent for the reader or unpins it; none for an archived agent, which offers no pin. */
   onPin?: ((pinned: boolean) => void) | undefined;
-  /** Move to section, in the menu's group with Pin and Archive as a task's; none for an archived agent. */
   section?: MenuEntry | undefined;
-  /** Leaves the agent's page where it is the one standing, once its delete landed; every surface drawing the row names it, so none leaves a deleted agent's page up. */
   onDeleted: () => void;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
@@ -160,7 +102,6 @@ export function SidebarAgent({
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, whose keys it hears while focused.
   const hold = useCallback((press: HTMLElement | null) => {
     row.current = press;
     item.current = press?.parentElement ?? null;
@@ -169,10 +110,7 @@ export function SidebarAgent({
   const coarse = useCoarsePointer();
   const queryClient = useQueryClient();
   const reads = useAgentReadMarks();
-  // Note that the row reads the account's mark rather than main's unseen dot, so every Mac and browser draws it alike,
-  // and the agent on screen only by a mark by hand, since what it does lands before the reader's eyes.
   const isUnread = agent.markedUnread === true || (!current && agentReadsUnread(agent));
-  // The agent's own actions, as its tab and its page offer them, read again by its own id before an archive.
   const actions = useAgentActions(
     agent,
     { ...agents, readAgent: (agentId) => readAgentById(queryClient, agentId) },
@@ -180,9 +118,7 @@ export function SidebarAgent({
   );
   const { archive } = actions.doors;
   const archived = agent.archivedAt !== undefined;
-  // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
-  // A message to it that did not go wears the failed mark in the pencil's place.
   const sendFailed = useFailedAgents().includes(agent.id) && !current;
   const { rename } = actions;
   const editing = rename?.editing ?? false;
@@ -193,7 +129,6 @@ export function SidebarAgent({
     () => reads.mark(agent, !isUnread),
     onPin === undefined ? undefined : () => onPin(!pinned),
   );
-  // The agent's menu over the doors a row has, its own read mark, pin, and section among them.
   const groups: MenuEntry[][] = agentMenuGroups({
     ...rowDoors(actions.doors),
     read: { unread: isUnread, onMark: (next) => reads.mark(agent, next) },
@@ -201,7 +136,6 @@ export function SidebarAgent({
     section,
     rowKeys: true,
   });
-  // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const marks: RowMark[] = [
     ...(onPin === undefined
       ? []
@@ -274,7 +208,6 @@ export function SidebarAgent({
                     <ReplayMask>{repository}</ReplayMask>
                   </span>
                 )}
-                {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
                 {agent.source?.kind === AGENT_SOURCE.SLACK ? (
                   <>
                     <ProviderMark

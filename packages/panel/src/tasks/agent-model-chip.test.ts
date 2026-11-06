@@ -17,21 +17,6 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 
-/**
- * agent-model-chip.test.ts -- the chip's model menu stands still while it is
- * open: turning Fast on widens the chip leftward from its fixed trailing
- * edge, and the menu hung from that edge neither jumps on the frame the
- * chip widens nor once the resize is measured. On an agent that runs on
- * Claude Code it offers Claude models alone, with Fast and no Context row,
- * on Codex GPT models alone with neither, the list `list_models` answers
- * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
- * offers all of it. A model whose plan runs no fast mode draws no Fast.
- * A Codex agent's menu ends on the ChatGPT plan that pays and a link to
- * manage its usage; no other agent's says what pays. An automation's chip
- * says a choice nothing of the reader's pays for cannot run; a running
- * agent's never does.
- */
-
 const MODELS: readonly CatalogModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -47,10 +32,8 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-/** The chip's trailing edge on the composer's foot, which the controls after it hold still. */
 const CHIP_RIGHT = 900;
 
-/** The chip's width as its words draw it: wider once it says Fast. */
 const CHIP_WIDTH = { STANDARD: 120, FAST: 160 } as const;
 
 const MENU_HEIGHT = 300;
@@ -59,7 +42,6 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  // The GPT model's row wears its harness's mark, an asset of the panel's.
   fakeAppPlatform({ assetBase: () => "https://app.test/" });
 });
 
@@ -73,11 +55,6 @@ function box(left: number, top: number, width: number, height: number): DOMRect 
   return DOMRect.fromRect({ x: left, y: top, width, height });
 }
 
-/**
- * Lays the composer's foot out as the window would, since jsdom lays out
- * nothing: the chip's box stands at a fixed trailing edge, as wide as its
- * words, and its menu's layer is as tall as a menu; the room is the window.
- */
 function stageLayout(): void {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("agent-model-chip")) {
@@ -90,7 +67,6 @@ function stageLayout(): void {
   });
 }
 
-/** The chip over a choice it changes at once, as `use-agent-model.ts` draws a pick before the service answers. */
 function Owned(): React.JSX.Element {
   const [choice, setChoice] = useState<ModelChoice>({
     model: "anthropic/claude-opus-5.5",
@@ -105,7 +81,6 @@ function Owned(): React.JSX.Element {
   });
 }
 
-/** Where the open menu's left edge is drawn in the window: its layer's inset from whichever chip edge it is held by. */
 function menuLeft(view: HTMLElement): number {
   const anchor = view.querySelector(".agent-model-chip");
   const layer = view.querySelector<HTMLElement>(".ui-anchored-popover");
@@ -146,7 +121,6 @@ test("turning Fast on in the chip's menu leaves the menu where it stood", () => 
   assert.equal(menuLeft(view), opened, "turning Fast off again keeps it in place");
 });
 
-/** The catalog `coder-agent-tools.test.ts`'s runtime tests read: Opus with its fast version and two windows, Sonnet, and a GPT model with its fast and Ultrafast versions. */
 const RUNTIME_MODELS: readonly CatalogModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -187,7 +161,6 @@ const RUNTIME_MODELS: readonly CatalogModel[] = [
   },
 ];
 
-/** The open menu of a chip on an agent on the runtime given: the models it lists, and its pinned rows. */
 function openMenuOn(
   runtime: AgentRuntime | undefined,
   choice: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
@@ -293,7 +266,6 @@ test("a Codex agent its OpenAI API key pays for names the key rather than a plan
     { inputTokens: 1000, outputTokens: 200, costUsd: 0.42, payer: AGENT_PAYER.API_KEY },
   );
   assert.equal(onKey.line, "OpenAI API key · $0.42 so far");
-  // Before its first turn settles, the payer the page names says the same.
   const first = openMenuOn(
     AGENT_RUNTIME.CODEX,
     { model: "openai/gpt-6.1-sol", effort: "low" },

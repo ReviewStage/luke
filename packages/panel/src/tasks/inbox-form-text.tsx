@@ -13,47 +13,22 @@ import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import type { SkillSource } from "./skill-picker.js";
 
-/**
- * inbox-form-text.tsx -- a text field of an Inbox form, written in the composer's own field, as the item's box is.
- *
- * The field is the composer's (`composer-field.tsx`), through the same
- * pickers the box takes (`composer-pickers.tsx`): an `@` opens what the
- * words may mention, written in as its link and drawn as its chip, and a
- * `/` opens the repository's skills; it is drawn at a field's size under
- * the field's name rather than as a card. What it holds is the field's
- * value, links and all, so a mention reaches the agent as a note's does.
- * Enter sends the item's answer, or takes the keyboard to what it lacks,
- * as Enter anywhere in the item does, Shift+Enter is a new line, and
- * Escape leaves the field, in a form of several fields as in one. A press on the field's name takes the caret
- * into it, as a label's press does for an input. Like the box, it never takes the caret as the
- * item opens, because K and J step the list.
- */
-
-/** What a form's own text field is handed: the field, the ids its name is read by, and what it holds. */
 export interface FormTextProps {
   readonly field: InboxField;
   readonly control: FieldControl;
   readonly value: string;
   readonly disabled: boolean;
-  /** Hands the field's words back, nothing for an empty field. */
   readonly onChange: (typed: string | undefined) => void;
 }
 
-/** What every text field of an item's form is written with: whom the words go to, what they may name, and the item's send. */
 export interface FormTextDoors {
-  /** The item's agent, which the `@` list does not offer; none where the words go to no agent. */
   readonly self: string | undefined;
-  /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads. */
   readonly agent: AgentSummary | undefined;
-  /** Where the item's repository's skills are read from; nothing where none can be. */
   readonly skills: SkillSource | undefined;
-  /** The words a dictation is likely to say (`dictation-keywords.ts`). */
   readonly keywords: readonly string[];
-  /** Sends the item's answer, or takes the keyboard to what it lacks. */
   readonly onEnter: () => void;
 }
 
-/** One text field of a form as the composer's field, sized as a field. */
 export function InboxFormText({
   field,
   control,
@@ -68,7 +43,6 @@ export function InboxFormText({
   const bundle = useAtomValue(useSideBundles().descriptionEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const { agent } = doors;
-  // Note that a press on the field's name takes the caret into its words, as a label does for its input, since an editor is no labelable element.
   const { labelId } = control;
   useEffect(() => {
     const name = document.getElementById(labelId);
@@ -85,7 +59,6 @@ export function InboxFormText({
     self: doors.self,
     skills: doors.skills,
     keywords: doors.keywords,
-    // A server's chip says what the answer does with it, as the box's does.
     servers: {
       statuses,
       place: {
@@ -93,7 +66,6 @@ export function InboxFormText({
         handed: agent?.status === AGENT_STATUS.RUNNING ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
       },
     },
-    // Note that the field has no microphone, so no dictation of its own has anything to say.
     onNote: () => undefined,
   });
   return (

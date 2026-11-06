@@ -33,18 +33,6 @@ import {
   useSummaryPin,
 } from "./task-summary.js";
 
-/**
- * task-summary.test.ts -- the summary's pull request row hangs the Changes
- * card, whose agent opens through the door the plan hands it, the one that
- * gives the plan's column the keys, and whose card previews the running
- * agent's latest step while the plan's column shows that agent. A page's
- * row hangs the page's tab's card, previewing it, and the plan's row the
- * task's card, as its tab does. A column too
- * narrow to spare the rail draws none, and the toolbar's button hangs the
- * card in its place. A plan with nothing to list draws neither the summary
- * nor its button. Synthetic agents and pull requests throughout.
- */
-
 const RUN_STARTED = 5_000;
 
 const AGENT: AgentSummary = {
@@ -70,7 +58,6 @@ const PULL_REQUEST: AgentPullRequest = {
   changedFiles: 6,
 };
 
-/** What the agent's tab last drew: its run's one step so far. */
 const HELD: HeldTranscripts = {
   agents: new Map([
     [
@@ -93,7 +80,6 @@ const HELD: HeldTranscripts = {
   workers: new Map(),
 };
 
-/** The summary pinned beside the document, its card hung by nothing. */
 const PINNED: SummaryLayout = {
   mode: "column",
   holds: true,
@@ -114,7 +100,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The summary of a task whose running agent opened the pull request, the task's column showing `shown`, drawn beside `beside`; every agent it opens recorded. */
 function mount(
   shown: "agent" | "plan",
   linkWorkspace?: string,
@@ -167,12 +152,10 @@ function mount(
   return { page, opened };
 }
 
-/** Rests the pointer on a control, which hangs its card. */
 function hover(control: Element): void {
   restOn(control);
 }
 
-/** The agent named in the Changes card the pull request's row hangs. */
 function cardAgent(page: HTMLElement): HTMLButtonElement {
   const row = [...page.querySelectorAll("button")].find((each) =>
     each.textContent?.includes("#42 Expire invitations"),
@@ -318,7 +301,6 @@ test("a heading folds its rows away, counting them, and stands folded as the sum
   assert.equal(heading(again).getAttribute("aria-expanded"), "false", "it stands as it was left");
 });
 
-/** An item of the plan's inbox that waits on the reader. */
 const ASKING: InboxItem = {
   id: "6c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
   agentId: AGENT.id,
@@ -332,7 +314,6 @@ const ASKING: InboxItem = {
   updatedAt: 1_000,
 };
 
-/** Writes `draft` into an inbox item's box, as typing an answer or picking on its card would. */
 function DraftOnItem({ item, draft }: { item: InboxItem; draft: Draft }): null {
   const writer = useDraftWriter();
   useEffect(() => {
@@ -380,10 +361,8 @@ test("the Inbox's row wears the Draft pencil beside its count while one of its i
   assert.equal(marks(stale).drafted, false);
 });
 
-/** What the plan's own inbox holds in these tests: nothing. */
 const NO_INBOX = { open: [], waiting: [], settled: [] };
 
-/** The plan's column as the shell lays it out: the summary, laid out by the column's own width. */
 function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
@@ -402,12 +381,10 @@ function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   );
 }
 
-/** A plan whose summary lists something: one page its agents wrote. */
 function listedControl(): TasksControl {
   return tasksControl({ pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }] });
 }
 
-/** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
 function columnAt(width: number, tasks: TasksControl = listedControl()) {
   const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
   measured.mockReturnValue(DOMRect.fromRect({ width }));

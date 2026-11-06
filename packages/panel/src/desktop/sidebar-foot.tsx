@@ -64,28 +64,10 @@ import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
 
-/**
- * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, the Mac offline, a release on its way in, Send feedback, and Settings' gear.
- *
- * The row every desktop devtool keeps at the foot of its sidebar, the way
- * Cursor keeps it: the account's face and name at its start, which opens the
- * account's menu upward over the column, and the gear at its end, which goes
- * to Settings at once. Send feedback stands just before the gear, always in
- * sight, so word back to the people who make the app is one press away
- * rather than a menu deep. The Mac offline, and a newer release, each stand
- * between them as a small pill while they hold, and take no room while they
- * do not. The menu offers what the menu bar's Help menu offers, by the same
- * commands, with Settings at its head, the ways to reach the people who make
- * the app under it, and Sign out last, which acts on the press.
- */
-
-/** Where Contact us > GitHub leads: our own issues, where CONTRIBUTING.md sends bugs and feature requests. */
 const ISSUES_URL = "https://github.com/ReviewStage/vespin/issues";
 
-/** The account's place while no one is signed in: someone's outline. */
 const NOBODY_SIGNED_IN: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
 
-/** The account's face: the signed-in person's (`actor-ref.tsx`), or someone's outline while no one is signed in. */
 export function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return <ActorMark actor={NOBODY_SIGNED_IN} size={ACTOR_SIZE.ACCOUNT} />;
@@ -97,12 +79,6 @@ export function AccountAvatar({ account }: { account: AccountSnapshot }): React.
   );
 }
 
-/**
- * One of the release's presses: a compact round pill, its glyph then its one word,
- * which a narrow foot folds to the glyph alone, named still. Its hint says
- * what a press does whether its word is drawn or not, since the word alone
- * says less.
- */
 function UpdatePill({
   word,
   hint,
@@ -136,16 +112,6 @@ function UpdatePill({
   );
 }
 
-/**
- * A newer release with something to press, between the account and the
- * gear: Restart, the very act Settings' Restart to update runs, once the
- * release is downloaded, on the working blue's wash: news, not urgency; or,
- * once installing it failed, the download from the releases page that
- * Settings offers in its place, on the failure's red, its hint saying what
- * went wrong. One word each, so the account's name keeps its room. It
- * draws nothing in any other state, so the row carries no control with
- * nothing to do.
- */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
   const offered =
@@ -162,7 +128,6 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
       />
     );
   }
-  // The sidebar carries a failure only once a release was named.
   if (update.status !== UPDATE_STATUS.ERROR || update.latestVersion === undefined) return null;
   return (
     <UpdatePill
@@ -175,17 +140,6 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
   );
 }
 
-/**
- * A development build's row over the account's: the branch it was cut from,
- * as a sidebar row draws a place, which a press copies with its commit, so
- * builds run side by side are told apart without opening Settings. Hide
- * stands at its end under the pointer, as a task row's acts do, the name
- * giving way to it; it hides the row and the Dock band for a demo. A hidden
- * row keeps its place unseen and comes in under the pointer as Show branch,
- * the way back without the menu bar's View > Developer > Show Build Label.
- * A release, the web, and a fixture run, whose captures are the product's
- * pictures, draw none.
- */
 function SidebarBuild(): React.JSX.Element | null {
   const run = useQuery({ ...appStateQuery, select: selectRun }).data;
   const facts = useQuery({ ...appStateQuery, select: selectWindow }).data;
@@ -236,7 +190,6 @@ function SidebarBuild(): React.JSX.Element | null {
   );
 }
 
-/** Who the menu is about, over its items: the account's name, and its email muted under it. */
 export function AccountHeading({
   account,
 }: {
@@ -266,19 +219,10 @@ export function AccountHeading({
   );
 }
 
-/**
- * The account's menu: the reader's own page where the window offers one; the
- * changelog, the Keyboard shortcuts page, and the ways to write to the people
- * who make the app; then Sign out, while anyone is signed in to leave. Note
- * that Settings and Send feedback are left to the gear and the button beside
- * the account, which already stand one press away.
- */
 function accountMenuGroups(
   signedIn: boolean,
-  /** Whether the window is an installed app's, whose menu bar's chords the Keyboard shortcuts page lists. */
   desktopApp: boolean,
   acts: {
-    /** Opens the reader's own page; none outside the window, or before the account's id is known. */
     onProfile: (() => void) | undefined;
     onOpenChangelog: () => void;
     onOpenIssues: () => void;
@@ -323,12 +267,6 @@ function accountMenuGroups(
   return groups;
 }
 
-/**
- * The account menu's items, each wired to what it does in the window, for
- * the foot's menu and a phone's (`phone-account.tsx`) alike. Sign out acts
- * on the press, as Settings' does, and a refusal is said in a toast
- * (`signOutSayingFailure`).
- */
 export function useAccountMenuGroups(
   account: AccountSnapshot,
   onSignOut: () => Promise<void>,
@@ -350,7 +288,6 @@ export function useAccountMenuGroups(
   });
 }
 
-/** The foot's account button and the menu it raises. */
 function AccountMenu({
   account,
   shown,
@@ -386,12 +323,6 @@ function AccountMenu({
   );
 }
 
-/**
- * The foot of the column: the account, which opens its menu; a release on
- * its way in, and the Mac offline, while they hold; Send feedback, which
- * opens the feedback dialog; and the gear, the one press to
- * Settings.
- */
 export function SidebarFoot({
   account,
   updates,
@@ -402,9 +333,7 @@ export function SidebarFoot({
 }: {
   account: AccountSnapshot;
   updates: UpdateControl;
-  /** Whether the sidebar is in sight; folded away, nothing it opened stands over the window. */
   shown: boolean;
-  /** Whether Settings is the page on show, which the gear marks. */
   settingsOpen: boolean;
   onSettings: () => void;
   onSignOut: () => Promise<void>;

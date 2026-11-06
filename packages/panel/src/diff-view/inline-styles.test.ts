@@ -3,14 +3,6 @@ import type { Element } from "hast";
 import { test } from "vitest";
 import { toHtml } from "./inline-styles.js";
 
-/**
- * inline-styles.test.ts -- the HTML a diff is written as carries no `style` the
- * panel's policy would refuse: each inline style is written in the data
- * attribute the bundle applies through the CSSOM, and the tree Pierre keeps
- * to draw from again is left as it was. Synthetic markup only.
- */
-
-/** A column with its row span, holding a token colored in both themes and a plain one. */
 function column(): Element {
   return {
     type: "element",

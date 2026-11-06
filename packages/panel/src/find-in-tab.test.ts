@@ -10,13 +10,6 @@ import { runAppCommand } from "./app-commands.js";
 import { FindScope } from "./find-in-tab.js";
 import { holdMotion, releaseMotion } from "./testing/motion-held.js";
 
-/**
- * find-in-tab.test.ts -- the find bar over a tab leaves as it arrives: Escape
- * or its close puts it away, focus back where ⌘F found it, the bar drawn
- * through its fade out on the exit token, taking no press and saying what it
- * last said, and gone once the fade has run, or at once where motion is held.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -39,7 +32,6 @@ afterEach(() => {
 
 const BAR = '.find-bar[role="search"]';
 
-/** A tab with words in it, and a button holding focus before the bar opens, with the find bar opened by ⌘F. */
 function opened(): HTMLButtonElement {
   const before = document.createElement("button");
   const host = document.createElement("div");
@@ -63,7 +55,6 @@ function opened(): HTMLButtonElement {
   return before;
 }
 
-/** Escape pressed in the bar's field. */
 function pressEscape(): void {
   const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field);

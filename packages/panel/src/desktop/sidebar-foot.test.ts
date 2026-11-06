@@ -25,12 +25,6 @@ import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 
-/**
- * The sidebar's foot as the developer meets it: the account's menu in
- * Cursor's order, Settings, what the menu bar's Help menu offers, Contact
- * us, and Sign out, which acts on the press.
- */
-
 const DEAN: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
   email: "dean@example.com",
@@ -40,7 +34,6 @@ const DEAN: AccountSnapshot = {
 
 const roots: Root[] = [];
 
-/** Every act the foot sent, in order. */
 let sent: { kind: string }[] = [];
 
 beforeEach(() => {
@@ -60,12 +53,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * Hands the window main's document with `patch`, its run a development build
- * of `branch`, and waits for the foot to draw that branch and for what Query
- * notifies beside it: one client holds a
- * test's document across its mounts, so the branch is what says this one landed.
- */
 async function footOn(
   branch: string,
   patch: Partial<AppStateSnapshot>,
@@ -75,18 +62,15 @@ async function footOn(
   handState({}, { ...patch, run: { ...base, commit: { sha: "a10eee5", dirty: false, branch } } });
   mount(DEAN, options);
   await vi.waitFor(() => assert.equal(document.body.textContent?.includes(branch), true));
-  // Note that a slice drawn apart from the branch, the network's or the run's capabilities, may reach the foot a Query notification later.
   await settleQueries();
 }
 
-/** Lets the window's document, handed through the bridge's promise, reach what is drawn. */
 async function stateArrived(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/** The Help menu's commands, offered as `App` offers them, each press written down. */
 function HelpOffers({ ran }: { ran: string[] }): null {
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => ran.push(APP_COMMAND.SEND_FEEDBACK));
   useAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS, () => ran.push(APP_COMMAND.KEYBOARD_SHORTCUTS));
@@ -144,7 +128,6 @@ function mount(
       ),
     ),
   );
-  // Note that a refusal's toast is shown on the window's own registry, which `showToast` writes to.
   const toasts = document.createElement("div");
   document.body.append(toasts);
   const toastRoot = createRoot(toasts);
@@ -160,13 +143,11 @@ function accountMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"][aria-label="Account"]');
 }
 
-/** The account menu's own lines as they stand down its scrolling column: its heading, items, and rules. */
 function accountMenuColumn(): Element[] {
   const first = accountMenu()?.querySelector('[role^="menuitem"]');
   return [...(first?.parentElement?.children ?? [])];
 }
 
-/** The open account menu as it reads down: its heading, each item's label and chord, and a dash for each rule; not the unseen focus guards a submenu standing beside it leaves among them. */
 function accountMenuLines(): string[] {
   accountMenu() ?? assert.fail("the account's menu stands");
   const lines = accountMenuColumn().filter((line) =>
@@ -181,12 +162,10 @@ function accountMenuLines(): string[] {
   });
 }
 
-/** Contact us's submenu, while it stands. */
 function contactMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"][aria-label="Contact us"]');
 }
 
-/** Lays an element out where the window would, which jsdom never does. */
 function placeAt(
   element: Element,
   box: { left: number; top: number; width: number; height: number },
@@ -196,7 +175,6 @@ function placeAt(
   );
 }
 
-/** The open account menu's own item by its label, not a submenu's. */
 function accountItem(label: string): HTMLButtonElement {
   const item = accountMenuColumn().find(
     (line): line is HTMLButtonElement =>
@@ -295,7 +273,6 @@ test("Left or Escape closes Contact us's menu alone, and choosing in it closes b
 test("in the window's bottom-left corner, Contact us's menu opens rightward and rises so it ends level with its row", async () => {
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(1000);
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(700);
-  // Note that the page's root is the window's size, as a browser lays it out, though jsdom lays out nothing.
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1000);
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(700);
   const button = mount(DEAN);
@@ -308,7 +285,6 @@ test("in the window's bottom-left corner, Contact us's menu opens rightward and 
     height: 340,
   });
   placeAt(contact, { left: 16, top: 640, width: 200, height: 32 });
-  // Note that a menu is laid out 196 by 74, its own offset size as well, as a browser lays it out, though jsdom lays out nothing.
   const menuBox = (element: HTMLElement) =>
     element.getAttribute("role") === "menu" ||
     element.querySelector(':scope > [role="menu"]') !== null;
@@ -332,7 +308,6 @@ test("in the window's bottom-left corner, Contact us's menu opens rightward and 
   });
 
   act(() => contact.click());
-  // Note that Base UI places the submenu over a few promises rather than in the render that opened it.
   await act(async () => {
     for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
   });

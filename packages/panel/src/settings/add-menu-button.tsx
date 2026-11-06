@@ -10,32 +10,17 @@ import { PlusIcon } from "@repo/ui/icons";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
 
-/**
- * add-menu-button.tsx -- a Settings row's Add press that picks what to add from the app's searched menu: GitHub's Add repository, the Slack bot's Add channel.
- *
- * The outline `Button` with its plus, and under it `@repo/ui`'s
- * `SearchableMenu` hung from its end at a Settings picker's width. The menu
- * reads what it lists as it opens (`onOpen`), so a list that failed is asked
- * for again; it closes on a pick, on Escape, and on focus leaving it, and a
- * close hands the keyboard back to the button, as a picker's chip takes it.
- */
-
-/** What the press is handed: its words, the menu's rows or what stands in their place, and what a pick does. */
 interface AddMenuButtonProps {
-  /** The press's words, which name the menu too. */
   label: string;
   placeholder: string;
   noMatch: string;
   rows: readonly MenuRow[];
-  /** Drawn in place of the rows while they are read, could not be, or are none; handed the menu's close where it holds a link that leaves. */
   note?: React.ReactNode | ((close: () => void) => React.ReactNode);
   onOpen?: (() => void) | undefined;
   onPick: (id: string) => void;
-  /** Whether its menu's words are the app's own, which a screen recording shows as they read, but for a row that is `replayMasked` (`SearchableMenu`'s `replayUnmasked`). */
   replayUnmasked?: boolean | undefined;
 }
 
-/** The Add press and its menu, as above. */
 export function AddMenuButton({
   label,
   placeholder,

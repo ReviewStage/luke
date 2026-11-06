@@ -5,10 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
 import { TurnCard } from "./turn-card.js";
 
-/** The Mac's own region, read by a time asked for in no locale of its own: one that sets the clock on 24 hours. */
 const MAC_REGION = "en-GB";
 
-/** Has every time asked for in no locale of its own read the Mac's region as `MAC_REGION`, as macOS hands it to the window. */
 function onMacRegion(): void {
   for (const method of ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"] as const) {
     const says = Date.prototype[method];

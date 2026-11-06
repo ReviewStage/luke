@@ -7,20 +7,8 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { useNamer } from "./pull-request-people.js";
 
-/**
- * minimized-threads.tsx -- a line's review threads drawn small while Minimize inline comments is on, as stage-cli draws them: one chip at the end of the line, the faces of who wrote on it, how many comments, and whether every thread is resolved, which shows the threads or puts them away.
- *
- * The chip stands in a row of no height of its own, floated up over the end
- * of the line it is on, so the diff reads as if the line held no comments;
- * the threads, once shown, are drawn under the chip as they are while
- * nothing is minimized. Shown or put away, the line is told the view
- * (`onShown`), which keeps it so while the setting stands.
- */
-
-/** How many faces a chip draws before the rest go uncounted, as stage-cli's does. */
 const CHIP_FACES = 4;
 
-/** What a chip says of a line's threads, and what pressing it does. */
 const CHIP_WORDS = {
   comments: (count: number) => (count === 1 ? "1 comment" : `${count} comments`),
   open: (count: number) => (count === 0 ? "all resolved" : `${count} open`),
@@ -30,7 +18,6 @@ const CHIP_WORDS = {
   HIDE_HINT: "Hide comments",
 } as const;
 
-/** Everyone who wrote on the threads, each once, in the order they first wrote. */
 function writersOf(threads: readonly ReviewThread[]) {
   const seen = new Map<string, ReviewThread["comments"][number]["by"]>();
   for (const comment of threads.flatMap((thread) => thread.comments)) {
@@ -39,14 +26,6 @@ function writersOf(threads: readonly ReviewThread[]) {
   return [...seen.values()];
 }
 
-/**
- * A line's cards drawn small: the chip, a fold's summary, which shows whether
- * every thread on it is resolved where its cards have a state, the faces of
- * who wrote them, and how many, said whole to a screen reader with what
- * pressing it does; and the cards it folds, drawn under it once shown. Note
- * that a fold is what lets the tab's find reach the cards while they are
- * put away, and open the line whose words it brings into view.
- */
 function MinimizedChip({
   label,
   faces,
@@ -57,21 +36,13 @@ function MinimizedChip({
   above = false,
   children,
 }: {
-  /** The chip said whole, ending with what pressing it does. */
   label: string;
-  /** The faces of who wrote the cards, as many as the chip draws. */
   faces: ReactNode;
-  /** How many comments the cards hold. */
   count: number;
-  /** Whether every thread under the chip is resolved; none for cards with no state, as the app's notes have none. */
   resolved?: boolean | undefined;
-  /** Whether the cards stand above the code, on no line, where the chip takes a row of its own rather than floating over a line. */
   above?: boolean;
-  /** Whether the cards stand under the chip. */
   shown: boolean;
-  /** Told the cards were shown or put away, by the chip or by the find. */
   onShown: (shown: boolean) => void;
-  /** The cards as they are drawn while nothing is minimized. */
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -99,16 +70,10 @@ function MinimizedChip({
   );
 }
 
-/** What pressing a chip does, as its label ends: shows the cards, or puts them away. */
 function chipPress(shown: boolean): string {
   return shown ? CHIP_WORDS.HIDE : CHIP_WORDS.SHOW;
 }
 
-/**
- * One line's threads minimized (`MinimizedChip`): who wrote on them, how
- * many comments, and how many are still open ("3 comments by dana, sam · 1
- * open, show").
- */
 export function MinimizedThreads({
   threads,
   shown,
@@ -117,13 +82,9 @@ export function MinimizedThreads({
   children,
 }: {
   threads: readonly ReviewThread[];
-  /** Whether the threads stand above the diff, on no line, where the chip takes a row of its own rather than floating over a line. */
   above?: boolean;
-  /** Whether the threads stand under the chip. */
   shown: boolean;
-  /** Told the threads were shown or put away, by the chip or by the find. */
   onShown: (shown: boolean) => void;
-  /** The threads as they are drawn while nothing is minimized. */
   children: ReactNode;
 }): React.JSX.Element {
   const name = useNamer();

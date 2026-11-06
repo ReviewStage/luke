@@ -14,14 +14,6 @@ import { installActPortClient } from "./app-bridge.js";
 import { installShownFailureReporter, reportShownFailure } from "./failure-report.js";
 import { fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
 
-/**
- * The act door, against the port's own server: a refusal reaches the caller
- * as a rejection carrying the sentence the kind's procedure draws, and an
- * answer reaches it as the host gave it. A failure that is no refusal, the
- * transport's or a fault's, reaches it as one fixed sentence, its own text
- * kept as the cause and logged, never read by a person.
- */
-
 const PANEL: ActSender = { sender: Symbol("window"), panel: true };
 const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
@@ -32,7 +24,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** This window's act port, served the account asks' procedures alone, standing as `actor`. */
 function openActPort(actor: ActSender): void {
   const noKeys = () => Effect.succeed({ keys: [] });
   const noToken = () => Effect.succeed({ token: null });

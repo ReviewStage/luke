@@ -5,13 +5,6 @@ import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
 import { test } from "vitest";
 import { onTerminalPort } from "./terminal-port.js";
 
-/**
- * The ports main posts for attached shells, as the page receives them: one
- * the preload hands in under the terminal channel, with a ticket naming its
- * shell, reaches the tab; one posted from any other source, or with no
- * ticket, never does.
- */
-
 const TICKET = { agentId: "agent-1", terminalId: "shell-1" };
 
 function received(init: MessageEventInit): readonly unknown[] {

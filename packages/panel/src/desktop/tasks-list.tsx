@@ -154,102 +154,32 @@ import { type ChosenTasks, useTasksSelection } from "./tasks-selection.js";
 import { useHeldTasks } from "./use-held-tasks.js";
 import { useTaskDrag } from "./use-row-drag.js";
 
-/**
- * tasks-list.tsx -- the Tasks page's List: the listed workspace's tasks under their pins, the account's sections, and the grouping chosen, each group folding under its head, each row a line of columns that stand one under another down the page, changed where it stands and dragged from group to group.
- *
- * It is one of the Tasks page's two views (`tasks-page.tsx`). It runs the
- * pinned tasks first, then each of the account's sections while it keeps
- * them, then the rest under the grouping chosen, by status from the work
- * under way at first (`tasksListGroups`). Every row of the page is a row of
- * one grid, as Linear's list stands its rows: the task's priority, key, and
- * status before its name, and after it how many Inbox threads of it wait on
- * the reader, its repository led by its owner's picture, as the sidebar
- * draws one (`RepositoryPicture`), its assignee's face, or the dashed
- * unassigned mark, its creator's face, the one icon of how its agents
- * stand (`TaskAgentsMark`), when it last moved, and its ⋯, each
- * where the view draws it, so each column lines up down the whole page
- * whatever any one row holds.
- *
- * A row is changed where it stands, as a Board card is
- * (`task-row-parts.tsx`): its priority, status, and assignee are chips
- * dropping the menu that changes them, and the task's own menu, whose Rename makes
- * its name its field, which its ⋯, shown while the row is in hand, a right-click, and
- * the menu key open alike (`useRowMenu`). A press anywhere else on the row opens the
- * task. The row hangs no card for the whole task, which would say what its columns
- * already do; its assignee's face and its creator's hang their own instead.
- *
- * Each group draws only the rows near the view (`VirtualRows`), as the
- * Inbox's list does, so a long workspace's List draws as quickly as a short
- * one; every row while a find bar stands open over it, and the row holding
- * the keyboard wherever the page is scrolled. The keys, the choosing, and a
- * drag still reach the rows left undrawn, each brought in where it is
- * reached.
- *
- * A group's head folds it, kept on this Mac (`KEPT.FOLDS`), its count
- * standing beside its name either way. A row is dragged by its press
- * (`use-row-drag.ts`): within Pinned or a section to a new place there; onto
- * another status's, priority's, or assignee's group, which sends it that
- * status or priority, or assigns it to that person, No assignee's assigning
- * it to no one, as the Board's columns do; onto Pinned, which pins it; and
- * onto a section, which keeps it there. As in the sidebar, a task stands in
- * one place, so a row dragged out of Pinned is unpinned and one dragged out
- * of a section leaves it. A group of a repository or of a creator takes no
- * drop, since a drag cannot say either. A row under an assignee's group
- * leaves its own assignee's cell empty, as the group's head says it, but on
- * a phone, whose rows are changed by their chips alone. A phone's List has no room for
- * most columns beside a name, nor a drag beside its scrolling,
- * so it draws only a row's chips, its name, and its time, its rows changed
- * by their chips and menus, the rest on its card. A wider List narrowed,
- * beside a side panel or in a small window, folds those same columns away
- * by its own width, one by one in a fixed order, before its names are
- * squeezed (`fitted-columns.ts`).
- *
- * Rows are chosen together (`SelectionRegion`): by the box in a row's gutter,
- * which comes in under the pointer and stays on every row while any is
- * chosen, by X on the row in hand, and as a Mac's list chooses them, ⌘-click
- * one in or out, ⇧-click a run, ⇧↑↓ grow it, ⌘A every row of an open group, and Esc
- * none, across every group, while a plain press still opens the task. While any is chosen, a bar floating at the foot of the page acts on
- * them all at once: Mark done, Set status, and Move to section, each
- * answered by one toast whose Undo puts every task back where it stood.
- */
-
-/** What the page is called, to a screen reader. */
 const TASKS = "Tasks";
 
-/** What the page is read as while the tasks are. */
 const READING_LINE = readingWords(TERM.TASK.many);
 
-/** What the page says where the tasks could not be read. */
 const UNREAD_LINE = readFailedWords(`your ${TERM.TASK.many}`);
 
-/** What the List says where the filter and the view leave no task standing. */
 const NONE_STANDING = "No tasks match this view";
 
-/** What a group with no task says, and a section with none where rows are dragged into it, as the sidebar's says. */
 const NO_TASKS = "No tasks";
 const DRAG_HERE = "Drag tasks here";
 
-/** What a group of pinned tasks is called. */
 const PINNED = "Pinned";
 
-/** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
 const ROW_HANDLE = CARD_PRESS_SELECTOR;
 
-/** How tall a row is taken to be before it is drawn, in pixels: a control's height and its insets (`min-h-tasks-list-row`). */
 const ROW_ESTIMATE_PX = 36;
 
-/** A group's rows, and the lines its quick add draws over them: each a subgrid of the List's columns, its rows edge to edge. */
 const ROWS_GRID =
   "col-span-full m-0 grid list-none grid-cols-subgrid content-start gap-x-[normal] p-0";
 
-/** The drop zone Pinned is, the zone of the run of every task, and No assignee's; a section's is its id, a status's or a priority's its value, and an assignee's their account id. */
 const DROP_ZONE = {
   PINNED: "pinned",
   ALL: "all",
   NO_ASSIGNEE: "no-assignee",
 } as const;
 
-/** The groups folded, each kind by the values its groups stand for; absent where none is. */
 const storedFolds = Schema.fromJsonString(
   Schema.Struct({
     pinned: Schema.optionalKey(Schema.Boolean),
@@ -264,18 +194,15 @@ const storedFolds = Schema.fromJsonString(
 
 type ListFolds = typeof storedFolds.Type;
 
-/** The List's folded groups, kept on this Mac. */
 const KEPT = {
   FOLDS: keptKey("app.tasksListFolds", storedFolds),
 } as const;
 
-/** A set of folded values with one folded or opened. */
 function flipped<T>(held: readonly T[] | undefined, value: T): readonly T[] {
   const kept = held ?? [];
   return kept.includes(value) ? kept.filter((each) => each !== value) : [...kept, value];
 }
 
-/** Whether a group is folded; the run of every task has no head to fold it by. */
 function foldedIn(folds: ListFolds, head: TasksGroupHead): boolean {
   switch (head.kind) {
     case TASKS_GROUP.PINNED:
@@ -297,7 +224,6 @@ function foldedIn(folds: ListFolds, head: TasksGroupHead): boolean {
   }
 }
 
-/** The folds with a group folded or opened. */
 function toggledIn(folds: ListFolds, head: TasksGroupHead): ListFolds {
   switch (head.kind) {
     case TASKS_GROUP.PINNED:
@@ -319,7 +245,6 @@ function toggledIn(folds: ListFolds, head: TasksGroupHead): ListFolds {
   }
 }
 
-/** Which groups are folded, and the press that folds or opens one, kept on this Mac as it is pressed. */
 function useListFolds(): {
   folded: (head: TasksGroupHead) => boolean;
   toggle: (head: TasksGroupHead) => void;
@@ -331,7 +256,6 @@ function useListFolds(): {
   };
 }
 
-/** The drop zone a group is, where a row may be dropped into it: none for a repository's or a creator's. */
 function zoneOf(head: TasksGroupHead): string | undefined {
   switch (head.kind) {
     case TASKS_GROUP.PINNED:
@@ -351,12 +275,10 @@ function zoneOf(head: TasksGroupHead): string | undefined {
   }
 }
 
-/** Whether a group keeps an order of its own, which a drag sets: Pinned's and a section's. */
 function ordered(head: TasksGroupHead): boolean {
   return head.kind === TASKS_GROUP.PINNED || head.kind === TASKS_GROUP.SECTION;
 }
 
-/** What keys a group among the List's: the value it stands for, a section by its id, and the pins and the run of every task by their kind, none of which another group's value can be. */
 function groupKey(head: TasksGroupHead): string {
   switch (head.kind) {
     case TASKS_GROUP.SECTION:
@@ -376,14 +298,12 @@ function groupKey(head: TasksGroupHead): string {
   }
 }
 
-/** What the page stands: its read, or none of the workspace's tasks. */
 function listState(tasks: TasksControl, empty: boolean): CollectionState {
   if (tasks.listFailed && empty) return COLLECTION_STATE.ERROR;
   if (!tasks.listRead && !tasks.listFailed) return COLLECTION_STATE.LOADING;
   return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
-/** The account's sections in the listed workspace, each with its tasks' ids in its own order; none while it keeps no sections. */
 function listSections(tasks: TasksControl): readonly TasksSection[] {
   const workspaceId = tasks.workspace?.id;
   if (workspaceId === undefined) return [];
@@ -393,16 +313,13 @@ function listSections(tasks: TasksControl): readonly TasksSection[] {
   }));
 }
 
-/** What heads a group of the List: its glyph, its name, and its hint where the name does not say the whole of it. */
 interface GroupHead {
   readonly icon: ReactNode;
   readonly name: string;
   readonly hint?: string | undefined;
-  /** Whether its name is a person's, a repository's, or a section's, which a screen recording keeps masked. */
   readonly masked?: boolean | undefined;
 }
 
-/** How the List names and draws the people its groups stand for: by account id, null for no one. */
 interface GroupPeople {
   readonly creatorName: (creatorId: string | null) => string;
   readonly creatorMark: (creatorId: string) => ReactNode;
@@ -410,11 +327,9 @@ interface GroupPeople {
   readonly assigneeMark: (assigneeId: string) => ReactNode;
 }
 
-/** What heads a group: its glyph and its name. */
 function groupHead(
   head: TasksGroupHead,
   tasks: TasksControl,
-  /** Every repository a group or a row stands for, which a repository's name tells its own apart from. */
   repositories: readonly { readonly repository: string | null }[],
   people: GroupPeople,
 ): GroupHead {
@@ -424,7 +339,6 @@ function groupHead(
     case TASKS_GROUP.SECTION: {
       const section = tasks.taskSections.sections.find((each) => each.id === head.sectionId);
       const glyph = sectionGlyph(section?.icon) ?? <GLYPH.SECTION />;
-      // Note that a section's emoji is drawn as words, which a screen recording keeps masked, while a glyph is a picture.
       return {
         icon:
           section?.icon?.kind === TASK_SECTION_ICON_KIND.EMOJI ? (
@@ -482,25 +396,21 @@ function groupHead(
   }
 }
 
-/** Where a pin stands among the pins: its position, and when it was pinned. */
 const pinPlaceOf = (task: TaskSummary): PinPlace => ({
   position: task.pinPosition,
   at: task.pinnedAt ?? 0,
 });
 
-/** The pins' new places as the moves the account keeps. */
 function pinMoves(positions: ReadonlyMap<TaskSummary, string>) {
   return [...positions].map(([task, position]) => ({ agent: false, id: task.id, position }));
 }
 
-/** The write that takes a task out of the section it is kept in; none where it is in none. */
 function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
   return sectionEntries(tasks.taskSections).has(taskId)
     ? [{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]
     : [];
 }
 
-/** A section's entries for the tasks its group draws, in its own order; its agents, which the List draws not, left out. */
 function drawnEntries(tasks: TasksControl, group: TasksGroup, sectionId: string) {
   const drawn = new Set(group.tasks.map((task) => task.id));
   return sectionOrder(tasks.taskSections, sectionId).flatMap((entry) =>
@@ -508,21 +418,11 @@ function drawnEntries(tasks: TasksControl, group: TasksGroup, sectionId: string)
   );
 }
 
-/** What a group's drag does, each row heard by its task's id: its rows moved within it, where it keeps an order, and a row let go over another group's zone. */
 interface ListDrops {
   readonly move: (group: TasksGroup) => ((taskId: string, to: number) => void) | undefined;
   readonly dropOut: (group: TasksGroup, taskId: string, zone: string, at: number) => void;
 }
 
-/**
- * The List's drag: a row moved within Pinned or a section stands there at
- * its new place; let go over another group, it is pinned there, kept in
- * that section, or sent that group's status, priority, or assignee, and
- * leaves Pinned or its section where it came from one, as the sidebar keeps
- * a task in one place. Each lands at once; a status, priority, or assignee
- * the service refuses goes back, and so does the row, to Pinned or its
- * section, as the tab reads when the refusal comes (`latest`).
- */
 function listDrops(
   tasks: TasksControl,
   latest: () => TasksControl,
@@ -554,7 +454,6 @@ function listDrops(
     const task = group.tasks.find((each) => each.id === taskId);
     const onto = groups.find((each) => zoneOf(each.head) === zone)?.head;
     if (task === undefined || onto === undefined) return;
-    // A task stands in one place, so one carried out of Pinned is unpinned, and one carried out of its section leaves it.
     const fromPins = group.head.kind === TASKS_GROUP.PINNED;
     const leaving: TaskSectionWrite[] =
       group.head.kind === TASKS_GROUP.SECTION && onto.kind !== TASKS_GROUP.SECTION
@@ -564,7 +463,6 @@ function listDrops(
       if (fromPins) tasks.onMarkTask(task.id, TASK_MARK.UNPIN);
       if (leaving.length > 0) tasks.onWriteSections(leaving);
     };
-    // Note that a row put back is pinned anew, so it is placed as a new pin dropped at its place among every pin of the workspace, the filter's hidden ones too, any neighbor its new pin instant would cross given a position, as a row dragged into Pinned is; and kept in its section under the rows it stood under.
     const before = tasks.taskSections;
     const allPins = inPinOrder(
       tasks.listed.tasks.filter((each) => each.pinnedAt !== undefined),
@@ -587,7 +485,6 @@ function listDrops(
     };
     switch (onto.kind) {
       case TASKS_GROUP.PINNED: {
-        // Note that the task lands as one pinned now, with no place of its own yet, as the sidebar pins one dragged into Pinned.
         const { pinPosition: _position, ...rest } = task;
         const moving: TaskSummary = { ...rest, pinnedAt: Date.now() };
         leave();
@@ -626,14 +523,6 @@ function listDrops(
   return { move, dropOut };
 }
 
-/**
- * One task's row on the page (`task-list-row.tsx`), and the cells only the
- * page draws, each in its own column where the view draws it: what waits on
- * the reader, and its creator's face, its maker named before it. Note
- * that it is held while what it is handed stands (`memo`), each prop a plain
- * value or a steady door, so a change to one task draws its row alone, and
- * the minute moves only its time.
- */
 const TasksPageRow = memo(function TasksPageRow({
   tasks,
   task,
@@ -653,27 +542,18 @@ const TasksPageRow = memo(function TasksPageRow({
 }: {
   tasks: TaskRowTab;
   task: TaskSummary;
-  /** The task the window has open, where it is this one (`openedTaskOf`). */
   opened: OpenedTask | undefined;
   workspaceName: string;
-  /** The task's repository as the row says it: its name alone, unless another repository the List draws shares it. */
   repositoryName: string;
-  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   properties: readonly TaskRowCell[];
-  /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld: boolean;
-  /** How many of its sub-tasks are finished, of all of them, `subTasksTotal`; none where it has none. */
   subTasksFinished: number;
   subTasksTotal: number;
-  /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
-  /** Whether it draws its menu's ⋯, which a finger's List leaves out. */
   more: boolean;
-  /** Opens a task by its id. */
   onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
-  /** Where it stands in its group's run of rows (`VirtualRows`). */
   place: VirtualRowPlace;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
@@ -697,7 +577,6 @@ const TasksPageRow = memo(function TasksPageRow({
       onStanding={(standing) => onStanding(task, standing)}
       content={{
         [TASK_PROPERTY.WAITING]: <WaitingCount count={waiting} />,
-        // Note that a task the app or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does.
         [TASK_PROPERTY.CREATOR]: (
           <>
             {maker === undefined ? null : (
@@ -718,10 +597,8 @@ const TasksPageRow = memo(function TasksPageRow({
   );
 });
 
-/** The chips a quick add's draft draws in the cells of the properties the List draws, by the property each says. */
 const DRAFT_CELLS = [TASK_PROPERTY.PRIORITY, TASK_PROPERTY.STATUS, TASK_PROPERTY.ASSIGNEE] as const;
 
-/** The draft's chip for a property, where it has one. */
 function draftChip(draft: DraftParts, property: TaskRowCell): ReactNode {
   if (property === TASK_PROPERTY.PRIORITY) return draft.priority;
   if (property === TASK_PROPERTY.STATUS) return draft.status;
@@ -729,15 +606,6 @@ function draftChip(draft: DraftParts, property: TaskRowCell): ReactNode {
   return null;
 }
 
-/**
- * A List group's quick add line: a row of the list's own cells, raised as a
- * card off the page as a Board's draft is, so it reads as one being written, the draft's
- * chips in the cells of its priority, status, and assignee and its bare
- * title in the name's, so it reads as the row it is about to be; a chip
- * whose column the List does not draw stands after the title, so each
- * stays in reach. An add still out stands as its row, its name muted, and
- * why one was refused in the name's cell.
- */
 function listQuickAddLine(properties: readonly TaskRowCell[]): QuickAddLine {
   return ({ draft, pending, refused }) => (
     <TaskRowDraft
@@ -766,13 +634,6 @@ function listQuickAddLine(properties: readonly TaskRowCell[]): QuickAddLine {
   );
 }
 
-/**
- * Where the List's runs of rows stand: the page's scroller they stand in,
- * the List's grid, whose resizing moves the runs below a group that grew or
- * folded, whether a find bar stands open, which draws every row so the find
- * covers them, and where each run is held while it stands, so a row out of
- * view can be brought in.
- */
 interface ListRunsPlace {
   readonly scroller: RefObject<HTMLElement | null>;
   readonly list: RefObject<HTMLElement | null>;
@@ -780,14 +641,6 @@ interface ListRunsPlace {
   readonly holdRun: VirtualRuns["hold"];
 }
 
-/**
- * One group: its head, a press that folds and opens it, its glyph, name,
- * and count, and the + that adds a task in it in place (`quick-add.tsx`),
- * its lines standing over the rows; and its rows, drawing only those near
- * the view (`VirtualRows`), or a line saying it holds none. The group is a
- * drop zone where a row may be let go in it, and its rows are dragged
- * within it, where it keeps an order, and out of it.
- */
 function TasksListGroup({
   group,
   head,
@@ -807,17 +660,12 @@ function TasksListGroup({
   folded: boolean;
   onToggle: () => void;
   drops: ListDrops;
-  /** Whether its rows are dragged at all: not on a phone, whose drag is its scroll. */
   draggable: boolean;
-  /** Shows every settled task, as the group's "+ N older" line asks. */
   onShowOlder: () => void;
   tasks: TasksControl;
-  /** The cells the rows draw, which a quick add's line stands its own on. */
   properties: readonly TaskRowCell[];
   place: ListRunsPlace;
-  /** Draws a task's row, wearing its place in the run. */
   row: (task: TaskSummary, at: VirtualRowPlace) => ReactNode;
-  /** What each group's run measured, by the group's key, held across the page's visits. */
   measured: Map<string, VirtualRowMeasurements> | undefined;
 }): React.JSX.Element {
   const runKey = groupKey(group.head);
@@ -836,7 +684,6 @@ function TasksListGroup({
   const into = quickAddInto(group.head);
   const quick = useQuickAdd(tasks, into ?? {});
   const adding = quick.shown;
-  // A folded group opens as its + asks, so the draft stands in sight.
   const add = () => {
     if (folded) onToggle();
     quick.open();
@@ -854,7 +701,6 @@ function TasksListGroup({
       ) : null
     ) : (
       <>
-        {/* Note that the quick add's lines stand in a list of their own, over the run, because a run draws only its rows. */}
         {adding ? (
           <Stack
             as={LAYOUT_ELEMENT.UL}
@@ -906,7 +752,6 @@ function TasksListGroup({
       data-row-drop={draggable ? zone : undefined}
       data-folded={folded ? "true" : undefined}
     >
-      {/* Note that one run of every task, grouped by nothing, needs no head of its own, and no fold. */}
       {titled ? (
         <GroupHeader
           label={head.masked === true ? <ReplayMask>{head.name}</ReplayMask> : head.name}
@@ -932,7 +777,6 @@ function TasksListGroup({
   );
 }
 
-/** The List's groups, each drawn on after its last task left it, or the filter took it away, until its exit has played (`ListMotion`); kept while the grouping stands, so changing it swaps every group at once. */
 function LeavingTasksGroups({
   groups,
   group,
@@ -944,7 +788,6 @@ function LeavingTasksGroups({
   return <>{drawn.map(({ value }) => group(value))}</>;
 }
 
-/** The List: the listed workspace's tasks under their pins, sections, and the grouping chosen, in one grid whose columns line up down the page. */
 export function TasksList({
   tasks,
   room,
@@ -961,11 +804,9 @@ export function TasksList({
   const folds = useListFolds();
   const waitingOn = useTasksWaiting(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
-  // Note that a finger's rows draw no ⋯, as a phone's mail list draws none, so their names keep the room: a long press opens a row's menu.
   const more = !useCoarsePointer();
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
   const subTaskCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
-  // The columns its display chose, and the sub-tasks' count beside them where any task has sub-tasks, folded for its own width (`fitted-columns.ts`).
   const chosen = useMemo(
     () =>
       subTaskCounts.size > 0 ? [...display.properties, LIST_COLUMN.SUB_TASKS] : display.properties,
@@ -993,7 +834,6 @@ export function TasksList({
       <ActorMark actor={assigneeFor(assigneeId, directory, listed)} size={ACTOR_SIZE.MARK} />
     ),
   };
-  // While the page is shown each task keeps the group and the place it was first drawn in, so one a teammate's change would move stays under the reader's eye.
   const groups = useHeldTasks(
     tasks,
     { workspaceId: tasks.workspace?.id, filter, display },
@@ -1010,7 +850,6 @@ export function TasksList({
         now,
       }),
   );
-  // Note that every door a row is handed stands across draws, so a row held while what it is handed does (`memo`) holds.
   const setStanding = useSteadyDoor(useStandingDoor(tasks));
   const rowTab = useTaskRowTab(tasks);
   const { region, agents } = tasks;
@@ -1020,7 +859,6 @@ export function TasksList({
     [groups],
   );
   const workspaceName = tasks.workspace?.name ?? "";
-  // What every task listed says in the cells whose words differ row to row, which its columns stand as wide as (`taskRowFit`); read again only as those change, since it walks every task.
   const fit = useMemo(
     () =>
       taskRowFit(
@@ -1053,18 +891,15 @@ export function TasksList({
     }),
     [fit, properties, more],
   );
-  // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
   const drops = listDrops(tasks, () => latest.current, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
-  // Every open group's tasks, in the order drawn down the page, those its run leaves undrawn among them; a folded group's are not drawn.
   const order = groups.flatMap((group) =>
     folds.folded(group.head) ? [] : group.tasks.map(taskIdOf),
   );
   const runs = useVirtualRuns();
-  // Note that the runs draw only the rows near the view, and every row while a find bar stands open over the page.
   const finding = useFindOpen();
   const runsPlace = useMemo(
     (): ListRunsPlace => ({ scroller, list, finding, holdRun: runs.hold }),
@@ -1072,8 +907,6 @@ export function TasksList({
   );
   const pressIn = (row: Element | null | undefined) =>
     row?.querySelector<HTMLElement>(ROW_HANDLE) ?? undefined;
-  // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn; a key
-  // reaching past the rows drawn goes on to the List's own first or last row, or the one after or before, brought in where it is not drawn.
   const roving = useRovingKeys<HTMLDivElement>({
     reach: (from, to) => {
       const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
@@ -1094,10 +927,8 @@ export function TasksList({
     },
   });
   const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
-  // Note that only rows an open group lists stay chosen, so a task the filter or a fold took away is never acted on.
   const selection = useTasksSelection(tasks, new Set(order), frame.chosen);
   const { regionId, selected } = selection;
-  // Note that the motion is handed what lays the rows out, so a draw that moved none measures none; a fold tells it of its own (`useListMotionReplay`).
   const laidOut = useMemo(() => ({ groups, properties }), [groups, properties]);
   return (
     <CollectionPage
@@ -1128,7 +959,6 @@ export function TasksList({
         </ErrorState>
       }
     >
-      {/* A refresh that failed after the tasks were read leaves them drawn, with a line over them. */}
       {tasks.listFailed && listed.length > 0 ? (
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.TASKS_REFRESH)}
@@ -1152,7 +982,6 @@ export function TasksList({
             {...motionRows()}
             style={listStyle}
           >
-            {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
             {groups.every((group) => group.tasks.length === 0) ? (
               <Text
                 variant={TEXT_VARIANT.CAPTION}
@@ -1218,7 +1047,6 @@ export function TasksList({
           </div>
         </ListMotion>
       </SelectionRegion>
-      {/* Note that the bar floats at the page's foot rather than over the rows, so choosing a row moves none under the pointer. */}
       <div className="tasks-list-selection pointer-events-none sticky bottom-ui-16 z-4 flex justify-center *:pointer-events-auto">
         <SelectionBar
           count={selected.size}

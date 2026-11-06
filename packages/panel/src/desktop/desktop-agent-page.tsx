@@ -109,75 +109,18 @@ import { tabCard } from "./tab-card.js";
 import { taskCardOf } from "./task-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
-/**
- * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
- *
- * An agent an automation's run starts belongs to the workspace rather than
- * to a task, so there is no task's column for its tab to stand in. Its page
- * stands where the task would, beside the sidebar, as the Inbox does, and
- * draws the task column's own agent pane (`main-tabs.tsx`'s `AgentPane`):
- * its transcript, its composer, its model and servers, and what it
- * published, at the document's reading width, each through the same
- * control a plan's agents are driven by, here holding the task list's row of
- * the one agent (`use-agents.ts`'s `agentId`), so opening it reads nothing
- * of the agent; an automation's agent holds the run that started it beside
- * it (`LIVE_READ.AGENT_ORIGINS`), read once while it is held. ⌘F finds in it as in a
- * plan's column. An `@` in its box offers its repository's files, its
- * skills, and the servers, read through its workspace since no plan names
- * them (`tasklessMentions`), the pages the agent showed and the pull request
- * it opened, and the workspace's agents, the app's box among
- * them, though it works in no repository; a skill a message names is its
- * chip, which opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
- * File tab reads a repository no plan names; and a dictation listens for its repository and
- * its title. A row of its inbox calls opens the window's Inbox on the
- * thread it names, as a link to the thread does. Beside it stands
- * the window's side panel, held by the agent while its page stands
- * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
- * pull request's chip its pull request, as on a task, and its toggle,
- * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
- * one, since the agent's own column opens no tab. Its title names the agent as
- * its tab would, and its ⋯ offers the agent's one menu, the very one its
- * tab's ⋯ offers on a task (`agent-actions.tsx`'s `agentMenuGroups`): Copy
- * link and Copy transcript, Rename, which turns the title into
- * its name's field, Show terminal, Archive, and Permanently delete, so an
- * agent with no task is acted on as a task's is; and, since such an agent
- * has a row of its own among the sidebar's tasks, what that row offers too:
- * Mark as unread or Mark as read, through a task's marks
- * (`agent-read-marks.ts`), and Pin or Unpin and Move to section, the
- * reader's own, while the agent is not archived; ⌘J and New terminal open its terminal as on a
- * task (`terminal-commands.tsx`). An archived agent takes no message, so
- * its composer gives way to its own Unarchive, which its ⋯ offers in
- * Archive's place, and it is not renamed. An agent the task list does not carry,
- * deleted or of a workspace the reader is not in, as a link may name, is not
- * found, and nothing of it is drawn. Whoever sent it a message is read against its
- * workspace's members, as on a plan, and the automation whose run started
- * it against its workspace's automations, so the prompt it opens on names
- * the automation and opens its page. An agent an automation's run started
- * leads its bar with the path to that automation, says under it what fired
- * the run, and steps through the automation's other runs' agents from the
- * bar's end (`automation-agent-run.tsx`). Escape leaves it for wherever it was
- * opened from, and so does any row of the sidebar.
- */
-
-/** What the page says where the agent could not be read. */
 const NOT_READ = "This agent could not be read.";
 
-/** Nothing to do, for the doors a task's column opens and this page does not have. */
 const nothing = (): void => undefined;
 
-/** No tab arrived anything: arrivals are a plan's. */
 const NO_UNREAD: readonly StripTab[] = [];
 
-/** What the page's ⋯ is called. */
 const ACTIONS_THING = "Agent";
 
-/** What the title's field is called for a reader, as an agent's tab calls its own. */
 const NAME_LABEL = "Agent name";
 
-/** What the place an agent started from Slack leads its bar with is called. */
 const SLACK_PLACE = "Slack";
 
-/** The trail an agent started from Slack leads its bar with: Slack, on its mark, opening the message it was started from; none for any other agent, or where Slack answered no link. */
 function slackTrail(agent: Pick<AgentSummary, "source">): readonly ToolbarPlace[] | undefined {
   const { source } = agent;
   if (source?.kind !== AGENT_SOURCE.SLACK || source.url === undefined) return undefined;
@@ -191,24 +134,12 @@ function slackTrail(agent: Pick<AgentSummary, "source">): readonly ToolbarPlace[
   ];
 }
 
-/**
- * The row the sidebar lists the agent by among its tasks, whose pin, read
- * marks, and section are the page's too: for an agent with no task, as the
- * listed workspace's agents hold it; none for an agent on a task, or one the
- * list does not hold, whose page then offers neither.
- */
 function listedAgent(tasks: TasksControl, agent: AgentSummary): TasklessAgent | undefined {
   if (agent.planId !== null) return undefined;
   const { standing, archived } = tasks.listedAgents;
   return [...standing, ...archived].find((each) => each.id === agent.id);
 }
 
-/**
- * What a tab of the agent's page is pinned on: the agent while the sidebar
- * lists it standing, which is where the pin is drawn, or the task of an
- * agent on one, whose panel holds the same tab; none for an archived agent,
- * or one not read yet, which the sidebar draws no pin of.
- */
 function pagePinOn(tasks: TasksControl, agent: AgentSummary | undefined): PinHolder | undefined {
   if (agent === undefined || agent.archivedAt !== undefined) return undefined;
   if (agent.planId !== null) return { task: agent.planId };
@@ -216,13 +147,6 @@ function pagePinOn(tasks: TasksControl, agent: AgentSummary | undefined): PinHol
   return standing ? { agent: agent.id } : undefined;
 }
 
-/**
- * The page's bar: its title and its ⋯, which offer the agent's one menu as
- * its tab in a task's column does (`agent-actions.tsx`'s
- * `agentMenuGroups`): its title turned into its name's field by Rename, and,
- * for an agent with no task, its sidebar row's own read mark, Pin, and
- * Move to section beside the tab's actions.
- */
 function AgentPageBar({
   tasks,
   agent,
@@ -238,19 +162,14 @@ function AgentPageBar({
   agent: AgentSummary;
   agents: AgentsControl;
   shown: boolean;
-  /** The places above the page, an automation's agent's alone: Automations and its automation (`automation-agent-run.tsx`). */
   trail: readonly ToolbarPlace[] | undefined;
-  /** What stands before the ⋯: the arrows through its automation's runs, an automation's agent's alone. */
   steps: React.ReactNode;
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenLocal">;
-  /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
-  /** A phone's head (`phone-head.tsx`): its way back, and the panel its ⋯ opens; none elsewhere. */
   phone?: AgentPagePhone | undefined;
 }): React.JSX.Element {
   const label = agentName(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
-  // The page's agent's ⌥⌘C, ⇧⌥⌘C, and ⌘⌫, as its ⋯'s items run them.
   const { onCopy, deletion } = actions.doors;
   const copies = shown ? onCopy : undefined;
   useAppCommand(
@@ -269,7 +188,6 @@ function AgentPageBar({
   const listed = listedAgent(tasks, agent);
   const reads = useAgentReadMarks();
   const sectionDialogs = useSectionDialogs(tasks, shown);
-  // Note that the agent on screen is unread only by a mark by hand, as its sidebar row reads it while current.
   const read =
     listed === undefined
       ? undefined
@@ -277,7 +195,6 @@ function AgentPageBar({
           unread: reads.markedUnread(agent.id),
           onMark: (next: boolean) => reads.mark(listed, next),
         };
-  // Note that an archived agent offers neither a pin nor a section, as an archived task.
   const own = listed !== undefined && agent.archivedAt === undefined;
   const agentPin = own
     ? {
@@ -288,7 +205,6 @@ function AgentPageBar({
   const section = own
     ? moveToSectionEntry(tasks, { agent: true, id: agent.id }, listed.workspaceId, sectionDialogs)
     : undefined;
-  // Note that the page's own head already leads with the Slack crumb an agent started from Slack opens, so its menu offers no Open in Slack beside it.
   const groups = agentMenuGroups({
     chosen: true,
     ...actions.doors,
@@ -314,13 +230,11 @@ function AgentPageBar({
     ) : (
       label
     );
-  // The agent's menu: a right-click on its name, or a phone's ⋯, which has no right-click to offer it on.
   const drawnMenu =
     menu.drawn === undefined ? null : (
       <ActionMenu
         label={moreLabel(ACTIONS_THING)}
         menu={menu.drawn}
-        // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
         groups={
           phone === undefined
             ? groups
@@ -378,19 +292,15 @@ function AgentPageBar({
   );
 }
 
-/** What a phone's way back out of a draft calls the agent, before the agent is read. */
 const AGENT = "Agent";
 
-/** What Show panel is called in a phone's ⋯, where the title bar's toggle is not drawn. */
 const SHOW_PANEL = "Show panel";
 
-/** What a phone's agent page heads itself with (`phone-head.tsx`): its way back, and the panel its ⋯ shows, while it is shut. */
 export interface AgentPagePhone {
   readonly back: TaskHeadBack;
   readonly onShowPanel: (() => void) | undefined;
 }
 
-/** The page's mentions, once there are any to hand; until then the box takes an `@` as the letter it is. */
 function AgentMentions({
   value,
   children,
@@ -401,7 +311,6 @@ function AgentMentions({
   return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
-/** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
 export function DesktopAgentPage({
   tasks,
   agentId,
@@ -409,15 +318,12 @@ export function DesktopAgentPage({
 }: {
   tasks: TasksControl;
   agentId: string;
-  /** A phone's way back out of the page, to the page it was opened from (`WindowHistory`'s `onLeave`), which heads it as a phone's page (`phone-head.tsx`); none elsewhere. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
-  // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
   const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
     undefined,
   );
   const draftShown = drafting?.agentId === agentId ? drafting.draftId : undefined;
-  // Escape leaves a draft for the agent it was opened from, its words kept, and the page otherwise.
   useAppCommand(
     APP_COMMAND.EXIT_AGENT_PAGE,
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
@@ -426,15 +332,12 @@ export function DesktopAgentPage({
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
   const { onArea, focus, setFocus } = useColumnFocus();
-  // The panel holds the keys while the focus went into it last, or while it fills the window over the page.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   const openAgents = useMemo(() => [agentId], [agentId]);
-  // ⌘T opens the panel's "+", the page's one, handing it the keys: the agent's own column opens no tab of its own.
   useAppCommand(APP_COMMAND.NEW_TAB, () => {
     setFocus(COLUMN.SIDE);
     sidePanel.onNewTab();
   });
-  // The agent as the task list carries it, on a task or with none, with its own workspace and repository.
   const { liveAgents } = tasks;
   const listedPage = useMemo(
     () => liveAgents?.find((each) => each.id === agentId),
@@ -448,25 +351,17 @@ export function DesktopAgentPage({
     listedPage,
     list: { read: tasks.listRead, failed: tasks.listFailed, onRetry: tasks.onRetryList },
     listedPullRequests: tasks.listedPullRequests,
-    // An agent of a task, an archived one opened here among them, offers what that task's mode lets it.
     modeOf: (planId) => tasks.tasks.find((each) => each.id === planId)?.mode,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
-    // An agent a Continue or a Fork started opens on its own page, as a Start's tab opens on a task.
     onStarted: tasks.agentView.onOpen,
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
-  // The run that started an automation's agent, held while its page stands; an agent the list names no automation of has none, and asks nothing.
   const run = useQuery(agentOriginQuery(agent?.automationName === undefined ? undefined : agentId));
-  // Note that the models come from the open task's agents where this page has not read them, so
-  // the agent is named alike in both; and that an archived agent, which takes no message, is
-  // brought back by its own Unarchive, there being no task to bring back with it.
   const { onArchive } = agents;
   const toast = useToast();
   const openLink = useReadLinkOpener();
-  // An Unarchive refused says why, as any other refusal of the agent's does.
-  // Note that it settles once the answer is said, so the note's Unarchive shows busy till then.
   const unarchive = () =>
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
@@ -478,16 +373,12 @@ export function DesktopAgentPage({
         });
       }
     }, nothing);
-  // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
   const { workspaceId, agentRepository } = agents;
   usePageWorkspace(agentId, workspaceId);
-  // Show terminal, ⌘J, and New terminal open the agent's terminals in the side panel, as its tab's do on a task.
   const terminalDoors = useAgentTerminalDoors(sidePanel, () => setFocus(COLUMN.SIDE));
-  // The workspace's agents an `@` offers, named by the tasks the window lists.
   const readMentionAgents = useMentionAgentsReader(workspaceId, tasks.tasks, agents.models);
   const listed = tasks.workspaces.find((each) => each.id === workspaceId);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
-  // The words a dictation into the agent's box listens for: its repository and its title.
   const keywords = useMemo(
     () =>
       dictationKeywords({
@@ -497,8 +388,6 @@ export function DesktopAgentPage({
       }),
     [agentRepository, agent?.title],
   );
-  // The pane draws the agent as the column's tab would: archived or not, it is the list's one agent.
-  // Note that what the pane is handed stands while it says the same, because the pane holds while it does (`memo`), and every row of the transcript with it.
   const control = useSteadyDoors({
     ...agents,
     agents: agent === undefined ? agents.agents : [agent],
@@ -509,11 +398,9 @@ export function DesktopAgentPage({
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   });
   const tab = useMemo(() => ({ agent: agentId }), [agentId]);
-  // A Fork or a Continue opens the page's draft in the agent's place, through the same doors a task's column opens its own by.
   const draftDoors = useAgentDraftDoors(agents, agent?.archivedAt !== undefined, (draftId) =>
     setDrafting({ agentId, draftId }),
   );
-  // The draft stands in the pane while it is the one the page opened, and the agent again once it starts or is let go.
   const draftTab =
     draftShown !== undefined && agents.draft?.id === draftShown ? draftShown : undefined;
   const paneTab = useMemo(
@@ -525,11 +412,8 @@ export function DesktopAgentPage({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  // Note that an inbox call and a page are the rows of a coding agent's own that open a tab, and a task's archive the one
-  // that opens another task, as a link to it opens (`route.ts`), a worker's opening through its delegation.
   const openPlace = useOpenPlace();
   const openTarget = useSteadyDoor((target: ToolTarget) => {
-    // An inbox call's row opens the window's Inbox on the thread its answer names, narrowed to the agent's task where it has one.
     if (target.kind === TOOL_TARGET.INBOX) {
       const { item } = target;
       openPlace?.(
@@ -543,16 +427,12 @@ export function DesktopAgentPage({
       );
     }
     if (target.kind === TOOL_TARGET.TASK) openPlace?.(placeOfTaskTarget(target));
-    // Its plan's card names its task, an archived agent's among them, whose press opens the plan.
     if (target.kind === TOOL_TARGET.DESCRIPTION && planId !== null) {
       openPlace?.({ kind: LINK_PLACE.TASK, planId });
     }
-    // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
-    // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
     if (target.kind === TOOL_TARGET.PAGE) sidePanel.onChoose({ page: target.page });
   });
-  // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = useSteadyDoor(
     (agent: string, callId: string, task: string, status: AgentStatus) => {
       views.onWorkerStatus(callId, status);
@@ -562,10 +442,6 @@ export function DesktopAgentPage({
   const openPullRequest = useSteadyDoor((published: string, number?: number) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION, number),
   );
-  // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task,
-  // and one to any other pull request of its repository a Pull request tab by its number.
-  // Note that the three openers handed to the transcript stand while what they read does, because every link and chip in it is drawn again with each new one.
-  // A page of a task, or of another agent, opens beside the agent, read on its own place.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
     sidePanel.onPreview({ page }, place),
   );
@@ -579,7 +455,6 @@ export function DesktopAgentPage({
       ),
     [agentId, pullRequests, agentIds, heldIds, openPullRequest, openPageBeside, agentRepository],
   );
-  // A link to the page's own agent, as a fork's chip opens its source, leaves the page's draft for the agent.
   const openLinkHere = useMemo(
     () =>
       openLink === undefined
@@ -595,7 +470,6 @@ export function DesktopAgentPage({
     [openLink, agentId],
   );
   const shown = tasks.shown && !sidePanel.fullScreen;
-  // An agent an automation's run started: its run among the automation's, followed live.
   const runPlace = useAutomationRunPlace(agent);
   const sideTab = sidePanel.tab;
   const planId = agent?.planId ?? null;
@@ -607,7 +481,6 @@ export function DesktopAgentPage({
         held: views.held,
         chosen: (opened) =>
           sameTab(opened, tab) || (sideTab !== undefined && sameTab(opened, sideTab)),
-        // Note that an agent on a task shows its pages on the task, so its rows read them there.
         pages: planId === null ? { agentId } : { taskId: planId },
         task:
           planTask === undefined
@@ -620,7 +493,6 @@ export function DesktopAgentPage({
       }),
     [control, views.held, tab, sideTab, planId, agentId, planTask, tasks],
   );
-  // The agent's repository, which the panel beside it reads a file of by its workspace, once the read named both.
   const repositoryPlace = useMemo(
     () =>
       workspaceId === undefined || agentRepository === undefined
@@ -628,7 +500,6 @@ export function DesktopAgentPage({
         : { workspaceId, repository: agentRepository },
     [workspaceId, agentRepository],
   );
-  // A file the panel beside the agent opens is read through the agent's workspace and repository, as its tab saves it.
   const fileReads = useMemo(
     () =>
       repositoryPlace === undefined
@@ -636,7 +507,6 @@ export function DesktopAgentPage({
         : { place: repositoryPlace, repository: repositoryPlace.repository },
     [repositoryPlace],
   );
-  // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
   const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
     lines === undefined
       ? sidePanel.onPreviewFile({ path }, undefined, fileReads)
@@ -646,12 +516,10 @@ export function DesktopAgentPage({
           fileReads,
         ),
   );
-  // A skill's file opens where a file the agent names does: in the panel beside it.
   const openSkill = (skill: { readonly path: string }) => {
     if (fileReads === undefined) return;
     sidePanel.onPreviewFile({ path: skill.path }, undefined, fileReads);
   };
-  // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
   const changesPeople = useChangesPeople(agentId);
   const pullRequestCard = useSteadyDoor((url: string) => {
     const pullRequest = control.pullRequests.get(agentId);
@@ -672,10 +540,8 @@ export function DesktopAgentPage({
     });
     return card ?? undefined;
   });
-  // What an `@` offers once the read named the agent's workspace, and its repository's files where it has one: the app works in none.
   const mentionWorkspace = listed?.slug ?? workspaceId;
   const { onShowMention } = tasks;
-  // An agent on no task offers the pages it showed and the pull request it opened, as a task offers its own.
   const ownPages = tasks.agentView.pages;
   const ownPullRequest = control.pullRequests.get(agentId);
   const ownName = agent === undefined ? undefined : agentName(agent, control.models);
@@ -717,7 +583,6 @@ export function DesktopAgentPage({
       holds,
     ],
   );
-  // A phone's way back leaves a draft for the agent it was opened from first, as Escape does, and the page then.
   const phoneHead: AgentPagePhone | undefined =
     away === undefined
       ? undefined
@@ -761,8 +626,6 @@ export function DesktopAgentPage({
       />
     );
   if (agent === undefined) {
-    // A page the service would not hand the reader keeps its bar over the words saying so.
-    // On a phone the bar keeps the page's way back, the drawer and the places bar out of reach.
     if (agents.listMissing) {
       return (
         <NotFound
@@ -775,7 +638,6 @@ export function DesktopAgentPage({
         />
       );
     }
-    // In the page's own frame, so its row and sheet stand where the read page's will.
     return (
       <div className="desktop-task relative flex min-h-0 flex-1" data-panel-open="false">
         <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
@@ -799,7 +661,6 @@ export function DesktopAgentPage({
   }
   return (
     <LinkWorkspaceProvider value={listed?.slug ?? workspaceId}>
-      {/* Note that the words are of the agent's workspace by its id, because one with no slug is named by its id in the slug's place, which no chip's provider read can find it by. */}
       <WordsWorkspace value={workspaceId}>
         <MemberDirectory workspace={workspace} readerId={tasks.me}>
           <AutomationDirectory
@@ -811,7 +672,6 @@ export function DesktopAgentPage({
               <AgentMentions value={mentions}>
                 <OpenLinkProvider value={openLinkHere}>
                   <OpenAddressesHere value={openHere}>
-                    {/* An archived agent's sandbox takes no shell, so ⌘J and New terminal stand only while it does not. */}
                     {terminalDoors.terminals && agent.archivedAt === undefined ? (
                       <TerminalCommands
                         here={agentId}
@@ -825,7 +685,6 @@ export function DesktopAgentPage({
                       className="desktop-task relative flex min-h-0 flex-1"
                       data-panel-open={String(sidePanel.open)}
                     >
-                      {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
                       <Fill
                         as={FILL_ELEMENT.SECTION}
                         className="agent-page"
@@ -857,7 +716,6 @@ export function DesktopAgentPage({
                           />
                         </FindScope>
                       </Fill>
-                      {/* Note that the panel stands while its toggle asks for its "+" with nothing to show, drawing the menu alone. */}
                       {drawing.panel !== undefined || sidePanel.toggleAsked ? (
                         <SidePanel
                           {...drawing}

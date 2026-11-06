@@ -24,13 +24,6 @@ import {
 } from "@repo/features/admin-wire";
 import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@repo/features/link-grammar";
 
-/**
- * The page's own addresses, distinct from the API's parameters so a pasted
- * dashboard link and an API call never read as each other. Both ride the
- * query string because the page is served at `/admin` alone — a path segment
- * would need its own route — and the account id goes back into the detail
- * endpoint's gate, never into anything rendered.
- */
 const ACCOUNT_VIEW_PARAM = "user";
 
 const WORKSPACE_VIEW_PARAM = "workspace";
@@ -43,17 +36,8 @@ const WINDOW_VIEW_PARAM = "days";
 
 const SEARCH_VIEW_PARAM = "q";
 
-/**
- * Long enough that a typed word coalesces into one roster read, short enough
- * that the searched answer still feels like the box's own.
- */
 export const SEARCH_DEBOUNCE_MS = 250;
 
-/**
- * The sidebar's destinations, in the order it lists them, each the view it
- * opens and the address's `view` value naming it (the Overview names none);
- * an open account highlights Users, and an open workspace Workspaces.
- */
 export const ADMIN_TAB = {
   DASHBOARD: "dashboard",
   COST: "cost",
@@ -64,31 +48,26 @@ export const ADMIN_TAB = {
 
 export type AdminTab = (typeof ADMIN_TAB)[keyof typeof ADMIN_TAB];
 
-/** The pages under a section, each opened from one of its rows rather than the sidebar. */
 export const ADMIN_PAGE = {
   ACCOUNT: "account",
   WORKSPACE: "workspace",
   DAY: "day",
 } as const;
 
-/** Which of the page's views the address bar names. */
 export type AdminView =
   | { kind: AdminTab }
   | { kind: typeof ADMIN_PAGE.ACCOUNT; id: string }
   | { kind: typeof ADMIN_PAGE.WORKSPACE; id: string }
   | { kind: typeof ADMIN_PAGE.DAY; day: string };
 
-/** Whether a view is one of the place's sections, rather than an account's, a workspace's, or a day's page under one. */
 export function adminSection(view: AdminView): boolean {
   return Object.values(ADMIN_TAB).some((tab) => tab === view.kind);
 }
 
-/** The view a section opens on. */
 export function adminSectionView(tab: AdminTab): AdminView {
   return { kind: tab };
 }
 
-/** The section a view stands under: an account's page under Users, a workspace's under Workspaces, a day's under the Overview. */
 export function adminSectionOf(view: AdminView): AdminTab {
   if (view.kind === ADMIN_PAGE.ACCOUNT) return ADMIN_TAB.USERS;
   if (view.kind === ADMIN_PAGE.WORKSPACE) return ADMIN_TAB.WORKSPACES;
@@ -102,20 +81,12 @@ export function viewFromLocation(): AdminView {
   if (id) return { kind: ADMIN_PAGE.ACCOUNT, id };
   const workspaceId = params.get(WORKSPACE_VIEW_PARAM);
   if (workspaceId) return { kind: ADMIN_PAGE.WORKSPACE, id: workspaceId };
-  // An address naming no real UTC day is the plain dashboard rather than a
-  // broken page, the same reading an out-of-set window gets.
   const day = params.get(DAY_VIEW_PARAM);
   if (day !== null && isUtcDayKey(day)) return { kind: ADMIN_PAGE.DAY, day };
   const tab = params.get(TAB_PARAM);
   return { kind: Object.values(ADMIN_TAB).find((each) => each === tab) ?? ADMIN_TAB.DASHBOARD };
 }
 
-/**
- * The window the address bar names, so a 90-day view is shareable and survives
- * a reload. An address naming no window, or one outside the set, is the
- * default view rather than a broken page — a link is the reader's, not a
- * request the API gets to refuse.
- */
 export function windowFromLocation(): AdminMetricsWindow {
   const value = new URLSearchParams(window.location.search).get(WINDOW_VIEW_PARAM);
   return (
@@ -124,33 +95,17 @@ export function windowFromLocation(): AdminMetricsWindow {
   );
 }
 
-/**
- * The window the Reliability screen reads: the shared one where the screen
- * offers it, and the longest it offers otherwise, so a 90-day address opens
- * the month rather than a read the endpoint refuses.
- */
 export function reliabilityWindow(windowDays: AdminMetricsWindow): AdminMetricsWindow {
   return ADMIN_RELIABILITY_WINDOWS.includes(windowDays)
     ? windowDays
     : (ADMIN_RELIABILITY_WINDOWS.at(-1) ?? ADMIN_METRICS_WINDOW_DEFAULT);
 }
 
-/**
- * The search the address bar names, so a searched roster is shareable and
- * survives a reload. An address naming a term past the API's length bound is
- * clipped to it rather than refused — a link is the reader's — and matches
- * the bound the input below enforces on typing.
- */
 export function searchFromLocation(): string {
   const value = new URLSearchParams(window.location.search).get(SEARCH_VIEW_PARAM) ?? "";
   return value.slice(0, ADMIN_USERS_SEARCH_MAX_LENGTH);
 }
 
-/**
- * The current address with the search set or cleared. Typing rewrites the
- * entry in place rather than pushing one, so the back button walks views,
- * not keystrokes.
- */
 export function searchHref(query: string): string {
   const params = new URLSearchParams(window.location.search);
   if (query) params.set(SEARCH_VIEW_PARAM, query);
@@ -159,17 +114,11 @@ export function searchHref(query: string): string {
   return queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
 }
 
-/** The term a typed query asks the service to search for: none when blank. */
 export function searchTerm(query: string): string | undefined {
   const term = query.trim();
   return term.length === 0 ? undefined : term;
 }
 
-/**
- * A page address from its own params, carrying the window the address bar
- * currently names, so navigating between views keeps the chosen window. The
- * default window rides as no param at all, keeping the plain addresses plain.
- */
 function hrefWithWindow(params: URLSearchParams): string {
   const windowDays = windowFromLocation();
   if (windowDays !== ADMIN_METRICS_WINDOW_DEFAULT) {
@@ -179,10 +128,6 @@ function hrefWithWindow(params: URLSearchParams): string {
   return query ? `${window.location.pathname}?${query}` : window.location.pathname;
 }
 
-/**
- * An account's page of the dashboard from anywhere on the origin, at the
- * default window: where a maintainer's sign-in as that account ends.
- */
 export function accountPageHref(id: string): string {
   const params = new URLSearchParams();
   params.set(ACCOUNT_VIEW_PARAM, id);
@@ -221,16 +166,10 @@ export function windowHref(windowDays: AdminMetricsWindow): string {
   return query ? `${window.location.pathname}?${query}` : window.location.pathname;
 }
 
-/**
- * Whether a click on a link is asking this page to navigate, or asking the
- * browser for its own gesture — a new tab, a window, a download — which the
- * real anchor underneath must keep answering.
- */
 export function plainLeftClick(event: React.MouseEvent): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** A windowed read's query: the default scope and window ride as no params. */
 export function windowedReadQuery(
   hideAdmins: boolean,
   windowDays: AdminMetricsWindow,
@@ -243,7 +182,6 @@ export function windowedReadQuery(
   };
 }
 
-/** The roster read's query: a windowed read's, and the search where one rides. */
 export function usersReadQuery(
   hideAdmins: boolean,
   windowDays: AdminMetricsWindow,
@@ -255,7 +193,6 @@ export function usersReadQuery(
   };
 }
 
-/** One account's read query, with the default window riding as no param. */
 export function accountReadQuery(id: string, windowDays: AdminMetricsWindow): AdminUserQuery {
   return {
     [ADMIN_USER_ID_PARAM]: id,
@@ -265,12 +202,10 @@ export function accountReadQuery(id: string, windowDays: AdminMetricsWindow): Ad
   };
 }
 
-/** One workspace's read query. */
 export function workspaceReadQuery(id: string): AdminWorkspaceQuery {
   return { [ADMIN_WORKSPACE_ID_PARAM]: id };
 }
 
-/** The day read's query: one day, with the default scope riding as no param. */
 export function dayReadQuery(day: string, hideAdmins: boolean): AdminDayQuery {
   return {
     [ADMIN_DAY_PARAM]: day,
@@ -278,11 +213,6 @@ export function dayReadQuery(day: string, hideAdmins: boolean): AdminDayQuery {
   };
 }
 
-/**
- * The Workspaces read's query: the default scope, the shared-only list, and
- * no search ride as no params. It reads no window, because its activity
- * counts are always the trailing week.
- */
 export function workspacesReadQuery(
   hideAdmins: boolean,
   sharedOnly: boolean,
@@ -295,7 +225,6 @@ export function workspacesReadQuery(
   };
 }
 
-/** The Admin place's link fields for a view: the Overview none, a section its name, an account's, a workspace's, or a day's page its own. */
 export function adminLinkFields(view: AdminView): {
   readonly section?: AdminLinkSection;
   readonly userId?: string;
@@ -322,7 +251,6 @@ export function adminLinkFields(view: AdminView): {
   }
 }
 
-/** The view an Admin link names, or none where it names only the place, which opens on its Overview with its list standing. */
 export function adminViewOfLink(fields: {
   readonly section?: AdminLinkSection | undefined;
   readonly userId?: string | undefined;

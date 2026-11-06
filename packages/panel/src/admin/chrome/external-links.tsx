@@ -1,10 +1,3 @@
-/**
- * external-links.tsx -- the pages outside the dashboard an admin page links
- * to, such as an account's person in product analytics or a workspace's
- * GitHub account: each its provider's mark beside its words, opening in a
- * new tab.
- */
-
 import {
   GAP,
   Inline,
@@ -15,14 +8,12 @@ import {
   TextLink,
 } from "@repo/ui";
 
-/** One page outside the dashboard: whose page it is, what it is called, and where it is. */
 export interface ExternalPlace {
   provider: MarkProvider;
   label: string;
   href: string;
 }
 
-/** One page outside the dashboard, its provider's mark leading its words inside the one link. */
 export function ExternalLink({ place }: { place: ExternalPlace }): React.JSX.Element {
   return (
     <TextLink
@@ -37,7 +28,6 @@ export function ExternalLink({ place }: { place: ExternalPlace }): React.JSX.Ele
   );
 }
 
-/** A row of pages outside the dashboard, or nothing where there are none. */
 export function ExternalLinks({
   places,
 }: {

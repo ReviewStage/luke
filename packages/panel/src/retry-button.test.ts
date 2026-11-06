@@ -9,13 +9,6 @@ import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 
-/**
- * retry-button.test.ts -- a failure's Retry is named by its words and
- * retries on a press; where a bar short of room folds its words away, the
- * glyph left still names them in the window's pill, and with its words
- * drawn it raises no pill repeating them.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -25,11 +18,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * Lays the bar out as folded or not: jsdom lays nothing out, so the fold a
- * container query would set is what the computed style answers, and the
- * observer reports the box at once, as a first layout would.
- */
 function layOut(folded: boolean): void {
   vi.stubGlobal(
     "ResizeObserver",
@@ -52,7 +40,6 @@ function layOut(folded: boolean): void {
   });
 }
 
-/** Draws the agents' Retry, counting its presses, and points at it. */
 function hover() {
   let presses = 0;
   const container = document.body.appendChild(document.createElement("div"));

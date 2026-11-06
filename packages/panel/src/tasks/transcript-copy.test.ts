@@ -18,16 +18,6 @@ import {
   transcriptMarkdown,
 } from "./transcript-copy.js";
 
-/**
- * transcript-copy.test.ts -- a transcript's copy follows the order its tab
- * draws: a message that reached the agent while its turn ran is copied
- * between the turn's work before it and after it, not ahead of the turn,
- * where the service keeps it. An agent started from another is copied as
- * its tab draws it, with none of the markers its first message holds.
- * Synthetic throughout.
- */
-
-/** One answered command the agent ran, under its own call id. */
 function ran(name: string): WireRecord {
   return {
     type: "tool-bash",
@@ -41,7 +31,6 @@ function ran(name: string): WireRecord {
 const STEP: WireRecord = { type: "step-start" };
 
 test("a message GitHub sent while the turn ran is copied between the steps before it and the steps after it", () => {
-  // The service keeps the line ahead of the journal, which closed behind it.
   const messages: readonly AgentTranscriptMessage[] = [
     { id: "task", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Fix the tile." }] },
     {
@@ -269,7 +258,6 @@ test("a check line kept before its metadata said a check failed is copied as its
   );
 });
 
-/** The first message of an agent forked from another: the brief, two of the source's three steps, and the developer's note. */
 const FORKED_FIRST = firstMessageText(
   "Fix the tile.",
   {
@@ -392,7 +380,6 @@ test("a replay longer than the card draws at first is copied whole, every kept s
   for (const copy of [TRANSCRIPT_COPY.CONCISE, TRANSCRIPT_COPY.FULL]) {
     const markdown = transcriptMarkdown(copied, copy);
     const copiedSteps = [...markdown.matchAll(/Step (\d+)\./gu)].map((match) => Number(match[1]));
-    // The full copy says each step twice, its line and its words.
     assert.deepEqual(
       [...new Set(copiedSteps)],
       Array.from({ length: count }, (_, at) => at + 1),

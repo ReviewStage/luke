@@ -6,15 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { type RowMove, useRowDrag, useRunRowDrag } from "./use-row-drag.js";
 
-/**
- * use-row-drag.test.ts -- a row pressed and drawn far enough up or down its
- * list is dropped where its leading edge crossed the rows' middles, a press
- * that stays a click moves nothing, and Escape puts a drag back. jsdom lays
- * nothing out, so each row is laid out here, a fixed height apart. Synthetic
- * throughout.
- */
-
-/** Each row's height, as laid out here, in CSS pixels. */
 const ROW_HEIGHT = 30;
 
 const roots: Root[] = [];
@@ -26,14 +17,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** How far the sidebar holding the list has scrolled, in CSS pixels, which moves every box up the screen. */
 let scrolled = 0;
 
-/**
- * A list of `count` rows whose drag reports each move to `onMove`, laid out
- * a row's height apart; or, where `places` says each row's place among
- * every row of a list drawing only some of them (`data-index`), those rows.
- */
 function drawn(count: number, onMove: RowMove, places?: readonly number[]): HTMLElement {
   function List() {
     const all = useRowDrag(places === undefined ? onMove : undefined);
@@ -62,7 +47,6 @@ function drawn(count: number, onMove: RowMove, places?: readonly number[]): HTML
     return DOMRect.fromRect({ y: at * ROW_HEIGHT - scrolled, width: 200, height: ROW_HEIGHT });
   });
   const list = container.querySelector("ul") ?? assert.fail("the list stands");
-  // jsdom captures no pointer; the drag asks the list to, as the window's would.
   Object.assign(list, { setPointerCapture: () => undefined });
   return list;
 }
@@ -70,7 +54,6 @@ function drawn(count: number, onMove: RowMove, places?: readonly number[]): HTML
 const at = (type: string, y: number) =>
   new PointerEvent(type, { bubbles: true, button: 0, clientY: y, pointerId: 1 });
 
-/** The button on the row at `index`, which a press lands on. */
 function grip(list: HTMLElement, index: number): HTMLElement {
   return list.querySelectorAll<HTMLElement>("li button")[index] ?? assert.fail("no such row");
 }
@@ -105,7 +88,6 @@ test("in a list that reorders, the placeholder slides to where the row would lan
 test("a row let go off to the side lands its copy on the row's place on both axes, the row faded beneath it until it does", () => {
   const plays: Keyframe[][] = [];
   let finish: (() => void) | undefined;
-  // jsdom plays no animation; the copy's landing is taken as the window would start it.
   Object.defineProperty(HTMLElement.prototype, "animate", {
     configurable: true,
     value(keyframes: Keyframe[]) {
@@ -144,7 +126,6 @@ test("a row let go off to the side lands its copy on the row's place on both axe
   });
   Reflect.deleteProperty(HTMLElement.prototype, "animate");
   assert.deepEqual(moves, [[0, 2]]);
-  // The list here keeps its rows where they stood, so the row's place is still the first.
   assert.deepEqual(plays, [
     [{ transform: "translate(100px, 62px)" }, { transform: "translate(0px, 0px)" }],
   ]);
@@ -210,18 +191,12 @@ test("a row held still while the sidebar scrolls beneath it lands where the scro
   assert.deepEqual(moves, [[0, 3]]);
 });
 
-/** Frames asked for, which a test runs by hand. */
 let frames: FrameRequestCallback[] = [];
 
-/** Runs the frames asked for, and those they ask for in turn, up to `most` of them. */
 function runFrames(most = 50): void {
   for (let run = 0; run < most; run += 1) frames.shift()?.(0);
 }
 
-/**
- * Six rows, 180 of them, in a column `height` tall that scrolls them, as far
- * as 180 less its height; each move is reported to `moves`.
- */
 function inColumn(height: number, moves: [number, number][]): HTMLElement {
   frames = [];
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((frame) => frames.push(frame));
@@ -294,7 +269,6 @@ test("a column too short for both edges' reach runs only toward the nearer edge,
   act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
 });
 
-/** Lays out every element wearing `data-box="top height"` there, 200 wide, and every other nowhere. */
 function layOutByBoxes(): void {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const box = this.getAttribute("data-box");
@@ -304,12 +278,6 @@ function layOutByBoxes(): void {
   });
 }
 
-/**
- * Two zones down a column: `a`, from -40 to 60, a header over the list of
- * two rows that is dragged, from 0 to 60, and `b`, from 100 to 190, whose
- * three rows keep an order, at 100, 130, and 160, with a gap between them. Each drop out of `a` is reported to `outs`. Where `scoped`,
- * `b` stands in a drop scope of its own.
- */
 function twoZones(
   outs: [number, string, number][],
   reorders: boolean,
@@ -361,7 +329,6 @@ function twoZones(
   return container;
 }
 
-/** The button named `name`, which a press lands on. */
 function named(container: HTMLElement, name: string): HTMLElement {
   return (
     [...container.querySelectorAll<HTMLElement>("button")].find(
@@ -419,12 +386,10 @@ test("a list that keeps no order of its own lets a row go only out of it", () =>
   assert.deepEqual(outs, [[0, "b", 0]]);
 });
 
-/** Where the carried copy is drawn, moved from where it was lifted; none while nothing is carried. */
 function copyAt(): string | undefined {
   return document.querySelector<HTMLElement>("[data-carried]")?.style.transform;
 }
 
-/** The transform the row named `name` is drawn at. */
 function drawnAt(container: HTMLElement, name: string): string | undefined {
   return named(container, name).closest("li")?.style.transform;
 }

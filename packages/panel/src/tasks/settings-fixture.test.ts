@@ -24,22 +24,11 @@ import { test } from "vitest";
 import { stateWith } from "../testing/app-state.js";
 import { fixtureActAnswer, fixtureAppState } from "./tasks-fixture.js";
 
-/**
- * settings-fixture.test.ts -- a fixture run's Settings, Admin, and
- * Automations profiles sign the window in as a synthetic account and answer
- * the reads their pages ask through the act door, in place of main: every
- * answer one the act port's contract would carry, connected and expired
- * integrations among them, and three automations, one whose newest run
- * failed. A profile that stages no account leaves main's document as it is.
- */
-
-/** Every profile the account is signed in under, which the polish pass shoots one by one. */
 const SIGNED_IN_PROFILES = Object.values(RUN_PROFILE).filter(
   (profile) =>
     profile.startsWith("settings-") || profile.startsWith("automations") || profile === "admin",
 );
 
-/** One read the staged pages ask, by its kind and payload. */
 interface Read {
   readonly kind: PortActKind;
   readonly payload: PortActPayload<PortActKind>;
@@ -51,25 +40,21 @@ function read<Kind extends PortActKind>(kind: Kind, payload: PortActPayload<Kind
 
 const ACME = { workspaceId: "workspace-acme" };
 
-/** The reads the staged pages ask that answer once, each a value the contract encodes. */
 const READS: readonly Read[] = [
   read(ACT_KIND.INSTALLED_SKILLS_READ, { skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001" }),
   read(ACT_KIND.ADMIN_READ, { procedure: ADMIN_READ.METRICS, query: {} }),
 ];
 
-/** Whether a procedure's declared schema is an Effect Schema, which encodes with no service, as every act's output but a stream's is. */
 function isWireSchema(schema: unknown): schema is Schema.Codec<unknown, unknown> {
   return Schema.isSchema(schema);
 }
 
-/** Whether the act port's contract would carry `answer` as the kind's: it encodes through the output schema the kind's procedure declares. */
 function carried(kind: PortActKind, answer: unknown): boolean {
   const [declared] = actContract[kind]["~orpc"].outputSchemas ?? [];
   assert.ok(isWireSchema(declared), `${kind} declares a wire schema`);
   return Result.isSuccess(Schema.encodeUnknownResult(Schema.flip(declared))(answer));
 }
 
-/** The profile's answer to one read, which it must stage. */
 function answered<Kind extends PortActKind>(
   profile: string,
   kind: Kind,
@@ -77,7 +62,6 @@ function answered<Kind extends PortActKind>(
 ): PortActResult<Kind> {
   const staged = fixtureActAnswer({ profile }, kind, payload as PortActPayload<PortActKind>);
   assert.ok(staged, `${profile} answers ${kind}`);
-  // SAFETY: the profile answered this kind's read, with this kind's result.
   return staged.answer as PortActResult<Kind>;
 }
 
@@ -108,7 +92,6 @@ test("the integrations profile draws some accounts connected and some with their
 
 test("an Automations profile holds three automations in the listed workspace, one whose newest run failed, and that one's runs", () => {
   const { run } = stateWith({}, {});
-  /** The document an Automations profile draws. */
   const staged = (profile: string) => fixtureAppState(stateWith({}, { run: { ...run, profile } }));
   const automations =
     staged(RUN_PROFILE.AUTOMATIONS)[LIVE_READ.AUTOMATIONS]["workspace-personal"]?.rows ?? [];
@@ -149,7 +132,6 @@ test("Admin's Overview answers the window and the scope its controls ask for, it
       query,
     });
     assert.ok("answer" in read);
-    // SAFETY: a metrics read answers the Overview's metrics.
     return read.answer as AdminMetrics;
   };
   const week = metrics({ [ADMIN_METRICS_WINDOW_PARAM]: "7" });

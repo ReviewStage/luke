@@ -34,29 +34,8 @@ import { AddMenuButton } from "./add-menu-button.js";
 import { MenuRow } from "./menu-row.js";
 import { Picker, PickerRow } from "./picker-row.js";
 
-/**
- * slack-bot-channels.tsx -- where an owner or admin sends the workspace's Slack starts: the channels the bot is in, each with its repository, and the repository every other start works in.
- *
- * Drawn as GitHub's rows are on the same card: the bot's row holds Add
- * channel (`AddSlackChannel`) beside its ⋯, as GitHub's holds Add
- * repository, and under it, each a row of the card inset under the bot's
- * words, the Default repository picker, then one row per channel the bot is
- * in. A channel is named as Slack's sidebar names it, its mark (a hash, or a
- * lock for a private channel) saying its kind; its row holds its repository
- * picker, the default until one is chosen, and a ⋯ whose Remove from channel
- * asks first, since the bot leaves the channel for everyone in it. Where the
- * bot is in no channel, one row says so and how to add one, a private one by
- * `/invite`. A Slack start works in the repository its message names, else
- * its channel's, else the default. The repositories are the workspace's
- * held integrations' and the channels Slack's own list the host holds, so a
- * repository chosen draws at once, and a channel joined or left draws as
- * its answer lands; a refusal is said under the row that asked.
- */
-
-/** The menu row that picks no repository: the default in a channel's menu, none in the default's. */
 const NONE_ROW = "none";
 
-/** What the rows say. */
 const WORDS = {
   DEFAULT_LABEL: "Default repository",
   NONE: "None",
@@ -71,24 +50,16 @@ const WORDS = {
   REMOVE: "Remove from channel",
 } as const;
 
-/** The repositories the workspace reaches, as the menu reads them: still reading, not read, or their rows. */
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/** A channel as a sentence names it, as Slack writes one. */
 function channelName(channel: SlackListedChannel): string {
   return `#${channel.name}`;
 }
 
-/** A channel's mark, which says its kind so its name need not: Slack's hash for a public one, a lock for a private one. */
 function ChannelMark({ channel }: { channel: SlackListedChannel }): React.JSX.Element {
   return channel.private ? <GLYPH.PRIVATE_CHANNEL /> : <GLYPH.CHANNEL />;
 }
 
-/**
- * The repositories the workspace reaches, held by the host while the row
- * stands (`LIVE_READ.REPOSITORY_LISTS`); a picker opened over a read that
- * never answered asks for it again.
- */
 function useRepositoryRows(workspaceId: string) {
   const pictures = useRepositoryPictures();
   const list = useQuery(repositoryListsQuery(workspaceId));
@@ -112,11 +83,6 @@ function useRepositoryRows(workspaceId: string) {
   };
 }
 
-/**
- * Add channel and its menu, on the bot's row: the public channels the bot
- * is not in, one picked putting the bot in it, and where none is left, how
- * a private one is joined. A refusal is handed to the row to say.
- */
 export function AddSlackChannel({
   workspaceId,
   channels,
@@ -152,7 +118,6 @@ export function AddSlackChannel({
   );
 }
 
-/** The workspace's default repository for Slack starts, inset under the bot's row, named or cleared from its picker. */
 function DefaultRepositoryRow({
   workspaceId,
   chosen,
@@ -199,11 +164,6 @@ function DefaultRepositoryRow({
   );
 }
 
-/**
- * One channel the bot is in, inset under the bot's row: its mark and name,
- * its repository picker, the default until one is named (`repository`),
- * and a ⋯ whose Remove from channel asks first.
- */
 function ChannelRow({
   workspace,
   channel,
@@ -316,12 +276,6 @@ function ChannelRow({
   );
 }
 
-/**
- * The rows under a connected bot's row, to an owner or admin, each a row of
- * the card: the default repository, then each channel the bot is in, or
- * one row saying it is in none; where Slack's channels have not been
- * listed, the default alone.
- */
 export function SlackBotChannelRows({
   workspace,
   slack,

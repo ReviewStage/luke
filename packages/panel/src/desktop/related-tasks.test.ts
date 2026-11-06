@@ -20,17 +20,6 @@ import { longPress, underAFinger } from "../testing/finger.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { RelatedTasks } from "./related-tasks.js";
 
-/**
- * related-tasks.test.ts -- a task's related tasks, drawn on their own as the
- * Tasks page's List draws a task: each row is led by what its owner stands
- * there, its relation, and ends with a chip for each of its open pull
- * requests, a draft among them and a merged one left out, and its
- * sub-tasks' count stands however narrow the list; a press on a row opens
- * its task, and a finger's row
- * draws no ⋯, its menu a long press away.
- * Synthetic tasks.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -62,7 +51,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A pull request of the task's, `number` standing in `state`. */
 function pullRequest(number: number, state: PullRequestState) {
   return {
     number,
@@ -146,7 +134,6 @@ test("a related task's row says it is blocked beside its name and how many of it
     status,
     parentTaskId: TASK.id,
   });
-  // Note that the list is measured as a plan's narrow pane stands it, which folds the key away.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
     new DOMRect(0, 0, 360, 400),
   );

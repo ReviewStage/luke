@@ -13,13 +13,6 @@ import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { AccountSection } from "./account-section.js";
 
-/**
- * Settings › Profile names the signed-in account on the face every other
- * place draws it on: its picture where the sign-in carried one, and its
- * letter on its hue where it carried none, as the sidebar's foot and a
- * workspace's member list draw the same account. Synthetic accounts.
- */
-
 type SignedIn = Parameters<typeof AccountSection>[0]["account"];
 
 const ADA: SignedIn = {
@@ -30,14 +23,12 @@ const ADA: SignedIn = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
-/** `element` drawn, as a page to query. */
 function drawn(element: React.ReactElement): HTMLElement {
   const page = document.createElement("div");
   page.innerHTML = renderToStaticMarkup(element);
   return page;
 }
 
-/** The face leading Profile's account row for `account`. */
 function profileFace(account: SignedIn): Element | null {
   return drawn(
     withQueryClient(
@@ -49,7 +40,6 @@ function profileFace(account: SignedIn): Element | null {
   ).querySelector(".actor-mark");
 }
 
-/** The face the shared mark draws for the same account at a Settings row's size. */
 function sharedFace(account: SignedIn): Element | null {
   return drawn(
     createElement(ActorMark, { actor: accountActor(account), size: ACTOR_SIZE.CARD }),
@@ -78,7 +68,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The section drawn with a toast host on the window's own registry, over a Sign out of the given answer. */
 function mountSection(onSignOut: () => Promise<void>): { container: HTMLElement; root: Root } {
   const container = document.createElement("div");
   document.body.append(container);

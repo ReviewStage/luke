@@ -22,27 +22,14 @@ import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { DescriptionBody, type SectionLinks } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * A task's sections' links on its own page: a mention of a section drawn as
- * the chip that opens it, one of a heading the description no longer holds struck
- * through and opening the task at its top, a section's ⋯ copying its link,
- * the title's ⋯ copying the task's, an ask to show a section scrolling the document to it, and nothing a
- * mention names riding on an attribute. Mentions are read in the form
- * written before the link was settled as well as the settled one.
- * Synthetic description.
- */
 
 const TASK_ID = DOCUMENT_TASK.id;
 
-/** The slug of the workspace the task's links are written under. */
 const WORKSPACE = "acme";
 
 const PLACE = { workspace: WORKSPACE, repository: "acme/relay" } as const;
 
-/** A description whose last section mentions an earlier one, and one since renamed. */
 const TASK: Task = {
   ...DOCUMENT_TASK,
   document: {
@@ -60,17 +47,14 @@ const TASK: Task = {
   },
 };
 
-/** A Copy link button of a unit, a section's or the title's. */
 const UNIT_LINK = '.description-unit-more button[aria-label^="Copy link"]';
 
-/** The sections' Copy link buttons, the title's left out. */
 function sectionLinks(container: HTMLElement): HTMLButtonElement[] {
   return [...container.querySelectorAll<HTMLButtonElement>(UNIT_LINK)].filter(
     (button) => button.closest(".ui-page-header-actions") === null,
   );
 }
 
-/** The title's Copy link button, which ends its line in the header's acts. */
 const TITLE_LINK = '.ui-page-header-actions button[aria-label="Copy link"]';
 
 const roots: Root[] = [];
@@ -88,7 +72,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The task's page drawn with its sections' links, the mentions it was asked to open kept. */
 function drawn(links: Partial<SectionLinks> = {}) {
   const opened: Mention[] = [];
   const container = document.createElement("div");
@@ -157,7 +140,6 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   )?.parentElement;
   assert.ok(scroller);
   const units = container.querySelectorAll<HTMLElement>(".description-unit");
-  // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.
   vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 100 }));
   const rollout = units[1];
   assert.ok(rollout);
@@ -247,7 +229,6 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   ]);
 });
 
-/** The task's page drawn editable, as a task's own page is, its editor's bundle not yet landed so that an editor opened is its host alone. */
 function drawnEditable(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -311,7 +292,6 @@ test("on a description that cannot be edited, where no block is a Tab stop, ever
   assert.ok(mores.every((more) => more.tabIndex === 0));
 });
 
-/** A description whose words mention a file and a folder of its repository. */
 const FILES_TASK: Task = {
   ...TASK,
   document: {
@@ -376,7 +356,6 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
-  // Another repository's file is no file of the task's, but GitHub's own page, which opens there rather than in a tab.
   act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
@@ -473,7 +452,6 @@ test("a click on a folder's chip in a description that can be edited opens no ed
   assert.equal(container.querySelector(".description-document-editor"), null);
 });
 
-/** The task's page drawn as a task's own page is, its title editable. */
 function drawnTitled() {
   const container = document.createElement("div");
   document.body.append(container);
@@ -501,11 +479,9 @@ function drawnTitled() {
 
 test("the title's Copy link button ends the title's line, shown while the keyboard is on the title, the Tab stop after it, and copies the plan's link", async () => {
   const { block, more } = drawnTitled();
-  // The unit whose hover or focus shows the button, as a section's does.
   const unit = more.closest(".description-unit-attributed");
   assert.ok(unit, "the button stands in a unit");
   assert.ok(unit.contains(block), "the button stands in the title's unit");
-  // Note that focus is read once, because jsdom's selector engine holds a `:focus-within` answer.
   const before = unit.contains(document.activeElement);
   act(() => block.focus());
 

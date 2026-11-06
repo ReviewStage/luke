@@ -17,34 +17,17 @@ import {
 import { failureShown } from "./failure-report.js";
 import { useAnnounceShown } from "./use-announce-shown.js";
 
-/**
- * Each sign-in failure as the answer its report carries, whose key is the
- * report's code, so a failed sign-in says why in Sentry. Note that each is one
- * object for good, because a report is matched by its cause's identity and a
- * new object on every draw would report the same failure again.
- */
 const SIGN_IN_FAILURE_ANSWERS = Object.fromEntries(
   Object.values(SIGN_IN_FAILURE).map((failure) => [failure, { failure }]),
 ) as Record<SignInFailure, { readonly failure: SignInFailure }>;
 
-/** What the gate says while it waits on the browser. */
 const FINISH_IN_BROWSER = "Finish in your browser.";
 
-/** Each way in, in the order the gate stands them, with the name it says. */
 const WAYS_IN = [
   { provider: ACCOUNT_PROVIDER.GOOGLE, name: "Google" },
   { provider: ACCOUNT_PROVIDER.GITHUB, name: "GitHub" },
 ] as const;
 
-/**
- * The sign-in, alone in the window on an AuthPage card: the product's mark over the two ways in.
- * A press sends the browser to the provider and the gate waits in place —
- * the pressed button says so, the other stands disabled, and Cancel takes the
- * wait back — because the browser holds the actual work and there is nothing
- * else here to do meanwhile. The way in this Mac took last is the filled one
- * and says so; with none kept, Google is. The two never trade places, so the
- * hand that knows where GitHub is still finds it there.
- */
 export function SignInGate({
   account,
   waiting,
@@ -55,19 +38,13 @@ export function SignInGate({
   onCancel,
 }: {
   account: AccountSnapshot;
-  /** Whose sign-in the gate is waiting on; absent while none was begun here. */
   waiting?: AccountProvider;
-  /** Why the last attempt ended without landing, from the flow's owner. */
   failure?: SignInFailure;
-  /** The provider this Mac last signed in with; absent while none is kept. */
   lastUsed?: AccountProvider;
-  /** The link that opens the Mac app instead, which a shell that is not the Mac app offers; absent in the Mac app. */
   macAppLink?: string;
-  /** Sends the browser to the provider; the gate then waits on it. */
   onBegin: (provider: AccountProvider) => void;
   onCancel: () => void;
 }): React.JSX.Element {
-  // A sign-in begun from no press of this gate still holds both buttons.
   const busy = waiting !== undefined || account.status === ACCOUNT_STATUS.SIGNING_IN;
   const primary = lastUsed ?? ACCOUNT_PROVIDER.GOOGLE;
   useAnnounceShown(ANNOUNCE.POLITE, waiting ? FINISH_IN_BROWSER : "");

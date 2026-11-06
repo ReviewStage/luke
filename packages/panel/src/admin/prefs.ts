@@ -8,12 +8,6 @@ interface RememberedFlag {
   write(value: boolean): void;
 }
 
-/**
- * A boolean kept as the presence of a localStorage key. `absentMeans` is what
- * a browser with no key — or one that refuses storage altogether — reads as;
- * the key is written to mean the opposite and removed to mean `absentMeans`
- * again, so the remembered state is always the exception to the default.
- */
 function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
   return {
     read(): boolean {
@@ -26,36 +20,12 @@ function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
   };
 }
 
-/**
- * The site's session cookie is shared with the sign-in flow the desktop app
- * opens in this browser, so the first visit to the admin page would otherwise
- * land already signed in — on a session the maintainer never chose to spend
- * there. The dashboard opens only after a sign-in pressed on that page once;
- * the press is remembered locally, and from then on an existing session
- * resumes the way it does on any signed-in page. Signing out takes the press
- * back with the session, or the next cookie earned elsewhere on the site would
- * open the dashboard on a consent the maintainer gave once and then withdrew.
- */
 export const SIGN_IN_CHOSEN = rememberedFlag("app-admin-sign-in-chosen");
 
-/**
- * Whether the sidebar was left hidden, remembered the way the sign-in press
- * is, so a browser that refuses storage simply opens it shown every visit.
- * Note that the key is the one the old icon rail's fold was kept under, so a
- * sidebar left folded to its rail opens hidden.
- */
 export const SIDEBAR_HIDDEN = rememberedFlag("app-admin-sidebar-collapsed");
 
-/**
- * Whether the "Hide admins" filter is on. The key marks the exception, so a
- * browser that refuses storage simply opens with admins hidden.
- */
 export const ADMINS_HIDDEN = rememberedFlag("app-admin-hide-admins", true);
 
-/**
- * Whether the Workspaces table lists shared workspaces alone. The key marks
- * the exception, so a browser that refuses storage opens on shared ones.
- */
 export const WORKSPACES_SHARED_ONLY = rememberedFlag("app-admin-workspaces-shared-only", true);
 
 interface RememberedValue<T> {
@@ -63,11 +33,6 @@ interface RememberedValue<T> {
   write(value: T): void;
 }
 
-/**
- * A value kept as a localStorage string. A stored string `schema` does not
- * read reads as nothing at all, never as a guess at what an old build
- * meant by it.
- */
 function rememberedValue<T>(key: string, schema: Schema.Codec<T, string>): RememberedValue<T> {
   return {
     read: () => Option.getOrUndefined(readKeptOption(key, schema)),
@@ -75,7 +40,6 @@ function rememberedValue<T>(key: string, schema: Schema.Codec<T, string>): Remem
   };
 }
 
-/** A roster sort as kept: its key and its direction, joined by a separator no key contains. */
 const storedAccountsSort = Schema.TemplateLiteralParser([
   Schema.Literals(Object.values(ACCOUNTS_SORT_KEY)),
   ":",
@@ -93,11 +57,6 @@ const storedAccountsSort = Schema.TemplateLiteralParser([
   ),
 );
 
-/**
- * The last roster sort chosen, so a refresh reopens it in the order it was
- * left. A stored value the sets no longer name reads as no sort at all — the
- * server's own order — rather than a guess at what an old build meant by it.
- */
 export const ACCOUNTS_SORT: RememberedValue<AccountsSort> = rememberedValue(
   "app-admin-users-sort",
   storedAccountsSort,

@@ -35,17 +35,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { AgentConnectSection } from "./agent-auth-section.js";
 import { AgentsPage } from "./agents-page.js";
 
-/**
- * Settings › Agents' harnesses over a bridge answering as the service would:
- * each row's button says how its harness is connected, or Connect, or that
- * its plan needs a hand; its dialog's rows save and remove each credential,
- * and while both are saved its default control picks the one new agents
- * use, sent as the plan's `forAgents`. Nothing pasted stands on the page once kept or
- * reaches a log. Setup's same rows connect in place, with no dialog.
- * Synthetic credentials throughout.
- */
-
-/** Low-entropy fakes shaped as a pasted key and token are, built at run time. */
 const KEY = ["sk", "ant", "api03", "synthetic".repeat(4)].join("-");
 const TOKEN = ["sk", "ant", "oat01", "fake".repeat(8)].join("-");
 
@@ -79,7 +68,6 @@ const CHATGPT_PLAN: SubscriptionKeySummary = {
   forAgents: true,
 };
 
-/** The code a Connect Codex start hands out. */
 const DEVICE_LOGIN = {
   loginId: "login-1",
   userCode: "225Q-1343X",
@@ -88,20 +76,13 @@ const DEVICE_LOGIN = {
   expiresAt: AT + 15 * 60 * 1000,
 };
 
-/** What the test's service holds for the account. */
 let held: ProviderKeysAnswer = { keys: [] };
-/** Why the next save is refused, or nothing where it is kept. */
 let refusal: (typeof PROVIDER_KEY_REJECTION)[keyof typeof PROVIDER_KEY_REJECTION] | undefined;
-/** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** Connect Codex's wait while it is held open, as a login waits on its code being entered; none answers it connected at once. */
 let waitOpen: PromiseWithResolvers<FakeActAnswer> | undefined;
-/** How the keys the host holds are delivered to the window again, as each write's own answer lays them. */
 let deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void = () => undefined;
-/** Every copy the page made, in order. */
 let copied: string[] = [];
 
-/** A write's answer of the keys, laid where the host holds them before it answers, as the host lays it. */
 function written(value: ProviderKeysAnswer): Promise<FakeActAnswer> {
   deliverKeys({ rows: value });
   return Promise.resolve(done(value));
@@ -149,7 +130,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.CHATGPT_DEVICE_START:
       return Promise.resolve(done(DEVICE_LOGIN));
     case ACT_KIND.CHATGPT_DEVICE_CANCEL: {
-      // Ending a login answers its wait as canceled, as the service does.
       const canceled = { outcome: CHATGPT_DEVICE_LOGIN.CANCELED };
       waitOpen?.resolve(done(canceled));
       waitOpen = undefined;
@@ -191,7 +171,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The Agents page for an ordinary account, on a platform offering `capabilities`. */
 async function mount(
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
 ): Promise<HTMLElement> {
@@ -209,7 +188,6 @@ async function mount(
   return container;
 }
 
-/** Setup's Connect an agent, and whether either harness stood connected after each answer. */
 async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }> {
   const base = stateWith({}, {});
   handState(
@@ -234,20 +212,17 @@ async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }
   return { page: container, connected };
 }
 
-/** Whether the harnesses' rows stand, which they do once the signed-in account's keys are read. */
 function harnessRowsStand(page: HTMLElement): boolean {
   return [...page.querySelectorAll(".ui-settings-row")].some((row) =>
     row.textContent?.startsWith("Claude"),
   );
 }
 
-/** A harness's row button, or the link it draws in a button's place, the check it may end in having none. */
 const rowButton = (page: HTMLElement, harness: string) =>
   [...page.querySelectorAll<HTMLElement>(".ui-settings-row")]
     .find((row) => row.textContent?.startsWith(harness))
     ?.querySelector<HTMLElement>("button, a") ?? assert.fail(`no ${harness} row`);
 
-/** What a harness's row says under its name, and in which tint, or nothing where it says nothing. */
 const rowState = (page: HTMLElement, harness: string) => {
   const line = rowButton(page, harness)
     .closest(".ui-settings-row")
@@ -272,7 +247,6 @@ async function press(within: Element | Document, words: string): Promise<void> {
   await settle();
 }
 
-/** Opens a harness's dialog from its row. */
 async function open(page: HTMLElement, harness: string): Promise<HTMLElement> {
   act(() => rowButton(page, harness).click());
   await settle();
@@ -283,7 +257,6 @@ async function open(page: HTMLElement, harness: string): Promise<HTMLElement> {
   );
 }
 
-/** Connect Codex, standing over the window, found by the title that names it. */
 const connectCodex = () =>
   [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
     (dialog) =>
@@ -291,25 +264,21 @@ const connectCodex = () =>
       "Connect Codex",
   ) ?? assert.fail("no Connect Codex dialog");
 
-/** The dialog's row a label names. */
 const row = (dialog: Element, label: string) =>
   [...dialog.querySelectorAll<HTMLElement>(".ui-settings-row")].find(
     (each) => each.querySelector(".ui-settings-row-label")?.textContent === label,
   ) ?? assert.fail(`no ${label} row`);
 
-/** What a dialog's row says of its credential under its name, and in which tint. */
 const lineOf = (within: Element) => {
   const line = within.querySelector<HTMLElement>(".ui-settings-row-state");
   return line === null ? undefined : { words: line.textContent, state: line.dataset.state };
 };
 
-/** An option of the default's control, by its words. */
 const choice = (dialog: Element, label: string) =>
   [...dialog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
     (each) => each.textContent === label,
   ) ?? assert.fail(`no ${label} choice`);
 
-/** The field a visible label names, as a reader finds it. */
 function labeled(within: Element, words: string): HTMLInputElement {
   const label = [...within.querySelectorAll("label")].find((each) => each.textContent === words);
   const control = label?.control;
@@ -317,7 +286,6 @@ function labeled(within: Element, words: string): HTMLInputElement {
   return control;
 }
 
-/** Puts `value` in a field as typing does. */
 function type(field: HTMLInputElement, value: string): void {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
@@ -325,7 +293,6 @@ function type(field: HTMLInputElement, value: string): void {
   });
 }
 
-/** Puts `value` in a field as a paste does, which saves it, and waits on the save. */
 async function paste(field: HTMLInputElement, value: string): Promise<void> {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
@@ -334,10 +301,6 @@ async function paste(field: HTMLInputElement, value: string): Promise<void> {
   await settle();
 }
 
-/**
- * The question standing at the one open dialog's foot, never in a card of
- * its own over it, with what the dialog holds stilled behind it.
- */
 function question(): HTMLElement {
   const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
   assert.equal(dialogs.length, 1, "the question opens no card over the dialog");
@@ -350,7 +313,6 @@ function question(): HTMLElement {
   return dialog.querySelector<HTMLElement>('[role="group"]') ?? assert.fail("no question stands");
 }
 
-/** The act a question asks, as its look says what it costs. */
 const actLook = (words: string) => button(question(), words).getAttribute("data-variant");
 
 const forAgentsSent = () =>
@@ -372,7 +334,6 @@ test("each harness's row names the credential in use, then what is wrong with it
     keys: [{ ...ANTHROPIC_KEY, provider: PROVIDER_KEY_PROVIDER.OPENAI, hint: "sk-proj-…7Qx2" }],
     subscriptions: [CLAUDE_PLAN],
   };
-  // Note that one client holds the test's worlds, so each later world waits for its own keys to replace the last one's.
   const connected = await mount();
   await vi.waitFor(() =>
     assert.deepEqual(rowState(connected, "Claude"), connectedWith("Claude plan")),
@@ -391,7 +352,6 @@ test("each harness's row names the credential in use, then what is wrong with it
   assert.deepEqual(rowState(connected, "Codex"), connectedWith("OpenAI API key sk-proj-…7Qx2"));
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  // The plan's default off with a key saved is the key, whatever the plan's state.
   held = {
     keys: [ANTHROPIC_KEY],
     subscriptions: [
@@ -411,7 +371,6 @@ test("each harness's row names the credential in use, then what is wrong with it
   assert.equal(rowButton(attention, "Codex").getAttribute("aria-label"), "Sign in to Codex again");
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  // A plan at its limit says so after its name; only ChatGPT's offers Manage usage, which opens ChatGPT's usage settings.
   held = {
     keys: [],
     subscriptions: [
@@ -480,7 +439,6 @@ test("while both credentials are saved, the dialog's own default control picks t
       forAgents: false,
     },
   ]);
-  // Note that what the host lays after each act reaches the keys' query a notify later, so the choice is waited on.
   await vi.waitFor(() =>
     assert.equal(choice(dialog, "API key").getAttribute("aria-checked"), "true"),
   );
@@ -647,7 +605,6 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   });
   await settle();
   await press(question(), "Disconnect Claude plan");
-  // Note that the form stands once the keys the host lays after the disconnect reach the query.
   await vi.waitFor(() =>
     assert.equal(
       document.activeElement === labeled(dialog, "Paste the token it prints"),
@@ -776,7 +733,6 @@ test("setup connects Claude in place, with no dialog: Connect opens one row at a
 
   await press(row(page, "Claude"), "Connect Claude");
   await paste(labeled(row(page, "Claude"), "Paste the token it prints"), TOKEN);
-  // Note that the row closes once the keys the host lays after the save reach their query.
   await vi.waitFor(() =>
     assert.equal(
       row(page, "Claude").querySelector("input") === null,

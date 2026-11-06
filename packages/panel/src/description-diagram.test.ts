@@ -29,51 +29,29 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
 
-/**
- * description-diagram.test.ts -- a ```` ```mermaid ```` fence on a plan's page and
- * in its versions draws as the picture the diagram bundle answered, its code
- * a press away; a fence the bundle refuses says so over its code; a fence
- * whose code a version changed is drawn as its code with the changes marked;
- * and every other fence, and every fence where the words are not a description's,
- * stays code. Mermaid cannot lay out under jsdom, so the bundle stands in at
- * its one boundary, the bundle's importer, answering a picture named by the
- * code and the appearance it was asked in. On a finger's device, or in a
- * phone's narrow room, a tap on a diagram opens it over the window, which
- * its Close or Escape shuts; with a mouse in a wide room a tap opens nothing,
- * while the keyboard's press on the picture opens it in any room.
- * Synthetic description.
- */
-
-/** The code the stand-in refuses, as Mermaid refuses code it cannot parse. */
 const UNPARSED = "flowchart LR\n  A -->";
 
-/** What the stand-in answers: a picture named by what it was asked to draw, or a refusal for `UNPARSED`. */
 function stoodInDrawing(code: string, appearance: DiagramAppearance): DiagramDrawing {
   if (code === UNPARSED) return { kind: DIAGRAM_DRAWING.REFUSED };
   return { kind: DIAGRAM_DRAWING.DRAWN, url: pictureOf(code, appearance) };
 }
 
-/** The address the stand-in answers for a code in an appearance. */
 function pictureOf(code: string, appearance: DiagramAppearance): string {
   return `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
 }
 
-/** The diagram bundle's stand-in. */
 const STAND_IN: DiagramModule = {
   draw: (code, appearance) => Promise.resolve(stoodInDrawing(code, appearance)),
 };
 
 let bundles: SideBundles;
 
-// The bundle already landed, as it is once a diagram has been shown in this window.
 beforeAll(async () => {
   bundles = await Effect.runPromise(landedBundles({ diagram: () => Promise.resolve(STAND_IN) }));
 });
 
-/** Whether the window is in its dark appearance, and who hears it flip. */
 const appearance = { dark: false, listeners: new Set<() => void>() };
 
-/** Whether the window is worked by a finger, which a press on a diagram asks as it lands. */
 const device = { finger: false };
 
 const roots: Root[] = [];
@@ -106,7 +84,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** `node` drawn in a window of its own, once every draw it asked for has landed. */
 async function drawn(node: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -123,22 +100,18 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** A description whose text holds `fence` under a heading. */
 function taskWith(fence: string): Task {
   return { ...DOCUMENT_TASK, document: { body: `## Flow\n\n${fence}\n`, assumptions: [] } };
 }
 
-/** A Mermaid fence around `code`. */
 const mermaidFence = (code: string) => `\`\`\`mermaid\n${code}\n\`\`\``;
 
-/** The diagrams a page draws, as their pictures' addresses. */
 function pictures(container: HTMLElement): (string | null)[] {
   return [...container.querySelectorAll(".description-diagram img")].map((img) =>
     img.getAttribute("src"),
   );
 }
 
-/** The failure note's Retry, where the fence has one. */
 function retry(container: HTMLElement): HTMLButtonElement | undefined {
   return (
     [
@@ -147,7 +120,6 @@ function retry(container: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
-/** The diagram's Show code, or Show diagram, toggle. */
 function toggle(container: HTMLElement): HTMLButtonElement {
   return (
     container.querySelector<HTMLButtonElement>(".description-diagram-head button") ??
@@ -155,7 +127,6 @@ function toggle(container: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** A version of the description drawn against the one before it, as the version history draws it. */
 function Version({ previous, now }: { previous: string; now: string }): ReactNode {
   const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {
@@ -358,12 +329,10 @@ test("a version draws a fence it left alone as its diagram, and one whose code i
   );
 });
 
-/** The diagram opened over the window, if it is. */
 function viewer(): HTMLElement | null {
   return document.querySelector<HTMLElement>(".attachment-viewer");
 }
 
-/** The diagram's picture on the page. */
 function picture(container: HTMLElement): HTMLImageElement {
   return (
     container.querySelector<HTMLImageElement>(".description-diagram-picture") ??
@@ -371,12 +340,10 @@ function picture(container: HTMLElement): HTMLImageElement {
   );
 }
 
-/** A pointer's press on `element`, which counts its clicks, as a key's press does not. */
 function tap(element: HTMLElement): void {
   element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
 }
 
-/** The press around the diagram's picture, which the keyboard reaches. */
 function press(container: HTMLElement): HTMLButtonElement {
   return (
     picture(container).closest<HTMLButtonElement>("button") ??
@@ -408,7 +375,6 @@ test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it"
   const room = document.body.appendChild(document.createElement("div"));
   room.className = "desktop-shell";
   room.dataset.room = "narrow";
-  // Note that the shell hands its room down as well as writing it on its element, as `app.tsx` does.
   const page = await drawn(
     createElement(
       ShellRoomContext.Provider,

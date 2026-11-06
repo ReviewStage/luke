@@ -22,13 +22,6 @@ import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
-/**
- * agent-turn-foot.test.ts -- in an agent's tab, a finished turn's Copy and
- * Copy link stand at its foot, on the line saying how long it worked and
- * after those words, as a sent message's stand on the line under its
- * bubble; a turn still running offers none. Synthetic throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 
 const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 1 };
@@ -58,7 +51,6 @@ const TASK: AgentTranscriptMessage = {
   parts: [{ type: "text", text: "Make the video tile look good at any width." }],
 };
 
-/** The agent's turn, saying its words, finished or still running. */
 function turn(finished: boolean): AgentTranscriptMessage {
   return {
     id: TURN,
@@ -78,7 +70,6 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-/** The agent's turn as the tab draws it, over a page of the task and that turn, for an agent of `status`. */
 async function drawnTurn(status: AgentStatus): Promise<HTMLElement> {
   fakeAppBridge({});
   fakeActPort({});
@@ -125,7 +116,6 @@ async function drawnTurn(status: AgentStatus): Promise<HTMLElement> {
   );
 }
 
-/** What stands on the line holding the turn's "Worked for", a line of its own under the turn's words, in reading order. */
 function footOf(message: HTMLElement): readonly string[] {
   const worked = message.querySelector("[data-worked]") ?? assert.fail("the turn says it worked");
   const line =

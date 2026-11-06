@@ -13,13 +13,6 @@ import { onSideBundles } from "../testing/side-bundles.js";
 import { AgentComposer } from "./agent-composer.js";
 import { useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * A box whose editor bundle could not be loaded says so under the card and
- * stays inert, its importer failing as a chunk that could not be loaded does,
- * and offers Retry, which reads the bundle again, so a chunk that lands then
- * mounts the editor.
- */
-
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -47,7 +40,6 @@ test("a box whose editor bundle could not be loaded says so beside Retry and sta
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
   const bundles = sideBundles({
     descriptionEditor: () => {

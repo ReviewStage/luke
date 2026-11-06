@@ -27,14 +27,6 @@ import { restOn } from "../testing/hint-rest.js";
 import { onSideBundles } from "../testing/side-bundles.js";
 import { type DiffListEntry, PierreDiffList } from "./diff-list.js";
 
-/**
- * diff-list.test.ts -- Files changed's list while its bundle is still on its
- * way: the place says the changes are being read, as the tab does while it
- * reads them, rather than standing empty, and stays busy until the list
- * has drawn its first file. The bundle is the real one, held back until the
- * test lets it land, as a slow connection holds it on the web.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -75,9 +67,6 @@ const ENTRY: DiffListEntry = {
 const roots: Root[] = [];
 
 beforeAll(async () => {
-  // Note that the highlighter is loaded first, in the look's themes and on the
-  // highlighter the bundle picks, because Pierre draws no file until it is,
-  // and a cold load takes longer than the two frames `settle` waits.
   await getSharedHighlighter({
     themes: [LOOK.themes.dark, LOOK.themes.light],
     langs: ["typescript"],
@@ -90,7 +79,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Lets the bundle's import land, and Pierre's next two frames, in which it draws the list. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();

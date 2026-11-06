@@ -10,16 +10,8 @@ import {
 } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * placement.test.ts -- where the description editor's caret stands as it opens and
- * as a press on its text's room moves it: the end of the text, or the end
- * of a section, read back as the section Esc names. And what an empty text
- * says until a word is typed. Synthetic text.
- */
-
 const TEXT = "## Goal\n\nShip the invite flow.\n\n## Risks\n\nEmail may bounce.\n";
 
-/** Every editor mounted, taken down after each test. */
 const mounted: DescriptionEditorHandle[] = [];
 
 beforeEach(installEditorLayout);
@@ -29,7 +21,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on `markdown` with its caret where `placement` says, and each section Esc named, in order. */
 function mount(
   markdown: string,
   placement: DescriptionEditorPlacement | undefined,
@@ -53,7 +44,6 @@ function mount(
   return { finished, handle, element };
 }
 
-/** Esc in the editor, which names the section the caret stands in. */
 function pressEscape(element: HTMLElement): void {
   element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 }
@@ -111,7 +101,6 @@ test("an editor opened on words a press selected selects them again, from where 
     code: false,
     top: 0,
   });
-  // Selected backwards, from the second line's "invite" up into the first line's "it".
   const { element } = mount(text, {
     x: 0,
     y: 0,
@@ -146,7 +135,6 @@ test("an editor opened on words it cannot find, in their section, an empty one, 
     y: 0,
     words: { section, text: said, occurrence: 0, offset: 2, code: false, top: 0 },
   });
-  // Note that the click's point stands on nothing, as jsdom lays nothing out, so it puts the caret at the text's start.
   Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => null });
   try {
     for (const placement of [words(0, "Not here."), words(1, "Ship it."), words(5, "Ship it.")]) {

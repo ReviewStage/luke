@@ -1,7 +1,3 @@
-/**
- * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, syntax theme, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
- */
-
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
@@ -29,7 +25,6 @@ const HEAD = "0123456789abcdef0123456789abcdef01234567";
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // View settings opens its syntax theme on the window's appearance, here the dark one.
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query.includes("dark"),
     addEventListener: () => undefined,
@@ -46,7 +41,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A File tab's file as the tab draws it, in the look it reads. */
 function DrawnLines(): React.JSX.Element {
   return createElement(WholeFile, {
     name: PATH,
@@ -58,7 +52,6 @@ function DrawnLines(): React.JSX.Element {
   });
 }
 
-/** How the drawn file stands: its numbers, its wrap, and the type its scroller names. */
 function drawnLines(container: HTMLElement) {
   const scroller =
     container.querySelector<HTMLElement>(".whole-file > .ui-scroll-area") ??
@@ -75,7 +68,6 @@ function drawnLines(container: HTMLElement) {
   };
 }
 
-/** A File tab's bar with the end its tab hands it. */
 function Bar(): React.JSX.Element {
   const end = useFileViewEnd({
     path: PATH,
@@ -85,7 +77,6 @@ function Bar(): React.JSX.Element {
   return createElement(FileViewBar, { lead: null, github: undefined, ...end });
 }
 
-/** Draws the bar's end beside the look the tab's lines follow. */
 function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -101,7 +92,6 @@ function mount(): HTMLElement {
   return container;
 }
 
-/** Presses the button of a name in the bar. */
 function press(container: HTMLElement, name: string): void {
   const button =
     container.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`) ??
@@ -109,7 +99,6 @@ function press(container: HTMLElement, name: string): void {
   act(() => button.click());
 }
 
-/** Answers the view's file reads through `read`, and its tree's listings as unanswered. */
 function answerFileReads(read: (request: TaskFileRequest) => Promise<TasksFileAnswer>): void {
   fakeActPort({
     ...readingFiles(read),
@@ -129,7 +118,6 @@ test("View settings on a File tab offers its lines' wrap, numbers, syntax theme,
   );
   assert.deepEqual(
     [...popover.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
-      // A pop-up's name ends with the value it names, which is not the row's.
       (control) => control.getAttribute("aria-label")?.split(": ")[0],
     ),
     [
@@ -182,7 +170,6 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
   const copied: string[] = [];
   fakeAppPlatform(copyingInto(copied));
   const asked: TaskFileRequest[] = [];
-  // The service: the head's commit from the first line, the text at it, and newer text once the branch moves on.
   const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> => {
     asked.push(request);
     if (request.raw !== true) {

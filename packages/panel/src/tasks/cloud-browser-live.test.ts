@@ -18,13 +18,6 @@ import {
   type InputMessage,
 } from "./cloud-browser-live.js";
 
-/**
- * One cloud Browser tab's live view over a fake door: the sockets it opens,
- * what it sends on each, and the frames it hands the pane, as the relay
- * answers it in each test. A synthetic task and tab throughout; the clock is
- * the test's own.
- */
-
 const TARGET = {
   agentId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   tabId: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
@@ -41,14 +34,12 @@ const KEY: InputMessage = {
   modifiers: 0,
 };
 
-/** One socket the view opened: what it sent, decoded, and the listener the relay answers through. */
 interface FakeSocket {
   readonly sent: unknown[];
   readonly listener: BrowserLiveListener;
   closed: boolean;
 }
 
-/** A view over a door that records every socket, its frames drawn into `frames`, and its states into `views`. */
 function harness() {
   const sockets: FakeSocket[] = [];
   const frames: CloudBrowserFrame[] = [];
@@ -77,7 +68,6 @@ function harness() {
   return { live, sockets, frames, views, say, run, last: () => views.at(-1) };
 }
 
-/** Lets every fiber the view forked run as far as it can. */
 const settle = Effect.repeat(Effect.yieldNow, { times: 20 });
 
 const VIEWPORT_MESSAGE = { type: BROWSER_LIVE_CLIENT.VIEWPORT, ...VIEWPORT };

@@ -11,13 +11,6 @@ import {
   ConversationScrollButton,
 } from "./conversation.js";
 
-/**
- * conversation.test.ts -- a log opens on its newest line, offers the way
- * back to it once the reader scrolls away, and asks for older lines as the
- * reader nears its top. jsdom lays nothing out, so the log's heights are
- * stood in for.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -33,7 +26,6 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
 });
 
-/** Lays out every log drawn from now on as 2000px of lines in a 600px box, its rows' block 16px down it. */
 function logsLaidOut(): void {
   const tops = new WeakMap<Element, number>();
   const isLog = (element: Element) => element.getAttribute("role") === "log";
@@ -63,10 +55,8 @@ function logsLaidOut(): void {
   });
 }
 
-/** The way back to the newest line, where it shows. */
 const WAY_BACK = "[aria-label='Scroll to the newest line']";
 
-/** Scrolls `box` to `top` as the browser would, so the log hears it. */
 function scroll(box: HTMLElement, top: number): void {
   box.scrollTop = top;
   act(() => {
@@ -74,10 +64,8 @@ function scroll(box: HTMLElement, top: number): void {
   });
 }
 
-/** Draws a long log of ten lines, asking for older lines through `onNearTop` where one is handed, and answers its box. */
 function mountLog(onNearTop?: () => void) {
   logsLaidOut();
-  // jsdom has no `scrollTo` on an element, which the virtualizer writes through.
   Object.defineProperty(HTMLElement.prototype, "scrollTo", {
     configurable: true,
     value(this: HTMLElement, options?: ScrollToOptions) {

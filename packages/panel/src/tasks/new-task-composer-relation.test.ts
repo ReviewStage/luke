@@ -19,16 +19,6 @@ import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import type { NewTaskStart } from "./use-tasks-tab.js";
 
-/**
- * new-task-composer-relation.test.ts -- New task's relations on the card:
- * tasks picked from the + menu's Task relation are sent with the start
- * together, each as the kind standing at the search's foot, and a row's ×
- * drops its own; a task picked again changes its kind and a second Sub-task
- * of replaces the first; as Sub-task of, a task in another repository is
- * listed dimmed with why, and a pick holds the repository chip to the other
- * task's, the start naming no repository. Synthetic throughout.
- */
-
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -38,7 +28,6 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
-/** A task of Acme by id, name, number, and repository. */
 function task(id: string, name: string, number: number, repository: string): TaskSummary {
   return { id, workspaceId: ACME.id, name, number, createdAt: 1, updatedAt: 1, repository };
 }
@@ -47,7 +36,6 @@ const LOGIN = task("1a2b3c4d-0000-4000-8000-000000000001", "Ship login", 212, "a
 const LIMIT = task("1a2b3c4d-0000-4000-8000-000000000002", "API rate limit", 7, "acme/api");
 const SIGNUP = task("1a2b3c4d-0000-4000-8000-000000000003", "Ship signup", 213, "acme/web");
 
-/** The host's read of Acme's repositories, listing both on its App. */
 const LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
@@ -89,7 +77,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card in Acme on acme/web, each start's repository and relations written down. */
 async function mount() {
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, LISTING);
   const control = tasksControl();
@@ -134,7 +121,6 @@ async function mount() {
   return { container, starts };
 }
 
-/** The open menu's row naming `words`: a menu item, a task, or a pinned row. */
 function row(words: string): HTMLElement {
   return (
     [
@@ -145,7 +131,6 @@ function row(words: string): HTMLElement {
   );
 }
 
-/** Opens the card's + menu and its Task relation. */
 async function openRelationSearch(container: HTMLElement): Promise<void> {
   const plus =
     container.querySelector<HTMLButtonElement>('button[aria-label="Add files and more"]') ??
@@ -156,7 +141,6 @@ async function openRelationSearch(container: HTMLElement): Promise<void> {
   await settle();
 }
 
-/** Relates `name` from the + menu as `kind`, switched at the search's foot. */
 async function relate(container: HTMLElement, kind: string, name: string): Promise<void> {
   await openRelationSearch(container);
   act(() => row("Relation").click());
@@ -167,7 +151,6 @@ async function relate(container: HTMLElement, kind: string, name: string): Promi
   await settle();
 }
 
-/** The rows docked over the card, each read as its sentence: kind, then name. */
 function docked(container: HTMLElement): string[] {
   return [...container.querySelectorAll<HTMLElement>(".new-task-relations-dock li")].map(
     (each) =>

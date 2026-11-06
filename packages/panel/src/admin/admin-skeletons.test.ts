@@ -11,18 +11,8 @@ import { ReliabilityScreen } from "./screens/reliability.js";
 import { UsersScreen } from "./screens/users.js";
 import { WorkspacesScreen } from "./screens/workspaces.js";
 
-/**
- * admin-skeletons.test.ts -- an admin screen's first load stands the page it
- * is waiting for: the same headline cards, a chart's own heading and legend,
- * a table's own columns with an account's avatar only where an account
- * lands, a hint only where a card will say one, and every section the page
- * states, its notes among them. Synthetic accounts; every read is held
- * unanswered but the one a test lands.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A read nobody answers, so the screen stands its skeleton. */
 function unanswered(): Promise<never> {
   return Promise.withResolvers<never>().promise;
 }
@@ -47,7 +37,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `screen` under doors answering with `reads`, and lets any answer land. */
 async function draw(
   screen: React.ReactElement,
   reads: Partial<AdminReads> = {},
@@ -78,7 +67,6 @@ async function draw(
   return page;
 }
 
-/** What every screen is handed but these tests never press. */
 const QUIET = {
   hideAdmins: false,
   onHideAdminsChange: () => undefined,
@@ -91,14 +79,12 @@ const QUIET = {
   frame: (content: React.JSX.Element) => content,
 } as const;
 
-/** The region a loading page stands its skeleton in. */
 function loadingRegion(page: HTMLElement): HTMLElement {
   const region = page.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
   if (region === null) throw new Error("the page stands no loading region");
   return region;
 }
 
-/** The headings of the sections under `within`, in order. */
 function sectionHeadings(within: HTMLElement): string[] {
   return Array.from(within.querySelectorAll("section h2"), (heading) => heading.textContent ?? "");
 }

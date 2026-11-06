@@ -51,19 +51,8 @@ import {
   useSidePanel,
 } from "./use-side-panel.js";
 
-/**
- * The side panel's cloud Browser tabs: a tab opened here listed until the
- * host's held list names it; each drawn in the strip, kept chosen while the
- * list is on its way, and closed in this window alone; and one tab's pane, which waits quietly for the page, draws it once
- * a frame arrives, takes the tab over and hands it back, and steers it from
- * its bar; and a draft, which opens nothing until its bar's Enter. A
- * synthetic task and tab throughout, the live view over a fake door.
- */
-
-/** The app, whose browser a tab is in, wearing a plain glyph. */
 const APP_OWNER = { name: "Vespin", icon: createElement("span") };
 
-/** An agent whose browser a draft opens in. */
 const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 
 const TASK = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
@@ -89,14 +78,12 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** Lets the window's reads, and the redraws they cause, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/** Draws an element under a fresh atom registry, as the window's root does. */
 function draw(element: React.ReactElement): { rerender: (next: React.ReactElement) => void } {
   const container = document.createElement("div");
   document.body.append(container);
@@ -107,7 +94,6 @@ function draw(element: React.ReactElement): { rerender: (next: React.ReactElemen
   return { rerender: (next) => act(() => root.render(onRegistry(registry, next))) };
 }
 
-/** A task that has used every fixed tab. */
 const USED: OpenTask = {
   id: TASK,
   holds: Object.fromEntries(SIDE_PANEL_TABS.map((tab) => [tab, true])),
@@ -164,7 +150,6 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
     assert.ok(button, `a ${name} button`);
     await act(async () => button.click());
   };
-  // What stands over the page, apart from the line under the bar saying who has the tab.
   const status = () =>
     document.querySelector('.cloud-browser-body [role="status"]')?.textContent ?? undefined;
 
@@ -178,7 +163,6 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   );
   await settle();
   assert.ok(listener, "the pane opened its view");
-  // The window's own spinner stands while the page is on its way, its words for a screen reader alone.
   await vi.waitFor(() => assert.equal(status(), "Waiting for the page"));
   assert.ok(
     document.querySelector("section.ph-no-capture"),
@@ -451,9 +435,7 @@ test("a tab the member opened here is listed before the service lists it, and le
     ),
   );
 
-  // The service lists it, and later its agent's browser closes it: it goes, as any listed tab would.
   act(() => lay({ taskId: TASK }, [LISTED, opened]));
-  // Note that each list reaches the tabs' query one notify tick later, so the one listing the tab lands before the next.
   await vi.waitFor(() => assert.equal(listed?.length, 2));
   act(() => lay({ taskId: TASK }, [LISTED]));
   await settle();
@@ -465,14 +447,12 @@ test("a tab the member opened here is listed before the service lists it, and le
   );
 });
 
-/** The bar's address field. */
 function addressField(): HTMLInputElement {
   const field = document.querySelector<HTMLInputElement>('input[aria-label="Address"]');
   assert.ok(field, "the bar's address");
   return field;
 }
 
-/** Types `value` into the bar's address as the page would hand it to React. */
 function typeAddress(value: string): void {
   const field = addressField();
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -482,7 +462,6 @@ function typeAddress(value: string): void {
   });
 }
 
-/** Presses Enter in the bar's address, which submits its form. */
 async function pressEnter(): Promise<void> {
   await act(async () => addressField().form?.requestSubmit());
   await settle();
@@ -495,7 +474,6 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
       asked.push(payload);
-      // SAFETY: the test hands back the wire's own answer, a tab or a failure.
       return Promise.resolve(answer as never);
     },
   });
@@ -526,7 +504,6 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
 
   await pressEnter();
   assert.deepEqual(asked, [{ agentId: AGENT_ID, address: "http://localhost:3000/" }]);
-  // Note that the refusal is drawn once the open's mutation hears it, a few steps after the press.
   await vi.waitFor(() =>
     assert.equal(
       document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
@@ -684,7 +661,6 @@ test("a bar's steps say why they are off while the tab is not live, reachable by
   restOn(back());
   assert.equal(hint(), "Back");
 
-  // A view the relay closed as idle needs Watch again, which is not a wait.
   act(() => back().dispatchEvent(new MouseEvent("pointerout", { bubbles: true })));
   await act(async () => listener?.closed(BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.IDLE]));
   await settle();

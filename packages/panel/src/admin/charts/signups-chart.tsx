@@ -22,14 +22,8 @@ const SIGNUPS_CHART = {
 
 const SIGNUPS_TITLE = "New accounts per day";
 
-/** The plot's height, which the chart and its skeleton both stand. */
 const SIGNUPS_PLOT_HEIGHT = "10rem";
 
-/**
- * One series, so the heading names it and no legend box restates the heading.
- * A window with no signups says so instead of drawing the server's zero-fill
- * as a flat measurement, and today's bar wears the partial-day fade.
- */
 export function SignupsChart({
   daily,
   trend,
@@ -62,14 +56,12 @@ export function SignupsChart({
   );
 }
 
-/** The chart while the window is read: its heading over its plot's block, and a bone for the trend it reads. */
 export function SignupsChartSkeleton(): React.JSX.Element {
   return <ChartFrameSkeleton title={SIGNUPS_TITLE} aside plot={SIGNUPS_PLOT_HEIGHT} />;
 }
 
 const SIGN_IN_METHODS_TITLE = "Linked sign-in methods";
 
-/** The methods a bar stands for, in the order they stand, each read from the answer's counts. */
 const SIGN_IN_METHODS: readonly {
   method: string;
   accounts: (methods: AdminSignInMethods) => number;
@@ -79,23 +71,12 @@ const SIGN_IN_METHODS: readonly {
   { method: "Other", accounts: (methods) => methods.other },
 ];
 
-/** The room each method's bar takes. */
 const SIGN_IN_ROW_HEIGHT = 40;
 
 const SIGN_IN_METHODS_CHART = {
   accounts: { label: "Accounts", color: "var(--ui-color-chart-1)" },
 } satisfies ChartConfig;
 
-/**
- * How the accounts sign in, as horizontal bars. One measure across nominal
- * categories, so every bar wears the first slot's hue and the end labels
- * carry the exact count and its share of all accounts — shares that can sum
- * past 100%, since an account may link more than one method, which is why
- * each label says "of accounts" instead of posing as a slice of the bars. A
- * method nobody has linked draws no bar at all: a zero-length bar parks its
- * end label at the plot origin, where two empty methods would stack their
- * labels over the category axis.
- */
 export function SignInMethodsChart({
   methods,
   totalAccounts,
@@ -146,10 +127,6 @@ export function SignInMethodsChart({
   );
 }
 
-/**
- * The chart while the roster is read: its heading over a block of a bar for
- * every method, as an answer where each was linked stands.
- */
 export function SignInMethodsChartSkeleton(): React.JSX.Element {
   return (
     <ChartFrameSkeleton

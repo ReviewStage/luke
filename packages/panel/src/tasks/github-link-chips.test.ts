@@ -25,25 +25,6 @@ import { PullRequestChip } from "./pull-request-chip.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * github-link-chips.test.ts -- a pull request's or an issue's link in a
- * description's words says what the workspace's GitHub App answers for it: once it
- * answers, every link to it is called by its number and live title, whatever
- * its label and never its repository, so a pasted address and an agent's
- * `[@#42](…)` draw one chip, on a page with a repository and one with none; each wears GitHub's mark for where it
- * stands and says it in words, its card saying its key, its state, and a
- * pull request's lines added and removed in place of its address. Each is held by its address through
- * the plan's workspace, as the host holds it, nothing is asked where that workspace has no active
- * installation, and one the App answers nothing for stays as its address
- * says. A card names who opened it by their face, a pull request's by
- * its avatar, with how long ago it moved, its size, branches, labels, and
- * counts, a pull request's being the one card every pull request hangs
- * (`pull-request-card.tsx`). A pull request's link standing alone in words drawn as a document
- * is a row that hangs the same card, as is an agent's own pull request's
- * row pinned over its box. Synthetic workspace, plan, pull
- * requests, and issues.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AT = 1_792_000_000_000;
 const MERGED = "https://github.com/acme/relay/pull/42";
@@ -57,7 +38,6 @@ const OPEN_ISSUE = "https://github.com/acme/relay/issues/7";
 const SHELVED_ISSUE = "https://github.com/acme/relay/issues/9";
 const UNREACHED_ISSUE = "https://github.com/acme/secret/issues/3";
 
-/** The issues `acme/relay` holds, as the App answers them; `acme/secret` it does not reach. */
 const RELAY_ISSUES = new Map([
   [
     7,
@@ -80,12 +60,10 @@ const RELAY_ISSUES = new Map([
   ],
 ]);
 
-/** How long ago, before the test runs, the merged pull request was opened and merged. */
 const HOUR = 60 * 60 * 1000;
 const OPENED_AT = Date.now() - 50 * HOUR;
 const MERGED_AT = Date.now() - 2 * HOUR - 60_000;
 
-/** The pull requests `acme/relay` holds, as the App answers them: one whole, and one as an older service answers it, with no more than its number, title, page, and state. */
 const RELAY_PULLS = new Map([
   [
     42,
@@ -144,10 +122,8 @@ const RELAY_PULLS = new Map([
   ],
 ]);
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-/** Acme, no GitHub installation. */
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -157,7 +133,6 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
-/** Acme with its GitHub App installed. */
 const ACME_WITH_GITHUB: Workspace = { ...ACME, github: { login: "acme", active: true } };
 
 const TASK: TaskSummary = {
@@ -169,7 +144,6 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** What the host holds of each page this file links, by its address, as Acme's GitHub App answered it: `acme/relay`'s pull requests and issues, `acme/ledger`'s one, and none of what `acme/secret` holds, which it does not reach. */
 const STANDINGS: Readonly<Record<string, AppHostRead<AppLinkStanding>>> = Object.fromEntries([
   ...[...RELAY_PULLS.values()].map((pullRequest) => [pullRequest.url, { rows: { pullRequest } }]),
   [
@@ -190,7 +164,6 @@ const STANDINGS: Readonly<Record<string, AppHostRead<AppLinkStanding>>> = Object
   [UNREACHED_ISSUE, { rows: { issue: null } }],
 ]);
 
-/** Main's document holding the plan in Acme, with what the host holds of each page read through Acme, whether or not it is drawn. */
 function stateWith(workspace: Workspace): AppStateSnapshot {
   const snapshot = signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" });
   return {
@@ -200,7 +173,6 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
   };
 }
 
-/** The plan's page, as its words' chips stand on it. */
 const PAGE: TaskMentionsValue = {
   holder: { taskId: TASK_ID },
   taskName: TASK.name,
@@ -225,12 +197,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn on the plan's page in a window holding `workspace`, as a document where asked, and every act the window asked. */
 function drawn(text: string, workspace: Workspace, asDocument = false, page = PAGE) {
   return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace, page);
 }
 
-/** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
 async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAGE) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
@@ -239,14 +209,12 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAG
     requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
-      // A link's standing is held quietly, as the host holds one, what it holds already on the document.
       if (request.kind === ACT_KIND.TASKS_LINK_STANDING_FOLLOW) {
         return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
       }
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
   writeAppState(state);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -267,14 +235,12 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAG
   return { container, asked };
 }
 
-/** Each link the window held a standing of, in order, by the workspace and the address. */
 function standingsHeld(asked: readonly AnyAct[]) {
   return asked.flatMap((each) =>
     each.kind === ACT_KIND.TASKS_LINK_STANDING_FOLLOW ? [each.payload] : [],
   );
 }
 
-/** Each chip drawn: the name it says, the state after it, and the pull request's mark it wears, if any. */
 function chips(container: HTMLElement): [string | null, string | null, string | undefined][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
@@ -283,7 +249,6 @@ function chips(container: HTMLElement): [string | null, string | null, string | 
   ]);
 }
 
-/** Each chip drawn: the name it says, the state after it, and the issue's mark it wears, if any, by its state and the words a reader who cannot see it hears. */
 function issueChips(container: HTMLElement): (string | null | undefined)[][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     const mark = chip.querySelector<SVGElement>("[data-issue-mark]");
@@ -309,7 +274,6 @@ test("a pull request's link says its number, live title, and state, wearing its 
     ["#5", "Open", PULL_REQUEST_STATE.OPEN],
     ["secret#7", null, undefined],
   ]);
-  // Note that the three chips of one pull request hold its one read.
   assert.deepEqual(standingsHeld(asked), [
     { workspaceId: "workspace-acme", address: MERGED },
     { workspaceId: "workspace-acme", address: ELSEWHERE },
@@ -333,7 +297,6 @@ test("an open pull request GitHub's merge queue holds says Queued and wears the 
   assert.ok(row?.textContent?.includes("Queued"));
 });
 
-/** The plan's page as a place off a task draws it: in no repository. */
 const NO_REPOSITORY: TaskMentionsValue = {
   ...PAGE,
   repository: null,
@@ -438,16 +401,13 @@ test("where the workspace has no GitHub App installed, an issue's link asks noth
   assert.deepEqual(standingsHeld(asked), []);
 });
 
-/** The card a chip hangs: a pull request's own, or the mention's. */
 const CHIP_CARD = ".ui-tooltip-card :is([data-mention-card], [data-pull-request-card])";
 
-/** The card a chip hangs, once the pointer rests on the chip. */
 function cardOf(chip: Element): Element | undefined {
   restOn(chip);
   return [...document.querySelectorAll(CHIP_CARD)].at(-1);
 }
 
-/** The line under the name of the card a chip hangs, and its corner: a pull request's key and state, and how long ago it moved. */
 function cardHead(chip: Element | undefined): [string | undefined, string | undefined] {
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
@@ -461,7 +421,6 @@ function cardHead(chip: Element | undefined): [string | undefined, string | unde
   return head;
 }
 
-/** The lines under the head of the card a chip hangs, notes and rows alike: a pull request's size, branches, and who opened it, an issue's key and state, and an address where GitHub answered nothing. */
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
@@ -474,7 +433,6 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
   return notes;
 }
 
-/** A card's line as a reader hears it: its words without what is hidden from them, a face's letter and a glyph. */
 function readable(note: Element): string | null {
   const words = note.cloneNode(true);
   if (!(words instanceof Element)) return note.textContent;
@@ -482,7 +440,6 @@ function readable(note: Element): string | null {
   return words.textContent;
 }
 
-/** The face each card's opener wears: the kind of actor it is, and the avatar it is drawn with where one is. */
 function openerFace(chip: Element | undefined): [string | undefined, string | null | undefined] {
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
@@ -530,7 +487,6 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   );
 });
 
-/** Each label a chip's card names, by its name. */
 function cardLabels(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
   const card = cardOf(chip);
@@ -609,7 +565,6 @@ test("a pull request's chip whose place knows no more than its line hangs the ca
 
   const chip = container.querySelector("a") ?? assert.fail("the chip is drawn");
   restOn(chip);
-  // The card reads the pull request's standing as it hangs, which the host already holds.
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
@@ -621,7 +576,6 @@ test("a pull request's chip whose place knows no more than its line hangs the ca
   ]);
 });
 
-/** An agent's merged pull request's row pinned over its box. */
 function publishedRow(): ReactNode {
   return createElement(PublishedRow, {
     pullRequest: {

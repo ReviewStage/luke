@@ -20,41 +20,13 @@ import {
 } from "@repo/features/pull-request-chapters-wire";
 import type { DiffLineSpan } from "../diff-view/contract.js";
 
-/**
- * chapters-model.ts -- a pull request's chapters as its Chapters view draws them: which of its states stands, whether the chapters are stale, the order they are read in, which files each holds, and whether the member has viewed them.
- *
- * The view draws one state at a time (`chaptersShown`): the read on its way,
- * failed, or saying there is no pull request; no chapters yet, offering
- * Generate where the member can make them, on the model and key the read
- * names; chapters being made, by this
- * window's own Generate or someone else's; a generation that failed; or the
- * chapters ready, stale where they were made for a head the pull request
- * has moved on from, or for another push than the files drawn, or for any
- * where the files name no head (`chaptersStale`). "Other changes"
- * is always read last (`orderedChapters`). A chapter is viewed once every file it holds is
- * marked viewed on GitHub (`chapterViewed`), and marking it marks each of
- * them, or unmarks them all where all were (`chapterMarks`), so a file two
- * chapters hold is shared by both. A key change's press brings its first
- * lines in the chapter's reading order into view (`firstLineRef`), lit where
- * the chapter's diff draws them (`drawnLines`), else its file's header.
- * Nothing here reads the DOM.
- */
-
-/** Which of its states the Chapters view draws. */
 export const CHAPTERS_SHOWN = {
-  /** The read is on its way, or asked again after a failure. */
   READING: "reading",
-  /** The read did not answer anything the view can draw. */
   FAILED: "failed",
-  /** The agent has no pull request, or the number names none. */
   NO_PULL_REQUEST: "no-pull-request",
-  /** No chapters were ever asked for this pull request. */
   NONE: "none",
-  /** Chapters are being made, by this window's Generate or another's. */
   GENERATING: "generating",
-  /** The newest generation was given up on. */
   GENERATION_FAILED: "generation-failed",
-  /** The chapters, stale or not. */
   READY: "ready",
 } as const;
 
@@ -63,7 +35,6 @@ type Answered = Extract<PullRequestChaptersAnswerView, { pullRequest: unknown }>
 type Answer = NonNullable<Answered["pullRequest"]>;
 type FailureKind = Extract<Answer["chapters"], { failureKind: unknown }>["failureKind"];
 
-/** What the view draws, with what each state draws from. */
 export type ChaptersShown =
   | { readonly kind: typeof CHAPTERS_SHOWN.READING }
   | { readonly kind: typeof CHAPTERS_SHOWN.FAILED; readonly failure: Failure }
@@ -71,13 +42,11 @@ export type ChaptersShown =
   | {
       readonly kind: typeof CHAPTERS_SHOWN.NONE;
       readonly generatable: boolean;
-      /** What the member's Generate would run on; none where the service did not say. */
       readonly runsOn: ChaptersRunsOn | undefined;
     }
   | {
       readonly kind: typeof CHAPTERS_SHOWN.GENERATING;
       readonly startedAt: number;
-      /** Whether it is this window's own Generate, which answers once they land; else a read shows another's, which only a Refresh sees land. */
       readonly ours: boolean;
     }
   | {
@@ -88,34 +57,25 @@ export type ChaptersShown =
   | {
       readonly kind: typeof CHAPTERS_SHOWN.READY;
       readonly chapters: readonly Chapter[];
-      /** The provider's id of the model that told them. */
       readonly model: string;
       readonly stale: boolean;
       readonly generatable: boolean;
     };
 
-/** Every chapters model's label, Claude's and OpenAI's alike, by its provider's id. */
 const MODEL_LABELS: Readonly<Record<string, string>> = {
   ...CHAPTERS_MODEL_LABEL,
   ...OPENAI_CHAPTERS_MODEL_LABEL,
 };
 
-/** A chapters model as the view names it, one that told them or one a Generate would run on: its label where Generate offers it, else the id as stored. */
 export function chaptersModelLabel(model: string): string {
   return Object.hasOwn(MODEL_LABELS, model) ? (MODEL_LABELS[model] ?? model) : model;
 }
 
-/** The heads the tab's own reads hold now, each where it holds one: its pull request's, and its files'. */
 export interface ChaptersHeads {
   readonly pullRequest: string | undefined;
   readonly files: string | undefined;
 }
 
-/**
- * Whether chapters cannot be drawn over the files the tab holds: the files
- * are of another push than the chapters were made for, or of one no read
- * named, or the pull request has moved on past them.
- */
 function chaptersStale(chapters: Answer["chapters"], heads: ChaptersHeads): boolean {
   if (chapters.status === PULL_REQUEST_CHAPTERS_STATE.NONE) return false;
   const { pullRequest, files } = heads;
@@ -124,7 +84,6 @@ function chaptersStale(chapters: Answer["chapters"], heads: ChaptersHeads): bool
   );
 }
 
-/** The chapters in reading order: the story's own as told, then "Other changes", wherever the answer put it. */
 function orderedChapters(chapters: readonly Chapter[]): readonly Chapter[] {
   return [
     ...chapters.filter((chapter) => chapter.kind !== CHAPTER_KIND.OTHER),
@@ -132,15 +91,8 @@ function orderedChapters(chapters: readonly Chapter[]): readonly Chapter[] {
   ];
 }
 
-/**
- * What the view draws from its read as it stands, and this window's own
- * Generate where one is out, which stands over whatever the read last said
- * until it answers. A read asked again after a failure stands unread until
- * it answers (`useHostRead`), so the failure gives way to the wait.
- */
 export function chaptersShown(
   answer: PullRequestChaptersAnswerView | undefined,
-  /** When this window's own Generate was pressed, while it is out. */
   generating: number | undefined,
   heads: ChaptersHeads = { pullRequest: undefined, files: undefined },
 ): ChaptersShown {
@@ -174,7 +126,6 @@ export function chaptersShown(
   }
 }
 
-/** The paths of the files a chapter draws, in the order it first names each. */
 export function chapterPaths(
   chapter: Chapter,
   files: readonly AgentChangedFile[],
@@ -182,7 +133,6 @@ export function chapterPaths(
   return chapterPatches(chapter, files).map((file) => file.path);
 }
 
-/** Whether every file of a chapter is marked viewed; never for a chapter that holds none. */
 export function chapterViewed(
   paths: readonly string[],
   viewed: (path: string) => boolean,
@@ -190,10 +140,6 @@ export function chapterViewed(
   return paths.length > 0 && paths.every(viewed);
 }
 
-/**
- * The files a press of Mark chapter viewed turns: each one not yet viewed,
- * or, where every one is, all of them, so the press unmarks the chapter.
- */
 export function chapterMarks(
   paths: readonly string[],
   viewed: (path: string) => boolean,
@@ -201,7 +147,6 @@ export function chapterMarks(
   return chapterViewed(paths, viewed) ? paths : paths.filter((path) => !viewed(path));
 }
 
-/** How many of the review threads stand in a chapter. */
 export function chapterThreadCount(
   chapter: Chapter,
   threads: readonly ReviewThread[],
@@ -210,26 +155,16 @@ export function chapterThreadCount(
   return threads.filter((thread) => threadInChapter(thread, chapter, hunks)).length;
 }
 
-/** The line or the lines a key change points at, as its pill names them after its file. */
 export function lineRefLines(ref: LineRef): string {
   return ref.startLine === ref.endLine ? `L${ref.startLine}` : `L${ref.startLine}–${ref.endLine}`;
 }
 
-/** Lines a key change points at, named whole: the file's path, then the line or the lines. */
 export function lineRefLabel(ref: LineRef): string {
   return `${ref.path} · ${lineRefLines(ref)}`;
 }
 
-/** Where a line ref stands among others of its file at the same line: a removed line before an added one, as a unified diff draws them. */
 const SIDE_RANK = { [LINE_REF_SIDE.DELETIONS]: 0, [LINE_REF_SIDE.ADDITIONS]: 1 } as const;
 
-/**
- * The lines of a key change its press brings into view: the first in the
- * chapter's reading order, as ReviewStage orders them, by the file the
- * chapter draws first (`paths`), then by line, a removed line before an
- * added one at the same number, then the shorter run. Lines of files the
- * chapter does not draw come last, in the order the key change names them.
- */
 export function firstLineRef(
   refs: readonly LineRef[],
   paths: readonly string[],
@@ -248,15 +183,6 @@ export function firstLineRef(
   return sorted[0];
 }
 
-/**
- * The lines of `ref` the chapter's diff draws of `file`, the file as the
- * chapter draws it (`chapterPatches`): from its first line to its last, or
- * to the end of the hunk holding its first where it runs past it; none
- * where the file draws no lines, or no hunk it draws holds the first line
- * on its side, which brings the file's header into view instead. Note that
- * a hunk draws every line it counts on a side, its unchanged lines among
- * them, so a run may start on one.
- */
 export function drawnLines(
   file: AgentChangedFile | undefined,
   ref: LineRef,
@@ -273,7 +199,6 @@ export function drawnLines(
   return undefined;
 }
 
-/** The chapter `step` on from `at` among `count`, held at either end. */
 export function steppedChapter(at: number, step: number, count: number): number {
   return Math.min(Math.max(0, count - 1), Math.max(0, at + step));
 }

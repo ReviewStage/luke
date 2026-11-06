@@ -87,10 +87,8 @@ import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl } from "../testing/tasks-control.js";
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-// The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 test("the Inbox left and come back to draws the rows the window holds at once, before anything is pushed again", async () => {
@@ -134,7 +132,6 @@ test("the Inbox draws each task held whole by the account's feed from it, follow
 });
 
 test("an Inbox whose feed holds nothing of its tasks says so rather than reading for good", async () => {
-  // The feed answers with no task, as it leaves out one whose items all settled past its bound.
   world.inboxes = new Map();
   const { page } = mount();
   await settle();
@@ -144,7 +141,6 @@ test("an Inbox whose feed holds nothing of its tasks says so rather than reading
 });
 
 test("a link to an item the account's feed leaves out waits for its task's own read, saying no Not found, and then shows it", async () => {
-  // The feed leaves the invites task out, as it does one whose items all settled past its bound.
   world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
   let land: () => void = () => undefined;
   world.startRead = (taskId) =>
@@ -174,7 +170,6 @@ test("a link to an item the account's feed leaves out waits for its task's own r
 test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
   world.feedRefused = true;
   const { page } = mount();
-  // Note that the refusal, and then the feed read again, stand once they reach the feed's query.
   const retry = await vi.waitFor(
     () =>
       [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
@@ -390,7 +385,6 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
     automationName: null,
     repository: "acme/relay",
   };
-  // Main's document names the agent by what waits on it, as the window's names are read.
   const held = stateWith({}, {});
   handState({}, { inbox: { ...held.inbox, taskless: [waiting] } });
   const { page } = mount([waiting]);
@@ -434,7 +428,6 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
   );
 });
 
-/** The automation that started the agent with no task, as its workspace's list reads it. */
 const SWEEP: AutomationSummary = {
   id: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
   planId: null,
@@ -458,7 +451,6 @@ const DOMAIN: InboxItem = {
   agentId: TASKLESS_AGENT,
 };
 
-/** An item of an agent of the reader's with no task, as main lists it: no automation, and no repository. */
 function tasklessItem(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
@@ -525,7 +517,6 @@ test("an agent's row hangs a card naming the agent and the automation that start
 
   act(() => rowNamed(page, "Bump the Node image?").click());
   await settle();
-  // Note that no automation stands behind its crumb, so the crumb is words, opening nothing.
   const stray = page.querySelector<HTMLElement>('nav[aria-label="Path"] li');
   assert.equal(stray?.textContent, "Other agents");
   assert.equal(stray?.querySelector("button"), null);
@@ -596,7 +587,6 @@ test("an item from a service that names no workspace for it still names its auto
   );
 });
 
-/** Another agent with no task the same automation started, whose two questions wait. */
 const SECOND_AGENT = "6f708192-a3b4-4c5d-8e6f-708192a3b4c5";
 const SECOND_ASK: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000a", "Skip the slow suite?", 2_000),
@@ -1018,7 +1008,6 @@ test("on a phone the Inbox's list is headed by one ⋯, its title centered befor
   );
 });
 
-/** The thread a box's checkbox starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
 const STARTED: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-0000000000f1", "Annual plan copy", 9_000),
   key: "annual-plan-copy",
@@ -1036,7 +1025,6 @@ const STARTED: InboxItem = {
   ],
 };
 
-/** Every thread the box starts, written down and answered as the service starts it, the task's inbox then holding it. */
 function heldStarts(): AgentInboxStartParams[] {
   const sent: AgentInboxStartParams[] = [];
   const bridge = appBridge();
@@ -1153,7 +1141,6 @@ test("on a phone the panel open over an item heads itself: the way back to the i
   assert.equal(shut, 1, "the way back shuts the panel");
 });
 
-/** The button standing anywhere in the window whose words are `words`. */
 function buttonSaying(words: string): HTMLButtonElement {
   return (
     [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -1162,7 +1149,6 @@ function buttonSaying(words: string): HTMLButtonElement {
   );
 }
 
-/** The rows the list draws, by their titles, in its order. */
 function rowTitles(page: HTMLElement): (string | null | undefined)[] {
   return [
     ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main"),
@@ -1283,7 +1269,6 @@ test("words written in the box while its new thread starts stay in it once the t
 
 test("an item opened whose agent's inbox could not be read says so in the pane, and Retry reads it there", async () => {
   world.listedWorkspace = ACME;
-  // Note that no holding names the billing task, nor the feed its agent, so its item is opened by its agent, whose own read fails.
   world.tasklessAgents = new Map([[AGENT.id, AGENT]]);
   world.agentInboxes = new Map([[AGENT.id, [THRESHOLD]]]);
   world.feedLeavesOut = new Set([AGENT.id]);

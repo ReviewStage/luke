@@ -9,12 +9,6 @@ import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { Message, MessageContent } from "./message.js";
 
-/**
- * message.test.ts -- on a screen with no hover, a tap spent opening a hint
- * inside a message shows none of the message's actions, while a tap on its
- * words still does.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -23,7 +17,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `element` into the document, on a registry of its own. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -33,7 +26,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** A finger going `type` on `target`, as the browser sends it. */
 function press(target: Element, type: string): void {
   act(() => {
     target.dispatchEvent(
@@ -50,7 +42,6 @@ function press(target: Element, type: string): void {
   });
 }
 
-/** A finger's tap on `target`, and the click its release makes where its touchend was not refused. */
 function tap(target: Element): void {
   press(target, "pointerover");
   press(target, "pointerdown");
@@ -64,7 +55,6 @@ function tap(target: Element): void {
   });
 }
 
-/** Whether a card stands, drawn and not on its way out. */
 function cardStands(): boolean {
   const card = document.querySelector(".ui-tooltip-card");
   return card !== null && !card.hasAttribute("data-leaving");

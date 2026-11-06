@@ -1,20 +1,10 @@
 // @vitest-environment jsdom
 
-/**
- * drawn-lines.test.ts -- a line between a file's hunks is drawn once a gap
- * is opened over it, up, down, or all at once, as Pierre itself draws the
- * file; and a file Pierre has not read whole draws none of them, though
- * Pierre says every line of such a file stands. The view is told each
- * file's lines only as they change, and that a file the list lets go, or a
- * list taken down, draws none. Synthetic files only.
- */
-
 import assert from "node:assert/strict";
 import { FileDiff, getSharedHighlighter, parseDiffFromFile, parsePatchFiles } from "@pierre/diffs";
 import { beforeAll, test } from "vitest";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 
-/** A file of a hundred lines, the fifth and the ninetieth changed, so one long gap stands between its two hunks. */
 function changedFile() {
   const lines = Array.from({ length: 100 }, (_line, at) => `const line${at + 1} = ${at + 1};`);
   const after = lines.map((line, at) => (at === 4 || at === 89 ? `${line} // changed` : line));
@@ -24,10 +14,8 @@ function changedFile() {
   );
 }
 
-/** The lines between the hunks a thread could wait on: near the gap's top, its middle, and near its foot. */
 const HIDDEN = [12, 50, 80];
 
-/** The file drawn by Pierre as Files changed draws it, twenty lines a press. */
 function drawn(fileDiff = changedFile()) {
   const view = new FileDiff<string, undefined>({
     theme: { dark: "github-dark", light: "github-light" },
@@ -40,7 +28,6 @@ function drawn(fileDiff = changedFile()) {
 }
 
 beforeAll(async () => {
-  // Note that the highlighter is loaded first, so Pierre draws the file at once.
   await getSharedHighlighter({
     themes: ["github-dark", "github-light"],
     langs: ["typescript"],
@@ -94,12 +81,10 @@ test("the view is told a file's drawn lines only as they change, and that a file
     ["b.ts", [12]],
   ]);
 
-  // A filter leaves b.ts out of the list.
   teller.forget(new Set(["a.ts"]));
   assert.deepEqual(heard.at(-1), ["b.ts", []]);
   assert.deepEqual(teller.told("b.ts"), []);
 
-  // The list is taken down, as a filter that keeps no file does.
   teller.forget(new Set());
   assert.deepEqual(heard.at(-1), ["a.ts", []]);
   assert.equal(heard.length, 4, "nothing is told twice");

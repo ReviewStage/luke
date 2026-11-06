@@ -4,12 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Refreshing } from "./chrome/controls.js";
 
-/**
- * admin-refresh-failure.test.ts -- a failed refresh is said as an alert over
- * the answer still shown, its words said once, with a Retry of its own that
- * reads again, and refuses a press while a read is out rather than abort it.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const FAILURE = "The server did not answer.";
@@ -25,7 +19,6 @@ afterEach(() => {
 
 type RefreshingProps = Omit<Parameters<typeof Refreshing>[0], "children">;
 
-/** A page holding the answer under `Refreshing`, and a way to draw it again with new props. */
 interface Mounted {
   readonly page: HTMLElement;
   readonly draw: (props: RefreshingProps) => void;

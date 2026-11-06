@@ -5,13 +5,6 @@ import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import { test } from "vitest";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 
-/**
- * agent-ref.test.ts -- an Inbox thread's agent is named one way wherever
- * its messages are drawn: as the window's read of its task's agents holds
- * it, else as its thread was read with it, by its title on its
- * harness's mark, never as an unnamed coding agent.
- */
-
 const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 
 const THREAD_LINE = {
@@ -19,7 +12,6 @@ const THREAD_LINE = {
   model: "anthropic/claude-opus-5.5",
 };
 
-/** The agents a place holds read, and nothing else of them. */
 function holding(agents: readonly AgentSummary[] | undefined) {
   return { agents, archived: undefined, models: undefined, me: undefined, pullRequests: new Map() };
 }

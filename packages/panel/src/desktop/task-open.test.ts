@@ -26,13 +26,6 @@ import {
 } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
-/**
- * task-open.test.ts -- a task opens on its agent's tab through one placeholder
- * in the page's shape: no spinner, no empty column, and no "Reading the agent"
- * between the open and the transcript, which is followed from the agent's id
- * before the task's list of agents answers. Synthetic throughout.
- */
-
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
@@ -61,7 +54,6 @@ const BRIEF: AgentTranscriptMessage = {
   sentAt: Date.UTC(2026, 9, 14, 16, 5),
 };
 
-/** The transcript's one page, the brief alone, as the host pushes it. */
 const PAGE: AgentTranscriptPage = {
   messages: [BRIEF],
   cursor: "1:0",
@@ -79,7 +71,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A host that records each transcript the window holds and lays its pages only when the test pushes them. */
 function heldTranscript() {
   const telling = tellingTranscripts();
   return {
@@ -89,7 +80,6 @@ function heldTranscript() {
   };
 }
 
-/** The task's row as the sidebar lists it, naming its one agent. */
 const ROW = {
   id: TASK.id,
   workspaceId: TASK.workspaceId,
@@ -114,7 +104,6 @@ const ROW = {
   },
 };
 
-/** The task's page opened on its agent's tab: the task `read` or still being read, the agents listed or not yet. */
 function opened(input: { read: boolean; listed: boolean }): TasksControl {
   return tasksControl({
     tasks: [ROW],
@@ -126,7 +115,6 @@ function opened(input: { read: boolean; listed: boolean }): TasksControl {
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: input.listed ? [{ agent: AGENT.id }] : [],
-      // The tab the task's row chose before its agents were read (`use-main-tabs.ts`).
       tab: { agent: AGENT.id },
       openAgents: input.listed ? [AGENT.id] : undefined,
     },
@@ -165,7 +153,6 @@ async function settle(): Promise<void> {
   await settleQueries();
 }
 
-/** What stands in the column's log as a reader sees it: a spinner, nothing, the placeholder's blocks by their shapes and widths, or the log's lines. */
 function columnLog(container: HTMLElement): string {
   const pane = container.querySelector(".desktop-agent");
   if (pane === null || pane.textContent === null) return "empty";

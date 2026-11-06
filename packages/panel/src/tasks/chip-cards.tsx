@@ -20,31 +20,7 @@ import { useMentionedReader } from "./mentioned-place.js";
 import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
 
-/**
- * chip-cards.tsx -- the cards the chips of places in the app hang, each the card the window already hangs for what the chip names, read from what the window holds.
- *
- * A chip names a place (`mention-chip.tsx`), and its card is the one every
- * other place naming the same thing hangs, so a plan reads alike from its
- * sidebar row and from a chip in an agent's words: a plan's is the plan's
- * card (`../desktop/task-card.tsx`), and a section's or a version's the
- * same card's head with the section's heading or the version under it in
- * the agents' stead; a page's is its tab's, its title, its version, when
- * it last moved, and who showed it over a preview of it (`page-card.tsx`),
- * from the pages its plan or its agent on no task holds, held as the card
- * is first hung (`PageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
- * its Inbox row's own card (`inbox-item-chip.tsx`); an
- * automation's is its card, the workspace's automations read as the card is
- * first hung where no directory around it reads them yet. Everything else
- * is read from main's document and the directories around the chip, so a
- * chip asks nothing as it is drawn. A place the window does not hold, a
- * plan of another account's, keeps the chip's own card, its glyph and
- * name, as does a page the read does not find, the page of a plan or an
- * agent the reader cannot reach among them.
- */
-
-/** What a plan's card is made from where a chip hangs it: the window's plans, as the shell holds them. */
 interface ChipCardsPlace {
-  /** The plan's card, counted back from `now`, with the place within it the card is hung for; none where the window lists no such plan. */
   readonly taskCard: (
     taskId: string,
     now: number,
@@ -52,7 +28,6 @@ interface ChipCardsPlace {
   ) => ReactNode | undefined;
 }
 
-/** A place within a plan a card is hung for: its glyph and its words. */
 export interface TaskFocus {
   readonly glyph: ReactNode;
   readonly words: ReactNode;
@@ -60,21 +35,16 @@ export interface TaskFocus {
 
 const ChipCardsContext = createContext<ChipCardsPlace | undefined>(undefined);
 
-/** Hands every chip under it the window's plans' cards. */
 export const ChipCards = ChipCardsContext.Provider;
 
-/** What a version's line says of it. */
 function versionWords(revision: number): string {
   return `Version ${revision}`;
 }
 
-/** What an automation's card opens: nothing, since the chip it hangs from opens the automation. */
 const OPEN_NOTHING = (): void => undefined;
 
-/** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
 const PAGE_UNREAD = "Can't read this page.";
 
-/** A page's card where its page cannot be read: the chip's glyph and name, and a note saying so. */
 export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string }): ReactNode {
   return (
     <HoverCard data-page-card="">
@@ -84,12 +54,6 @@ export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string
   );
 }
 
-/**
- * The heading a section's anchor names in a description the window holds the
- * words of: the plan's page's, or one the host holds for a window that
- * opened it (`LIVE_READ.DESCRIPTION_DOCUMENT`); none where it holds neither, no
- * heading spells the anchor, or no plan is asked for.
- */
 export function useSectionHeading(taskId: string | undefined, anchor: string): string | undefined {
   const page = useTaskMentions();
   const held = useQuery({ ...descriptionDocumentQuery(taskId), enabled: false }).data;
@@ -106,7 +70,6 @@ export function useSectionHeading(taskId: string | undefined, anchor: string): s
   return headings[sectionAnchors(headings).indexOf(anchor)];
 }
 
-/** A plan's card, with the place within it the card is hung for, or `fallback` where the window lists no such plan. */
 export function TaskChipCard({
   taskId,
   focus,
@@ -119,7 +82,6 @@ export function TaskChipCard({
   return useTaskCard(taskId, focus) ?? fallback;
 }
 
-/** A plan's card, with the place within it the card is hung for, as `TaskChipCard` hangs it; none for no plan, or where the window lists no such plan. */
 export function useTaskCard(
   taskId: string | undefined,
   focus?: TaskFocus | undefined,
@@ -129,7 +91,6 @@ export function useTaskCard(
   return taskId === undefined ? undefined : place?.taskCard(taskId, now, focus);
 }
 
-/** A section's card: its plan's card's head, and the heading the anchor names, or the name it was written with; where the description no longer holds it, that said. */
 export function SectionChipCard({
   taskId,
   anchor,
@@ -140,7 +101,6 @@ export function SectionChipCard({
   taskId: string;
   anchor: string;
   name: string;
-  /** What the card says of a section the description no longer holds; none while it holds it. */
   gone: string | undefined;
   fallback: ReactNode;
 }): ReactNode {
@@ -155,7 +115,6 @@ export function SectionChipCard({
   );
 }
 
-/** A version's card: its plan's card's head, and the version. */
 export function VersionChipCard({
   taskId,
   revision,
@@ -174,22 +133,12 @@ export function VersionChipCard({
   );
 }
 
-/**
- * A page's card, its tab's, previewing it: the page among the pages of the
- * plan the link names it on, or of the agent on no task, held as the card
- * is first hung and never as the chip is drawn (`LIVE_READ.PAGES`), so
- * words full of chips ask nothing until one is looked at, and a page of the
- * open plan, which the window holds already, hangs at once; `reading` while
- * that read is out, which is `fallback` where none is given, and `fallback`
- * where it failed or holds no such page.
- */
 export function PageChipCard({
   place,
   pageId,
   reading,
   fallback,
 }: {
-  /** The plan the link names the page on, or the agent on no task. */
   place: PagePlace;
   pageId: string;
   reading?: ReactNode;
@@ -202,18 +151,11 @@ export function PageChipCard({
   return <PageCard place={place} page={page} />;
 }
 
-/** The workspace a link was written under, by its slug, one it stood under before, or its id where it has none, as the account holds it; none where it holds no such workspace. */
 function useLinkWorkspace(written: string): Workspace | undefined {
   const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data;
   return workspaces === undefined ? undefined : workspaceOfSlug(workspaces, written);
 }
 
-/**
- * The members of the workspace given around a card, so a person it names
- * is read as that workspace holds them: the directory standing around the
- * chip where it is that workspace's, else the workspace's own, read as the
- * card is hung.
- */
 export function WorkspaceDirectory({
   workspace,
   children,
@@ -231,7 +173,6 @@ export function WorkspaceDirectory({
   );
 }
 
-/** A member's card, as the directory around it holds them; `reading` while it is read, and `fallback` where it holds no one of the id. */
 function MemberCard({
   userId,
   reading,
@@ -249,13 +190,6 @@ function MemberCard({
   return actorCard(actor) ?? fallback;
 }
 
-/**
- * A member's card, as every place naming them hangs it, read against the
- * members of the workspace the link names, since their role and whether
- * they left are that workspace's; `reading` while those are read, and
- * `fallback` where the account holds no such workspace, or it lists no one
- * of the id.
- */
 export function PersonChipCard({
   userId,
   workspace,
@@ -263,7 +197,6 @@ export function PersonChipCard({
   fallback,
 }: {
   userId: string;
-  /** The slug of the workspace the link was written under. */
   workspace: string;
   reading: ReactNode;
   fallback: ReactNode;
@@ -277,7 +210,6 @@ export function PersonChipCard({
   );
 }
 
-/** An automation's card, as the directory around the chip knows it; `reading` while its automations are read, else `fallback`. */
 function KnownAutomationCard({
   automationId,
   reading,
@@ -293,18 +225,10 @@ function KnownAutomationCard({
   return <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />;
 }
 
-/**
- * The automations of the workspace a link was written under, read around
- * its chip as it is drawn, so the chip calls the automation by its name now
- * and wears its tile as its row in the `@` list does; shared with a
- * directory around it that already reads them. A link of a workspace the
- * account holds none of reads nothing.
- */
 export function LinkAutomations({
   workspace: slug,
   children,
 }: {
-  /** The slug of the workspace the link was written under. */
   workspace: string;
   children: ReactNode;
 }): ReactNode {
@@ -317,14 +241,6 @@ export function LinkAutomations({
   );
 }
 
-/**
- * An automation's card, the workspace's automations read as it is first
- * hung where no directory around the chip reads them yet, and shared with
- * one that does (`AutomationDirectory`), of the workspace the link names,
- * else the one the words are of; `reading` while the read is out, and
- * `fallback` where it failed, no workspace is known, or the workspace
- * lists no such automation.
- */
 export function AutomationChipCard({
   automationId,
   workspace: slug,
@@ -333,9 +249,7 @@ export function AutomationChipCard({
   fallback,
 }: {
   automationId: string;
-  /** The slug of the workspace the link was written under, whose automations are read. */
   workspace: string;
-  /** The workspace the words are of, read where the account holds none of the link's slug. */
   wordsWorkspaceId: string | undefined;
   reading: ReactNode;
   fallback: ReactNode;
@@ -346,7 +260,6 @@ export function AutomationChipCard({
   );
   const workspace = named ?? words;
   if (workspace === undefined) return fallback;
-  // Note that its maker is named by the members of its own workspace, as a member's chip under the link is.
   return (
     <WorkspaceDirectory workspace={workspace}>
       <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>

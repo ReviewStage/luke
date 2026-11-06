@@ -1,25 +1,14 @@
-/**
- * pane-motion.ts -- the window's pane motion under jsdom: the motion tokens set and an animation engine that records what is played rather than playing it.
- */
-
-/** A motion the page played: the element it played on, its keyframes, and a way to have it finish. */
 interface Played {
   element: Element;
   keyframes: Keyframe[];
   finish: () => void;
 }
 
-/** What the recording engine answers a motion with: no more of an Animation than the page reaches for. */
 interface RecordedMotion {
   onfinish: (() => void) | null;
   cancel: () => void;
 }
 
-/**
- * Gives the window the pane's motion tokens and an animation engine that
- * records what is played rather than playing it, since jsdom has neither;
- * answers what was played, and a way to take both away again.
- */
 export function playMotions() {
   const played: Played[] = [];
   const root = document.documentElement.style;
@@ -36,7 +25,6 @@ export function playMotions() {
       return animation;
     },
   });
-  // Note that a motion recorded is never running, so an exit that stops what runs first finds nothing to stop.
   Object.defineProperty(Element.prototype, "getAnimations", {
     configurable: true,
     value: () => [],
@@ -52,7 +40,6 @@ export function playMotions() {
   };
 }
 
-/** The list motion's tokens, as the app's sheets set them. */
 const LIST_MOTION_TOKENS = {
   "--ui-duration-exit": "90ms",
   "--ui-motion-exit": "ease",
@@ -61,10 +48,6 @@ const LIST_MOTION_TOKENS = {
   "--ui-list-travel": "16px",
 };
 
-/**
- * `playMotions` with the list's tokens beside the pane's, taken away again
- * with the motions; answers what was played, and a way to take both away.
- */
 export function playListMotions() {
   const motions = playMotions();
   const root = document.documentElement.style;

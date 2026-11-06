@@ -12,16 +12,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * transcript-markdown.test.ts -- a fenced block in a reply still being
- * written: drawn plain while its closing fence has not arrived, and sent to
- * main to be colored once it has, rather than once a word. Synthetic reply.
- */
-
-/** The reply's words before its block, so the block is not the first thing written. */
 const LEAD = "Here is the fix for the reader.\n\n```ts\n";
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];

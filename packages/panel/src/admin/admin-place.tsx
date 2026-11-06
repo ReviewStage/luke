@@ -1,16 +1,3 @@
-/**
- * admin-place.tsx -- the app's Admin place: the admin screens standing in the task's place, for an admin alone, under the app's own sidebar and history.
- *
- * The screens are the ones the web's standalone `/admin` page mounts
- * (`apps/web/src/AdminDashboard.tsx`); here they read through the window's
- * host (`app-admin-doors.tsx`) and stand in the window's work column beside
- * its sidebar (`desktop/desktop-admin.tsx`), under a bar of the sections,
- * the window's history holding which one stands. The window and whether admins are counted
- * are the page's own choices, kept across sections, the latter across
- * launches as the web page keeps it. The service's gate decides every read:
- * the sidebar's row is only how an admin gets here.
- */
-
 import { ADMIN_METRICS_WINDOW_DEFAULT, type AdminMetricsWindow } from "@repo/features/admin-wire";
 import { useState } from "react";
 import { AppAdminDoors } from "./app-admin-doors.js";
@@ -25,25 +12,15 @@ import { UsersScreen } from "./screens/users.js";
 import { WorkspaceScreen } from "./screens/workspace.js";
 import { WorkspacesScreen } from "./screens/workspaces.js";
 
-/** No shell of their own: the app's work column is the screens' frame. */
 const unframed = (content: React.JSX.Element) => content;
 
-/** Signing out is the app's own, which no screen here offers. */
 const noSignOut = async () => undefined;
 
 export interface AdminPlaceProps {
   readonly view: AdminView;
-  /** Opens another view of the place: a section in place, an account's, a workspace's, or a day's page as a step of the window's history. */
   readonly onOpen: (view: AdminView) => void;
 }
 
-/**
- * The Admin place's views under the app's doors: what stands in the
- * window's work column (`desktop/desktop-admin.tsx`). Every view
- * names other accounts, so the views are blocked from the screen recording
- * whole (`ph-no-capture`, `session-replay.ts`), past the masking of their
- * words, as the Inbox is.
- */
 export function AdminPlace(props: AdminPlaceProps): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col ph-no-capture">

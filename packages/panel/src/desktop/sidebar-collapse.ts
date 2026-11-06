@@ -1,58 +1,23 @@
-/**
- * sidebar-collapse.ts -- whether the tasks' sidebar is folded away, by the developer or by a stage too narrow to pin it, how wide it stands, and whether it floats open over the work.
- *
- * The choice is the window's own and nobody else's: no other window draws the
- * sidebar and main never acts on it, so it is kept in the renderer's storage,
- * which lives under the app's state root and outlives a relaunch, rather than
- * crossing to the settings file as a setting nobody else reads.
- *
- * A stage narrower than {@link SIDEBAR_COMPACT} folds the sidebar whatever
- * the choice says, as Linear's and AppKit's sidebars fold, and writes nothing
- * over the choice, so widening it again hands back the sidebar as the
- * developer left it. The stage is the panel's root element (`stage-room.ts`):
- * the window itself on the desktop, the box the page gives the panel in a
- * browser. A folded sidebar floats open over the work rather than
- * beside it: peeked while the pointer rests at the window's left edge and
- * put away once it leaves, as Linear's does, or opened by its toggle or
- * chord until a choice in it, Escape, or a press outside puts it away. Only
- * a stage wide enough pins it again.
- */
-
 import { Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
 import { PANE_FLOAT, type PaneFloat } from "./hover-pane.js";
 
-/**
- * How wide the sidebar may be dragged, in CSS pixels, and where it starts:
- * the range VS Code, Cursor, and Codex give theirs, around the width the
- * sidebar had before it could be dragged.
- */
 export const SIDEBAR_WIDTH = {
   MIN: 200,
   MAX: 400,
   DEFAULT: 264,
 } as const;
 
-/**
- * The stage's widths, in CSS pixels, between which the sidebar is pinned or
- * floats. Narrower than `ENTER`, the stage folds it: the work beside a
- * pinned sidebar at its default width would be left less than the Inbox's
- * list and the item it reads need side by side. Only wider than `LEAVE` is
- * it pinned again, so a stage dragged across the line does not fold and
- * unfold the sidebar at every pixel.
- */
 const SIDEBAR_COMPACT = {
   ENTER: 1120,
   LEAVE: 1160,
 } as const;
 
-/** How the folded sidebar stands over the work: as every pane that floats does (`hover-pane.ts`). */
 export const SIDEBAR_OVERLAY = PANE_FLOAT;
 
 type SidebarOverlay = PaneFloat;
 
-/** The fold and the width, kept on this Mac. */
 const KEPT = {
   COLLAPSED: keptKey("app.sidebar-collapsed", keptFlag),
   WIDTH: keptKey("app.sidebar-width", Schema.FiniteFromString),
@@ -62,49 +27,26 @@ function clampWidth(width: number): number {
   return Math.min(SIDEBAR_WIDTH.MAX, Math.max(SIDEBAR_WIDTH.MIN, Math.round(width)));
 }
 
-/** Whether a stage this wide is too narrow to pin the sidebar, given whether it was, so the line it crosses depends on the way it is crossed. */
 export function compactStage(width: number, was: boolean): boolean {
   return width < (was ? SIDEBAR_COMPACT.LEAVE : SIDEBAR_COMPACT.ENTER);
 }
 
 export interface SidebarCollapse {
-  /** Whether the sidebar stands out of the window's columns: folded by the developer, or by a stage too narrow to pin it. */
   collapsed: boolean;
-  /** Whether the stage is too narrow to pin the sidebar, so its toggle floats it over the work instead. */
   compact: boolean;
-  /** How the folded sidebar stands over the work; always closed while it is pinned. */
   overlay: SidebarOverlay;
-  /** The open sidebar's width in CSS pixels, always within {@link SIDEBAR_WIDTH}, kept while it is folded. */
   width: number;
-  /** Pins the sidebar or folds it away; on a compact stage, floats it open over the work or puts it away. */
   onToggle: () => void;
-  /** Floats the folded sidebar over the work, as a peek or opened, or puts it away. */
   onOverlay: (overlay: SidebarOverlay) => void;
-  /** Asks for a width; it is clamped to the bounds before it is kept. */
   onResize: (width: number) => void;
-  /** Whether the run keeps none of the sidebar's preferences: a fixture run, whose frames wear no developer's own. */
   staged: boolean;
 }
 
-/** Whether the sidebar is on screen: pinned, or floating over the work as a peek or opened. */
 export function sidebarInSight(sidebar: Pick<SidebarCollapse, "collapsed" | "overlay">): boolean {
   return !sidebar.collapsed || sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
 }
 
-/**
- * The collapse, the width, and the overlay. The chord is the sidebar toggle's
- * to offer, so it answers only while the toggle stands. The choice itself
- * outlives an absence: Settings hands back the sidebar the way it was left,
- * and so does a stage widened past the compact line, by the `compact`
- * `useStageRoom` measures. The width outlives a fold, so the sidebar opens again as
- * wide as it closed. A fixture run starts open at the default width and
- * keeps nothing, so its frames never wear a developer's own fold or width. The overlay goes with the fold it floats
- * over, so a pinned sidebar folded again starts away.
- */
 export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): SidebarCollapse {
-  // Note that the fixture run's fold is a state of its own rather than the
-  // kept one reset, because the run is only known once the first state
-  // arrives, a render after the kept fold was read.
   const [kept, , changeKept] = useKept(KEPT.COLLAPSED, false);
   const [staged, setStaged] = useState(false);
   const [keptWidth, keepWidth] = useKept(KEPT.WIDTH, SIDEBAR_WIDTH.DEFAULT);
@@ -131,7 +73,6 @@ export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): Side
     if (!collapsed) setOverlay(SIDEBAR_OVERLAY.CLOSED);
   }, [collapsed]);
 
-  // Note that the fold is handed back steady, so the columns handed it hold while it does.
   const shownOverlay = collapsed ? overlay : SIDEBAR_OVERLAY.CLOSED;
   return useMemo(
     () => ({

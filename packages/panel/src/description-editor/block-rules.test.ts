@@ -7,16 +7,8 @@ import { installEditorLayout } from "../testing/composer.js";
 import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * block-rules.test.ts -- the description editor's Markdown rules that make a block,
- * typed at the start of a line: each makes its block on a line of the text,
- * and does nothing in a table's cell, which holds one line of words, while
- * a mark's rule still marks words there. Synthetic description.
- */
-
 const TABLE = "| Role | Invites |\n| --- | --- |\n| Admin | Anyone |\n";
 
-/** Each rule that makes a block, as typed, and the Markdown its block is written as on a line saying `Anyone`. */
 const BLOCK_RULES = [
   { typed: "## ", written: "## Anyone" },
   { typed: "- ", written: "- Anyone" },
@@ -34,7 +26,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text, and its handle. */
 function mounted(markdown: string): { editor: Editor; handle: DescriptionEditorHandle } {
   const host = document.body.appendChild(document.createElement("div"));
   const handle = mountDescriptionEditor(host, {
@@ -52,7 +43,6 @@ function mounted(markdown: string): { editor: Editor; handle: DescriptionEditorH
   return { editor: element?.editor ?? assert.fail("the editor is running"), handle };
 }
 
-/** The caret put before `words`. */
 function caretBefore(editor: Editor, words: string): void {
   let at: number | undefined;
   editor.state.doc.descendants((node, pos) => {
@@ -65,7 +55,6 @@ function caretBefore(editor: Editor, words: string): void {
     .run();
 }
 
-/** The words typed one key at a time, as the browser's text input hands each to the editor, so a Markdown rule a key completes runs. */
 function typeKeys(editor: Editor, text: string): void {
   const { view } = editor;
   for (const character of text) {
@@ -96,7 +85,6 @@ test("each rule that makes a block does nothing in a table's cell, its words kep
 
     typeKeys(editor, rule.typed);
 
-    // Each cell holds one line of words and nothing else.
     const cells = [...editor.view.dom.querySelectorAll("td")].map((cell) => ({
       words: cell.textContent,
       blocks: [...cell.children].map((child) => child.tagName),

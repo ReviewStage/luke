@@ -24,16 +24,6 @@ import {
   useOpenLink,
 } from "./use-open-link.js";
 
-/**
- * use-open-link.test.ts -- a pull request inside a pull request's own tab
- * opens on GitHub, though a listed task's agent opened it, a new list
- * draws no part opening links again, which reads the list as the link
- * opens, and a link naming a listed task by its number reaches the place
- * pressed on by the task's id; where every other link opens is the route table's
- * (`../route.test.ts`). Synthetic ids, a task card's pull request row
- * standing for every press.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const URL = "https://github.com/acme/relay/pull/42";
@@ -74,7 +64,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Presses the pull request's row drawn as `wrap` holds it under the window's opener, answering where it went. */
 function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) {
   const links: ReadLink[] = [];
   const github: string[] = [];
@@ -112,7 +101,6 @@ test("inside a pull request's own tab, a link to it opens on GitHub", () => {
 test("a new list of tasks draws no part opening links again, and a link opened after it reads the new list", () => {
   const links: ReadLink[] = [];
   let open: ((href: string) => void) | undefined;
-  // Note that the part holds while nothing it is handed changes, as a transcript's link does.
   const Opener = memo(function Opener() {
     open = useOpenLink();
     return null;
@@ -160,7 +148,6 @@ test("a link naming a listed task by its number is asked of the place it is pres
   );
   const asked: LinkPlace[] = [];
   let open: ((href: string) => void) | undefined;
-  // Note that the part reads the window's document, so it is read by the press.
   function Opener(): null {
     useAppSlice(APP_SLICE.RUN);
     open = useOpenLink();
@@ -184,7 +171,6 @@ test("a link naming a listed task by its number is asked of the place it is pres
       ),
     ),
   );
-  // The window's document lands a few turns after the read is asked.
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

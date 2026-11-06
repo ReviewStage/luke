@@ -12,9 +12,6 @@ import { Effect } from "effect";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach } from "vitest";
-// Note that the places are loaded as the window loads them, on first use
-// (the router's lazy routes, and `desktop-shell.tsx`'s Automations), so each module is read here first and its load
-// settles within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/automations-page.js";
 import "./desktop/admin-route.lazy.js";
 import "./desktop/settings-route.lazy.js";
@@ -28,16 +25,6 @@ import { stateWith } from "./testing/app-state.js";
 import { onRegistry, writeAppState } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 import { appStateFirstRead } from "./use-app-state.js";
-
-/**
- * app-fixture-places.test.ts -- a fixture run, which main hands signed out
- * with nothing read, opens the window where its Settings, Admin, or
- * Automations profile names, signed in as the fixture's synthetic account,
- * each page drawn from the answers the fixture stages at the act door rather
- * than its signed-out line, and its person profile's account reads its own
- * page as its own; and a fixture run on any other profile still draws the
- * account main holds.
- */
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -55,7 +42,6 @@ beforeEach(() => {
     applySessionReplay: () => undefined,
     adminDashboard: () => ({ href: "https://app.test/admin" }),
   });
-  // Every act main would answer is refused, as a fixture run's service reads go empty-handed.
   fakeActPortAnswering(() => Promise.reject(refusedOnPort("Not here.")));
 });
 
@@ -63,11 +49,9 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  // The window's one registry holds the document it read, so the next test's window reads its own.
   rendererRegistry.reset();
 });
 
-/** Main's document for a fixture run on `profile`: signed out, nothing read, no access. */
 function fixtureRun(profile: string): AppStateSnapshot {
   const { run } = stateWith({}, {});
   return stateWith(
@@ -81,7 +65,6 @@ function fixtureRun(profile: string): AppStateSnapshot {
   );
 }
 
-/** Hands the window main's document for a fixture run on `profile`, every other bridge call quiet. */
 function handFixtureRun(profile: string): void {
   const snapshot = fixtureRun(profile);
   const quiet = Object.fromEntries([
@@ -104,17 +87,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/**
- * Draws the window as its root does on a fixture run on `profile`: on the
- * window's one registry, once main's document is read
- * (`window-root.tsx`) and the synthetic tasks have landed (`App`).
- */
 function drawWindow(profile: string): Effect.Effect<void> {
   return Effect.gen(function* () {
     handFixtureRun(profile);
     const state = yield* Effect.orDie(appStateFirstRead);
     yield* Effect.promise(loadTasksFixture);
-    // Note that the document is in the client before the window draws, as the root's `ensureQueryData` leaves it.
     writeAppState(state);
     root = createRoot(document.body.appendChild(document.createElement("div")));
     act(() => root?.render(onRegistry(rendererRegistry, windowRouter().drawn())));
@@ -122,7 +99,6 @@ function drawWindow(profile: string): Effect.Effect<void> {
   });
 }
 
-/** The window's words as drawn. */
 function drawn(): string {
   return document.body.textContent ?? "";
 }
@@ -194,7 +170,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       yield* drawWindow(RUN_PROFILE.PERSON);
-      // The account's button at the sidebar's foot, named by the account alone where the workspace's switcher says more.
       const account = [...document.querySelectorAll("button")].find(
         (button) => button.textContent?.endsWith("Ada Lovelace") && !button.matches("[aria-label]"),
       );
@@ -215,7 +190,6 @@ it.effect(
     }),
 );
 
-/** Types `words` into `input` as a reader does, through the prototype's setter, which React reads a change by. */
 function typeInto(input: HTMLInputElement | null, words: string): void {
   assert.ok(input, "the field is drawn");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;

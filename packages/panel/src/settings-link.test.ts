@@ -13,13 +13,6 @@ import { fakeAppBridge } from "./testing/app-bridge.js";
 import { withQueryClient } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 
-/**
- * A Settings link followed as the window follows it: one navigation to the
- * address naming its workspace and its page, which the Workspace page shows
- * while Settings stands, and its section, the anchor its group wears on the
- * page drawn.
- */
-
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",

@@ -60,21 +60,8 @@ import { ChipCards, type TaskFocus } from "./chip-cards.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * chip-cards.test.ts -- a chip of a place in the app hangs the card the window
- * hangs for that place wherever it names it: a plan's card for a plan, the
- * same card's head and the section's heading for a section, or the
- * version for a version; a page's title, version, and when it moved; a
- * file's or a folder's path, repository, and where it is read; a member's
- * card; an Inbox item's Inbox row's own card; an automation's card,
- * its workspace's automations read as it is first hung. A place the window
- * holds nothing of keeps the chip's own card. Synthetic workspace, plan,
- * page, people, and automation.
- */
-
 const AT = 1_792_000_000_000;
 
-/** What a page's card says where its page cannot be read, as the reader sees it. */
 const PAGE_UNREAD = "Can't read this page.";
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -83,13 +70,10 @@ const PAGE_ID = "26494df1-595a-4364-abf7-85781c65a9f8";
 
 const ITEM_ID = "item_4b9e";
 
-/** A coding agent on no task, which shows its pages on itself. */
 const SWEEP_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** Another agent on no task, which the reader cannot reach. */
 const HIDDEN_AGENT = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
-/** The page the agent on no task showed on itself, as a read of its pages lists it. */
 const SWEEP_PAGE: PageLine = {
   id: "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c7d",
   title: "Flake ledger",
@@ -98,7 +82,6 @@ const SWEEP_PAGE: PageLine = {
   shownBy: { kind: PAGE_SHOWER.AGENT, agentId: SWEEP_AGENT },
 };
 
-/** The page the open plan holds. */
 const UNFURL_PAGE: PageLine = {
   id: PAGE_ID,
   title: "Unfurl matrix",
@@ -107,7 +90,6 @@ const UNFURL_PAGE: PageLine = {
   shownBy: { kind: PAGE_SHOWER.APP },
 };
 
-/** A plan the window does not hold open, and a page on it, read as its card is hung. */
 const OTHER_TASK = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b";
 
 const ROLLOUT_PAGE: PageLine = {
@@ -120,7 +102,6 @@ const ROLLOUT_PAGE: PageLine = {
 
 const SAM = "user-sam";
 
-/** The reader, who is not Sam. */
 const DEAN = "user-dean";
 
 const ACME: Workspace = {
@@ -140,10 +121,8 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.OWNER },
 ];
 
-/** Another workspace of the account's, where Sam is a member rather than the owner, and which runs an automation of its own. */
 const BETA: Workspace = { ...ACME, id: "workspace-beta", name: "Beta", slug: "beta" };
 
-/** A member of Beta alone, who made its automation. */
 const PRIYA = "user-priya";
 
 const BETA_MEMBERS: readonly WorkspaceMember[] = [
@@ -188,10 +167,8 @@ const AUDIT: AutomationSummary = {
   creatorId: PRIYA,
 };
 
-/** The time a card counts back from: Oct 26, 2026, 3 PM, on the machine's own clock. */
 const CARDS_NOW = new Date(2026, 9, 26, 15).getTime();
 
-/** Main's document holding the plan, its page, and an Inbox item waiting on it. */
 const STATE: AppStateSnapshot = (() => {
   const snapshot = stateWith({}, {});
   return {
@@ -230,7 +207,6 @@ const STATE: AppStateSnapshot = (() => {
   };
 })();
 
-/** The plan's agent's message asking a choice, open until the reader answers it. */
 const ASKING = {
   id: "e7a1c3d5-2b4f-4e6a-8c9d-0f1e2d3c4b5a",
   author: INBOX_MESSAGE_AUTHOR.AGENT,
@@ -244,7 +220,6 @@ const ASKING = {
   createdAt: AT,
 } as const;
 
-/** An item of the plan's agent, open and asking a choice, as the service answers one. */
 const WAITING: InboxItem = {
   id: ITEM_ID,
   agentId: "agent-1",
@@ -259,7 +234,6 @@ const WAITING: InboxItem = {
   updatedAt: AT,
 };
 
-/** An item of the same plan the reader answered, which main's document no longer lists as waiting. */
 const ANSWERED_ITEM = "item_7d2c";
 
 const ANSWERED: InboxItem = {
@@ -283,7 +257,6 @@ const ANSWERED: InboxItem = {
   ],
 };
 
-/** An item of the agent on no task, answered too. */
 const SWEEP_ITEM = "item_9a1f";
 
 const SWEPT: InboxItem = {
@@ -294,20 +267,12 @@ const SWEPT: InboxItem = {
   title: "Quarantine the flaky test?",
 };
 
-/** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
-/** Every hold the window took on a workspace's automations, in order. */
 let automationHolds: readonly AutomationsHold[] = [];
 
-/** Every agent on no task whose pages the window held, in order. */
 const agentPageReads: string[] = [];
 
-/**
- * The pages each plan and agent on no task holds, as the host lays them on
- * the window's document once held: the open plan's page, another plan's,
- * the agent's own, and a refusal for an agent the reader cannot reach.
- */
 function heldPagesOf(place: PagePlace): AppHolderPages {
   if ("taskId" in place) {
     if (place.taskId === TASK_ID) return { rows: [UNFURL_PAGE] };
@@ -331,7 +296,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The plan's card as the window's plans make it, with what a chip hangs it for. */
 const taskCards = {
   taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) =>
     taskId !== TASK_ID
@@ -345,7 +309,6 @@ const taskCards = {
         }),
 };
 
-/** The plan's page, whose words the section's heading is read from. */
 const PAGE: TaskMentionsValue = {
   holder: { taskId: TASK_ID },
   taskName: TASK.name,
@@ -361,7 +324,6 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`, whose feed holds the plan's items and the agent on no task's, which a chip's glyph and card read, unless another is given. */
 async function drawn(
   text: string,
   page: TaskMentionsValue = PAGE,
@@ -377,21 +339,17 @@ async function drawn(
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
   writeAppState(state);
   const reads = handHostReads({ items: feed });
   fakeActPort({});
-  // Note that a workspace's automations are laid on the document as a card holds them, as the host lays them.
   automationHolds = holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: (workspaceId) => ({
       rows: workspaceId === BETA.id ? [AUDIT] : [SWEEP],
     }),
   }).holds;
-  // Note that each workspace's people are laid on the document as a card holds them, as the host lays them.
   holdMembers(reads.deliverMembers, (workspaceId) => ({
     rows: { members: workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS },
   }));
-  // Note that a page's card holds its plan's or its agent's pages, which the host lays on the document.
   holdPages(reads.deliverPages, heldPagesOf);
   fakeAppPlatform({ pageFrameUrl });
   const container = document.body.appendChild(document.createElement("div"));
@@ -422,12 +380,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The card the chip hangs once what it reads has landed, its words by part. */
 async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the place is drawn as its chip");
   restOn(chip);
   await settle();
-  // Note that a card reading what it names draws its skeleton until the read reaches its query.
   await vi.waitFor(() =>
     assert.equal(document.querySelector('.ui-tooltip-card [class*="skeleton"]') === null, true),
   );
@@ -454,10 +410,8 @@ async function cardOf(chip: Element | undefined) {
   return look;
 }
 
-/** The attributes the session recording masks (`../session-replay.ts`), which may carry words. */
 const MASKED = new Set(["title", "aria-label", "aria-description", "alt", "href", "src"]);
 
-/** Whether any element of the card carries `words` on an attribute the recording keeps. */
 function carriesWords(card: Element, words: string): boolean {
   return [card, ...card.querySelectorAll("*")]
     .flatMap((element) => [...element.attributes])
@@ -466,7 +420,6 @@ function carriesWords(card: Element, words: string): boolean {
     );
 }
 
-/** Each chip drawn in the words, in order. */
 function chipsOf(container: HTMLElement): readonly Element[] {
   return [...container.querySelectorAll("[data-mention-ref]")];
 }
@@ -567,9 +520,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Vespin"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.deepEqual([other.name, other.notes], ["Old draft", [PAGE_UNREAD]]);
-  // A page id the open plan holds, named on another plan, is not the open plan's page.
   assert.deepEqual([another.name, another.notes], ["Another plan's page", [PAGE_UNREAD]]);
-  // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
   assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Vespin"]]);
@@ -680,7 +631,6 @@ test("an Inbox item's labeled chip is called by the item's title, whether it wai
     ].join(" "),
   );
 
-  // Note that the feed's items name their chips once they reach its query.
   await vi.waitFor(() =>
     assert.deepEqual(
       chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
@@ -712,7 +662,6 @@ test("an Inbox item's chip whose feed could not be read keeps the card main's br
 
 test("a member's chip hangs their card", async () => {
   const container = await drawn(`Ask [Sam](${HOME}/person/${SAM}).`);
-  // Note that the chip names the member once the workspace's members reach their query.
   await vi.waitFor(() =>
     assert.equal(chipsOf(container)[0]?.textContent?.includes("Sam Okafor"), true),
   );
@@ -728,7 +677,6 @@ test("an automation's chip is called by its name now, its workspace's automation
   vi.useFakeTimers({ now: CARDS_NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
   const container = await drawn(`Run by [the sweep](${HOME}/automation/${SWEEP.id}).`);
   const reads = () => automationHolds.length;
-  // Note that the chip says the automation's name once the workspace's automations reach their query.
   await vi.waitFor(() =>
     assert.equal(chipsOf(container)[0]?.textContent?.includes("Nightly sweep"), true),
   );

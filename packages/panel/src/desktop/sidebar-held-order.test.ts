@@ -15,14 +15,6 @@ import { pointerCross } from "../testing/pointer-cross.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-held-order.test.ts -- the sidebar's tasks hold the places they
- * were first drawn in while the pointer is over the sidebar, so an update
- * that would sort a task elsewhere moves nothing under the reader's hand;
- * once the pointer leaves, or the sidebar is folded away and back, the list
- * is sorted anew. Synthetic throughout.
- */
-
 const WORKSPACE: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
@@ -34,7 +26,6 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
-  // The window's motion as a Mac with none reduced answers it.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -57,11 +48,6 @@ function task(id: string, name: string, updatedAt: number): TaskSummary {
   return { id, workspaceId: WORKSPACE.id, name, createdAt: 1, updatedAt, repository: null };
 }
 
-/**
- * The sidebar over the tasks given, the pointer resting on it, a way to draw
- * it again over others, in sight or folded away, as an update does, and a
- * way to take the pointer off it.
- */
 function mountSidebar(tasks: readonly TaskSummary[]) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -86,7 +72,6 @@ function mountSidebar(tasks: readonly TaskSummary[]) {
   return { container, draw, leave: () => pointerCross(tasksNav, document.body) };
 }
 
-/** The names of the tasks drawn under Tasks, in the order drawn. */
 function names(sidebar: HTMLElement): string[] {
   const region = sidebar.querySelector('nav[aria-label="My tasks"]');
   return [...(region?.querySelectorAll(".ui-list-row-title") ?? [])].map(

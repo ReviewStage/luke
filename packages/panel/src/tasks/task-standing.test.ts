@@ -30,15 +30,6 @@ import {
   type TaskStandingDoor,
 } from "./task-standing.js";
 
-/**
- * task-standing.test.ts -- a task's head names it by its path and says where
- * it stands and how much it matters: a pick from the status chip's menu is
- * handed to the page to send, the chips take no pick without a door to send
- * it through, the repository leads the path as plain words where the page
- * hands its doors, its menu opening under the path for an ask from elsewhere, the parent's stands after it for a child task, and a task from
- * a service before keys draws neither path nor chips.
- */
-
 const TASK: Task = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   workspaceId: "workspace-acme",
@@ -65,7 +56,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws the task's path and its chips into the document, with the door a pick is sent through, and the rest of the head's doors where handed. */
 function drawn(
   task: Task,
   onSet: ((standing: TaskStanding) => void) | undefined,
@@ -90,7 +80,6 @@ function drawn(
   return host;
 }
 
-/** A chooser whose list the host holds unread, for a chip that only says. */
 const UNREAD_CHOOSER: RepositoryChooser = {
   recent: [],
   openGitHub: () => undefined,
@@ -98,7 +87,6 @@ const UNREAD_CHOOSER: RepositoryChooser = {
   manages: true,
 };
 
-/** The chip a label names. */
 function chip(host: HTMLElement, label: string): HTMLButtonElement {
   const found = [...host.querySelectorAll("button")].find((button) =>
     (button.getAttribute("aria-label") ?? button.textContent ?? "").includes(label),
@@ -269,7 +257,6 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
   });
 
   act(() => chip(host, "Assignee").click());
-  // Note that the members are listed once the read the host holds reaches its query.
   const rows = await vi.waitFor(() => {
     const listed = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
     assert.equal(listed.length, 4);
@@ -354,15 +341,12 @@ test("the assignee's menu says No members match when a search finds nobody", asy
 
   act(() => chip(host, "Assignee").click());
   const input = document.querySelector<HTMLInputElement>('input[role="combobox"]');
-  // Note that the value goes in through the prototype's setter, because React
-  // tracks the field's own and would read a change made there as none.
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(input, "zzz");
     input?.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  // Note that the menu says so once the members the host holds reach their query.
   await vi.waitFor(() =>
     assert.equal(document.querySelector(".ui-combobox-empty")?.textContent, "No members match"),
   );
@@ -402,7 +386,6 @@ test("the assignee's menu says the members could not be read, with Retry, never 
 
   act(() => chip(host, "Assignee").click());
 
-  // Note that the menu says the read failed once the failure reaches its query.
   const note = await vi.waitFor(() => {
     const said = document.querySelector(".ui-combobox-note");
     assert.match(said?.textContent ?? "", /Members could not be read\./u);

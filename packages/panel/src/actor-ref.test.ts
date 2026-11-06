@@ -16,14 +16,6 @@ import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "./actor-ref.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { restOn } from "./testing/hint-rest.js";
 
-/**
- * Whoever did something is drawn one way: a person by their picture once it
- * loads and their letter until then, the app, an agent, and an automation each
- * by their own mark, someone unnamed by an outline; named in a line, an
- * actor with a page is a press that opens it and a person is not; a
- * facepile counts the rest only where asked. Synthetic people.
- */
-
 const PICTURE = "https://avatars.githubusercontent.com/u/9";
 const DANA: Actor = {
   kind: ACTOR_KIND.PERSON,
@@ -127,7 +119,6 @@ test("a facepile draws its first few and counts the rest only where its words do
   assert.equal(uncounted.querySelector(".actor-stack-more"), null);
 });
 
-/** The words of the card an actor named in a line hangs once the pointer rests on its name. */
 function cardOf(actor: Actor): Element {
   const view = draw(createElement(ActorRef, { actor }));
   const named = view.querySelector("[data-actor-ref]") ?? assert.fail("the actor is named");

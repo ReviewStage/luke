@@ -1,28 +1,8 @@
-/* index.css -- the panel's stylesheets in the one order the cascade needs,
-   which every app that mounts the panel imports whole (the desktop's
-   `apps/desktop/src/renderer/styles/index.css`, the web's `apps/web/src/app/app.css`)
-   and the tests lay as written (`../testing/container-width.ts`).
-
-   An app adds only what is its own: fonts, and its Tailwind entry after this
-   one. Tailwind's theme and utilities sit in cascade layers this file has
-   already opened under them, so where the app imports them does not change
-   which rule wins. */
-/* The shared tokens first, `@repo/ui`'s scale, each profile's roles, its
-   palette, and the window's old names for them, keyed on the root's
-   `data-ui-profile`, `data-ui-theme`, and `data-ui-density`, so every
-   sheet below reads them. */
 @import "@repo/ui/tokens.css";
 @import "./settings.css";
 @import "./base.css";
-/* The shared components' own rules, in the `components` layer: above
-   base.css's element resets, which sit in `base`, and under the utilities an
-   app's Tailwind entry layers last, so a reset never undoes a shared control. */
 @import "@repo/ui/styles.css";
 @import "./tasks.css";
 @import "./attachment-viewer.css";
-/* The shell and its sidebar, which an app drawing the app's sidebar outside
-   the panel imports alone, just ahead of the window's own layout. */
 @import "./shell.css";
-/* After everything: the window's own layout restages the shared surface's
-   elements, and its overrides have to win. */
 @import "./desktop.css";

@@ -23,19 +23,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem, menuItems } from "../testing/phone-head.js";
 import { MemorySection } from "./memory-page.js";
 
-/**
- * Settings › Memory over a bridge answering as the host would: the memories
- * of the workspace Settings shows are held for that workspace and drawn as
- * the host lays them on the document, listed in the service's order with
- * their words whole and whose words they are; Delete is offered from a
- * memory's ⋯, unavailable on one the reader may not forget, asks first in
- * the confirm dialog, and the memory leaves the list as the host draws it
- * gone; several chosen are forgotten one after another on one question; a
- * forget that fails says so in the dialog and keeps the memory listed;
- * another workspace is held for its own memories; and a read that fails
- * offers to try again. Synthetic workspaces, members, and memories.
- */
-
 const READER = "user-reader";
 
 const ACME: Workspace = {
@@ -65,20 +52,13 @@ const TESTS: MemorySummary = {
   updatedAt: Date.UTC(2026, 9, 9, 12),
 };
 
-/** The memories the test's service holds, by the workspace, held and forgotten by the page. */
 let stored: Readonly<Record<string, readonly MemorySummary[]>> = {};
-/** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** Whether the host's read of the memories failed before it ever answered. */
 let readFails = false;
-/** Whether a forget is answered with a failure rather than the memories. */
 let refuseForget = false;
-/** Whether the host has read nothing yet, so it lays no memories. */
 let readsNothing = false;
-/** Each workspace's memories as the test's host lays them on the document, under the version it last delivered. */
 let laid: AppMemories = NO_KEYS_HELD;
 let version = 1;
-/** The window's listeners to the document's deliveries. */
 const listeners = new Set<(delivery: AppStateDelivery) => void>();
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
@@ -88,7 +68,6 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
 
 const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Lays one workspace's read on the document and delivers it, as the host does as a read moves. */
 function lay(workspaceId: string, read: AppHostRead<readonly MemorySummary[]>): void {
   laid = { ...laid, [workspaceId]: read };
   version += 1;
@@ -97,19 +76,16 @@ function lay(workspaceId: string, read: AppHostRead<readonly MemorySummary[]>): 
   }
 }
 
-/** Lays a workspace's memories as the test's host reads them now; nothing while it reads nothing. */
 function layRead(workspaceId: string): void {
   if (readsNothing) return;
   lay(workspaceId, readFails ? { failed: true } : { rows: stored[workspaceId] ?? [] });
 }
 
-/** The bridge, answering the page's acts the way the host would. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.MEMORIES_FOLLOW: {
       const { workspaceId } = request.payload;
-      // Note that the host lays what it read once the hold is taken, never inside it, and holds it quietly.
       void Promise.resolve().then(() => layRead(workspaceId));
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
     }
@@ -120,7 +96,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       const { workspaceId, id } = request.payload;
       const before = stored[workspaceId] ?? [];
       const after = before.filter((memory) => memory.id !== id);
-      // The host draws the memory gone the moment it is asked, and puts it back where the service refused it.
       lay(workspaceId, { rows: after });
       if (refuseForget) {
         lay(workspaceId, { rows: before });
@@ -166,7 +141,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** How the workspaces' own read stands, which the page is handed beside the workspace it shows. */
 interface WorkspacesRead {
   readonly failed: boolean;
   readonly retry: () => void;
@@ -202,7 +176,6 @@ async function mount(
         ),
       ),
     );
-  // Note that the page stands read once the memories the host holds reach their query, unless the test holds the read out.
   const read = () =>
     readsNothing
       ? Promise.resolve()
@@ -239,12 +212,10 @@ const button = (within: Element, label: string) =>
 const dialog = () =>
   document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 
-/** A memory row's own press, which ⌘ chooses. */
 const pressOf = (page: HTMLElement, memory: MemorySummary) =>
   rowOf(page, memory).querySelector<HTMLButtonElement>("[data-card-press]") ??
   assert.fail("no press on the row");
 
-/** Opens a memory's ⋯. */
 function openMenu(page: HTMLElement, memory: MemorySummary): void {
   const more =
     rowOf(page, memory).querySelector<HTMLButtonElement>('button[aria-label="Memory actions"]') ??
@@ -252,13 +223,11 @@ function openMenu(page: HTMLElement, memory: MemorySummary): void {
   act(() => more.click());
 }
 
-/** Chooses Delete from a memory's ⋯, which puts its question up. */
 function askForget(page: HTMLElement, memory: MemorySummary): void {
   openMenu(page, memory);
   chooseMenuItem("Delete");
 }
 
-/** Asks Forget, then presses the dialog's own Forget; answers whether it asked before forgetting. */
 async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
   askForget(page, memory);
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.MEMORIES_FORGET);
@@ -267,7 +236,6 @@ async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean
   return askedFirst;
 }
 
-/** Types `query` over whatever the search holds, as the developer would. */
 async function searchFor(page: HTMLElement, query: string): Promise<void> {
   const field =
     page.querySelector<HTMLInputElement>('input[aria-label="Search memories"]') ??
@@ -344,7 +312,6 @@ test("a memory a search hid comes back unchosen, so a later act on what is chose
   await searchFor(page, "store");
   await searchFor(page, "");
 
-  // Note that the element is checked as a yes or no, because a failure's diff of an element would print the whole document.
   assert.ok(page.querySelector('[role="toolbar"]') === null, "nothing stands chosen");
   assert.equal(pressOf(page, DEPLOYS).getAttribute("data-selected"), null);
 });
@@ -449,7 +416,6 @@ test("a workspace Vespin has remembered nothing in says so", async () => {
 
 test("a read that fails offers to try again, and no account holds nothing", async () => {
   readFails = true;
-  // Note that the signed-out page is drawn first, since a second page's subscription would follow the first page's read again.
   const { page: signedOut } = await mount(false);
   assert.equal(signedOut.textContent, "Sign in to use this page.");
   assert.deepEqual(

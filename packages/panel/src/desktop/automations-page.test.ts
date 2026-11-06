@@ -75,12 +75,6 @@ import { ToastHost } from "../toast.js";
 import { appStateNow } from "../use-app-state.js";
 import { AutomationsPage } from "./automations-page.js";
 
-/**
- * automations-page.test.ts -- the Automations page as the window draws it: the listed workspace's automations, the workspace's before the personal ones, each naming its owner, an automation turned off saying so, a failed run marked, a switch's write taken in place, and a read that did not land said with a retry.
- *
- * The service is a script at the act boundary; synthetic automations and words throughout.
- */
-
 const WORKSPACE: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -131,7 +125,6 @@ const FAILING = automation(3, {
   },
 });
 
-/** The models a new agent may run on. */
 const CATALOG = [
   {
     id: "anthropic/claude-opus-5.5",
@@ -141,10 +134,8 @@ const CATALOG = [
   },
 ] as const;
 
-/** The account's default model, which a new agent runs on until another is chosen. */
 const DEFAULT_CHOICE = { model: "anthropic/claude-opus-5.5", effort: "high" };
 
-/** One agent of the workspace's on the repository, which a same-agent automation's runs may go to. */
 const CI_DIGEST = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: null,
@@ -156,7 +147,6 @@ const CI_DIGEST = {
   turnId: null,
 } as const;
 
-/** An agent on no task in the workspace, working in the automations' repository, as the task list carries it. */
 function onLedger(agent: AgentSummary): TasklessAgent {
   return {
     ...agent,
@@ -167,7 +157,6 @@ function onLedger(agent: AgentSummary): TasklessAgent {
   };
 }
 
-/** The task list as the host lays it: failed before it carried any agent where the test says so, else carrying the test's agents on no task. */
 function tasksView(): TasksView {
   return agentListRefused
     ? { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.FAILED }
@@ -180,78 +169,45 @@ function tasksView(): TasksView {
 }
 
 let root: Root | undefined;
-/** The service's automations, as a read of the list answers them and a change changes them. */
 let standing: AutomationSummary[] = [];
-/** How many reads of the list are refused before one answers. */
 let listRefusals = 0;
 
-/** The host's holds on the page's lists and histories, as the test's host answers them. */
 let host: ReturnType<typeof holdAutomations>;
 
-/** Every workspace whose list was read, by a hold or a Try again, in order. */
 function listed(): string[] {
   return host.asked
     .filter((each) => each.kind === AUTOMATION_FOLLOW.WORKSPACE)
     .map((each) => each.id);
 }
 
-/**
- * What stands laid again for every list and history a page held, as the
- * host lays a change, a write drawn on a list before it answers among them
- * (`@repo/host`'s `automation-collections.ts`).
- */
 function layStanding(): void {
   host.lay();
 }
 
-/** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
-/** Whether the page stands over no workspace, so nothing it reads is laid. */
 let unlisted = false;
-/** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
-/** Every change asked, as the act carried it. */
 let changes: unknown[] = [];
-/** Every automation made, as the act carried it. */
 let creates: AutomationCreateParams[] = [];
-/** Every automation deleted, by its id. */
 let deletes: string[] = [];
-/** Every search of a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
-/** Every agent on no task the task list carries, as the host lays it. */
 let workspaceAgents: readonly TasklessAgent[] = [];
-/** The agents a search for `words` finds, as the service answers it. */
 let agentsFound: (words: string) => readonly AgentSummary[] = () => [];
-/** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
-/** Every run of the workspace's automations, as its Runs tab's read holds them. */
 let workspaceRuns: AutomationWorkspaceRun[] = [];
-/** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
-/** Whether a read of an automation's runs is held unanswered, as one still out on the wire. */
 let runsHeld = false;
-/** Whether a Run now is held unanswered, as one still out on the wire. */
 let runHeld = false;
-/** What a Run now answers where it does not start a run. */
 let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
-/** Every agent whose page a run opened. */
 let agentsOpened: string[] = [];
-/** Whether the account's default model reads, or answers that it could not. */
 let defaultRefused = false;
-/** How many times the model catalog was asked again. */
 let catalogReads = 0;
-/** Whether the model catalog answers that it could not be read. */
 let catalogRefused = false;
-/** Whether the catalog marks every model as one no credential of the reader's pays for. */
 let catalogUnconnected = false;
-/** Whether the task list failed before it carried the workspace's agents. */
 let agentListRefused = false;
-/** Lays the task list on the window again, as the host does once it reads it. */
 let deliverTasks: (next: TasksView) => void = () => undefined;
-/** Lays the models on the window again, as the host does once it asks them again. */
 let deliverModels: HostReadsHanded["deliverModels"] = () => undefined;
 
-/** The models as the host holds them: failed while refused, and the catalog otherwise, every model unpaid where the test says so. */
 const modelsHeld = () =>
   catalogRefused
     ? { failed: true as const }
@@ -263,7 +219,6 @@ const modelsHeld = () =>
         },
       };
 
-/** Lays the models and the account's row as the host holds them for the page about to draw: the row failed while the default is refused. */
 function holdChoices(): void {
   deliverModels = handHostReads({
     models: modelsHeld(),
@@ -278,29 +233,19 @@ function holdChoices(): void {
         },
   }).deliverModels;
 }
-/** Whether a search among the workspace's agents answers that it could not be made. */
 let agentSearchRefused = false;
-/** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
 let noRecent = false;
-/** Whether the read of the account's integrations is held unanswered, as one still out on the wire. */
 let integrationsHeld = false;
-/** How many reads of the account's integrations are refused before one answers. */
 let integrationsRefusals = 0;
-/** The workspace's Sentry as its read answers it: the deployment holds the integration, installed once, unless a test says otherwise. */
 let sentryRead: WorkspaceSentry = {
   configured: true,
   installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
 };
-/** How many of the host's reads of a workspace's integrations fail before one answers. */
 let sentryRefusals = 0;
-/** The workspaces whose integrations the host follows, laid once as the first hold of each is taken. */
 let integrationsFollowed = new Set<string>();
-/** Each workspace's integrations the host holds for the window, as last laid. */
 let workspaceIntegrations: AppWorkspaceIntegrations = NO_KEYS_HELD;
-/** Lays each workspace's integrations on the window's document, as the host does once the editor holds them. */
 let deliverIntegrations: HostReadsHanded["deliverIntegrations"] = () => undefined;
 
-/** Lays a workspace's integrations as the host's read of them now stands: failed while refused, its Sentry as `sentryRead` says and no Slack bot otherwise. */
 function layIntegrations(workspaceId: string): void {
   const read =
     sentryRefusals > 0
@@ -310,22 +255,16 @@ function layIntegrations(workspaceId: string): void {
   workspaceIntegrations = { ...workspaceIntegrations, [workspaceId]: read };
   deliverIntegrations(workspaceIntegrations);
 }
-/** Every workspace a Sentry install was asked for. */
 let sentryInstalls: string[] = [];
-/** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
   | undefined;
 
-/** The secrets a write answers once: a webhook made, and a new secret asked for. Synthetic. */
 const MADE_SECRET = "whsec-fixture-made-once";
 const ROTATED_SECRET = "whsec-fixture-rotated-once";
 
-/** The automations a fresh webhook secret was asked for. */
 let secretsAsked: string[] = [];
-/** What the window handed main's clipboard itself. */
 let copied: string[] = [];
-/** The experiments a Send feedback was about, in order. */
 let feedbackAbout: Experiment[] = [];
 
 beforeEach(() => {
@@ -372,7 +311,6 @@ beforeEach(() => {
   integrationsFollowed = new Set();
   workspaceIntegrations = NO_KEYS_HELD;
   fakeActs({
-    // Note that the task list is laid as the page is first drawn, so a test's agents stand once it mounts.
     requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
@@ -406,7 +344,6 @@ beforeEach(() => {
             ? { webhookUrl: "https://vespin.dev/api/automations/made/webhook" }
             : undefined),
         });
-        // A webhook's secret is answered once, by the write that minted it.
         const value = hooked
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
@@ -444,7 +381,6 @@ beforeEach(() => {
             : { automation, webhookSecret: ROTATED_SECRET };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      // Note that the host follows a workspace's integrations once however many surfaces hold them, and lays what it read once the hold is taken.
       if (request.kind === ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW) {
         const { workspaceId } = request.payload;
         if (!integrationsFollowed.has(workspaceId)) {
@@ -493,7 +429,6 @@ beforeEach(() => {
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
-  // Note that each list and history a page holds is laid on its document as the host lays it.
   const reads = handHostReads({});
   deliverIntegrations = reads.deliverIntegrations;
   deliverTasks = reads.deliverTasks;
@@ -509,7 +444,6 @@ beforeEach(() => {
     [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: () => ({ rows: workspaceRuns }),
     [AUTOMATION_FOLLOW.RUNS]: () => (runsHeld ? undefined : { rows: runs }),
   });
-  // Note that the account's integrations are laid as the host holds them: none while held, failed while refused, and Linear and Sentry connected otherwise.
   holdIntegrations(() => {
     if (integrationsHeld) return undefined;
     if (integrationsRefusals > 0) {
@@ -524,7 +458,6 @@ beforeEach(() => {
           : INTEGRATION_STATUS.DISCONNECTED,
       ]),
     );
-    // SAFETY: every provider on the list is given a status above, which is the whole of the record.
     return {
       rows: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
     };
@@ -539,10 +472,8 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
 
-/** The page as drawn over the tasks control given, rendered again in place where one stands. */
 function render(tasks: ReturnType<typeof tasksControl>): void {
   act(() =>
     root?.render(
@@ -559,7 +490,6 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
   );
 }
 
-/** The Automations page, standing in the task's place over the workspace listed. */
 function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   holdChoices();
   unlisted = tasks.workspace === undefined;
@@ -571,7 +501,6 @@ function mount(tasks = tasksControl({ workspace: WORKSPACE })): HTMLElement {
   return container;
 }
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -579,7 +508,6 @@ async function settle(): Promise<void> {
     });
   await ticks();
   await settleQueries(ticks);
-  // Note that the list and the runs the host lays reach their queries a tick after they land, so the page is read once neither still stands out, bar one the test holds or a page over no workspace reads; a list held out holds the runs out too, since the page's skeleton reads them until the list lands.
   if (listHeld || unlisted) return;
   await vi.waitFor(() => {
     const text = document.body.textContent ?? "";
@@ -592,12 +520,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The automations' rows, top to bottom. */
 function automationRows(page: HTMLElement): Element[] {
   return [...page.querySelectorAll(".automation-group li")];
 }
 
-/** The runs' rows in the Runs panel, newest first. */
 function runRows(page: HTMLElement | Element | null | undefined): Element[] {
   const panel = page?.matches("aside[aria-label='Runs']")
     ? page
@@ -605,7 +531,6 @@ function runRows(page: HTMLElement | Element | null | undefined): Element[] {
   return [...(panel?.querySelectorAll("li") ?? [])];
 }
 
-/** Each row's name and owner, top to bottom. */
 function rows(page: HTMLElement): string[][] {
   return automationRows(page).map((row) => [
     row.querySelector(".automation-row-name")?.textContent ?? "",
@@ -613,12 +538,10 @@ function rows(page: HTMLElement): string[][] {
   ]);
 }
 
-/** Whether a row says `words` among its own. */
 function says(row: Element, words: string): boolean {
   return (row.textContent ?? "").includes(words);
 }
 
-/** The row of the automation named. */
 function rowOf(page: HTMLElement, name: string): Element {
   const row = automationRows(page).find(
     (each) => each.querySelector(".automation-row-name")?.textContent === name,
@@ -796,7 +719,6 @@ test("with no automations the page says what one is, and with no workspace liste
   assert.deepEqual(listed(), [WORKSPACE.id], "no list is read with no workspace listed");
 });
 
-/** The window's bar over `page`, its parts in the order they stand, each by its text. */
 function bar(page: HTMLElement): { banner: HTMLElement; parts: Element[] } {
   const banner = page.querySelector<HTMLElement>("header") ?? assert.fail("no bar");
   return { banner, parts: [...banner.children] };
@@ -856,7 +778,6 @@ test("while the list is first read it stands as quiet rows under its toolbar, sa
 });
 
 test("with no workspace listed the list and a linked automation stand as quiet blocks, never as empty or gone", async () => {
-  // Note that the tasks are read apart from the workspaces, so a listed task list says nothing of them.
   const page = mount(tasksControl({ workspace: undefined, listRead: true, listFailed: false }));
   await settle();
   assert.equal(
@@ -891,31 +812,19 @@ test("with no workspace listed the list and a linked automation stand as quiet b
   assert.deepEqual(listed(), [], "no workspace's list is asked for");
 });
 
-/** The workspace the account made first, its personal one, where everything is its own. */
 const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada" };
 
-/** Each time the Board was opened past the page, as the sidebar's Tasks row opens it. */
 let boardOpens: number[] = [];
 
-/** Opens the Board as the sidebar's Tasks row would, through the window's guarded door. */
 let openBoard: () => void = () => undefined;
 
-/** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
-/** The ask the window's guard last told the shell of, as a browser tab's ways out hear it; nothing while no page holds unsaved work. */
 let shellAsk: LeaveAsk | undefined;
 
-/** Sends the window to a place among the automations, as a link opened there does. */
 let sendTo: (place: AutomationsPlace) => void = () => undefined;
-/** Lists another workspace under the mounted pages, as the switcher would. */
 let moveTo: (workspace: Workspace) => void = () => undefined;
 
-/**
- * The Automations pages as the window holds them, standing on `start` and
- * moved by their own presses, over the workspace listed, the personal one
- * first among the account's.
- */
 function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): HTMLElement {
   holdChoices();
   unlisted = false;
@@ -926,7 +835,6 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     sendTo = setPlace;
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
-    // The window's own guard, over doors guarded as the Plans tab guards its own.
     const leaveGuard = useLeaveGuard((ask) => {
       shellAsk = ask;
     });
@@ -996,8 +904,6 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
   return container;
 }
 
-/** The button named, wherever it is drawn. */
-/** What a reader names `control` by: the elements its `aria-labelledby` lists, itself among them, in order. */
 function nameOf(control: HTMLElement): string {
   const ids = (control.getAttribute("aria-labelledby") ?? "").split(" ");
   return ids
@@ -1006,7 +912,6 @@ function nameOf(control: HTMLElement): string {
     .trim();
 }
 
-/** The servers chip, found as a reader names it: by its hidden field name, then its own face. */
 function serversChip(root: ParentNode = document): HTMLButtonElement | undefined {
   return [...root.querySelectorAll<HTMLButtonElement>("button[aria-labelledby]")].find((each) => {
     const [fieldName] = (each.getAttribute("aria-labelledby") ?? "").split(" ");
@@ -1024,7 +929,6 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
-/** The value a copy field shows beside its "Copy {what}", or nothing where none stands. */
 function copyFieldValue(page: HTMLElement, what: string): HTMLElement | undefined {
   let at: Element | null | undefined = [...page.querySelectorAll("button")].find(
     (each) => each.getAttribute("aria-label") === `Copy ${what}`,
@@ -1037,18 +941,15 @@ function copyFieldValue(page: HTMLElement, what: string): HTMLElement | undefine
   return undefined;
 }
 
-/** Stands a phone's automation's runs, from its head's ⋯, where its Runs now stands. */
 function phoneRuns(): void {
   act(() => button("Automation actions").click());
   act(() => menuItem("Runs").click());
 }
 
-/** Whether a copy button shows its copy landed, its glyph turned to the check, once the clipboard took it. */
 function copiedShown(copyButton: HTMLButtonElement): boolean {
   return copyButton.querySelector(".ui-copy-glyph")?.getAttribute("data-state") === "copied";
 }
 
-/** The option of the list standing open whose words are `words`. */
 function optionWords(words: string): HTMLElement {
   const found = [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
     (each) => each.textContent === words,
@@ -1057,7 +958,6 @@ function optionWords(words: string): HTMLElement {
   return found;
 }
 
-/** The item of the menu standing open whose words are `name`. */
 function menuItem(name: string): HTMLButtonElement {
   const found = [
     ...document.querySelectorAll<HTMLButtonElement>(
@@ -1068,7 +968,6 @@ function menuItem(name: string): HTMLButtonElement {
   return found;
 }
 
-/** The button of the dialog standing whose words are `name`. */
 function dialogButton(name: string): HTMLButtonElement {
   const found = [
     ...document.querySelectorAll<HTMLButtonElement>(
@@ -1079,7 +978,6 @@ function dialogButton(name: string): HTMLButtonElement {
   return found;
 }
 
-/** Types into a field as a developer would, so React hears the change. */
 function type(field: HTMLInputElement | HTMLTextAreaElement | null, value: string): void {
   assert.ok(field, "the field is drawn");
   const prototype =
@@ -1093,40 +991,34 @@ function type(field: HTMLInputElement | HTMLTextAreaElement | null, value: strin
   });
 }
 
-/** The picker named, by its chip's own name: "Event: Issue opened". */
 function picker(page: HTMLElement, label: string): HTMLButtonElement {
   const found = page.querySelector<HTMLButtonElement>(`button[aria-label^="${label}: "]`);
   assert.ok(found, `no picker ${label}`);
   return found;
 }
 
-/** What the picker named says it holds now. */
 function picked(page: HTMLElement, label: string): string | undefined {
   return picker(page, label)
     .getAttribute("aria-label")
     ?.slice(label.length + 2);
 }
 
-/** What the row of the picker named says under its name: the trigger's sentence under Type. */
 function pickerDetail(page: HTMLElement, label: string): string | undefined {
   const id = picker(page, label).getAttribute("aria-describedby");
   return id === null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
 }
 
-/** Whether `words` stand in an error line, which the window's announcer says as they arrive. */
 function announced(words: string): boolean {
   return [...document.querySelectorAll("[data-slot=field-error]")].some(
     (region) => region.textContent === words,
   );
 }
 
-/** What describes the picker named, each part on its own: its row's why, then its row's error. */
 function pickerDescription(page: HTMLElement, label: string): (string | undefined)[] {
   const ids = picker(page, label).getAttribute("aria-describedby")?.split(" ") ?? [];
   return ids.map((id) => document.getElementById(id)?.textContent ?? undefined);
 }
 
-/** Picks an option as a developer would: the picker's chip, then the menu's row of that name. */
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
@@ -1136,24 +1028,20 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
-/** The switch named, wherever it is drawn. */
 function switchNamed(name: string): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
   assert.ok(found, `no switch ${name}`);
   return found;
 }
 
-/** Whether the switch named is on. */
 function isOn(name: string): boolean {
   return switchNamed(name).getAttribute("aria-checked") === "true";
 }
 
-/** The toolbar's crumbs' words, in order. */
 function crumbs(page: HTMLElement): string {
   return page.querySelector(".automation-toolbar nav")?.textContent ?? "";
 }
 
-/** The page's headings: an automation's page has one, its name, written in its title. */
 function headings(page: HTMLElement): string[] {
   return [...page.querySelectorAll("h1")].map(
     (each) => each.querySelector("input")?.value ?? each.textContent?.trim() ?? "",
@@ -1408,7 +1296,6 @@ test("a row's Delete withdrawn deletes nothing and leaves the row standing", asy
   assert.ok(rows(page).some(([name]) => name === SWEEP.name));
 });
 
-/** The leave dialog's question, while it stands. */
 function leaveAsked(): string | undefined {
   return [...document.querySelectorAll("[role=dialog], [role=alertdialog]")]
     .map((dialog) => dialog.textContent ?? "")
@@ -1500,7 +1387,6 @@ test("the Owner row stands in a shared workspace, and not in the account's perso
   assert.equal(personal.querySelector("button[aria-label^='Owner: ']") === null, true);
 });
 
-/** The groups of the editor's form, by their titles, top to bottom. */
 function formGroups(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".automation-form section[aria-labelledby] h2")].map(
     (title) => title.textContent ?? "",
@@ -1710,7 +1596,6 @@ test("the Runs panel's edge resizes it within its bounds, and the width stands o
   window.localStorage.clear();
 });
 
-/** The pill the pointer resting on `element` raises, or nothing where it raises none. */
 function pillOver(element: Element): string | undefined {
   restOn(element);
   const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
@@ -1730,7 +1615,6 @@ test("an automation's toolbar too narrow for its acts' words beside its name fol
       return { name, pill: pillOver(press) };
     });
 
-  // A 760 window's toolbar, past the traffic lights.
   const narrow = layContainersAt({ "automation-toolbar": 570 });
   try {
     act(() => relayout());
@@ -1859,7 +1743,6 @@ test("with no workspace listed because the workspaces could not be read, the lis
   act(() => button("Retry").click());
   assert.equal(retries, 1);
 
-  // The read Retry asked for lands, listing the workspace, whose automations are then read.
   render(tasksControl({ workspace: WORKSPACE }));
   await settle();
   assert.deepEqual(listed(), [WORKSPACE.id]);
@@ -1952,7 +1835,6 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   assert.equal(places.length, 1);
 });
 
-/** A new automation's page, named and given its prompt, ready to have its schedule picked. */
 async function mountNewScheduled(): Promise<HTMLElement> {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
@@ -1974,7 +1856,6 @@ test("a schedule repeated weekly is saved on Monday at nine, as its day and time
   });
 });
 
-/** The Nightly sweep's page, standing on a schedule of Wednesdays at 07:30 Tokyo time. */
 async function mountWeeklySweep(): Promise<HTMLElement> {
   standing = [
     {
@@ -2012,7 +1893,6 @@ test("a schedule's time is written as its summary says it, and a time that canno
   type(field(), "soon");
   assert.equal(button("Save").disabled, false, "words that are no time are unsaved work");
 
-  // Note that "2" reads as 2:00 AM and moves the schedule before the colon after it makes the words unreadable.
   type(field(), "2");
   type(field(), "2:");
   assert.equal(field().getAttribute("aria-invalid"), "true");
@@ -2111,7 +1991,6 @@ test("Escape while writing the prompt lets go of the caret and reaches the windo
   pressEscape({});
   window.removeEventListener("keydown", listen);
 
-  // Note that both reach the window, whose live call Escape stops first, marked taken, so neither leaves the page.
   assert.deepEqual(reached, [true, true]);
   assert.equal(document.activeElement === prompt, false);
   assert.equal(prompt.value, "Triage the issues opened overnight.");
@@ -2158,7 +2037,6 @@ test("the repository chosen first is not said again among the others its runs wo
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .ui-chip")?.click());
   await settle();
-  // The repository's row names it, then its owner after it.
   act(() => optionWords("webacme").click());
   await settle();
 
@@ -2208,7 +2086,6 @@ test("the agent a same-agent automation was saved with is not offered once its r
 
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .ui-chip")?.click());
   await settle();
-  // The repository's row names it, then its owner after it.
   act(() => optionWords("webacme").click());
   await settle();
   assert.equal(picked(page, "Agent"), "Started by its first run");
@@ -2241,7 +2118,6 @@ test("Same agent saves with none chosen, its first run starting one, or with one
   assert.equal(picked(page, "Agent"), "CI digest");
   act(() => button("Save").click());
   await settle();
-  // A picked agent is let go again, for the next run to start one.
   pick(page, "Agent", "Started by its first run");
   assert.equal(picked(page, "Agent"), "Started by its first run");
   act(() => button("Save").click());
@@ -2263,12 +2139,10 @@ test("Same agent saves with none chosen, its first run starting one, or with one
   ]);
 });
 
-/** Whether the picker named wears a glyph before its name, a chip's chevron not being one. */
 function chipWearsGlyph(page: HTMLElement, label: string): boolean {
   return picker(page, label).querySelector(".ui-chip-name")?.previousElementSibling != null;
 }
 
-/** The Agent picker's rows, each as its glyph, its name, and its detail beside it, and the marks at its end. */
 function agentRows(): {
   glyph: boolean;
   name: string | null;
@@ -2280,7 +2154,6 @@ function agentRows(): {
       option.querySelector(".ui-combobox-option-glyph svg, .ui-combobox-option-glyph img") !== null,
     name: option.querySelector(".ui-combobox-option-label")?.textContent ?? null,
     detail: option.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
-    // Note that the hint's marks stand inside the replay mark its menu draws them under, so a mark is a child of that mark, or of the hint where none stands.
     ends: [...(option.querySelector(".ui-combobox-option-hint")?.children ?? [])]
       .flatMap((mark) =>
         mark.matches("[data-replay-mask], [data-replay-unmask]") ? [...mark.children] : [mark],
@@ -2351,7 +2224,6 @@ test("the Agent picker's rows each hang their agent's card while the pointer res
   await settle();
   act(() => picker(page, "Agent").click());
 
-  // The first row chooses none, so the agent's is the second.
   restOn(document.querySelectorAll("[role=option]")[1] ?? assert.fail("the menu lists the agent"));
   const card = document.querySelector(".ui-tooltip-card") ?? assert.fail("the row hangs a card");
   assert.equal(card.querySelector(".ui-hover-card-name")?.textContent, "CI digest");
@@ -2449,7 +2321,6 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
 });
 
-/** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
     if (row.querySelector(".integration-mark-sentry") !== null) return "sentry";
@@ -2648,7 +2519,6 @@ test("a Run now the service refuses says why under the name, and a new automatio
   assert.match(fresh.textContent ?? "", /No runs yet\./u);
 });
 
-/** A run of the sweep that started the CI digest agent, which a press on its row opens. */
 const SWEEP_RUN = {
   id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
   firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
@@ -2659,7 +2529,6 @@ const SWEEP_RUN = {
   settledAt: 3,
 } as const;
 
-/** A run that started no agent and names no subject, so has nothing of its own to open. */
 const UNSTARTED_RUN = {
   id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
   firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
@@ -2690,7 +2559,6 @@ test("a default model that could not be read is said as unknown, and a model can
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  // Note that the default reads as failed once the preferences' failure reaches their query.
   await vi.waitFor(() =>
     assert.match(
       page.textContent ?? "",
@@ -2702,7 +2570,6 @@ test("a default model that could not be read is said as unknown, and a model can
     true,
     "no model is drawn as the default",
   );
-  // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
@@ -2730,7 +2597,6 @@ test("a default model that could not be read is said as unknown, and a model can
 test("the reader's own automation says a model nothing of theirs pays for cannot run, while a teammate's, run on its maker's connections, says nothing of it", async () => {
   catalogUnconnected = true;
   standing = [DIGEST, SWEEP];
-  /** The pinned rows of the Model row's menu and its last line, on the automation given. */
   const footOn = async (automationId: string): Promise<string> => {
     const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
     await settle();
@@ -3181,16 +3047,9 @@ test("a link to a run opens its automation's editor with that run marked current
   );
 });
 
-/**
- * The Automations pages on a narrow stage, a phone's, or the room given,
- * standing on `start`, with the window's stylesheets laid: the page and
- * whether its runs stand alone held as the Plans tab holds them, its runs'
- * screen shown and left by their own presses.
- */
 function mountNarrow(start: AutomationsPlace, room: ShellRoom = SHELL_ROOM.NARROW): HTMLElement {
   function Pages() {
     const [place, setPlace] = useState(start);
-    // As the Plans tab does, a page opened on a run's link stands its runs.
     const [runsShown, setRunsShown] = useState(
       start.kind === AUTOMATIONS_PAGE.EDIT && start.runId !== undefined,
     );
@@ -3220,7 +3079,6 @@ function mountNarrow(start: AutomationsPlace, room: ShellRoom = SHELL_ROOM.NARRO
   return container;
 }
 
-/** Which of an automation's two screens are on screen: its setup, and its runs. */
 function screensShown(page: HTMLElement): string[] {
   const setup = page.querySelector(".automation-editor-screen") ?? assert.fail("no setup");
   const runsScreen = page.querySelector("section[aria-label='Runs']") ?? assert.fail("no runs");
@@ -3363,7 +3221,6 @@ test("on a narrow stage each row says when it runs next before what fires it, un
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
 });
 
-/** An automation fired by Sentry alerts from two projects at the error level, waiting six hours before the same issue runs again. */
 const SENTRY_ALERTS = automation(11, {
   name: "Fix Sentry errors",
   trigger: {
@@ -3375,7 +3232,6 @@ const SENTRY_ALERTS = automation(11, {
   guards: { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 6 },
 });
 
-/** A Sentry issue's firing, as its run keeps it. Synthetic. */
 const ISSUE_FIRING = {
   kind: AUTOMATION_FIRING.INTEGRATION,
   provider: TRIGGER_PROVIDER.SENTRY,
@@ -3570,7 +3426,6 @@ test("Sentry stays listed but unpickable, saying why, where this deployment hold
     [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
       (row) => row.querySelector(".ui-combobox-option-label")?.textContent === "Sentry",
     ) ?? assert.fail("Sentry is listed");
-  // Note that Sentry is said unpickable once the workspace's integrations reach their query.
   await vi.waitFor(() => assert.equal(sentryOption().getAttribute("aria-disabled"), "true"));
   const sentry = sentryOption();
   assert.match(sentry.textContent ?? "", /Not set up on this deployment yet/u);
@@ -3587,7 +3442,6 @@ test("Sentry stays listed but unpickable, saying why, where this deployment hold
 test("Sentry chosen before the read says the deployment holds no Sentry integration is held back from saving", async () => {
   sentryRead = { configured: false, installations: [] };
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  // Chosen before the read answers.
   pick(page, "Type", "Sentry");
   await settle();
 
@@ -3617,7 +3471,6 @@ test("on a phone the list is headed by New automation and one ⋯ holding Create
 });
 
 test("on a phone an automation's page is headed by the way back to the list, its name a section's gap under it, and one ⋯ holding Save, Run now, its switch, Runs, and the automation's own actions, where the draft stands its heading", async () => {
-  // Note that the window's sheets are laid on a phone's root, whose tokens the gap is read in.
   const sheets = layContainersAt({});
   document.documentElement.dataset.uiProfile = PROFILE.WEB;
   document.documentElement.dataset.uiRoom = SHELL_ROOM.NARROW;
@@ -3643,7 +3496,6 @@ test("on a phone an automation's page is headed by the way back to the list, its
     ),
     ["Automations", "Automation actions"],
   );
-  // The page's header names it, and the head picks the name up once that scrolls away, so it is the one h1.
   assert.equal(head.querySelector("h1") === null, true);
   assert.equal(
     page.querySelector<HTMLInputElement>("h1 input[aria-label='Automation name']")?.value,
@@ -3668,7 +3520,6 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   catalogRefused = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.classList.contains("automation-model-picker"))
       return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
@@ -3676,7 +3527,6 @@ test("a model catalog that could not be read says so in the model menu, and Retr
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
-  // Note that the picker stands once the failed reads reach their queries.
   const choose = await vi.waitFor(() => button("Choose a model"));
   act(() => choose.click());
   await settle();

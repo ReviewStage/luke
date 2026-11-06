@@ -6,26 +6,12 @@ import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { startsOwnAgents } from "./agent-model.js";
 import type { AgentsControl } from "./use-agents.js";
 
-/**
- * terminal-picker.tsx -- the palette a terminal command opens on a task with no coding agent: its one offer, to start one.
- *
- * A terminal belongs to one agent (`terminal-entry.ts`), whose rules never
- * ask which; a task with none has no terminal to open, so the command
- * offers to start an agent, as the command palette's own dialog and row. A
- * pilot task's agents are its pilot's to start, so it offers nothing, and
- * while the task's agents are still being read it says so.
- */
-
-/** The value of the row that starts an agent. */
 const START_ROW = "start-agent";
 
-/** The start row's words. */
 const START_WORDS = "Start an agent";
 
-/** What the palette's field says. */
 const PICKER_LABEL = "New terminal";
 
-/** The keys' hints along the foot, each its chord and then its word, which a reader is not read. */
 function PickerFoot(): React.JSX.Element {
   return (
     <ReplayUnmask>
@@ -48,13 +34,10 @@ export function TerminalPicker({
 }: {
   open: boolean;
   agents: AgentsControl;
-  /** Starts a coding agent on the task. */
   onStartAgent: () => void;
-  /** Whether a coding agent can start on the task now. */
   start: { readonly available: boolean };
   onClose: () => void;
 }): React.JSX.Element {
-  // Note that a task whose agents are not read yet offers nothing until they are.
   const read = agents.agents !== undefined;
   const offersStart = read && startsOwnAgents(agents.mode);
   const groups: readonly CommandGroup[] = offersStart

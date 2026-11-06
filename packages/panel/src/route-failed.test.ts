@@ -14,12 +14,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { LAZY_ROUTE } from "./panel-router.js";
 
-/**
- * route-failed.test.ts -- a lazy route of the window's that landed and threw
- * while drawing says so with Reload, which draws it again in place, the
- * window left standing, as `lazy-route.ts`'s surfaces do.
- */
-
 let host: HTMLDivElement;
 let root: Root;
 
@@ -36,7 +30,6 @@ afterEach(() => {
 });
 
 test("a lazy route that landed and threw while drawing is drawn again in place on Reload", async () => {
-  // Note that React says the failure its boundary caught on the console, as it would in the window.
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   const broken = { now: true };
   const Page = () => {

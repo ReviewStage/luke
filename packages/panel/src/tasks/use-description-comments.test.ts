@@ -21,13 +21,6 @@ import { handHostReads } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { useDescriptionComments } from "./use-description-comments.js";
 
-/**
- * A comment whose mention could not hand the thread over: the reply posts,
- * and the thread says who could not take it; and an edit the service
- * refused, whose field closed as it was sent, keeps its words as the
- * comment's draft. Synthetic thread.
- */
-
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const THREAD: DescriptionCommentThread = {

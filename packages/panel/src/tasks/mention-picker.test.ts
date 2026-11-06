@@ -27,10 +27,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 
-/**
- * mention-picker.test.ts -- the `@` list as the editor's reports drive it: a list closed with Escape, which fades out before it goes; and on a plan, the workspace's other tasks found by their keys, its Inbox threads by their titles, and its automations by their names.
- */
-
 let root: Root | undefined;
 
 afterEach(() => {
@@ -40,7 +36,6 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** The list drawn as a plan's box draws it, over a description whose one section is Margins, the latest it answered kept for the test to drive. */
 function mounted() {
   let latest: MentionPicker | undefined;
   function Picker() {
@@ -76,12 +71,10 @@ function mounted() {
   };
 }
 
-/** A word the editor reports at the start of the words, typed as far as `query`. */
 function word(query: string): ComposerTrigger {
   return { start: 0, query, rect: { left: 0, top: 0, bottom: 0 } };
 }
 
-/** The rows the open list draws, by name. */
 const rows = (page: HTMLElement) =>
   [...page.querySelectorAll(".ui-combobox-option-label")].map((row) => row.textContent);
 
@@ -130,7 +123,6 @@ test("the @ list's foot names its keys through Shortcut, ⏎ and ⇥ mention and
   );
 });
 
-/** The list drawn as a description's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
 async function mountedOnDescription(chosen: MentionNode[]) {
   let latest: MentionPicker | undefined;
   function Picker() {
@@ -169,7 +161,6 @@ async function mountedOnDescription(chosen: MentionNode[]) {
   };
 }
 
-/** The rows the open list draws, by name and the detail beside it. */
 const detailedRows = (page: HTMLElement) =>
   [...page.querySelectorAll('[role="option"]')].map((row) =>
     [".ui-combobox-option-label", ".ui-combobox-option-detail"]
@@ -178,7 +169,6 @@ const detailedRows = (page: HTMLElement) =>
       .join(" · "),
   );
 
-/** A workspace the reader owns, as the window lists it. */
 const workspace = (id: string, name: string, slug: string) => ({
   id,
   name,
@@ -187,7 +177,6 @@ const workspace = (id: string, name: string, slug: string) => ({
   github: null,
 });
 
-/** A task of a workspace, as the window lists it. */
 const task = (id: string, workspaceId: string, number: number, name: string) => ({
   id,
   workspaceId,
@@ -244,7 +233,6 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
   });
 });
 
-/** An open Inbox thread an agent posted, changed last at `updatedAt`. */
 const thread = (id: string, title: string, updatedAt: number): InboxItem => ({
   id,
   agentId: "agent-1",
@@ -309,7 +297,6 @@ test("on a plan, the workspace's Inbox threads are found by their title, the pla
     place: { kind: LINK_PLACE.INBOX_ITEM, itemId: "item-billing" },
   });
 
-  // The box draws the thread's link as the thread's chip, not as its words.
   const box = document.body.appendChild(document.createElement("div"));
   const boxRoot = createRoot(box);
   act(() =>

@@ -1,13 +1,3 @@
-/**
- * workspace.tsx -- one workspace's page: what its row in the Workspaces
- * table counts, the GitHub accounts it installed the App on, and every
- * member, each opening their account's page.
- *
- * It is the step between a workspace and the people in it: the Workspaces
- * table and an account's own list of workspaces open it, and each member
- * opens their account, so a maintainer walks either way without searching.
- */
-
 import type { AdminWorkspaceDetail, AdminWorkspaceMember } from "@repo/features/admin-answer-wire";
 import { formatCount } from "@repo/features/number-format";
 import { formatDate } from "@repo/features/time-format";
@@ -51,23 +41,18 @@ import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
 
 const WORKSPACE_ERROR = readFailedWords("this workspace");
 
-/** What the page is called until its workspace is read, or where it cannot be. */
 const WORKSPACE_TITLE = "Workspace";
 
-/** The masthead's line bone, about the created line's width. */
 const SKELETON_CREATED_WIDTH = "192px";
 
-/** How many members the table's skeleton stands a row for, about a small team's. */
 const MEMBERS_SKELETON_ROWS = 3;
 
-/** The members table's columns by key; a fixed set, so a heading never carries a free string. */
 const MEMBER_COLUMN = {
   ACCOUNT: "account",
   ROLE: "role",
   JOINED: "joined",
 } as const;
 
-/** The week's work, as the Workspaces table counts it, and how many are in it. */
 const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceDetail>[] = [
   {
     key: "members",
@@ -118,7 +103,6 @@ function memberColumns(
   ]);
 }
 
-/** The masthead's frame: the badges line over the created line and the workspace's GitHub accounts. */
 function MastheadFrame({
   created,
   links,
@@ -134,7 +118,6 @@ function MastheadFrame({
   );
 }
 
-/** What the workspace is: whether it is someone's personal one, when it was made, and the GitHub accounts it installed the App on. */
 function Masthead({ detail }: { detail: AdminWorkspaceDetail }): React.JSX.Element {
   const { workspace } = detail;
   return (
@@ -172,7 +155,6 @@ function Masthead({ detail }: { detail: AdminWorkspaceDetail }): React.JSX.Eleme
   );
 }
 
-/** The masthead while the workspace is read: a bone for its created line. */
 function MastheadSkeleton(): React.JSX.Element {
   return (
     <MastheadFrame
@@ -186,7 +168,6 @@ function MastheadSkeleton(): React.JSX.Element {
   );
 }
 
-/** The page's sections, drawn from `detail` once it is read and as their skeletons until then. */
 function WorkspaceSections({
   detail,
   onOpenAccount,
@@ -237,7 +218,6 @@ export function WorkspaceScreen({
   onSignOut: () => Promise<void>;
   onBack: () => void;
   onOpenAccount: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();

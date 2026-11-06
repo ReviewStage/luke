@@ -4,21 +4,13 @@ import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wir
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import type { OpenFile } from "./use-side-panel.js";
 
-/**
- * file-tab-model.ts -- what a File tab holds of its file, apart from drawing it: its whole text, where it was read, and why a file is not shown.
- */
-
-/** Where a File tab's read of its file stands. */
 export const FILE_READ = {
   READING: "reading",
   READY: "ready",
-  /** The service answered why the file is not shown. */
   REFUSED: "refused",
-  /** The read did not land: the service did not answer, or main refused it. */
   FAILED: "failed",
 } as const;
 
-/** A file's whole text, of `lineCount` lines, read on `branch`, at `commit` where the service named the commit. */
 export interface FileText {
   readonly repository: string;
   readonly branch: string;
@@ -33,12 +25,10 @@ export type FileRead =
   | {
       readonly kind: typeof FILE_READ.REFUSED;
       readonly refusal: TaskFileRefusal;
-      /** The branch GitHub found nothing at the path on, where the service named it. */
       readonly branch: string | undefined;
     }
   | { readonly kind: typeof FILE_READ.FAILED };
 
-/** What a File tab says in its file's place, for each reason the file is not shown. */
 const FILE_REFUSAL_LINE = {
   [TASK_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
   [TASK_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
@@ -48,20 +38,12 @@ const FILE_REFUSAL_LINE = {
   [TASK_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read.",
 } as const satisfies Record<TaskFileRefusal, string>;
 
-/** The characters of a commit's SHA a line names it by, as GitHub abbreviates one. */
 const SHORT_COMMIT_CHARS = 7;
 
-/** A commit as a line names it: its SHA cut as GitHub abbreviates one. */
 export function shortCommit(sha: string): string {
   return sha.slice(0, SHORT_COMMIT_CHARS);
 }
 
-/**
- * What a File tab says in place of a file refused: the table's line, and
- * for a missing file the branch it was looked for on where the service
- * named it, or the commit it was read at, which an agent may not have
- * pushed.
- */
 export function refusalLine(
   refusal: TaskFileRefusal,
   branch: string | undefined,
@@ -76,12 +58,6 @@ export function refusalLine(
   return FILE_REFUSAL_LINE[refusal];
 }
 
-/**
- * The file's page on GitHub at the commit its lines were read at, or the
- * branch where the service named no commit, so the page holds the lines
- * the tab draws; its lit lines marked where it still has them: a file
- * shortened past them, which the tab lights nothing of, opens at its top.
- */
 export function fileUrl(held: FileText, file: OpenFile): string {
   const page = {
     kind: GITHUB_PAGE.FILE,
@@ -96,22 +72,15 @@ export function fileUrl(held: FileText, file: OpenFile): string {
   return gitHubPageLink({ ...page, lines: { startLine, endLine } });
 }
 
-/** Whether a refusal may pass with time, so the tab offers to read again. */
 export function refusalPasses(refusal: TaskFileRefusal): boolean {
   return refusal === TASK_FILE_REFUSAL.UNAVAILABLE;
 }
 
-/**
- * How many lines a file's text holds, as GitHub and an editor count them:
- * a newline ending the last line opens no line of its own, and an empty
- * file holds one empty line.
- */
 export function lineCountOf(text: string): number {
   const lines = text.split("\n").length;
   return text.endsWith("\n") && lines > 1 ? lines - 1 : lines;
 }
 
-/** How a raw read of a file's whole text came out: the text, a file the service will not carry whole, or a read that did not land. */
 export const WHOLE_TEXT = {
   READ: "read",
   REFUSED: "refused",
@@ -123,13 +92,6 @@ export type WholeText =
   | { readonly kind: typeof WHOLE_TEXT.REFUSED; readonly cause: unknown }
   | { readonly kind: typeof WHOLE_TEXT.UNREAD; readonly cause: unknown };
 
-/**
- * A raw read's answer as a copy or a download of the file hears it: the
- * file's text as it holds it, its lines uncut; a file the service refuses
- * to carry whole, as one grown past its bound since it was drawn; or a read
- * that did not land. Either failure keeps the answer that said so, which
- * its toast reports.
- */
 export function wholeTextOf(answer: TasksFileAnswer): WholeText {
   if ("text" in answer) return { kind: WHOLE_TEXT.READ, text: answer.text.text };
   if ("refusal" in answer) return { kind: WHOLE_TEXT.REFUSED, cause: answer };

@@ -15,34 +15,16 @@ import {
 import { Fragment } from "react";
 import { ChartEmpty, ChartFrame, PlotBox } from "./chart-frame.js";
 
-/**
- * The floor under a cell's fill, so a small nonzero share still reads as a
- * mark against the card instead of vanishing into it.
- */
 const RETENTION_FILL_FLOOR_PERCENT = 8;
 
-/**
- * The ceiling over a cell's fill. Note that a full share stops here rather
- * than at the series' own ink, because the page's text must read at AA on
- * every cell in both themes (`admin-retention-grid.test.ts`), and no single
- * ink, dark or white, clears the chart blue across the whole ramp.
- */
 const RETENTION_FILL_CEILING_PERCENT = 60;
 
-/** A cohort row's height at least, every cell's, which the grid's skeleton stands too. */
 const RETENTION_ROW_HEIGHT = "2.25rem";
 
-/** The room between the grid's rows and columns. */
 const RETENTION_GAP = "var(--ui-space-4)";
 
-/**
- * How many weekly cohorts the grid stands, the service's
- * `ADMIN_RETENTION_WEEKS`, not imported because the module exporting it
- * carries query code the client bundle must not.
- */
 const RETENTION_SKELETON_WEEKS = 8;
 
-/** Every cell's box: at least a row tall, so an empty cell holds its row as a filled one does. */
 const RETENTION_CELL_BOX: React.CSSProperties = { minHeight: RETENTION_ROW_HEIGHT };
 
 function retentionCellStyle(share: number): React.CSSProperties {
@@ -98,7 +80,6 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   );
 }
 
-/** A column's heading, in the Group role every list's heading takes. */
 function HeaderWords({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP}>
@@ -107,16 +88,6 @@ function HeaderWords({ children }: { children: React.ReactNode }): React.JSX.Ele
   );
 }
 
-/**
- * Weekly signup cohorts against the weeks after them, as a plain CSS grid
- * rather than a chart: each row is the accounts created in one UTC week, each
- * cell the share of them that used the hosted tier that many weeks after
- * signing up. The grid is triangular because the builder emits no cell for a
- * week the calendar has not reached, and the current week's cells wear a
- * dashed border because their week is still accruing. The page's section
- * heading names it, so its card carries no title, and the grid scrolls inside
- * the card rather than squeezing its cells in a narrow column.
- */
 export function RetentionGrid({
   retention,
 }: {
@@ -134,10 +105,6 @@ export function RetentionGrid({
   const offsets = Array.from({ length: retention.weeks }, (_, offset) => offset);
   return (
     <ChartFrame>
-      {/* Note that the scroller bleeds across the card's inset, because cells
-      scrolled out of a narrow card should pass under its edge, not stop short of it.
-      The inset comes back on the grid's own box, which stands as wide as the grid,
-      so it pads both ends of the scroll; a swipe up or down over it moves the page. */}
       <div className="-mx-(--ui-card-inset)">
         <ScrollArea
           axis={SCROLL_AXIS.HORIZONTAL}
@@ -189,11 +156,6 @@ export function RetentionGrid({
   );
 }
 
-/**
- * The grid while its cohorts are read: its card over a block as tall as the
- * grid it stands for, its header row in the caption's line and a row a
- * cohort, each the cells' own height and the grid's gap apart.
- */
 export function RetentionGridSkeleton(): React.JSX.Element {
   return (
     <ChartFrame>

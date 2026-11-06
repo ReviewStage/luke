@@ -17,13 +17,6 @@ import { ToastHost } from "./toast.js";
 import { appStateQuery } from "./use-app-state.js";
 import { useWindowZoom } from "./window-zoom.js";
 
-/**
- * window-zoom.test.ts -- ⌘+, ⌘−, and ⌘0 are the desktop's: its window zooms,
- * so its keymap claims them, and the web's leaves them to the browser's own
- * zoom, which they would otherwise be taken from for nothing. A size the
- * settings refuse is said in a toast rather than forgotten in silence.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -33,7 +26,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A window at 100% whose zoom keys write into `writes`, saying in `landed` whether each render held the document. */
 function ZoomWindow({
   writes,
   landed,
@@ -50,7 +42,6 @@ function ZoomWindow({
   return null;
 }
 
-/** Draws the window on a platform offering `capabilities`, once its document has arrived. */
 async function drawOn(
   capabilities: readonly HostCapability[],
   writes: ZoomPercent[],
@@ -66,7 +57,6 @@ async function drawOn(
   await vi.waitFor(() => expect(landed.at(-1)).toBe(true));
 }
 
-/** Presses ⌘ and `key`, answering the event, so a test reads whether the window took it. */
 function pressCommand(key: string, code: string, repeat = false): KeyboardEvent {
   const event = new KeyboardEvent("keydown", {
     key,
@@ -107,14 +97,12 @@ for (const { name, key, code, zoom } of ZOOM_KEYS) {
   });
 }
 
-// Note that this test is the file's only one that presses a repeat and so the only one to read the window's capabilities outside React, which its one registry answers for every test after it.
 test("a held ⌘+ keeps stepping the browser's zoom on the web, its repeats left alone too", async () => {
   await drawOn(WEB_CAPABILITIES, []);
   assert.equal(pressCommand("+", "Equal").defaultPrevented, false);
   assert.equal(pressCommand("+", "Equal", true).defaultPrevented, false);
 });
 
-/** A desktop window at 100% whose every write is refused, beside the toasts it raises. */
 function RefusedZoomWindow({ landed }: { landed: boolean[] }): ReactElement {
   function Keys(): null {
     landed.push(useQuery(appStateQuery).data !== undefined);

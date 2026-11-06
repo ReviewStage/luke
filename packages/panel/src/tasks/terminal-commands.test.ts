@@ -26,14 +26,6 @@ import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
-/**
- * Show terminal (⌘J) and New terminal from each place a developer can be,
- * as the new-terminal rules have them: which agent's Terminal tab the side
- * panel is asked to show, whether a new shell is asked of its sandbox, and
- * the picker where the rules leave the agent to the developer. The task is
- * drawn by the real window over a staged control.
- */
-
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
@@ -53,7 +45,6 @@ const SUMMARY: TaskSummary = {
   repository: TASK.repository,
 };
 
-/** An agent on the task, standing where `status` says. */
 function agent(id: string, title: string, status: AgentSummary["status"]): AgentSummary {
   return {
     id,
@@ -85,23 +76,18 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets main's answers, and the redraws they cause, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 }
 
-/** The task drawn with the agents given, its column on `main` and the panel on `side`, answering what the panel was asked to show. */
 async function mount(input: {
-  /** The task's agents, or nothing while their read is out. */
   agents: readonly AgentSummary[] | undefined;
   main?: MainTab;
   side?: SidePanelTab;
   lastTerminal?: string;
-  /** A Start pressed, answering why it was refused, where it was. */
   started?: () => Failure | undefined;
-  /** Whether the platform runs terminals, so ⌘J stands, or no longer does, once the document reaches the window's queries. */
   terminals?: boolean;
 }) {
   const container = document.body.appendChild(document.createElement("div"));
@@ -153,14 +139,11 @@ async function mount(input: {
       ),
     ),
   );
-  // The document arrives a few microtasks after the window first draws, and its capabilities reach the task's page one notify tick later.
   await settle();
   const terminals = input.terminals ?? true;
   await vi.waitFor(() => assert.equal(appCommandOffered(APP_COMMAND.SHOW_TERMINAL), terminals));
   return {
-    /** Every tab the side panel was asked to show, in order. */
     shown,
-    /** How many new shells were asked of the agent's sandbox and not yet started. */
     asked: (agentId: string) => registry.get(shellsAsked(agentId)),
     run: async (command: typeof APP_COMMAND.SHOW_TERMINAL | typeof APP_COMMAND.NEW_TERMINAL) => {
       act(() => {
@@ -171,7 +154,6 @@ async function mount(input: {
   };
 }
 
-/** The offer to start an agent, while it stands: its rows' names, and which is chosen. */
 function picker() {
   const dialog = document.querySelector('[role="dialog"]');
   if (dialog === null) return undefined;
@@ -282,7 +264,6 @@ test("the panel's + lists each agent's terminal under Terminal, and a pick adds 
   assert.equal(task.asked(WORKING.id), 1);
 });
 
-/** The open menu's item named `label`: whether it shows a shortcut and what, and a press of it, the menu closing behind. */
 function menuItem(label: string) {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
@@ -299,7 +280,6 @@ function menuItem(label: string) {
   };
 }
 
-/** Opens the right-click menu of the task's column's tab named `name`. */
 function rightClickTab(name: string): void {
   const tab = [
     ...document.querySelectorAll<HTMLElement>('.desktop-task-main .ui-toolbar [role="tab"]'),
@@ -324,13 +304,11 @@ test("an agent's tab offers Show terminal on its right-click, which opens that a
     null,
     "the composer wears no Terminal chip",
   );
-  // The chosen tab's right-click says ⌘J, which opens the same terminal from here.
   rightClickTab("Invite flow");
   const fromChosen = menuItem("Show terminal");
   assert.equal(fromChosen.hint, "⌘J");
   await fromChosen.press();
   assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
-  // Another agent's tab opens its own terminal, which ⌘J would not from here, so it says no shortcut.
   rightClickTab("Expiry job");
   const fromOther = menuItem("Show terminal");
   assert.equal(fromOther.hint, undefined);
@@ -340,14 +318,12 @@ test("an agent's tab offers Show terminal on its right-click, which opens that a
   assert.equal(task.asked(DONE.id), 0);
 });
 
-/** The labels of the menu standing open. */
 function menuLabels(): string[] {
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "a menu stands open");
   return [...menu.querySelectorAll(".ui-menu-item-label")].map((each) => each.textContent ?? "");
 }
 
-/** The task drawn as `mount` draws it, on a platform offering `capabilities`. */
 async function mountOn(
   capabilities: readonly HostCapability[],
   input: Parameters<typeof mount>[0],

@@ -47,30 +47,8 @@ import {
   VIEW_OPTIONS,
 } from "./tasks-page-options.js";
 
-/**
- * tasks-page.tsx -- the window's Tasks page: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title, narrowed by its Filter and laid out by its View options.
- *
- * It stands in the plan's place, opened by the sidebar's Tasks row, and its
- * way out is `EXIT_BOARD`, so Back, Escape, and the window's history treat it
- * as the place the Board alone once was.
- *
- * Its toolbar ends in Filter and View options (`tasks-page-options.tsx`).
- * The filter is the page's, one for both views and one for each workspace,
- * since a creator and a repository are a workspace's own; each view keeps a
- * display of its own (`tasks-page-model.ts`). Which view it shows, the
- * filter, and both displays are kept on this Mac; where it stood scrolled is
- * the router's to put back with the step it stood in (`panel-router.tsx`).
- *
- * The List is `tasks-list.tsx`, and the Board `tasks-board.tsx`. A display
- * is kept with the properties its view offered then, so a property a view
- * gains since is drawn as the view's own display draws it rather than read
- * as one turned off.
- */
-
-/** What the page is called, on its toolbar and to a screen reader. */
 const TASKS = "Tasks";
 
-/** The page's two views. */
 const TASKS_VIEW = {
   LIST: "list",
   BOARD: "board",
@@ -80,7 +58,6 @@ export type TasksView = (typeof TASKS_VIEW)[keyof typeof TASKS_VIEW];
 
 const storedView = Schema.fromJsonString(Schema.Literals(Object.values(TASKS_VIEW)));
 
-/** The filters as kept: each workspace's by its id. */
 const storedFilters = Schema.fromJsonString(
   Schema.Record(
     Schema.String,
@@ -95,7 +72,6 @@ const storedFilters = Schema.fromJsonString(
   ),
 );
 
-/** A display as kept (`KeptTasksDisplay`): each choice optional, the Done and Canceled switches of an earlier build among them. */
 const storedDisplay = Schema.fromJsonString(
   Schema.Struct({
     grouping: Schema.optionalKey(Schema.Literals(Object.values(TASKS_GROUPING))),
@@ -106,30 +82,25 @@ const storedDisplay = Schema.fromJsonString(
     canceled: Schema.optionalKey(Schema.Boolean),
     pinnedFirst: Schema.optionalKey(Schema.Boolean),
     properties: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PROPERTY_ORDER))),
-    /** The properties the view offered when it was kept; absent from an earlier build, which offered `EARLIER_OFFERED`'s. */
     offered: Schema.optionalKey(Schema.Array(Schema.Literals(TASK_PROPERTY_ORDER))),
   }),
 );
 
-/** The properties each view offers its rows or cards. */
 const OFFERED = {
   [TASKS_VIEW.LIST]: TASK_PROPERTY_ORDER,
   [TASKS_VIEW.BOARD]: BOARD_PROPERTIES,
 } as const satisfies Record<TasksView, readonly TaskProperty[]>;
 
-/** The properties each view offered before a kept display said which it offered. */
 const EARLIER_OFFERED = {
   [TASKS_VIEW.LIST]: EARLIER_LIST_PROPERTIES,
   [TASKS_VIEW.BOARD]: EARLIER_BOARD_PROPERTIES,
 } as const satisfies Record<TasksView, readonly TaskProperty[]>;
 
-/** Each view's display until its reader changes it. */
 const INITIAL_DISPLAY = {
   [TASKS_VIEW.LIST]: DEFAULT_LIST_DISPLAY,
   [TASKS_VIEW.BOARD]: DEFAULT_BOARD_DISPLAY,
 } as const satisfies Record<TasksView, TasksDisplay>;
 
-/** A view's display as kept, over its own initial one; its own where none was kept. A property the view offered only since it was kept stands as its own display draws it, and one kept is kept with the properties its view offers now. */
 function storedDisplayOf(view: TasksView) {
   return storedDisplay.pipe(
     Schema.decodeTo(
@@ -144,7 +115,6 @@ function storedDisplayOf(view: TasksView) {
   );
 }
 
-/** Where the view shown last, the filters (each workspace's by its id), and each view's display are kept on this Mac. */
 const KEPT = {
   VIEW: keptKey("app.tasksPageView", storedView),
   FILTERS: keptKey("app.tasksFilter", storedFilters),
@@ -154,7 +124,6 @@ const KEPT = {
   },
 } as const;
 
-/** The List | Columns switch beside the page's title. */
 function ViewSwitch({
   view,
   onView,
@@ -177,7 +146,6 @@ function ViewSwitch({
   );
 }
 
-/** The Tasks page, in the plan's place: the List or the Board, as the reader last chose, under its Filter and View options. */
 export function TasksPage({
   tasks,
   room,
@@ -185,7 +153,6 @@ export function TasksPage({
 }: {
   tasks: TasksControl;
   room: ShellRoom;
-  /** What the page holds across its visits, where something outlives it to hold it (`tasks-page-held.ts`). */
   held?: TasksPageHeld | undefined;
 }): React.JSX.Element {
   const [view, keepView] = useKept(KEPT.VIEW, TASKS_VIEW.LIST);
@@ -204,7 +171,6 @@ export function TasksPage({
   const workspaceId = tasks.workspace?.id;
   const filter =
     workspaceId === undefined ? NO_TASKS_FILTER : (filters[workspaceId] ?? NO_TASKS_FILTER);
-  // Note that the record is read again before it is written, so another tab's filter for another workspace is kept, over this tab's own where storage keeps nothing.
   const onFilter = (next: TasksFilter) => {
     if (workspaceId === undefined) return;
     changeFilters((held) => ({ ...held, [workspaceId]: next }));
@@ -216,9 +182,6 @@ export function TasksPage({
   const listed = tasks.listed.tasks;
   const filterAsk = useMenuAsk();
   const optionsAsk = useMenuAsk();
-  // A phone heads the page as it heads every place (`phone-head.tsx`): its start corner empty where the places bar
-  // holds New task (`mobile-bar.tsx`), the title centered, and a ⋯ holding
-  // the view's switch and opening the Filter's and View options' own menus where it stands.
   const phone = room === SHELL_ROOM.NARROW;
   const viewItem = (value: TasksView, label: string, icon: React.JSX.Element) => ({
     label,
@@ -320,7 +283,6 @@ export function TasksPage({
       }
     />
   );
-  // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
   const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;
   const frame = {
     toolbar,
@@ -332,10 +294,8 @@ export function TasksPage({
     measured: held?.measuredIn(view),
     column: held?.column,
   };
-  // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown} held={held?.find}>
-      {/* A face names its assignee or its creator, and the Filter offers them, against the listed workspace's members. */}
       <ReplayUnmask>
         <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
           {view === TASKS_VIEW.BOARD ? (

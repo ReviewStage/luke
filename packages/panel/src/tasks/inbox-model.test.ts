@@ -77,7 +77,6 @@ import {
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const UNLISTED = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
-/** An item of the agent's, open, as the service answers one. */
 function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem {
   return {
     agentId: AGENT,
@@ -95,20 +94,17 @@ function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem 
 
 const DANA = { userId: "user-dana", name: "Dana Reyes" };
 
-/** A choice of one, as a version 4 response asks it. */
 const QUEUE: InboxResponse = {
   type: INBOX_RESPONSE.CHOICE,
   options: [{ label: "Postgres" }, { label: "Redis" }],
 };
 
-/** A choice of several. */
 const CHANNELS: InboxResponse = {
   type: INBOX_RESPONSE.CHOICE,
   options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
   multiple: true,
 };
 
-/** A form. */
 const SMTP: InboxResponse = {
   type: INBOX_RESPONSE.FORM,
   fields: [
@@ -119,10 +115,8 @@ const SMTP: InboxResponse = {
   ],
 };
 
-/** An ask for words. */
 const QUESTION: InboxResponse = { type: INBOX_RESPONSE.TEXT };
 
-/** A draft holding an approval's or a to-do's decision, as its card holds it: its one pick, by the reply's kind. */
 function decided(reply: string): InboxDraft {
   return { ...EMPTY_INBOX_DRAFT, choices: [reply] };
 }
@@ -401,7 +395,6 @@ test("files attached alone answer an item in the developer's own words, and trav
   });
 });
 
-/** A task of the account's, holding inbox items. */
 function task(id: string, name: string): TaskSummary {
   return {
     id,
@@ -427,7 +420,6 @@ const TASKS = [
   { holder: taskHolder(INVITES), items: [item({ id: "expiry", updatedAt: 40 })] },
 ];
 
-/** The ids of a list's rows, in the order it draws them. */
 function drawn(view: InboxListView): readonly string[] {
   return view.items.map(({ item }) => item.id);
 }
@@ -463,7 +455,6 @@ test("a list drawn again from a task's same items lists each in the object it li
 });
 
 test("an item whose place is held stands where the list drew it, whatever it changed to since", () => {
-  // The threshold question is answered once the list is drawn, which changes when it changed.
   const answered = TASKS.map(({ holder, items }) => ({
     holder,
     items: items.map((each) =>
@@ -521,7 +512,6 @@ test("Open lists only what the reader is not done with, and the item chosen wher
 const ME = { userId: "user-me", name: "Sam Ortiz" };
 const KAI = { userId: "user-kai", name: "Kai Moreno" };
 
-/** Items of the reader's agents, of teammates' agents, and one the service names no starter for, across two plans. */
 const SHARED = [
   {
     holder: taskHolder(BILLING),
@@ -568,23 +558,17 @@ test("only an open item the reader's own agent asks needs them, or one whose sta
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
 });
 
-/** Items on tasks the service says wait on someone other than the agent's starter, beside one from a service before it said. */
 const ASSIGNED = [
   {
     holder: taskHolder(BILLING),
     items: [
-      // On a task assigned to the reader, though Dana started its agent.
       item({ id: "assigned-to-me", startedBy: DANA, waitsOn: ME, updatedAt: 30 }),
-      // On a task assigned to Dana, though the reader started its agent.
       item({ id: "assigned-to-dana", startedBy: ME, waitsOn: DANA, updatedAt: 20 }),
     ],
   },
   {
     holder: taskHolder(INVITES),
-    items: [
-      // From a service before it named who an item waits on: its starter.
-      item({ id: "older-service", startedBy: KAI, updatedAt: 10 }),
-    ],
+    items: [item({ id: "older-service", startedBy: KAI, updatedAt: 10 })],
   },
 ];
 
@@ -666,11 +650,6 @@ test("a task done or canceled hides none of its items: Open lists and counts its
   assert.deepEqual(drawn(open), ["done-open", "canceled-open", "done-unread", "canceled-unread"]);
 });
 
-/**
- * The shared items with three of them unread: a teammate's settled one, the
- * reader's own open one, and the reader's own settled one, whose agent wrote
- * on the thread again after it was answered.
- */
 const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   holder,
   items: [
@@ -718,7 +697,6 @@ test("Open addressed to the reader lists their own open items, read or not, and 
 });
 
 test("the item read keeps its place among the steps once Open leaves it out", () => {
-  // Note that an item read once opened leaves Open's rows but not its steps.
   const read = UNREAD_SHARED.map(({ holder, items }) => ({
     holder,
     items: items.map((each) => (each.id === "mine-followed" ? { ...each, unread: false } : each)),
@@ -851,7 +829,6 @@ test("a code block near the file's top reads from its first line, a file that en
   );
 });
 
-/** An item of an agent with no task as main's read lists it. */
 function waitingTaskless(
   agentId: string,
   patch: Partial<AppInboxTasklessItem> = {},
@@ -873,7 +850,6 @@ function waitingTaskless(
 }
 
 test("each item of an agent with no plan is held by its agent, named by the automation that started it, the unnamed ones alike, and only the listed workspace's are listed", () => {
-  // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
     automationName: "Old",
@@ -881,7 +857,6 @@ test("each item of an agent with no plan is held by its agent, named by the auto
   const waiting = [
     waitingTaskless("agent-1"),
     waitingTaskless("agent-2"),
-    // Started by hand, by no automation.
     waitingTaskless("agent-3", { automationId: null, automationName: null }),
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
@@ -921,7 +896,6 @@ test("each item of an agent with no plan is held by its agent, named by the auto
   );
 });
 
-/** Names a member as a row's preview does: "You" for the reader, a teammate by name, someone unnamed where the service names nobody. */
 function previewName(
   member: { readonly userId: string; readonly name: string } | undefined,
 ): string {
@@ -933,7 +907,6 @@ const READER = "user-reader";
 const YOU = { userId: READER, name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
-/** A message on an item's thread, written at `createdAt`. */
 function message(
   overrides: Partial<InboxMessage> & Pick<InboxMessage, "text" | "createdAt">,
 ): InboxMessage {
@@ -977,7 +950,6 @@ test("a thread's latest message by a member is its row's preview, led by who wro
   assert.equal(inboxPreview(open(filesOnly), previewName), "Charles Pan: Sent a file");
 });
 
-/** The agent's message ending with `ask`, open unless it says otherwise. */
 function asking(ask: InboxAsk, id = "b1b2c3d4-0000-4000-8000-000000000001"): InboxMessage {
   return {
     id,
@@ -1376,7 +1348,6 @@ test("a comment's files are drawn after its words but for a picture its words dr
   const read = inboxCommentFiles(files, words, itemId);
   assert.deepEqual(ids(read.pictures), [linked, quoted, fenced, loose]);
   assert.deepEqual(ids(read.others), [spec, drawnSpec]);
-  // Words naming another item's picture draw none of this one's, and no words leave every file to be drawn.
   assert.deepEqual(
     ids(inboxCommentFiles(files, words, "a1b2c3d4-0000-4000-8000-0000000000f2").pictures),
     [drawn, linked, quoted, fenced, loose],
@@ -1413,7 +1384,6 @@ test("a recording an agent posted stands with a comment's pictures, never its ot
   assert.deepEqual(read.others, [], "no recording is named as a file");
 });
 
-/** The message with its ask standing as `status` says; the very message where it asks nothing. */
 function standing(
   message: InboxMessage,
   status: (typeof INBOX_ASK_STATUS)[keyof typeof INBOX_ASK_STATUS],
@@ -1489,7 +1459,6 @@ test("a settled item's card names its ending in the word its line says it in: an
   assert.equal(inboxSettledWords(resolved, previewName), "Charles Pan: Resolved without an answer");
   assert.equal(inboxSettledStanding(resolved), "Resolved");
 
-  // Note that the service's member close withdraws the ask it left open, saying no why.
   const resolvedAsked = item({
     id: "w5",
     status: INBOX_STATUS.CLOSED,

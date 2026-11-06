@@ -7,13 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
-/**
- * press-cursor.test.ts -- the one cursor rule: a control gives the Mac's
- * arrow in the desktop's window and the pointing hand on the web, and a real
- * link the hand on both, read through the sheets every app lays (the tokens,
- * the panel's reset, `@repo/ui`'s sheet, and the compiled utilities).
- */
-
 const roots: Root[] = [];
 let laid: HTMLStyleElement | undefined;
 
@@ -24,7 +17,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` on a surface of `profile`, answering the surface. */
 function drawnAt(profile: Profile, element: ReactElement): HTMLElement {
   laid ??= layContainersAt(
     {},
@@ -38,11 +30,6 @@ function drawnAt(profile: Profile, element: ReactElement): HTMLElement {
   return surface;
 }
 
-/**
- * The cursor `element` is drawn with. Note that jsdom answers a `var()` as
- * it is spelled, so the custom property it names is read on the element,
- * where the profile's value has been inherited.
- */
 function cursorOf(element: Element): string {
   const style = getComputedStyle(element);
   const named = /^var\((--[\w-]+)\)$/u.exec(style.cursor)?.[1];

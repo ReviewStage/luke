@@ -4,18 +4,8 @@ import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { test } from "vitest";
 import { dockedTodos, newestTodos, taskTodos } from "./agent-todos.js";
 
-/**
- * agent-todos.test.ts -- a coding agent on Claude Code keeps its to-dos one
- * task at a time, with TaskCreate, TaskUpdate, TaskList, and TaskGet, and
- * the tab folds those calls into the list as it stood after each, in
- * creation order, across every page of the transcript, which it draws as a
- * whole list's call. The CLI's answers are spelled as CLI 2.1.304 spells
- * them. Synthetic words.
- */
-
 const { PENDING, IN_PROGRESS, DONE } = AGENT_TODO_STATUS;
 
-/** One stored part of a task call: answered with the CLI's words where given, still running where not, and failed where `failed`. */
 function call(
   callId: string,
   tool: string,
@@ -65,12 +55,10 @@ test("creates and updates fold into one list in creation order, each call's list
     { content: "Round the totals", status: IN_PROGRESS },
     { content: "Export the invoices", status: PENDING },
   ]);
-  // The second page's first call folds on from the first page's last.
   assert.deepEqual(lists.get("u2"), [
     { content: "Round the totals", status: DONE },
     { content: "Export the invoices", status: PENDING },
   ]);
-  // A create still running lists its subject pending, as the list stands while the CLI answers.
   assert.deepEqual(lists.get("c3"), [
     { content: "Round the totals", status: DONE },
     { content: "Export the invoices", status: IN_PROGRESS },
@@ -118,7 +106,6 @@ test("a deleted task leaves the list, a read of one moves it, a failed call or a
     ),
     call("u2", "TaskUpdate", { taskId: "2", status: "completed" }, "Task #2 not found"),
     call("u3", "TaskUpdate", { taskId: "2", status: "completed" }, "Error: no such task", true),
-    // A subagent of the session deleted the rest, which only the list says.
     call("l1", "TaskList", {}, "No tasks found"),
   ]);
   const lists = taskTodos([message]);
@@ -139,13 +126,11 @@ test("a task first met by an update, its create on a page not yet landed or befo
     updated("u2", "1", "completed"),
     created("c3", "3", "Open the pull request"),
   ]);
-  // The newest page alone: the two tasks it moves stand in creation order, by their numbers, and the one it creates after them.
   assert.deepEqual(taskTodos([newer]).get("c3"), [
     { content: "Task #1", status: DONE },
     { content: "Task #2", status: IN_PROGRESS },
     { content: "Open the pull request", status: PENDING },
   ]);
-  // The older page landed: the same calls name them.
   assert.deepEqual(taskTodos([older, newer]).get("c3"), [
     { content: "Round the totals", status: DONE },
     { content: "Export the invoices", status: IN_PROGRESS },

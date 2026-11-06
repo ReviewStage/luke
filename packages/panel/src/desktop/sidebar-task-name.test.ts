@@ -15,10 +15,6 @@ import { relayout } from "../testing/resize-observer.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-task-name.test.ts -- a sidebar task's name held to its row's one line: fading out where the row cuts it, never ending hard, and named whole by the row's hint while it is cut. Synthetic.
- */
-
 const WORKSPACE: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
@@ -63,7 +59,6 @@ function task(id: string, name: string): TaskSummary {
   };
 }
 
-/** The sidebar over a task with a name too long for its row and one that fits. */
 async function mountSidebar(): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -87,7 +82,6 @@ async function mountSidebar(): Promise<HTMLElement> {
   return container;
 }
 
-/** The row's press for the task named `name`, whose name stands in a line of its own. */
 function rowOf(sidebar: HTMLElement, name: string): HTMLElement {
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
     (each) => each.querySelector(".ui-list-row-title .ui-one-line")?.textContent === name,
@@ -95,14 +89,12 @@ function rowOf(sidebar: HTMLElement, name: string): HTMLElement {
   return row ?? assert.fail(`no ${name} row`);
 }
 
-/** Lays the row's name out narrower than it runs, as a narrow sidebar does, and tells the window. */
 function cutShort(words: Element): void {
   Object.defineProperty(words, "scrollWidth", { configurable: true, value: 320 });
   Object.defineProperty(words, "clientWidth", { configurable: true, value: 180 });
   act(() => relayout());
 }
 
-/** The pill the pointer resting on `target` raises, or nothing where it raises none. */
 function pillOver(target: Element): string | undefined {
   restOn(target);
   const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;

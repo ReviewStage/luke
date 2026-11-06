@@ -37,25 +37,14 @@ import { FileTab } from "./file-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * A File tab's lines mentioned in the agent's message box on the same task's
- * page, over the real editor bundle and the real diff bundle: the lines
- * picked by their numbers or selected as text in the tab, the command ⌥⌘K
- * runs, and the box holding the mention as its chip, pinned to the commit
- * the lines were read at, sent as the lines' GitHub address. Synthetic plan
- * and repository.
- */
-
 const TASK_ID = "pl_1";
 
-/** The commit the default branch's head stood at when the lines were read. */
 const HEAD = "0123456789abcdef0123456789abcdef01234567";
 
 const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -92,7 +81,6 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** The file as the service reads it: its first line naming the head's commit, and its whole text raw. */
 const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> =>
   Promise.resolve(
     request.raw === true
@@ -117,7 +105,6 @@ const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> =>
         },
   );
 
-/** The agent's box on the composer's own control, its sends answered by `sender`. */
 function Box({ sender }: { sender: MessageSender }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -132,7 +119,6 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
   });
 }
 
-/** A task's page drawing the file's tab and, unless it is asked not to, the agent's box, every message the box sends written down. */
 async function page({ box = true }: { box?: boolean } = {}) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
@@ -167,14 +153,12 @@ async function page({ box = true }: { box?: boolean } = {}) {
   return { container, sent };
 }
 
-/** The text of a line the tab draws, by its number. */
 function lineText(container: HTMLElement, line: number): Node {
   const text = wholeFileRoot(container)?.querySelector(`[data-line="${line}"] span`)?.firstChild;
   assert.ok(text, `line ${line} is drawn`);
   return text;
 }
 
-/** The file's card hung while the pointer rests on `element`: its name and its note. */
 function cardOn(element: Element | undefined): (string | null | undefined)[] {
   assert.ok(element, "the chip is drawn");
   restOn(element);
@@ -190,12 +174,6 @@ function cardOn(element: Element | undefined): (string | null | undefined)[] {
   return read;
 }
 
-/**
- * Runs ⌥⌘K over a selection from a place in one line's text to a place in
- * another's. Note that jsdom keeps no selection of nodes in a shadow root,
- * so the window's selection is stood in for while the command reads it, as
- * a browser hands it: the one range, read across the shadow root.
- */
 function mentionSelected(from: Node, fromOffset: number, to: Node, toOffset: number): boolean {
   const range = document.createRange();
   range.setStart(from, fromOffset);
@@ -205,7 +183,6 @@ function mentionSelected(from: Node, fromOffset: number, to: Node, toOffset: num
     rangeCount: { value: 1 },
     getComposedRanges: { value: () => [range] },
   });
-  // Note that only the tab's reads are stood in for, the message box reading the window's own.
   const read = vi
     .spyOn(document, "getSelection")
     .mockReturnValueOnce(held)

@@ -63,19 +63,6 @@ import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import type { AgentsControl } from "./use-agents.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
-/**
- * agent-chapters-tab.test.ts -- an agent's Pull request tab offers a
- * Chapters tab after Checks: with none yet, Generate chapters, which stands
- * as generating until it answers, then the chapters, counted on the tab,
- * "Other changes" last; each chapter's diff is Files changed's list handed
- * only its hunks and the review threads on them; chapters made for an
- * older head stand under a line saying so with Regenerate; a generation
- * that failed says why with Retry; a chapter is viewed once its files are,
- * Mark chapter viewed and ⇧V mark them all, ← and → step through the
- * chapters, and a key change's press scrolls to its lines and lights them.
- * Synthetic people, files, and chapters throughout.
- */
-
 const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -107,7 +94,6 @@ const PULL_REQUEST: AgentOverviewPullRequest = {
   requested: [],
 };
 
-/** A file of two hunks: the read at its top, the write further down. */
 const STORE: AgentChangedFile = {
   path: "src/store.ts",
   previousPath: null,
@@ -178,7 +164,6 @@ const OTHER: Chapter = {
   riskReasons: [],
 };
 
-/** A review thread on the store's second hunk, which the sweep's chapter holds. */
 const ON_WRITE: ReviewThread = {
   path: STORE.path,
   line: 11,
@@ -212,13 +197,11 @@ const CONVERSATION: AgentOverviewConversation = {
   earlier: 0,
 };
 
-/** What a member who saved an Anthropic key generates on. */
 const ON_HAIKU: ChaptersRunsOn = {
   provider: MODEL_PROVIDER.ANTHROPIC,
   model: "claude-haiku-5-5",
 };
 
-/** The read answering these newest chapters, to a member whose Generate runs on `runsOn`, or who can generate none. */
 function answering(
   chapters: PullRequestChaptersState,
   runsOn: ChaptersRunsOn | null = ON_HAIKU,
@@ -233,7 +216,6 @@ function answering(
   };
 }
 
-/** Ready chapters made for `headSha`, "Other changes" put first, as no reader reads it. */
 function ready(
   headSha = HEAD,
   chapters: readonly Chapter[] = [OTHER, READ_STORE, SWEEP_EXPIRED],
@@ -248,11 +230,8 @@ function ready(
 }
 
 let root: Root | undefined;
-/** What each of Files changed's lists was handed, mount first, each draw after it, with the box it was drawn in. */
 let lists: Array<{ readonly host: HTMLElement; readonly props: DiffListProps }> = [];
-/** The files the lists were scrolled to, in order. */
 let listReveals: string[] = [];
-/** Every viewed mark asked of GitHub, in order. */
 let marked: PullRequestActionRequest[] = [];
 
 const DIFF_STAND_IN: DiffViewModule = {
@@ -305,7 +284,6 @@ beforeAll(async () => {
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-// The view is a chunk of its own the tab loads the first time it is shown; loaded once here, so each test's first draw finds it.
 beforeAll(() => import("./agent-chapters-tab.js"));
 
 beforeEach(() => {
@@ -332,20 +310,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** How a test's control answers: the chapters the host holds and their Generate, and the member's viewed marks. */
 interface Answers {
-  /** The chapters as the host holds them, a failure as a read that never answered; none yet, with Generate offered, where none are named. */
   readonly chapters?: PullRequestChaptersAnswerView;
   readonly generateChapters?: AgentsControl["generateChapters"];
-  /** The files marked viewed on GitHub; the marks are unread where none are named. */
   readonly viewed?: readonly string[];
-  /** The head GitHub holds as each read of the overview and the files asks; theirs where none is named, the overview's merge box saying none. */
   readonly head?: () => string;
-  /** Whether the files' read names no head, as where the service could not read the pull request's commits. */
   readonly filesHeadless?: boolean;
 }
 
-/** The workspace's one member as the host holds its people. */
 const DANA: WorkspaceMember = {
   userId: "user-dana",
   name: "Dana",
@@ -353,10 +325,8 @@ const DANA: WorkspaceMember = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 
-/** How the chapters the host holds move, as its live read of them answers; nothing before a test's control lays them. */
 let moveChapters: (next: PullRequestChaptersAnswerView) => void = () => undefined;
 
-/** The agent's pull request's chapters as the host holds them, a failure as a read that never answered. */
 function chaptersHeld(answer: PullRequestChaptersAnswerView): AppChapters {
   return {
     [AGENT.id]: {
@@ -365,7 +335,6 @@ function chaptersHeld(answer: PullRequestChaptersAnswerView): AppChapters {
   };
 }
 
-/** The agent's control, its overview, files, and Generate answering as given, and its chapters laid on the window's document as the host holds them. */
 function controlAnswering(answers: Answers): AgentsControl {
   const { deliverChapters, deliverMembers, deliverParts } = handHostReads({
     chapters: chaptersHeld(
@@ -373,9 +342,7 @@ function controlAnswering(answers: Answers): AgentsControl {
     ),
   });
   moveChapters = (next) => deliverChapters(chaptersHeld(next));
-  // Note that the workspace's people are laid on the document as the tab holds them, as the host lays them.
   holdMembers(deliverMembers, () => ({ rows: { members: [DANA] } }));
-  // The host holds the tab's parts, its pull request read anew for its head on each ask.
   holdPullRequestParts(deliverParts, {
     [PULL_REQUEST_PART.PULL_REQUEST]: () =>
       Promise.resolve({
@@ -412,7 +379,6 @@ function controlAnswering(answers: Answers): AgentsControl {
     ...fakeActPortCalls(),
     ...answeringChanges(() => {
       const head = answers.head?.() ?? HEAD;
-      // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
       const files = head === HEAD ? FILES : [];
       return Promise.resolve({
         pullRequest: {
@@ -447,7 +413,6 @@ function controlAnswering(answers: Answers): AgentsControl {
   });
 }
 
-/** The tab, holding the view its row chooses as the side panel does. */
 function Switching({ control, first }: { control: AgentsControl; first: PullRequestView }) {
   const [view, setView] = useState<PullRequestView>(first);
   return createElement(AgentPullRequestTab, {
@@ -461,7 +426,6 @@ function Switching({ control, first }: { control: AgentsControl; first: PullRequ
   });
 }
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -471,7 +435,6 @@ async function settle(): Promise<void> {
   await settleQueries(ticks);
 }
 
-/** Draws the agent's tab on its Chapters view, or the view given, its reads landed. */
 async function draw(
   control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CHAPTERS,
@@ -505,12 +468,10 @@ async function draw(
   return container;
 }
 
-/** The tabs of the row under the header, by their words. */
 function tabNames(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[role="tab"]')].map((each) => each.textContent ?? "");
 }
 
-/** What the Chapters tab says, its glyph's words among them. */
 function chaptersTabWords(tab: HTMLElement): string {
   const chapters =
     [...tab.querySelectorAll('[role="tab"]')].find((each) =>
@@ -519,7 +480,6 @@ function chaptersTabWords(tab: HTMLElement): string {
   return drawnWords(chapters);
 }
 
-/** The button whose words are as given, where one stands outside a hidden view. */
 function button(container: HTMLElement, words: string): HTMLButtonElement {
   return (
     [...container.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -528,24 +488,20 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-/** The rail's rows' presses, in order. */
 function railPresses(container: Element | null): HTMLButtonElement[] {
   return [...(container?.querySelectorAll<HTMLButtonElement>(".ui-list-row-main") ?? [])];
 }
 
-/** The rail's rows, as a reader hears each's title: its place, its title, and its risk. */
 function railRows(tab: HTMLElement): string[] {
   return railPresses(tab.querySelector(".chapter-rail")).map(
     (each) => each.querySelector(".ui-list-row-title")?.textContent ?? "",
   );
 }
 
-/** A rail row's press, by its place among them. */
 function railRow(container: Element | null, at: number): HTMLButtonElement {
   return railPresses(container)[at] ?? assert.fail(`row ${at + 1} stands`);
 }
 
-/** A key change's lines, by the press a reader hears. */
 function linesPress(tab: HTMLElement, label: string): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(`button[aria-label="Show ${label} in the diff"]`) ??
@@ -553,7 +509,6 @@ function linesPress(tab: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-/** What a row draws, word by word, a glyph by the words it carries. */
 function drawnWords(node: Node): string {
   if (node instanceof Element && node.getAttribute("role") === "img") {
     return node.getAttribute("aria-label") ?? "";
@@ -565,18 +520,15 @@ function drawnWords(node: Node): string {
     .join(" ");
 }
 
-/** The chapter shown, by the title its bar leads with. */
 function heading(tab: HTMLElement): string {
   return tab.querySelector(".chapter-reading .ui-pane-bar-title")?.textContent ?? "";
 }
 
-/** The paths and patches the chapter's list was last handed, the Files changed view's own left out. */
 function listed(): Array<[string, string]> {
   const chapter = lists.filter((each) => each.host.closest(".chapters-view") !== null).at(-1);
   return (chapter?.props.files ?? []).map((file) => [file.path, file.patch]);
 }
 
-/** Presses a key on the chapter's view. */
 function press(tab: HTMLElement, init: KeyboardEventInit): void {
   const view = tab.querySelector(".chapters-view") ?? assert.fail("the chapters stand");
   act(() => {
@@ -602,7 +554,6 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters on
       .map((name) => name.replace(/[\d+−\s].*$/u, "")),
     ["Conversation", "Checks", "Chapters", "Files"],
   );
-  // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
   const generate = await vi.waitFor(() => button(tab, "Generate with GPT-6 Luna"));
   assert.match(tab.textContent ?? "", /Generating them runs on your OpenAI API key\./u);
   act(() => generate.click());
@@ -784,7 +735,6 @@ test("the Chapters tab counts none viewed where the files' read names no head, s
   assert.equal(chaptersTabWords(tab), "Chapters out of date 3");
 });
 
-/** The Chapters tab answering ready chapters, made by `model` for `headSha`. */
 function readyChapters(headSha: string): Extract<PullRequestChaptersState, { model: string }> {
   const chapters = ready(headSha);
   return chapters.status === PULL_REQUEST_CHAPTERS_STATE.READY ? chapters : assert.fail("ready");
@@ -859,14 +809,12 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
     controlAnswering({
       head: () => head,
       generateChapters: () => {
-        // A push the tab has not read yet, which the Generate tells the chapters for.
         head = HEAD;
         return Promise.resolve(answering(ready()));
       },
     }),
   );
 
-  // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
   const generate = await vi.waitFor(() => button(tab, "Generate with Haiku 5.5"));
   act(() => generate.click());
   await settle();
@@ -910,7 +858,6 @@ test("a generation that failed says why with Retry, chapters someone else is mak
     }),
   );
   assert.match(elsewhere.textContent ?? "", /Generating chapters/u);
-  // Another member's generation lands: the host's live read of the chapters moves, with no press here.
   act(() => moveChapters(answering(ready())));
   await vi.waitFor(() =>
     assert.deepEqual(railRows(elsewhere), [
@@ -940,12 +887,10 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   );
 });
 
-/** The rail floated over the chapter, as it stands where the panel has no room for it beside. */
 function floatedRail(tab: HTMLElement): HTMLElement | null {
   return tab.querySelector<HTMLElement>('aside[aria-label="Chapters"]');
 }
 
-/** The toggle that floats the rail, which the stylesheet draws in a narrow panel alone. */
 function railToggle(tab: HTMLElement): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>('.chapter-rail-toggle[data-place="over"] button') ??
@@ -953,7 +898,6 @@ function railToggle(tab: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** A narrow panel with the chapters read and the rail away. */
 async function narrowChapters(): Promise<HTMLElement> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);

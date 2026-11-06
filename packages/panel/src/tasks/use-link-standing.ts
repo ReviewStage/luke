@@ -24,62 +24,26 @@ import { linkStandingQuery } from "../live-reads.js";
 import { appStateNow, appStateQuery } from "../use-app-state.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
-/**
- * use-link-standing.ts -- a GitHub pull request or issue a link in the app's words names, as its chip says it: its key, its title, where it stands, who opened it, and a pull request's lines added and removed, read through the workspace's own GitHub App.
- *
- * The workspace is the one the words are of: the plan's, where they are a
- * plan's, else the one the place drawing them names, as the window's Inbox
- * names an item's own, its plan's or its agent's (`WordsWorkspace`), else the
- * one their mentions are written under.
- * Words that name neither, as an Inbox item whose workspace the service did
- * not name, read nothing, since a page read through another workspace's
- * connection would be drawn in the wrong one. A pull request or a GitHub
- * issue is held by the host while a chip draws it (`LIVE_READ.LINK_STANDINGS`),
- * by the workspace and the link's own address, read through the workspace's
- * GitHub App on the service, and only where that workspace has the App, so a
- * chip in a workspace without it asks nothing. Until it first answers, or
- * where it never does, a repository the App does not reach among them, the
- * chip says what the address says, as it always has. A chip drawn again, as a
- * description's text is when a section opens in its editor and when it closes, says
- * the last answer at once while the host asks again, rather than its address
- * until the read lands; and an answer is drawn only while that workspace
- * still has the App, so a workspace that disconnects stops drawing it. A
- * Linear issue's chip asks nothing and says what its address says.
- */
-
-/** Where the words a chip stands in are: the plan's id, none off a plan, and the workspace's slug its mentions are written under. */
 export interface ChipWhere {
   readonly taskId: string | undefined;
   readonly workspace: string;
 }
 
-/**
- * The workspace words drawn off a plan's page are of, where the place
- * drawing them knows it, as the window's Inbox knows an item's: by its id,
- * since a workspace an older service answered may have no slug. None where
- * it does not know it, so a link there reads nothing rather than another
- * workspace's.
- */
 const WordsWorkspaceContext = createContext<string | undefined>(undefined);
 
-/** Hands the words under it the workspace they are of, by its id. */
 export const WordsWorkspace = WordsWorkspaceContext.Provider;
 
-/** A GitHub page as GitHub answered for it: its key, `relay#42`, its title, the state it stands in, and a pull request's or an issue's own state for its mark. */
 export interface LinkStanding {
   readonly key: string;
   readonly title: string;
   readonly state: string | undefined;
   readonly pullRequest: StandingPullRequest | undefined;
   readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
-  /** Who opened a pull request or a GitHub issue, as its card draws them by their face; none where GitHub named no one. */
   readonly opener: GitHubPerson | undefined;
 }
 
-/** The suffix GitHub gives an App's bot's login, which names a bot where an older service answered no more than the login. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
-/** Who opened a pull request or a GitHub issue, as GitHub named them on it: their login, their avatar where the service answered one, and whether they are an App's bot. */
 export function openerOf(summary: {
   readonly author?: string;
   readonly authorAvatarUrl?: string;
@@ -91,23 +55,19 @@ export function openerOf(summary: {
   return authorAvatarUrl === undefined ? person : { ...person, avatarUrl: authorAvatarUrl };
 }
 
-/** A pull request as its chip draws it: its number and state for its mark, and for its card what the service answered of it, each none, or no labels, where an older service answered none. */
 export interface StandingPullRequest {
   readonly number: number;
   readonly state: PullRequestState;
   readonly lines: { readonly additions: number; readonly deletions: number } | undefined;
   readonly files: number | undefined;
-  /** When it was last opened, merged, or closed, as its state says: merged when merged, closed when closed, and opened otherwise. */
   readonly when: { readonly moment: PullRequestMoment; readonly at: number } | undefined;
   readonly branches: { readonly base: string; readonly head: string } | undefined;
   readonly labels: readonly { readonly name: string; readonly color: string }[];
   readonly comments: number | undefined;
   readonly commits: number | undefined;
-  /** True where it is open and GitHub's merge queue holds it, which its mark and its words say as its Pull request tab does. */
   readonly queued?: true;
 }
 
-/** The moment a pull request's card names when it says how long ago: when it was opened, merged, or closed. */
 export const PULL_REQUEST_MOMENT = {
   OPENED: "opened",
   MERGED: "merged",
@@ -116,7 +76,6 @@ export const PULL_REQUEST_MOMENT = {
 
 export type PullRequestMoment = (typeof PULL_REQUEST_MOMENT)[keyof typeof PULL_REQUEST_MOMENT];
 
-/** When the card says a pull request last moved, as its state names it: merged or closed when it was, and opened otherwise; none where the service answered no time for it. */
 function whenOf(pullRequest: GitHubPullRequestSummary): StandingPullRequest["when"] {
   if (pullRequest.state === PULL_REQUEST_STATE.MERGED && pullRequest.mergedAt !== undefined) {
     return { moment: PULL_REQUEST_MOMENT.MERGED, at: pullRequest.mergedAt };
@@ -129,12 +88,10 @@ function whenOf(pullRequest: GitHubPullRequestSummary): StandingPullRequest["whe
     : { moment: PULL_REQUEST_MOMENT.OPENED, at: pullRequest.openedAt };
 }
 
-/** A pull request as the service answered it for a chip, as its card draws it. */
 function standingPullRequestOf(pullRequest: GitHubPullRequestSummary): StandingPullRequest {
   return {
     number: pullRequest.number,
     state: pullRequest.state,
-    // Note that an older service answers none of what follows, so its card draws none of it.
     lines:
       pullRequest.additions === undefined || pullRequest.deletions === undefined
         ? undefined
@@ -152,31 +109,26 @@ function standingPullRequestOf(pullRequest: GitHubPullRequestSummary): StandingP
   };
 }
 
-/** Whether a pull request is drawn queued: open, and held in GitHub's merge queue. */
 function queuedOf(pullRequest: GitHubPullRequestSummary): boolean {
   return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN;
 }
 
-/** A GitHub issue's state in words, as its chip says it. */
 const ISSUE_WORDS = {
   open: "Open",
   closed: "Closed",
   "not-planned": "Not planned",
 } as const satisfies Record<IssueState, string>;
 
-/** The numbered pages of GitHub's a link may name. */
 const GITHUB_PAGE = { PULL_REQUEST: "pull-request", ISSUE: "issue" } as const;
 
 type GitHubPage = (typeof GITHUB_PAGE)[keyof typeof GITHUB_PAGE];
 
-/** What a link mention asks GitHub: a pull request or an issue by repository and number. */
 interface Asked {
   readonly page: GitHubPage;
   readonly repository: string;
   readonly number: number;
 }
 
-/** What an address asks GitHub for, where it is a pull request's or a GitHub issue's page. */
 function askedOf(address: string): Asked | undefined {
   const pullRequest = pullRequestAddressOf(address);
   if (pullRequest !== undefined) return { page: GITHUB_PAGE.PULL_REQUEST, ...pullRequest };
@@ -184,19 +136,15 @@ function askedOf(address: string): Asked | undefined {
   return issue === undefined ? undefined : { page: GITHUB_PAGE.ISSUE, ...issue };
 }
 
-/** The address a mention asks GitHub about, where it is a link to GitHub. */
 function githubAddressOf(mention: Mention): string | undefined {
-  // Note that a well-known site's page names no provider to ask.
   if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
   return mention.provider === INTEGRATION_PROVIDER.GITHUB ? mention.url : undefined;
 }
 
-/** The key a chip names an asked page by: the repository's name and the pull request's or the issue's number. */
 function keyOf(asked: Asked): string {
   return `${repositoryParts(asked.repository).name}#${asked.number}`;
 }
 
-/** What a chip draws of the page a link names, from what GitHub holds of it as the host last read it; none where GitHub holds no such page. */
 function standingOf(asked: Asked, held: AppLinkStanding): LinkStanding | undefined {
   const key = keyOf(asked);
   if ("issue" in held) {
@@ -225,30 +173,21 @@ function standingOf(asked: Asked, held: AppLinkStanding): LinkStanding | undefin
       };
 }
 
-/** Whether the workspace has the connection an ask is read through: an active GitHub installation. */
 function connectedFor(workspace: Workspace | undefined): workspace is Workspace {
   return workspace?.github?.active === true;
 }
 
-/** What of the tasks a chip's workspace is found by: the workspaces, and the tasks that name theirs. */
 type WorkspacePlaces = Pick<TasksView, "workspaces" | "tasks">;
 
-/**
- * The workspaces and tasks of the document, which tells the chips only as
- * either moves, so a transcript of chips is not drawn again for each word an
- * agent streams into the slice beside them.
- */
 const selectWorkspacePlaces = (state: AppStateSnapshot): WorkspacePlaces => ({
   workspaces: state.tasks.workspaces,
   tasks: state.tasks.tasks,
 });
 
-/** The workspaces and tasks of the document (`selectWorkspacePlaces`); none before the first read. */
 function useWorkspacePlaces(): WorkspacePlaces | undefined {
   return useQuery({ ...appStateQuery, select: selectWorkspacePlaces }).data;
 }
 
-/** The workspace of the task given, else the one named by its id; none where neither is listed. */
 function workspaceOf(
   planning: WorkspacePlaces | undefined,
   taskId: string | undefined,
@@ -265,7 +204,6 @@ function workspaceOf(
   );
 }
 
-/** The workspace the words a chip stands in are of: the plan's, else the one the place drawing them names, else the one their mentions are written under; none where they name none. */
 function wordsWorkspace(
   planning: WorkspacePlaces | undefined,
   where: ChipWhere,
@@ -277,13 +215,6 @@ function wordsWorkspace(
   );
 }
 
-/**
- * The id of the task a link names by its number, `…/task/42`, among the
- * tasks the window lists: the one of that number in the workspace the
- * link's first step names among the reader's own (`workspaceOfSlug`); none
- * where it names no number, or the window lists no such task, as one moved
- * out of the workspace since, which only the service still finds.
- */
 export function useNumberedTaskId(
   workspace: string,
   number: number | undefined,
@@ -292,7 +223,6 @@ export function useNumberedTaskId(
   return number === undefined ? undefined : numberedTaskIdIn(planning, { workspace, number });
 }
 
-/** The id of the task a link names by its number among the tasks `planning` lists (`useNumberedTaskId`); none where it lists none. */
 function numberedTaskIdIn(
   planning: WorkspacePlaces | undefined,
   { workspace, number }: { readonly workspace: string; readonly number: number },
@@ -303,17 +233,14 @@ function numberedTaskIdIn(
   return planning.tasks.find((task) => task.workspaceId === named.id && task.number === number)?.id;
 }
 
-/** The id of the task a link names by its number among the tasks the window lists as it stands now (`useNumberedTaskId`), for a press that cannot wait a render; nothing redraws for it. */
 export const numberedTaskIdNow: NumberedTaskIdOf = (task) =>
   numberedTaskIdIn(appStateNow()?.tasks, task);
 
-/** How the id of the task a link names by its number is found among the tasks the window lists (`useNumberedTaskId`), for words pasted. */
 export function useNumberedTaskIdOf(): NumberedTaskIdOf {
   const planning = useWorkspacePlaces();
   return (task) => numberedTaskIdIn(planning, task);
 }
 
-/** The places a task's links name it in, which a link written by the task's number names it in too. */
 const NUMBERED_PLACES: ReadonlySet<LinkPlace["kind"]> = new Set([
   LINK_PLACE.TASK,
   LINK_PLACE.SECTION,
@@ -322,12 +249,6 @@ const NUMBERED_PLACES: ReadonlySet<LinkPlace["kind"]> = new Set([
   LINK_PLACE.PAGE,
 ]);
 
-/**
- * A place naming its task by its id, named by the task's number
- * (`taskLinkStep`) where the window lists the task with one in the
- * workspace its link is written under, `workspace`, since a number names a
- * task only in its own workspace; any other place as it is.
- */
 function numberedPlaceIn(
   planning: WorkspacePlaces | undefined,
   place: LinkPlace,
@@ -340,30 +261,20 @@ function numberedPlaceIn(
   return home?.id === task.workspaceId ? withTaskId(place, taskLinkStep(task)) : place;
 }
 
-/** How a place's link is written by its task's number where the window lists one (`numberedPlaceIn`), as Copy link writes it. */
 export function useNumberedPlace(): (place: LinkPlace, workspace: string) => LinkPlace {
   const planning = useWorkspacePlaces();
   return (place, workspace) => numberedPlaceIn(planning, place, workspace);
 }
 
-/** The id of the workspace the words a chip stands in are of (`wordsWorkspace`); none where they name none. */
 export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
   return wordsWorkspace(useWorkspacePlaces(), where, useContext(WordsWorkspaceContext))?.id;
 }
 
-/**
- * What GitHub holds of the pull request or issue `address` names, read
- * through `workspace`; none for any other address, while unread or
- * unconnected, or where GitHub holds no such page. The host holds it while
- * it is drawn (`LIVE_READ.LINK_STANDINGS`), by the workspace and the
- * address, so it is drawn again at once.
- */
 function useStandingAt(
   workspace: Workspace | undefined,
   address: string | undefined,
 ): LinkStanding | undefined {
   const asked = address === undefined ? undefined : askedOf(address);
-  // Note that a standing stands only for the workspace and the connection it was read through, so a disconnect or another workspace holds none.
   const link =
     asked !== undefined && address !== undefined && connectedFor(workspace)
       ? { workspaceId: workspace.id, address }
@@ -381,13 +292,11 @@ function useStandingAt(
   );
 }
 
-/** What GitHub holds of the page a link mention names, through the workspace `where` stands in (`useStandingAt`). */
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
   const workspace = wordsWorkspace(useWorkspacePlaces(), where, useContext(WordsWorkspaceContext));
   return useStandingAt(workspace, githubAddressOf(mention));
 }
 
-/** What GitHub holds of the page `address` names, read through the workspace of the task given, or else the workspace named where the place names none (`useStandingAt`). */
 export function usePlaceStanding(
   place: { readonly taskId: string | null; readonly workspaceId?: string | undefined },
   address: string | undefined,

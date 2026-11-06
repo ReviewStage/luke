@@ -16,10 +16,6 @@ import { stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 
-/**
- * use-startup-work.test.ts -- the panel's first commit starts nothing but its drawing: session replay and the editor and markdown-parser prefetches wait for the renderer to go idle, and session replay hears a change of what it reads, never a delivery that moved nothing. `requestIdleCallback` is stood in at the window's boundary.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -52,7 +48,6 @@ beforeEach(() => {
     const each = idle[handle];
     if (each) each.canceled = true;
   });
-  // SAFETY: only the capability under test is answered; nothing here reads another.
   uninstall = installAppPlatform({
     applySessionReplay: (word: SessionReplayBootstrap) => heard.push(word),
   } as unknown as AppPlatform);
@@ -66,14 +61,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What the panel's root runs on its first commit, over the snapshot given. */
 function Startup(props: { readonly state: AppStateSnapshot }): null {
   useSessionReplay(props.state.run, props.state.sessionReplay, undefined);
   usePrefetchBundles();
   return null;
 }
 
-/** Draws the startup work, and answers a way to hand it another delivery. */
 function draw(first: AppStateSnapshot): (next: AppStateSnapshot) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -96,13 +89,11 @@ function draw(first: AppStateSnapshot): (next: AppStateSnapshot) => void {
   return (next) => act(() => root.render(render(next)));
 }
 
-/** A delivery of the document, a new object each time as a delivery is, recording as given. */
 function delivery(sessionReplay: AppStateSnapshot["sessionReplay"]): AppStateSnapshot {
   const base = stateWith({}, {});
   return { ...base, run: { ...base.run, packaged: true }, sessionReplay };
 }
 
-/** The renderer going idle: every callback standing runs. */
 function goIdle(): void {
   act(() => {
     for (const each of idle.filter((one) => !one.canceled)) each.run();
@@ -170,7 +161,6 @@ test("leaving before the renderer is idle starts nothing", () => {
 });
 
 test("a browser with no requestIdleCallback starts the work after a frame has painted, or at once in a hidden tab", async () => {
-  // jsdom has no requestIdleCallback, as Safari has none: the stand-ins go.
   vi.unstubAllGlobals();
   const frames: (() => void)[] = [];
   vi.stubGlobal("requestAnimationFrame", (run: () => void) => frames.push(run));
@@ -178,7 +168,6 @@ test("a browser with no requestIdleCallback starts the work after a frame has pa
 
   draw(delivery({ permitted: true, halted: false }));
   assert.deepEqual(heard, []);
-  // The first frame runs before the paint, so nothing has started; the frames each asks for next are the paint's.
   const first = frames.splice(0);
   act(() => {
     for (const run of first) run();

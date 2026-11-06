@@ -27,16 +27,6 @@ import { LoneLinkCards } from "./lone-link-card.js";
 import { SentWords } from "./skill-chip.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * transcript-document.test.ts -- words drawn as a document, as an Inbox
- * item's are: a link alone in its paragraph stands as the card of what it
- * names, the same link in a sentence stays its chip, pictures written next
- * to each other stand side by side, and an item's own pictures are read
- * through the Inbox and drawn with their captions, a press opening one
- * viewer the arrow keys walk across them all. Words drawn as a
- * transcript keep none of it. Synthetic ids, repository, and pictures.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const PAGE_ID = "3c4d5e6f-0000-4000-8000-000000000001";
 const ITEM_ID = "a1b2c3d4-0000-4000-8000-000000000001";
@@ -50,20 +40,12 @@ const LINES = `https://github.com/${REPOSITORY}/blob/${COMMIT}/apps/web/rollout-
 const PAGE = linkOf({ kind: LINK_PLACE.PAGE, planId: TASK_ID, pageId: PAGE_ID }, "acme");
 const LINEAR = "https://linear.app/acme/issue/ACME-142";
 
-/** A picture's bytes as its read answers them. */
 const HELD: PictureAnswer = { contentType: "image/png", base64: "iVBORw0KGgo=" };
 
-/** A read that did not answer. */
 const UNANSWERED = new Error("The host did not answer.");
 
-/** No picture of an item is ever answered: each read waits. */
 const NO_PICTURES: PictureReader = () => new Promise(() => undefined);
 
-/**
- * An item's pictures read as the test answers them: at once as `answers`
- * holds them, a failure where it holds one, and held until `land` answers it
- * where it holds none; each ask kept in `asked`.
- */
 function pictureReader(
   answers: ReadonlyMap<string, PictureAnswer | Error>,
   asked: string[] = [],
@@ -79,7 +61,6 @@ function pictureReader(
   return { read, land: (attachmentId) => act(() => held.get(attachmentId)?.(HELD)) };
 }
 
-/** An item's own picture's address, under its task. */
 function pictureOf(itemId: string, attachmentId: string): string {
   return inboxAttachmentAddress(
     { kind: LINK_PLACE.INBOX_ITEM, planId: TASK_ID, itemId },
@@ -88,7 +69,6 @@ function pictureOf(itemId: string, attachmentId: string): string {
   );
 }
 
-/** The words of a message with a link in a sentence and three standing alone. */
 const LINKS = [
   `The fix is in [the pull request](${PULL_REQUEST}).`,
   PULL_REQUEST,
@@ -97,7 +77,6 @@ const LINKS = [
   LINEAR,
 ].join("\n\n");
 
-/** The words of a message with a before and an after written next to each other. */
 const PAIR = [
   "Here is the change:",
   `![Before](${pictureOf(ITEM_ID, BEFORE)} "Before") ![After](${pictureOf(ITEM_ID, AFTER)} "After")`,
@@ -107,7 +86,6 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-// A message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -129,13 +107,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** What a pane hands its words: the cards' doors over the task's repository, and the item's pictures as `pictures` reads them. */
 function inPane(
   children: ReactNode,
   pictures: PictureReader = NO_PICTURES,
   read: { path: string; ref: string | undefined }[] = [],
 ): ReactElement {
-  // A file's lines are held unread, so a code card stands as it reads them.
   fakeActPort({
     ...openingLinks((link) => told.push(link)),
     [ACT_KIND.TASKS_FILE]: (window) => {
@@ -157,7 +133,6 @@ function inPane(
   });
 }
 
-/** The node drawn into a fresh container. */
 function drawn(node: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -167,7 +142,6 @@ function drawn(node: ReactElement): HTMLElement {
   return container;
 }
 
-/** Each lone link's card drawn: its kind and what it says. */
 function cards(container: HTMLElement): [string | undefined, string][] {
   return [...container.querySelectorAll<HTMLElement>(".lone-link-card")].map((card) => [
     card.dataset.loneLink,
@@ -177,7 +151,6 @@ function cards(container: HTMLElement): [string | undefined, string][] {
   ]);
 }
 
-/** Each chip drawn in a paragraph of words, by the name it says. */
 function chipsInWords(container: HTMLElement): (string | null)[] {
   return [...container.querySelectorAll("p [data-mention-ref]")].map(
     (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent ?? null,
@@ -195,11 +168,9 @@ test("drawn as a document, a link alone in its paragraph is its card, a pull req
     ["page", "The funnel"],
     ["code", "apps/web/rollout-store.ts, Lines 3–5"],
   ]);
-  // The pull request named in a sentence, and the issue standing alone, which earns no card.
   const chips = chipsInWords(container);
   assert.equal(chips.length, 2);
   assert.equal(chips[0], "the pull request");
-  // The code card reads its lines at the link's commit, as an Inbox code block does.
   assert.deepEqual(read, [{ path: "apps/web/rollout-store.ts", ref: COMMIT }]);
 
   const pullRequest = container.querySelector<HTMLButtonElement>(
@@ -282,7 +253,6 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
       "div",
       null,
       inPane(createElement(TranscriptWords, { text, asDocument: true }), pictures.read),
-      // Another item's pane in the same window, its own picture held.
       createElement(InboxPictures, {
         itemId: OTHER_ITEM_ID,
         control: { read: pictures.read },
@@ -320,12 +290,10 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
           new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
         ),
     );
-  // The third is still read, and the broken one failed, so the walk holds the pair alone.
   assert.deepEqual(viewer(), ["After.png", "2 of 2"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["Before.png", "1 of 2"]);
 
-  // The third's bytes land, and it joins the walk where it is drawn.
   pictures.land(third);
   await vi.waitFor(() => assert.deepEqual(viewer(), ["Before.png", "1 of 3"]));
   key("ArrowRight");
@@ -337,7 +305,6 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   key("ArrowLeft");
   assert.deepEqual(viewer(), ["Third.png", "3 of 3"]);
 
-  // A picture drawn while the viewer stands, as a newer read of the item adds one, joins the walk.
   text = `${text}\n\n![Fourth](${pictureOf(ITEM_ID, fourth)})`;
   act(() => root.render(withQueryClient(draw())));
   await vi.waitFor(() => assert.deepEqual(viewer(), ["Third.png", "3 of 4"]));
@@ -361,7 +328,6 @@ test("a picture far from the screen is neither asked for nor drawn until it come
       disconnect(): void {}
     },
   );
-  // Every box stands far below the window, a long thread's first picture as its foot is read, until it is scrolled to.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => box as DOMRect);
   const asked: string[] = [];
   const text = `![Far](${pictureOf(ITEM_ID, far)})`;
@@ -418,7 +384,6 @@ test("words drawn as a transcript, as the transcript and the description draw th
   );
 
   assert.equal(container.querySelectorAll(".lone-link-card").length, 0);
-  // Every link, in a sentence or alone, stays a chip in its paragraph.
   assert.equal(chipsInWords(container).length, 5);
 });
 
@@ -431,7 +396,6 @@ test("an Inbox link block draws as the link alone in its words does: a pull requ
   const page = drawn(inPane(createElement(LinkBlock, { url: PAGE, label: "The funnel" })));
   assert.deepEqual(cards(page), [["page", "The funnel"]]);
 
-  // A label with brackets and an address with parentheses are the link's, not the markdown's.
   const issue = drawn(
     inPane(createElement(LinkBlock, { url: `${LINEAR}?a=(b)`, label: "[ACME-142] fails" })),
   );

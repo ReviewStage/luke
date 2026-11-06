@@ -8,13 +8,6 @@ import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import { TranscriptTodos } from "./transcript-blocks.js";
 
-/**
- * transcript-todos.test.ts -- an agent's to-do list, as a call's row opens
- * onto it (the dock over the composer draws the same items): each item
- * says its words and its status, and a failed write says why. Synthetic
- * items.
- */
-
 const TODOS: AgentTodos["todos"] = [
   { content: "Read the record-write path", status: AGENT_TODO_STATUS.DONE },
   {
@@ -25,14 +18,12 @@ const TODOS: AgentTodos["todos"] = [
   { content: "Run the store tests", status: AGENT_TODO_STATUS.PENDING },
 ];
 
-/** The node drawn as `node` is, in a box of its own. */
 function drawn(node: ReactNode): HTMLElement {
   const box = document.createElement("div");
   box.innerHTML = renderToStaticMarkup(createElement("div", null, node));
   return box;
 }
 
-/** A call's row opening onto the list, open. */
 function transcriptList(errorText?: string, live = false): HTMLElement {
   return drawn(
     createElement(TranscriptTodos, {
@@ -46,7 +37,6 @@ function transcriptList(errorText?: string, live = false): HTMLElement {
   );
 }
 
-/** Each item's glyph seat and words, in the list's order. */
 function items(surface: HTMLElement): { seat: Element; words: Element; status: string }[] {
   return [...surface.querySelectorAll("li[data-todo-status]")].map((item) => {
     const [seat, words] = item.children;

@@ -20,7 +20,6 @@ import { fakeAppBridge } from "./testing/app-bridge.js";
 const ignore = () => undefined;
 const SIGNED_OUT: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
-/** Every root a test mounted, unmounted after it so nothing it started outlives it. */
 const mounted: Root[] = [];
 
 beforeEach(() => {
@@ -39,7 +38,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return mountRoot(element).container;
 }
 
-/** A mounted root, kept so the test can draw it again with what main announces next. */
 function mountRoot(element: React.ReactElement) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -78,7 +76,6 @@ test("each provider's button begins that provider's sign-in", () => {
   assert.deepEqual(pressed, [ACCOUNT_PROVIDER.GOOGLE, ACCOUNT_PROVIDER.GITHUB]);
 });
 
-/** Every "Last used" badge drawn, with the button each describes. */
 function lastUsedBadges(container: HTMLElement) {
   return [...container.querySelectorAll("span")]
     .filter((each) => each.textContent === "Last used")
@@ -159,7 +156,6 @@ test("a sign-in that ended without landing is reported once, under why it ended"
   const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
   try {
     const { root } = mountRoot(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT }));
-    // A draw for any other reason, with the same failure still shown, reports nothing more.
     act(() =>
       root.render(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT, lastUsed: ACCOUNT_PROVIDER.GITHUB })),
     );

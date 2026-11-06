@@ -30,27 +30,6 @@ import type { PendingReview } from "./line-comment.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
 
-/**
- * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the Review press at the end of its tabs' row and the panel it opens, as stage-cli's review panel.
- *
- * The panel asks what the review says of the pull request, Comment,
- * Approve, or Request changes, and its optional words, written as
- * Markdown on the description's editor (`comment-editor.tsx`), and sends both as one change
- * (`PULL_REQUEST_ACTION.SUBMIT_REVIEW`), which the service submits on
- * GitHub as the member pressing it: their own pending review where they
- * hold one, else a new one (`pull-request-writes.ts`). Nothing is refused
- * here that GitHub might allow: GitHub's own rules, approving one's own
- * pull request among them, come back as its words on the panel's own
- * line, with the sign-in offered where GitHub would not take the member's.
- * Once GitHub took it the panel closes and lets go of its words, and the
- * tab reads the conversation again (`usePullRequestWrites`); until then
- * what was written stands, the panel closed and opened again included.
- * Under the line counting the member's pending comments stand the comments
- * themselves, each with Edit and Delete (`pending-comments.tsx`); a Delete's
- * question over the window leaves the panel open.
- */
-
-/** The panel's own words. */
 const REVIEW_WORDS = {
   OPEN: "Review",
   TITLE: "Finish your review",
@@ -62,14 +41,11 @@ const REVIEW_WORDS = {
   SUBMIT: "Submit review",
   SUBMITTING: "Submitting review",
   DISCARD: "Discard",
-  /** What the panel says of the comments the member's pending review holds, which submitting publishes. */
   pending: (count: number) =>
     `${count} pending ${count === 1 ? "comment" : "comments"} will be published.`,
-  /** The Review press's name to a reader, with the pending comments it holds. */
   openWith: (count: number) => `Review, ${count} pending ${count === 1 ? "comment" : "comments"}`,
 } as const;
 
-/** What Discard asks before it throws the member's pending review away. */
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard your pending review?",
   body: `This deletes every pending comment you added to it. ${IRREVERSIBLE_WORDS}`,
@@ -79,33 +55,24 @@ const DISCARD_QUESTION: DialogQuestion = {
   replayUnmasked: true,
 };
 
-/** What the review may say, in the order GitHub's own review box offers it. */
 const EVENT_OPTIONS = [
   { value: REVIEW_EVENT.COMMENT, label: "Comment" },
   { value: REVIEW_EVENT.APPROVE, label: "Approve" },
   { value: REVIEW_EVENT.REQUEST_CHANGES, label: "Request changes" },
 ] as const satisfies readonly ChoiceOption<ReviewEvent>[];
 
-/** The field's prompt, by what the review says: changes asked for want their summary. */
 function placeholderOf(event: ReviewEvent): string {
   return event === REVIEW_EVENT.REQUEST_CHANGES
     ? "Summarize the requested changes"
     : "Leave a summary comment (optional)";
 }
 
-/**
- * Whether a press or the focus went to a question asked over the window
- * from inside the panel, a pending comment's Delete, which stands outside
- * it in the document and leaves it open.
- */
 function inQuestion(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('[role="alertdialog"]') !== null;
 }
 
-/** The width the panel asks for, stage-cli's own; the side panel may narrow it. */
 const PANEL_WIDTH = 480;
 
-/** The review being written: what it says, its words, and the presses on them. */
 interface ReviewDraft {
   readonly event: ReviewEvent;
   readonly body: string;
@@ -114,12 +81,6 @@ interface ReviewDraft {
   readonly submit: () => void;
 }
 
-/**
- * The panel: its head, the words with their preview, what the review says,
- * GitHub's answer where it did not take the last one, and Cancel and
- * Submit. Escape closes it, Enter in its words submits it, and focus
- * leaving it closes it, its words kept, unless a review is on its way.
- */
 function ReviewPanel({
   open,
   id,
@@ -131,15 +92,12 @@ function ReviewPanel({
   onClose,
   onLeave,
 }: {
-  /** Whether it stands; closed, it fades out. */
   open: boolean;
   id: string;
   draft: ReviewDraft;
   writes: PullRequestWrites;
   pending: PendingReview;
-  /** The pending comments themselves, each with Edit and Delete, under the line counting them; none draws none. */
   pendingList: ReactNode;
-  /** Asks to throw the pending review away; offered only while one is held. */
   onDiscard: () => void;
   onClose: () => void;
   onLeave: (left: EventTarget | null) => void;
@@ -219,20 +177,13 @@ function ReviewPanel({
   );
 }
 
-/**
- * The tabs' row's Review press and the panel it opens, holding the review being
- * written for as long as the tab stands, so a panel closed by a stray
- * click opens again on the same words.
- */
 export function PullRequestReview({
   writes,
   pending,
   pendingList,
 }: {
   writes: PullRequestWrites;
-  /** The member's own pending review, which the panel publishes or discards. */
   pending: PendingReview;
-  /** Its comments as the panel lists them, under the line counting them; none lists none. */
   pendingList?: ReactNode;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -242,7 +193,6 @@ export function PullRequestReview({
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
-  // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
   const discarding = useConfirmDialog(
     { subject: pending != null, surfaceOpen: open },
     writes.confirmAct({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW }),
@@ -250,8 +200,6 @@ export function PullRequestReview({
   );
   const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
 
-  // Note that we hand focus back to the press, as a menu returns it to its
-  // trigger, because closing takes the focused field away with it.
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
@@ -267,7 +215,6 @@ export function PullRequestReview({
 
   return (
     <div className="pull-request-review relative flex" ref={root}>
-      {/* Note that a narrow row folds the press to a square around its glyph, which wears the count at its corner, so the word stands in the hint and the name. */}
       <FoldingButton
         ref={trigger}
         label={REVIEW_WORDS.OPEN}
@@ -286,10 +233,6 @@ export function PullRequestReview({
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen(!open)}
       />
-      {/* Note that a press outside closes it too, as a menu's does, because
-          the field keeps the focus through a press on words nothing can
-          focus, so no blur says it was left; a review on its way, or the
-          question it asked, holds it open all the same. */}
       <AnchoredPopover
         open={open}
         align={POPOVER_ALIGN.END}
@@ -307,10 +250,6 @@ export function PullRequestReview({
           onDiscard={discarding.ask}
           onClose={close}
           onLeave={(left) => {
-            // Note that a review on its way holds the panel open, because the
-            // press it was sent from is disabled as it goes, which drops the
-            // focus the way a click outside would, and GitHub's answer is
-            // drawn in the panel.
             if (sending || inQuestion(left)) return;
             if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
           }}

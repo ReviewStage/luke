@@ -7,42 +7,21 @@ import { isUnread } from "./inbox-model.js";
 import { type RemindDoors, remindEntries } from "./inbox-remind.js";
 import { markReadItem } from "./task-menu-items.js";
 
-/**
- * inbox-item-actions.tsx -- the acts every menu of one Inbox item offers, wherever the item is drawn: its row in the Inbox's list and the ⋯ on its thread's bar.
- *
- * Each menu offers the same groups in the same order: Copy link, the
- * item's link under the task or the agent that holds it; Mark as read or
- * unread, naming U where U reaches the item, and Remind me beside it, naming H
- * there too (`inbox-remind.tsx`); and, alone and last while the item is open, Resolve without answering, asked first
- * through the surface's one question (`inbox-close.tsx`). A surface hands
- * down only the doors it has, and a group whose door is missing stands
- * nowhere.
- */
-
-/** What an item's acts are offered with: the doors the surface hands down, and whether U reaches the item there. */
 interface InboxItemDoors {
-  /** Marks the item read or unread; none where the surface offers no mark. */
   readonly onMark: ((item: InboxItem, unread: boolean) => void) | undefined;
-  /** Asks to close an open item without an answer, through the question the surface draws (`useInboxCloseAsk`); none where it offers no close. */
   readonly onAskClose: ((item: InboxItem) => void) | undefined;
-  /** Whether U marks this item, so its Mark names the chord, and H sets its reminder, so its Remind me does. */
   readonly keyed: boolean;
-  /** Sets the item's reminder, and opens the date picker for a time of the reader's own where the surface holds one; none where it offers no reminder. */
   readonly remind?: RemindDoors | undefined;
 }
 
-/** An item's acts as a menu draws them. */
 interface InboxItemActions {
-  /** The menu's groups, with `lead` over the item's own: a phone's, standing for what its bar draws. */
   readonly groups: (lead?: readonly MenuAction[][]) => MenuEntry[][];
 }
 
-/** The place an item is linked by: its id alone, whose agent and task its reader asks the service for. */
 function inboxItemPlace(item: InboxItem): LinkPlace {
   return { kind: LINK_PLACE.INBOX_ITEM, itemId: item.id };
 }
 
-/** One item's acts. */
 export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): InboxItemActions {
   const { onMark, onAskClose, keyed, remind } = doors;
   const read =

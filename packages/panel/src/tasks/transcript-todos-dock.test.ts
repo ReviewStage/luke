@@ -7,15 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { TranscriptTodosDock } from "./transcript-blocks.js";
 
-/**
- * transcript-todos-dock.test.ts -- the docked to-do list says how far it
- * has got with counts that roll as they change; an item that changes where
- * it stands while drawn has its glyph arrive, and a list drawn as it stands
- * is still; its line leads with its chevron; and in a short window an open
- * list stops growing at under a third of what is seen and scrolls past it.
- * Synthetic list.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -33,7 +24,6 @@ afterEach(() => {
   document.documentElement.removeAttribute("style");
 });
 
-/** A list of three steps, the first `done` of them done and the next in progress. */
 function steps(done: number): Todos {
   return ["Read the store", "Write the migration", "Ship it"].map((content, index) => ({
     content,
@@ -46,7 +36,6 @@ function steps(done: number): Todos {
   }));
 }
 
-/** The dock drawn into the page, and a way to draw it again as the agent writes the list anew. */
 function docked(todos: Todos): { view: HTMLElement; to: (next: Todos) => void } {
   const view = document.body.appendChild(document.createElement("div"));
   const root = createRoot(view);

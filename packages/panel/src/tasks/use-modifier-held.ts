@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
 
-/**
- * use-modifier-held.ts -- whether ⌘ (Ctrl elsewhere) is held down while `watching`, which an agent's Send reads to say what Enter will do with it held.
- *
- * Heard at the window, so a press anywhere counts, and let go as the
- * window loses focus, since a key released elsewhere is never heard.
- */
 export function useModifierHeld(watching: boolean): boolean {
   const [held, setHeld] = useState(false);
   useEffect(() => {

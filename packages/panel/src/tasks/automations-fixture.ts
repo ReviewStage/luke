@@ -1,16 +1,3 @@
-/**
- * automations-fixture.ts -- the synthetic automations a fixture run's Automations profiles open, and the follows their pages hold in place of the service's.
- *
- * Under an Automations profile (`RUN_PROFILE.AUTOMATIONS*`) the account
- * signed in (`settings-fixture.ts`) holds three automations in the listed
- * workspace, one on a schedule, one on its pull requests, and one called by
- * a webhook, each with a history of runs, the webhook's newest run failed. The window opens on their list, on the first one's editor, or on
- * the failed one's with that run marked. Each read their pages hold is
- * laid here on main's document (`use-app-state.ts`), the list and the runs
- * as they stand, as the host lays them; nothing moves after. Every name,
- * repository, and prompt here is invented; nothing is read from an account.
- */
-
 import { AGENT_STATUS } from "@repo/features/agent-wire";
 import {
   AUTOMATION_ACTION,
@@ -30,13 +17,11 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { type AppAutomationReads, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "./use-tasks-tab.js";
 
-/** When the fixture stands, from which every instant here is counted: a fixed one, never the clock. */
 const NOW = Date.parse("2026-10-24T09:00:00Z");
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** The account signed in, as `settings-fixture.ts` names it, which created two of the three. */
 const ACCOUNT_ID = "user-ada";
 
 function uuid(series: string, n: number): string {
@@ -49,7 +34,6 @@ const AUTOMATION_ID = {
   DEPLOY: uuid("3f0e6f5c-7d1a-4f6e-9a55", 3),
 } as const;
 
-/** One run, fired `agoHours` before the fixture stands and settled a few minutes after. */
 function run(
   n: number,
   agoHours: number,
@@ -78,7 +62,6 @@ const SCHEDULED = (agoHours: number) => ({
   dueAt: NOW - agoHours * HOUR,
 });
 
-/** The sweep's runs, every weeknight, the newest still at work. */
 const SWEEP_RUNS: readonly AutomationRunSummary[] = [
   run(1, 7, SCHEDULED(7), {
     agent: {
@@ -109,7 +92,6 @@ const SWEEP_RUNS: readonly AutomationRunSummary[] = [
   }),
 ];
 
-/** The reviews' runs, one per pull request pushed to. */
 const REVIEW_RUNS: readonly AutomationRunSummary[] = [
   run(
     5,
@@ -149,7 +131,6 @@ const REVIEW_RUNS: readonly AutomationRunSummary[] = [
   ),
 ];
 
-/** The deploy check's runs, the newest of which could not start its agent. */
 const FAILED_RUN_ID = uuid("1c2d3e4f-5a6b-4c7d-8e9f", 7);
 const DEPLOY_RUNS: readonly AutomationRunSummary[] = [
   run(
@@ -195,7 +176,6 @@ const RUNS: ReadonlyMap<string, readonly AutomationRunSummary[]> = new Map([
   [AUTOMATION_ID.DEPLOY, DEPLOY_RUNS],
 ]);
 
-/** The three automations of a workspace, newest first, as its list reads them. */
 function automations(workspaceId: string): readonly AutomationSummary[] {
   const common = {
     planId: null,
@@ -273,7 +253,6 @@ function automations(workspaceId: string): readonly AutomationSummary[] {
   ];
 }
 
-/** Every run of the workspace's automations, newest first, each with the automation it is a run of, as the Runs tab reads them. */
 function workspaceRuns(workspaceId: string): readonly AutomationWorkspaceRun[] {
   return automations(workspaceId)
     .flatMap((automation) =>
@@ -285,7 +264,6 @@ function workspaceRuns(workspaceId: string): readonly AutomationWorkspaceRun[] {
     .toSorted((one, other) => other.firedAt - one.firedAt);
 }
 
-/** The page each Automations profile opens on. */
 const AUTOMATIONS_PLACES: ReadonlyMap<string, AutomationsPlace> = new Map<string, AutomationsPlace>(
   [
     [RUN_PROFILE.AUTOMATIONS, { kind: AUTOMATIONS_PAGE.LIST }],
@@ -300,12 +278,10 @@ const AUTOMATIONS_PLACES: ReadonlyMap<string, AutomationsPlace> = new Map<string
   ],
 );
 
-/** The page an Automations profile opens at launch; none under any other. */
 export function automationsLaunchPlace(profile: string): AutomationsPlace | undefined {
   return AUTOMATIONS_PLACES.get(profile);
 }
 
-/** Each of `workspaceIds`' automations and runs, and each automation's runs, as the host lays them once read. */
 function stagedReads(workspaceIds: readonly string[]): AppAutomationReads {
   const ofEach = <Rows>(ids: readonly string[], rows: (id: string) => Rows) =>
     Object.fromEntries(ids.map((id) => [id, { rows: rows(id) }]));
@@ -316,21 +292,14 @@ function stagedReads(workspaceIds: readonly string[]): AppAutomationReads {
   };
 }
 
-/** The staged reads, one object for each list of workspaces, so a delivery that moves none of them draws none again. */
 const STAGED_READS = new WeakMap<readonly string[], AppAutomationReads>();
 
-/**
- * Main's held reads with the staged ones laid over them, by the read and
- * then main's own, one object for each of main's. Note that each read has
- * its own, since main's reads may each be the one empty value.
- */
 const LAID_OVER = {
   [LIVE_READ.AUTOMATIONS]: new WeakMap<object, object>(),
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: new WeakMap<object, object>(),
   [LIVE_READ.AUTOMATION_RUNS]: new WeakMap<object, object>(),
 } as const satisfies Record<keyof AppAutomationReads, WeakMap<object, object>>;
 
-/** Main's `read` with its staged one laid over it, one object for each of main's. */
 function laidOver<Read extends keyof AppAutomationReads>(
   read: Read,
   held: AppAutomationReads[Read],
@@ -338,19 +307,12 @@ function laidOver<Read extends keyof AppAutomationReads>(
 ): AppAutomationReads[Read] {
   const kept = LAID_OVER[read];
   const laid = kept.get(held);
-  // SAFETY: what is kept for `held` is `held` with its own staged reads laid over it.
   if (laid !== undefined) return laid as AppAutomationReads[Read];
   const next = { ...held, ...staged };
   kept.set(held, next);
   return next;
 }
 
-/**
- * Main's document as an Automations profile draws it: each of
- * `workspaceIds`' automations and runs, and each automation's runs, held
- * as the windows' reads of them hold them (`LIVE_READ.AUTOMATIONS` and its
- * runs). The same document, the very object, under any other profile.
- */
 export function automationsAppState(
   state: AppStateSnapshot,
   workspaceIds: readonly string[],

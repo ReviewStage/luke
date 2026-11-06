@@ -42,15 +42,6 @@ import {
   useAgentTranscript,
 } from "./use-agent-transcript.js";
 
-/**
- * use-agent-transcript.test.ts -- a tab draws its transcript from the read
- * the host holds of it on app state, holding it while the tab is shown and
- * letting it go when it is not; what the host lays for another transcript
- * is left alone, a transcript already held draws in the tab's first frame,
- * and one that could not be read offers Try again while the messages held
- * stand. Older pages are asked for one at a time. Synthetic ids throughout.
- */
-
 const AGENT: AgentTranscriptKey = {
   kind: TRANSCRIPT_KIND.AGENT,
   agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -71,7 +62,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A page saying `text` under `id`. */
 function pageOf(id: string, text: string): AgentTranscriptPage {
   return {
     messages: [{ id, role: "assistant", parts: [{ type: "text", text }] }],
@@ -82,12 +72,10 @@ function pageOf(id: string, text: string): AgentTranscriptPage {
   };
 }
 
-/** Messages saying their own ids. */
 function said(ids: readonly string[]): AgentTranscriptMessage[] {
   return ids.map((id) => ({ id, role: "assistant", parts: [{ type: "text", text: id }] }));
 }
 
-/** The newest page, as a follow opens with it: its messages by id, and where the older page is read below where one stands. */
 function newestOf(ids: readonly string[], before?: string): AgentTranscriptPage {
   return {
     messages: said(ids),
@@ -100,17 +88,11 @@ function newestOf(ids: readonly string[], before?: string): AgentTranscriptPage 
   };
 }
 
-/** Lets what was laid reach the window and be drawn. */
 async function settle(): Promise<void> {
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   await settleQueries();
 }
 
-/**
- * The hook drawn under a probe that keeps every frame it drew, once the
- * window's document has landed, as the window draws nothing before it, over
- * a host telling the transcripts' pages as the test hands them.
- */
 function drawn(older?: TranscriptOlderReader) {
   const telling = tellingTranscripts();
   const frames: AgentTranscriptControl[] = [];
@@ -127,7 +109,6 @@ function drawn(older?: TranscriptOlderReader) {
   return {
     telling,
     frames,
-    /** What the probe drew last. */
     seen: () => frames.at(-1),
     draw: (shown: boolean) =>
       act(async () => {
@@ -142,12 +123,10 @@ function drawn(older?: TranscriptOlderReader) {
   };
 }
 
-/** The ids of the messages drawn. */
 function ids(control: AgentTranscriptControl | undefined): readonly string[] | undefined {
   return control?.messages.map((message) => message.id);
 }
 
-/** The agent's own transcript as it stands, held on the window's first document. */
 function heldOnFirstDocument(...pages: readonly AgentTranscriptPage[]): void {
   handHostReads({
     transcripts: { [AGENT.agentId]: { [OWN_TRANSCRIPT]: transcriptTold(pages) } },
@@ -212,7 +191,6 @@ test("a transcript that could not be read offers Try again, which asks the host 
   assert.deepEqual(ids(seen()), ["m-1", "m-2"]);
 });
 
-/** A page saying the agent's one worker stands at `status`, its title and start alike each time. */
 function workerPage(status: AgentStatus): AgentTranscriptPage {
   return {
     messages: [],
@@ -257,7 +235,6 @@ test("an agent that ended stays held while its tab is shown, so the lines a call
 
   await draw(true);
   await push(AGENT, ended("m-1", "Invites now expire after seven days."));
-  // A call into the ended agent writes its spoken lines, which the host still lays.
   await push(AGENT, ended("said-1", "Walk me through the expiry job."));
   await push(AGENT, ended("said-2", "It reads pending invites oldest first."));
 
@@ -326,7 +303,6 @@ test("a hold whose transcript the host already held is timed as a cache hit, cau
     span.name,
     span.attributes()[PANEL_SPAN_ATTRIBUTE.CACHE_HIT],
   ]);
-  // The host lays what it held again as it reads on, and then the page past its cursor.
   await push(AGENT, held);
   await push(AGENT, { ...pageOf("m-3", "Writing."), caughtUp: true });
   uninstall();
@@ -366,7 +342,6 @@ test("a hold let go before its first page landed is timed by no span", async () 
   assert.deepEqual(spans, []);
 });
 
-/** An older reader that writes down each read and answers it when the test hands the answer. */
 function scriptedOlder() {
   const asked: AgentTranscriptOlderParams[] = [];
   let answer: (older: AgentTranscriptOlderAnswer) => void = () => undefined;
@@ -402,7 +377,6 @@ test("older pages are asked for one at a time, each out until the host lays it b
   assert.deepEqual(asked, [{ ...AGENT, before: "3" }]);
   assert.equal(seen()?.loadingOlder, true);
 
-  // The read lands, and stays out until the page it laid reaches the window.
   await hand({ landed: true });
   assert.equal(seen()?.loadingOlder, true);
   act(() => seen()?.loadOlder());
@@ -436,7 +410,6 @@ test("an older read that failed leaves what is held and may be asked again, its 
   assert.equal(asked.length, 2);
   await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
 
-  // A newest page that takes the place of what was held lets the failed cursor go.
   await push(AGENT, newestOf(["m-90"], "90"));
   assert.equal(seen()?.olderFailed, false);
 });

@@ -19,63 +19,45 @@ import { TextLink } from "./text-link.js";
 
 const SAFE_LINK = /^(?:https?:\/\/|mailto:)/i;
 
-/** The drawn tree's types: the tree root or an element, a node under it, an element's child, and a run of text. */
 type HastParent = Root | Element;
 type HastNode = RootContent;
 type HastChild = ElementContent;
 type HastText = Text;
 
-/** A stretch of the words, from one offset up to another. */
 export interface MarkdownSpan {
   from: number;
   to: number;
 }
 
-/** How a stretch of the words is marked as a change: written in, or struck out. */
 export const MARKDOWN_MARK = {
   INSERTED: "inserted",
   DELETED: "deleted",
-  /** Words a comment thread is anchored to (`tasks/description-comments.tsx`). */
   COMMENT: "comment",
 } as const;
 
 type MarkdownMarkKind = (typeof MARKDOWN_MARK)[keyof typeof MARKDOWN_MARK];
 
-/** A stretch of the words marked as a change, or as a comment's words, which names its thread and whether it is the one open. */
 export interface MarkdownMark extends MarkdownSpan {
   kind: MarkdownMarkKind;
   thread?: string | undefined;
   active?: boolean | undefined;
-  /** Whether the comment is on its whole block, drawn by the block's edge rather than over its words. */
   block?: boolean | undefined;
 }
 
-/**
- * A message drawn with its changes marked: the stretches written in or
- * struck out, and the words comment threads are anchored to. Offsets are in
- * the words.
- */
 export interface MarkdownEdit {
   marks?: readonly MarkdownMark[] | undefined;
 }
 
-/** The element and class each kind of change mark is drawn as, so it reads as a change without its color. */
 const MARK_DRAWN = {
   [MARKDOWN_MARK.INSERTED]: { tagName: "ins", className: "markdown-inserted" },
   [MARKDOWN_MARK.DELETED]: { tagName: "del", className: "markdown-deleted" },
   [MARKDOWN_MARK.COMMENT]: { tagName: "mark", className: "description-comment-mark" },
 } as const satisfies Record<MarkdownMarkKind, { tagName: string; className: string }>;
 
-/** Whether a node is the line break the renderer leaves between block elements, which draws nothing. */
 function isBlockBreak(node: HastNode): boolean {
   return node.type === "text" && node.value.trim() === "";
 }
 
-/**
- * One run of text cut into what is drawn, each change marked. A run's place
- * in the words maps letter for letter onto its value, which an escaped
- * character puts one letter off, the same small error the cut always made.
- */
 function editedText(text: HastText, start: number, edit: MarkdownEdit): readonly HastChild[] {
   const { marks = [] } = edit;
   const local = (offset: number) => Math.min(Math.max(offset - start, 0), text.value.length);
@@ -88,7 +70,6 @@ function editedText(text: HastText, start: number, edit: MarkdownEdit): readonly
     if (to === undefined || to === from) return;
     const value = text.value.slice(from, to);
     const covering = marks.filter((each) => from >= local(each.from) && to <= local(each.to));
-    // Note that a change mark wins over a comment's, and words under several threads name every one of them.
     const mark = covering.find((each) => each.kind !== MARKDOWN_MARK.COMMENT) ?? covering[0];
     const threads = covering.flatMap((each) =>
       each.kind === MARKDOWN_MARK.COMMENT && each.thread !== undefined ? [each.thread] : [],
@@ -114,11 +95,6 @@ function editedText(text: HastText, start: number, edit: MarkdownEdit): readonly
   return parts;
 }
 
-/**
- * A picture inside the change mark that covers it whole, so a picture
- * written in or struck out reads as the change it is; one no mark covers is
- * left as it is, since a picture holds no words to cut.
- */
 function markedPicture(
   picture: HastNode,
   start: number,
@@ -136,12 +112,6 @@ function markedPicture(
   };
 }
 
-/**
- * Draws an edit over a parent's children in place. Every node carries its
- * place in the words, so the edit is made on the drawn tree rather than on
- * the Markdown. The breaks between blocks carry no place of their own and
- * are kept as they stand.
- */
 function editChildren(parent: HastParent, edit: MarkdownEdit): void {
   const original = [...parent.children];
   const kept: HastNode[] = [];
@@ -163,27 +133,15 @@ function editChildren(parent: HastParent, edit: MarkdownEdit): void {
     if (child.type === "element") editChildren(child, edit);
     kept.push(child);
   }
-  // SAFETY: every node kept is one of this parent's own children, or a run of
-  // text or a mark cut from one, each a child any parent holds.
   parent.children.splice(0, original.length, ...(kept as typeof parent.children));
 }
 
-/** The lines a fenced block opens on. */
 const FENCE_OPENINGS = ["```", "~~~"] as const;
 
-/** Whether a run of text inside a block is that block's code. */
 function isCodeOf(parent: HastParent, code: HastElement): boolean {
   return parent.type === "element" && parent.tagName === "pre" && code.tagName === "code";
 }
 
-/**
- * Gives each fenced block's code its place in the words, which the tree
- * leaves off the run of text the code is, so an edit marks inside code as it
- * does anywhere else. A fence's code is
- * the words letter for letter from the line after its opening one, unless
- * it stands in a list or a quote, whose lines lose their indent; a code that
- * does not read back from there keeps no place, and is drawn whole.
- */
 function placeFencedCode(parent: HastParent, words: string): void {
   for (const child of parent.children) {
     if (child.type !== "element") continue;
@@ -209,7 +167,6 @@ function placeFencedCode(parent: HastParent, words: string): void {
   }
 }
 
-/** The rehype step that draws a message's changes marked. */
 const drawEdit =
   (edit: MarkdownEdit, words: string) =>
   (tree: HastParent): void => {
@@ -217,11 +174,9 @@ const drawEdit =
     editChildren(tree, edit);
   };
 
-/** An element of the tree, and what it may hold. */
 type HastElement = Element;
 type HastElementChild = ElementContent;
 
-/** One run of text with the words a search asks for marked where they landed. */
 function foundIn(text: HastText, tokens: readonly string[]): readonly HastElementChild[] {
   const ranges = matchRanges(text.value, tokens);
   if (ranges.length === 0) return [text];
@@ -242,7 +197,6 @@ function foundIn(text: HastText, tokens: readonly string[]): readonly HastElemen
   return parts;
 }
 
-/** Marks a search's words in every run of text under an element. */
 function markFoundIn(element: HastElement, tokens: readonly string[]): void {
   element.children = element.children.flatMap((child) => {
     if (child.type === "text") return foundIn(child, tokens);
@@ -251,17 +205,14 @@ function markFoundIn(element: HastElement, tokens: readonly string[]): void {
   });
 }
 
-/** The rehype step that marks where a search's words landed, block by block; the breaks between blocks hold no words. */
 const markFound =
   (tokens: readonly string[]) =>
   (tree: HastParent): void => {
     for (const child of tree.children) if (child.type === "element") markFoundIn(child, tokens);
   };
 
-/** The elements whose words hold no key: code, read literally, and a link, which already goes somewhere. */
 const KEYLESS_TAGS: ReadonlySet<string> = new Set(["a", "code", "pre"]);
 
-/** A run of text with each key `targets` holds in it written as a link to its task, the words between left as they were. */
 function keyedText(
   text: HastText,
   targets: ReadonlyMap<string, string>,
@@ -284,7 +235,6 @@ function keyedText(
   return parts;
 }
 
-/** Writes each listed task's key in the words under an element as a link to its task, but in code or a link. */
 function linkKeysIn(element: HastElement, targets: ReadonlyMap<string, string>): void {
   element.children = element.children.flatMap((child) => {
     if (child.type === "text") return keyedText(child, targets);
@@ -293,13 +243,6 @@ function linkKeysIn(element: HastElement, targets: ReadonlyMap<string, string>):
   });
 }
 
-/**
- * The rehype step that writes each listed task's key among the words
- * (`ACME-42`) as a link to its task, block by block, which the place draws
- * as the task's chip saying the key as written (`linkChip`). Note that it
- * runs after an edit is drawn, which places its marks by each node's place
- * in the words, and that the words themselves are left as written.
- */
 const linkTaskKeys =
   (targets: ReadonlyMap<string, string>) =>
   (tree: HastParent): void => {
@@ -310,16 +253,13 @@ const linkTaskKeys =
     }
   };
 
-/** Whether a node is a link the place draws itself, a mention's chip say. */
 function isDrawnLink(node: HastElementChild, link: LinkDrawer): boolean {
   if (node.type !== "element" || node.tagName !== "a") return false;
   const href = node.properties.href;
-  // Note that a link whose label a change marks in part is drawn as words, which must still wrap (`drawnMarked`).
   if (marksOf(node) === LINK_MARKS.MIXED) return false;
   return isWireString(href) && link(href, labelOf(node)) !== undefined;
 }
 
-/** An element's children, and theirs, with each link the place draws itself held with the punctuation written against it (`link-glue.ts`). */
 function gluedChildren(element: HastElement, link: LinkDrawer): HastElementChild[] {
   for (const child of element.children) {
     if (child.type === "element" && !isDrawnLink(child, link))
@@ -338,7 +278,6 @@ function gluedChildren(element: HastElement, link: LinkDrawer): HastElementChild
   });
 }
 
-/** The rehype step that holds every drawn link with the punctuation written against it, so a comma never starts a line alone after a chip. */
 const glueDrawnLinks =
   (link: LinkDrawer) =>
   (tree: HastParent): void => {
@@ -347,39 +286,14 @@ const glueDrawnLinks =
     }
   };
 
-/**
- * How each element is drawn where the library's default would say the wrong
- * thing on this surface.
- *
- * A link is drawn as a plain link (`text-link.tsx`), naming its destination
- * on hover. It is pressed only where the place showing the words hands an
- * opener (`openLink`), as the task's page, its versions, and the app's notes
- * do; elsewhere, as in a caption, it is words going nowhere, so a message's
- * words become an action only where a reader expects a link to open. Only
- * HTTP, HTTPS, and mail destinations survive `urlTransform` below, so anything else
- * arrives here as words alone. A place that draws its own links
- * (`LinkDrawer`), one showing a description's words or the app's notes, draws a link
- * naming a mention as the chip that opens what it names before it is ever
- * drawn as a plain one.
- *
- * A heading, a picture, and a quote are the note's own (`@repo/ui/markdown`).
- * A fence is its code, and a Mermaid one draws as its diagram only where the
- * place showing the words asks for it (`diagrams`), as a plan's page does.
- */
 const COMPONENTS: MarkdownComponents = {
   a: ({ href, children, node }) => plainLink(href, children, node, undefined),
 };
 
-/**
- * How a line's code span is drawn: as a transcript's (`.transcript-inline-code`),
- * since a line, a to-do's step, stands under an agent's message and reads as
- * its words do. A fence's code in a line is one span too (`MARKDOWN_LOOK.INLINE`).
- */
 const LINE_CODE: MarkdownComponents["code"] = ({ children }) => (
   <code className="transcript-inline-code">{children}</code>
 );
 
-/** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */
 function plainLink(
   href: string | undefined,
   children: ReactNode,
@@ -394,39 +308,24 @@ function plainLink(
   );
 }
 
-/**
- * Draws a link the place showing the words knows better than as words, a
- * mention's chip (`tasks/mention-chip.tsx`) say, from its destination,
- * its label's words, and where the link is written in the words, which a
- * date's chip names to change it in place; nothing for one it leaves drawn
- * as any link is. Note that whether it draws a link never turns on `at`,
- * since the words are glued around its links before they are placed.
- */
 export type LinkDrawer = (
   href: string,
   label: string,
   at?: MarkdownSpan | undefined,
 ) => ReactNode | undefined;
 
-/** Where a node is written in the words, where the tree kept its place. */
 function writtenAt(node: HastParent | undefined): MarkdownSpan | undefined {
   const from = node?.position?.start.offset;
   const to = node?.position?.end.offset;
   return from === undefined || to === undefined ? undefined : { from, to };
 }
 
-/**
- * Draws a picture the place showing the words knows how to, a description's say,
- * from its address, its alt text, and its title; nothing for one it leaves
- * drawn as its alt text, as every picture is where no drawer is handed.
- */
 export type PictureDrawer = (
   src: string,
   alt: string,
   title: string | undefined,
 ) => ReactNode | undefined;
 
-/** The marks a link's words wear, drawn mid-edit: none, one over every word, or a change inside its label. */
 const LINK_MARKS = {
   NONE: "none",
   MIXED: "mixed",
@@ -436,7 +335,6 @@ type LinkMarks =
   | (typeof LINK_MARKS)[keyof typeof LINK_MARKS]
   | (typeof MARK_DRAWN)[MarkdownMarkKind];
 
-/** Whether a node is a change mark drawn over words. */
 function isMark(node: HastNode): boolean {
   return (
     node.type === "element" &&
@@ -444,7 +342,6 @@ function isMark(node: HastNode): boolean {
   );
 }
 
-/** The marks a link's words wear: none, the one every word wears, or a change inside the label. */
 function marksOf(link: HastParent | undefined): LinkMarks {
   const drawn = (link?.children ?? []).filter((child) => !isBlockBreak(child));
   if (!drawn.some(isMark)) return LINK_MARKS.NONE;
@@ -458,14 +355,6 @@ function marksOf(link: HastParent | undefined): LinkMarks {
   return whole ? mark : LINK_MARKS.MIXED;
 }
 
-/**
- * A link the place knows how to draw, a mention's chip say, drawn with the
- * change marks its words wore: a chip in the mark every word wore, so a
- * mention written in or struck out in a version reads as the change it is;
- * and, where the change is inside its label, the link drawn as words with
- * its marks, since one chip would join the words struck out and written in
- * into one name and hide what changed.
- */
 function drawnMarked(
   drawn: ReactNode,
   link: HastParent | undefined,
@@ -477,7 +366,6 @@ function drawnMarked(
   if (marks === LINK_MARKS.NONE) return drawn;
   if (marks === LINK_MARKS.MIXED) return plainLink(href, children, link, openLink);
   const Mark = marks.tagName;
-  // Note that a comment's mark keeps the threads it names, so a press on a marked chip still opens them.
   const first = link?.children.find((child) => !isBlockBreak(child));
   const threads =
     first?.type === "element" && isWireString(first.properties.dataThreads)
@@ -494,52 +382,34 @@ function drawnMarked(
   );
 }
 
-/** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */
 function wordsOf(node: HastParent | HastNode): string {
   if (node.type === "text") return node.value;
   if (!("children" in node)) return "";
   return node.children.map((child) => wordsOf(child)).join("");
 }
 
-/** A link's label as its words. */
 function labelOf(link: HastParent | undefined): string {
   return link === undefined ? "" : wordsOf(link);
 }
 
-/** A link's label as its words where it is words alone; nothing where an edit or a change marks inside it. */
 function plainLabelOf(link: HastParent | undefined): string | undefined {
   const marked = link?.children.some((child) => child.type === "element") ?? false;
   return marked ? undefined : labelOf(link);
 }
 
-/** The class a fence's code wears when the fence names Mermaid as its language. */
 const DIAGRAM_FENCE_CLASS = "language-mermaid";
 
-/**
- * A fence's code where it may be drawn as its diagram: a Mermaid fence whose
- * code holds its words alone. Nothing for any other fence, or for one whose
- * code wears a change mark or a search's match,
- * since a diagram drawn from marked words would hide what is marked, and
- * two diagrams side by side would hide what changed between them.
- */
 function diagramCode(pre: HastElement | undefined): string | undefined {
   const [code, ...rest] = (pre?.children ?? []).filter((child) => !isBlockBreak(child));
   if (rest.length > 0 || code?.type !== "element" || code.tagName !== "code") return undefined;
   const classes = code.properties.className;
   if (!Array.isArray(classes) || !classes.includes(DIAGRAM_FENCE_CLASS)) return undefined;
   if (!code.children.every((child) => child.type === "text")) return undefined;
-  // Note that the fence's closing line break is dropped, so the code is the editor's block's own and one picture serves both.
   return wordsOf(code).replace(/\n$/u, "");
 }
 
-/** The edit the words are drawn with, which a fence reads to know whether it is marked. */
 const FenceEdit = createContext<MarkdownEdit | undefined>(undefined);
 
-/**
- * Whether an edit's marks reach into a block. Read off the block's own
- * place, so a fence whose code keeps no place of its own (`placeFencedCode`)
- * is still known to be marked.
- */
 function editReaches(edit: MarkdownEdit | undefined, block: HastElement | undefined): boolean {
   const from = block?.position?.start.offset;
   const to = block?.position?.end.offset;
@@ -547,7 +417,6 @@ function editReaches(edit: MarkdownEdit | undefined, block: HastElement | undefi
   return (edit.marks ?? []).some((span) => span.from < to && span.to > from);
 }
 
-/** A fence drawn as its diagram where it may be, and as its code while an edit's marks reach into it. */
 function DiagramFence({
   node,
   children,
@@ -569,17 +438,6 @@ function keptUrl(url: string): string {
   return url;
 }
 
-/**
- * A message's words drawn as the Markdown they were written in, as a note
- * (`@repo/ui/markdown`): inline emphasis, code, strikethrough, and web links
- * inside the paragraph, and the blocks a paragraph cannot hold — headings,
- * lists, quotes, fenced code, tables, rules — composed around it. Raw HTML
- * in the words is text. Every size in the stylesheet is in `em`, so the same
- * component reads at the caption's ten pixels and the description's own size. Note
- * that it is drawn again only when what it is handed changes, because the
- * engine parses the words afresh on every draw, and a description redrawn on a save
- * would parse every section.
- */
 export const MarkdownMessage = memo(function MarkdownMessage({
   words,
   className,
@@ -594,28 +452,19 @@ export const MarkdownMessage = memo(function MarkdownMessage({
 }: {
   words: string;
   className?: string;
-  /** The changes and comments the words are drawn with marked; drawn plain without one. */
   edit?: MarkdownEdit | undefined;
-  /** Draws the links the place knows better, a mention's chip say; every link is drawn as words without one. */
   link?: LinkDrawer | undefined;
-  /** Opens a plain link pressed; every plain link is words going nowhere without one. */
   openLink?: ((href: string) => void) | undefined;
-  /** Draws the pictures the place knows how to, a description's say; every picture is its alt text without one. */
   picture?: PictureDrawer | undefined;
-  /** The words a search asks for, marked where they landed. */
   found?: readonly string[] | undefined;
-  /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
   diagrams?: boolean | undefined;
-  /** Draws each task item's box a reader can tick, as a description the developer can edit does; every checkbox is read-only without it. */
   taskBox?: MarkdownTaskBox | undefined;
-  /** Whether the words are one line's, a to-do's step say: drawn in the place's own element as one run of inline words, with no root, its blocks' words run together. */
   inline?: boolean | undefined;
 }): React.JSX.Element {
   const keyTargets = useWordTargets();
   const rehypePlugins = useMemo(() => {
     const plugins: MarkdownSteps = [];
     if (edit !== undefined) plugins.push(markdownStep(drawEdit, edit, words));
-    // Note that a task's key is written as its link only where the place draws links as chips.
     if (link !== undefined && keyTargets.size > 0) {
       plugins.push(markdownStep(linkTaskKeys, keyTargets));
     }
@@ -623,9 +472,6 @@ export const MarkdownMessage = memo(function MarkdownMessage({
     if (link !== undefined) plugins.push(markdownStep(glueDrawnLinks, link));
     return plugins;
   }, [edit, words, found, link, keyTargets]);
-  // Note that a place drawing its own links is handed every destination,
-  // since only it knows which it draws; any it leaves is drawn as above,
-  // so a destination that is not the web's is still words alone.
   const components = useMemo<MarkdownComponents>(() => {
     if (
       link === undefined &&

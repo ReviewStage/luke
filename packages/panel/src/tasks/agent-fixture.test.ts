@@ -20,19 +20,8 @@ import { agentActAnswer, FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
 
-/**
- * agent-fixture.test.ts -- a fixture run's agent profiles answer the reads
- * their agent's tabs ask through the act door, in place of main, which a
- * fixture run's service reads go to empty-handed: every answer one the act
- * port's contract would carry, the pull request queued with its checks
- * passed and approved, its chapters ready, and the Terminal's sandbox as each
- * profile stages it. Every act the profiles do not stage still goes to main.
- */
-
-/** Every agent profile, which the polish pass shoots one by one. */
 const AGENT_PROFILES = Object.values(RUN_PROFILE).filter((profile) => profile.startsWith("agent-"));
 
-/** One read the agent's tabs ask, by its kind and payload. */
 interface Read {
   readonly kind: PortActKind;
   readonly payload: PortActPayload<PortActKind>;
@@ -44,7 +33,6 @@ function read<Kind extends PortActKind>(kind: Kind, payload: PortActPayload<Kind
 
 const AGENT = { agentId: FIXTURE_AGENT_ID };
 
-/** The reads the agent's column and its side panel's tabs ask that answer once, each a value the contract encodes. */
 const READS: readonly Read[] = [
   read(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID, includeArchived: true }),
   read(ACT_KIND.AGENTS_CHANGES, AGENT),
@@ -58,19 +46,16 @@ const READS: readonly Read[] = [
   read(ACT_KIND.TERMINAL_LIST, AGENT),
 ];
 
-/** Whether a procedure's declared schema is an Effect Schema, which encodes with no service, as every act's output but a stream's is. */
 function isWireSchema(schema: unknown): schema is Schema.Codec<unknown, unknown> {
   return Schema.isSchema(schema);
 }
 
-/** Whether the act port's contract would carry `answer` as the kind's: it encodes through the output schema the kind's procedure declares. */
 function carried(kind: PortActKind, answer: unknown): boolean {
   const [declared] = actContract[kind]["~orpc"].outputSchemas ?? [];
   assert.ok(isWireSchema(declared), `${kind} declares a wire schema`);
   return Result.isSuccess(Schema.encodeUnknownResult(Schema.flip(declared))(answer));
 }
 
-/** The profile's answer to one read, which it must stage. */
 function answered<Kind extends PortActKind>(
   profile: string,
   kind: Kind,
@@ -78,7 +63,6 @@ function answered<Kind extends PortActKind>(
 ): PortActResult<Kind> {
   const staged = agentActAnswer(profile, kind, payload as PortActPayload<PortActKind>);
   assert.ok(staged, `${profile} answers ${kind}`);
-  // SAFETY: the profile answered this kind's read, with this kind's result.
   return staged.answer as PortActResult<Kind>;
 }
 
@@ -93,7 +77,6 @@ it("every read an agent profile answers is one the act port's contract carries",
   assert.deepEqual(refused, []);
 });
 
-/** What each hunk of a patch says it counts and what it holds, old side and new, as `old/new`. */
 function hunkCounts(patch: string): readonly { readonly said: string; readonly held: string }[] {
   const hunks: { said: string; old: number; new: number }[] = [];
   for (const line of patch.split("\n")) {
@@ -122,7 +105,6 @@ it("every changed file's patch counts the lines its hunks hold, as the diff view
   assert.deepEqual(miscounted, []);
 });
 
-/** Every file path the File tab's tree lists under `path`, walking its folders. */
 function listedFiles(path: string): readonly string[] {
   const listed = answered(RUN_PROFILE.AGENT_FILE, ACT_KIND.TASKS_TREE, {
     planId: FIXTURE_TASK_ID,
@@ -173,7 +155,6 @@ it.effect(
         { run: { ...run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PULL_REQUEST } },
       );
       yield* appStateFirstRead;
-      // The window is drawn once the synthetic tasks have landed (`App`).
       yield* Effect.promise(loadTasksFixture);
       const sent: PortActKind[] = [];
       fakeActPort({

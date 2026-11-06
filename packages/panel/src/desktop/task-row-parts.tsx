@@ -43,36 +43,12 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 
-/**
- * task-row-parts.tsx -- what the Tasks page's List row and Board card share: the chips that change a task's priority, status, and assignee where it stands, how many Inbox threads of it wait on the reader, and the door that sends a change.
- *
- * A row and a card draw the same task the same way, so a status picked on
- * either is picked from one menu, and a
- * change the service did not keep says so in one toast. A chip names its
- * value by its mark alone where its place has no room for words, its words
- * still its name, and drops a menu of every value, each with its mark, the
- * one standing checked. The assignee's chip is its face, or the dashed
- * unassigned mark, dropping the task page's assignee rows
- * (`task-standing.tsx`'s `assigneeRows`), and hangs the assignee's own
- * card. A task from a service before statuses stands as Todo, and one
- * before priorities as No priority, as everywhere else. Neither hangs the
- * task's own card, which says nothing the row or the card does not: each
- * chip hangs its own instead.
- */
-
-/** What a change the service did not keep says. */
 const UNCHANGED_LINE = "The task could not be changed. Try again.";
 
-/** A task's status, Todo for one from a service before statuses. */
 export function statusOf(task: Pick<TaskSummary, "status">): TaskStatus {
   return task.status ?? TASK_STATUS.TODO;
 }
 
-/**
- * A task as its menu is headed when it rises as a phone's sheet, the way
- * its row and card read: its status's mark, its name, and under it its
- * repository, its status, and its key, each where the row has one.
- */
 export function taskSubject(
   task: Pick<TaskSummary, "name" | "status">,
   repository: string | undefined,
@@ -85,15 +61,12 @@ export function taskSubject(
   return { mark: <TaskStatusMark status={status} />, name: task.name, detail: detail.join(" · ") };
 }
 
-/** What a standing chip reads of a task: its status, priority, and assignee. */
 type ChipTask = Pick<TaskSummary, "status" | "priority" | "assignee">;
 
-/** A task's priority, No priority for one from a service before priorities. */
 export function priorityOf(task: ChipTask): TaskPriority {
   return task.priority ?? TASK_PRIORITY.NONE;
 }
 
-/** Whether a task already stands where a standing would send it. */
 export function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
   if (standing.status !== undefined) return statusOf(task) === standing.status;
   if (standing.assigneeId !== undefined) {
@@ -102,13 +75,6 @@ export function standsAt(task: TaskSummary, standing: TaskStanding): boolean {
   return priorityOf(task) === standing.priority;
 }
 
-/**
- * Sends a task a change of where it stands, unless it stands there already,
- * which the tab draws at once, a member assigned by the directory's name for
- * them, and puts back where the service did not keep it, and says so then.
- * What the caller moved with it to put back too, `onRefused`, runs only on
- * that refusal. It settles once the service has answered, so a press may wait on it.
- */
 export function useStandingDoor(
   tasks: Pick<TasksControl, "onSetTaskStanding">,
 ): (task: TaskSummary, standing: TaskStanding, onRefused?: () => void) => Promise<void> {
@@ -135,7 +101,6 @@ export function useStandingDoor(
   };
 }
 
-/** A chip that names one of a task's standings by its mark and drops the menu that changes it, each value with its mark, the one standing checked. */
 function StandingChip<T extends string>({
   label,
   value,
@@ -147,16 +112,13 @@ function StandingChip<T extends string>({
   masked,
   onPick,
 }: {
-  /** What it changes, Status, Priority, or Assignee, which its tooltip and its menu say before the value. */
   label: string;
   value: T;
   order: readonly T[];
   words: Readonly<Record<T, string>>;
   mark: (value: T) => React.JSX.Element;
   look: ChipLook;
-  /** The card the value standing hangs in its pill's place, as an assignee's face hangs theirs. */
   card?: ReactNode;
-  /** Whether a value names a person, its words and its face kept masked in a screen recording. */
   masked?: ((value: T) => boolean) | undefined;
   onPick: (value: T) => void;
 }): React.JSX.Element {
@@ -202,13 +164,11 @@ function StandingChip<T extends string>({
   );
 }
 
-/** The chip that says a task's priority and changes it. */
 export function PriorityChip({
   task,
   look,
   onStanding,
 }: {
-  /** What it says of the task: where it stands, as a card or a row holds it, or as a quick add's draft does before it is a task. */
   task: ChipTask;
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
@@ -226,18 +186,11 @@ export function PriorityChip({
   );
 }
 
-/**
- * The chip that says who a task is assigned to by their face, or the dashed
- * unassigned mark, and changes it: No assignee, then the workspace's members,
- * the reader first. An assignee the members do not name, as while they are
- * unread, still stands checked by the name the task carries.
- */
 export function AssigneeChip({
   task,
   look,
   onStanding,
 }: {
-  /** What it says of the task: where it stands, as a card or a row holds it, or as a quick add's draft does before it is a task. */
   task: ChipTask;
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
@@ -262,13 +215,11 @@ export function AssigneeChip({
   );
 }
 
-/** The chip that says a task's status by its mark and changes it. */
 export function StatusChip({
   task,
   look,
   onStanding,
 }: {
-  /** What it says of the task: where it stands, as a card or a row holds it, or as a quick add's draft does before it is a task. */
   task: ChipTask;
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
@@ -286,7 +237,6 @@ export function StatusChip({
   );
 }
 
-/** How many of a task's questions wait on the reader, its count after the attention mark, named by its whole words; nothing at none. */
 export function WaitingCount({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
   return (
@@ -296,13 +246,6 @@ export function WaitingCount({ count }: { count: number }): React.JSX.Element | 
   );
 }
 
-/**
- * Who made a task, by their face: the member's, or the square of the app or the
- * agent that made it for them with the member's face on its corner, as every
- * task surface draws it. It hangs their card, and a press opens the member's
- * page where the window offers one, else the task, so it is never a press
- * that does nothing.
- */
 export function CreatorFace({
   task,
   onOpen,
@@ -313,7 +256,6 @@ export function CreatorFace({
   const creator = creatorActor(task, useMemberDirectory(), undefined);
   const maker = useTaskMaker(task);
   const shown = maker?.actor ?? creator;
-  // Note that the face opens the member it stands for, whoever made the task for them, since the app and an agent have no page.
   const door = useActorDoor(creator);
   return (
     <Tooltip label={actorName(shown)} card={actorCard(shown)}>

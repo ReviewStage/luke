@@ -13,14 +13,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { PageCard } from "./page-card.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * page-card.test.ts -- a page's card shows its preview once the version it
- * names has loaded, and a version written while the card stands is held
- * hidden until it loads, rather than the last version standing under the
- * new one's number, and its preview is handed the window's theme as its tab
- * is. Synthetic plan and page.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const FUNNEL: PageLine = {

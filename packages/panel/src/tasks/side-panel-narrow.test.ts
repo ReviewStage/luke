@@ -18,16 +18,6 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { agentsControl } from "../testing/tasks-control.js";
 
-/**
- * The side panel's Changes tab at its narrowest, 280px, where it has no room
- * for its tree beside the diff: the tree is drawn over the diff only once
- * asked, by a press, a peek, or the pointer at the tab's edge, and Escape or
- * a press on the diff puts it away. jsdom lays nothing out, so the window's
- * stylesheets are laid once for a panel that wide
- * (`testing/container-width.ts`) and what is drawn is read through them.
- */
-
-/** The plan the tab stands on. */
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const AGENT: AgentSummary = {
@@ -54,7 +44,6 @@ const PULL_REQUEST = {
 
 const roots: Root[] = [];
 
-/** Draws `element` into the document, its reads let land, answering the box it was drawn in. */
 async function mounted(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -66,13 +55,11 @@ async function mounted(element: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** Lets go of every tab drawn. */
 function unmountTabs(): void {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 }
 
-/** An agent's Changes tab over its pull request's one file, a line removed and two added, with the tree beside every Changes tab held open as the panel holds it. */
 async function drawChangesTab(): Promise<HTMLElement> {
   fakeActPort({
     ...fakeActPortCalls(),
@@ -114,16 +101,13 @@ async function drawChangesTab(): Promise<HTMLElement> {
       tree: { open: true, onToggle: () => undefined },
     }),
   );
-  // Note that the changes land through a query, so the tab is read once its files are drawn.
   await vi.waitFor(() => assert.equal(drawnToggles(tab).length > 0, true));
   return tab;
 }
 
 beforeAll(() => {
   layContainersAt({ "side-panel": 280 });
-  // The first element read cascades the whole window once, which is left to the setup.
   getComputedStyle(document.documentElement);
-  // Note that the setup is given longer than most, because jsdom takes seconds to lay the stylesheets.
 }, 30_000);
 
 afterEach(() => {
@@ -131,17 +115,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * Whether the stylesheets draw the element itself, which is where every
- * rule read here hides one. Note that its boxes around are not read, as
- * `shown` reads them, because jsdom takes a tenth of a second to cascade
- * each element through the window's stylesheets.
- */
 function drawn(element: Element): boolean {
   return getComputedStyle(element).display !== "none";
 }
 
-/** The tree's toggles the stylesheet shows, each standing in the box that names its place. */
 function drawnToggles(tab: HTMLElement): HTMLButtonElement[] {
   return [...tab.querySelectorAll(".file-tree-toggle")]
     .filter(drawn)
@@ -150,7 +127,6 @@ function drawnToggles(tab: HTMLElement): HTMLButtonElement[] {
 
 test("a Changes tab draws no tree beside the diff until the tree's toggle opens it over the diff for this tab alone", async () => {
   const tab = await drawChangesTab();
-  // The tree, where it is drawn at all.
   const treeDrawn = () => {
     const tree = tab.querySelector('[aria-label="Changed files"]');
     return tree !== null && drawn(tree);
@@ -206,7 +182,6 @@ test("Escape pressed on the tree's toggle takes down the tree it opened over the
   assert.equal(escaped, false, "the window hears no Escape of its own");
 });
 
-/** The pointer crossing from `from` onto `to` at a height in the window, as React hears a leave and an enter. */
 function pointerCross(from: Element, to: Element, clientY = 0): void {
   act(() => {
     from.dispatchEvent(
@@ -218,7 +193,6 @@ function pointerCross(from: Element, to: Element, clientY = 0): void {
   });
 }
 
-/** A Changes tab's parts as the floating tree's tests read them. */
 function changesParts(tab: HTMLElement) {
   const toggle = drawnToggles(tab)[0] ?? assert.fail("a toggle is drawn");
   const body = tab.querySelector(".file-view-body") ?? assert.fail("the diff's body is drawn");
@@ -233,7 +207,6 @@ function changesParts(tab: HTMLElement) {
 
 test("the pointer resting on the tree's toggle floats the tree over the diff, and it goes once the pointer leaves for anywhere but down into the tree, or leaves the tree", async () => {
   const { toggle, diff, tree, treeDrawn } = changesParts(await drawChangesTab());
-  // jsdom lays nothing out, so the toggle's foot stands at the window's top: above it is up, below it is down.
   pointerCross(diff, toggle);
   assert.ok(treeDrawn(), "the tree floats over the diff");
   assert.deepEqual(
@@ -291,7 +264,6 @@ test("a press of the toggle opens the tree with the keyboard in it, holds the ke
   assert.ok(treeDrawn(), "the tree floats over the diff");
   assert.ok(held.contains(document.activeElement), "the keyboard lands in the tree");
 
-  // jsdom walks no focus for Tab, so what is read is the key: the tree takes it, wrapping it past its last control rather than leaving it to the browser to walk on out.
   const tabbed = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
   act(() => {
     document.activeElement?.dispatchEvent(tabbed);

@@ -33,28 +33,6 @@ import {
 import type { AgentsControl } from "./use-agents.js";
 import { useLocalSession } from "./use-local-session.js";
 
-/**
- * local-tab.tsx -- a cloud agent's Local tab: a shell on this Mac in the agent's mirrored files, under a bar naming the agent and where the connection stands.
- *
- * The tab is the File tab's frame: a bar across its top, here naming the
- * agent whose files the shell stands in (`AgentRef`, which hangs the agent's
- * card and opens its tab) and the connection in a word or two; then the
- * terminal's screen (`terminal/`), which fills the rest. A state with
- * something to do lays one slim bar over the screen with one text action
- * and its key, and the terminal prints a state with nothing to do as a dim
- * line at the end of its own scrollback (`terminal-model.ts`). The tab
- * connects only while it is shown (`use-terminal-session.ts`).
- *
- * The whole tab is left out of the screen recording, because the shell's
- * own words are drawn on a canvas the text masking cannot reach, and a
- * shell prints whatever its commands print.
- */
-
-/**
- * The screen's scrollback as the source ⌘F finds in, since the terminal
- * draws its words on a canvas the window's find cannot read: found as
- * typed, stepped, tallied, and seeded from the screen's selection.
- */
 function useScrollbackFind(find: TerminalFind | undefined): FindSource | undefined {
   return useMemo(
     () =>
@@ -69,7 +47,6 @@ function useScrollbackFind(find: TerminalFind | undefined): FindSource | undefin
               ),
             clear: find.clear,
             onTally: find.onTally,
-            // A selection over several lines seeds its first, the one line the field holds, its spaces kept.
             selection: () =>
               find
                 .selection()
@@ -80,13 +57,10 @@ function useScrollbackFind(find: TerminalFind | undefined): FindSource | undefin
   );
 }
 
-/** What a phone's ⋯ calls the agent's name in the bar, which opens its tab. */
 const OPEN_AGENT = "Open agent";
 
-/** What the shells list's toggle says. */
 const SHELLS_TOGGLE = { open: "Hide shells", closed: "Show shells" } as const;
 
-/** The slim bar over the screen: its words, and its one action with its key. */
 function StateBar({
   bar,
   onAction,
@@ -95,7 +69,6 @@ function StateBar({
   onAction: (action: TerminalAction) => void;
 }): React.JSX.Element {
   const { action } = bar;
-  // Note that a late bar is hidden until it has held a second, so its words are said once its reveal has run: a blip that mends first is never seen, so it is never said.
   const [revealed, setRevealed] = useState(false);
   useAnnounceShown(ANNOUNCE.POLITE, bar.late && !revealed ? "" : bar.words);
   return (
@@ -104,7 +77,6 @@ function StateBar({
       data-late={String(bar.late)}
       onAnimationEnd={() => setRevealed(true)}
     >
-      {/* Note that the glyph and the words are one item, so a bar too narrow for its action puts the action on a line of its own rather than the glyph apart from its words. */}
       <span className="flex min-w-0 flex-initial items-center gap-control-gap">
         {bar.busy ? (
           <span className="flex-none tracking-busy text-muted-foreground" aria-hidden="true">
@@ -137,11 +109,8 @@ export function LocalTab({
 }: {
   agentId: string;
   agents: AgentsControl;
-  /** Whether the tab is on screen, the one moment it holds a connection. */
   shown: boolean;
-  /** Opens the agent's own tab in the task's column. */
   onOpenAgent: () => void;
-  /** Whether the shells list stands beside the screen, which holds for every Terminal tab alike, and its toggle. */
   shells: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
@@ -149,9 +118,7 @@ export function LocalTab({
   useFindSource(useScrollbackFind(session.find));
   const look = terminalLook(session.state);
   const room = usePaneRoom(shells);
-  // A phone draws no bar over the screen: its header's ⋯ opens the agent and the shells, saying where the connection stands.
   const phone = usePhoneRoom();
-  // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.
   const bar = look.bar ?? (phone ? look.phoneBar : undefined);
   useTabActions(
     phone
@@ -177,7 +144,6 @@ export function LocalTab({
       {phone ? null : (
         <PaneBar
           middle={
-            // Note that the name and where the connection stands share one shrinking box, so a long name gives way to the toggle rather than running under it.
             <span className="terminal-tab-title inline-flex min-w-0 items-center gap-item-gap overflow-hidden whitespace-nowrap text-muted-foreground">
               <AgentRef
                 subject={subject}
@@ -195,7 +161,6 @@ export function LocalTab({
       <Fill flow={FILL_FLOW.ROW} clip className={TERMINAL_BODY_CLASS} {...room.body}>
         <div className={TERMINAL_HOST_CLASS}>
           {bar === undefined ? null : (
-            // Note that each entry into a state's bar is a bar of its own, because a late bar's reveal runs again and its words wait for it, even when the state it follows was late too.
             <StateBar key={session.state.kind} bar={bar} onAction={session.onAction} />
           )}
           {session.failed ? (
@@ -219,12 +184,10 @@ export function LocalTab({
           models={agents.models}
           session={{
             ...session,
-            // A shell chosen in the list floating over the screen takes the list down, to show the shell.
             onChoose: (id) => {
               room.closeOver();
               session.onChoose(id);
             },
-            // So does a shell started there, which the screen shows.
             onCreate: () => {
               room.closeOver();
               session.onCreate();

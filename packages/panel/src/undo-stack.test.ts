@@ -6,22 +6,12 @@ import { afterEach, test } from "vitest";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { pressRows, ROW_WRITE, type RowDoors, redoLast, UNDO_RAN, undoLast } from "./undo-stack.js";
 
-/**
- * undo-stack.test.ts -- ⌘Z and ⇧⌘Z over one task's pin as the window draws
- * it: the keys take the pin back and put it back, a pin after ⌘Z leaves
- * nothing to put back, and a pin taken back since is left alone. The act
- * keeps each pin and draws the task as it leaves it, as the host does.
- * Synthetic throughout.
- */
-
 const TASK_ID = "3f2c8a51-6d0e-4b7a-9c14-2e5f7a9b0d36";
 
 afterEach(() => {
-  // The window's one registry holds the lists, so the next test's window starts with none.
   rendererRegistry.reset();
 });
 
-/** The tasks drawn: the one task, pinned or not. */
 function tasksShowing(pinned: boolean): TasksView {
   const task: TaskSummary = {
     id: TASK_ID,
@@ -35,12 +25,9 @@ function tasksShowing(pinned: boolean): TasksView {
   return { ...IDLE_TASKS_VIEW, tasks: [task] };
 }
 
-/** A window drawing the task unpinned, its act keeping each pin and drawing the task as the pin leaves it. */
 interface PinWindow {
   readonly doors: RowDoors<TasksView, typeof ACT_KIND.TASKS_PIN>;
-  /** Every pin the act was sent, in order. */
   readonly sent: TasksPinParams[];
-  /** Draws the task pinned or not, as another Mac's pin would. */
   readonly show: (pinned: boolean) => void;
 }
 
@@ -58,7 +45,6 @@ function standWindow(): PinWindow {
   return { doors: { rows: () => drawn, send }, sent, show };
 }
 
-/** Pins the task as its menu's Pin does: its row read as pressed, the pin sent, and kept for ⌘Z once the act keeps it. */
 async function pin(window: PinWindow): Promise<void> {
   const pressed = pressRows(ROW_WRITE.TASK_PIN, window.doors, [
     { id: TASK_ID, after: { pinned: true, position: null } },

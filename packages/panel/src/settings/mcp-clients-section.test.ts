@@ -15,15 +15,6 @@ import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
 
-/**
- * mcp-clients-section.test.ts -- Settings › our MCP's connected
- * agents: a revoke that did not finish leaves its row standing with its
- * Disconnect and says so, never that it landed, and one that lands leaves the
- * row saying how long the access the agent already holds lasts; and the
- * `vespin` command, which Settings › CLI signs out, is never listed. Synthetic
- * ids and addresses.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -52,7 +43,6 @@ const CLAUDE: McpClient = {
   lastRefreshedAt: null,
 };
 
-/** The `vespin` command's grant, which the read lists beside the outside agents. */
 const VESPIN_CLI: McpClient = {
   clientId: "vespin-cli",
   name: "Vespin CLI",
@@ -61,14 +51,12 @@ const VESPIN_CLI: McpClient = {
   lastRefreshedAt: null,
 };
 
-/** Lets the window's document and a press's acts land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
 }
 
-/** Presses the button whose words are given within `scope`. */
 async function press(words: string, scope: ParentNode = document): Promise<void> {
   const button = [...scope.querySelectorAll("button")].find((each) => each.textContent === words);
   assert.ok(button !== undefined, `${words} is drawn`);
@@ -76,7 +64,6 @@ async function press(words: string, scope: ParentNode = document): Promise<void>
   await settle();
 }
 
-/** Chooses `words` in the page's one ⋯, and lets what it asked settle. */
 async function choose(words: string): Promise<void> {
   const ellipsis =
     document.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
@@ -90,14 +77,12 @@ async function choose(words: string): Promise<void> {
   await settle();
 }
 
-/** The confirm dialog standing over the page. */
 function dialog(): HTMLElement {
   const open = document.querySelector<HTMLElement>('[role="alertdialog"]');
   assert.ok(open !== null, "the confirm dialog stands");
   return open;
 }
 
-/** The page's words, apart from any dialog over it. */
 function pageText(): string {
   return [...document.body.children]
     .filter((each) => each.querySelector('[role="alertdialog"]') === null)
@@ -128,7 +113,6 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
       return Promise.resolve(answer);
     },
   });
-  // Note that Codex's mark is served under the platform's asset base, which a row may draw.
   fakeAppPlatform(QUIET_PANEL);
   await writeHandedAppState();
   const registry = AtomRegistry.make();

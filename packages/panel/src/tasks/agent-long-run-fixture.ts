@@ -1,22 +1,3 @@
-/**
- * agent-long-run-fixture.ts -- the orchestrator a fixture run's long-run profile opens: days of work, thousands of calls, written to while it is open.
- *
- * The agent profiles' agent (`agent-fixture.ts`) ran one short turn. Under
- * the long-run profile it is an orchestrator that has run for days instead,
- * as the agent tab meets one at its heaviest: forty finished turns, each
- * opened by a teammate's line and answered by a journal of some fifty parts,
- * and a turn still under way that has done twenty rounds of the same work,
- * teammates' lines arriving between them, so the transcript holds about
- * three thousand entries. Among them stand hundreds of message and Inbox calls,
- * sixty coding agents it started and twenty workers it delegated to,
- * hundreds of mention chips in long Markdown with tables and links, and
- * thirty sets of pictures, each a screenshot's size. While its tab holds
- * it, the running turn's journal is written a step longer every
- * `LONG_RUN.STEP_MS`, and staged again on the window's document, as a
- * running agent's held transcript moves. Every name, address, and line here
- * is invented.
- */
-
 import { AsyncIteratorClass } from "@orpc/client";
 import { AGENT_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
 import type { AppTranscript } from "@repo/host/app-state";
@@ -25,30 +6,21 @@ import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
 import { rendererPause } from "../renderer-runtime.js";
 import { fixtureMoved } from "./fixture-moves.js";
 
-/** How big the run is, and how fast its newest turn is written. */
 export const LONG_RUN = {
-  /** The turns it ran, each a line in and a journal out; the newest is still under way. */
   TURNS: 41,
-  /** The rounds of work the newest turn has done so far, each as much as a finished turn holds, a teammate's line arriving after some. */
   ROUNDS: 20,
-  /** The calls each turn makes before its words, a coding agent started and a set of pictures among them. */
   CALLS_PER_TURN: 22,
-  /** How often a running turn's journal is pushed again, a part longer, in milliseconds. */
   STEP_MS: 1_000,
-  /** How wide and tall each picture the agent showed is, in pixels: a screenshot's size. */
   PICTURE_WIDTH: 2_400,
   PICTURE_HEIGHT: 1_500,
 } as const;
 
 const MINUTE = 60_000;
 
-/** When the run began: three days before the fixture's clock reads it. */
 const RUN_STARTED_AT = Date.parse("2026-10-22T09:00:00Z");
 
-/** The teammates the run's words mention, as a workspace's chips name them. */
 const PEOPLE = ["Ada Lovelace", "Grace Hopper", "Alan Turing", "Katherine Johnson"] as const;
 
-/** The jobs the agents it started work on, named as a rollout names them. */
 const JOBS = [
   "fix(panel): menus keep their place on a small window",
   "refactor(ui): one toolbar for every pane",
@@ -58,7 +30,6 @@ const JOBS = [
   "fix(ui): chips fade where cut",
 ] as const;
 
-/** A coding agent the run started, by its turn: its id and its name. */
 function startedAgent(turn: number): { readonly id: string; readonly name: string } {
   const hex = turn.toString(16).padStart(12, "0");
   return {
@@ -67,29 +38,24 @@ function startedAgent(turn: number): { readonly id: string; readonly name: strin
   };
 }
 
-/** A mention of the agent the run started at `turn`, as the run writes one. */
 function agentMention(turn: number): string {
   const agent = startedAgent(turn);
   return `[@${agent.name}](https://vespin.dev/stage/plan/${FIXTURE_IDS.TASK}/agent/${agent.id})`;
 }
 
-/** A mention of a pull request the run's agents opened. */
 function pullRequestMention(turn: number): string {
   const number = 5_000 + turn;
   return `[@#${number} ${JOBS[turn % JOBS.length]}](https://github.com/ada/relay/pull/${number})`;
 }
 
-/** A tool's call as the transcript stores it, answered. */
 function toolPart(tool: string, callId: string, input: WireRecord, output: WireValue): WireRecord {
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
 
-/** The same call still under way, as a running turn's newest call stands. */
 function runningPart(tool: string, callId: string, input: WireRecord): WireRecord {
   return { type: `tool-${tool}`, toolCallId: callId, state: "input-available", input };
 }
 
-/** The long Markdown a turn ends on: a table of the rollout's pull requests, links, and chips. */
 function turnWords(turn: number): string {
   const rows = Array.from({ length: 3 }, (_, at) => {
     const each = turn * 3 + at;
@@ -106,7 +72,6 @@ function turnWords(turn: number): string {
   ].join("\n");
 }
 
-/** One of the run's calls, its `at`th of the turn: message and Inbox calls most, then commands and reads. */
 function call(turn: number, at: number): WireRecord {
   const id = `long-run-${turn}-${at}`;
   switch (at % 7) {
@@ -170,7 +135,6 @@ function call(turn: number, at: number): WireRecord {
   }
 }
 
-/** The coding agent a turn started, as `start_agent` answers. */
 function startAgentPart(turn: number): WireRecord {
   const agent = startedAgent(turn);
   return toolPart(
@@ -192,7 +156,6 @@ function startAgentPart(turn: number): WireRecord {
   );
 }
 
-/** The worker a turn delegated to, as `delegate` answers. */
 function delegatePart(turn: number): WireRecord {
   return toolPart(
     "delegate",
@@ -205,7 +168,6 @@ function delegatePart(turn: number): WireRecord {
   );
 }
 
-/** The set of pictures a turn showed, as `show_image` answers. */
 function picturesPart(turn: number): WireRecord {
   return toolPart(
     "show_image",
@@ -225,7 +187,6 @@ function picturesPart(turn: number): WireRecord {
   );
 }
 
-/** A turn's parts, in the order its journal stored them: thinking, its calls a step each, then its words. */
 function turnParts(turn: number): WireRecord[] {
   const calls = Array.from({ length: LONG_RUN.CALLS_PER_TURN }, (_, at) => [
     { type: "step-start" },
@@ -242,7 +203,6 @@ function turnParts(turn: number): WireRecord[] {
   ];
 }
 
-/** The line that opened a turn: a teammate's, or the developer's own naming what to do next. */
 function turnLine(turn: number): AgentTranscriptMessage {
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {
@@ -258,7 +218,6 @@ function turnLine(turn: number): AgentTranscriptMessage {
   };
 }
 
-/** A turn's journal, finished an hour after it began, or still under way where it is the newest. */
 function turnJournal(turn: number, parts: readonly WireRecord[], running: boolean) {
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {
@@ -270,7 +229,6 @@ function turnJournal(turn: number, parts: readonly WireRecord[], running: boolea
   } satisfies AgentTranscriptMessage;
 }
 
-/** Every turn but the newest, whole, then the newest's line. */
 const SETTLED: readonly AgentTranscriptMessage[] = Array.from(
   { length: LONG_RUN.TURNS },
   (_, turn) =>
@@ -279,16 +237,13 @@ const SETTLED: readonly AgentTranscriptMessage[] = Array.from(
       : [turnLine(turn), turnJournal(turn, turnParts(turn), false)],
 ).flat();
 
-/** The rounds the newest turn has done, each a finished turn's work, numbered after the settled turns. */
 const ROUND_PARTS: readonly (readonly WireRecord[])[] = Array.from(
   { length: LONG_RUN.ROUNDS },
   (_, round) => turnParts(LONG_RUN.TURNS + round),
 );
 
-/** The id of the newest turn's journal. */
 const NEWEST_JOURNAL = `long-run-journal-${LONG_RUN.TURNS - 1}`;
 
-/** How many steps the newest turn had begun by the end of each of its rounds. */
 const ROUND_STEPS: readonly number[] = ROUND_PARTS.map(
   (_, round) =>
     ROUND_PARTS.slice(0, round + 1)
@@ -296,7 +251,6 @@ const ROUND_STEPS: readonly number[] = ROUND_PARTS.map(
       .filter((part) => part.type === "step-start").length,
 );
 
-/** A teammate's line that reached the newest turn after every third round, as a steer does. */
 const ARRIVED: readonly AgentTranscriptMessage[] = ROUND_STEPS.flatMap((afterStep, round) =>
   round % 3 === 2
     ? [
@@ -309,7 +263,6 @@ const ARRIVED: readonly AgentTranscriptMessage[] = ROUND_STEPS.flatMap((afterSte
     : [],
 );
 
-/** The newest turn's journal: its rounds, then `steps` steps written while the tab is open, its last call still under way. */
 function newestJournal(steps: number): AgentTranscriptMessage {
   const turn = LONG_RUN.TURNS - 1;
   const parts: WireRecord[] = ROUND_PARTS.flat();
@@ -329,20 +282,12 @@ function isRecord(value: WireValue | undefined): value is WireRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** How many steps the newest turn has taken, which the holds on its transcript move on (`longRunHold`): one run for the whole fixture run, which keeps writing while a tab holds it, as a running agent does, rather than starting over as a tab opens again. */
 let step = 1;
 
-/** The holds open on the run's transcript, the first opened first: the one that writes it on. */
 const holds = new Set<object>();
 
-/** The run's transcript at the step it last reached, so a document staged again at it holds the very one. */
 let staged: { readonly step: number; readonly transcript: AppTranscript } | undefined;
 
-/**
- * The run's transcript as the host would hold it at the step it reached:
- * every turn, the newest journal a step long each, and the teammates' lines
- * that arrived during it, running and caught up.
- */
 export function longRunTranscript(): AppTranscript {
   if (staged?.step === step) return staged.transcript;
   const transcript: AppTranscript = {
@@ -360,20 +305,11 @@ export function longRunTranscript(): AppTranscript {
   return transcript;
 }
 
-/**
- * The run's hold, as main holds a running agent's for its tab: its newest
- * journal written a step longer every `LONG_RUN.STEP_MS`, the window's
- * document staged again on each (`fixture-moves.ts`), until the tab lets it
- * go. It carries nothing, as a hold does. Note that the hold opened first
- * among those open writes the run on, so two tabs holding it at once grow
- * it no faster than one.
- */
 export function longRunHold(): AsyncIteratorClass<never, void> {
   const hold = {};
   let closed = false;
   return new AsyncIteratorClass<never, void>(
     async () => {
-      // Note that a hold joins those open on its first read, so a hold never read neither advances the run nor blocks another.
       if (!closed) holds.add(hold);
       while (!closed) {
         await rendererPause(LONG_RUN.STEP_MS);
@@ -390,10 +326,8 @@ export function longRunHold(): AsyncIteratorClass<never, void> {
   );
 }
 
-/** Each picture's bytes as the run showed it, drawn once: a screenshot-sized PNG. */
 let pictureBytes: string | undefined;
 
-/** A picture the run showed, read as main reads one: a screenshot-sized PNG. */
 export function longRunPicture(): { readonly contentType: "image/png"; readonly base64: string } {
   if (pictureBytes === undefined) {
     const canvas = document.createElement("canvas");

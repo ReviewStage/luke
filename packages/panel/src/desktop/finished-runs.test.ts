@@ -15,16 +15,9 @@ import {
   withoutFinishedRuns,
 } from "./finished-runs.js";
 
-/**
- * finished-runs.test.ts -- an automation's finished run leaves the sidebar's Tasks unless something still holds it for the reader: it has not completed, ended unseen, waits on the reader in the Inbox, has its pull request open, or is the agent shown; an agent started by hand always stands. A task a run made leaves once its run failed or was stopped and nothing holds it; any other task always stands.
- *
- * Synthetic agents throughout.
- */
-
 const ME = "user-me";
 const ADA = "user-ada";
 
-/** An automation's run that finished, as the sidebar lists it. */
 const RUN: TasklessAgent = {
   id: "4b2e7c1d-9a3f-4e6b-8c5d-1f0a2b3c4d5e",
   planId: null,
@@ -41,14 +34,11 @@ const RUN: TasklessAgent = {
   activityAt: 2,
 };
 
-/** The same agent started by hand, which names no automation. */
 const { automationName: _automationName, ...UNNAMED } = RUN;
 const BY_HAND: TasklessAgent = { ...UNNAMED, automationId: null };
 
-/** Nothing holding any agent. */
 const NOTHING_HELD: RunsHeld = { unseen: () => false, inbox: [], me: ME, shown: undefined };
 
-/** The run's pull request in the state given. */
 function withPullRequest(state: PullRequestState): TasklessAgent {
   return {
     ...RUN,
@@ -62,7 +52,6 @@ function withPullRequest(state: PullRequestState): TasklessAgent {
   };
 }
 
-/** The ids that stand. */
 function standing(agent: TasklessAgent, held: RunsHeld): readonly string[] {
   return withoutFinishedRuns([agent], held).map((each) => each.id);
 }
@@ -97,7 +86,6 @@ describe("an automation's finished runs under Tasks", () => {
   });
 });
 
-/** The agents of a run's task whose one agent failed. */
 const FAILED_RUN_AGENTS: TaskAgentsSummary = {
   total: 1,
   working: 0,
@@ -109,7 +97,6 @@ const FAILED_RUN_AGENTS: TaskAgentsSummary = {
   pullRequests: [],
 };
 
-/** A task a run made whose run failed, as the sidebar lists it. */
 const RUN_TASK: TaskSummary = {
   id: "9c8b7a6f-5e4d-4c3b-8a29-1f0e9d8c7b6a",
   workspaceId: "workspace-1",
@@ -121,13 +108,10 @@ const RUN_TASK: TaskSummary = {
   agents: FAILED_RUN_AGENTS,
 };
 
-/** The same task made by a member, which names no run. */
 const { madeByRun: _madeByRun, ...BY_MEMBER } = RUN_TASK;
 
-/** Nothing holding any task. */
 const NO_TASK_HELD: RunTasksHeld = { unread: () => false, inbox: [], shown: () => false };
 
-/** The run's task with one pull request in the state given. */
 function taskWithPullRequest(state: PullRequestState): TaskSummary {
   const pullRequest = {
     number: 42,
@@ -143,7 +127,6 @@ function taskWithPullRequest(state: PullRequestState): TaskSummary {
   };
 }
 
-/** The task ids that stand. */
 function tasksStanding(task: TaskSummary, held: RunTasksHeld): readonly string[] {
   return withoutFinishedRunTasks([task], held).map((each) => each.id);
 }

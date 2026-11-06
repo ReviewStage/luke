@@ -29,7 +29,6 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
 const ignore = () => undefined;
 const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
     status: ACCOUNT_STATUS.SIGNED_IN,
@@ -66,12 +65,10 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The sidebar fold the developer chose, as storage keeps it. */
 const KEPT_FOLD = "app.sidebar-collapsed";
 
 let root: Root | undefined;
 
-/** How wide the panel's stage is laid out, which jsdom, laying out nothing, leaves to the test. */
 let stageWidth = 0;
 
 beforeEach(() => {
@@ -94,21 +91,17 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
 const routed = shellRouterEachTest();
 
-/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
 function underRouter(shell: ReactElement, standing?: string): ReactElement {
   return routed().under(shell, standing);
 }
 
-/** Resizes the panel's stage, as the developer dragging the window's frame does on the desktop. */
 function resizeStage(width: number): void {
   stageWidth = width;
   act(() => relayout());
 }
 
-/** The window's shell resting on the Inbox, on a stage of a width, its sidebar the real fold kept in storage. */
 function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
   stageWidth = width;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -130,7 +123,6 @@ function mount(width: number, onOpenInbox: () => void = ignore): HTMLElement {
         onCancelSignIn: ignore,
       },
       tab,
-      // The window turns to Settings by the router, as its own doors do.
       onTabChange: (next: PanelTab) => {
         setTab(next);
         routed().go(next === PANEL_TAB.SETTINGS ? SHELL_AT.SETTINGS : SHELL_AT.PLACES);
@@ -168,11 +160,6 @@ function sidebarOf(page: HTMLElement): HTMLElement {
   return aside;
 }
 
-/**
- * How the sidebar stands, as the developer meets it: `pinned` beside the
- * work, `away` folded off the window and unreachable, `floating` over the
- * work and reachable.
- */
 function standing(page: HTMLElement): string {
   const aside = sidebarOf(page);
   const folded = page.querySelector(".desktop-shell")?.getAttribute("data-sidebar-collapsed");
@@ -180,7 +167,6 @@ function standing(page: HTMLElement): string {
   return aside.hasAttribute("inert") ? "away" : "floating";
 }
 
-/** The sidebar's toggle beside the traffic lights, by whatever it is called now. */
 function toggle(page: HTMLElement): HTMLButtonElement {
   const button = page.querySelector<HTMLButtonElement>(
     ".title-bar-controls:not([data-edge]) button",
@@ -189,14 +175,12 @@ function toggle(page: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-/** A press as it starts down, which the window hears before the click. */
 function pressDown(target: Element): void {
   act(() => {
     target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
   });
 }
 
-/** The pointer crossing from `from` onto `to`, as React hears an enter and a leave. */
 function pointerCross(from: Element, to: Element): void {
   act(() => {
     from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
@@ -204,7 +188,6 @@ function pointerCross(from: Element, to: Element): void {
   });
 }
 
-/** The sidebar's row named `name`: the button whose first words a reader hears are it. */
 function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefined {
   return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) =>
@@ -290,7 +273,6 @@ test("a sidebar its toggle floats in a narrow window holds the keyboard: Tab wal
   const inbox = rowNamed(sidebarOf(page), "Inbox");
   assert.ok(document.activeElement === inbox, "the keyboard lands on the place shown");
 
-  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
   act(() => {
     inbox?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     work.focus();
@@ -359,12 +341,10 @@ test("a floating sidebar left for Settings by its chord is away when the plans c
   act(() => toggle(page).click());
   assert.equal(standing(page), "floating");
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
-  // Settings is its own chunk, so the test waits for it as the window does.
   await act(() => routed().settled());
   assert.equal(page.querySelector("aside.desktop-sidebar"), null, "Settings draws its own list");
   const back = rowNamed(page.querySelector('nav[aria-label="Settings pages"]') ?? page, "Back");
   assert.ok(back, "Settings has its way back");
-  // The plans come back once the router has gone back to them.
   act(() => back.click());
   await act(() => routed().settled());
   assert.equal(standing(page), "away");
@@ -405,7 +385,6 @@ test("a press on no control in a peek keeps the keyboard in the work, and Escape
   const page = mount(1000);
   const main = page.querySelector("main.desktop-main");
   const edge = page.querySelector("[data-sidebar-peek-edge]");
-  // Note that the work is the first press that takes the keyboard, since a dimmed one, as the Inbox's Mark all as read with nothing unread, takes none.
   const work = main?.querySelector<HTMLButtonElement>("button:not(:disabled)");
   assert.ok(main && edge && work);
   work.focus();

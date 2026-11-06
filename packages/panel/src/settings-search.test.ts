@@ -16,13 +16,6 @@ import {
 } from "./settings-search.js";
 import { DESKTOP_CAPABILITIES } from "./testing/app-state.js";
 
-/**
- * Settings search over what the pages draw: a Workspace group is found only where
- * the page draws it for the workspace Settings shows, a row elsewhere
- * only while its page draws it, and an integration by its tools once the
- * Integrations page has read them. Synthetic workspaces and tools.
- */
-
 const TEAM: Workspace = {
   id: "workspace-acme",
   name: "acme",
@@ -38,7 +31,6 @@ const FIRST: Workspace = {
   github: null,
 };
 
-/** Where `query` leads on the Workspace page while `workspace` is shown. */
 function workspaceFound(query: string, workspace: Workspace): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
@@ -163,7 +155,6 @@ test("the OpenAI key dictation runs on is found by that word, on Codex's row in 
   }
 });
 
-/** Where `query` leads on the Experimental page, signed in or not. */
 function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
   const input: SettingsSearchInput = {
     settings: settingsView(),
@@ -185,13 +176,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      [
-        "Task descriptions",
-        "Bring your own host",
-        "Skills",
-        "Pilot",
-        "Memory",
-      ],
+      ["Task descriptions", "Bring your own host", "Skills", "Pilot", "Memory"],
       query,
     );
   }
@@ -251,7 +236,6 @@ test("Escape and the keys that answer in place are found on the Keyboard shortcu
   assert.ok(shortcutsFound("link").includes("Link selected words"));
 });
 
-/** Every page's rows as a signed-in desktop reader of a workspace they administer sees them, Skills' and Hosts' among them. */
 const FULL_INPUT: SettingsSearchInput = {
   settings: settingsView({
     experiments: experimentsOn(EXPERIMENT.SKILLS, EXPERIMENT.BRING_YOUR_OWN_HOST),
@@ -261,7 +245,6 @@ const FULL_INPUT: SettingsSearchInput = {
   workspace: { ...TEAM, role: WORKSPACE_ROLE.ADMIN },
 };
 
-/** The labels of the rows `query` finds, in the order they are listed. */
 function labelsFound(query: string, input: SettingsSearchInput = FULL_INPUT): readonly string[] {
   return (searchSettings(settingsSearchCorpus(input), query)?.groups ?? []).flatMap((group) =>
     group.items.map((entry) => entry.label),
@@ -317,7 +300,6 @@ test("a search that finds nothing says what to try", () => {
   assert.equal(searchSettings(settingsSearchCorpus(FULL_INPUT), "zzzz")?.matched, 0);
 });
 
-/** Rows on one page, each its own words: what a query ranks and marks. */
 function entryOf(id: string, label: string, ...words: string[]): SettingsSearchEntry {
   return { id, label, page: SETTINGS_VIEW.APPEARANCE, haystack: [label, ...words] };
 }

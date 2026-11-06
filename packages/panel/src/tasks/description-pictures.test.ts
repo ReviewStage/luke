@@ -24,24 +24,12 @@ import { DescriptionBody } from "./description-body.js";
 import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
-/**
- * description-pictures.test.ts -- a description's pictures where its words are drawn: each
- * read through the host and drawn from its bytes with its caption, one this
- * reader cannot reach drawn as its words, one from outside the app a link that
- * reads nothing, a press opening the description's pictures over the window, and a
- * version drawing a picture it struck and the one it wrote in, each marked,
- * and the description's card in an agent's transcript drawing the description's pictures.
- * Synthetic descriptions and pictures.
- */
-
-/** A PNG's signature in base64: all the window draws of a picture here. */
 const PNG_BASE64 = "iVBORw0KGgo=";
 
 const MOCK = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 const SECOND = "3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02";
 const GONE = "d1e2f3a4-5b6c-4d7e-8f90-a1b2c3d4e506";
 
-/** Who edits a description here, as the service names a member. */
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
 const HOUR = 60 * 60 * 1000;
@@ -55,14 +43,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Waits until no picture drawn is still being read, as the window's queries hand each read to React a tick after it lands. */
 async function settle(): Promise<void> {
   await vi.waitFor(() =>
     assert.equal(document.querySelector('.picture-block[data-state="reading"]') === null, true),
   );
 }
 
-/** The host as the window reaches it: the pictures it holds by id, those it cannot answer for now, and every other read refused. */
 function standHost(
   pictures: ReadonlySet<string>,
   asked: string[],
@@ -91,7 +77,6 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** A plan of its own id, so the window's pictures read for one test stand apart from another's. */
 function taskOf(id: string, body: string): Task {
   return { ...DOCUMENT_TASK, id, document: { body, assumptions: [] } };
 }
@@ -312,7 +297,6 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   );
   assert.equal(failed?.querySelector("button")?.textContent, "Retry");
 
-  // A description drawn again asks whether motion is held still, which a page with no stylesheet cannot say.
   holdMotion();
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

@@ -23,17 +23,6 @@ import {
   treeOrder,
 } from "./changes-model.js";
 
-/**
- * changes-model.test.ts -- a review thread previews the end of the hunk
- * GitHub froze for it, found on the side its line counts on, from a few
- * rows above its range to its line, though GitHub's header still counts
- * the whole hunk: written as a patch of the thread's file whose header
- * counts the rows kept, with the thread's own lines selected. Files
- * changed lists its files in the tree's order, keeps those whose path holds
- * a filter, and folds what is rarely read.
- */
-
-/** A hunk as GitHub freezes one for a thread: its header counting the whole hunk, its lines cut at the thread's line. */
 const HUNK = [
   "@@ -20,9 +20,9 @@ function expire()",
   " const a = 1;",
@@ -45,14 +34,12 @@ const HUNK = [
   " }",
 ].join("\n");
 
-/** The head git writes over the thread's file. */
 const HEAD = [
   "diff --git a/src/expiry.ts b/src/expiry.ts",
   "--- a/src/expiry.ts",
   "+++ b/src/expiry.ts",
 ];
 
-/** What a thread on the hunk previews. */
 function previewOf(thread: Partial<Parameters<typeof threadPreview>[0]>) {
   return threadPreview({
     path: "src/expiry.ts",
@@ -131,7 +118,6 @@ test("a line the hunk does not hold previews the hunk's end, where GitHub ends i
   assert.equal(previewOf({ diffHunk: "not a diff" }), undefined);
 });
 
-/** A thread on `path` at `line` on the new side, keyed by its one comment's page. */
 function threadAt(path: string, line: number | null, url: string) {
   return {
     path,
@@ -157,7 +143,6 @@ function threadAt(path: string, line: number | null, url: string) {
   };
 }
 
-/** The changed file the threads are on: one hunk, old lines 3 to 5 and new lines 3 to 6, line 4 changed and a line added. */
 const FILE_A = {
   path: "src/a.ts",
   previousPath: null,
@@ -201,13 +186,11 @@ test("a file's threads stand under the lines its diff draws, on the side they co
   );
 });
 
-/** A file of two hunks, old lines 3 to 5 and 40 to 42, new lines 3 to 6 and 41 to 43, the lines between them one further on the new side. */
 const FILE_GAPPED = {
   ...FILE_A,
   patch: `${FILE_A.patch}\n@@ -40,3 +41,3 @@\n const x = 1;\n-const y = 2;\n+const y = 3;\n const z = 4;`,
 };
 
-/** Threads on the gapped file: on a line of each side between its hunks, on a line a hunk shows, and outdated though it names a line. */
 const GAP_THREADS = [
   threadAt("src/a.ts", 30, `${R}gap-right`),
   { ...threadAt("src/a.ts", 20, `${R}gap-left`), side: DIFF_SIDE.LEFT },
@@ -267,7 +250,6 @@ test("every thread on a file whose diff is not drawn stands above where its diff
   );
 });
 
-/** A changed file, modified, a few lines changed, unless told otherwise. */
 function changed(path: string, overrides: Partial<AgentChangedFile> = {}): AgentChangedFile {
   return {
     path,
@@ -336,7 +318,6 @@ test("a deleted file, a lockfile, and a file of more than a thousand changed lin
   );
 });
 
-/** A pick of lines on the sides given, from `start` to `end`, as the gutter's + tells it. */
 function picked(
   start: number,
   end: number,
@@ -393,7 +374,6 @@ test("no comment is offered where GitHub takes none: a line no row stands for, a
   );
 });
 
-/** A file changed from `before` to `after`, its patch the hunks GitHub sends: from the first `@@` on, three lines of context. */
 function changedFrom(
   before: string,
   after: string,
@@ -403,7 +383,6 @@ function changedFrom(
   return changed("src/a.ts", { patch: whole.slice(whole.indexOf("@@")), ...overrides });
 }
 
-/** Lines numbered from 1 to `count`, each ending in a newline. */
 function numbered(count: number, from = 1): string[] {
   return Array.from({ length: count }, (_, at) => `line ${from + at}`);
 }

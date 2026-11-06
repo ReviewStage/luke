@@ -104,99 +104,35 @@ import { PhoneHead } from "./phone-head.js";
 import { PLACE_LIST, PLACE_LIST_TITLE, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
-/**
- * desktop-version-history.tsx -- a description's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.
- *
- * The left column is as wide as the tasks' sidebar and resizes it from its
- * own edge, never folding, as Settings' page list does. At its head stand
- * back and forward and the Back row, which Escape presses too, then the
- * view's title, then the versions, newest first: who wrote each, drawn as
- * the rest of the window draws them (the app's face as the Transcript wears
- * it, the reader's account picture as You, a teammate's sign-in picture
- * where the workspace's members read lists one, a coding agent's harness and
- * title), what it did, and how long ago, in the sidebar's few letters with
- * the moment itself on hover. The newest is the description as it stands and the
- * one drawn when the view opens, wearing no tag of its own: its Restore says
- * it is already current. Opened from a section's "Edited by", the view draws
- * the version that made the section's last change instead, its row brought
- * into the list's view. Choosing a row, or stepping with the up and down
- * arrows, draws that version beside the list (`version-view.tsx`), and older
- * versions are read a page at a time from the list's foot. A row's ⋯, shown
- * while the row is hovered or holds the keyboard, its right-click and the
- * menu key offer what applies to its version: Show changes, its Open, and
- * its Restore. Show changes, or the right arrow, slides the column one level over, as a nested
- * page of System Settings does, the title going with the list: All versions
- * at its head, who wrote the version, which opens where it was written, then
- * a row for each section it changed, a section added or removed saying so.
- * The first is drawn alone beside them, the arrows step through the rest,
- * and the left arrow, Escape, or All versions slide back with the version
- * still chosen. A version keeps only the text its writer's
- * saves left, so a section is the finest step it is read in. While the
- * versions are read, the list and the page stand as quiet blocks in their
- * own shapes (`skeleton.tsx`).
- *
- * The view is one place in the window's history however many versions are
- * chosen in it, so Back returns to wherever it was opened from, the task as
- * it was left, side panel and all; a restore that lands leaves for the task
- * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
- * the description held, so both are left out of the screen recording
- * (`ph-no-capture`) as a second line behind the recording's text masking.
- *
- * What the history is of is handed in as its subject: the open task's
- * (`taskVersionSubject`).
- */
-
-/** Who wrote a version, in the label's type, on its row and over its sections alike. */
 const VERSION_AUTHOR =
   "version-row-author min-w-0 overflow-hidden whitespace-nowrap text-label font-ui-medium text-foreground";
 
-/**
- * A pane of the track the versions and the sections of the one opened stand
- * in, each giving back the track's reach past the column as padding; its
- * slide is the window's pane motion (`desktop.css`).
- */
 const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-reach";
 
-/**
- * What a version history is of, as the view draws it: the history as read
- * and its presses, the title every version is drawn under, and what applies
- * to its versions.
- */
 export interface VersionSubject {
   readonly versions: DescriptionHistoryControl;
   readonly title: string | undefined;
-  /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
-  /** What a revision did, in a few words. */
   readonly summary: (line: DescriptionRevisionLine) => string;
-  /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
-  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none where the task's is not listed. */
   readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
-  /** The task the versions are of, which their mentions are read against; none while it is read. */
   readonly task?: MentionedTask | undefined;
 }
 
-/** What the page says while the subject has no revision yet. */
 const NO_HISTORY_LINE = "No versions yet.";
 
-/** What the menu item that opens a revision's sections says. */
 const SECTIONS_LABEL = "Show changes";
 
-/** What a version's row is, which names its ⋯ and its menu. */
 const VERSION_THING = "Version";
 
-/** What a changed section's row is, which names its ⋯ and its menu. */
 const SECTION_THING = "Section";
 
-/** The word a changed section wears beside its name: none for an edit, which most are. */
 const SECTION_CHANGE_WORDS = {
   [VERSION_CHANGE.ADDED]: "Added",
   [VERSION_CHANGE.REMOVED]: "Removed",
   [VERSION_CHANGE.CHANGED]: undefined,
 } as const satisfies Record<ChangedSection["change"], string | undefined>;
 
-/** The placeholder rows' shape while the versions are read: each row's author and summary as wide as their share of it. */
 const LOG_SKELETON = [
   { author: "34%", summary: "78%" },
   { author: "48%", summary: "62%" },
@@ -204,39 +140,25 @@ const LOG_SKELETON = [
   { author: "40%", summary: "56%" },
 ] as const;
 
-/** What the sections' pane says where the revision's version did not read. */
 const SECTIONS_FAILED = readFailedWords("the sections it changed");
 
-/** How wide each placeholder row of a revision's sections stands, a section's name as a share of its line. */
 const SECTIONS_SKELETON = ["46%", "62%", "38%"] as const;
 
-/** A placeholder revision's writer's mark, at a row's actor mark's size (`avatar.css`). */
 const ROW_MARK_SKELETON = "20px";
 
-/** How wide a placeholder revision's time stands, a short moment's ("2h", "Mon"). */
 const TIME_SKELETON = "28px";
 
-/** What the list of versions, and of a revision's sections, are called to a reader. */
 const LIST_LABEL = { VERSIONS: "Version list", SECTIONS: "Sections changed" } as const;
 
-/** The way from a revision to the place that wrote it: what its Open says, and the press. */
 interface SourceDoor {
   readonly label: string;
   readonly onOpen: () => void;
 }
 
-/** A revision's Open as an item of its right-click menu. */
 function sourceItem(source: SourceDoor): MenuAction {
   return { label: source.label, icon: <ArrowUpRightIcon />, onSelect: source.onOpen };
 }
 
-/**
- * One revision's row: who wrote it, what it did, and when; lit while its
- * version is drawn. Its ⋯ (`ListRow`'s `menu`) shows while the row is hovered
- * or holds the keyboard, and drops the same menu the row's right-click, a
- * long press, and the menu key hang; a finger's row draws no ⋯, as a phone's
- * Inbox row draws none. A row with nothing to offer has none of them.
- */
 function RevisionRow({
   line,
   author,
@@ -255,19 +177,13 @@ function RevisionRow({
   author: Actor;
   selected: boolean;
   now: number;
-  /** Where it stands in the run of versions (`VirtualRows`). */
   place: VirtualRowPlace;
   rowRef: (row: HTMLElement | null) => void;
   onSelect: () => void;
-  /** Opens the sections the revision changed; none for a revision that opens none. */
   onOpenSections: (() => void) | undefined;
-  /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Restores the version, asking nothing; none for the description as it stands. */
   onRestore: (() => void) | undefined;
-  /** Copy link, the version's; none for a history with no link of its own. */
   copyLink: MenuAction | undefined;
-  /** What the revision did, in a few words. */
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
@@ -284,7 +200,6 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  // Note that the author's card hangs beside the row as the pointer rests on it, the app's its own; an agent or an automation the version names by name alone hangs nothing.
   const card = actorCard(author);
   return (
     <RowHintOptions card={card}>
@@ -313,18 +228,11 @@ function RevisionRow({
   );
 }
 
-/** What the way back from a revision's sections to the versions says, and where it leads as a hint names it. */
 const ALL_VERSIONS = "All versions";
 const ALL_VERSIONS_PLACE = "all versions";
 
-/** The list's title. */
 const VERSION_HISTORY = "Version history";
 
-/**
- * The head of a revision's sections: the way back to every version, and who
- * wrote it, which goes where it was written where anywhere in the window
- * did, and is said and not pressed where nowhere did.
- */
 function SectionsHead({
   author,
   source,
@@ -332,7 +240,6 @@ function SectionsHead({
 }: {
   author: Actor;
   source: SourceDoor | undefined;
-  /** The way back to every version, a row of its own; none on a phone, whose header leads with it. */
   onBack: (() => void) | undefined;
 }): React.JSX.Element {
   const name = (
@@ -366,7 +273,6 @@ function SectionsHead({
   );
 }
 
-/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn; its right-click, a long press, and the menu key offering Copy link and its revision's source, a finger's row drawing no ⋯ as a revision's draws none. */
 function SectionRow({
   section,
   selected,
@@ -379,9 +285,7 @@ function SectionRow({
   selected: boolean;
   rowRef: (row: HTMLElement | null) => void;
   onSelect: () => void;
-  /** The way to the place that wrote its revision, which its right-click offers. */
   source: SourceDoor | undefined;
-  /** Copy link, its revision's, since a link names no section of a version; none for a history with no link of its own. */
   copyLink: MenuAction | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
@@ -403,7 +307,6 @@ function SectionRow({
   );
 }
 
-/** The reader as their account names them, or nobody while no account is signed in, with the workspace's members beside. */
 function readerOf(
   account: AccountSnapshot,
   members: readonly WorkspaceMember[] | undefined,
@@ -417,11 +320,6 @@ function readerOf(
   return former === undefined ? read : { ...read, former };
 }
 
-/**
- * The versions while they are read, as rows of a revision's own: its
- * writer's mark, their name over its summary, and its time, so the
- * revisions land where the blocks stood.
- */
 function LogSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the versions…">
@@ -440,7 +338,6 @@ function LogSkeleton(): React.JSX.Element {
   );
 }
 
-/** A revision's sections while they are read, as rows of a section's own: its name on one line. */
 function SectionsSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the sections it changed…">
@@ -453,7 +350,6 @@ function SectionsSkeleton(): React.JSX.Element {
   );
 }
 
-/** An older page of versions the read did not lay. */
 class OlderVersionsUnread extends Error {
   constructor() {
     super("The older versions could not be read.");
@@ -461,13 +357,6 @@ class OlderVersionsUnread extends Error {
   }
 }
 
-/**
- * The foot of the list while an older page stands: how many older versions
- * wait, read a page of them on its press, and a failed read said above it
- * with Retry. Note that the count is the versions numbered below `before`,
- * the oldest one the list holds, since a description's versions are numbered from
- * one without gaps.
- */
 function EarlierRow({
   before,
   onRead,
@@ -475,7 +364,6 @@ function EarlierRow({
   before: number;
   onRead: () => Promise<boolean>;
 }): React.JSX.Element {
-  // The read of the older page as a mutation, whose pending and failed states the row draws; one that did not land is its failure.
   const older = useMutation({
     mutationFn: async () => {
       if (!(await onRead())) throw new OlderVersionsUnread();
@@ -508,18 +396,11 @@ function EarlierRow({
   );
 }
 
-/** The key of the row among `rows` that is `element`, where it is one. */
 function keyOfRow<K>(rows: Map<K, HTMLElement>, element: EventTarget | null): K | undefined {
   for (const [key, row] of rows) if (row === element) return key;
   return undefined;
 }
 
-/**
- * Chooses the row the focus stepped onto from another row of the same
- * list, which is what its ↑↓ do (`List`'s roving keys). Note that a focus
- * that comes into the list from outside chooses nothing, so Tab lands on a
- * row without changing the version shown.
- */
 function chooseSteppedRow<K>(
   rows: Map<K, HTMLElement>,
   choose: (key: K) => void,
@@ -531,12 +412,6 @@ function chooseSteppedRow<K>(
   };
 }
 
-/**
- * ← and → on a row: → goes into the row's sections where it has them, and
- * ← comes back out. Note that they are heard on the list's own box, so a
- * field, a dialog, or a menu over a row, whose keys bubble through React's
- * tree, are never taken for a row's.
- */
 function goThroughRow<K>(
   rows: Map<K, HTMLElement>,
   keys: { readonly open?: (key: K) => boolean; readonly back?: () => void },
@@ -554,12 +429,6 @@ function goThroughRow<K>(
   };
 }
 
-/**
- * Hands the focus to the chosen section once a revision's sections are
- * drawn, because the list of versions goes inert as they open and the focus
- * with it, and the sections' arrows need a row to walk from. Note that it
- * only takes a focus that was lost, never one the reader put somewhere.
- */
 function useSectionsFocused(
   opened: number | undefined,
   unit: number | undefined,
@@ -576,12 +445,6 @@ function useSectionsFocused(
   }, [opened, unit, sectionRows]);
 }
 
-/**
- * The row of the version the view opened on, brought into the list's view
- * once it is chosen, so a version opened deep in the list is seen lit, and
- * drawn there where its run had not drawn it (`bringIn`). Only the list
- * scrolls, since the window around it must not.
- */
 function useOpenedRowShown(
   selected: number | undefined,
   rows: Map<number, HTMLElement>,
@@ -603,16 +466,12 @@ function useOpenedRowShown(
   }, [selected, rows, log, run]);
 }
 
-/** How tall a version's row is taken to be before it is drawn, in pixels: its name over two lines of what it did, and its insets. */
 const REVISION_ESTIMATE_PX = 64;
 
-/** The room between two versions' rows, in pixels: a list's (`--ui-list-gap`). */
 const REVISION_GAP_PX = 2;
 
-/** A row's press, which takes the focus in the list's walk. */
 const ROW_PRESS = ".ui-list-row-main";
 
-/** The sections the open revision changed, once its version is read; nothing while it is read, or while no revision is open. */
 function openedSections(
   viewing: ViewedVersion | undefined,
   opened: OpenedSections | undefined,
@@ -623,7 +482,6 @@ function openedSections(
   return changedSections(versionDiff(read.previous, read.document), read.previous === null);
 }
 
-/** Whether the open revision's version failed to read, so its sections will not stand until it is read again. */
 function sectionsFailed(
   viewing: ViewedVersion | undefined,
   opened: OpenedSections | undefined,
@@ -635,10 +493,6 @@ function sectionsFailed(
   );
 }
 
-/**
- * The version history's page beside the list: the version chosen, or the
- * state standing in its place.
- */
 function VersionPage({
   subject,
   restore,
@@ -647,9 +501,7 @@ function VersionPage({
 }: {
   subject: VersionSubject;
   restore: VersionRestore;
-  /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
-  /** What leads the page's bar: the way back to the list, where the page stands alone. */
   lead: React.ReactNode;
 }): React.JSX.Element {
   const { versions } = subject;
@@ -667,7 +519,6 @@ function VersionPage({
     );
   }
   const { list } = versions;
-  // A list read that holds versions is still finding the one the view opened on.
   const finding = list.kind === HISTORY_READ.READY && list.revisions.length > 0;
   if (list.kind === HISTORY_READ.READING || finding) {
     return <VersionPageSkeleton lead={lead} title={subject.title} section={section} />;
@@ -696,20 +547,16 @@ function VersionPage({
   );
 }
 
-/** What the way back from a version to the list says, in a narrow room. */
 const VERSION_LIST = "Versions";
 
-/** Where the way back from a version to the list leads, as a hint names it. */
 const VERSION_LIST_PLACE = "versions";
 
-/** The open plan's history as the view's subject: its name, its agents, and the places in the window its revisions were written. */
 export function taskVersionSubject(tasks: TasksControl): VersionSubject {
   const { region, boundFor } = tasks;
   const task = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
   const workspace = tasks.workspaces.find((each) => each.id === task?.workspaceId);
   return {
     workspace,
-    // A version's mentions are read against the task as it stands, as its page reads them.
     task:
       task === undefined
         ? undefined
@@ -731,20 +578,6 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
   };
 }
 
-/**
- * A version history over the whole window: the versions where the sidebar
- * stands, with the way back at their head, and the version chosen beside
- * them. `onExit`
- * leaves for wherever it was opened from, and `onRestored` for what a
- * restore landed on. A narrow room, or a history narrower than the split's
- * line by its own width (`column-split.ts`), shows the list or the version,
- * one at a time (`hiddenColumns`): a version or a section chosen stands alone
- * the whole width, under a way back to the list, headed as a phone heads
- * every page (`phone-head.tsx`), by the way back, when it was saved, and its
- * restore in a ⋯. A narrow room heads the list so too: by its way out, or
- * from a revision's sections the way back to every version, and its title,
- * with no Back and Forward.
- */
 export function DesktopVersionHistory({
   sidebar,
   room,
@@ -759,11 +592,9 @@ export function DesktopVersionHistory({
   room: ShellRoom;
   history: NavigationHistory;
   subject: VersionSubject;
-  /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
   onExit: () => void;
   onRestored: () => void;
-  /** Where `onExit` leads where it is no step of the window's history, as the Back row's hint names it; the step behind where none is named. */
   exitPlace?: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
@@ -775,7 +606,6 @@ export function DesktopVersionHistory({
   const log = useRef<HTMLDivElement>(null);
   const run = useRef<VirtualRowsHandle>(null);
   const keys = useMemo(() => revisions.map((line) => String(line.seq)), [revisions]);
-  // The rows are one Tab stop that ↑↓ walk; a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
   const roving = useRovingKeys<HTMLDivElement>({
     reach: (from, to) => {
       const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
@@ -799,7 +629,6 @@ export function DesktopVersionHistory({
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
   const people = useQuery(workspaceMembersQuery(subject.workspace?.id)).data;
-  // A version of a description has a link of its own, its description's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();
   const numbered = useNumberedPlace();
@@ -819,7 +648,6 @@ export function DesktopVersionHistory({
           chord,
         );
   const reader = readerOf(account, people?.members, people?.former);
-  // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const failed = sectionsFailed(versions.viewing, opened);
@@ -888,7 +716,6 @@ export function DesktopVersionHistory({
         hidden={hidden.list}
       >
         {narrow ? (
-          // A phone's header: the way out, or from a revision's sections back to every version, and the title.
           <PhoneHead
             place="version-log"
             start={
@@ -919,7 +746,6 @@ export function DesktopVersionHistory({
               look={BACK_BUTTON_LOOK.COLUMN}
               label="Back"
               place={exitPlaceName}
-              // Note that Escape closes the sections while they are open, so the key moves to All versions.
               command={opened === undefined ? APP_COMMAND.EXIT_VERSION_HISTORY : NO_BACK_KEY}
               onBack={onExit}
             />
@@ -1053,7 +879,6 @@ export function DesktopVersionHistory({
             </ScrollArea>
           </Fill>
         </div>
-        {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>
       <section
@@ -1082,7 +907,6 @@ export function DesktopVersionHistory({
   );
 }
 
-/** The open description's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
 export function TaskVersionHistory({
   tasks,
   ...view

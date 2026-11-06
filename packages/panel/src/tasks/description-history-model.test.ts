@@ -44,12 +44,10 @@ function line(overrides: Partial<DescriptionRevisionLine> = {}): DescriptionRevi
   };
 }
 
-/** A revision's document, as the service answers one: its text of these sections, no list. */
 function documentOf(sections: readonly string[]) {
   return { body: `${sections.join("\n\n")}\n`, assumptions: [] };
 }
 
-/** The words a unit marks as one kind, in order. */
 function marked(diff: ReturnType<typeof versionDiff>, kind: string): string[] {
   return diff.units.flatMap((unit) =>
     unit.marks
@@ -91,7 +89,6 @@ test("a revision is drawn under its writer: the reader by their account's pictur
     provider: MODEL_PROVIDER.OPENAI,
     state: ACTOR_STATE.REST,
   });
-  // An agent the task no longer lists, or a line from a service that names none, wears no harness.
   assert.deepEqual(revisionAuthorOf({ lastEdit: agentEdit }, reader, agents), {
     kind: ACTOR_KIND.AGENT,
     name: "Invite emails",
@@ -122,7 +119,6 @@ test("a revision names its writer as the developer knows them, and says what it 
     "Invite emails",
   );
   assert.equal(named({ actor: DESCRIPTION_ACTOR.EARLIER }), "Earlier");
-  // Someone other than the reader, as a shared task will hold, is named rather than called You.
   assert.equal(named({ actor: DESCRIPTION_ACTOR.DEVELOPER, by: CHARLES }), "Charles Pan");
 
   assert.equal(revisionSummary(line()), "14 changes");
@@ -143,11 +139,6 @@ test("a revision names its writer as the developer knows them, and says what it 
   );
 });
 
-/**
- * A description's revisions, newest first, as the service lists them: the app's on a
- * call, moved on by saves from three hours ago to two, an agent's five hours
- * ago, and the description before its history began.
- */
 const REVISIONS = [
   line({ seq: 3, startedAt: NOW - 3 * HOUR }),
   line({
@@ -168,10 +159,8 @@ const REVISIONS = [
 ];
 
 test("a save is found as the revision it moved on, a moment before or at the revision's own", () => {
-  // The section's save is stamped just before the revision it began is.
   assert.equal(revisionOfSave(REVISIONS, NOW - 5 * HOUR - 4, true), 2);
   assert.equal(revisionOfSave(REVISIONS, NOW - 5 * HOUR, true), 2);
-  // A save that moved a revision on is that revision's, wherever it fell within it.
   assert.equal(revisionOfSave(REVISIONS, NOW - 3 * HOUR - 4, true), 3);
   assert.equal(revisionOfSave(REVISIONS, NOW - 2.5 * HOUR, true), 3);
   assert.equal(revisionOfSave(REVISIONS, NOW - 2 * HOUR, true), 3);
@@ -360,7 +349,6 @@ test("a revision's Open goes to its agent's tab, and nowhere for Vespin's own sa
     kind: REVISION_SOURCE.AGENT,
     agentId: AGENT_ID,
   });
-  // An agent the line no longer names, the developer, and the description before history open nothing.
   assert.equal(revisionSource({ lastEdit: agentEdit }), undefined);
   assert.equal(
     revisionSource({ lastEdit: { ...agentEdit, actor: DESCRIPTION_ACTOR.DEVELOPER } }),
@@ -425,21 +413,18 @@ test("a teammate's revision wears their face as the workspace's members list the
     pictureUrl: charlesPicture,
     you: false,
   });
-  // Before the members are read, a teammate stands by their name alone, drawn by their letter.
   assert.deepEqual(revisionAuthorOf(edit(CHARLES), reader, []), {
     kind: ACTOR_KIND.PERSON,
     userId: CHARLES.userId,
     name: "Charles Pan",
     you: false,
   });
-  // Once read, a member the workspace no longer lists has left, and keeps the name the service holds.
   assert.deepEqual(revisionAuthorOf(edit(CHARLES), { ...reader, members: [member(DEAN)] }, []), {
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
     name: "Charles Pan",
     userId: CHARLES.userId,
   });
-  // And keeps their picture, and the name their account holds now, from the read of who left.
   const left = {
     ...CHARLES,
     name: "Charles Pan-Ito",

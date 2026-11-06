@@ -1,14 +1,3 @@
-/* The settings tab's own layout that utilities say badly: the integration
-   tools' split and the picture choice, each laid out by its container's
-   width, and the rows of another component the split restages. The rest is
-   drawn in utilities where each is written. */
-
-/* Settings › Integrations: a connected row's tools opened in place under
-   it, over a hairline. The chevron that opens a row, after its count, turns
-   down while its tools show. The tools stand in a column of their own,
-   which scrolls, and the page of the one it holds beside them, which
-   scrolls apart; where the page is too narrow for both, the column stands
-   above the page, which still scrolls within its own bound. */
 .integration-tools-panel {
   border-top: 1px solid var(--ui-color-border);
   container: integration-tools / inline-size;
@@ -16,8 +5,6 @@
 
 .integration-tools-split {
   display: grid;
-  /* Note that the split takes a share of what is seen, because a fixed height
-     overran a short window and left a tall one a thin strip. */
   height: calc(var(--ui-stage-height) * 0.6);
   grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
 }
@@ -26,8 +13,6 @@
   border-left: 1px solid var(--ui-color-border);
 }
 
-/* The column is too narrow for a title and a name both, so it says the
-   title alone, and the page beside it says the name of the one it holds. */
 .integration-tools-list .integration-tool-title + .integration-tool-id {
   display: none;
 }
@@ -42,8 +27,6 @@
 
 @container integration-tools (width < 480px) {
   .integration-tools-split {
-    /* Note that it follows what is seen too, as the wide split does, because
-       a fixed height ran past a small phone's screen and trapped its scroll. */
     height: min(560px, calc(var(--ui-stage-height) * 0.7));
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 180px minmax(0, 1fr);
@@ -54,10 +37,6 @@
     border-left: 0;
   }
 
-  /* The page under the column has the column's whole width and no room
-     beside the title, so its head wraps: the title on its own line, two
-     lines where it needs them, and the tool's name in the code face under
-     it, rather than the name lost to the title's shrink. */
   .integration-tools-panel .integration-tool-detail-head {
     height: auto;
     min-height: 40px;

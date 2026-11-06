@@ -8,20 +8,6 @@ import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { AccountAvatar, AccountHeading, useAccountMenuGroups } from "./sidebar-foot.js";
 import { workspaceMenuGroups } from "./workspace-switcher.js";
 
-/**
- * phone-account.tsx -- a phone's account: the reader's face in the start corner of a place's head, opening one menu of their workspaces and their account.
- *
- * On the desktop the sidebar splits these between its head, the workspace
- * switcher, and its foot, the account's menu. A phone's places draw neither
- * (`desktop-sidebar.tsx`), so every place's head leads with the reader's face
- * instead, as phone apps that keep an account and actions of their own do,
- * the actions at the head's other end. Its menu holds the workspaces, New
- * workspace and Workspace settings; Settings and Send feedback, which the
- * desktop's foot draws as buttons beside its account; then the account
- * menu's items, each the same as the desktop's.
- */
-
-/** The face and its menu; see the module's head. */
 export function PhoneAccount({
   tasks,
   account,
@@ -35,7 +21,6 @@ export function PhoneAccount({
 }): React.JSX.Element {
   const menu = useMenu(tasks.shown);
   const accountGroups = useAccountMenuGroups(account, onSignOut);
-  // The foot's two buttons, which a phone draws no foot for.
   const footGroup: MenuEntry[] = [
     { label: "Settings", icon: <GearIcon />, onSelect: onSettings },
     {

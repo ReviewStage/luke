@@ -4,14 +4,8 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { mobileBarShown } from "./mobile-bar.js";
 
-/**
- * mobile-bar.test.ts -- a phone's bar stands over the Inbox's list, and
- * gives the whole screen to an item chosen over it.
- */
-
 const CHOSEN = { taskId: "task-1", itemId: "item-1" } as const;
 
-/** A phone's window on the Inbox's place, with an item chosen or none. */
 function onInbox(chosen: typeof CHOSEN | undefined) {
   const tasks = tasksControl();
   return tasksControl({ inboxView: { ...tasks.inboxView, open: true, chosen } });

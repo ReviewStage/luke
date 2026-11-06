@@ -21,13 +21,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { type InboxReadMarks, type MarkSaying, useInboxReadMarks } from "./use-inbox-read-marks.js";
 
-/**
- * use-inbox-read-marks.test.ts -- the Inbox's read marks say a refusal
- * once, unless the caller says it itself, and Mark all as read names the
- * unread items it marks, which the host draws read. Synthetic plan and
- * items.
- */
-
 const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-acme",
@@ -37,7 +30,6 @@ const TASK: TaskSummary = {
   repository: "acme/relay",
 };
 
-/** An item of the plan's, open and asking words, read or unread as given. */
 function item(id: string, unread: boolean): InboxItem {
   return {
     id,
@@ -66,7 +58,6 @@ function item(id: string, unread: boolean): InboxItem {
 const X = "a1b2c3d4-0000-4000-8000-000000000001";
 const Y = "a1b2c3d4-0000-4000-8000-000000000002";
 
-/** One write the hook sent, and how to answer it. */
 interface Sent {
   readonly words: string;
   readonly answer: (failed?: boolean) => Promise<void>;
@@ -79,10 +70,8 @@ afterEach(() => {
   root = undefined;
 });
 
-/** The hook, every write it sends held until the test answers it. */
 function marks() {
   const sent: Sent[] = [];
-  /** One write held until the test answers it, with the value it answers when it does not fail. */
   const sending = <Value>(words: string, value: Value) =>
     new Promise<Value | { failure: typeof AGENT_CALL_FAILURE.NOT_FOUND }>((resolve) => {
       sent.push({
@@ -112,7 +101,6 @@ function marks() {
   const held = () => control ?? assert.fail("the hook stands");
   return {
     sent,
-    /** The hook's presses as it stands. */
     get marks() {
       return held();
     },
@@ -120,7 +108,6 @@ function marks() {
       act(() => {
         void held().onMark(target, unread, saying);
       }),
-    /** What each toast standing says, leaving out those on their way out. */
     toasts: () =>
       [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
         (words) => words.textContent ?? "",
@@ -129,7 +116,6 @@ function marks() {
   };
 }
 
-/** Lets the writes queued so far reach the act. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();

@@ -9,14 +9,6 @@ import type {
 } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * A description's pictures in its editor: a file pasted or chosen is laid in as a
- * picture after the caret's block, handed to the panel under its upload,
- * and writes nothing until the panel kept it, then its line; Remove takes
- * one still being kept out; and a picture of another description pasted in is kept
- * again on this one. Synthetic description and pictures.
- */
-
 const TASK_ID = "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13";
 const OTHER_TASK_ID = "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
 const KEPT = `https://vespin.dev/acme/plan/${TASK_ID}/files/0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01`;
@@ -31,7 +23,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor on `TEXT`, its caret at the end of the Approach section, with the panel's pictures stood in for. */
 function opened(markdown = TEXT) {
   const taken: PictureTaken[] = [];
   const pictures: DescriptionEditorPictures = {

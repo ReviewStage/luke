@@ -29,13 +29,6 @@ import {
   useMessageReveal,
 } from "./message-links.js";
 
-/**
- * A message of an agent's transcript has a link of its own: Copy link
- * beside its Copy copies it, under the agent's task, and a link to it
- * brings it into view in the agent's tab, lit once, or says it is gone
- * where the transcript no longer holds it. Synthetic agent.
- */
-
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -48,7 +41,6 @@ const AGENT: AgentSummary = {
   brief: AGENT_BRIEF.PROMPT,
 };
 
-/** One of the developer's messages. */
 function line(id: string, text: string): AgentTranscriptMessage {
   return { id, role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] };
 }
@@ -73,12 +65,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The agent's tab under a task in Acme, its transcript read page by page as `pages`, then to its end; the reveal standing as given, every ask it let go kept. */
 async function drawn(
   reveal: MessageReveal | undefined,
   pages: readonly (readonly AgentTranscriptMessage[])[] = [MESSAGES],
   agent: AgentSummary = AGENT,
-  /** A page held until the test lets it land, by its place among `pages`. */
   held?: { readonly page: number; readonly release: Promise<void> },
 ): Promise<{
   container: HTMLElement;
@@ -87,7 +77,6 @@ async function drawn(
 }> {
   const revealed: number[] = [];
   const registry = AtomRegistry.make();
-  // Note that the transcript ends on a page with nothing on it, as an ended agent's does.
   pushedTranscripts(
     () =>
       [...pages, []].map((messages, at) => ({
@@ -145,7 +134,6 @@ async function drawn(
   };
 }
 
-/** The element drawing the message of this id. */
 function messageNamed(container: HTMLElement, id: string): HTMLElement {
   const found = [...container.querySelectorAll<HTMLElement>("[data-message-id]")].find(
     (each) => each.dataset.messageId === id,

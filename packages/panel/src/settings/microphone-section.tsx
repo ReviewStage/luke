@@ -22,10 +22,8 @@ import { useBusyPress } from "./busy-press.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
-/** What the System Settings door is called, for a reader and its hover. */
 const OPEN_PRIVACY = "Open Privacy & Security in System Settings";
 
-/** Allow, which waits on the system's answer to the request. */
 function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): React.JSX.Element {
   const request = useBusyPress(microphone.onRequest);
   return (
@@ -40,20 +38,6 @@ function AllowMicrophone({ microphone }: { microphone: MicrophoneControl }): Rea
   );
 }
 
-/**
- * microphone-section.tsx -- the This Mac page's Dictation group: whether the app may open the microphone, and which one it prefers.
- *
- * Dictation records the microphone in the window it is pressed in, so the
- * group stands only on a platform whose microphone the app asks for itself.
- * Its first row answers access, not use: whether macOS lets the app at the
- * microphone, a check once it does, Allow while macOS has not been asked,
- * and the door to System Settings once it has answered, the one place its
- * answer can be changed. Under it stand the microphone's own settings, the
- * schema's rows of This Mac's microphone section (`SchemaSettingRows`).
- *
- * Each line is `@repo/ui`'s `SettingsRow`; the System Settings door is the
- * quiet `IconButton`, and Allow the outline `Button`.
- */
 export function MicrophoneSection({
   view,
   writes,
@@ -66,8 +50,6 @@ export function MicrophoneSection({
   const row = microphoneAccessRow(microphone.status);
   return (
     <SettingsSection title="Dictation">
-      {/* Note that the row stands in a wrapper wearing its search anchor,
-          because the shared row takes no attribute of a caller's. */}
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.MICROPHONE)}>
         <SettingsRow
           label={

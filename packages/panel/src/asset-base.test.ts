@@ -8,12 +8,6 @@ import { test } from "vitest";
 import { HarnessMark } from "./harness-marks.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 
-/**
- * The panel's static files resolve from the asset base its shell names, not
- * from the document's own address, which on the web is a route such as
- * `/<workspace>/plan/<id>` rather than the folder the files are served from.
- */
-
 const BASE = "https://app.example/assets/panel/";
 
 test("the Codex mark resolves from the asset base the shell names", () => {

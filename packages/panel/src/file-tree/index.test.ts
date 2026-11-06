@@ -5,19 +5,6 @@ import { afterEach, test } from "vitest";
 import { FILE_MARK, type FileMark, type FileTreeHandle } from "./contract.js";
 import { fileTree } from "./index.js";
 
-/**
- * index.test.ts -- a change set's tree draws at each file's row's end what
- * its mark carries past what became of it: how many review threads stand on
- * it, the lines it adds and removes, and a Viewed toggle, ticked once the
- * file is viewed; a folder's row says nothing more. A press on the toggle
- * is the toggle's alone, the row neither opening its file nor taking the
- * keyboard, while a press anywhere else on the row opens the file, and V
- * on the row the tree's keyboard stands on presses its toggle. A reader
- * finds the toggle as a checkbox named Viewed. A ⌘-press opens its file
- * in a tab of its own and leaves the tab's own file the one row marked. The
- * tree is the bundle's own, Pierre drawing it in jsdom; synthetic paths.
- */
-
 const PATHS = ["src/seats.ts", "src/plan.md", "README.md"] as const;
 
 let mounted: { host: HTMLElement; handle: FileTreeHandle } | undefined;
@@ -28,12 +15,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the tree's listing land, which Pierre draws as it lands, on no clock. */
 async function settle(): Promise<void> {
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
 }
 
-/** The tree mounted over the change set's files alone, every folder open, marked as given, with what it opened and marked. */
 async function mountMarked(marks: readonly FileMark[]) {
   const opened: string[] = [];
   const viewed: string[] = [];
@@ -52,7 +37,6 @@ async function mountMarked(marks: readonly FileMark[]) {
   return { handle, opened, viewed };
 }
 
-/** The row the tree drew for a path, through its shadow root. */
 function row(path: string): HTMLElement {
   for (const container of mounted?.host.querySelectorAll("file-tree-container") ?? []) {
     const found = container.shadowRoot?.querySelector<HTMLElement>(`[data-item-path="${path}"]`);
@@ -63,7 +47,6 @@ function row(path: string): HTMLElement {
   return assert.fail(`the tree draws ${path}`);
 }
 
-/** The rows the tree draws as chosen, by path. */
 function chosen(): string[] {
   const rows = [...(mounted?.host.querySelectorAll("file-tree-container") ?? [])]
     .filter((container) => container.closest("[hidden]") === null)
@@ -73,13 +56,11 @@ function chosen(): string[] {
   return rows.map((each) => each.dataset.itemPath ?? "");
 }
 
-/** The words at the end of a row, part by part. */
 function parts(path: string): string[] {
   const run = row(path).querySelector('[data-item-section="decoration"] > span');
   return [...(run?.children ?? [])].map((part) => part.textContent ?? "");
 }
 
-/** A row's Viewed toggle, the last part of its run. */
 function toggle(path: string): HTMLElement {
   const run = row(path).querySelector('[data-item-section="decoration"] > span');
   const part = run?.children[4];

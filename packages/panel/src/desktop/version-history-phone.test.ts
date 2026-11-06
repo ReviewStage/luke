@@ -22,18 +22,8 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { TaskVersionHistory } from "./desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
-/**
- * version-history-phone.test.ts -- a description's version history on a phone is
- * headed as every phone's page is: its list by one way out, named for the
- * step Back goes to, or from a revision's sections back to every version,
- * and its title, with no Back and Forward; a version by the way back to the
- * list, when it was saved, and a ⋯ holding its restore. A wide room keeps
- * its rows and bar. Synthetic description and revisions.
- */
-
 const ignore = (): void => undefined;
 
-/** A revision of the description by the developer. */
 function line(seq: number) {
   return {
     seq,
@@ -43,7 +33,6 @@ function line(seq: number) {
   };
 }
 
-/** Back's list as it stands over the history: the Inbox the plan was opened from. */
 const FROM_INBOX: NavigationHistory = {
   canGoBack: true,
   canGoForward: false,
@@ -72,7 +61,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The description's version history in `room` over its versions 3 and 2, as `history` stands, every way out written down. */
 function drawn(
   room: ShellRoom,
   history: Partial<VersionHistoryControl>,
@@ -127,7 +115,6 @@ function drawn(
   return { view, exits };
 }
 
-/** Version 2 read and shown, against nothing before it. */
 const VIEWING_2: Partial<VersionHistoryControl> = {
   selected: 2,
   listed: false,

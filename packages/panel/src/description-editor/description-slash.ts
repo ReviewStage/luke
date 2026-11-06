@@ -13,56 +13,29 @@ import {
 import { turnInto } from "./writing-format.js";
 import { inTableCell } from "./writing-keys.js";
 
-/**
- * description-slash.ts -- the description editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
- *
- * A `/` at the start of a line or after a space, outside code and outside
- * a table's cell, opens the panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
- * no space in it, so a space typed after it ends it and closes the menu.
- * A choice deletes the word, through its end where the caret stands inside
- * it, and runs the block's command on the block the caret stands in
- * (`insert`): a block is set rather than toggled, as Turn into sets it; a
- * diagram is a Mermaid code block; a table is three by three under a
- * header row; a mention lays in the `@` that opens the panel's `@` list;
- * a picture lays in nothing, the panel opening its chooser; and a
- * document's own block lays in the Markdown it names, read as the editor
- * reads its text, in place of the line where the word stood alone on it.
- * The keys the menu takes are the panel's first (`./description-editor.ts`'s
- * `handleKeyDown`).
- */
-
-/** The `/` word the caret ends: `/`, at the start of the line or after a space, then anything but a space or another `/`. */
 const SLASH_WORD = /(^|\s)\/([^\s/]*)$/u;
 
-/** The rest of a `/` word after the caret, which a choice deletes too. */
 const WORD_REST = /^[^\s/￼]*/u;
 
-/** The character an inline node that is no text stands for in its block's words, one position wide as the node is. */
 const LEAF_CHARACTER = "￼";
 
-/** The language a code block names to be drawn as a diagram, as `./diagram-preview.ts` reads it. */
 const DIAGRAM_LANGUAGE = "mermaid";
 
-/** The table a `/table` lays in: three rows by three columns, the first its header. */
 const TABLE = { rows: 3, cols: 3, withHeaderRow: true } as const;
 
-/** What a mention's choice lays in, which the `@` list opens on. */
 const MENTION_MARK = "@";
 
-/** The `/` word the caret ends: the report, and the range a choice deletes. */
 interface SlashWord {
   readonly trigger: ComposerTrigger;
   readonly from: number;
   readonly to: number;
 }
 
-/** What the plugin holds between changes: the word last found, and the report last made. */
 interface SlashState {
   found: SlashWord | undefined;
   reported: ComposerTrigger | undefined;
 }
 
-/** What each block chosen does to the block the caret stands in, its `/` word already deleted. */
 const INSERTS = {
   [WRITING_BLOCK.TEXT]: (editor) => turnInto(editor, WRITING_BLOCK.TEXT),
   [WRITING_BLOCK.HEADING_1]: (editor) => turnInto(editor, WRITING_BLOCK.HEADING_1),
@@ -88,7 +61,6 @@ const INSERTS = {
   },
 } as const satisfies Record<SlashBlock, (editor: Editor) => void>;
 
-/** The `/` word the caret ends in plain text, outside code and outside a table's cell; nothing while the editor has no caret or the caret ends none. */
 function slashAt(view: EditorView): SlashWord | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
@@ -119,7 +91,6 @@ function slashAt(view: EditorView): SlashWord | undefined {
   };
 }
 
-/** A document's own blocks laid in after the top-level block the selection ends in, or in place of it where the caret stands alone on an empty line, so nothing written is split or replaced. */
 function ownBlockAtCaret(editor: Editor, content: readonly JSONContent[]): void {
   const { $to, empty } = editor.state.selection;
   if ($to.depth < 1) {
@@ -146,7 +117,6 @@ function ownBlockAtCaret(editor: Editor, content: readonly JSONContent[]): void 
     .run();
 }
 
-/** The `/` word found again, and reported where it changed. */
 function reported(view: EditorView, state: SlashState, blocks: DescriptionEditorBlocks): void {
   state.found = slashAt(view);
   const next = state.found?.trigger;
@@ -155,11 +125,6 @@ function reported(view: EditorView, state: SlashState, blocks: DescriptionEditor
   blocks.onTrigger(next);
 }
 
-/**
- * The description editor's `/`: the word reported as the editor's state moves and
- * as it takes or loses the caret, and a block chosen laid in in its place,
- * a document's own Markdown read into blocks by `parse`.
- */
 export function descriptionSlash(
   blocks: DescriptionEditorBlocks,
   parse: (markdown: string) => readonly JSONContent[],
@@ -181,12 +146,6 @@ export function descriptionSlash(
       },
     },
   });
-  /**
-   * The `/` word the caret ends deleted, and `block` run on the block the
-   * caret stands in, or a document's own Markdown laid in there. With no `/`
-   * word, as a press beside the editor lays one in, a document's own block
-   * goes after the block the caret stands in, or in place of it where empty.
-   */
   const insert = (editor: Editor, block: SlashChoice): void => {
     const word = state.found;
     if (word === undefined) {

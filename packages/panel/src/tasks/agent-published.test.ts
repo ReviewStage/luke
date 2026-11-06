@@ -9,15 +9,6 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { BranchChip, LinesChanged, type PublishedDoors, PublishedRow } from "./agent-published.js";
 
-/**
- * agent-published.test.ts -- the pull request's row pinned over an agent's
- * box opens the agent's Pull request tab where a side panel takes it, and
- * the pull request on GitHub where none does; where the press opened the
- * tab, its right-click offers GitHub's page instead, beside the branch's
- * copies. The box's foot wears the branch's chip only while no pull
- * request stands. Synthetic ids.
- */
-
 const URL = "https://github.com/acme/relay/pull/42";
 
 const PUBLISHED = {
@@ -43,7 +34,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The doors given to what is drawn, and what each door was asked. */
 function doorsAsked(withPanel: boolean) {
   const asked: string[] = [];
   const doors: PublishedDoors = {
@@ -54,7 +44,6 @@ function doorsAsked(withPanel: boolean) {
   return { doors, asked };
 }
 
-/** Draws `element` and answers the button it stands as. */
 function drawn(element: React.ReactElement): HTMLElement | null {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -62,7 +51,6 @@ function drawn(element: React.ReactElement): HTMLElement | null {
   return container.querySelector<HTMLElement>("a, button");
 }
 
-/** Draws the pinned row over the doors given. */
 function drawRow(withPanel: boolean) {
   const { doors, asked } = doorsAsked(withPanel);
   const row =
@@ -76,7 +64,6 @@ function drawRow(withPanel: boolean) {
   return { row, asked };
 }
 
-/** The item of the right-click's menu named `name`. */
 function menuItem(name: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -85,7 +72,6 @@ function menuItem(name: string): HTMLElement {
   );
 }
 
-/** Right-clicks `target`. */
 function rightClick(target: HTMLElement): void {
   act(() => {
     target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));

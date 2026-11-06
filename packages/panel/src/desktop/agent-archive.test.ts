@@ -13,23 +13,14 @@ import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
-/**
- * agent-archive.test.ts -- an archived agent's row under the summary's
- * Archived fold hangs the agent's tab's card, saying it was archived, and
- * by whom and why where the service said; a press on it opens the agent,
- * whose tab is gone; and its Unarchive is busy while the service answers.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
-  // Note that the fold is kept in the window's storage, so each test starts with it folded.
   window.localStorage.clear();
 });
 
-/** A summary's Archived fold, its one archived agent drawn over a registry of its own, `onOpen` hearing a row opened. */
 function drawArchived(onOpen: (agentId: string) => void = () => undefined): HTMLElement {
   const agents = agentsControl({
     archived: [
@@ -106,9 +97,7 @@ test("a press on an archived agent's row opens it, whose tab is gone", () => {
   assert.deepEqual(opened, ["agent-8"]);
 });
 
-/** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
 function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy): string[] {
-  // Note that each draw unfolds Archived afresh, so the fold the last one kept is let go.
   window.localStorage.clear();
   const agents = {
     ...agentsControl({

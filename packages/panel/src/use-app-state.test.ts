@@ -14,13 +14,6 @@ import { deliveryOf, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { appStateQuery } from "./use-app-state.js";
 
-/**
- * use-app-state.test.ts -- what a window's readers hold across deliveries of
- * the document: each delivery is a new tree, as it is after crossing into the
- * window, and what a reader holds of a slice the delivery did not move is the
- * object it already held.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -36,19 +29,12 @@ afterEach(() => {
   root = undefined;
 });
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/**
- * A window reading the document through `useQuery(appStateQuery)`, first answered
- * `first`; what it answers is each snapshot the reader drew, a door to
- * deliver the next one whole, and one to push a delivery of what moved as
- * main's stream would, a new tree each time.
- */
 async function window(first: AppStateSnapshot): Promise<{
   drawn: AppStateSnapshot[];
   deliver: (snapshot: AppStateSnapshot) => Promise<void>;

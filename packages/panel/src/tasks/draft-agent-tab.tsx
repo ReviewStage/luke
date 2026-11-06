@@ -21,76 +21,13 @@ import type { AgentComposerControl, ComposerNote } from "./use-agent-composer.js
 import type { AgentDraft, AgentsControl } from "./use-agents.js";
 import { WorkingLine } from "./working-time.js";
 
-/**
- * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
- *
- * Opened from the task's column's "+", it is drawn as an agent's tab is with
- * nothing yet said: nothing where the transcript would be, since the
- * composer's placeholder is the one prompt, and at the tab's foot the
- * composer, focused as the tab opens, with the model
- * chip on the account's default once that is read. Nothing reaches the
- * service until the first send, which starts the agent with those words, the
- * files attached, or both as its prompt, never the description, on the model
- * the chip names where the developer
- * changed it and else on the account's default, in the task's repository;
- * the tab then gives way to the agent's own. The words and the choice are
- * the draft's, held by its owner, as are the files, so they wait while the
- * tab is away. A
- * send that did not start it
- * leaves the words in the box with why under it and what mends it: Retry,
- * which asks again under the draft's own key, or, for a repository out of
- * reach, the press its reason names, a move of the task asking again by
- * itself once it lands. Closing the tab lets the draft go, and since
- * nothing was started, nothing is left behind. While the agent its page
- * draws is archived, nothing starts from it, so the box gives way to the
- * note that offers Unarchive, and the words written wait in the draft until
- * it is back.
- *
- * A draft may fork one of the task's agents at one of its messages
- * (`fork-action.tsx`): a chip over the box names the source and the message,
- * the model chip starts on the source's model and effort, and a send forks
- * the source there with the box's words and files as the developer's note,
- * an empty box forking alone. The chip's × lets the fork go, leaving an
- * ordinary draft with its words. A draft may continue one of the agents
- * on its whole transcript the same way, its chip naming the source alone.
- * While a fork's or a continue's Start is out, which copies the source's
- * work before the new agent starts and may take a while, the tab stands on
- * a working line saying so, counting from the send, over the held box;
- * once it lands the tab gives way to the new agent's, and a Start that did
- * not land leaves the line for the note and Retry under the box, the words
- * kept.
- *
- * While the Bring your own host experiment is on, the box wears New task's
- * Runs on chip after its "+" (`runs-on.tsx`), listing Cloud and the
- * member's devices, read as the tab opens where no read has listed them.
- * It starts on where a Start naming no place would run (`useStartRunsOn`):
- * a fork's or a continue's source's place, else the member's newest agent
- * on the task's, else their last pick; a send names a place only once one
- * is picked here, held by the draft as its other chips are, and the service
- * decides otherwise. While the experiment is off no chip stands and no send
- * names a place.
- *
- * A draft New task handed over (`use-agents.ts`'s `onHandDraft`)
- * is a task whose agent the service refused as New task started them
- * both: it holds the words and files New task's box held, the model picked
- * on its chip where one was, and why (`refused`), which the tab shows under
- * the box with Retry and what mends it, as a refused send of the
- * developer's own would, until the next send. Where New task's chip was
- * left on the account's default, the draft holds no model, so its chip
- * shows the default this tab read and its Retry names none.
- */
-
-/** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve(false);
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 
-/** The devices Runs on offers before a read lists any: none, so it offers Cloud alone. */
 const NO_DEVICES: readonly MacOffer[] = [];
 
-/** What a fork's working line names its source as where the task does not list it. */
 const UNLISTED_SOURCE = "the agent";
 
-/** The working line a fork's or a continue's draft stands on while its Start is out, saying the stage it is likely at and counting from the send. */
 function StartingLine({
   source,
   sentAt,
@@ -114,19 +51,13 @@ export function DraftAgentTab({
 }: {
   draft: AgentDraft;
   control: AgentsControl;
-  /** The cards a fork's source chip hangs, as its tab's own chip does; none where the place draws none. */
   cards?: TranscriptCards | undefined;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
-  // When a fork's or a continue's Start went, which its working line counts from; none while none is out.
   const [sentAt, setSentAt] = useState<number | undefined>(undefined);
   const [note, setNote] = useState<ComposerNote | undefined>(undefined);
-  // Note that a send lets the refusal New task handed over go, so a tab opened again after says only its own.
   const shownNote = note ?? draft.refused;
-  // The account's default as the host holds it, which the chip names until the developer makes a choice of their own.
   const fallback = useAgentDefault().choice;
-  // Note that the control is read through a ref, because the panel hands a
-  // new one on every render and an answer lands on whichever is current.
   const latest = useRef(control);
   latest.current = control;
 
@@ -137,14 +68,11 @@ export function DraftAgentTab({
       : [...(control.agents ?? []), ...(control.archived ?? [])].find(
           (agent) => agent.id === fork.agentId,
         );
-  // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
-  // Note that a model nothing of the account's pays for holds Send, with the press that connects one, rather than being refused once sent.
   const unpaid =
     control.models === undefined || choice === undefined
       ? undefined
       : unrunnableChoice(control.models, choice);
-  // Runs on stands only while Bring your own host is on, and reads the member's devices where no read has listed them.
   const placesOn =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) })
       .data === true;
@@ -171,7 +99,6 @@ export function DraftAgentTab({
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
-    // Note that a place picked while the experiment was on is not sent once it is off.
     const runsOn = placesOn ? draft.runsOn : undefined;
     const started =
       fork === undefined

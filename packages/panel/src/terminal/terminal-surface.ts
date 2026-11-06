@@ -16,37 +16,11 @@ import {
 import { TERMINAL_KEY, terminalKey } from "./terminal-keys.js";
 import { terminalFindTints, terminalTheme } from "./terminal-theme.js";
 
-/**
- * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, colored from the window's tokens, its keys sorted between the shell and the window.
- *
- * It draws with WebGL, and with xterm's DOM renderer where WebGL is not to be
- * had, the DOM renderer's rules reaching the page as adopted sheets
- * (`./adopted-styles.ts`). It draws in the window's monospace face, or, while
- * a web page is still fetching that face, in the system's until it lands,
- * so its cells are never measured in one face and drawn in another, which
- * would draw the screen past its box. Wide characters are measured as
- * Unicode 11 measures them, so an emoji or a CJK character in a prompt takes
- * the two cells a shell expects. It fits its box whenever the box changes,
- * once a frame at most, and says so only when that changes its size in
- * cells, which is what a shell is told. It knows nothing of where its bytes
- * come from: the tab hands it a shell's output and takes what is typed.
- */
-
-/** The class the host wears while a terminal is mounted in it, which `index.css` styles. */
 const SURFACE_CLASS = "terminal-surface";
 
-/** The token the terminal's typeface is read from, and the face it falls back to without one. */
 const FONT_TOKEN = "--ui-font-mono";
 const FALLBACK_FONT = "monospace";
 
-/**
- * How the terminal draws and keeps its lines: the code's size and leading,
- * a block cursor that holds still, and colors held legible on either
- * appearance's ground, as VS Code's terminal holds them. Option types the
- * character the layout gives it rather than acting as Meta, and Option held
- * while dragging selects text even where a program such as tmux takes the
- * mouse. The Unicode addon is proposed API.
- */
 const TERMINAL_LOOK = {
   fontSize: 12,
   lineHeight: 1.4,
@@ -59,18 +33,14 @@ const TERMINAL_LOOK = {
   allowProposedApi: true,
 } as const;
 
-/** The attribute the tab sets on the host while no shell is connected, which dims the output. */
 const DIM_ATTRIBUTE = "data-dim";
 
-/** Whether the tab has the screen dimmed. */
 function isDim(host: HTMLElement): boolean {
   return host.getAttribute(DIM_ATTRIBUTE) === "true";
 }
 
-/** The Unicode version wide characters are measured by. */
 const UNICODE_VERSION = "11";
 
-/** A WebGL renderer loaded into the terminal, or nothing where the window cannot make one. */
 function loadWebgl(terminal: Terminal): WebglAddon | undefined {
   if (!("WebGL2RenderingContext" in window)) return undefined;
   const webgl = new WebglAddon();
@@ -83,14 +53,6 @@ function loadWebgl(terminal: Terminal): WebglAddon | undefined {
   }
 }
 
-/**
- * Draws with WebGL, on a fresh context whenever the GPU process loses one.
- * Where none can be made the DOM renderer draws instead, its colors held to
- * the palette: it writes a 24-bit color, or one it adjusted for contrast,
- * as a style attribute, which the panel's policy refuses, so a cell left to
- * it would lose its color altogether, where a palette color reaches it as
- * a class (`./adopted-styles.ts`).
- */
 function drawWithWebgl(terminal: Terminal): void {
   const webgl = loadWebgl(terminal);
   if (webgl === undefined) {
@@ -103,18 +65,9 @@ function drawWithWebgl(terminal: Terminal): void {
   });
 }
 
-/**
- * A find over the scrollback through the search addon: every match tinted
- * in the find's tokens, the current one brightest, both marked in the
- * scrollbar's ruler, and each step bringing its match into view. A query
- * typed further keeps to the match it was at, as the window's own find
- * does. Note that the tints are read as the find runs, so a find after the
- * appearance flips draws in the new one's.
- */
 function scrollbackFind(terminal: Terminal, host: Element): TerminalFind {
   const search = new SearchAddon({ highlightLimit: FIND_LIMIT });
   terminal.loadAddon(search);
-  // The query found last, which a query typed further keeps to the match of.
   let last = "";
   const options = (way: TerminalFindWay) => {
     const { match, current } = terminalFindTints(host);
@@ -129,9 +82,6 @@ function scrollbackFind(terminal: Terminal, host: Element): TerminalFind {
     };
   };
   return {
-    // Note that a query typed afresh is found from the newest output up,
-    // as a terminal's recent lines are what a find is after, and one typed
-    // further keeps to the match it was at.
     find: (query, way) => {
       const fresh = way === TERMINAL_FIND.TYPED && (last === "" || !query.startsWith(last));
       last = query;
@@ -153,24 +103,16 @@ function scrollbackFind(terminal: Terminal, host: Element): TerminalFind {
   };
 }
 
-/** The most matches a find tints and counts; past it the tally says there are more. */
 const FIND_LIMIT = 1_000;
 
-/** The typeface the terminal draws in: the window's one monospace stack. */
 function monospaceFont(host: Element): string {
   return getComputedStyle(host).getPropertyValue(FONT_TOKEN).trim() || FALLBACK_FONT;
 }
 
-/**
- * Whether the face given has loaded, which a page answers for a web font
- * only once something has drawn in it; the desktop's faces are the
- * system's, loaded already.
- */
 function faceLoaded(face: string): boolean {
   return !("fonts" in document) || document.fonts.check(face);
 }
 
-/** Calls `then` once the face given has loaded; a face that fails to load never calls it. */
 function onFaceLanded(face: string, then: () => void): void {
   document.fonts.load(face).then(then, () => undefined);
 }
@@ -180,7 +122,6 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   const stopAdopting = adoptInlineStyles(host);
   const family = monospaceFont(host);
   const face = `${TERMINAL_LOOK.fontSize}px ${family}`;
-  // Note that a face still on its way is stood in for by the system's, because the terminal measures its cells as it opens.
   const landed = faceLoaded(face);
   const terminal = new Terminal({
     ...TERMINAL_LOOK,
@@ -190,9 +131,6 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   terminal.attachCustomKeyEventHandler((event) => {
     const key = terminalKey(event);
     if (key.kind === TERMINAL_KEY.SHELL) return true;
-    // Note that the press is claimed whole on its keydown, because the
-    // keypress after it would type Return into the shell as well, and the
-    // window's keymap would read ⌘⌫ as deleting the task.
     if (key.kind === TERMINAL_KEY.SEND && event.type === "keydown") {
       event.preventDefault();
       event.stopPropagation();
@@ -216,7 +154,6 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   const heard = [terminal.onData(props.onInput), terminal.onResize(props.onResize)];
   fit.fit();
 
-  // A face that lands later is drawn in from then, its cells measured again as a change of face measures them, and the screen fitted to them.
   let mounted = true;
   if (!landed) {
     onFaceLanded(face, () => {
@@ -226,8 +163,6 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     });
   }
 
-  // The tokens' values flip with the appearance, and the canvas holds the old ones until told.
-  // Note that a dimmed screen is dimmed in its colors, never by the box's opacity, which would dim the notes the terminal prints as well, and its contrast floor is lifted, because the floor would lift the output back out of its dimming.
   const retheme = () => {
     const dim = isDim(host);
     terminal.options.theme = terminalTheme(host, dim);
@@ -237,7 +172,6 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   const dimming = new MutationObserver(retheme);
   dimming.observe(host, { attributes: true, attributeFilter: [DIM_ATTRIBUTE] });
 
-  // A box resized many times in a frame is fitted once, at the frame.
   let frame: number | undefined;
   const resized = new ResizeObserver(() => {
     if (frame !== undefined) return;

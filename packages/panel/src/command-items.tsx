@@ -1,24 +1,3 @@
-/**
- * command-items.tsx -- the window's commands as every place offering one words, marks, and keys it: the one list ⌘K and the action menus both read.
- *
- * A command is a verb, the noun it acts on where a place must say it, the
- * glyph it wears, and the chord that runs it where it has one. A menu on a
- * row that already names its thing says the verb alone ("Pin", "Permanently
- * delete"), and ⌘K, whose row names nothing, says the verb and the noun
- * ("Pin task", "Permanently delete task"). A command a chord reaches takes
- * its words from the shortcuts table (`@repo/settings/shortcuts`), whose
- * label is its verb and noun, so the menu bar, the Keyboard shortcuts page,
- * ⌘K, and the menus never word it apart; a command no chord reaches is
- * worded here alone. A chord that acts on whichever thing is focused, as
- * ⌥⌘C copies the description or an agent's transcript and ⌘⌫ deletes a task or an
- * agent, keeps its own words in the table, which ⌘K and the menu bar say,
- * and each thing's item says its own verb (`keyedAs`).
- *
- * Note that the item is no `@repo/ui/command` `CommandItem`, which is one row
- * of the dialog, its words to search and what choosing it does: a place
- * draws its row from a `PanelCommand` and says what choosing it does there.
- */
-
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import {
@@ -43,7 +22,6 @@ import {
 } from "@repo/ui/icons";
 import type { MenuAction } from "./desktop/action-menu.js";
 
-/** Where a command is offered: a menu on a row that names its thing, or ⌘K, whose row names nothing. */
 export const COMMAND_PLACE = {
   MENU: "menu",
   PALETTE: "palette",
@@ -51,7 +29,6 @@ export const COMMAND_PLACE = {
 
 type CommandPlace = (typeof COMMAND_PLACE)[keyof typeof COMMAND_PLACE];
 
-/** One command as every place draws it: its verb, the noun ⌘K says after it, its glyph, and the chord that runs it. */
 export interface PanelCommand {
   readonly verb: string;
   readonly noun: string | undefined;
@@ -59,19 +36,12 @@ export interface PanelCommand {
   readonly command: KeyedCommand | undefined;
 }
 
-/** What a command acts on, where ⌘K says it after the verb. */
 const NOUN = {
   TASK: "task",
   AGENT: "agent",
   TAB: "tab",
 } as const;
 
-/**
- * A command a chord reaches, worded as the shortcuts table labels it: its
- * label is the verb, then the noun where one is named. Note that a label not
- * ending in its noun is refused as the module loads, because the menus would
- * otherwise say a verb the table never wrote.
- */
 function keyed(command: KeyedCommand, icon: React.JSX.Element, noun?: string): PanelCommand {
   const label = appCommandLabel(command);
   const ending = noun === undefined ? "" : ` ${noun}`;
@@ -79,12 +49,6 @@ function keyed(command: KeyedCommand, icon: React.JSX.Element, noun?: string): P
   return { verb: label.slice(0, label.length - ending.length), noun, icon, command };
 }
 
-/**
- * One thing's item for a chord several kinds of thing share, worded here,
- * since the table's label names them all: "Copy description" and "Copy concise
- * transcript" for the one ⌥⌘C. Note that it is not what ⌘K finds the
- * command by, which is the table's own item (`keyed`).
- */
 function keyedAs(
   command: KeyedCommand,
   verb: string,
@@ -94,12 +58,10 @@ function keyedAs(
   return { verb, noun, icon, command };
 }
 
-/** A command no chord reaches, worded here. */
 function unkeyed(verb: string, icon: React.JSX.Element, noun?: string): PanelCommand {
   return { verb, noun, icon, command: undefined };
 }
 
-/** Every command a menu offers beside ⌘K, by what it does. */
 export const PANEL_COMMAND = {
   COPY_CONTENT: keyed(APP_COMMAND.COPY_CONTENT, <GLYPH.COPY />),
   COPY_DESCRIPTION: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy description", <GLYPH.COPY />),
@@ -151,10 +113,6 @@ export const PANEL_COMMAND = {
   COPY_GITHUB_LINK: unkeyed("Copy GitHub link", <GLYPH.LINK />),
 } as const satisfies Record<string, PanelCommand>;
 
-/**
- * Each command a chord reaches, by that chord's command: the item worded as
- * the table labels it, never one thing's own item for a chord several share.
- */
 const BY_COMMAND: ReadonlyMap<AppCommand, PanelCommand> = new Map(
   Object.values(PANEL_COMMAND).flatMap((item): [AppCommand, PanelCommand][] =>
     item.command === undefined ||
@@ -164,27 +122,19 @@ const BY_COMMAND: ReadonlyMap<AppCommand, PanelCommand> = new Map(
   ),
 );
 
-/** The list's item for a command the window runs, where the list holds one. */
 export function panelCommandOf(command: AppCommand): PanelCommand | undefined {
   return BY_COMMAND.get(command);
 }
 
-/** What a command says where it is offered: the verb on a row's menu, the verb and its noun in ⌘K. */
 export function commandWords(item: PanelCommand, place: CommandPlace): string {
   if (place === COMMAND_PLACE.MENU || item.noun === undefined) return item.verb;
   return `${item.verb} ${item.noun}`;
 }
 
-/** The command's verb and glyph as a row's menu draws them, for a submenu or a row's mark, which hold or run it some way of their own. */
 export function commandHead(item: PanelCommand): { label: string; icon: React.JSX.Element } {
   return { label: commandWords(item, COMMAND_PLACE.MENU), icon: item.icon };
 }
 
-/**
- * The command as an action menu draws it, on a row that names its thing:
- * its verb and glyph, and its chord where `keyed` says the chord acts on
- * what the menu does, as on the open task's menu and on no other task's.
- */
 export function commandAction(
   item: PanelCommand,
   onSelect: () => void,

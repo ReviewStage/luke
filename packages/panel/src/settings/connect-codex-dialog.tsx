@@ -35,29 +35,6 @@ import { copyThroughShell } from "../copy-feedback.js";
 import { refusedShown } from "../failure-report.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 
-/**
- * connect-codex-dialog.tsx -- Connect Codex: a ChatGPT plan connected through Codex's device-code login, which the service runs, on the desktop and the web alike.
- *
- * Opening the dialog asks the service for a code (`CHATGPT_DEVICE_START`)
- * and says the two steps that use it: turn device code authorization on
- * in ChatGPT, then sign in and enter the code, which it shows to copy, at
- * the verification page, which opens outside the window. Under them it waits on Codex
- * (`CHATGPT_DEVICE_WAIT`), one answer the host gives once the login
- * settles, asking after it on the interval the service named on a
- * `Schedule` of its own. Connected, it tells its
- * owner, who closes it; the keys the answer carries are laid where the host
- * holds them, so the row says the plan is connected as the dialog goes.
- * Expired, refused, or canceled, it says the service's fixed sentence and
- * offers Try again, which starts afresh, as an ask that went unanswered
- * does. Close, Escape, or the window
- * going away withdraw a login still waiting (`CHATGPT_DEVICE_CANCEL`), as
- * does a code that lands after the dialog closed or started over, so no
- * login stands that no dialog asks after.
- *
- * Every word is the app's own and shows in a screen recording, but the
- * code, which is masked.
- */
-
 const WORDS = {
   TITLE: "Connect Codex",
   SUBTITLE: "Use your own subscription for this provider's models",
@@ -75,7 +52,6 @@ const WORDS = {
   TRY_AGAIN: "Try again",
 } as const;
 
-/** Where the dialog stands: getting a code, waiting on it, or ended in a failure Try again starts over from. */
 const STANDING = {
   STARTING: "starting",
   WAITING: "waiting",
@@ -91,11 +67,6 @@ const STARTING: Standing = { kind: STANDING.STARTING };
 
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/**
- * The login while the dialog is `open`: a code asked for as it opens and on
- * Try again, the login asked after while it waits, and withdrawn as the
- * dialog closes or goes away with it still waiting.
- */
 function useDeviceLogin(
   open: boolean,
   onConnected: () => void,
@@ -110,7 +81,6 @@ function useDeviceLogin(
     actMutation(ACT_KIND.CHATGPT_DEVICE_CANCEL),
   );
   const [standing, setStanding] = useState<Standing>(STARTING);
-  // Note that a ref counts the starts, because a start's answer reads it as it lands, which no render stands between.
   const starts = useRef(0);
   const connected = useRef(onConnected);
   connected.current = onConnected;
@@ -140,7 +110,6 @@ function useDeviceLogin(
     if (!open) return;
     start();
     return () => {
-      // Note that closing counts as a start, so a code still on its way lands nowhere and is withdrawn.
       starts.current += 1;
       setStanding(STARTING);
     };
@@ -165,7 +134,6 @@ function useDeviceLogin(
           connected.current();
           return;
         }
-        // Note that the host answers only once the login settles, so a pending answer is none it gives.
         if (outcome === CHATGPT_DEVICE_LOGIN.PENDING) return;
         setStanding({
           kind: STANDING.FAILED,
@@ -182,7 +150,6 @@ function useDeviceLogin(
   return { standing, retry: start };
 }
 
-/** The two steps over a code handed out, and the wait on Codex under them, at the card's own gap. */
 function Steps({ login }: { login: ChatGptDeviceStartAnswer }): React.JSX.Element {
   const openLink = useOpenLink();
   const url = login.verificationUrl;
@@ -221,12 +188,6 @@ function Steps({ login }: { login: ChatGptDeviceStartAnswer }): React.JSX.Elemen
   );
 }
 
-/**
- * Connect Codex over the window while `open`: its title, a line under it,
- * and close, which withdraws the login, then the code's steps, the wait, or why it
- * ended with Try again. `onConnected` hears the plan connected; its owner
- * closes the dialog then.
- */
 export function ConnectCodexDialog({
   open,
   onClose,

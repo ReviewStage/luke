@@ -18,20 +18,8 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
-/**
- * markdown-editor.test.ts -- the description's editor mounted by a document that
- * takes none of the description's options, as a pull request's description or a
- * review's comment mounts it: a GitHub-flavored body handed back byte for
- * byte, and changed only where it is edited; the whole format toolbar over
- * selected words; and the `/` menu offering the document's own block, less
- * the blocks it drops. The editor is the real one, from its bundle.
- * Synthetic body.
- */
-
-/** A pull request's description as GitHub holds it, every construct its Markdown has that the description's text has not among it. */
 const BODY = [
   "## Summary",
   "",
@@ -66,7 +54,6 @@ const BODY = [
   "",
 ].join("\n");
 
-/** A review comment's own block, as a line comment offers it. */
 const SUGGESTION = {
   group: BLOCK_MENU_GROUP.BLOCKS,
   row: { id: "suggestion", label: "Suggestion", icon: null },
@@ -76,7 +63,6 @@ const SUGGESTION = {
 
 const roots: Root[] = [];
 
-// Landed before any document renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -97,7 +83,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on `markdown` with none of the description's options but those given, each draft it hands over kept. */
 function mounted(markdown: string, options: Partial<MarkdownEditorProps> = {}) {
   const drafts: string[] = [];
   const handle: RefObject<DescriptionEditorHandle | undefined> = { current: undefined };
@@ -131,7 +116,6 @@ function mounted(markdown: string, options: Partial<MarkdownEditorProps> = {}) {
   };
 }
 
-/** Where `words` stand in the editor's text, as positions. */
 function positionsOf(editor: Editor, words: string): { from: number; to: number } {
   let found: { from: number; to: number } | undefined;
   editor.state.doc.descendants((node, pos) => {
@@ -141,14 +125,12 @@ function positionsOf(editor: Editor, words: string): { from: number; to: number 
   return found ?? assert.fail(`${words} is in the text`);
 }
 
-/** Words typed where the caret stands, as the editor's own input inserts them. */
 function type(editor: Editor, words: string): void {
   act(() => {
     editor.view.dispatch(editor.state.tr.insertText(words));
   });
 }
 
-/** The rows the `/` menu offers now, by their words; none while it stands closed. */
 function offered(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".ui-block-menu .ui-combobox-option-label")].map(
     (row) => row.textContent ?? "",
@@ -280,7 +262,6 @@ test("a body saved with Windows line endings comes back byte for byte untouched,
   assert.equal(last(), crlf.replace("This lifts the editor", "This moves the editor"));
 });
 
-/** The editor's root as a reader is told of it: its role, and the list and the row it names. */
 function named(editor: Editor) {
   const root = editor.view.dom;
   return {
@@ -292,7 +273,6 @@ function named(editor: Editor) {
   };
 }
 
-/** A key pressed in the editor's words. */
 function press(editor: Editor, key: string): void {
   act(() => {
     editor.view.dom.dispatchEvent(
@@ -301,14 +281,12 @@ function press(editor: Editor, key: string): void {
   });
 }
 
-/** The list standing over the text, and the id of its highlighted row. */
 function standing(container: HTMLElement) {
   const list =
     container.querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("a list stands");
   return { list: list.id, active: list.querySelector('[role="option"][aria-selected="true"]')?.id };
 }
 
-/** The textbox the root is while no list stands over it. */
 const TEXTBOX = {
   role: "textbox",
   multiline: "true",

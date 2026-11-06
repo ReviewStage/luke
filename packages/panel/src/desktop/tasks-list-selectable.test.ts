@@ -23,13 +23,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { ADMIN_AWAY, AUTOMATIONS_AWAY, BOARD_AWAY, PERSON_AWAY } from "../testing/tasks-control.js";
 import { TasksPage } from "./tasks-page.js";
 
-/**
- * tasks-list-selectable.test.ts -- the Tasks page's List chooses its tasks as
- * every selectable list does (`@repo/ui/testing/selectable-list`), across the
- * groups its tasks stand in. The page over the tasks tab itself, five tasks
- * in three statuses; the key of each is its task's id.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -50,7 +43,6 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: DEAN, name: "Dean Stratakos", email: "dean@acme.dev", role: "owner" },
 ];
 
-/** A task of Acme's, numbered `number`, standing in `status`. */
 function task(number: number, status: TaskStatus): TaskSummary {
   return {
     id: `t-${number}`,
@@ -75,7 +67,6 @@ const TASKS = [
   task(5, TASK_STATUS.BACKLOG),
 ];
 
-/** The page over the tasks tab reading `TASKS`, and the ids of the tasks it was asked to open. */
 async function mount() {
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
@@ -119,7 +110,6 @@ async function mount() {
   const container = document.body.appendChild(document.createElement("div"));
   const root: Root = createRoot(container);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Page))));
-  // Note that the members and the list land after the first paint.
   await act(async () => undefined);
   await act(async () => undefined);
   return {

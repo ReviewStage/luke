@@ -1,7 +1,3 @@
-/**
- * cost.tsx -- the Cost screen: what the hosted service spends, priced at list price from the usage its tables keep.
- */
-
 import {
   ADMIN_COST_TOP_ACCOUNTS_LIMIT,
   type AdminCost,
@@ -38,26 +34,18 @@ import { windowedReadQuery } from "../routing.js";
 
 const COST_ERROR = readFailedWords("cost");
 
-/** What every figure on the screen is, said once at the top of the page. */
 const COST_DESCRIPTION = `Every model token and metered second at its public list price: a list-price equivalent, not what ${PRODUCT_NAME} pays.`;
 
-/** The screen's dollar measure, named once so every label says the same thing. */
 const LIST_PRICE = "List-price equivalent";
 
-/** How many models the by-model table's skeleton stands a row for, about the models a window prices. */
 const MODEL_SKELETON_ROWS = 5;
 
-/** The figure a dollar amount that has nothing to divide by stands as. */
 const NO_FIGURE = "—";
 
 function usdOrNone(value: number | null): string {
   return value === null ? NO_FIGURE : formatUsd(value);
 }
 
-/**
- * What every dollar on the screen is and is not, said once under the
- * headline: a comparison and a trend at public prices, never our bill.
- */
 function ListPriceNote(): React.JSX.Element {
   return (
     <Text tone={TEXT_TONE.MUTED}>
@@ -66,7 +54,6 @@ function ListPriceNote(): React.JSX.Element {
   );
 }
 
-/** The headline figure's comparison with the window before it, which says nothing where there was none. */
 function spendMove(cost: AdminCost): string {
   const { trend } = cost.totals;
   if (trend.prior === 0) return `nothing priced in the ${trend.days} days before`;
@@ -80,7 +67,6 @@ function spendHint(cost: AdminCost): string {
     : `${spendMove(cost)} · plus ${formatCompact(unpriced)} unpriced tokens`;
 }
 
-/** The headline cards, in the order they stand. */
 const COST_STATS: readonly StatSpec<AdminCost>[] = [
   {
     key: "spend",
@@ -106,7 +92,6 @@ const COST_STATS: readonly StatSpec<AdminCost>[] = [
   },
 ];
 
-/** The two tables' column keys. */
 const MODEL_COLUMN = { MODEL: "model", SPEND: "spend", TOKENS: "tokens" } as const;
 
 const ACCOUNT_COLUMN = {
@@ -188,12 +173,10 @@ function accountColumns(onOpen: (id: string) => void): DataTableColumns<AdminCos
   ]);
 }
 
-/** A list price per minute as its provider writes it, to the fraction of a cent it names. */
 function perMinute(usd: number): string {
   return `$${usd}`;
 }
 
-/** What the figures leave out and how the seconds are priced, under the tables. */
 function CostBasisNote({ cost }: { cost: AdminCost }): React.JSX.Element {
   const { prices } = cost;
   return (
@@ -210,11 +193,6 @@ function CostBasisNote({ cost }: { cost: AdminCost }): React.JSX.Element {
   );
 }
 
-/**
- * The screen's sections under its toolbar, drawn from `cost` once it is
- * read and as their skeletons until then, so the loading page is this page
- * with bones where the answer lands.
- */
 function CostSections({
   cost,
   onOpenAccount,
@@ -304,7 +282,6 @@ export function CostScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
-  /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();

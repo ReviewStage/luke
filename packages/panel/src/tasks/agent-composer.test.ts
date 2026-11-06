@@ -41,16 +41,6 @@ import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./reposito
 import type { SkillSource } from "./skill-picker.js";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * The agent's message box as the developer works it, on the editor bundle's
- * editor: typing reaches the draft, Enter sends it and the box empties, a
- * message refused for what is mended elsewhere offers that remedy under the
- * box and sends the same line again once it lands, an input method's Enter
- * sends nothing, the box takes the caret as it opens and gives it up on
- * Escape, a `/` opens the repository's skills and a pick writes its chip,
- * and a dictation's words land where the caret stood as it began.
- */
-
 const SKILLS: readonly SkillOption[] = [
   {
     name: "release",
@@ -72,7 +62,6 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -94,13 +83,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The box on the composer's own control, its sends answered by `sender`. */
 function Box({
   sender,
   messages = [],
 }: {
   sender: MessageSender;
-  /** The transcript as the tab reads it, which a sent line is read back from. */
   messages?: readonly AgentTranscriptMessage[];
 }): ReactNode {
   const composer = useAgentComposer({
@@ -117,12 +104,10 @@ function Box({
       composer,
       skills: reading,
     }),
-    // What Continue would carry, as the tab hands it on.
     createElement("output", { "data-unsent": composer.unsent.words }),
   );
 }
 
-/** The box mounted, every message it sends written down and answered by `answer`. */
 async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promise(ignore)) {
   const sent: { text: string; clientKey: string }[] = [];
   const sender: MessageSender = (_agentId, text, clientKey) => {
@@ -140,7 +125,6 @@ async function mounted(answer: () => Promise<AgentAgentAnswer> = () => new Promi
   return {
     container,
     sent,
-    /** The words the box's editor shows. */
     shown: () => composerEditor(container).textContent,
     button: (label: string) =>
       container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
@@ -234,7 +218,6 @@ test("words selected raise the format toolbar, its marks alone, and a message bo
   );
 });
 
-/** The agent as the service answers a message it took. */
 const TAKEN: AgentAgentAnswer = {
   agent: {
     id: "agent-1",
@@ -248,7 +231,6 @@ const TAKEN: AgentAgentAnswer = {
   },
 };
 
-/** The box mounted, its one send answered only as the test lets it. */
 async function answeredLater() {
   let answer: (answered: AgentAgentAnswer) => void = ignore;
   const box = await mounted(
@@ -260,7 +242,6 @@ async function answeredLater() {
   return { ...box, answer: (answered: AgentAgentAnswer) => answer(answered) };
 }
 
-/** The box mounted, each send answered only as the test lets it, in the order they went. */
 async function answeredInTurn() {
   const answers: ((answered: AgentAgentAnswer) => void)[] = [];
   const box = await mounted(
@@ -460,7 +441,6 @@ test("Escape closes the skills' list without leaving the box, and the list stays
   assert.equal(box.container.querySelector('[role="listbox"]'), null);
 });
 
-/** A microphone that opens at once and a recorder that hands over what it heard as it stops, in place of the Mac's. */
 function stubMicrophone(): void {
   const track = { stop: ignore };
   const stream = { getTracks: () => [track] };
@@ -508,14 +488,12 @@ function stubMicrophone(): void {
 
 test("a dictation's words land where the caret stood as it began, spaced from the words around them", async () => {
   stubMicrophone();
-  // The strip draws still under reduced motion, which jsdom has no answer to.
   vi.stubGlobal("matchMedia", (query: string) => ({
     matches: query === "(prefers-reduced-motion: reduce)",
     addEventListener: ignore,
     removeEventListener: ignore,
   }));
   fakeAppBridge({});
-  // Main answers the microphone granted, and no route to prefer.
   fakeActPort({
     [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
     [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
@@ -525,7 +503,6 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   typeInComposer(box.container, "Fix this later");
   const editor = composerEditor(box.container).editor;
   assert.ok(editor, "the editor is running");
-  // The caret goes after "Fix", as a press there would put it.
   act(() => editor.commands.setTextSelection(4));
 
   const dictate = box.button("Dictate");
@@ -570,7 +547,6 @@ test("a dictation the service refused for want of an OpenAI key says to add one 
   assert.equal(box.shown(), "", "nothing was put in the box");
 });
 
-/** The box at an agent's tab's foot with the microphone stubbed, every clip read as `transcribed` answers. */
 async function mountedForDictation(transcribed: () => Promise<{ text: string }>) {
   stubMicrophone();
   vi.stubGlobal("matchMedia", (query: string) => ({
@@ -613,7 +589,6 @@ test('a clip sent for reading draws its ring and its "Transcribing" together, th
   assert.equal(reading.querySelector(":scope > [aria-hidden]")?.textContent, "Transcribing");
 });
 
-/** The box under the window's repository doors, its one message refused for a repository its owner's other workspace reaches, and every later one taken. */
 async function mountedRefusedForMove() {
   const sent: { text: string; clientKey: string }[] = [];
   const moves: { resolve: (moved: boolean) => void }[] = [];
@@ -683,13 +658,11 @@ test("a message refused for a repository its owner's other workspace reaches mov
   assert.equal(box.sent[1]?.clientKey, box.sent[0]?.clientKey);
 });
 
-/** What a remedy's press opened: pages of GitHub's, and places in Settings. */
 interface OpenedByRemedy {
   readonly github: string[];
   readonly settings: SettingsLink[];
 }
 
-/** The box under the window's doors and Settings opener, its one message refused for `unreached`; answers what each press opened. */
 async function mountedRefusedOnToken(unreached: RepositoryUnreached) {
   const opened: OpenedByRemedy = { github: [], settings: [] };
   const sender: MessageSender = () =>
@@ -840,7 +813,6 @@ test("a message refused because the agent's host was removed closes the box on t
 });
 
 test("while the agent's turn is starting, its status not yet running, a box that queues on Enter offers Queue in Send's place", async () => {
-  /** The box while a turn starts: the tab says it works, as a line the box sent still on its way does, while the agent's status still reads the turn before. */
   function Starting(): ReactNode {
     const composer = useAgentComposer({
       agentId: "agent-1",
@@ -877,7 +849,6 @@ test("while the agent's turn is starting, its status not yet running, a box that
 
 test("while the agent's turn runs, a touch held on Send sends the other way: a box whose Enter steers queues", async () => {
   const done: string[] = [];
-  /** The box while a turn runs, Enter steering, each way a message leaves recorded. */
   function Running(): ReactNode {
     const composer = useAgentComposer({
       agentId: "agent-1",

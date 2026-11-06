@@ -13,13 +13,6 @@ import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { HostConnectDialog } from "./host-connect-dialog.js";
 
-/**
- * host-connect-dialog.test.ts -- a pairing's link asks whose box it is
- * before anything is pressed: Connect approves the code the link named and
- * closes onto the list, and a code that cannot be approved says what to do
- * next. Synthetic names, codes, and documentation addresses.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -46,14 +39,12 @@ const BOX: HostPairingView = {
   expiresAt: 1_800_000_000_000,
 };
 
-/** Lets the dialog's read and a press's acts land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
 }
 
-/** The dialog for the code, drawn and its read landed, and what it told its owner. */
 async function opened(): Promise<string[]> {
   const told: string[] = [];
   const container = document.createElement("div");
@@ -72,7 +63,6 @@ async function opened(): Promise<string[]> {
     ),
   );
   await settle();
-  // Note that the pairing lands through a query, so the dialog is read once it no longer reads it.
   await vi.waitFor(() =>
     assert.equal((document.body.textContent ?? "").includes("Reading the code"), false),
   );
@@ -117,7 +107,6 @@ test("a code no pairing has, or one held after too many such codes, says so and 
   ] as const) {
     fakeActPort({ [ACT_KIND.HOSTS_PAIRING_READ]: () => Promise.resolve(refusal) });
     await opened();
-    // Note that the code read last stands while it is read again, so the refusal is read once it is this one's.
     await vi.waitFor(() => assert.equal((document.body.textContent ?? "").includes(says), true));
 
     const text = document.body.textContent ?? "";

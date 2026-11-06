@@ -37,20 +37,6 @@ import { MentionedAgents } from "./mentioned-place.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { WordsWorkspace } from "./use-link-standing.js";
 
-/**
- * mentioned-agent-card.test.ts -- a chip of a coding agent the place has no
- * tab of, an agent on another task of the workspace or on none, in words
- * drawn off that task's page as the Inbox draws them, hangs the agent's
- * tab's own card: its name, its model, who started it, and the task it
- * works on, drawn from the agents the task list carries, so neither drawing
- * a chip nor hanging its card asks the service anything. A mark the window
- * holds no model for wears the harness the list carries; an agent the list
- * carries not keeps the chip's own card, and until the list first answers
- * the card stands in its reading state. A pull request's chip hangs its Pull
- * request tab's card from the pull request the list holds of its agent.
- * Synthetic workspace, tasks, and agents.
- */
-
 const AT = 1_792_000_000_000;
 
 const ME = "user-dean";
@@ -99,14 +85,12 @@ const SWEEPER = agentOf("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", {
   startedBy: { userId: ME, name: "Dean Stratakos" },
 });
 
-/** An agent on no task the task list carries not, one of a workspace the reader left say. */
 const AUDITOR = agentOf("2a1b0c9d-8e7f-4a6b-9c5d-4e3f2a1b0c9d", {
   planId: null,
   title: "Audit retries",
   status: AGENT_STATUS.COMPLETED,
 });
 
-/** Main's document holding the billing task, by which an agent of it names where it works, before the task list first answers live. */
 const STATE: AppStateSnapshot = (() => {
   const snapshot = signedInAs({ id: ME, email: "dean@example.com", name: "Dean Stratakos" });
   return {
@@ -115,10 +99,8 @@ const STATE: AppStateSnapshot = (() => {
   };
 })();
 
-/** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
-/** The pull request the prorater opened, as its Pull request tab reads it. */
 const SEAT_PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Prorate seats on upgrade",
@@ -130,7 +112,6 @@ const SEAT_PULL_REQUEST: AgentPullRequest = {
   changedFiles: 3,
 };
 
-/** A pull request no agent of the workspace opened. */
 const OUTSIDE_PULL_REQUEST = "https://github.com/acme/relay/pull/7";
 
 let root: Root | undefined;
@@ -144,16 +125,8 @@ afterEach(() => {
   told.length = 0;
 });
 
-/** An older pull request the prorater opened, which its row no longer keeps. */
 const OLDER_PULL_REQUEST = "https://github.com/acme/relay/pull/41";
 
-/**
- * Main's document as `STATE` once the task list has answered live: the
- * prorater among its tasks' agents, though the billing row's few name it
- * not, an archived one say, the sweeper on no task, the prorater's pull
- * request as its row keeps it, and the billing row naming that one and an
- * older one of the prorater's.
- */
 const LISTED_STATE: AppStateSnapshot = {
   ...STATE,
   tasks: {
@@ -208,12 +181,10 @@ const LISTED_STATE: AppStateSnapshot = {
   },
 };
 
-/** The words drawn as the Inbox draws them, off any task's page, in the workspace given, main's document being `state`. */
 function drawn(text: string, state: AppStateSnapshot = STATE): Promise<HTMLElement> {
   return drawnElement(createElement(TranscriptWords, { text }), state);
 }
 
-/** An element drawn where the Inbox draws words, in the workspace given, main's document being `state`. */
 async function drawnElement(
   element: ReactElement,
   state: AppStateSnapshot = STATE,
@@ -226,7 +197,6 @@ async function drawnElement(
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
-  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
   writeAppState(state);
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -255,12 +225,10 @@ async function settle(): Promise<void> {
   });
 }
 
-/** An agent's mention, by the agent whichever task it works on, as its chip is written. */
 function mentionOf(agent: AgentSummary, name: string): string {
   return mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: agent.id }, name, PLACE);
 }
 
-/** The acts that read agents, as told. */
 function agentReads(): readonly AnyAct[] {
   return told.filter(
     (request) =>
@@ -270,7 +238,6 @@ function agentReads(): readonly AnyAct[] {
   );
 }
 
-/** What the card a chip hangs says, once its read has landed: the agent's tab's card, or the chip's own. */
 async function cardOf(chip: Element | undefined) {
   assert.ok(chip, "the agent is drawn as its chip");
   restOn(chip);
@@ -334,7 +301,6 @@ test("chips of agents off their task's page read nothing, and hang their tab's c
 });
 
 test("a mention of an agent on another task whose model no row names, laid in a message box as an Inbox answer's is, wears the harness the task list carries", async () => {
-  // The box stands on another task's page, whose doors know only that task's agents.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
       mention: {
@@ -368,7 +334,6 @@ test("a mention of an agent on another task whose model no row names, laid in a 
 });
 
 test("a mention of its own task's agent whose tile the page knows no harness of wears the harness the task list carries", async () => {
-  // The box stands on the agent's own task's page, whose agents are not yet read.
   const container = await drawnElement(
     createElement(MentionNodeChip, {
       mention: {

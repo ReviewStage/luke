@@ -10,15 +10,6 @@ import { findRanges, reveal } from "../find-matches.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { TranscriptTool, type TranscriptToolProps } from "./transcript-blocks.js";
 
-/**
- * transcript-call-card.test.ts -- a tool call's input and output are code
- * cards: a long output is cut at 40 lines behind Show all, which shows the
- * rest, a find reaches a line past the cut and opens the card on it, and
- * its Copy copies the whole output however it stands. JSON reads as words,
- * an output that only acknowledges is left out and an empty one says so,
- * and a command is one Terminal card. Synthetic calls.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -26,14 +17,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A block of `count` numbered lines. */
 function numbered(count: number): string {
   return Array.from({ length: count }, (_, at) => `line ${at + 1}`).join("\n");
 }
 
 const PATH = "src/members/accept-invite.ts";
 
-/** A finished call drawn with its row opened, as a reader would open it: a read of `PATH` answering `output` where nothing else is said. */
 function openedCall(
   output: ToolBlock | undefined,
   call: Partial<TranscriptToolProps> = {},
@@ -60,7 +49,6 @@ function openedCall(
   return container;
 }
 
-/** A read answering `text` as its words. */
 function openedRead(text: string): HTMLElement {
   return openedCall({ kind: TOOL_BLOCK.TEXT, text });
 }
@@ -71,7 +59,6 @@ function buttonNamed(drawing: HTMLElement, name: string): HTMLButtonElement | un
   );
 }
 
-/** The lines the card found by `selector` shows now, less what it holds `hidden` and the newline that closes the last. */
 function cardLines(drawing: HTMLElement, selector = "[data-tool-output]"): string[] {
   const body = drawing.querySelector(`${selector} pre`)?.cloneNode(true);
   if (!(body instanceof Element)) return assert.fail(`No card at ${selector}`);
@@ -79,7 +66,6 @@ function cardLines(drawing: HTMLElement, selector = "[data-tool-output]"): strin
   return (body.textContent ?? "").replace(/\n$/u, "").split("\n");
 }
 
-/** A card's title, by the card a selector finds. */
 function cardTitle(drawing: HTMLElement, selector: string): string | undefined {
   return drawing.querySelector(`${selector} [data-title]`)?.textContent ?? undefined;
 }
@@ -95,7 +81,6 @@ test("a long output is cut at 40 lines behind Show all, which shows the rest", (
 });
 
 test("a find over the transcript reaches a long output's line past its cut, and brings it into view with the card whole", () => {
-  // jsdom lays nothing out; a match is brought into view where it stands.
   Range.prototype.getBoundingClientRect = () => new DOMRect();
   const output = numbered(60).replace("line 55", "lantern 55");
   const drawing = openedRead(output);
@@ -202,7 +187,6 @@ test.each([
 ])("$reads", ({ output, shown }) => {
   const drawing = openedCall(output);
   const drawn = drawing.querySelector("[data-tool-output]");
-  // Note that a card's words are its lines, without its header's.
   const words = drawn?.querySelector("pre") ? cardLines(drawing).join("\n") : drawn?.textContent;
   assert.equal(words, shown);
 });

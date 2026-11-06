@@ -1,11 +1,3 @@
-/**
- * workspace-cell.tsx -- a workspace's name wherever an admin table names one, opening its page.
- *
- * Where the mount keeps addresses, the name is a real anchor, so a keyboard
- * reaches the workspace and a modified click still gets the browser's own
- * gesture; where it keeps none, it is a button, as an account's cell is.
- */
-
 import { TEXT_ELEMENT, TEXT_VARIANT, Text, TextButton, TextLink } from "@repo/ui";
 import { useAdminDoorsIfAny } from "./admin-doors.js";
 import { plainLeftClick } from "./routing.js";

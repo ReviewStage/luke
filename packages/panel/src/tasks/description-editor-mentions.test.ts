@@ -26,14 +26,6 @@ import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-/**
- * `@` in the description's editor over the real editor bundle: the word typed
- * opens the list of the description's sections and the repository's files,
- * grouped by kind and narrowed by the word; Enter writes the highlighted
- * row as its mention, drawn in the editor as its chip. Synthetic description and
- * repository.
- */
-
 const TASK: Task = {
   ...DOCUMENT_TASK,
   repository: "acme/relay",
@@ -43,7 +35,6 @@ const TASK: Task = {
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -69,20 +60,11 @@ beforeEach(() => {
 
 afterEach(async () => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the saves a description left as it went answer before its atoms go.
   await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
-/**
- * The plan's page drawn editable with its mentions, its editor opened on
- * Rollout, under the page's mentions where given. Note that it draws on a
- * registry of its own, as the window's root provides one, because the
- * minute a date's chip is said from is an atom: on the one registry every
- * test shares, a test before it would have started that minute on the real
- * clock, and a test that sets the date would read that one instead.
- */
 async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -112,13 +94,11 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
   assert.ok(rollout);
-  // Opened by Enter on its block, which places the caret by section rather than by a point jsdom cannot lay out.
   act(() => rollout.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   await act(async () => undefined);
   const element = container.querySelector<TiptapEditorHTMLElement>(".description-document-text");
   const editor = element?.editor;
   assert.ok(element && editor, "the description's editor is open");
-  /** The words typed at the end of the text, as the editor's own input inserts them. */
   const typeAtEnd = async (words: string) => {
     act(() => {
       editor.view.focus();
@@ -132,7 +112,6 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
     act(() => {
       element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
     });
-  /** The words typed right after the words given, as the editor's own input inserts them. */
   const typeAfter = async (words: string, typed: string) => {
     act(() => {
       let at: number | undefined;
@@ -150,7 +129,6 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
     });
     await act(async () => undefined);
   };
-  /** Words pasted at the end of the text, as the system's clipboard hands them over. */
   const pasteAtEnd = async (words: string) => {
     act(() => {
       editor.view.focus();
@@ -170,7 +148,6 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   return { container, typeAtEnd, typeAfter, press, pasteAtEnd };
 }
 
-/** The list's groups as it draws them: each heading and its rows' names. */
 function listed(container: HTMLElement): [string, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label") ?? "",
@@ -416,7 +393,6 @@ test("a section's address naming its task by its number, pasted whole into the d
   );
 });
 
-/** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
 function crumb(container: HTMLElement): string | undefined {
   return container.querySelector(".mention-menu-crumb-title")?.textContent ?? undefined;
 }

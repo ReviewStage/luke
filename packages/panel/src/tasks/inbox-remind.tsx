@@ -15,24 +15,6 @@ import {
 } from "./date-picker.js";
 import { hasReminder } from "./inbox-model.js";
 
-/**
- * inbox-remind.tsx -- setting a reminder on an Inbox item: the times its menus offer, the menu H opens on the chosen row, and the date picker for a time of the reader's own.
- *
- * A reminder takes an item out of the reader's Inbox until a time they pick:
- * in an hour, tomorrow at 9 AM, next Monday at 9 AM, or a day and time
- * picked in the date picker a date mention opens (`date-picker.tsx`), asked
- * there for one moment, opening on tomorrow at 9 AM, which only its Remind
- * me confirms. The item's row offers them in a
- * Remind me submenu, and H opens them on the chosen row; an item with a
- * reminder already offers Clear reminder at the submenu's foot, as Mail's
- * Remind Me does, the row saying when it comes due rather than the menu.
- * Several items chosen together are offered the same times, set on every
- * one, and Clear reminders where any holds one, answered by one toast whose
- * Undo puts each back as it stood. What a reminder does to the item, and
- * how it comes back, is `inbox-model.ts`'s `inboxAtNow`.
- */
-
-/** The hour tomorrow, next week, and the picker's opening day come due at, in the reader's own zone. */
 const MORNING_HOUR = 9;
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -49,19 +31,15 @@ const WORDS = {
   PAST: "Pick a time after now to be reminded",
 } as const;
 
-/** What the act that sets a reminder is called, wherever it stands. */
 export const REMIND_ME = WORDS.REMIND_ME;
 
-/** The picker asked for one moment: titled as the menu is, confirmed by Remind me. */
 const REMIND_MOMENT: DatePickerMoment = { title: WORDS.REMIND_ME, verb: WORDS.REMIND_ME };
 
-/** One time a Remind me menu offers: its words, and when it comes due, counted from the moment it is chosen. */
 interface RemindTime {
   readonly label: string;
   readonly at: (now: number) => number;
 }
 
-/** `now`'s day in the reader's own zone, `days` on, at `hour` sharp. */
 function dayAt(now: number, days: number, hour: number): number {
   const day = new Date(now);
   day.setDate(day.getDate() + days);
@@ -69,35 +47,29 @@ function dayAt(now: number, days: number, hour: number): number {
   return day.getTime();
 }
 
-/** The times every Remind me menu offers, in its order: an hour on, tomorrow morning, and next Monday morning. */
 const REMIND_TIMES: readonly RemindTime[] = [
   { label: WORDS.IN_AN_HOUR, at: (now) => now + HOUR_MS },
   { label: WORDS.TOMORROW, at: (now) => dayAt(now, 1, MORNING_HOUR) },
   {
     label: WORDS.NEXT_WEEK,
-    // Note that a Monday's next week is the Monday after, never the day itself.
     at: (now) => dayAt(now, (8 - new Date(now).getDay()) % 7 || 7, MORNING_HOUR),
   },
 ];
 
-/** An instant as a date mention spells a time, at UTC, so its chip's words say it in the reader's zone. */
 function momentOf(at: number): string {
   return `${new Date(at).toISOString().slice(0, 16)}+00:00`;
 }
 
-/** When a reminder comes due, in the words a date mention's chip uses from `now`: Today 11:24 AM, Tomorrow 9:00 AM, Monday 9:00 AM. */
 export function remindWords(at: number, now: number): string {
   return dateChipText({ start: momentOf(at) }, now, readerZone());
 }
 
-/** What a pick names: nothing, where the picker closed without its Remind me or holds no date; a time not ahead of now; or the instant to be reminded at. */
 const PICKED = { NONE: "none", PAST: "past", AT: "at" } as const;
 
 type Picked =
   | { readonly kind: typeof PICKED.NONE | typeof PICKED.PAST }
   | { readonly kind: typeof PICKED.AT; readonly at: number };
 
-/** What a pick names at `now`. Note that a picker closed any way but its Remind me names nothing, since only the act confirms a time. */
 function pickedInstant(picked: DatePicked, now: number): Picked {
   if (picked.how !== DATE_PICKER_CLOSE.CONFIRM || picked.date === undefined) {
     return { kind: PICKED.NONE };
@@ -107,24 +79,19 @@ function pickedInstant(picked: DatePicked, now: number): Picked {
   return at <= now ? { kind: PICKED.PAST } : { kind: PICKED.AT, at };
 }
 
-/** How a reminder set says so: by its own toast, or quietly where its caller answers several at once. */
 export interface RemindSaying {
   readonly quiet: boolean;
 }
 
-/** A reminder set among several, which their caller answers with one toast. */
 const QUIET: RemindSaying = { quiet: true };
 
-/** How an item's reminder is set: for an instant, or cleared where it is null. */
 export type InboxReminder = (item: InboxItem, until: number | null, saying?: RemindSaying) => void;
 
-/** What a Remind me menu acts through: the reminder, and the date picker for a time of the reader's own, where the menu's surface holds one. */
 export interface RemindDoors {
   readonly onRemind: InboxReminder;
   readonly onPick?: ((item: InboxItem) => void) | undefined;
 }
 
-/** The times a menu offers, each saying when it comes due, set through `onAt` as it is chosen. */
 function timeActions(onAt: (at: number) => void): MenuAction[] {
   const now = Date.now();
   return REMIND_TIMES.map((time) => ({
@@ -134,20 +101,12 @@ function timeActions(onAt: (at: number) => void): MenuAction[] {
   }));
 }
 
-/** Clear reminder, on an item with a reminder already; nothing on one without. */
 function clearReminderActions(item: InboxItem, onRemind: InboxReminder): MenuAction[] {
   return hasReminder(item)
     ? [{ label: WORDS.CLEAR, icon: <InboxIcon />, onSelect: () => onRemind(item, null) }]
     : [];
 }
 
-/**
- * An item's menu's reminder entry: Remind me, a submenu of the times and,
- * where the menu's surface holds a picker, a time of the reader's own,
- * printing H where `keyed`, on any item, open or settled, as H sets a
- * reminder on any; and at its foot Clear reminder, on an item with a
- * reminder already, whose time its row says (`InboxItemMarks`).
- */
 export function remindEntries(item: InboxItem, doors: RemindDoors, keyed: boolean): MenuEntry[] {
   const { onPick, onRemind } = doors;
   const pick: MenuAction[] =
@@ -167,14 +126,8 @@ export function remindEntries(item: InboxItem, doors: RemindDoors, keyed: boolea
   return [remind];
 }
 
-/** Sets or clears the reminder of several items chosen together. */
 export type InboxRemindMany = (items: readonly InboxItem[], until: number | null) => void;
 
-/**
- * The Remind me menu of several items chosen together: the times, set on
- * every one; a time of the reader's own where the surface holds a picker;
- * and Clear reminders where any of them holds one.
- */
 export function remindManyGroups(
   items: readonly InboxItem[],
   onRemindMany: InboxRemindMany,
@@ -189,11 +142,6 @@ export function remindManyGroups(
   ].filter((group) => group.length > 0);
 }
 
-/**
- * Sets the reminder of several items at once, or clears it on those that
- * hold one, each quietly, and answers with one toast whose Undo puts each
- * back as it stood; a refusal is still each item's own to say.
- */
 export function useRemindMany(onRemind: InboxReminder | undefined): InboxRemindMany {
   const toast = useToast();
   return useCallback(
@@ -212,13 +160,6 @@ export function useRemindMany(onRemind: InboxReminder | undefined): InboxRemindM
   );
 }
 
-/**
- * Reminders from an Inbox's list: H opens the Remind me menu on the chosen
- * row while `active`, and Pick a date and time opens the date picker there,
- * drawn in `room`. `rowOf` finds the row an item is drawn in; an item whose
- * row is not drawn opens nothing. What it answers draws the menu and the
- * picker while either stands, and opens the picker for an item.
- */
 export function useInboxReminding({
   room,
   rowOf,
@@ -239,10 +180,8 @@ export function useInboxReminding({
   const toast = useToast();
   const menu = useMenu(active);
   const { open } = picker;
-  // Note that the picker opens on the row of `item`, setting its reminder unless `onAt` takes the time picked, as several items chosen together do.
   const onPick = useCallback(
     (item: InboxItem, onAt?: (at: number) => void) => {
-      // Note that a time for several items chosen hangs from the list's room where none of their rows is drawn.
       const row = rowOf(item.id) ?? (onAt === undefined ? undefined : (room.current ?? undefined));
       if (row === undefined || onRemind === undefined) return;
       open({

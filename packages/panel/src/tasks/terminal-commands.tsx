@@ -18,24 +18,6 @@ import { TerminalPicker } from "./terminal-picker.js";
 import type { AgentsControl } from "./use-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
 
-/**
- * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its Terminal tab shown, and the offer to start an agent on a task with none.
- *
- * Both commands are offers on the window's one keymap (`app-commands.ts`), so
- * the menu bar and ⌘K run them as ⌘J does. Each decides the agent
- * (`terminal-entry.ts`) from where the developer is, never asking, then
- * shows that agent's Terminal tab in the side panel, New terminal asking its
- * sandbox for a new shell first (`terminal-store.ts`'s `shellsAsked`), which
- * the tab starts once the sandbox runs. A task with no agent offers to start one; one whose
- * agents are still being read waits on them, and lands as the rules have it
- * once they are.
- */
-
-/**
- * Opens an agent's terminal as a command means it: its Terminal tab shown,
- * after a new shell is asked of its sandbox where the command was New
- * terminal. The panel's "+" opens its Terminal rows through the same door.
- */
 export function useOpenTerminal(
   sidePanel: Pick<SidePanelControl, "onChoose">,
   onShown: () => void,
@@ -57,11 +39,9 @@ export function TerminalCommands({
   sidePanel,
   onShown,
 }: {
-  /** The agent whose own tab, Changes tab, or Terminal tab holds the developer, if any. */
   here: string | undefined;
   agents: AgentsControl;
   sidePanel: Pick<SidePanelControl, "onChoose" | "lastTerminal">;
-  /** Hands the keyboard to the side panel, where the terminal now stands. */
   onShown: () => void;
 }): React.JSX.Element {
   const toast = useToast();
@@ -77,10 +57,8 @@ export function TerminalCommands({
   const run = (ask: TerminalAsk) => {
     const landed = target();
     if (landed.kind === TERMINAL_TARGET.AGENT) return open(landed.agentId, ask);
-    // A task with no agent offers to start one; one whose agents are not read yet waits on them.
     setAsking(ask);
   };
-  // The task's agents read while the command waits on them: it lands on one where there is one.
   const waiting = asking !== undefined && agents.agents !== undefined && agents.agents.length > 0;
   useEffect(() => {
     if (!waiting || asking === undefined) return;
@@ -90,8 +68,6 @@ export function TerminalCommands({
   });
   useAppCommand(APP_COMMAND.SHOW_TERMINAL, () => run(TERMINAL_ASK.SHOW));
   useAppCommand(APP_COMMAND.NEW_TERMINAL, () => run(TERMINAL_ASK.NEW));
-  // A refused start says why on the toast, its repository's remedy as its action where it has one,
-  // since the palette that pressed it has closed; a move starts the agent again once it lands.
   const startAgent = () => {
     void agents.start.onPress().then((failure) => {
       if (failure === undefined) return;

@@ -56,21 +56,6 @@ import { ForkProvider } from "./fork-action.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import type { AgentContinuer } from "./use-agents.js";
 
-/**
- * continue-agent.test.ts -- an agent whose turn failed, or whose session
- * ended under a message, is continued in a new agent from its tab: the
- * failed end line ends on Continue in new agent, on its own row, and a box
- * closed on an ended agent offers it as its note's remedy, carrying the
- * box's words and files and letting them go once the new agent started.
- * Once an agent continues it, whatever it stands as, its box gives way to
- * Continued in with the continuing agents' chips (the newest two and +N
- * more past three) and Archive, the failed end line's press saying
- * Continue again in the same place, and Continued in is drawn nowhere
- * else, unless an archive took the box, when the transcript ends on it.
- * Words beside a Continue never tell the reader to start a new agent. Nothing is offered on a refused API key, an archived agent, or a
- * turn that did not fail. Synthetic throughout.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const NEXT = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
@@ -115,7 +100,6 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -137,7 +121,6 @@ async function settle(): Promise<void> {
   await settleQueries();
 }
 
-/** Lays words and files in the agent's box before its tab draws, as a draft kept from before. */
 function Seeded({
   words,
   files,
@@ -159,11 +142,6 @@ function Seeded({
   return null;
 }
 
-/**
- * The source agent's tab, standing as `status` with its turn failed for
- * `failure`, over a task whose agents are `others` beside it; every
- * continue and every tab opened written down.
- */
 async function drawnTab(input: {
   status: AgentStatus;
   failure?: AgentFailure;
@@ -173,9 +151,7 @@ async function drawnTab(input: {
   onUnarchive?: () => void;
   source?: Partial<AgentSummary>;
   onArchive?: (agentId: string, archived: boolean) => void;
-  /** The signed-in reader, whose own agents archive at once; another's at rest is read again first. */
   me?: string;
-  /** Reads the agent again before a teammate's is archived unasked. */
   readAgent?: (agentId: string) => Promise<AgentSummary | undefined>;
   onStop?: (agentId: string) => void;
   answer?: () => Promise<Failure | undefined>;
@@ -186,23 +162,14 @@ async function drawnTab(input: {
     onWriter?: (writer: DraftWriter) => void;
   };
   messages?: readonly AgentTranscriptMessage[];
-  /** Whether the tab's place opens the continue as a draft, as the task's column does. */
   drafts?: boolean;
-  /** What the first page says the agent and its newest turn cost, the latter as a service older than this window sent it. */
   usage?: Pick<AgentMessagesAnswer, "usage" | "turnUsage">;
-  /** Where the first page says the agent's launch stands, or stopped once it failed. */
   launch?: AgentLaunch;
-  /** Where the end line's key press turns, by the provider it names. */
   onOpenApiKeys?: (provider: ModelProvider | undefined) => void;
-  /** Why the first page says the launch never started, where its host said. */
   launchUnstarted?: DeviceLaunchUnstarted;
-  /** The repository the agent works in, as what it published says. */
   repository?: string;
-  /** Takes each message the tab sends, by its words, answering as the service does; none answers it as unanswered. */
   onMessage?: (text: string) => Promise<AgentAgentAnswer>;
-  /** Whether Bring your own host is on, which Move to stands behind. */
   ownHost?: boolean;
-  /** Takes each copy the tab makes, by its words. */
   copied?: string[];
 }) {
   fakeAppBridge({});
@@ -255,7 +222,6 @@ async function drawnTab(input: {
       input.onMessage?.(text) ??
       Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
   });
-  // Note that what the agent published is laid over the transcripts' host, which it hands everything else on to.
   const parts = handHostReads({});
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -316,7 +282,6 @@ async function drawnTab(input: {
     continued,
     drafted,
     opened,
-    /** The developer's lines in the transcript reading `words`. */
     lines: (words: string) =>
       [...container.querySelectorAll<HTMLElement>(".is-user")].filter((each) =>
         each.textContent?.includes(words),
@@ -332,7 +297,6 @@ async function drawnTab(input: {
     named: (within: ParentNode, words: string) =>
       [...within.querySelectorAll("button")].find((each) => each.textContent === words),
     buttons,
-    /** The end line's words and the presses on their row, each by what it says. */
     endRow: () => {
       const words = container.querySelector<HTMLElement>(
         "[data-ended] :is(.agent-end-words, .ui-failure-note-words)",
@@ -372,7 +336,6 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     endLineParts(AGENT_STATUS.FAILED, undefined)?.words,
     "Failed: the run ended without saying why",
   );
-  // Note that an agent whose host stopped beating names the host and a message as the way on, rather than reading as the run's own failure.
   assert.equal(
     endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.OTHER, undefined, true, {
       host: "Studio",
@@ -399,7 +362,6 @@ test("a failed agent whose host settled its launch unstarted ends on the step it
   assert.doesNotMatch(line.textContent ?? "", /Failed:/);
 });
 
-/** A failed agent on Studio whose launch Studio settled unstarted, its GitHub sign-in unable to reach the repository. */
 const SIGN_IN_REFUSED = {
   status: AGENT_STATUS.FAILED,
   failure: AGENT_FAILURE.OTHER,
@@ -408,7 +370,6 @@ const SIGN_IN_REFUSED = {
   source: { machine: AGENT_MACHINE.DEVICE, mac: { name: "Studio" } },
 } as const;
 
-/** The sign-in card the transcript ends on, none where it ends otherwise. */
 function signInCard(container: ParentNode): HTMLElement | null {
   return container.querySelector<HTMLElement>(".agent-end .ui-banner");
 }
@@ -420,14 +381,12 @@ test("a launch its Mac's GitHub sign-in could not start ends on a card naming th
     ...SIGN_IN_REFUSED,
     repository: "acme/web",
     copied,
-    // Note that the line is never answered, so it stays going, as a launch that takes its time does.
     onMessage: (text) => {
       sent.push(text);
       return new Promise(() => undefined);
     },
   });
   const card = signInCard(tab.container) ?? assert.fail("the transcript ends on the card");
-  // Note that the card names the repository once what the agent published reaches its query.
   await vi.waitFor(() =>
     assert.match(
       card.textContent ?? "",
@@ -511,7 +470,6 @@ test("a failed end line's row ends on Continue where only a new agent goes on, a
     failure: AGENT_FAILURE.SESSION_ENDED,
   };
   const key = { ...failed, endReason: endLineReason(AGENT_FAILURE.PROVIDER_KEY) };
-  // Note that a model call that failed leaves the agent taking messages, so a message carries it on.
   const model = {
     ...failed,
     endReason: endLineReason(AGENT_FAILURE.MODEL),
@@ -627,7 +585,6 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
 
   const note = tab.note() ?? assert.fail("the box says why it closed");
   assert.match(note.textContent ?? "", /^This agent has ended\.(?!.*Continue in a new one)/);
-  // The refused line stays where it went, marked, and the closed box does not draw its words again.
   assert.equal(composerEditor(tab.container).textContent, "", "the words show once");
   assert.ok(
     tab.container.querySelector(".agent-composer[data-closed]"),
@@ -709,7 +666,6 @@ test("words changed in the closed box while its continue is out stay once it lan
   assert.ok(button);
   act(() => button.click());
 
-  // Another window writes on in the same draft while the Start is out.
   act(() =>
     writer?.update({ kind: DRAFT_PLACE.AGENT, planId: TASK, agentId: SOURCE }, (was) => ({
       ...was,

@@ -7,14 +7,6 @@ import { installEditorLayout } from "../testing/composer.js";
 import type { DescriptionEditorBlocks, DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
-/**
- * description-placeholder.test.ts -- what the description editor's empty blocks say under
- * the caret: the empty description its own words, an empty line how to open the `/`
- * menu where one stands over the text, and an empty heading its level's
- * name. Synthetic description.
- */
-
-/** A `/` menu that takes no key, for an editor that offers one. */
 const QUIET_BLOCKS: DescriptionEditorBlocks = { onTrigger: () => undefined, onKey: () => false };
 
 const editors: DescriptionEditorHandle[] = [];
@@ -26,7 +18,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The editor mounted on the text, the `/` menu over it unless `offersBlocks` says not. */
 function mounted(markdown: string, offersBlocks = true): Editor {
   const host = document.body.appendChild(document.createElement("div"));
   editors.push(
@@ -46,12 +37,10 @@ function mounted(markdown: string, offersBlocks = true): Editor {
   return element?.editor ?? assert.fail("the editor is running");
 }
 
-/** What the empty block under the caret says, where one says anything. */
 function said(editor: Editor): string | undefined {
   return editor.view.dom.querySelector(".is-empty")?.getAttribute("data-placeholder") ?? undefined;
 }
 
-/** A new empty line after the text's last words, the caret on it. */
 function newLine(editor: Editor): void {
   editor
     .chain()

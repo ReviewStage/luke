@@ -12,17 +12,8 @@ import {
   rowWidth,
 } from "./agent-context-model.js";
 
-/**
- * What the agent box's context ring and its popover say of a page's
- * context: the share in words, the ring's color by how near eve's
- * compaction the last step read, the parts the read divides into with a
- * "~" on every estimate, and the lines under them. Synthetic counts
- * throughout.
- */
-
 const NOW = 1_800_000_600_000;
 
-/** A step that read 620k of a 1M window whose compaction is at 900k, on an agent handed the description. */
 const CONTEXT: AgentContext = {
   windowTokens: 1_000_000,
   compactionThresholdTokens: 900_000,
@@ -34,7 +25,6 @@ const CONTEXT: AgentContext = {
   measuredAt: NOW - 60_000,
 };
 
-/** The context with the last step reading this many tokens. */
 function reading(inputTokens: number): AgentContext {
   return { ...CONTEXT, inputTokens };
 }
@@ -43,7 +33,6 @@ test("the ring says the share of the window the last step read, and the popover 
   assert.equal(contextHint(CONTEXT), "62% of context used");
   assert.equal(contextFullLine(CONTEXT), "62% full");
   assert.equal(contextTotalLine(CONTEXT), "~620K / 1M tokens");
-  // A read past the window says so rather than stopping at a hundred.
   assert.equal(contextFullLine(reading(1_470_000)), "147% full");
   assert.equal(
     contextTotalLine({ ...CONTEXT, windowTokens: 200_000, inputTokens: 812 }),
@@ -76,7 +65,6 @@ test("the popover divides the read into the instructions, the tools, the descrip
       ["Conversation", "~615.4K"],
     ],
   );
-  // The bar's stretches are shares of the window, so together they fill what the step read.
   const filled = rows.reduce((sum, row) => sum + rowWidth(row, CONTEXT), 0);
   assert.ok(Math.abs(filled - 62) < 1e-9);
 });
@@ -99,8 +87,6 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
       ["Conversation", "~616K"],
     ],
   );
-  // A read the estimates outrun scales them down to it: the parts add up to the count and the
-  // bar fills what the step read, with no conversation left rather than less than none.
   const small = reading(3_000);
   const tiny = contextRows(small, undefined);
   assert.equal(rowCount(tiny[tiny.length - 1] ?? assert.fail("no conversation row")), "~0");

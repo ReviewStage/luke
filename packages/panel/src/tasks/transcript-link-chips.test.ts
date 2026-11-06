@@ -22,17 +22,6 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 
-/**
- * transcript-link-chips.test.ts -- a link an agent or the app writes in its
- * words, labeled as it likes or bare, is drawn as the chip of what it
- * names wherever a transcript's words are drawn: an agent's reply, a
- * subagent's, and an Inbox item's Markdown, which all draw
- * through `TranscriptWords`. A link that names nothing stays a link, and
- * code stays code. A call's row names the file it read or edited by the
- * same chip, and the page it fetched by its website chip. Synthetic task
- * and repository.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/relay";
 const COMMIT = "0a1b2c3d";
@@ -45,7 +34,6 @@ const WORDS = [
   "Not `https://linear.app/acme/issue/LUKE-9` nor `[@x](https://linear.app/acme)`.",
 ].join(" ");
 
-// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
@@ -63,7 +51,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What a task's page hands its places, each task and file a chip opened kept. */
 function taskPage(
   opened: Mention[],
   files: { path: string; lines: MentionLines | undefined }[],
@@ -84,12 +71,10 @@ function taskPage(
   };
 }
 
-/** The words drawn as a transcript draws them, on the task's page given or off any. */
 function drawn(page: TaskMentionsValue | undefined, text: string = WORDS): HTMLElement {
   return drawnElement(page, createElement(TranscriptWords, { text }));
 }
 
-/** An element drawn on the task's page given, or off any. */
 function drawnElement(page: TaskMentionsValue | undefined, words: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -105,7 +90,6 @@ function drawnElement(page: TaskMentionsValue | undefined, words: ReactElement):
   return container;
 }
 
-/** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
   return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
@@ -113,7 +97,6 @@ function chips(container: HTMLElement): [string | undefined, string | null][] {
   ]);
 }
 
-/** Whether any element drawn carries an address on an attribute the recording keeps, other than a link's own. */
 function carriesTarget(container: HTMLElement): boolean {
   const masked = new Set(["title", "href", "xmlns"]);
   return [...container.querySelectorAll("*")]
@@ -168,7 +151,6 @@ test("off a plan's page, as in the workspace's Inbox, the same links are chips, 
 
 test("a reference link is read through its definition, and a file's page far longer than a page's bound is still the file", () => {
   const files: { path: string; lines: MentionLines | undefined }[] = [];
-  // Each letter spelled in six characters, so the address passes a page's bound while its path stays inside a path's.
   const longPath = `apps/${"é".repeat(400)}.ts`;
   const longPage = `https://github.com/${REPOSITORY}/blob/HEAD/apps/${"%C3%A9".repeat(400)}.ts`;
   const container = drawn(
@@ -193,7 +175,6 @@ test("a reference link is read through its definition, and a file's page far lon
   );
 });
 
-/** A finished call of `kind` naming the files or the page given, as a transcript's row draws it. */
 function fileCall(kind: CallKind, subject: string, named: { files?: string[]; page?: string }) {
   return createElement(TranscriptTool, {
     kind,
@@ -226,7 +207,6 @@ test("a call's row names the first file it edited by the file's chip and how man
   );
 
   assert.deepEqual(chips(edited), [[MENTION_KIND.FILE, "list.ts"]]);
-  // Note that the chip says what it names to a reader who hears it, "file".
   assert.equal(edited.querySelector("summary")?.textContent, "Edited file list.ts +1");
   assert.equal(fetched.querySelector("[data-site-chip]")?.textContent, "rfc-editor.org");
   assert.deepEqual(chips(elsewhere), []);

@@ -20,17 +20,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
-/**
- * version-history-keys.test.ts -- the versions are one Tab stop, and ↑ and ↓
- * pressed on a row choose the version they step to, which the page beside the
- * list then shows, rather than only moving the focus there; focus coming onto
- * a row from outside the list chooses nothing; and where older versions wait,
- * the list's foot says how many and reads the next page on its press, or says
- * the read failed and offers Retry; and the Back row at the list's head goes
- * back, its hint, raised by the keyboard's focus, saying where it leads.
- * Synthetic description and people.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -47,7 +36,6 @@ const ACME = {
   github: null,
 };
 
-/** A revision of the description by Lee. */
 function line(seq: number) {
   return {
     seq,
@@ -78,7 +66,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The description's version history with versions 3, 2, and 1 listed and 3 chosen, each version chosen after it heard in `chosen`; `earlier` is where older versions are read before, and `onLoadEarlier` reads them. */
 function drawn(
   chosen: number[],
   older: { earlier?: number; onLoadEarlier?: () => Promise<boolean> } = {},
@@ -163,21 +150,18 @@ function drawn(
   return container;
 }
 
-/** The Back row at the head of the versions' column. */
 function backRow(view: HTMLElement): HTMLButtonElement | undefined {
   return [...view.querySelectorAll<HTMLButtonElement>(".version-log > button")].find(
     (button) => button.textContent?.trim() === "Back",
   );
 }
 
-/** The version rows' presses, newest first. */
 function rowsOf(view: HTMLElement): HTMLButtonElement[] {
   return [
     ...view.querySelectorAll<HTMLButtonElement>('[aria-label="Version list"] .ui-list-row-main'),
   ];
 }
 
-/** Presses `name` on whatever holds the focus. */
 function key(name: string): void {
   act(() => {
     document.activeElement?.dispatchEvent(
@@ -206,13 +190,11 @@ test("focus landing on a version from outside the list does not choose it", () =
   expect(chosen).toEqual([]);
 });
 
-/** The foot under the version list, which is the only button in it besides the rows. */
 function foot(view: HTMLElement): HTMLButtonElement | null {
   return view.querySelector<HTMLButtonElement>(".version-earlier .ui-line-button");
 }
 
 test("the foot counts the older versions, and reading them is its press", async () => {
-  // Version 3 is the oldest listed, so versions 2 and 1 are the older ones.
   const read: Array<(landed: boolean) => void> = [];
   const view = drawn([], {
     earlier: 3,
@@ -221,7 +203,6 @@ test("the foot counts the older versions, and reading them is its press", async 
   expect(foot(view)?.textContent).toBe("Show 2 more");
 
   act(() => foot(view)?.click());
-  // Note that the read stands out once its mutation's notification has drawn it.
   await vi.waitFor(() =>
     expect(foot(view)?.getAttribute("aria-label")).toBe("Reading older versions"),
   );
@@ -256,7 +237,6 @@ test("a list with no older versions has no foot", () => {
   expect(foot(drawn([]))).toBeNull();
 });
 
-/** Rests the keyboard's focus on `button` past the hint's wait, on a faked clock, and answers what the hint says. */
 function hintOf(button: HTMLButtonElement): string | null | undefined {
   document.documentElement.dataset.keyboard = "true";
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -291,7 +271,6 @@ test("the Back row names the page the window goes back to, where the history ope
   expect(hintOf(back)).toContain("Back to Inbox");
 });
 
-/** The Back row that leads to All versions, at the head of a revision's sections. */
 function allVersionsRow(view: HTMLElement): HTMLButtonElement | undefined {
   return [...view.querySelectorAll<HTMLButtonElement>(".version-log-pane button")].find(
     (button) => button.textContent?.trim() === "All versions",

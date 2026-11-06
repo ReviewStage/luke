@@ -32,17 +32,6 @@ import { useChangesPeople } from "./changes-people.js";
 import { PullRequestCard, peopleOf } from "./pull-request-card.js";
 import type { AgentsControl } from "./use-agents.js";
 
-/**
- * pull-request-people.test.ts -- an agent's pull request's card says who
- * its pull request names as every actor is drawn: a linked teammate as the
- * member, anyone else as themself on GitHub, a person's circle or an App's
- * bot's square, our own App's bot among them; each reviewer stands on a
- * row of its own with where they stand at its end and hangs their card,
- * every one of them listed, scrolling within the card. Its Files changed
- * view names nobody, since the Pull request tab's header above it does.
- * Synthetic people throughout.
- */
-
 const CHARLES: WorkspaceMember = {
   userId: "user-charles",
   name: "Charles Pan",
@@ -106,7 +95,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `element` inside the workspace's member directory, its reads landed. */
 async function draw(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -125,7 +113,6 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** The agent's changes as the service answers them, naming the people given. */
 function changesNaming(people: AgentChangesPeople): () => Promise<AgentChangesAnswerView> {
   return () =>
     Promise.resolve({
@@ -148,7 +135,6 @@ function changesNaming(people: AgentChangesPeople): () => Promise<AgentChangesAn
     });
 }
 
-/** The plan's agents, the one whose pull request it is among them. */
 function controlNaming(): AgentsControl {
   return agentsControl({
     agents: [AGENT],
@@ -160,12 +146,10 @@ function controlNaming(): AgentsControl {
 
 const control = controlNaming();
 
-/** Rests the pointer on a control, which hangs its card. */
 function hover(control: Element): void {
   restOn(control);
 }
 
-/** The pull request's card as its Pull request tab hangs it, with the people its tab read, or none before it has. */
 function card(people: AgentChangesPeople | undefined): ReactElement {
   const hung = tabCard({
     kind: TAB_KIND.CHANGES,
@@ -179,7 +163,6 @@ function card(people: AgentChangesPeople | undefined): ReactElement {
   return hung;
 }
 
-/** Each row of the card's reviewers: the name said, the kind of actor named, whether a bot, and where they stand at the row's end. */
 function reviewerRows(within: ParentNode): (string | null | undefined)[][] {
   return [...within.querySelectorAll('[aria-label="Reviewers"] > li')].map((row) => [
     row.querySelector(".ui-inline-ref-label")?.textContent,
@@ -218,7 +201,6 @@ test("a pull request's card says who opened it and lists its reviewers by where 
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
   const opener = async (people: AgentChangesPeople) => {
-    // Note that each draw's window holds the members anew, so the host lays them for it.
     handMembers(() => ({ rows: { members: [CHARLES] } }));
     const drawn = await draw(card(people));
     const row = drawn.querySelector(".ui-hover-card-row");
@@ -252,7 +234,6 @@ test("a pull request's tab card says who opened it and its reviewers once its ta
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  // Note that each draw's window holds the members anew, so the host lays them for it.
   handMembers(() => ({ rows: { members: [CHARLES] } }));
   const read = await draw(card(PEOPLE));
   assert.match(read.textContent ?? "", /Opened by luke-agent/u);
@@ -288,7 +269,6 @@ test("Files changed names nobody, with files or without, since the Pull request 
 });
 
 test("the people an agent's Changes tab read are named on its pull request's card wherever it hangs", async () => {
-  /** The agent's pull request's card, hung apart from its tab, naming whom the tab read. */
   function HungCard(): ReactElement {
     return card(peopleOf(useChangesPeople(AGENT.id), PULL_REQUEST));
   }
@@ -343,7 +323,6 @@ test("a pull request's card hung over its tab lists every reviewer, scrolling wi
   hover(tab.querySelector("button") ?? assert.fail("the tab stands"));
   const list = document.querySelector('.ui-tooltip-card [aria-label="Reviewers"]');
   assert.equal(list?.children.length, 50, "every reviewer is listed, none counted");
-  // Note that the list scrolls in the area it stands in.
   act(() => {
     list?.closest(".ui-scroll-area")?.dispatchEvent(new Event("scroll"));
   });

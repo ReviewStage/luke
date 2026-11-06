@@ -120,39 +120,9 @@ import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 import { useAutomations } from "./use-automations.js";
 
-/**
- * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.
- *
- * It stands in the plan's place as an agent's page does, opened from
- * wherever the window names a member, the reader among them, or someone
- * who left. Its head is their face at the page's size, their name, and
- * their role and email as the members read lists them, or that they left.
- * Under it stand their agents at work, the Inbox
- * items their agents wait on, the tasks assigned to them, the rest of the
- * tasks they created, and their other
- * agents, each from the listed workspace's task list and Inbox
- * (`@repo/ui/person-page-model`), and the workspace's automations they
- * made, a section with nothing in it left out.
- * Until the members, the task list, the Inbox, and the automations are read,
- * placeholders stand where what each names will, and a read that failed
- * says that and offers Retry, so a page names nobody as someone outside the
- * workspace, and is called empty, only once its reads have answered.
- * Nothing on it is read for it: it shows a teammate only what the sidebar,
- * the Inbox, and an agent's card already show any member, never their
- * personal workspace, their answers, or another workspace's. A press on a
- * row opens what it names, and its ⋯, a right-click, and the menu key open
- * its acts: a task's the sidebar's, an agent's Copy link and Archive, an
- * Item's and an automation's Copy link, each link written under the
- * workspace the page stands in. Its lists move: a row arriving slides in, one
- * leaving slides out, and one taken from a section into another glides
- * across. Escape leaves the page.
- */
-
-/** What a page's head says under a name, by who the person is to the workspace. */
 function headLine(person: Actor): ReactNode {
   if (person.kind === ACTOR_KIND.PERSON) {
     const role = person.role === undefined ? undefined : ROLE_WORDS[person.role];
-    // Note that their email is masked in a screen recording, and their role, one of the workspace's own, is not.
     const email =
       person.email === undefined || person.email === "" ? undefined : (
         <ReplayMask>{person.email}</ReplayMask>
@@ -172,12 +142,10 @@ function headLine(person: Actor): ReactNode {
   return "Not in this workspace";
 }
 
-/** The name the page heads with: a member's own, never "You", since the badge says so. */
 function headName(person: Actor): string {
   return person.kind === ACTOR_KIND.PERSON ? person.name : actorName(person);
 }
 
-/** A section: its name and count, then its rows. */
 function PersonSection({
   title,
   count,
@@ -189,11 +157,8 @@ function PersonSection({
   title: string;
   count: number;
   tone?: StatusTone | undefined;
-  /** Whether its rows are drawn by a component this page leaves unmarked, an Inbox item's, so they stay masked in a screen recording but for the words a row unmasks itself. */
   rowsMasked?: boolean | undefined;
-  /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
   run?: ListRun | undefined;
-  /** Its rows, where it draws every one. */
   children?: ReactNode;
 }): React.JSX.Element {
   const list = (
@@ -208,25 +173,12 @@ function PersonSection({
   );
 }
 
-/** What the section of what waits says where some of it could not be read. */
 const ITEMS_NOT_READ = "Some inbox items could not be read.";
 
-/** What an agent's row is, naming its ⋯ and menu "Agent actions". */
 const AGENT_THING = "Agent";
 
-/** What an automation's row is, naming its ⋯ and menu "Automation actions". */
 const AUTOMATION_THING = "Automation";
 
-/**
- * One of their agents as a row: its tile, its name, the task it works on,
- * and when it last moved; a press opens its tab, and its ⋯, right-click,
- * long press and menu key offer the agent's one menu over the doors a row has
- * (`agent-actions.tsx`), as a task's summary offers it: Copy link, Rename,
- * which turns the row into its name's field, Archive, asking first while a
- * teammate's agent still works, read again by its own id wherever it
- * stands, and Permanently delete, asked first. A finger's row draws no ⋯,
- * as a phone's Inbox row draws none, so its name keeps the room.
- */
 function AgentRow({
   each,
   tasks,
@@ -236,14 +188,12 @@ function AgentRow({
   each: PersonAgent;
   tasks: TasksControl;
   now: number;
-  /** Where it stands in its section's run of rows (`VirtualRows`). */
   place: VirtualRowPlace;
 }): React.JSX.Element {
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   const card = <AgentCard subject={subject} models={tasks.agents.models} />;
   const queryClient = useQueryClient();
-  // Note that the agent is read again by its own id before a teammate's is archived, because the agents control reads only the open task's.
   const control = {
     ...tasks.agents,
     readAgent: (agentId: string) => readAgentById(queryClient, agentId),
@@ -317,23 +267,14 @@ function AgentRow({
   );
 }
 
-/** An agent's key, by which its row leaves its list and glides into another (`ListMotion`). */
 function agentKey({ agent }: PersonAgent): string {
   return agent.id;
 }
 
-/** The height an agent's row is taken to have before it is measured, in pixels: a regular `ListRow`'s, one line. */
 const AGENT_ROW_ESTIMATE_PX = 40;
 
-/** The room between two agents' rows, in pixels: a list's (`--ui-list-gap`). */
 const AGENT_ROW_GAP_PX = 2;
 
-/**
- * A section of their agents: its name and count over its rows, each drawn
- * on after it is no longer listed until its exit has played (`useLeaving`),
- * drawing only those near the view of the page's scroller (`usePageScroll`),
- * every row while a find bar stands open (`List`'s `run`).
- */
 function PersonAgentsSection({
   title,
   agents,
@@ -348,7 +289,6 @@ function PersonAgentsSection({
   const drawn = useLeaving(agents, agentKey);
   const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
   const { scroller, shiftedBy } = usePageScroll();
-  // Note that the run draws every row while a find bar stands open over the page.
   const finding = useFindOpen();
   return (
     <PersonSection
@@ -372,26 +312,14 @@ function PersonAgentsSection({
   );
 }
 
-/** What the page's ⋯ is called, on its button and its menu alike. */
 const PERSON = "Person";
 
-/**
- * The workspace the page's links are written under: the one its page stands
- * in, by its slug where it has one, else by its id; none where it is not
- * known, so nothing copies a link that names no workspace.
- */
 function linkWorkspaceOf(tasks: TasksControl): string | undefined {
   const homeId = tasks.personView.workspaceId ?? tasks.workspace?.id;
   const home = tasks.workspaces.find((each) => each.id === homeId);
   return home?.slug ?? homeId;
 }
 
-/**
- * The header's end: their tasks in the sidebar, where the workspace is
- * shared and so filters by who created a task; and ⋯, holding Copy link
- * and Copy email for a member in one group, then the workspace's members in
- * Settings for its owners and admins.
- */
 function PersonActions({
   tasks,
   userId,
@@ -403,10 +331,8 @@ function PersonActions({
   tasks: TasksControl;
   userId: string;
   person: Actor;
-  /** Whether the workspace is shared, which alone filters the sidebar by person. */
   shared: boolean;
   onShowTasks: () => void;
-  /** Whether a phone heads the page, whose one ⋯ offers the sidebar's filter too, its button not drawn. */
   phone?: boolean;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
@@ -416,7 +342,6 @@ function PersonActions({
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
   const { workspace } = tasks;
-  // Only a member the members read lists has a row there to manage; someone who left has none.
   const manages =
     member?.role !== undefined &&
     workspace !== undefined &&
@@ -460,7 +385,6 @@ function PersonActions({
           {showTasks}
         </Button>
       ) : null}
-      {/* A phone's ⋯ always stands, since it also stands in for ⌘F (`phoneFindGroups`). */}
       {actions.length === 0 && !phone ? null : (
         <>
           <MoreButton thing={PERSON} {...menu.trigger()} />
@@ -479,7 +403,6 @@ function PersonActions({
   );
 }
 
-/** The workspace's automations a person made, as read: whether the list is still being read or could not be, and its Retry. */
 interface PersonAutomations {
   readonly automations: readonly AutomationSummary[];
   readonly reading: boolean;
@@ -487,14 +410,8 @@ interface PersonAutomations {
   readonly onRetry: () => void;
 }
 
-/**
- * The workspace's automations the person made: the workspace's alone,
- * never their personal ones, which only they read. None while the list is read or where
- * it could not be, which the page says rather than pass for a person with none.
- */
 function usePersonAutomations(workspaceId: string | undefined, userId: string): PersonAutomations {
   const { read, reload } = useAutomations(workspaceId);
-  // Note that their automations keep one identity while the read stands, because the list that draws them follows it (`useLeaving`).
   const theirs = useMemo(
     () =>
       read === undefined || "failure" in read
@@ -513,7 +430,6 @@ function usePersonAutomations(workspaceId: string | undefined, userId: string): 
   return { ...none, automations: theirs };
 }
 
-/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it, and its ⋯, right-click, long press and menu key offer Copy link, a finger's row drawing no ⋯. */
 function AutomationRow({
   automation,
   workspaceName,
@@ -572,12 +488,10 @@ function AutomationRow({
   );
 }
 
-/** An automation's key, by which its row leaves its list (`ListMotion`). */
 function automationKey({ id }: AutomationSummary): string {
   return id;
 }
 
-/** Their automations' rows, a row no longer listed drawn on until its exit has played (`useLeaving`). */
 function AutomationRows({
   automations,
   tasks,
@@ -608,7 +522,6 @@ function AutomationRows({
   );
 }
 
-/** The page's title: their face beside their name, which is the page's one `h1`. */
 function PersonHeading({ person }: { person: Actor }): React.JSX.Element {
   return (
     <PersonTitle
@@ -622,7 +535,6 @@ function PersonHeading({ person }: { person: Actor }): React.JSX.Element {
   );
 }
 
-/** The line under the title: You where it is the reader, and who they are here. */
 function PersonLine({ person }: { person: Actor }): React.ReactNode {
   const line = headLine(person);
   const you = person.kind === ACTOR_KIND.PERSON && person.you;
@@ -635,13 +547,6 @@ function PersonLine({ person }: { person: Actor }): React.ReactNode {
   );
 }
 
-/**
- * One section of a person's tasks, the first `PERSON_TASKS_SHOWN` of them,
- * newest first, wearing no face, since the page's head says whose they
- * are; and under it, where it leaves some out and the sidebar filters by
- * person, the foot that says how many more there are and lists every one
- * in the sidebar (`onShowAll`).
- */
 function PersonTasks({
   title,
   listed,
@@ -652,13 +557,10 @@ function PersonTasks({
   title: string;
   listed: readonly TaskSummary[];
   tasks: TasksControl;
-  /** Whether a task is unread, as the sidebar's rows count it. */
   unread: (task: TaskSummary) => boolean;
-  /** Lists every one in the sidebar, which filters by assignee alone, so a section of what they created offers none. */
   onShowAll?: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (listed.length === 0) return null;
-  // Note that the section and its foot are one block of the page, so the page's gap between sections stands above both and the foot stands close under the rows.
   return (
     <Stack gap={GAP.TIGHT}>
       <PersonSectionFrame label={title} title={title} count={listed.length}>
@@ -671,12 +573,10 @@ function PersonTasks({
   );
 }
 
-/** A task's key, by which its row leaves its list and glides into another (`ListMotion`). */
 function taskKey({ id }: TaskSummary): string {
   return id;
 }
 
-/** A section's first `PERSON_TASKS_SHOWN` tasks, a row no longer listed drawn on until its exit has played (`useLeaving`). */
 function PersonTaskRows({
   title,
   listed,
@@ -697,7 +597,6 @@ function PersonTaskRows({
         label={title}
         listed={drawn.map(({ value }) => value)}
         unread={unread}
-        // Note that a teammate's tasks are looked at rather than gone back to, so each opens on its plan.
         onOpen={tasks.onSelect}
         face={false}
         moves
@@ -706,10 +605,8 @@ function PersonTaskRows({
   );
 }
 
-/** What a phone's bar over the page is named by. */
 const PERSON_PHONE_PLACE = "person-page";
 
-/** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
   tasks,
   userId,
@@ -724,18 +621,14 @@ function PersonColumn({
   away: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const now = useMinute();
-  // What a phone's bar picks up from the page's header once it scrolls away.
   const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
   const listed = tasks.listed.tasks;
-  // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
   const { members, readerId, former, refused, retry } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
   const known = opened === undefined ? undefined : { userId, name: opened };
-  // Note that someone who left having only revised or answered is named by the former members read alone, since a link to them opens with no name.
   const left = former?.find((each) => each.userId === userId);
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
-  // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
@@ -743,16 +636,13 @@ function PersonColumn({
     taskView.onAssignedTo(
       userId === tasks.me ? { kind: ASSIGNED_TO.ME } : { kind: ASSIGNED_TO.MEMBER, userId },
     );
-  // Note that the page keeps one identity while the list stands, because each of its lists follows its rows (`useLeaving`).
   const page = useMemo(() => personPage(userId, listed), [userId, listed]);
-  // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
   const unread = useUnreadTasks({ staged });
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
   const drafts = useInboxRowDrafts();
-  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
   const waiting = read.items.filter(
     ({ holder, item }) =>
       (inboxWaitsOn(item)?.userId ??
@@ -762,10 +652,8 @@ function PersonColumn({
   );
   const { inboxView } = tasks;
   const openItem = (listed: InboxListed) => inboxView.onOpenItem(choiceOf(listed));
-  // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
-    // A phone's page still leads with its way back, the drawer and the places bar out of reach.
     return (
       <NotFound
         replayUnmasked
@@ -778,9 +666,7 @@ function PersonColumn({
       />
     );
   }
-  // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
   const theirs = you ? "your" : "their";
-  // A refused read will not name them, so the page says so and offers Retry rather than wait.
   const note =
     refused && unnamed ? (
       <div className="home-note my-tight-gap">
@@ -821,7 +707,6 @@ function PersonColumn({
         description={
           unnamed ? refused ? undefined : <PersonLineSkeleton /> : <PersonLine person={person} />
         }
-        // A phone's page offers its acts from its bar's one ⋯ instead.
         actions={away === undefined ? actions : undefined}
       >
         <PersonBody
@@ -848,7 +733,6 @@ function PersonColumn({
               now={now}
             />
           )}
-          {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
           {read.failed ? (
             <div className="home-note my-tight-gap">
               <ErrorState
@@ -917,7 +801,6 @@ function PersonColumn({
           ) : theirAutomations.reading ? (
             <RowsSkeleton label={`Reading ${theirs} automations…`} />
           ) : null}
-          {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
           {unnamed ||
           !tasks.listRead ||
           read.failed ||
@@ -936,7 +819,6 @@ function PersonColumn({
       </DetailPage>
     </ReplayUnmask>
   );
-  // Every link on the page, a row's Copy link among them, is written under the workspace it stands in.
   const linked = (
     <LinkWorkspaceProvider value={linkWorkspaceOf(tasks)}>{detail}</LinkWorkspaceProvider>
   );
@@ -954,7 +836,6 @@ function PersonColumn({
   );
 }
 
-/** A person's page, in the plan's place, read against the listed workspace's members. */
 export function PersonPage({
   tasks,
   userId,
@@ -964,11 +845,8 @@ export function PersonPage({
 }: {
   tasks: TasksControl;
   userId: string;
-  /** The name the place that opened the page knew them by: someone who left, whom only an edit names. */
   name?: string | undefined;
-  /** Whether the run is a fixture's, whose sidebar view is kept nowhere. */
   staged?: boolean;
-  /** A phone's way back out of the page (`WindowHistory`'s `onLeave`), which heads it as a phone's page; none elsewhere. */
   away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, tasks.personView.onClose);

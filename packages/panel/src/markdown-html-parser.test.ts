@@ -11,18 +11,11 @@ import { TranscriptWords } from "./tasks/transcript-blocks.js";
 import { withQueryClient } from "./testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
-/**
- * markdown-html-parser.test.ts -- a reply drawn before the HTML parser has
- * landed waits for it rather than being drawn without it, and is drawn
- * whole, its raw HTML parsed, the moment it lands. Synthetic words.
- */
-
 test("a reply is drawn only once the parser has landed, its HTML parsed", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   const words = createElement(TranscriptWords, { text: "Press <kbd>K</kbd> to search." });
-  // Note that the render is synchronous, so nothing the parser's import resolves has run yet.
   act(() =>
     root.render(
       withQueryClient(createElement(RegistryContext.Provider, { value: rendererRegistry }, words)),

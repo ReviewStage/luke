@@ -15,22 +15,10 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { CommentEditor } from "./comment-editor.js";
 
-/**
- * comment-editor.test.ts -- the box a member writes GitHub Markdown in, on
- * the description's editor, as its owner meets it: the words formatted by the
- * writing chords and handed over as Markdown, ⌘↩ and Esc the owner's, a
- * menu's Esc the box's alone, a comment opened again handed back byte for
- * byte, `@user` and `#123` kept as GitHub reads them, and words past
- * GitHub's bound saying so. The editor is the real one, from its bundle.
- * Synthetic words.
- */
-
-// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
 vi.hoisted(() => {
   Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
 });
 
-/** A review comment as GitHub holds it, with what a comment on github.com is written with. */
 const COMMENT = [
   "> [!NOTE]",
   "> cc @dana, this follows #123.",
@@ -64,14 +52,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What the owner heard: each change of the words, and what ⌘↩ and Esc handed it. */
 interface Heard {
   readonly changes: string[];
   readonly submitted: string[];
   readonly cancels: number[];
 }
 
-/** The box over words its owner holds, as an owner holds them, answering ⌘↩ and Esc where asked. */
 function Owner({
   start,
   heard,
@@ -100,7 +86,6 @@ function Owner({
   });
 }
 
-/** The box drawn in a holder that records every key reaching it, its words held by an owner. */
 function mount(
   start: string,
   answers = { submit: true, cancel: true },
@@ -108,7 +93,6 @@ function mount(
 ) {
   const heard: Heard = { changes: [], submitted: [], cancels: [] };
   const reached: string[] = [];
-  // Note that the keys are heard above the root React listens on, as a pane holding the box hears them.
   const pane = document.body.appendChild(document.createElement("div"));
   pane.addEventListener("keydown", (event) => reached.push(event.key));
   const holder = pane.appendChild(document.createElement("div"));
@@ -121,14 +105,12 @@ function mount(
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");
   const editor: Editor = element.editor ?? assert.fail("the box's editor is running");
-  /** Presses a key in the words, as the member would. */
   const press = (init: KeyboardEventInit) =>
     act(() => {
       element.dispatchEvent(
         new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
       );
     });
-  /** Types words where the caret stands, as the editor's own input inserts them. */
   const type = (words: string) =>
     act(() => {
       editor.view.dispatch(editor.state.tr.insertText(words));

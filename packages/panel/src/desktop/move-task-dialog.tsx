@@ -26,33 +26,8 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { sharedWords } from "./workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
-/**
- * move-task-dialog.tsx -- Move to workspace, from a task's ⋯: the account's other workspaces to move the task to, and what the move does.
- *
- * The menu offers it on a task the reader started, while the account is in
- * another workspace, because the service lets only a task's owner move it.
- * Where the list does not say who started a task (a service before it), or
- * the window does not know who is signed in, it is offered all the same,
- * and the service's refusal says the rest.
- *
- * The dialog lists every other workspace with its tile, its name, and who
- * shares it. One whose GitHub cannot reach the task's repository is listed
- * disabled, saying why, because the service refuses that move as it would a
- * change of repository; a task with no repository can go anywhere. The
- * first that can take it is chosen. Under the list it says what the move
- * does for the one chosen: who in the task's workspace loses it, who in the
- * other gains it, and that its agents go with it. The dialog is the move's
- * confirmation, so its act is the move itself, at the foot of a `Dialog` that
- * picks a destination rather than a `ConfirmDialog`, which only asks yes or
- * no. The question goes with its task and its surface (`@repo/ui`'s
- * `useConfirmDialog`), a move landed puts it away, and a refused one keeps it up saying so under the
- * list, the toast the move would raise held back in its favor.
- */
-
-/** What the dialog says under its list when the service refused the move. */
 const MOVE_REFUSED = "The task could not be moved. Try again.";
 
-/** The workspaces a task may be moved to: every one the account is in but its own. */
 function otherWorkspaces(
   tasks: Pick<TasksControl, "workspaces">,
   task: TaskSummary,
@@ -60,17 +35,14 @@ function otherWorkspaces(
   return tasks.workspaces.filter((workspace) => workspace.id !== task.workspaceId);
 }
 
-/** Whether the reader may be the one to move the task: its owner, or nobody the window can tell is not. */
 function ownsTask(tasks: Pick<TasksControl, "me">, task: TaskSummary): boolean {
   return task.ownerId === undefined || tasks.me === undefined || task.ownerId === tasks.me;
 }
 
-/** Whether the workspace's GitHub reaches the task's repository (`workspaceReaches`); a task with no repository goes anywhere. */
 function reaches(workspace: Workspace, repository: string | null): boolean {
   return repository === null || workspaceReaches(workspace, repository);
 }
 
-/** A row's line: who shares the workspace, or why it cannot take the task. */
 function rowLine(
   workspace: Workspace,
   repository: string | null,
@@ -84,17 +56,10 @@ function rowLine(
   return `${github} · cannot reach ${repository}`;
 }
 
-/** A workspace's name inside a line the dialog says, kept masked in a screen recording. */
 function named(workspace: Workspace): ReactNode {
   return <ReplayMask>{workspace.name}</ReplayMask>;
 }
 
-/**
- * Who in the task's workspace loses it: nobody where the reader is alone,
- * else its members who are not in the workspace chosen too. Note that they
- * are not counted, because the window knows how many each workspace holds
- * but not who is in both, and one in both keeps the task.
- */
 function lossLine(from: Workspace | undefined, to: Workspace): ReactNode {
   const losing = " lose access to it, its calls, and its agents.";
   if (from === undefined) {
@@ -125,7 +90,6 @@ function lossLine(from: Workspace | undefined, to: Workspace): ReactNode {
   );
 }
 
-/** Who in the workspace chosen gains it: its members counted, or named as its members where they are not. */
 function gainLine(to: Workspace): ReactNode {
   const { memberCount } = to;
   if (memberCount === undefined) {
@@ -154,7 +118,6 @@ function gainLine(to: Workspace): ReactNode {
   );
 }
 
-/** The workspaces as a radio group: a tile, a name, and a line each, the chosen one checked and the keyboard's one stop. */
 function WorkspaceChoices({
   workspaces,
   personalId,
@@ -165,12 +128,10 @@ function WorkspaceChoices({
   onChoose,
 }: {
   workspaces: readonly Workspace[];
-  /** The account's own first workspace, which a row calls personal while no one else is in it. */
   personalId: string | undefined;
   repository: string | null;
   chosen: Workspace | undefined;
   disabled: boolean;
-  /** The chosen row, which takes focus as the dialog opens. */
   first: React.RefObject<HTMLButtonElement | null>;
   onChoose: (workspaceId: string) => void;
 }): React.JSX.Element {
@@ -202,7 +163,6 @@ function WorkspaceChoices({
   );
 }
 
-/** The dialog over the window while the move is asked, running, or refused, and through its fade as it goes. */
 function MoveTaskCard({
   open,
   confirm,
@@ -213,7 +173,6 @@ function MoveTaskCard({
   chosen,
   onChoose,
 }: {
-  /** Whether the move is asked, running, or refused; falling, the card fades out. */
   open: boolean;
   confirm: DialogConfirm;
   task: TaskSummary;
@@ -287,13 +246,6 @@ function MoveTaskCard({
   );
 }
 
-/**
- * The workspace a task's repository belongs to, where the reader may move
- * the task there: a task they own, its own workspace's GitHub
- * not reaching its repository and another of the account's reaching it
- * (`strandedTaskHome`). None for any other task. The task's banner
- * (`stranded-task-banner.tsx`) and its card read it.
- */
 export function strandedHome(
   tasks: Pick<TasksControl, "me" | "workspaces">,
   task: TaskSummary,
@@ -302,15 +254,11 @@ export function strandedHome(
   return strandedTaskHome(task, tasks.workspaces);
 }
 
-/** One task's Move to workspace as a door holds it. */
 interface MoveTaskDoor {
-  /** The menu item's press; absent where the menu does not offer the move. */
   ask: (() => void) | undefined;
-  /** The dialog to draw beside the menu, which stands while the move is asked, running, or refused. */
   dialog: React.JSX.Element | null;
 }
 
-/** One task's Move to workspace, held for whichever door offers its menu. */
 export function useMoveTaskDialog(
   tasks: Pick<TasksControl, "shown" | "me" | "workspaces" | "moveTask">,
   task: TaskSummary | undefined,

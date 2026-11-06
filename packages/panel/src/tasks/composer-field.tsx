@@ -23,43 +23,8 @@ import type {
 } from "../description-editor/contract.js";
 import { useSelectionToolbar } from "./selection-toolbar.js";
 
-/**
- * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
- *
- * The field is TipTap (`../description-editor/composer-editor.ts`), from the editor
- * bundle the panel starts loading as it first paints (`../bundle-loader.ts`).
- * In the rare frame before it lands, the field is drawn at its own size with
- * its placeholder, inert and out of the Tab order, and the editor takes the
- * caret as it mounts, unless the developer is typing somewhere else or the
- * box asks it not to, as the Inbox's does, where K and J step the list.
- *
- * The editor owns the words. Each change hands them back as the draft
- * string, and the draft is never written back into the editor as a render
- * goes by: a draft that moves from outside, emptied by a send that was
- * taken or refilled by a message that did not go, is told to the editor as
- * `clear` or `replace`, once, against the last words the editor itself
- * handed back, so its own echo is never laid in again. The placeholder is
- * words the field draws while the draft is empty, rather than an attribute
- * of the editor's, so the recording masks it as it masks the words. A chip
- * the editor holds is drawn by the box, into the node's own element, as the
- * owner draws it (`chip`), and so is a quote block (`quote`). Words
- * selected raise the format toolbar over them, its marks alone
- * (`./selection-toolbar.tsx`), which stands aside while a list the box
- * opened stands, as its `aria-expanded` says. The field's
- * look is its own (`.agent-composer-input`, tasks.css), in the body type,
- * and unrecorded (`ph-no-capture`), the same in both boxes. Each key pressed
- * in it is timed to the paint after it, how long and nothing of the key
- * (`../panel-spans.ts`), the same in every box.
- */
-
-/** The editor's class, and the inert field's before it mounts. */
 const FIELD_CLASS = "ph-no-capture agent-composer-input";
 
-/**
- * The field's room in its card, which sizes the field from one line to its
- * cap (`.agent-composer-field`, tasks.css): the editor stands in it, and so
- * does the placeholder of a box still being read.
- */
 export function ComposerFieldRoom({
   ref,
   children,
@@ -74,7 +39,6 @@ export function ComposerFieldRoom({
   );
 }
 
-/** What the empty field asks for, over the field at the editor's own insets, said to nobody since the field names it. */
 export function ComposerPlaceholder({ children }: { children: string }): React.JSX.Element {
   return (
     <Text
@@ -89,12 +53,10 @@ export function ComposerPlaceholder({ children }: { children: string }): React.J
   );
 }
 
-/** The field before its editor mounts: drawn at the editor's own size and insets, inert. */
 export function UnloadedComposerField(): React.JSX.Element {
   return <div className={FIELD_CLASS} aria-busy="true" />;
 }
 
-/** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
 function typingElsewhere(): boolean {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || active === document.body) return false;
@@ -105,7 +67,6 @@ function typingElsewhere(): boolean {
   );
 }
 
-/** A chip the editor asked to be drawn: the element its node stands as, what it is, a skill, a mention, or a quote, and the key its drawing goes under. */
 interface DrawnChip {
   readonly element: HTMLElement;
   readonly chip:
@@ -115,12 +76,9 @@ interface DrawnChip {
   readonly key: number;
 }
 
-/** What the box's mentions are picked and drawn with: the `@` word's report, and each mention's look. */
 export interface ComposerFieldMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
-  /** A mention's chip, handed the doors to its node. */
   readonly chip: (mention: MentionNode, node: MentionNodeDoors) => ReactNode;
-  /** The mention words pasted whole stand for; nothing for words that paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
 }
 
@@ -149,11 +107,8 @@ export function ComposerField({
   keystrokeSpan = PANEL_SPAN.KEYSTROKE_COMPOSER,
   children,
 }: {
-  /** The editor bundle; nothing until it has loaded, while the field stands inert. */
   module: DescriptionEditorModule | undefined;
-  /** Where the mounted editor's handle is kept, for the box's commands. */
   editor: RefObject<ComposerEditorHandle | undefined>;
-  /** The field's own element, which the lists over it stand in. */
   room: RefObject<HTMLDivElement | null>;
   draft: string;
   setDraft: (text: string) => void;
@@ -166,25 +121,17 @@ export function ComposerField({
   onKey: (event: KeyboardEvent) => boolean;
   onEnter: () => void;
   onPasteFiles: (files: readonly File[]) => boolean;
-  /** Told once a paste past `maxLength` has been cut to fit; a box that gives no word of it cuts silently. */
   onPasteCut?: (() => void) | undefined;
   onTrigger: (trigger: ComposerTrigger | undefined) => void;
   chip: (chip: ComposerChip) => ReactNode;
-  /** How a quote block the editor holds is drawn; its words alone where none is given. */
   quote?: ((quote: ComposerQuote) => ReactNode) | undefined;
-  /** What the box's mentions are picked and drawn with; none where the box takes no mentions, read as it mounts. */
   mentions?: ComposerFieldMentions | undefined;
-  /** Whether the editor takes the caret as it mounts, unless the developer is typing elsewhere; a box that stands beside a list the keys step through takes none. */
   takesFocus?: boolean;
-  /** Whether the editor takes the caret as it mounts, over `takesFocus` and whoever is typing elsewhere; left out, those decide. Read as it mounts. */
   focus?: boolean | undefined;
-  /** The span its keystrokes are timed under. */
   keystrokeSpan?: KeystrokeSpanName;
-  /** What stands over the field, a list it opened. */
   children?: ReactNode;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
-  // A link in the draft opens, from its right-click, where the box stands.
   const editedLinks = useEditedLinksHost();
   const keystrokes = useKeystrokeSpans(keystrokeSpan);
   const roomHost = useCallback(
@@ -202,7 +149,6 @@ export function ComposerField({
     blocks: false,
     held: aria["aria-expanded"] === "true",
   });
-  // The last words the editor handed back, which a draft from outside is told against.
   const emitted = useRef(draft);
   const drawn = useRef(0);
   const latest = useRef({
@@ -234,7 +180,6 @@ export function ComposerField({
     format: toolbar.doors,
   };
 
-  /** A chip the editor asked for, drawn into its node's element until the node goes. */
   const draw = (element: HTMLElement, drawnChip: DrawnChip["chip"]) => {
     drawn.current += 1;
     const key = drawn.current;
@@ -283,7 +228,6 @@ export function ComposerField({
     };
   }, [module, editor, maxLength, label]);
 
-  // A draft that moved from outside is told to the editor once; its own words handed back are not.
   useLayoutEffect(() => {
     const mounted = editor.current;
     if (mounted === undefined || draft === emitted.current) return;

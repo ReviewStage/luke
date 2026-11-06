@@ -10,15 +10,7 @@ import { useAppCommand, useAppKeymap, useMenuCommands, useMenuOffers } from "./a
 import { useFocusedRowKeys } from "./desktop/task-actions.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 
-/**
- * The menu bar's commands as the window runs them under a dialog: Back and
- * Forward, which a mouse's back and forward buttons reach the window as under
- * Logi Options+, move the page while nothing stands over it, and leave it
- * alone while a dialog's card holds the keyboard.
- */
-
 let menuListener: ((command: AppCommand) => void) | undefined;
-/** Each set of commands the window told the menu bar it offers, in order. */
 let toldOffers: (readonly AppCommand[])[] = [];
 const roots: Root[] = [];
 
@@ -42,7 +34,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A window whose history offers Back and Forward, each move recorded, with a dialog over it while `dialog`. */
 function HistoryWindow({ moves, dialog }: { moves: string[]; dialog: boolean }): ReactElement {
   useMenuCommands(true);
   useAppCommand(APP_COMMAND.BACK, () => moves.push("back"));
@@ -61,7 +52,6 @@ function HistoryWindow({ moves, dialog }: { moves: string[]; dialog: boolean }):
   );
 }
 
-/** The window drawn, redrawn with its dialog shown or not by the function answered. */
 function drawWindow(moves: string[]): (dialog: boolean) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
@@ -71,7 +61,6 @@ function drawWindow(moves: string[]): (dialog: boolean) => void {
   return draw;
 }
 
-/** Chooses `command` from the menu bar, or swipes for it. */
 function menu(command: AppCommand): void {
   act(() => menuListener?.(command));
 }
@@ -97,7 +86,6 @@ test("a dialog standing holds off the menu bar's Back and Forward, which run aga
   assert.deepEqual(moves, ["back"]);
 });
 
-/** A window whose keymap answers, offering the Inbox's J and ⌘Z's undo, each press recorded, with a field to type in. */
 function KeyedWindow({ moves }: { moves: string[] }): ReactElement {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, () => moves.push("inbox"));
@@ -105,14 +93,12 @@ function KeyedWindow({ moves }: { moves: string[] }): ReactElement {
   return createElement("textarea", { "aria-label": "Message" });
 }
 
-/** Presses J where the press lands. */
 function pressJ(target: EventTarget): void {
   act(() => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "j", code: "KeyJ", bubbles: true }));
   });
 }
 
-/** Presses ⌘Z where the press lands, answering whether the window claimed it from what would answer it next. */
 function pressUndo(target: EventTarget): boolean {
   const press = new KeyboardEvent("keydown", {
     key: "z",
@@ -142,7 +128,6 @@ test("J and ⌘Z run their commands, and nothing while the press is typing into 
   assert.equal(claimedInField, false, "the field's own undo answers it");
 });
 
-/** What the open thing offers on U, P, and S, each press recorded: a plan's, say. */
 function OpenThing({ presses }: { presses: string[] }): null {
   useAppCommand(APP_COMMAND.TOGGLE_READ, () => presses.push("open read"));
   useAppCommand(APP_COMMAND.PIN, () => presses.push("open pin"));
@@ -150,7 +135,6 @@ function OpenThing({ presses }: { presses: string[] }): null {
   return null;
 }
 
-/** A sidebar row that takes the keyboard, offering U, P, and S while it holds it. */
 function FocusableRow({ presses }: { presses: string[] }): ReactElement {
   const row = useRef<HTMLDivElement | null>(null);
   useFocusedRowKeys(
@@ -162,7 +146,6 @@ function FocusableRow({ presses }: { presses: string[] }): ReactElement {
   return createElement("div", { ref: row, tabIndex: 0, "aria-label": "Row" });
 }
 
-/** The keymap with the open thing, mounted anew under `opened`, beside a focusable row. */
 function RowWindow({ presses, opened }: { presses: string[]; opened: number }): ReactElement {
   useAppKeymap(true);
   return createElement(
@@ -173,7 +156,6 @@ function RowWindow({ presses, opened }: { presses: string[]; opened: number }): 
   );
 }
 
-/** Presses a letter alone where the keyboard is. */
 function pressLetter(key: "u" | "p" | "s"): void {
   const target = document.activeElement ?? document.body;
   act(() => {
@@ -195,7 +177,6 @@ test("U, P, and S act on the focused sidebar row over the open thing, even once 
 
   const row = document.querySelector<HTMLElement>('[aria-label="Row"]') ?? assert.fail("the row");
   act(() => row.focus());
-  // The open thing mounting again makes its offers the newest, which must not take the letters from the row.
   draw(1);
   pressLetter("u");
   pressLetter("p");
@@ -208,7 +189,6 @@ test("U, P, and S act on the focused sidebar row over the open thing, even once 
   assert.deepEqual(presses.splice(0), ["open pin", "open status"]);
 });
 
-/** A window telling the menu bar its offers, offering Back always and Copy link while `linked`. */
 function OfferingWindow({ linked }: { linked: boolean }): ReactElement | null {
   useMenuOffers();
   useAppCommand(APP_COMMAND.BACK, () => undefined);

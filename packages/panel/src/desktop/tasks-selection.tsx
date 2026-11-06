@@ -35,38 +35,12 @@ import {
 import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { useRefusalHeard } from "./use-refusal-heard.js";
 
-/**
- * tasks-selection.tsx -- the tasks chosen together on a page of them, the Tasks page's List and Board and the sidebar alike, and what the selection bar and a chosen row's menu do to them all.
- *
- * Each page keeps its own selection (`useTasksSelection`): which tasks are
- * chosen, only those it still draws, so a task the filter, a fold, or the
- * service took away is never acted on and is not chosen again once back;
- * and the acts the bar offers on them all, as a task row's menu offers them
- * for one: Status and Move to section, each answered by one toast whose Undo
- * puts every task back where it stood, and Permanently delete, which asks
- * first, naming how many. A row chosen
- * among several offers those same acts from its ⋯, a right-click, and the
- * menu key, under how many it acts on (`chosenRowMenu`), as a Mac's list
- * does; one chosen alone keeps its own menu. The sidebar, whose rows stand
- * deep under its groups and sections, hands each row its selection through
- * `ChosenTasksContext` rather than through every group between.
- */
-
-/** What the selection bar's Move to section says beyond the sections. */
 const SELECTION_ACT = {
   NO_SECTION: "Remove from section",
 } as const;
 
-/** What a delete of every task chosen answers once the service deleted them all. */
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/**
- * Moves tasks into a section, on top of it in their order, or out of every
- * section where `sectionId` is null, through the section dialogs' `move`,
- * whose one toast's Undo puts each back in the section it stood in, under
- * the rows it stood under, or in none. A task already where it is sent is
- * left as it stands.
- */
 function moveToSection(
   tasks: TasksControl,
   taskIds: readonly string[],
@@ -86,25 +60,11 @@ function moveToSection(
   );
 }
 
-/**
- * A selection of several tasks as a chosen row's menu reads it: how many,
- * and the bar's acts on them all, read as the menu draws. Note that it is
- * the same while the count stands, so a row held while what it is handed
- * does (`memo`) holds as the selection moves, and reads the acts newest.
- */
 export interface ChosenTasks {
   readonly count: number;
   readonly acts: () => readonly SelectionAct[];
 }
 
-/**
- * What the selection bar offers the tasks chosen, as a task row's menu offers
- * them for one: Status, each status by its mark, the one they all stand at
- * checked; Move to section, each of the workspace's sections by its glyph,
- * New section to make one holding them, and out of every section; and
- * Permanently delete, which asks first. Each acts on them all at once, then
- * lets the selection go.
- */
 function selectionActs(
   tasks: TasksControl,
   latest: () => TasksControl,
@@ -166,11 +126,6 @@ function selectionActs(
   ];
 }
 
-/**
- * The question Permanently delete asks of the tasks chosen, naming how many.
- * Each goes with its board and transcript, which nothing in the app brings
- * back.
- */
 function deleteChosenQuestion(count: number): DialogQuestion {
   const one = count === 1;
   const named = countWords(count, TERM.TASK);
@@ -184,40 +139,23 @@ function deleteChosenQuestion(count: number): DialogQuestion {
   };
 }
 
-/** A page's selection of its tasks, as `useTasksSelection` keeps it. */
 export interface TasksSelection {
-  /** The id its `SelectionRegion` and the bar that names it share. */
   readonly regionId: string;
-  /** The tasks chosen, only those the page draws. */
   readonly selected: ReadonlySet<string>;
   readonly onChange: (selected: ReadonlySet<string>) => void;
-  /** Chooses none. */
   readonly onClear: () => void;
-  /** What the bar does to every task chosen. */
   readonly acts: readonly SelectionAct[];
-  /** The selection a row of the task stands in, where it is one of several chosen; none otherwise. */
   readonly chosenOf: (taskId: string) => ChosenTasks | undefined;
-  /** The questions its acts ask, Permanently delete and New section, which the page draws beside the bar. */
   readonly dialog: React.JSX.Element;
 }
 
-/** The tasks a page has chosen, by id, as a store holds them. */
 export type ChosenTasksStore = Store<ReadonlySet<string>>;
 
-/**
- * The tasks a page has chosen of those it draws (`drawn`), and what its bar
- * and its chosen rows do to them all. Note that a task no longer drawn leaves
- * the selection for good, so one coming back is not chosen again unasked.
- * The choice is held in `held` where the page hands a store that outlives
- * it, as the Tasks page does so its choice stands when it is drawn again,
- * and in a store of the hook's own otherwise.
- */
 export function useTasksSelection(
   tasks: TasksControl,
   drawn: ReadonlySet<string>,
   held?: ChosenTasksStore,
 ): TasksSelection {
-  // The tab as it stands, which an Undo pressed or a refusal answered renders after its act reads.
   const latest = useRef(tasks);
   latest.current = tasks;
   const regionId = useId();
@@ -229,19 +167,15 @@ export function useTasksSelection(
   ) => store.setState(typeof next === "function" ? next : () => next);
   const selected: ReadonlySet<string> = new Set([...chosen].filter((id) => drawn.has(id)));
   const stale = selected.size !== chosen.size;
-  // Note that the tasks no longer drawn are let go after the draw rather than during it, because a store's write redraws its readers.
   useEffect(() => {
     if (stale) store.setState((was) => new Set([...was].filter((id) => drawn.has(id))));
   });
   const onClear = () => setChosen(new Set());
   const sections = useSectionDialogs(tasks, tasks.shown);
-  // The tasks Permanently delete was asked of, held as it asks, so a selection changed meanwhile deletes none it never named.
   const [doomed, setDoomed] = useState<readonly string[]>([]);
-  // Note that a refusal said once the tab went away is said in a toast, since the question went with it.
   const heard = useRefusalHeard(doomed.length > 0 && tasks.shown, {
     surface: FAILURE_SURFACE.TASK_DELETE,
   });
-  // Note that a refusal leaves only the tasks refused asked of, so Retry sends none already deleted.
   const deleting = useMutation(tasks.deleteTasks);
   const deletionAct = useConfirmAct(deleting, {
     send: async () => {
@@ -254,7 +188,6 @@ export function useTasksSelection(
         return ACCEPTED;
       }
       setDoomed(refused);
-      // Note that the tasks refused are chosen again, since each left the selection as the host drew it gone, and the deleted stay out.
       setChosen((held) => new Set([...[...held].filter((id) => !doomed.includes(id)), ...refused]));
       return heard(
         answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED,
@@ -278,7 +211,6 @@ export function useTasksSelection(
     },
   });
   const actsNow = useSteadyDoor(() => acts);
-  // Note that a row is offered the selection's acts only among several chosen, as one chosen alone is the row's own menu already.
   const count = selected.size;
   const several: ChosenTasks | undefined = useMemo(
     () => (count > 1 ? { count, acts: actsNow } : undefined),
@@ -305,7 +237,6 @@ export function useTasksSelection(
   };
 }
 
-/** The menu a row chosen among several opens: the bar's acts on every task chosen, under how many. */
 export function chosenRowMenu(thing: string, chosen: ChosenTasks, shown: boolean) {
   return {
     thing,
@@ -316,7 +247,6 @@ export function chosenRowMenu(thing: string, chosen: ChosenTasks, shown: boolean
   };
 }
 
-/** The selection a sidebar task row stands in, where it is one of several chosen (`TasksSelection.chosenOf`); none outside a choosing sidebar. */
 export const ChosenTasksContext = createContext<(taskId: string) => ChosenTasks | undefined>(
   () => undefined,
 );

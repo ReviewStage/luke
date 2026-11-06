@@ -51,22 +51,8 @@ import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./description-
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
-/**
- * A description's comments on its own page: each open thread's words marked where
- * the description holds them, a press on them opening the thread beside them, its
- * ✓ resolving it and its reply posting the words typed, a thread whose
- * words were deleted saying so over its quote, a resolved thread marking
- * nothing and listed under Resolved in the Comments tab, where Reopen
- * brings it back, and no mark on a page that is not the plan's own; and
- * ⌥⌘M starts a thread on the words selected, as the bubble over them does.
- * The margin is measured again as a card is resized, and never on a draw
- * that moves nothing it stands on. Synthetic description and threads.
- */
-
-// Landed before any field renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 const TEXT = [
@@ -85,7 +71,6 @@ const ID = {
   RESOLVED: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
 } as const;
 
-/** A thread on the first place `words` stands in the text, its words and quote as the description holds them. */
 function threadOn(
   id: string,
   words: string,
@@ -134,7 +119,6 @@ const THREADS: readonly DescriptionCommentThread[] = [
   }),
 ];
 
-/** The plan's own page's links, which say the page is the plan's own. */
 const PAGE_LINKS = { workspace: "acme", onOpen: () => undefined, reveal: undefined };
 
 const roots: Root[] = [];
@@ -153,18 +137,15 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
-  // Note that a comment's unsent words are kept in the window's storage, so each test starts with none.
   window.localStorage.clear();
 });
 
-/** The choice of the description's comments list that lists the resolved threads. */
 function resolvedChoice(container: HTMLElement): HTMLElement | undefined {
   return [...container.querySelectorAll<HTMLElement>('[role="radio"]')].find((choice) =>
     choice.textContent?.startsWith("Resolved"),
   );
 }
 
-/** The plan's page, or the page with its comments listed in the margin's place, drawn over the threads, with every write asked kept. */
 function drawn(
   view: "page" | "list" | "other",
   threads: readonly DescriptionCommentThread[] = THREADS,
@@ -178,7 +159,6 @@ function drawn(
 ) {
   const asked: { thread: string; action: DescriptionCommentActionRequest }[] = [];
   const started: DescriptionCommentStartRequest[] = [];
-  /** Why each thread's last act failed, which a test sets before it draws the thread. */
   const notes = new Map<string, string>();
   const control: DescriptionCommentsControl = {
     planId: PLAN.id,
@@ -200,7 +180,6 @@ function drawn(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // The list draws its threads whole, their writers read as the reader's own and the agents named.
   const reader = view === "list" ? (me ?? "u-dean") : me;
   const page = createElement(DescriptionBody, {
     task: plan,
@@ -208,7 +187,6 @@ function drawn(
     ...(reader === undefined ? undefined : { reader: { readerId: reader } }),
     ...(view === "list" && agents !== undefined ? { agents } : undefined),
   });
-  // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const treeOf = (value: DescriptionCommentsControl) =>
     createElement(
@@ -223,17 +201,14 @@ function drawn(
       }),
     );
   act(() => root.render(onRegistry(registry, treeOf(control))));
-  // The list stands in the margin's place once the description's Comments toggle is pressed.
   if (view === "list") {
     act(() => container.querySelector<HTMLButtonElement>(".comments-toggle button")?.click());
   }
-  /** Draws the page again on the threads the service now lists. */
   const rethread = (next: readonly DescriptionCommentThread[]) =>
     act(() => root.render(onRegistry(registry, treeOf({ ...control, threads: next }))));
   return { container, asked, started, notes, rethread };
 }
 
-/** What `draw` drew with the column stood `across` wide, by default wide enough for its margin, since jsdom lays nothing out. */
 function wide<Drawn>(draw: () => Drawn, across = 1400): Drawn {
   const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
@@ -243,13 +218,11 @@ function wide<Drawn>(draw: () => Drawn, across = 1400): Drawn {
   try {
     return draw();
   } finally {
-    // Note that jsdom holds the width on `Element.prototype`, so the stand-in is taken away rather than put back.
     if (width !== undefined) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
     else Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
   }
 }
 
-/** Types `words` into a plain field, as a keyboard's input lands. */
 function typeInto(field: HTMLTextAreaElement | null | undefined, words: string): void {
   assert.ok(field, "the field stands");
   act(() => {
@@ -259,7 +232,6 @@ function typeInto(field: HTMLTextAreaElement | null | undefined, words: string):
   });
 }
 
-/** The words marked for a thread, joined as drawn. */
 function markedWords(container: HTMLElement, thread: string): string {
   return [...container.querySelectorAll(`mark.description-comment-mark[data-threads~="${thread}"]`)]
     .map((mark) => mark.textContent)
@@ -396,7 +368,6 @@ test("the description's comments list holds each open thread whole, its reply fi
 });
 
 test("a comment's time reads as a thread's does, a few letters, with the full moment on hover", () => {
-  // Note that the window's minute counts on the real clock here, so the comment is dated from it.
   const at = Date.now() - 3 * 3_600_000 - 30_000;
   const [open] = THREADS;
   assert.ok(open?.entries[0]);
@@ -422,7 +393,6 @@ test("a page that is not the plan's own marks no comment", () => {
   assert.equal(container.querySelectorAll(".comment-card").length, 0);
 });
 
-/** Types words into a field and presses Return, as a member posts. */
 async function post(field: HTMLTextAreaElement, words: string): Promise<void> {
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -484,7 +454,6 @@ test("a reply whose answer was lost is sent again under the same key, and the ne
   assert.notEqual(keys[1], keys[2]);
 });
 
-/** The menu items the first comment's Comment actions offers, over a thread `thread` of the page the reader u-dean reads; none where it draws no ⋯. */
 function threadMenuItems(thread: DescriptionCommentThread): string[] | undefined {
   const { container } = drawn(
     "page",
@@ -510,7 +479,6 @@ function threadMenuItems(thread: DescriptionCommentThread): string[] | undefined
   );
 }
 
-/** A thread whose one comment was written by `writer`. */
 function startedBy(writer: DescriptionCommentWriter): DescriptionCommentThread {
   const thread = threadOn(ID.OPEN, "**single-use link** that expires", "Why?");
   const [entry] = thread.entries;
@@ -736,7 +704,6 @@ test("a line's count stands every thread on the line under it, the first open", 
 });
 
 test("a line's count stands centered on the first line its words stand on, though they wrap onto the next", () => {
-  // Note that jsdom lays nothing out, so the marked words are given two line boxes 22px apart, the body at the page's top.
   const lines = Object.getOwnPropertyDescriptor(Element.prototype, "getClientRects");
   Element.prototype.getClientRects = function (this: Element) {
     const marked = this.classList.contains("description-comment-mark");
@@ -752,7 +719,6 @@ test("a line's count stands centered on the first line its words stand on, thoug
 });
 
 test("a fold's counts stand in the order of their lines, so the keyboard meets them top to bottom", () => {
-  // Note that the thread listed first stands on the lower line, and jsdom lays nothing out, so each mark is given its line's top.
   const lower = threadOn(ID.GONE, "Admins can withdraw", "Who else?", { section: "Approach" });
   const upper = threadOn(ID.OPEN, "**single-use link** that expires", "A setting?");
   const at = new Map<string, number>([
@@ -808,7 +774,6 @@ test("a link to a resolved thread lists it under Resolved, open, and scrolls the
   }
 });
 
-/** The plan's page's mentions, as the page hands them to every box on it. */
 const PAGE_MENTIONS: TaskMentionsValue = {
   holder: { taskId: PLAN.id },
   taskName: "Invitations",
@@ -974,7 +939,6 @@ test("a block a thread covers whole offers no button to start another, and one a
   for (const root of roots.splice(0)) act(() => root.unmount());
   container.remove();
 
-  // Note that folded, a line's count stands where its button would, though its thread covers a word alone; jsdom stands every line at one top.
   const folded = blocks(drawn("page", [onWord]).container);
   assert.ok(folded.button(folded.paragraph) === null, "the counted line offers none");
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -1243,7 +1207,6 @@ test("a thread's resolve reads as its writer's own line, drawn as a comment's he
     actor: DESCRIPTION_COMMENT_ACTOR.AGENT,
     agentId: AGENT.id,
   });
-  // The agent works on another task, so only the window's list across the workspace holds it.
   const agents: EditAgents = {
     control: {
       agents: [],
@@ -1304,7 +1267,6 @@ test("the line a thread's ask leaves is not drawn, since the mention in its word
   assert.equal(card.querySelectorAll(".comment-event").length, 0);
 });
 
-/** The plan's page with its text open in the editor from the Goal block's Enter, the editor's caret then stood in the open thread's words, which opens that thread. */
 async function caretInThread() {
   installEditorLayout();
   const control: DescriptionCommentsControl = {
@@ -1332,7 +1294,9 @@ async function caretInThread() {
             children: createElement(DescriptionBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              edit: descriptionEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
+              edit: descriptionEditMutation(PLAN.id, () =>
+                Promise.resolve({ saved: true } as const),
+              ),
             }),
           }),
         ),
@@ -1363,7 +1327,6 @@ async function caretInThread() {
 test("Tab from the editor to another of the description's controls closes the thread its caret opened", async () => {
   const { container, opened } = await caretInThread();
 
-  // Note that jsdom moves no focus on a Tab, so the focus goes where Tab takes it: the line's count, the next stop after the text.
   const count = container.querySelector<HTMLButtonElement>(".comment-count button");
   assert.ok(count, "the line's count");
   act(() => count.focus());
@@ -1388,7 +1351,6 @@ test("a press on the line's count while the editor's caret holds its thread open
   const count = container.querySelector<HTMLButtonElement>(".comment-count button");
   assert.ok(count, "the line's count");
 
-  // Note that a press focuses the count between its pointerdown and its click, as the window does.
   act(() => count.dispatchEvent(new Event("pointerdown", { bubbles: true })));
   act(() => count.focus());
   act(() => count.dispatchEvent(new Event("pointerup", { bubbles: true })));
@@ -1397,15 +1359,12 @@ test("a press on the line's count while the editor's caret holds its thread open
   assert.equal(opened(), false);
 });
 
-/** The suite's own answer to a media query, a mouse's, which a test answering for a finger puts back. */
 const MOUSE_MEDIA = Object.getOwnPropertyDescriptor(window, "matchMedia");
 
-/** Puts back the suite's mouse, which every field's send key asks after. */
 function answerMouse(): void {
   if (MOUSE_MEDIA !== undefined) Object.defineProperty(window, "matchMedia", MOUSE_MEDIA);
 }
 
-/** The device's main pointer answered as a finger's or a mouse's, which jsdom answers no media query for. */
 function answerPointer(coarse: boolean): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -1417,7 +1376,6 @@ function answerPointer(coarse: boolean): void {
   });
 }
 
-/** Where the comment bubble stands once `words` in the description are selected, the selection laid at `box` and the body at the page's top. */
 function bubbleOver(words: string, box: { top: number; bottom: number }): HTMLElement {
   const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
   Range.prototype.getBoundingClientRect = () => new DOMRect(40, box.top, 120, box.bottom - box.top);
@@ -1473,7 +1431,6 @@ test("on a touch screen the comment bubble stands under the words selected, clea
   );
 });
 
-/** The window's keymap, which answers a chord while its command's offer stands. */
 function Keymap(): null {
   useAppKeymap(true);
   return null;
@@ -1510,7 +1467,6 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
   const range = document.createRange();
   range.setStart(text, text.data.indexOf(words));
   range.setEnd(text, text.data.indexOf(words) + words.length);
-  // Note that jsdom lays nothing out, so the selection is given a box for the bubble to stand by.
   const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
   Range.prototype.getBoundingClientRect = () => new DOMRect(40, 100, 120, 20);
   answerPointer(false);
@@ -1612,7 +1568,6 @@ test("words selected in a description whose tab is then hidden take the bubble a
   assert.ok(container.querySelector(".comment-bubble"), "the bubble stands again by the words");
 });
 
-/** Hands files to a field's picker, as a member picks them, and waits for them to be read. */
 async function pickFiles(field: Element, files: readonly File[]): Promise<void> {
   const picker =
     field.querySelector<HTMLInputElement>('input[type="file"]') ?? assert.fail("no file picker");
@@ -1620,7 +1575,6 @@ async function pickFiles(field: Element, files: readonly File[]): Promise<void> 
   await act(async () => {
     picker.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  // Note that a file is read off the disk before it lands in the field.
   for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
 }
 
@@ -1719,7 +1673,6 @@ test("a picture pasted into the plain field is attached to the reply, as the edi
   );
 });
 
-/** A thread whose one comment, written by `by`, names a date. */
 function datedThread(by: { userId: string; name: string }): DescriptionCommentThread {
   return threadOn(ID.OPEN, "**single-use link** that expires", "", {
     entries: [
@@ -1800,14 +1753,12 @@ test("on the plan's page the date chip in the reader's own comment, its thread o
   assert.ok(container.querySelector('[role="dialog"]'), "the picker is open");
 });
 
-/** The margin's cards' tops, in the order drawn, as their slots stand them. */
 function slotTops(container: HTMLElement): number[] {
   return [...container.querySelectorAll<HTMLElement>(".comment-margin .comment-slot")].map((slot) =>
     Number(/translateY\((-?[\d.]+)px\)/.exec(slot.style.transform)?.[1]),
   );
 }
 
-/** Stands every card of the margin `height` tall, as `heights.card` says when read, since jsdom lays nothing out. */
 function cardsTall(heights: { card: number }): () => void {
   const offset = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
   Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
@@ -1846,7 +1797,6 @@ test("a card that grows with nothing drawn again moves the card under it down, i
   }
 });
 
-/** The reader's own comment in the Comments tab, with presses that open its Edit and the field it opens. */
 function ownComment(landing?: () => boolean | Promise<boolean>) {
   const drawnTab = drawn("list", [datedThread({ userId: "u-dean", name: "Dean" })], landing);
   const { container } = drawnTab;

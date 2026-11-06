@@ -8,21 +8,12 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 
-/**
- * attached-file-chips.test.ts -- the message box's way off takes a file off
- * on the press, so the box no longer holds it, while the row keeps its chip
- * drawn, out of reach, as it scales out, and takes it once that has played;
- * of two files alike, the one pressed is the one taken off; and a file the
- * box takes on scales in, the first into an empty box among them.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** The motion tokens the row reads, as the app's sheets set them. */
 const TOKENS = {
   "--ui-duration-exit": "90ms",
   "--ui-motion-exit": "ease",
@@ -33,14 +24,12 @@ const TOKENS = {
   "--ui-list-travel": "16px",
 } as const;
 
-/** A motion played: the element it played on, its keyframes, and a way to have it finish. */
 interface Played {
   readonly element: Element;
   readonly keyframes: Keyframe[];
   readonly finish: () => void;
 }
 
-/** How wide a chip is drawn, side by side in its row. */
 const CHIP = 120;
 
 const SPEC: AgentAttachment = {
@@ -66,7 +55,6 @@ beforeEach(() => {
       return motion;
     },
   });
-  // Note that each chip stands after the chips before it still in the row's layout.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -92,7 +80,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A message box holding `start`, taking a file off by its place as the box does, and on with Add. */
 function Box({
   start,
   held,
@@ -121,7 +108,6 @@ function draw(start: readonly AgentAttachment[]) {
   return held;
 }
 
-/** The chips drawn, in order, by the name their way off is heard by. */
 function chips(): HTMLLIElement[] {
   return [...document.querySelectorAll<HTMLLIElement>("li.ui-attachment-chip")];
 }

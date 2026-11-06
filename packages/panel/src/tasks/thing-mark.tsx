@@ -32,70 +32,29 @@ import { AgentGlyph, AgentMark, PlanGlyph } from "./tab-look.js";
 import { useAgentStatus, useTaskStatus } from "./use-known-names.js";
 import type { LinkStanding } from "./use-link-standing.js";
 
-/**
- * thing-mark.tsx -- the mark a chip leads with for each kind of thing it names, one entry per kind (`@repo/features/thing-kind`).
- *
- * A thing wears the mark its row wears wherever the window lists it, and
- * its chip wears that same mark whichever way it was written: a mention's
- * chip and an app link's chip both lead with `thingMark`, so a person
- * named by a link wears their face as their mention does, and an agent of
- * the plan open wears its tab's tile either way. The table is keyed by
- * every `THING_KIND` and typed over each kind's own `Thing`, so a kind
- * added there fails to compile until it says what mark it wears.
- *
- * A mark that reads where the thing stands, a plan's status, a pull
- * request's or an issue's state, an agent's harness, an automation's last
- * run, what an Inbox item asks, falls back while the window holds none of it
- * to the one glyph `@repo/ui/icons`' `GLYPH` stands for the kind by, never
- * to the mark of the site its address is on; a person falls back to the
- * initials the people rows draw where they have no picture.
- */
-
-/** What a chip hands its thing's mark: what it calls the thing, where it stands, and what it holds of it. */
 export interface ThingMarkAt {
-  /** The name the chip calls it by, which a person not among the members read is found by. */
   readonly name: string;
   readonly known: KnownNames;
-  /** The slug of the workspace the link was written under, whose members a person is drawn as. */
   readonly workspace: string;
-  /** The tiles of one plan's agents, as the place drawing the chip holds them; none where it holds none. */
   readonly tiles: AgentTiles | undefined;
-  /** What its provider answered for the page it names; none for any other thing, or while unread. */
   readonly standing: LinkStanding | undefined;
 }
 
-/** The tiles of a plan's agents as their tabs wear them; none for an agent not of the plan. */
 export interface AgentTiles {
   readonly tileOf: (agentId: string) => Actor | undefined;
 }
 
-/** The mark a kind wears. */
 type ThingMark<T> = (thing: T, at: ThingMarkAt) => ReactNode;
 
-/** The marks, one entry per kind. */
 type ThingMarks = { readonly [K in ThingKind]: ThingMark<ThingOf<K>> };
 
-/** A plan's glyph, wearing its status where the window holds the task, as its row does. */
 function PlanMark({ taskId }: { taskId: string }): React.JSX.Element {
   return <PlanGlyph status={useTaskStatus(taskId)} />;
 }
 
-/**
- * The harness an agent runs in, read off its model. Where no model is known
- * the chip wears the mark of no known harness, while the read is out and
- * after it answered with none alike, so the harness's mark lands in its place
- * without moving a thing and the chip's name never shifts when it does not.
- */
 function harnessMark(model: string | undefined): ReactNode {
   return <AgentMark provider={model === undefined ? undefined : providerOf(model)} />;
 }
-/**
- * The mark of an agent the place holds no tile of: the harness the window
- * last read it running on, giving way to the working mark while the window
- * lists it working, as its row does; and where the window holds no model of
- * it, an archived agent's or one past the few its task's row names, the one
- * the task list carries for it (`ReadAgentModel`).
- */
 function KnownAgentMark({ agentId, at }: { agentId: string; at: ThingMarkAt }): ReactNode {
   const model = at.known.agentModels.get(agentId);
   const status = useAgentStatus(agentId);
@@ -104,7 +63,6 @@ function KnownAgentMark({ agentId, at }: { agentId: string; at: ThingMarkAt }): 
   return <ReadAgentModel agentId={agentId}>{harnessMark}</ReadAgentModel>;
 }
 
-/** An agent's mark: its tab's tile where the place holds its plan's agents, else its harness's. */
 function AgentThingMark({
   agent,
   at,
@@ -114,7 +72,6 @@ function AgentThingMark({
 }): React.JSX.Element {
   const { tiles } = at;
   const tile = tiles?.tileOf(agent.agentId);
-  // Note that a tile the page knows no harness of, its agents not yet read say, gives way to the mark read for it.
   const harnessless =
     tile === undefined || (tile.kind === ACTOR_KIND.AGENT && tile.provider === undefined);
   return harnessless ? (
@@ -124,18 +81,11 @@ function AgentThingMark({
   );
 }
 
-/** A person as the members around the mark draw them: their picture, their initials where they have none, or grayed where they left. */
 function PersonFace({ userId, name }: { userId: string; name: string }): React.JSX.Element {
   const person = usePerson({ userId, name });
   return <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />;
 }
 
-/**
- * A person's face as the workspace their link names holds them, as their
- * card reads them (`PersonChipCard`), so the chip and its card agree on
- * whether they left; the members around the chip where the account holds no
- * such workspace.
- */
 function PersonMark({
   userId,
   name,
@@ -155,7 +105,6 @@ function PersonMark({
   );
 }
 
-/** An automation's clock tile, wearing how its newest run went where the window reads the automation, and at rest where it does not. */
 function AutomationTile({
   automationId,
   name,
@@ -176,24 +125,20 @@ function AutomationTile({
   );
 }
 
-/** A workspace's tile as its rows draw it; its letter by its slug where the window holds it not. */
 function WorkspaceMark({ slug }: { slug: string }): React.JSX.Element {
   const workspaces = useQuery({ ...appStateQuery, select: selectWorkspaces }).data;
   const listed = workspaces === undefined ? undefined : workspaceOfSlug(workspaces, slug);
   return <WorkspaceTile workspace={listed ?? { id: slug, name: slug }} size={TILE_SIZE.INLINE} />;
 }
 
-/** An automation's mark, or one of its runs': the automation's tile. */
 const AUTOMATION_MARK: ThingMark<
   ThingOf<typeof THING_KIND.AUTOMATION | typeof THING_KIND.AUTOMATION_RUN>
 > = (automation, at) => <AutomationTile automationId={automation.automationId} name={at.name} />;
 
-/** An MCP server's mark, or one of its tools': its provider's. */
 const SERVER_MARK: ThingMark<ThingOf<typeof THING_KIND.SERVER | typeof THING_KIND.TOOL>> = (
   server,
 ) => <ProviderMark provider={server.provider} />;
 
-/** The mark each kind leads with, as its row leads with it wherever the window lists the thing. */
 const THING_MARK: ThingMarks = {
   [THING_KIND.PLAN]: (plan) => <PlanMark taskId={plan.taskId} />,
   [THING_KIND.SECTION]: () => <HashIcon aria-hidden="true" />,
@@ -204,7 +149,6 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.WORKER]: () => <GLYPH.AGENT />,
   [THING_KIND.APP]: () => <ActorMark actor={APP_ACTOR} size={ACTOR_SIZE.INLINE} />,
   [THING_KIND.CHANGES]: () => <GLYPH.PULL_REQUEST_CHANGES />,
-  // A pull request its provider answered for wears its mark for where it stands, as everywhere the window draws one.
   [THING_KIND.PULL_REQUEST]: (_pullRequest, { standing }) =>
     standing?.pullRequest === undefined ? (
       <GLYPH.PULL_REQUEST />
@@ -235,18 +179,15 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.SERVER]: SERVER_MARK,
   [THING_KIND.TOOL]: SERVER_MARK,
   [THING_KIND.SKILL]: () => <SkillMark />,
-  // Note that a repository's row leads with its owner's picture only where the place may draw pictures, which no chip is told yet, so it wears its kind's glyph.
   [THING_KIND.REPOSITORY]: () => <GLYPH.REPOSITORY />,
   [THING_KIND.WORKSPACE]: (workspace) => <WorkspaceMark slug={workspace.workspace} />,
   [THING_KIND.DATE]: () => <CalendarIcon aria-hidden="true" />,
 };
 
-/** A thing's mark drawn through its kind's own entry. */
 function markOf<K extends ThingKind>(kind: K, thing: ThingOf<K>, at: ThingMarkAt): ReactNode {
   return THING_MARK[kind](thing, at);
 }
 
-/** The mark a thing leads with, by its kind's entry. */
 export function thingMark(thing: Thing, at: ThingMarkAt): ReactNode {
   return markOf(thing.kind, thing, at);
 }

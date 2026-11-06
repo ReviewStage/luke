@@ -11,12 +11,6 @@ import { relayout } from "../testing/resize-observer.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileViewBar } from "./file-view.js";
 
-/**
- * A File tab's path in its bar: each "…" names the folders it
- * stands for and opens the tree the last of them would, and a crumb's tree
- * goes once the bar is resized.
- */
-
 const REPOSITORY = "acme/relay";
 const PATH = "packages/db/src/members/invites/accept-invite.ts";
 
@@ -29,7 +23,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws a File tab's bar over `path`. */
 function barOver(path = PATH) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -57,7 +50,6 @@ function barOver(path = PATH) {
   const named = (button: HTMLButtonElement) =>
     button.getAttribute("aria-label") ?? button.textContent;
   return {
-    /** Presses the crumb the name names. */
     press: (name: string) => {
       const button =
         buttons().find((each) => named(each) === name) ?? assert.fail(`a crumb named ${name}`);
@@ -78,7 +70,6 @@ test("the “…” standing for the repository and every folder opens the tree 
   assert.ok(document.querySelector('[role="dialog"][aria-label="packages/db/src/members"]'));
 });
 
-/** A press landing on `target`, as the pointer's goes down. */
 function pressOn(target: Element) {
   act(() => {
     target.dispatchEvent(new Event("pointerdown", { bubbles: true }));

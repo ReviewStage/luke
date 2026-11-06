@@ -18,21 +18,6 @@ import type { AppSettingsView } from "@repo/settings/wire";
 import type { SettingsSearchInput } from "../settings-search.js";
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
 
-/**
- * settings-rows.ts -- what the settings pages offer, judged without drawing one.
- *
- * Note that this module imports no component, only types and plain functions:
- * the window's shell reads which page shows and which rows stand on every
- * launch, while the pages themselves are one `lazy()` boundary away
- * (`desktop-settings.tsx`), and a static import of a page from the shell would
- * pull every page into the bundle each launch parses.
- */
-
-/**
- * The capability a page stands on, for each page whose every row is one
- * platform feature's, and nothing for a page that stands everywhere: where
- * the platform does not offer it, the page is not listed, found, or drawn.
- */
 const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.ACCOUNT]: null,
   [SETTINGS_VIEW.WORKSPACE]: null,
@@ -47,21 +32,15 @@ const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.THIS_MAC]: HOST_CAPABILITY.MAC_COMMANDS,
   [SETTINGS_VIEW.EXPERIMENTAL]: null,
   [SETTINGS_VIEW.ABOUT]: null,
-  // The menu bar's chords, which a browser keeps many of for its own tabs.
   [SETTINGS_VIEW.SHORTCUTS]: HOST_CAPABILITY.DESKTOP_APP,
 } as const satisfies Record<SettingsView, HostCapability | null>;
 
-/**
- * The experiment a page stands on, for each page that is one experiment's:
- * while the account has it off, the page is not listed, found, or drawn.
- */
 const PAGE_EXPERIMENT: Partial<Record<SettingsView, Experiment>> = {
   [SETTINGS_VIEW.HOSTS]: EXPERIMENT.BRING_YOUR_OWN_HOST,
   [SETTINGS_VIEW.SKILLS]: EXPERIMENT.SKILLS,
   [SETTINGS_VIEW.MEMORY]: EXPERIMENT.MEMORY,
 };
 
-/** Whether a page stands for the account's experiments: every page but one an experiment the account has off holds. */
 export function settingsPageExperimentStands(
   view: SettingsView,
   experiments: ExperimentChoices,
@@ -70,12 +49,10 @@ export function settingsPageExperimentStands(
   return experiment === undefined || experimentOn(experiments, experiment);
 }
 
-/** The pages an experiment holds, whose names find its row in the search while those pages stand nowhere. */
 export function experimentPages(experiment: Experiment): readonly SettingsView[] {
   return SETTINGS_PAGE_LIST.filter((view) => PAGE_EXPERIMENT[view] === experiment);
 }
 
-/** Whether a page stands on this platform and for the account's experiments: the sidebar, the command palette, the search, and the page Settings shows all ask it. */
 export function settingsPageShown(
   view: SettingsView,
   capabilities: readonly HostCapability[],
@@ -88,13 +65,6 @@ export function settingsPageShown(
   );
 }
 
-/**
- * The page Settings shows for the one chosen: that page where the platform
- * and the account's experiments offer it, and Profile in place of one a
- * link or the history turned to that they do not,
- * so the title, the reset, the copied link, and the history all name the
- * page on screen.
- */
 export function shownSettingsView(
   view: SettingsView,
   capabilities: readonly HostCapability[],
@@ -103,7 +73,6 @@ export function shownSettingsView(
   return settingsPageShown(view, capabilities, experiments) ? view : SETTINGS_VIEW.ACCOUNT;
 }
 
-/** The workspace the page shows: the one the sidebar lists, else the first; none before the workspaces are read. */
 export function shownWorkspace(
   control: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId">,
 ): Workspace | undefined {
@@ -112,12 +81,6 @@ export function shownWorkspace(
   );
 }
 
-/**
- * What the pages currently offer, read afresh each render: every row's own
- * condition is judged from this one record, by the rows the pages draw and by
- * the search corpus alike, so a result never leads to a page without its row.
- * Absent until the settings have arrived.
- */
 export function settingsRowsInput({
   settings,
   account,

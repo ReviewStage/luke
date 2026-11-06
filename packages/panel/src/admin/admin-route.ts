@@ -1,14 +1,3 @@
-/**
- * admin-route.ts -- Admin as the router stands it: whether it stands, the view its address names, and the navigation that opens a view.
- *
- * Admin is a routed place (`panel-router.tsx`) under the workspace the
- * sidebar lists, its view read from its address alone: the Overview at
- * `/<workspace>/admin`, a section at `/admin/<section>`, and an account's, a
- * workspace's, or a day's page beneath. Its sections are one step, each
- * turned in the step's place as Settings' pages are, so Back leaves the
- * place; an account's, a workspace's, or a day's page is a step of its own.
- */
-
 import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@repo/features/link-grammar";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { ROUTED_PLACE } from "../route-gates.js";
@@ -22,15 +11,12 @@ import {
   adminViewOfLink,
 } from "./routing.js";
 
-/** The Overview, where Admin opens with no view named. */
 const ADMIN_OVERVIEW: AdminView = { kind: ADMIN_TAB.DASHBOARD };
 
-/** The section a segment names; none for one naming no section. */
 function sectionOf(segment: string | undefined): AdminLinkSection | undefined {
   return Object.values(ADMIN_LINK_SECTION).find((section) => section === segment);
 }
 
-/** Admin as the router stands it, opened under the workspace `listedSlug` names as it is pressed, and left by `onClose`. */
 export function useAdminRoute(input: {
   listedSlug: () => string | undefined;
   onClose: () => void;
@@ -51,7 +37,6 @@ export function useAdminRoute(input: {
   const onOpen = (to: AdminView = ADMIN_OVERVIEW) => {
     const workspace = (open ? params.workspace : undefined) ?? input.listedSlug();
     if (workspace === undefined) return;
-    // A section turned from another stands in its step's place; any other view is a step of its own.
     const replace = open && adminSection(view) && adminSection(to);
     const fields = adminLinkFields(to);
     if (fields.userId !== undefined) {

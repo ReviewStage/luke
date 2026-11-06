@@ -20,13 +20,6 @@ import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 
-/**
- * Settings › Profile's Links group as the panel draws it: where the
- * account's app links open, a pop-up naming the browser until the account
- * chooses, whose choice is written as the setting; and nothing of it while
- * signed out, since the choice is the account's.
- */
-
 const ignore = () => undefined;
 
 const SIGNED_IN: AccountSnapshot = {
@@ -36,14 +29,12 @@ const SIGNED_IN: AccountSnapshot = {
   provider: "github",
 };
 
-/** The settings a store sends that never held a link choice, drawn as the window draws them. */
 function neverChosen() {
   const { stored, ...rest } = appSettingsWire(settingsView());
   const { linkOpen: _never, ...held } = stored;
   return appSettingsView({ ...rest, stored: held });
 }
 
-/** Settings on the Profile page for the account given, every press but a setting's write ignored. */
 function settingsOn(account: AccountSnapshot): SettingsPanelProps {
   return {
     account,
@@ -80,10 +71,8 @@ function settingsOn(account: AccountSnapshot): SettingsPanelProps {
 
 const roots: Root[] = [];
 
-/** Each setting written through the bridge, as its act carried it. */
 let written: unknown[] = [];
 
-/** Draws Settings on the Profile page and answers the container. */
 function draw(account: AccountSnapshot): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -117,7 +106,6 @@ test("Profile asks where Vespin links open, the browser until chosen, and a choi
   const choice =
     page.querySelector<HTMLButtonElement>('button[aria-label="Open Vespin links in: Browser"]') ??
     assert.fail("the row is drawn, naming the browser");
-  // Note that the browser is the default, so a row that never chose wears no mark of a change.
   assert.equal(page.textContent?.includes("Modified"), false);
 
   act(() => choice.click());

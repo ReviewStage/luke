@@ -9,24 +9,10 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AddTabButton } from "./strip-tabs.js";
 
-/**
- * tab-add-menu.test.ts -- the menu a strip's "+" drops lies within what is
- * seen of the window, whatever edge of a phone's row the "+" stands at, and
- * however little of the screen a keyboard leaves, so every tab it offers
- * can be read and pressed; on the desktop the side panel's menu still hangs
- * over the column beside the panel from the "+"'s right edge, as it always
- * has. jsdom lays nothing out, so each test stands
- * the "+" and the menu where a laid-out window would and reads where the
- * menu was placed from its layer's inline place. Synthetic throughout.
- */
-
-/** The width the "+" menu asks for, the searchable menu's own. */
 const MENU_WIDTH = 340;
 
-/** The menu's height with a few rows, as a laid-out window would measure it. */
 const MENU_HEIGHT = 280;
 
-/** The least gap the menu keeps from the window's edges. */
 const MARGIN = 8;
 
 const ignore = () => undefined;
@@ -45,15 +31,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A box `left` in and `top` down, `width` by `height`. */
 function box(left: number, top: number, width: number, height: number): DOMRect {
   return DOMRect.fromRect({ x: left, y: top, width, height });
 }
 
-/**
- * Lays out a window `width` by `height` with the "+" at `plus` and, where
- * `panel` is given, inside a side panel at that box, as the strip draws it.
- */
 function layOut(
   width: number,
   height: number,
@@ -72,7 +53,6 @@ function layOut(
   });
 }
 
-/** A strip's "+" drawn into the document, inside a side panel where `inPanel` says, offering a few tabs. */
 async function drawn(inPanel: boolean): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   if (inPanel) container.setAttribute("data-popover-room", "");
@@ -102,7 +82,6 @@ async function drawn(inPanel: boolean): Promise<HTMLElement> {
   return container;
 }
 
-/** Presses the "+" and answers where its menu stands across the window, its left and right edges. */
 async function opened(container: HTMLElement, plus: DOMRect): Promise<[number, number]> {
   const button =
     container.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]') ??
@@ -145,7 +124,6 @@ test('on the desktop the side panel\'s "+" menu hangs from the "+"\'s right edge
   assert.deepEqual(await opened(await drawn(true), plus), [1129 - MENU_WIDTH, 1129]);
 });
 
-/** A length with every `var()` in it read off `element`, its fallback where the property is unset. */
 function resolved(element: Element, length: string): string {
   const once = length.replace(
     /var\((--[\w-]+)(?:,\s*([^)]*))?\)/g,
@@ -160,7 +138,6 @@ test('on a phone whose keyboard leaves the screen short of the "+" menu\'s heigh
   laid = layContainersAt({}, { touch: true });
   const plus = box(216, 60, 44, 44);
   layOut(390, 844, plus, box(0, 0, 390, 844));
-  // The keyboard leaves 300px of the 844 seen; the visual viewport says so.
   const seen = 300;
   Object.defineProperty(window, "visualViewport", {
     configurable: true,

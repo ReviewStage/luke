@@ -5,16 +5,8 @@ import { afterEach, expect, test } from "vitest";
 import { SignInMethodsChart, SignupsChart } from "./charts/signups-chart.js";
 import { UsageChart } from "./charts/usage-chart.js";
 
-/**
- * admin-chart-frame.test.ts -- every admin chart is named by a heading a
- * reader can move to, with its trend, where it has one, set beside the name.
- * The windows below hold no data, so each chart draws its frame around the
- * line saying so rather than a plot jsdom cannot measure.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-/** A synthetic window: a week of days with nothing in them, read at noon on its last day. */
 const EMPTY_WEEK = ["2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
 const GENERATED_AT = Date.UTC(2026, 9, 15, 12);
 const TREND = { days: 7, recent: 3, prior: 2 };
@@ -34,7 +26,6 @@ function render(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The words of each heading a chart is named by. */
 function chartHeadings(page: HTMLElement): string[] {
   return Array.from(page.querySelectorAll("h3"), (heading) => heading.textContent ?? "");
 }

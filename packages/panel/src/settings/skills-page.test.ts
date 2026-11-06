@@ -34,23 +34,6 @@ import { AddSkillDialog } from "./add-skill-dialog.js";
 import { SKILLS_LINE } from "./skills-model.js";
 import { SkillsPage } from "./skills-page.js";
 
-/**
- * Settings › Skills and its Add skill dialog over a host answering as the
- * service would: the skills of the workspace Settings shows are held for it
- * and drawn as the host lays them, the workspace's standing before the
- * account's own, each with its source and who installed it; a member who is
- * not an owner or admin sees View alone in a workspace skill's ⋯; View
- * reads the skill's text and files; Delete asks first; and an install
- * lights its rows. In the dialog, a GitHub source's skills are
- * one list to tick, searched once it is long, the named one ticked, and
- * Install sends the ticked ones with the commit previewed; a skill's text
- * fills Name and Description from its frontmatter, Install waiting for a
- * name by the rule and a description; a paste we do not install from says
- * GitHub alone; a refusal is said in words; and Everyone in the workspace
- * is offered to every member, never in a personal workspace. Synthetic
- * names and ids.
- */
-
 const READER = "user-ada";
 const SHA = "3f9c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5";
 const COMMAND = "npx skills add vercel-labs/agent-skills --skill web-design-guidelines";
@@ -108,7 +91,6 @@ function candidate(
   };
 }
 
-/** A source's preview holding the skills given. */
 function sourceOf(skills: readonly InstalledSkillCandidate[]): InstalledSkillPreview {
   return {
     kind: SKILL_PASTE_KIND.SOURCE,
@@ -131,17 +113,12 @@ const SOURCE = sourceOf([
   candidate("react-best-practices"),
 ]);
 
-/** The skills the test's service holds, which its host lays on the document for every workspace held. */
 let stored: InstalledSkillSummary[] = [];
-/** The workspaces whose skills the window holds. */
 let held = new Set<string>();
-/** Each held workspace's skills as the test's host lays them on the document, under the version it last delivered. */
 let laid: AppInstalledSkills = NO_KEYS_HELD;
 let version = 1;
-/** The window's listeners to the document's deliveries. */
 const listeners = new Set<(delivery: AppStateDelivery) => void>();
 
-/** The workspace's people, which name who installed a skill. */
 const MEMBERS: AppWorkspaceMembers = {
   "workspace-stage": {
     rows: {
@@ -157,7 +134,6 @@ const MEMBERS: AppWorkspaceMembers = {
   },
 };
 
-/** Lays every held workspace's skills as they are stored now and delivers them, as the host does as a read moves or a write is drawn. */
 function laySkills(): void {
   laid = Object.fromEntries([...held].map((workspaceId) => [workspaceId, { rows: stored }]));
   version += 1;
@@ -165,18 +141,13 @@ function laySkills(): void {
     listener({ version, entries: { [LIVE_READ.INSTALLED_SKILLS]: laid } });
   }
 }
-/** Every act the page sent, in order. */
 let sent: { kind: PortActKind; payload: unknown }[] = [];
-/** Whether the next install is refused, for a credential in the named skill. */
 let refuseInstall = false;
-/** What the next source preview answers. */
 let sourcePreview: InstalledSkillPreview = SOURCE;
-/** How many of the next previews the service never answers, which the port refuses. */
 let unreachedPreviews = 0;
 
 const roots: Root[] = [];
 
-/** What the service previews of a paste: a GitHub source's skills, a skill's text, or neither. */
 function previewOf(text: string): InstalledSkillPreview {
   if (text.includes("\n")) {
     return {
@@ -222,7 +193,6 @@ beforeEach(() => {
     [ACT_KIND.INSTALLED_SKILLS_FOLLOW]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_FOLLOW, payload });
       held.add(payload.workspaceId);
-      // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(laySkills);
       return quietHold();
     },
@@ -262,7 +232,6 @@ beforeEach(() => {
       const made = (payload.skills ?? [payload.name ?? "pr-style"]).map((name, at) =>
         skill(name, payload.scope, { id: `33333333-3333-4333-8333-33333333333${at}` }),
       );
-      // The host draws an install's skills as it answers.
       stored = [...stored, ...made];
       laySkills();
       return Promise.resolve({ skills: made });
@@ -296,7 +265,6 @@ function mount(element: React.ReactElement): void {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Note that each mount reads the document afresh, over the bridge this test installed.
   act(() => root.render(onRegistry(AtomRegistry.make(), element)));
 }
 
@@ -320,7 +288,6 @@ async function mountPage(shown = workspace()): Promise<void> {
     ),
   );
   await settle();
-  // Note that the page stands read once the skills the host holds reach their query.
   await vi.waitFor(() =>
     assert.equal(document.body.textContent?.includes("Reading your skills"), false),
   );
@@ -360,44 +327,36 @@ function typeInto(field: HTMLInputElement | HTMLTextAreaElement, text: string): 
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
   act(() => {
-    // Note that the value goes through the element's own setter, as typing does, so React hears it.
     Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, text);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
-/** The dialog's act at the foot's end, whatever it names. */
 const primary = () =>
   [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
     each.textContent?.startsWith("Install"),
   ) ?? assert.fail("no Install button");
 
-/** A field of the text screen, by its label. */
 const fieldOf = (label: string) =>
   [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")].find(
     (each) => each.labels?.[0]?.textContent === label,
   ) ?? assert.fail(`no ${label} field`);
 
-/** Whether the dialog still says it is reading what was pasted. */
 const previewReading = () => (document.body.textContent ?? "").includes(SKILLS_LINE.READING);
 
-/** Pastes `text` into the box and waits for its preview to land. */
 async function paste(text: string): Promise<void> {
   typeInto(document.querySelector("textarea") ?? assert.fail("no box"), text);
   await vi.waitFor(() => assert.equal(previewReading(), false));
 }
 
-/** The row a skill's name labels. */
 const rowOf = (name: string) =>
   [...document.querySelectorAll<HTMLElement>(".ui-settings-row")].find(
     (each) => each.querySelector(".ui-settings-row-label")?.textContent === name,
   ) ?? assert.fail(`no row for ${name}`);
 
-/** The ⋯ of a skill's row, none where it draws none. */
 const moreOf = (name: string) =>
   rowOf(name).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
 
-/** What a skill's ⋯ offers, opened and closed again. */
 function menuOf(name: string): (string | null)[] {
   const more = moreOf(name) ?? assert.fail(`no ⋯ for ${name}`);
   act(() => more.click());
@@ -406,7 +365,6 @@ function menuOf(name: string): (string | null)[] {
   return items;
 }
 
-/** Chooses `words` in a skill's ⋯, and lets what it asked settle. */
 async function choose(name: string, words: string): Promise<void> {
   const more = moreOf(name) ?? assert.fail(`no ⋯ for ${name}`);
   act(() => more.click());
@@ -420,10 +378,8 @@ async function choose(name: string, words: string): Promise<void> {
   await settle();
 }
 
-/** The search over a long list of found skills. */
 const SEARCH = 'input[aria-label="Search skills"]';
 
-/** The dialog standing over the page. */
 const dialog = (role = "dialog") =>
   document.querySelector<HTMLElement>(`[role="${role}"]`) ?? assert.fail(`no ${role}`);
 
@@ -479,7 +435,6 @@ test("View reads the skill and draws its text as written and every file with its
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_READ), [{ skillId: PR_STYLE.id }]);
   const shown = dialog();
   assert.equal(shown.querySelector("h2")?.textContent, "pr-style");
-  // Note that the skill's text lands through a query, so it is read once drawn.
   await vi.waitFor(() =>
     assert.match(shown.querySelector("pre")?.textContent ?? "", /name: pr-style[\s\S]*# PR style/u),
   );
@@ -670,7 +625,6 @@ test("Everyone in the workspace is offered to a member and installs there, and n
   assert.ok(!(document.body.textContent ?? "").includes("Everyone in Stage"));
 });
 
-/** Presses Escape in the dialog's box, as a member does with the caret in it. */
 function escapeInBox(): void {
   act(() => {
     (

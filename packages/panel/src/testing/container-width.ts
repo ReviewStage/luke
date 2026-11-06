@@ -9,45 +9,8 @@ import utilities from "@repo/panel/testing/tailwind.css?inline";
 import ui from "@repo/ui/styles.css?inline";
 import tokens from "@repo/ui/tokens.css?inline";
 
-/**
- * container-width.ts -- the panel's stylesheets as containers of given widths, on a given kind of device, read them, for jsdom, which lays nothing out and answers no container, media, or layer rule.
- *
- * A component that answers its own width does so through `@container`
- * rules: the composer's foot (tasks.css), a banner's stacked layout
- * (desktop.css). jsdom drops a container query whole, so `layContainersAt`
- * hands back the stylesheets with each query resolved for the widths asked:
- * its rules standing where the container is that narrow (or that wide), and
- * gone where it is not. A named query reads its container's width by name,
- * an unnamed one the width given for the nearest container, and a query on
- * a container the test names no width for is dropped, as jsdom would.
- *
- * A control shown only under the pointer answers the device through an
- * input-type media query, `(hover: …)`, `(pointer: …)`, or both joined by
- * `and`, spaced or not as a Tailwind arbitrary variant writes them
- * (`[@media(hover:none)_and_(pointer:coarse)]:`), which jsdom drops too: each is resolved for a touch screen (no
- * hover, a coarse pointer) where the layout says `touch`, and for a mouse
- * (hover, a fine pointer) where it does not. Every other media query is left for jsdom to
- * drop.
- *
- * The shared tokens (`@repo/ui/tokens.css`) are laid first, so a root
- * wearing a profile and a density reads its roles, and a query that rules
- * a coarse pointer out (`not all and (pointer: coarse)`) is resolved as its
- * opposite. The shared components' sheet (`@repo/ui/styles.css`) is laid
- * where the panel's `index.css` imports it, and each `@layer` block's rules, which
- * jsdom would drop, are laid ahead of every unlayered rule, layer by layer
- * in the order the layers first appear, as the cascade orders them. Note
- * that jsdom still weighs a selector's specificity across layers, which the
- * cascade does not. Laid into the test's document, they let
- * `getComputedStyle` say what the component draws at that width, which
- * `shown` reads up the element's ancestors. The utilities an app's Tailwind
- * entry compiles (`tailwind.css`) are laid after the panel's sheets, as each
- * app imports them, in the layers the panel's sheets opened under them.
- */
-
-/** What the app's compiled utilities are named, beside the sheets the panel's `index.css` imports. */
 const UTILITIES = "tailwind.css";
 
-/** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
   "@repo/ui/tokens.css": tokens,
   "./settings.css": settings,
@@ -59,7 +22,6 @@ const SHEET_BY_IMPORT = {
   "./desktop.css": desktop,
 } as const;
 
-/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in, each by the specifier it is imported by, and the app's utilities after them. */
 const SHEETS = [
   ...[...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier = ""]) => {
     const sheet = Object.entries(SHEET_BY_IMPORT).find(([named]) => named === specifier)?.[1];
@@ -69,44 +31,26 @@ const SHEETS = [
   { specifier: UTILITIES, css: utilities },
 ];
 
-/**
- * An at-rule resolved here, through the brace that opens its block: a
- * container query with one width condition and its name where it has one,
- * an input-type media query, or a named layer.
- */
 const AT_RULE =
   /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media ((?:not all and )?\((?:hover|pointer): ?[a-z]+\)(?: and \((?:hover|pointer): ?[a-z]+\))*) \{|@layer ([a-z-]+) \{/g;
 
-/** What each device answers the input-type features: on a touch screen nothing hovers and the pointer is a finger; a mouse hovers, finely. */
 const DEVICE = {
   TOUCH: { hover: "none", pointer: "coarse" },
   MOUSE: { hover: "hover", pointer: "fine" },
 } as const;
 
-/** What the sheets are laid for beyond the named containers' widths. */
 export interface ContainerLayout {
-  /** The nearest container's width, which an unnamed `@container` query reads; its rules are dropped where none is given. */
   readonly unnamed?: number;
-  /** Whether the device is a touch screen, which `(hover: none)` and `(pointer: coarse)` rules answer; a mouse's where left out. */
   readonly touch?: boolean;
-  /**
-   * The sheets to lay, by the specifier `index.css` imports each by
-   * (`./tasks.css`), where a test reads one rule of them: every
-   * `getComputedStyle` weighs each rule laid, so the whole panel's is slow
-   * to ask over, and every sheet is laid where this is left out.
-   */
   readonly only?: readonly string[];
 }
 
-/** What the sheets are resolved for: the named containers' widths and the rest of the layout. */
 interface Resolution {
   readonly widths: Readonly<Record<string, number>>;
   readonly layout: ContainerLayout;
-  /** Each layer's rules, gathered by its name in the order the layers first appear. */
   readonly layers: Map<string, string[]>;
 }
 
-/** Where the block opened just before `from` closes, past its closing brace. */
 function blockEnd(css: string, from: number): number {
   let depth = 1;
   let at = from;
@@ -118,7 +62,6 @@ function blockEnd(css: string, from: number): number {
   return at;
 }
 
-/** Whether a container `width` pixels wide meets the query's one condition. */
 function widthHolds(width: number, comparison: string, length: number): boolean {
   if (comparison === "max-width" || comparison === "<=") return width <= length;
   if (comparison === "min-width" || comparison === ">=") return width >= length;
@@ -126,7 +69,6 @@ function widthHolds(width: number, comparison: string, length: number): boolean 
   return width > length;
 }
 
-/** Whether an input-type media query, its features joined by `and` and the whole perhaps negated, holds for the device the layout says. */
 function mediaHolds(media: string, layout: ContainerLayout): boolean {
   const negated = media.startsWith("not all and ");
   const device: Readonly<Record<string, string>> =
@@ -138,7 +80,6 @@ function mediaHolds(media: string, layout: ContainerLayout): boolean {
   return negated ? !answered : answered;
 }
 
-/** Whether a container or media query matched by `AT_RULE` holds for the layout given. */
 function holds(query: RegExpExecArray, resolution: Resolution): boolean {
   const [, name, word, wordLength, sign, signLength, media] = query;
   const { widths, layout } = resolution;
@@ -149,7 +90,6 @@ function holds(query: RegExpExecArray, resolution: Resolution): boolean {
   );
 }
 
-/** A stylesheet's unlayered rules with every query resolved for the layout given, those nested in a block that stands included; its layers' rules are gathered into the resolution. */
 function resolvedAt(css: string, resolution: Resolution): string {
   const rules = new RegExp(AT_RULE);
   let resolved = "";
@@ -172,11 +112,9 @@ function resolvedAt(css: string, resolution: Resolution): string {
   return resolved + css.slice(from);
 }
 
-/** jsdom plays no animation, so the sheets are laid with their motion held still, as a capture run holds it: a test that wants motion hands the window its own tokens inline, as `playMotions` does. */
 const STILL_MOTION =
   ":root { --ui-duration-shape: 0s; --ui-duration-exit: 0s; --ui-duration-quick: 0s; --ui-duration-fast: 0s; --ui-duration-pane: 0s; }";
 
-/** Lays the stylesheets into the document for named containers of the widths given, the nearest one's, and the device given, answering the style element, which the caller removes. */
 export function layContainersAt(
   widths: Readonly<Record<string, number>>,
   layout: ContainerLayout = {},
@@ -193,7 +131,6 @@ export function layContainersAt(
   return style;
 }
 
-/** Whether an element is drawn at all: neither it nor any box around it is `display: none`. */
 export function shown(element: Element): boolean {
   for (let at: Element | null = element; at !== null; at = at.parentElement) {
     if (getComputedStyle(at).display === "none") return false;

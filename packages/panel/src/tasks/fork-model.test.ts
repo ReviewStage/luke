@@ -3,12 +3,6 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { test } from "vitest";
 import { forkStart, forksOf, messageOpening, startingWords } from "./fork-model.js";
 
-/**
- * fork-model.test.ts -- what a fork's chip quotes of the message, the Start
- * a forked draft sends, and where each of an agent's messages was forked
- * to, read off the task's agents.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const AT = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
@@ -68,7 +62,6 @@ test("a forked draft's send is from the source at its message, under the draft's
       effort: "low",
     },
   );
-  // Files with no words ride a note of none, as the Start takes them.
   assert.deepEqual(forkStart({ ...base, words: "", attachments: [notes], choice: undefined }), {
     idempotencyKey: "draft-1",
     from,
@@ -76,7 +69,6 @@ test("a forked draft's send is from the source at its message, under the draft's
     attachments: [notes],
     disabledServers: [],
   });
-  // A fork of a reply still being written names where it was cut, so the cut does not grow after the press.
   assert.deepEqual(
     forkStart({
       ...base,

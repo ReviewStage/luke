@@ -129,15 +129,11 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-// The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 test("a thread leads with its item's title alone as its subject, whether the item waits, is answered, or was taken back by its agent", async () => {
@@ -243,13 +239,10 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.deepEqual(asked.shownAgents, []);
 });
 
-/** What an intersection observer reports of the heading it watches: in the thread's view, or scrolled up past its top. */
 type HeadingSeen = (entries: readonly Partial<IntersectionObserverEntry>[]) => void;
 
-/** The headings the pane's intersection observers watch, each with its observer's callback. */
 const headingsWatched = new Map<Element, HeadingSeen>();
 
-/** An intersection observer that reports nothing until a test scrolls the heading it watches. */
 class HeadingObserver {
   readonly #callback: HeadingSeen;
   constructor(callback: HeadingSeen) {
@@ -264,7 +257,6 @@ class HeadingObserver {
   }
 }
 
-/** Scrolls the shown item's heading up out of the thread's view, or back into it, as its scroller would report it. */
 function scrollHeading(page: HTMLElement, away: boolean): void {
   const heading =
     page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]") ??
@@ -275,7 +267,6 @@ function scrollHeading(page: HTMLElement, away: boolean): void {
   act(() => seen([{ isIntersecting: !away, rootBounds, boundingClientRect }]));
 }
 
-/** The words of the item's bar's path, crumb by crumb, as a reader meets them. */
 function pathWords(page: HTMLElement): (string | null)[] {
   return [
     ...page.querySelectorAll('.inbox-view-items:not([hidden]) nav[aria-label="Path"] li'),
@@ -316,7 +307,6 @@ test("an image that lands before its item's own read does is drawn all the same"
     "acme",
   );
   world.inboxes.set(BILLING.id, [saying(THRESHOLD, `![The sandbox's window](${shot})`), RETRY]);
-  // The list's read of the plan answers, while the pane's own read of it is held.
   let billingReads = 0;
   world.startRead = (taskId) =>
     taskId === BILLING.id && billingReads++ > 0 ? new Promise(() => undefined) : undefined;
@@ -349,7 +339,6 @@ test("an item's Markdown draws its own pictures, read once its item's own read l
   world.inboxes.set(BILLING.id, [saying(THRESHOLD, words), RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  // The pictures land once their item's own read does, which keeps them as the item's.
   await landImageReads(page);
   const pair = page.querySelectorAll("[data-inbox-message-text] .transcript-pictures");
   assert.equal(pair.length, 1, "the two pictures stand side by side in one row");
@@ -363,7 +352,6 @@ test("an item's Markdown draws its own pictures, read once its item's own read l
     )?.textContent,
     "#42",
   );
-  // What the item's words draw stands inside the pane's masked region.
   assert.ok(page.querySelector(".ph-no-capture [data-lone-link]"));
 });
 
@@ -391,7 +379,6 @@ test("a page's link alone on its line, naming its task by the task's number, is 
   world.inboxes.set(BILLING.id, [saying(THRESHOLD, `[@${FUNNEL.title}](${link})`), RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD, standing: [numbered, INVITES] });
   await settle();
-  // Note that the page is drawn once its task's pages reach their query.
   await vi.waitFor(() =>
     assert.equal(
       page
@@ -439,7 +426,6 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
           new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
         ),
     );
-  // The picture the message carried is drawn over its words, so the viewer walks it first.
   assert.deepEqual(viewer(), ["The form after.png", "3 of 3"]);
   key("ArrowRight");
   assert.deepEqual(viewer(), ["The pull request tab.png", "1 of 3"]);
@@ -462,7 +448,6 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     );
   const created: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
-  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = (blob: Blob) => {
     created.push(blob.type);
     return `blob:video-${String(created.length)}`;
@@ -594,7 +579,6 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
       `The form, before and after.\n\n![Before](${picture(before)} "Before") ![After](${picture(after)} "After")`,
       1_000,
     ),
-    // The service keeps each picture the words draw as a file of the message; an older one may keep one they do not draw.
     files: [png(before, "before.png"), png(after, "after.png"), png(unnamed, "older.png")],
   };
   const members: InboxMessage = {
@@ -625,7 +609,6 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
   assert.deepEqual(alts(member), ["mine.png"]);
   assert.deepEqual(attachedNames(agent), []);
   assert.deepEqual(attachedNames(member), ["spec.pdf"]);
-  // What the message carried stands over its words, as every message's files do.
   for (const [comment, carried] of [
     [agent, agent.querySelector("[data-inbox-file-pictures]")],
     [member, member.querySelector("[data-inbox-file-pictures]")],
@@ -670,13 +653,11 @@ function standingCard(): readonly [string | null | undefined, string | null | un
   ];
 }
 
-/** Rests on a control as the keyboard reaches it, which hangs its card as a resting pointer does. */
 function reach(control: HTMLElement): void {
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(control);
 }
 
-/** The agent's references in the pane's thread, each its tile and its name as one button. */
 function threadRefs(page: HTMLElement): HTMLButtonElement[] {
   return [
     ...page.querySelectorAll<HTMLButtonElement>(
@@ -734,7 +715,6 @@ test("an archived agent is still named by its name, its card saying it was archi
   reach(named);
   assert.deepEqual(standingCard(), ["Agent", "Not found"]);
   act(() => named.click());
-  // An agent the task does not list is the window's, which opens it on its task.
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
   assert.deepEqual(asked.previewedAgents, []);
 });
@@ -764,7 +744,6 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     card.querySelector('.ui-hover-card-row-end .state-glyph[data-state="working"]'),
     "the spinner stands beside the agent at the card's foot, no words",
   );
-  // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
   act(() => {
     card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     card.click();
@@ -856,7 +835,6 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   assert.equal(readTitle(page), "Alert at 80%?");
 
   const box = composerEditor(page.querySelector(".inbox-view-items") ?? page);
-  // Note that jsdom computes no `isContentEditable`, which a browser answers for the editor.
   Object.defineProperty(box, "isContentEditable", { value: true });
   box.focus();
   pressKey("k", box);
@@ -893,7 +871,6 @@ test("split, K and J hand the keyboard to the row they choose, so the arrows go 
   act(() => keys.unmount());
 });
 
-/** The titles of the list's rows Tab stops on, in the order drawn. */
 function rowTabStops(page: HTMLElement): (string | null | undefined)[] {
   return [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.ui-list-row-main")]
     .filter((row) => row.tabIndex === 0)
@@ -936,7 +913,6 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
   elsewhere.remove();
 });
 
-/** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
 function heldAnswers(): AgentInboxAnswerParams[] {
   const sent: AgentInboxAnswerParams[] = [];
   const bridge = appBridge();
@@ -1047,7 +1023,6 @@ test("files picked or dropped in an item's box are drawn as chips and go with it
   );
 });
 
-/** A text file whose bytes are read only once the test opens its gate, as a slow disk would hand them over. */
 function gatedFile(name: string, words: string) {
   const file = new File([words], name, { type: "text/plain" });
   let open: () => void = () => undefined;
@@ -1075,7 +1050,6 @@ test("files whose reads land together both stand in the box", async () => {
 });
 
 test("files still being read as the agent posts on the item again land in its box", async () => {
-  // Main pushes the chosen task's inbox again as the test says it changed.
   const deliver = (outcome: ReadOutcome) =>
     world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, pushedOf(outcome.value));
   const { page } = mount([], { chosen: ON_THRESHOLD });
@@ -1137,7 +1111,6 @@ test("a message's file whose read failed says so under the files, and Retry read
   const comment = () =>
     itemPane(page).querySelector('[data-message-id="c1b2c3d4-0000-4000-8000-000000000095"]') ??
     assert.fail("the message is drawn");
-  // Note that a file's read answers through its query, a tick after it lands.
   await vi.waitFor(() =>
     assert.equal(comment().querySelector("[data-inbox-files-failed]") === null, false),
   );
@@ -1177,7 +1150,6 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   const pane = itemPane(page);
 
   typeInComposer(pane, "See @roll");
-  // Note that the repository's paths land through a query, so the list is read once they have.
   const listed = () =>
     [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
       (name) => name.textContent,
@@ -1233,7 +1205,6 @@ test("in the window's Inbox an @ in the box of a task's item offers that descrip
 
   typeInComposer(pane, "See @thresh");
 
-  // Note that the plan's saved words land through a query, so its sections are read once they have.
   const offered = () =>
     [
       ...pane.querySelectorAll(
@@ -1244,7 +1215,6 @@ test("in the window's Inbox an @ in the box of a task's item offers that descrip
 });
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
-  // The strip draws still under reduced motion, which jsdom has no answer to.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: (query: string) => ({
@@ -1282,7 +1252,6 @@ test("what an item's box said of a dictation that failed stays with that item, a
   assert.deepEqual(alerts(), [], "the next item's box says nothing of it");
 });
 
-/** The chip of the skill the thread's last reply names, pressed. */
 async function pressNoteSkill(page: HTMLElement, name: string): Promise<void> {
   await settle();
   const note = [
@@ -1340,7 +1309,6 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   await settle();
   act(() => world.chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
   await settle();
-  // Note that the agent's own read lands one notify tick later, which the item waits on.
   await vi.waitFor(() => assert.equal(itemPane(page).getAttribute("aria-label"), BUMP.title));
   await pressNoteSkill(page, "/release");
 
@@ -1402,7 +1370,6 @@ test("Got it on a notice answers it with a nod, whether its agent waits to hear 
   );
 });
 
-/** The shown item's thread as a reader meets it: each comment's kind, its writer's face, its writer by name, and a message's words. */
 function threadOf(page: HTMLElement): (string | null | undefined)[][] {
   return [
     ...itemPane(page).querySelectorAll<HTMLElement>(
@@ -1469,7 +1436,6 @@ test("a thread draws its messages after the question in the order they were writ
   );
 });
 
-/** Selects the words drawn in the item's pane as `words`, from `from` through `to`, as a drag lets them go. */
 function selectInPane(page: HTMLElement, words: string, from: string, to: string): void {
   const walker = document.createTreeWalker(itemPane(page), NodeFilter.SHOW_TEXT);
   let text: Node | null = walker.nextNode();
@@ -1485,7 +1451,6 @@ function selectInPane(page: HTMLElement, words: string, from: string, to: string
   });
 }
 
-/** Reply, where it stands over the window. */
 function replyPress(): HTMLButtonElement | undefined {
   return [...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button")].find(
     (each) => each.textContent === "Reply",
@@ -1602,7 +1567,6 @@ test("a message written on a settled item's thread from its box goes as a messag
   const pane = itemPane(page);
   const board =
     pane.querySelector<HTMLElement>(".inbox-board")?.parentElement ?? assert.fail("the thread");
-  // The thread is taller than its board, so the new comment lands under its foot, the draft reply under it.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this === board) return DOMRect.fromRect({ y: 0, height: 400 });
     if (this.matches("[data-message-id]")) return DOMRect.fromRect({ y: 900, height: 60 });
@@ -1677,7 +1641,6 @@ test("a message refused as naming no agent says the agent is archived where it i
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.AGENTS_ARCHIVE) return previous(request);
       unarchived.push(request.payload);
-      // Brought back, the agent is listed so from then on.
       const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
       world.listedAgents = [back];
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
@@ -1740,7 +1703,6 @@ test("an Unarchive that lands after another send was refused lets only the archi
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.AGENTS_ARCHIVE) return previous(request);
       const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
-      // Held until the test lands it, after the second send was refused.
       return new Promise((resolve) => {
         land = () => {
           world.listedAgents = [back];
@@ -1871,18 +1833,10 @@ test("what an item's box holds unsent, its words and its files, outlasts every m
   assert.deepEqual(box(), ["Use 90%", ["alerts.yml"]], "nor does the agent asking again");
 });
 
-/** How tall the room is that a thread's board shows, as the tests below lay it out. */
 const BOARD_ROOM = 400;
 
-/** The scroll measures jsdom gives no element, which `layOutBoards` stands in for. */
 const SCROLL_MEASURES = ["scrollHeight", "clientHeight", "scrollTop"] as const;
 
-/**
- * Lays out every thread's board (the pane's log) as the window would:
- * `layout.height` tall, read anew each time, in a room `BOARD_ROOM` tall,
- * its scroll held between its top and its end as a browser holds it. Any
- * other element keeps jsdom's own measures. Taken down as the test ends.
- */
 function layOutBoards(layout: { height: number }): void {
   const tops = new WeakMap<Element, number>();
   const board = (element: Element) =>
@@ -1910,7 +1864,6 @@ function layOutBoards(layout: { height: number }): void {
       get(this: Element) {
         return board(this) ? (tops.get(this) ?? 0) : jsdom("scrollTop").get?.call(this);
       },
-      // Note that a write that moves the board is heard as a scroll, as the browser hears one, whoever wrote it.
       set(this: Element, to: number) {
         if (!board(this)) return jsdom("scrollTop").set?.call(this, to);
         const held = Math.max(0, Math.min(to, layout.height - BOARD_ROOM));
@@ -1919,7 +1872,6 @@ function layOutBoards(layout: { height: number }): void {
         this.dispatchEvent(new Event("scroll"));
       },
     },
-    // jsdom has no `scrollTo` on an element, which the thread's run of rows writes through.
     scrollTo: {
       configurable: true,
       value(this: Element, options?: ScrollToOptions) {
@@ -1935,12 +1887,10 @@ function layOutBoards(layout: { height: number }): void {
   });
 }
 
-/** The pane's thread, its board, which scrolls. */
 function boardOf(pane: HTMLElement): HTMLElement {
   return pane.querySelector<HTMLElement>('[role="log"]') ?? assert.fail("the thread's board");
 }
 
-/** Scrolls `board` to `top` as the reader would, so the pane hears it. */
 function scrollBoard(board: HTMLElement, top: number): void {
   act(() => {
     board.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - board.scrollTop }));
@@ -1951,7 +1901,6 @@ function scrollBoard(board: HTMLElement, top: number): void {
   });
 }
 
-/** The transcript's way back to the newest line, where the pane shows it. */
 function scrollButton(pane: HTMLElement): HTMLButtonElement | null {
   return pane.querySelector<HTMLButtonElement>('button[aria-label="Scroll to the newest line"]');
 }
@@ -1977,7 +1926,6 @@ test("a thread scrolled up offers the transcript's way back to its newest messag
   layOutBoards({ height: 1200 });
   const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
   const board = boardOf(pane);
-  // Note that the thread hears where it stands as each scroll settles, which the virtualizer waits a moment of no scrolling for.
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   onTestFinished(() => void vi.useRealTimers());
   scrollBoard(board, 300);
@@ -1990,7 +1938,6 @@ test("a thread scrolled up offers the transcript's way back to its newest messag
   assert.equal(scrollButton(pane), null, "at its end, the way back goes");
 });
 
-/** Selects the words drawn under `within` as `words`, from `from` through `to`, as a drag lets them go. */
 function selectWithin(within: Element, words: string, from: string, to: string): void {
   const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
   let text: Node | null = walker.nextNode();
@@ -2006,7 +1953,6 @@ function selectWithin(within: Element, words: string, from: string, to: string):
   });
 }
 
-/** The quotes the item's box holds, in order. */
 function boxQuotes(pane: HTMLElement): (string | null)[] {
   const box = pane.querySelector(".inbox-answer") ?? assert.fail("the box is drawn");
   return [...box.querySelectorAll(".composer-editor .composer-quote-words")].map(
@@ -2127,7 +2073,6 @@ test.each([
   assert.deepEqual(boxQuotes(pane), [quoted]);
 });
 
-/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face it draws, and the marks drawn anywhere but in its head or its body. */
 function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
     (comment) => [
@@ -2244,7 +2189,6 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     "under them the note line on its own, and under it the row: +, the microphone, and Send",
   );
   assert.equal(footWords(pane), "", "and no line of help");
-  // What the thread draws stands inside the pane's masked region.
   assert.ok(pane.querySelector(".ph-no-capture [data-inbox-draft-ask]"));
   assert.ok(pane.querySelector(".ph-no-capture [data-inbox-message-text]"));
 });
@@ -2281,7 +2225,6 @@ test("a plain reply sends no answer and leaves the ask open, the box's Send held
   ]);
 });
 
-/** A notice posted on a thread, asking nothing and needing no reply, as the service writes one, at revision 4. */
 function noticeItem(extra: Partial<InboxItem> = {}): InboxItem {
   const said: InboxMessage = {
     id: "e1b2c3d4-0000-4000-8000-000000000020",
@@ -2297,11 +2240,6 @@ function noticeItem(extra: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-/**
- * Every answer and message the Inbox sends from now on, written down: each
- * answer refused as unanswered while `refusing` says so, the box standing
- * open again, and held unanswered otherwise; each message held unanswered.
- */
 function noticeWrites(refusing: () => boolean = () => false): {
   answered: AgentInboxAnswerParams[];
   messaged: AgentInboxMessageParams[];
@@ -2327,7 +2265,6 @@ function noticeWrites(refusing: () => boolean = () => false): {
   return { answered, messaged };
 }
 
-/** What each answer sent says: its item, the revision it names, and the reply. */
 function answersOf(answered: readonly AgentInboxAnswerParams[]) {
   return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
 }
@@ -2340,7 +2277,6 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
   assert.deepEqual(answersOf(answered), [acknowledged]);
   assert.deepEqual(messaged, [], "the agent is not messaged");
 
-  // Refused, the notice stands open again, its box held until it holds words.
   const send =
     pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
     assert.fail("the box has its button");
@@ -2358,7 +2294,6 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
 
 test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {
   const notice = noticeItem();
-  // The first acknowledgment is refused, so the box stands open to take the draft.
   let refusals = 1;
   const { answered, messaged } = noticeWrites(() => {
     refusals -= 1;
@@ -2423,7 +2358,6 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
-      // The service answers once the test says so.
       return new Promise((resolve) =>
         answers.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
       );
@@ -2614,7 +2548,6 @@ test("Got it pressed while a reply that settles the notice is out goes nowhere o
       if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       const landed = repliedOn(notice, "e1b2c3d4-0000-4000-8000-000000000021")(request.payload);
       assert.ok(!("failure" in landed));
-      // The reply settles the notice, as one naming its revision does.
       const settled: InboxItem = {
         ...landed.item,
         status: INBOX_STATUS.ANSWERED,
@@ -2645,12 +2578,10 @@ test("Got it pressed while a reply that settles the notice is out goes nowhere o
   assert.equal(sendWords(pane), "Send", "and is released");
 });
 
-/** The reader's draft reply at the thread's end, which holds the box. */
 function draftReplyIn(pane: HTMLElement): Element {
   return pane.querySelector('[data-inbox-comment="draft"]') ?? assert.fail("the draft reply");
 }
 
-/** The words at the head's end of each comment of the thread that says its reply is on its way. */
 function sendingMarks(page: HTMLElement): (string | undefined)[] {
   return [...itemPane(page).querySelectorAll(".inbox-thread .ui-comment-trailing")]
     .map((trailing) => wordsOf(trailing))
@@ -2661,7 +2592,6 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
   const page = pane.ownerDocument.body;
-  // Each send waits on the test's word: the reply landing on the thread, or refused.
   const lands: ((refused: boolean) => void)[] = [];
   const landed: InboxItem[] = [];
   const bridge = appBridge();
@@ -2695,7 +2625,6 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
   ]);
   assert.deepEqual(sendingMarks(page), ["Sending"], "the reply says it is on its way");
 
-  // The push holding the reply lands before the reply's own answer does.
   const held = landed[0] ?? assert.fail("the reply is answered");
   await act(async () =>
     world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [held, RETRY] }),
@@ -2733,7 +2662,6 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
 test("words written in a reply's box while the reply is out stay there, whether it lands or is refused", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
-  // Each send waits on the test's word: the reply landing on the thread, or refused.
   const lands: ((refused: boolean) => void)[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();

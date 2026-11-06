@@ -30,7 +30,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A run of the account's own automation that failed to start, as main hands the window its newest. */
 function failedRun(
   automationId: string,
   failedAt: number,
@@ -47,7 +46,6 @@ function failedRun(
   };
 }
 
-/** The window's Automations mark, wired as the sidebar wires it. */
 function Harness({
   runs,
   opened,
@@ -59,7 +57,6 @@ function Harness({
   return createElement(Fragment);
 }
 
-/** The harness mounted, and a way to draw it again with the runs and the automation open moved on. */
 function mount(runs: readonly AccountFailedRun[], opened?: string) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -87,7 +84,6 @@ test("the Automations mark stands until each failing automation is opened, stays
   draw(first, undefined);
   assert.equal(marked.at(-1), false);
 
-  // A relaunch reads what this Mac kept.
   const again = mount(first);
   assert.equal(marked.at(-1), false);
 

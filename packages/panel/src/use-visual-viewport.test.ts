@@ -6,43 +6,31 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useVisualViewport } from "./use-visual-viewport.js";
 
-/** The window's width and its height at the page's own scale, in CSS pixels. */
 const WINDOW_WIDTH = 390;
 const WINDOW_HEIGHT = 800;
 
-/**
- * How an engine answers the window's `innerWidth` and `innerHeight` under a
- * pinch: Blink keeps the layout viewport's, and WebKit gives the visual
- * viewport's (WebKit bug 174362), each a keyboard over the page left out.
- */
 const ENGINE = { BLINK: "blink", WEBKIT: "webkit" } as const;
 type Engine = (typeof ENGINE)[keyof typeof ENGINE];
 
-/** A phone's visual viewport, as tall as it is shown, panned as far as it is, and zoomed as far as it is, in a window its engine measures. */
 class FakeVisualViewport extends EventTarget {
   height = WINDOW_HEIGHT;
   offsetTop = 0;
   scale = 1;
-  /** The layout viewport's height, which only a window that shrinks for the keyboard (Android's `resizes-content`) changes. */
   layoutHeight = WINDOW_HEIGHT;
 
   constructor(readonly engine: Engine = ENGINE.BLINK) {
     super();
   }
 
-  /** The zoomed box's width: the window's, over the scale. */
   get width(): number {
     return WINDOW_WIDTH / this.scale;
   }
 
-  /** The window's size as its engine answers it. */
   get window() {
     const shrink = this.engine === ENGINE.WEBKIT ? this.scale : 1;
-    // Note that WebKit cuts the window's size to a whole pixel.
     return { width: WINDOW_WIDTH / shrink, height: Math.trunc(this.layoutHeight / shrink) };
   }
 
-  /** The viewport changed as a phone changes it, announced by the event it fires. */
   change(
     next: {
       readonly height: number;
@@ -62,7 +50,6 @@ class FakeVisualViewport extends EventTarget {
 
 let root: Root | undefined;
 
-/** Stands the window's visual viewport in for the test, or takes it away, the window measured as the viewport's engine measures it. */
 function standViewport(viewport: FakeVisualViewport | undefined): void {
   Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
   Object.defineProperty(window, "innerWidth", {
@@ -73,16 +60,13 @@ function standViewport(viewport: FakeVisualViewport | undefined): void {
     configurable: true,
     get: () => viewport?.window.height ?? WINDOW_HEIGHT,
   });
-  // A window whose `scrollTo` moves nothing, as jsdom's; a test that needs Safari's says so (`undoesPan`).
   Object.defineProperty(window, "scrollTo", { configurable: true, value: () => undefined });
-  // The initial containing block, which jsdom answers as 0: the layout viewport's height in every engine, a pinch or not.
   Object.defineProperty(document.documentElement, "clientHeight", {
     configurable: true,
     get: () => viewport?.layoutHeight ?? WINDOW_HEIGHT,
   });
 }
 
-/** A window whose `scrollTo(0, 0)` brings a panned viewport back to its top, as Safari's does. */
 function undoesPan(viewport: FakeVisualViewport): void {
   Object.defineProperty(window, "scrollTo", {
     configurable: true,
@@ -92,14 +76,12 @@ function undoesPan(viewport: FakeVisualViewport): void {
   });
 }
 
-/** Where the stage begins in the window, as the hook last wrote it. */
 function stageTop(): number {
   return (
     Number.parseFloat(document.documentElement.style.getPropertyValue("--ui-viewport-top")) || 0
   );
 }
 
-/** Mounts what the panel's root mounts. */
 function mount(): void {
   function Panel() {
     useVisualViewport();
@@ -110,10 +92,6 @@ function mount(): void {
   act(() => root?.render(createElement(Panel)));
 }
 
-/**
- * What a layer drawn over `document.body`, as a dialog is, outside the
- * stage, reads of a custom property.
- */
 function readOverBody(property: string): string {
   const layer = document.body.appendChild(document.createElement("div"));
   return getComputedStyle(layer).getPropertyValue(property);
@@ -142,7 +120,6 @@ test("a layer over the body is measured by the visible height, above the keyboar
   assert.equal(readOverBody("--ui-stage-height"), "480px");
   assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 
-  // Note that a viewport panned down to the field is seen, not covered.
   act(() => viewport.change({ height: 480, offsetTop: 120 }, "scroll"));
   assert.equal(readOverBody("--ui-viewport-top"), "120px");
   assert.equal(readOverBody("--ui-keyboard-inset"), "200px");
@@ -159,7 +136,6 @@ for (const engine of [ENGINE.BLINK, ENGINE.WEBKIT]) {
     standViewport(viewport);
     mount();
 
-    // Zoomed in twice over, the viewport shows half the page and follows the finger down it.
     act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
     act(() => viewport.change({ height: 400, offsetTop: 250, scale: 2 }, "scroll"));
     assert.equal(readOverBody("--ui-viewport-top"), "0px");
@@ -178,7 +154,6 @@ for (const engine of [ENGINE.BLINK, ENGINE.WEBKIT]) {
     mount();
     act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
 
-    // Twice over, a keyboard 320px tall at the page's own scale leaves 240px of the zoomed box seen.
     act(() => viewport.change({ height: 240, offsetTop: 300 }, "resize"));
     assert.equal(readOverBody("--ui-viewport-top"), "0px");
     assert.equal(readOverBody("--ui-stage-height"), "480px");
@@ -202,7 +177,6 @@ test("a window that shrinks for the keyboard, as Android's does, counts no keybo
   assert.equal(readOverBody("--ui-stage-height"), "480px");
   assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
 
-  // The keyboard put away while zoomed hands the window its height back.
   act(() => viewport.change({ height: 400, layoutHeight: 800 }, "resize"));
   assert.equal(readOverBody("--ui-stage-height"), "800px");
   assert.equal(readOverBody("--ui-keyboard-inset"), "0px");
@@ -232,7 +206,6 @@ test("in WebKit the keyboard's pan to the field is followed, never scrolled back
   undoesPan(viewport);
   mount();
 
-  // Safari opens a keyboard 320px tall and pans the page up to the field under it.
   act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
 
   assert.equal(viewport.offsetTop, 320, "the pan stands where Safari put it");
@@ -244,7 +217,6 @@ test("in WebKit the keyboard's pan to the field is followed, never scrolled back
 test("a keyboard rising over a focused field, panned to or not, scrolls its caret into view within its own column, and one over nothing focused scrolls nothing", () => {
   const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
   standViewport(viewport);
-  // A column on the stage holding more than it shows, and words in it to type in, the caret 620 down the stage.
   const column = scrollingColumn();
   const field = column.appendChild(document.createElement("div"));
   field.contentEditable = "true";
@@ -261,7 +233,6 @@ test("a keyboard rising over a focused field, panned to or not, scrolls its care
   field.focus();
   act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
 
-  // The caret's foot, 620 down the stage, stands under the keyboard's top, 480 down it, kept 24 above it.
   assert.equal(column.scrollTop, 620 + 24 - 480);
 });
 
@@ -273,15 +244,12 @@ test("the focus leaving the field lets the stage down at once, ahead of WebKit m
   const button = document.body.appendChild(document.createElement("button"));
   mount();
   field.focus();
-  // Safari opens a keyboard 320px tall and pans the page up to the field under it.
   act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
   assert.equal(readOverBody("--ui-stage-height"), "480px");
 
-  // The focus moving to another field keeps the keyboard up.
   act(() => other.focus());
   assert.equal(readOverBody("--ui-stage-height"), "480px");
 
-  // Done: the keyboard slides away while WebKit still measures it, and its pan, until it has gone.
   act(() => button.focus());
   assert.equal(readOverBody("--ui-viewport-top"), "0px");
   assert.equal(readOverBody("--ui-stage-height"), "800px");
@@ -301,7 +269,6 @@ test("the focus leaving the field lets the stage down at once, ahead of WebKit m
   assert.equal(readOverBody("--ui-keyboard-inset"), "320px");
 });
 
-/** A column 700 tall at the stage's top, holding more than it shows, measured as a laid-out page measures it. */
 function scrollingColumn(): HTMLElement {
   const column = document.body.appendChild(document.createElement("div"));
   column.style.overflowY = "auto";
@@ -320,7 +287,6 @@ test("a box focused while words stand selected elsewhere on the page is kept abo
   const field = column.appendChild(document.createElement("textarea"));
   field.getBoundingClientRect = () =>
     DOMRect.fromRect({ y: stageTop() + 650, height: 20, width: 390 });
-  // The words selected stand 150 down the window, as a laid-out page draws them.
   Object.defineProperty(Range.prototype, "getBoundingClientRect", {
     configurable: true,
     value: () => DOMRect.fromRect({ y: 150, height: 20, width: 200 }),

@@ -1,136 +1,45 @@
-/**
- * use-row-drag.ts -- a list's rows dragged up and down it to another place, or out of it into another, as the sidebar's Pinned section is ordered and the Board's cards are moved.
- *
- * A press on a row is a click until the pointer has gone a few pixels any
- * way; past that a copy of the row is lifted into a layer of its own over
- * the whole window and follows the pointer wherever it goes, as Linear's
- * and Notion's do, while the row itself stays in its list as its own faded
- * placeholder. Nothing the list scrolls in moves with the copy, so it is
- * never clipped by its list's column, never faded by the column's edge, and
- * never lengthens what the column scrolls, however far it is carried.
- *
- * In a list that reorders, the placeholder slides to where the row would
- * land and the rows it passes slide aside, past a row once the copy's
- * leading edge crosses that row's middle. Letting go puts it there and
- * lands the copy on it, from wherever it was let go; Escape, or
- * the system taking the pointer away, puts every row back and changes
- * nothing. A row changed under the drag puts it back as well, since the
- * places it measured have moved. Held at the top or the foot of the column
- * that scrolls the list (the sidebar's), or past it, the copy runs the
- * column along that way, faster the nearer the edge, as the tab strip runs
- * along under a tab held at its edge (`use-tab-drag.ts`), so a row reaches a
- * place, or a zone, scrolled out of sight.
- *
- * The rows are drawn on their own `transform` and the copy on its own, and
- * the stylesheet (desktop.css) times every slide from the motion tokens, so
- * reduced motion and a capture run hold them still as they hold the rest.
- * Only the drop reaches the list's owner, as one move. It is pointer events
- * with the pointer captured, never the browser's drag and drop, for the
- * reasons the strip's gives, and the captured pointer's own click lands on
- * the list rather than on the row, so a drop opens nothing.
- *
- * A list may also let its rows go elsewhere: carried over another drop zone
- * (an element wearing `data-row-drop`, a sidebar section or a board's
- * column), the placeholder stands home with its neighbors, and the zone is
- * marked as the one it would land in, with a line before the row it would
- * land above where the zone keeps an order of its own (its rows under
- * `data-row-drop-rows`). Letting go there hands the zone's id and that place
- * to the list's owner instead of a move. A list whose rows keep the view's
- * order rather than one dragged gives no move, so a row there goes only
- * elsewhere. A list that reorders and lets its rows go elsewhere reorders
- * them only while the pointer is level with its own zone; carried above or
- * below it, across the gap between two zones, it is let go nowhere unless
- * it is over another zone. A list of groups dragged by their headers names
- * the handle a press must land on, so a press on a row inside a group
- * starts that row's own drag and not the group's.
- *
- * A zone may stand only while a row is carried, as the sidebar's Pinned
- * does while nothing is pinned: the list's owner hears the press become a
- * drag and the drag end (`onCarried`), the first drawn before the drag
- * looks for a zone, so the zone it draws is one the pointer can reach at
- * once; a drop is heard in the same draw as the drag's end, so a zone the
- * drop filled stands on rather than leaving for a frame.
- *
- * A drop scope (an element wearing `data-row-drop-scope`: the sidebar, the
- * Board) keeps its zones to its own lists' rows, and its classes are
- * worn, boxless, around the copy, so its stylesheet's rules for a row still
- * draw the copy of one even though the copy stands outside it.
- *
- * A list of tasks (`useTaskDrag`) counts as its rows only the cards or rows
- * standing for a task, so a quick add's lines drawn among them are no place
- * a drag counts, and tells its owner the row dragged by its task's id rather
- * than its place, so the task found is the one pressed whichever of the
- * list's rows are drawn. Such a list may draw only the rows near the view
- * (`VirtualRows`): a place in it, or in a zone it is carried over, is the
- * place among them all of the row drawn at it (`data-index`); the
- * pressed row takes the keyboard as it is lifted, which keeps it drawn
- * however far the list is scrolled beneath it; and rows drawn or dropped by
- * that scroll leave the drag standing, which only the pressed row's leaving
- * puts back.
- */
-
 import { CARD_DROP_TARGET, MOTION_TOKEN, tokenTiming } from "@repo/ui";
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 
-/** How far the pointer goes any way, in CSS pixels, before a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
-/** How near the scrolling column's top or foot, in CSS pixels, a held row runs it along: about its faded edge. */
 const EDGE_REACH = 32;
 
-/** The most the column runs along in a frame, in CSS pixels, with the pointer at its edge or past it. */
 const EDGE_SPEED = 12;
 
-/** What a card or a task's row wears, its task's id as the value. */
 const TASK_ID = "data-task-id";
 
-/** What a row wears in a list drawing only the rows near the view, its place among them all as the value (`VirtualRows`). */
 const ROW_INDEX = "data-index";
 
-/** What the pressed row's keyboard is taken by as it is lifted: the control the press landed in. */
 const TAKES_FOCUS = "button, a[href], [tabindex]";
 
-/** What a row and its list wear while a drag lasts; desktop.css fades the one to a placeholder and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";
 
-/** A press on what is typed into or a control of its own, which starts no drag. */
 const NOT_A_HANDLE = "input, textarea, select, [contenteditable], [data-editing]";
 
-/** What a place a row may be dropped into wears, its id as the value. */
 const DROP_ZONE = "data-row-drop";
 
-/** What an element whose zones take only its own lists' rows wears, whose classes the copy of one of its rows is drawn under. */
 const DROP_SCOPE = "data-row-drop-scope";
 
-/** What the layer the copy of a row is carried in wears; desktop.css floats it over the window. */
 const CARRIED_ATTRIBUTE = "data-carried";
 
-/** What the copy itself wears, inside that layer; desktop.css lifts it. */
 const LIFTED_ATTRIBUTE = "data-lifted";
 
-/** What the zone a row is carried over wears while it is; a card's (`Card`), since a board's column is one. */
 const DROP_TARGET = CARD_DROP_TARGET;
 
-/** What the row a drop would land above wears, and the last row where it would land below them all. */
 const DROP_BEFORE = "data-drop-before";
 const DROP_AFTER = "data-drop-after";
 
-/** What a list's row is among its items, and what its owner hears one by. */
 interface RowKind<Row> {
-  /** What an item of the list must be to be one of its rows. */
   readonly item: string;
-  /** What the owner hears the row at `at` among them by. */
   readonly name: (row: HTMLElement, at: number) => Row | undefined;
-  /** Whether the list may draw only the rows near the view (`VirtualRows`), which its owner hears each by more than its place among those drawn. */
   readonly partial: boolean;
 }
 
-/** A row of any list, heard by its place among the list's rows. */
 const PLACED_ROW: RowKind<number> = { item: "li", name: (_row, at) => at, partial: false };
 
-/** A row of a list drawing only the rows near the view, heard by its place among them all (`data-index`). */
 const RUN_ROW: RowKind<number> = {
   item: "li",
   name: (row) => {
@@ -140,33 +49,23 @@ const RUN_ROW: RowKind<number> = {
   partial: true,
 };
 
-/** A card or a row standing for a task, heard by its task's id. */
 const TASK_ROW: RowKind<string> = {
   item: `li[${TASK_ID}]`,
   name: (row) => row.getAttribute(TASK_ID) ?? undefined,
   partial: true,
 };
 
-/** A zone the pressed row is carried over: the element, its id, and the place among its rows it would land at. */
 interface ZoneLanding {
   zone: HTMLElement;
   id: string;
   at: number;
 }
 
-/** A row's stretch down the list as laid out when the press began. */
 interface Slot {
   top: number;
   height: number;
 }
 
-/**
- * A press on a row, and the drag it became once it went far enough: the
- * pointer, where it began and where it is now, where the list's top stood
- * on screen then, so a scroll of the sidebar beneath a held row moves none
- * of the places measured, the rows and their slots, the space between two of
- * them, and where the pressed row would land now.
- */
 interface RowPress {
   pointerId: number;
   x: number;
@@ -174,11 +73,8 @@ interface RowPress {
   pointer: number;
   pointerX: number;
   listTop: number;
-  /** What an item of the list, or of a zone it is carried over, must be to be a row (`RowKind`). */
   item: string;
-  /** Whether the list may draw only the rows near the view (`RowKind`). */
   partial: boolean;
-  /** The control the press landed in, which takes the keyboard as the row is lifted; none where it landed in none. */
   control: HTMLElement | undefined;
   at: number;
   rows: HTMLElement[];
@@ -186,46 +82,26 @@ interface RowPress {
   gap: number;
   to: number;
   dragging: boolean;
-  /** Whether the rows reorder among themselves, which a list in the view's own order does not. */
   reorders: boolean;
-  /** The zone it would land in out of its own list, if it is over one. */
   zone: ZoneLanding | undefined;
-  /** The drop scope the list stands in, whose zones alone it drops into; none for the window's own. */
   scope: Element | null;
-  /** The layer the copy is carried in over the window once the press is a drag. */
   carried: HTMLElement | undefined;
-  /** The frame the scrolling column next runs along in, while the pointer is held at its edge. */
   frame: number | undefined;
-  /** The column that scrolls the list, which the copy held at its edge runs along; none where nothing does. */
   scroller: HTMLElement | undefined;
 }
 
-/** What a list's rows may do beyond moving among themselves, each row heard as `Row`: its place among the list's rows, or a task's id. */
 export interface RowDragOptions<Row = number> {
-  /** Hears a row let go over another drop zone: the row `from` here, the zone's id, and the place among the zone's rows it lands at. */
   onDropOut?: ((from: Row, zone: string, at: number) => void) | undefined;
-  /** What a press must land in to start a drag, where a row is a group with rows of its own inside. */
   handle?: string;
-  /** Hears a press become a drag (`true`) and that drag end, dropped or put back (`false`). */
   onCarried?: ((carried: boolean) => void) | undefined;
 }
 
-/** What the list's owner hears from a drop: the row `from` now stands at `to` among the list's rows, which differs from where it stood. */
 export type RowMove<Row = number> = (from: Row, to: number) => void;
 
-/** The list's rows that move, its items of the kind (`item`); one on its way out (`ListMotion`) is no longer one of them. */
 function rowsIn(list: HTMLElement, item: string): HTMLElement[] {
   return [...list.querySelectorAll<HTMLElement>(`:scope > ${item}:not([data-leaving])`)];
 }
 
-/**
- * Where the slot `at` among `rows` stands among every row of their list:
- * the slot itself where the list draws them all, else the place of the row
- * drawn there (`data-index`), or one past the last drawn for the slot after
- * them all. Note that each slot is read by its own row, because a list
- * drawing only the rows near the view also draws the row holding the
- * keyboard wherever it stands, so the rows drawn need not run on unbroken.
- */
 function placeAmong(press: RowPress, rows: readonly HTMLElement[], at: number): number {
   if (!press.partial) return at;
   const before = rows[at];
@@ -234,14 +110,12 @@ function placeAmong(press: RowPress, rows: readonly HTMLElement[], at: number): 
   return last === undefined ? 0 : (Number(last.getAttribute(ROW_INDEX)) || 0) + 1;
 }
 
-/** A drop zone's rows of the kind (`item`), where it keeps an order of its own that a drop lands at a place in. */
 function zoneRowsIn(zone: HTMLElement, item: string): HTMLElement[] {
   return [
     ...zone.querySelectorAll<HTMLElement>(`[data-row-drop-rows] > ${item}:not([data-leaving])`),
   ];
 }
 
-/** The copy's travel down the list, the pointer's own and the list's scrolling since the press, held between the first row's top and the last row's foot. */
 function travel(press: RowPress, list: HTMLElement): number {
   const own = press.slots[press.at];
   const first = press.slots[0];
@@ -253,7 +127,6 @@ function travel(press: RowPress, list: HTMLElement): number {
   return Math.max(least, Math.min(most, press.pointer - press.y + scrolled));
 }
 
-/** Where the pressed row lands with the copy `moved` along: past every row whose middle the copy's leading edge has crossed. */
 function landing(press: RowPress, moved: number): number {
   const own = press.slots[press.at];
   if (own === undefined) return press.at;
@@ -265,7 +138,6 @@ function landing(press: RowPress, moved: number): number {
   }).length;
 }
 
-/** How far the row at `index` slides: the pressed row's placeholder to its landing, and each row it passed aside to leave it room. */
 function aside(press: RowPress, index: number): number {
   const own = press.slots[press.at];
   const landing = press.slots[press.to];
@@ -280,7 +152,6 @@ function aside(press: RowPress, index: number): number {
   return 0;
 }
 
-/** Where among a zone's ordered rows a pointer at `y` would land a row: below every row whose middle it is past. */
 function landingIn(zone: HTMLElement, item: string, y: number): number {
   return zoneRowsIn(zone, item).filter((row) => {
     const box = row.getBoundingClientRect();
@@ -288,7 +159,6 @@ function landingIn(zone: HTMLElement, item: string, y: number): number {
   }).length;
 }
 
-/** The drop zone of the list's scope under the pointer other than the list's own, with where it would land; none over the list's own or over nothing. */
 function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined {
   const own = list.closest(`[${DROP_ZONE}]`);
   const zone = [...document.querySelectorAll<HTMLElement>(`[${DROP_ZONE}]`)].find((each) => {
@@ -302,14 +172,6 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
   return { zone, id, at: landingIn(zone, press.item, press.pointer) };
 }
 
-/**
- * The nearest element around the list's own drop zone, or the list where it
- * stands in none, within its drop scope, that scrolls it up and down: the
- * sidebar's column. None where nothing does, as on the Board, whose columns
- * are each a zone scrolling its own cards inside it and whose page scrolls
- * it sideways, neither of which a card carried to another column should
- * run. A column whose rows fit is never run along, having nowhere to go.
- */
 function scrollerOf(list: HTMLElement, scope: Element | null): HTMLElement | undefined {
   const home = list.closest(`[${DROP_ZONE}]`) ?? list;
   for (let each = home.parentElement; each !== null && each !== scope; each = each.parentElement) {
@@ -319,14 +181,6 @@ function scrollerOf(list: HTMLElement, scope: Element | null): HTMLElement | und
   return undefined;
 }
 
-/**
- * How far the column runs along this frame, toward the edge the pointer is
- * held at: faster the nearer the edge, the whole of `EDGE_SPEED` at it or
- * past it, and none away from both edges or where the column has no further
- * to go that way. Each edge reaches at most half the column, so in a column
- * too short for both a pointer is near one edge only and the column never
- * turns back and forth beneath it.
- */
 function edgeRun(scroller: HTMLElement, y: number): number {
   const box = scroller.getBoundingClientRect();
   const reach = Math.min(EDGE_REACH, box.height / 2);
@@ -339,7 +193,6 @@ function edgeRun(scroller: HTMLElement, y: number): number {
   return 0;
 }
 
-/** Takes down the marks of the zone the row was carried over. */
 function unmark(press: RowPress): void {
   const zone = press.zone?.zone;
   press.zone = undefined;
@@ -351,7 +204,6 @@ function unmark(press: RowPress): void {
   }
 }
 
-/** Marks the zone the row is carried over, and the line it would land at where the zone keeps an order. */
 function mark(press: RowPress, landing: ZoneLanding | undefined): void {
   unmark(press);
   press.zone = landing;
@@ -363,15 +215,6 @@ function mark(press: RowPress, landing: ZoneLanding | undefined): void {
   else rows.at(-1)?.setAttribute(DROP_AFTER, "true");
 }
 
-/**
- * Lifts a copy of the pressed row into a layer of its own over the window,
- * at the row's place and width on screen: in a shell of the list's tag and
- * classes, inside its scope's classes worn with no box of their own, so the
- * rules that draw the row draw the copy, and in the list's own type and
- * color, which it inherits there. The shell keeps none of a column's
- * scrolling, inset, or faded edge. The layer is hidden from assistive
- * technology, since the row it copies is still there.
- */
 function liftCopy(row: HTMLElement, list: HTMLElement, scope: Element | null): HTMLElement {
   const copy = row.cloneNode(true);
   if (copy instanceof HTMLElement) {
@@ -416,23 +259,12 @@ function liftCopy(row: HTMLElement, list: HTMLElement, scope: Element | null): H
   return layer;
 }
 
-/**
- * Whether the pointer is level with the list's own zone, or with the list
- * where it stands in none, however far it strays sideways: where a list
- * that also lets its rows go elsewhere reorders them.
- */
 function levelWithHome(press: RowPress, list: HTMLElement): boolean {
   const home = list.closest(`[${DROP_ZONE}]`) ?? list;
   const box = home.getBoundingClientRect();
   return box.top <= press.pointer && press.pointer < box.bottom;
 }
 
-/**
- * Draws the drag where the pointer has it: the copy follows the pointer, and
- * in a list that reorders, its placeholder slides to where it would land and
- * those it passed stand aside; carried over another zone, or out of a list
- * that keeps no order of its own, every row stands home.
- */
 function draw(press: RowPress, list: HTMLElement, out: boolean): void {
   const zone = out ? zoneUnder(press, list) : undefined;
   mark(press, zone);
@@ -449,11 +281,6 @@ function draw(press: RowPress, list: HTMLElement, out: boolean): void {
   });
 }
 
-/**
- * Takes the drag down: a put-back lets every row slide home on the
- * stylesheet's timing, while a drop clears them at once, because the list
- * has already been drawn in its new order beneath them.
- */
 function lower(press: RowPress, list: HTMLElement, settle: boolean): void {
   unmark(press);
   press.carried?.remove();
@@ -465,18 +292,10 @@ function lower(press: RowPress, list: HTMLElement, settle: boolean): void {
   }
   list.removeAttribute(DRAGGING_ATTRIBUTE);
   if (settle) return;
-  // Laid out with no transition, so letting the transition back plays nothing.
   list.getBoundingClientRect();
   for (const row of press.rows) row.style.transition = "";
 }
 
-/**
- * Lands the copy: plays it from where it was let go, on both axes, into the
- * place the row now stands, on the rows' own timing, then takes it down,
- * the row standing faded beneath it until it does, so the two never show
- * at once. The timing is read at the list, so reduced motion and a capture
- * run, which hold the tokens there, land it at once.
- */
 function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   const timing = tokenTiming(list, MOTION_TOKEN.DURATION_FAST, MOTION_TOKEN.SPRING_FAST);
   if (timing === undefined) {
@@ -497,14 +316,6 @@ function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   };
 }
 
-/**
- * The drag of a list whose rows are of a kind (`RowKind`): spread
- * `onPointerDown` on the list. A press is heard at the window from then on,
- * so it outlives the pointer leaving the list, and the pointer is captured
- * only once the press is a drag, so a press that stays a click lands on the
- * row as any click does. None where nothing hears a move or a drop
- * elsewhere, or where the list's rows find the drop elsewhere.
- */
 function useListDrag<Row>(
   kind: RowKind<Row>,
   onMove: RowMove<Row> | undefined,
@@ -520,7 +331,6 @@ function useListDrag<Row>(
     latestOut.current = options.onDropOut;
     latestCarried.current = options.onCarried;
   });
-  // A list taken away under a drag takes its copy down with it.
   useEffect(() => () => abandon.current?.(), []);
   const { handle } = options;
   const out = options.onDropOut !== undefined;
@@ -530,8 +340,6 @@ function useListDrag<Row>(
     const pressed = () => press.rows[press.at];
     const carried = (now: boolean) => latestCarried.current?.(now);
     const { scroller } = press;
-    // Note that the column is run along at once rather than gliding, because
-    // a glide would be restarted, and cut short, by every frame.
     const runAlong = () => {
       press.frame = undefined;
       if (!press.dragging || scroller === undefined) return;
@@ -541,7 +349,6 @@ function useListDrag<Row>(
       scroller.style.scrollBehavior = "auto";
       scroller.scrollTop = from + by;
       scroller.style.scrollBehavior = "";
-      // A column already at its end stops running however the pointer is held.
       if (scroller.scrollTop === from) return;
       draw(press, list, out);
       press.frame = requestAnimationFrame(runAlong);
@@ -556,13 +363,9 @@ function useListDrag<Row>(
         list.setPointerCapture(press.pointerId);
         list.setAttribute(DRAGGING_ATTRIBUTE, "true");
         const row = pressed();
-        // Copied before it is marked, so the copy is lifted rather than faded.
         if (row !== undefined) press.carried = liftCopy(row, list, press.scope);
         row?.setAttribute(DRAGGING_ATTRIBUTE, "true");
-        // Note that the row takes the keyboard as it is lifted, because a list drawing only the rows near the
-        // view keeps the row holding it drawn (`VirtualRows`' `holdsFocus`), and Safari focuses no pressed button itself.
         if (press.partial) press.control?.focus({ preventScroll: true });
-        // Drawn now, so a zone that stands only while a row is carried is there to be found.
         flushSync(() => carried(true));
       }
       press.pointer = event.clientY;
@@ -583,10 +386,6 @@ function useListDrag<Row>(
       release.current?.();
       const row = pressed();
       if (!press.dragging || row === undefined) return;
-      // A row pinned or unpinned under the drag leaves its places stale, so
-      // the drag is put back rather than dropped at a place that moved; but
-      // a list drawing only the rows near the view draws and drops rows as it
-      // is scrolled beneath the drag, so there only the pressed row leaving does.
       const now = rowsIn(list, press.item);
       const stale = press.partial
         ? !now.includes(row)
@@ -596,14 +395,12 @@ function useListDrag<Row>(
         carried(false);
         return;
       }
-      // The drag is drawn where the pointer was let go, which a move may not have reported.
       press.pointer = event.clientY;
       press.pointerX = event.clientX;
       draw(press, list, out);
       const zone = press.zone;
       if (zone !== undefined) {
         const at = placeAmong(press, zoneRowsIn(zone.zone, press.item), zone.at);
-        // The row now stands in the zone's list, so it comes down there rather than settling here.
         flushSync(() => {
           latestOut.current?.(name, zone.id, at);
           carried(false);
@@ -611,8 +408,6 @@ function useListDrag<Row>(
         lower(press, list, false);
         return;
       }
-      // The list is drawn in its new order before the rows come down, so they
-      // come down where that drew them, and the copy lands on the row there.
       flushSync(() => {
         if (press.to !== press.at) latest.current?.(name, placeAmong(press, press.rows, press.to));
         carried(false);
@@ -625,13 +420,9 @@ function useListDrag<Row>(
     const cancel = (event: PointerEvent) => {
       if (event.pointerId === press.pointerId) putBack();
     };
-    // The sidebar run along under a pointer held still, by a wheel or a
-    // trackpad, moves where the row would land.
     const runBeneath = () => {
       if (press.dragging) draw(press, list, out);
     };
-    // Escape puts a drag back, and is the drag's alone while it lasts, so it
-    // steps the window back no layer as well.
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !press.dragging) return;
       event.preventDefault();
@@ -666,7 +457,6 @@ function useListDrag<Row>(
     const at = rows.findIndex((row) => row.contains(target));
     const pressed = rows[at];
     const name = pressed === undefined ? undefined : kind.name(pressed, at);
-    // A row alone in its list has nowhere to move but out of it.
     if (name === undefined || (rows.length < 2 && !out)) return;
     const grip = handle === undefined ? null : target.closest(handle);
     if (handle !== undefined && (grip === null || !pressed?.contains(grip))) return;
@@ -704,7 +494,6 @@ function useListDrag<Row>(
   };
 }
 
-/** The drag of a list of any rows, each heard by its place among them (`useListDrag`). */
 export function useRowDrag(
   onMove: RowMove | undefined,
   options: RowDragOptions = {},
@@ -712,7 +501,6 @@ export function useRowDrag(
   return useListDrag(PLACED_ROW, onMove, options);
 }
 
-/** The drag of a list of any rows drawing only those near the view (`VirtualRows`), each heard by its place among them all (`useListDrag`). */
 export function useRunRowDrag(
   onMove: RowMove | undefined,
   options: RowDragOptions = {},
@@ -720,11 +508,6 @@ export function useRunRowDrag(
   return useListDrag(RUN_ROW, onMove, options);
 }
 
-/**
- * The drag of a list of tasks, the Board's column or a List's group
- * (`useListDrag`): its rows are its cards or rows, each heard by its task's
- * id, and a place is counted among them alone.
- */
 export function useTaskDrag(
   onMove: RowMove<string> | undefined,
   options: RowDragOptions<string> = {},

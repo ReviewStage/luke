@@ -26,15 +26,6 @@ import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 
-/**
- * agent-tab-reply-said.test.ts -- an agent's reply is read once it is
- * whole: the transcript is no live region, so the chunks it streams in are
- * not heard, and the page that says the turn completed says the reply
- * once, politely, by who sent it and its first sentence; a turn that fails
- * says its end line once as it lands, and reports why by the service's word
- * for it and the agent it is about. Synthetic transcript throughout.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -68,7 +59,6 @@ const DESCRIPTION: AgentTranscriptMessage = {
   parts: [{ type: "text", text: "Audit the retry paths." }],
 };
 
-/** The reply as a page reads it: its words so far, or its parts where it called a tool. */
 function reply(words: string | readonly WireRecord[]): AgentTranscriptMessage {
   return {
     id: "reply",
@@ -89,7 +79,6 @@ function page(
   return { messages: [DESCRIPTION, reply(words)], cursor, status, title: null, subagents: [] };
 }
 
-/** A call the reply made, answered. */
 const READ_TESTS: WireRecord = {
   type: "tool-read",
   toolCallId: "call-read",
@@ -98,10 +87,8 @@ const READ_TESTS: WireRecord = {
   output: { ok: true },
 };
 
-/** What the worker tab's worker was handed, which names its tab. */
 const WORKER_TASK = "Check the CSV writers";
 
-/** A running agent's tab, or its worker's, its first page answered at once and each later one when the test hands it. */
 async function runningTab(first: AgentMessagesAnswerView, worker = false, opened = AGENT) {
   fakeAppBridge({});
   mountAnnouncer();
@@ -151,7 +138,6 @@ async function runningTab(first: AgentMessagesAnswerView, worker = false, opened
   await settleQueries();
   return {
     container,
-    /** The agent's row as the list next reads it, as its status moves. */
     async row(agent: AgentSummary) {
       await act(async () => {
         draw(agent);
@@ -186,7 +172,6 @@ test("a reply that streams in three chunks is said once, after the last, by who 
   assert.equal(announcedPolitely(), "Reply from Retry audit: The retry paths are safe.");
   const said = document.querySelector('[role="status"][aria-live="polite"] span');
 
-  // A later page of the same finished turn says nothing again.
   await tab.answer(
     page("The retry paths are safe. Two callers retry twice.", AGENT_STATUS.COMPLETED, "1:5"),
   );
@@ -234,7 +219,6 @@ test("a tab opened on a turn already finished, or already failed, says nothing",
   assert.equal(announcedPolitely(), "", "a failure the transcript opens on is history");
   act(() => root?.unmount());
 
-  // A row still saying the turn runs, as a list read before it failed does, is no sign the turn was seen running.
   const stale = await runningTab(page("The retry", AGENT_STATUS.FAILED, "1:1"));
   await stale.row({ ...AGENT, status: AGENT_STATUS.FAILED });
   assert.equal(
@@ -312,7 +296,6 @@ test("a failed turn's end line reports the service's word for why, and the agent
       false,
       failed,
     );
-    // A tab drawn again, as its row is read anew, reports the same failure no more.
     await tab.row({ ...failed, title: "Retry audit, renamed" });
   } finally {
     uninstall();

@@ -163,82 +163,8 @@ import {
   type TaskInboxControl,
 } from "./use-task-inbox.js";
 
-/**
- * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's messages and what they ask, and the answers given in place or as they were given.
- *
- * The item reads as a comment thread, as an issue or a pull request does:
- * its title alone leads as the thread's subject. Each message under it is a
- * comment, a Markdown document headed by its writer's chip, their face and
- * name, and when, the chip's face standing out on the line that runs down
- * through every face to join the comments: a member by their face and name,
- * the agent by its tile and name. Its words are drawn with the item's own
- * pictures, pairs, and lone-link cards, read under the item's own
- * workspace, its plan's or its agent's, and its files after them, never as
- * a strip over its words: a picture its words draw stands there alone,
- * every other one as a picture after them, opened larger over the window
- * by a press (`inbox-pictures.tsx`), and any other file as its chip
- * (`CommentFiles`). A thread read cut to its latest says, after its first
- * message, that the earlier ones are in the agent's tab.
- *
- * A member's answer leads with the ask's card it answered, its kind and how
- * it was answered at its head and its controls under it as the answer left
- * them, read-only; where the thread read no longer carries the ask, it
- * leads with its stamp (`inbox-stamp.tsx`) and its values listed. An
- * agent's message that asks ends, while the ask waits, with a marker saying
- * which teammate it waits on, or nothing where it waits on the reader, its
- * controls standing in the draft reply over the note: a `decide`'s numbered
- * options or two small buttons, each numbered for the key that picks it
- * from anywhere in the Inbox but a field; a `do`'s steps with Mark done and
- * Couldn't do it; an `answer`'s fields, filled in part or whole, or its
- * Answer; each attaches its answer to the reply rather than sending it, and
- * a press pressed again takes it off. Answered, it leaves the agent's
- * message for the reply that answered it, or says "Answered" alone where
- * that reply is no longer read; replaced, it keeps its controls as it
- * offered them, stepped back to the muted ink and taking nothing, over a
- * pill saying a newer question, or message, replaced it; withdrawn, the
- * same over a pill saying so and its why as a muted sentence, or who closed
- * the item. An ask of a type this build does not know, one a newer service
- * wrote, is drawn as a line naming a newer version of the app, so the rest still reads.
- *
- * The draft reply is the reader's chip, "You" and nothing after it, over
- * the agent composer's box, its card and its field, with its `@` mentions,
- * its skills, and its microphone (`inbox-answer-box.tsx`), flowing at the
- * thread's end rather than docked under it, and a notice's Send reads "Got
- * it" until a word is written. The draft reply ends a settled item's
- * thread too. The board is a log, as an agent's transcript is: each item opens
- * at its newest message, the draft reply just over the board's foot, and
- * keeps to it as messages land while the reader is there; scrolled up, the
- * transcript's way back to the newest line floats over the foot; and the
- * reader's own message, sent while scrolled up, is scrolled into view as it
- * lands, the draft under it. The pane's bar is its path, task › agent, each
- * crumb drawn as its tab in the task's column, opening what it names and
- * hanging the card its sidebar row or tab hangs, after a way back to the
- * list where the item stands alone, and nothing else that opens the agent,
- * since its name does. Wherever the thread names the agent, the name is
- * the agent's own reference (`agent-ref.tsx`): its tab's card on hover, its
- * tab on a press, an archived agent's card saying so. Every time shows its
- * moment in the shared tooltip, and an agent this window does not list, one
- * started on another Mac, still leads with a glyph. The pane shows words an
- * agent wrote and pictures of what it rendered, so its thread is out of the
- * session recording (`ph-no-capture`), and the viewer, drawn over the
- * window outside it, is out of it on its own.
- *
- * Words selected anywhere in the thread but the draft reply stand Reply
- * over them, as an agent's words do in its tab (`reply-to-selection.tsx`):
- * its title, the agent's words and a member's, an answer's picks, ticks,
- * and values, and the lines saying what became of an ask. A press lays
- * them into the box as a quote block, so a reply can answer the thread
- * point by point. Reply stands only while the box takes a quote: never
- * while a send is out, a dictation holds the box, or its editor is still
- * loading (`inbox-answer-box.tsx`).
- */
-
-/** Where the way back from an item standing alone leads, as its hint names it. */
 const INBOX_PLACE = "inbox";
 
-/**
- * A link block, drawn as a link alone in its paragraph of the item's own words is: the card of what it names where it earns one (`lone-link-card.tsx`), else its chip. Note that it is handed to the words as a markdown link, because that one path is what gives a link its mark, its live label, its card, and the door it opens; an address that opens nowhere keeps its label with the address beside it to copy.
- */
 export function LinkBlock({ url, label }: { url: string; label: string }): React.JSX.Element {
   if (opensAsLink(url)) {
     return (
@@ -258,24 +184,14 @@ export function LinkBlock({ url, label }: { url: string; label: string }): React
   );
 }
 
-/** How a number key picks an open item's option: the draft after the option numbered is picked, or none where it has none. */
 type NumberedPick = (draft: InboxDraft, number: number) => InboxDraft | undefined;
 
-/** How the number keys pick an open item's options, its thread's open `decide`'s, or none where it has none they pick. */
 function numberedPickOf(thread: readonly InboxMessage[]): NumberedPick | undefined {
   const ask = openAskOf(thread)?.ask;
   if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DECIDE) return undefined;
   return (draft, number) => askNumberedPick(ask, draft, number);
 }
 
-/**
- * The number keys pick an open item's options, its thread's open `decide`'s, 1 the first, as a press on
- * the option would, and take the keyboard to it, wherever in the Inbox the
- * developer stands but a field or an editor, whose keys are its own, and
- * never under a dialog. Note that the keys are heard on the document,
- * because a reader stepping the list with J and K holds the keyboard on its
- * row rather than in the pane.
- */
 function useOptionNumbers(
   pane: React.RefObject<HTMLElement | null>,
   item: InboxItem,
@@ -305,7 +221,6 @@ function useOptionNumbers(
       if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
         return;
       const number = Number(event.key);
-      // Note that a number picks only an option drawn, never one stepped aside while the box starts a new thread.
       const row = optionRows(shown)[number - 1];
       if (row === undefined) return;
       const picked = pick?.(draft, number);
@@ -319,32 +234,22 @@ function useOptionNumbers(
   }, [numbered, pane]);
 }
 
-/** What the draft reply's head names the reader by, where nothing else names them. */
 const DRAFT_HEAD = {
   YOU: "You",
 } as const;
 
-/** The reader as the window draws them: as the workspace's members list them, else as their account signs in, else by their id alone. */
 function useReader(readerId: string | undefined): Actor {
   const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const { members } = useMemberDirectory();
   const member = members?.find((each) => each.userId === readerId);
   if (member !== undefined) return memberActor(member, readerId);
   if (account?.status === ACCOUNT_STATUS.SIGNED_IN) return accountActor(account);
-  // Note that a reader known by their id alone is still drawn as a person, by the words the head names them with.
   if (readerId !== undefined) {
     return { kind: ACTOR_KIND.PERSON, userId: readerId, name: DRAFT_HEAD.YOU, you: true };
   }
   return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
 }
 
-/**
- * The reader's reply not yet sent, as the thread's last comment, drawn as
- * a member's is: headed by the reader's own chip, "You", with nothing after
- * it, and the box under it, so what is sent drops into the thread in its
- * place and the box stands at the end again, as an issue's thread is
- * written on.
- */
 function DraftReply({
   readerId,
   place,
@@ -367,16 +272,8 @@ function DraftReply({
   );
 }
 
-/** What a reply on its way says at its head's end. */
 const SENDING = "Sending";
 
-/**
- * One of the reader's plain replies on their way, which stand as the
- * thread's last messages before the draft reply, in the order sent: drawn
- * as the reader's own message is, its files going up, and "Sending" at its
- * head's end, until the item holds it, when the message it became stands in
- * its place.
- */
 function PendingReply({
   readerId,
   reply,
@@ -418,21 +315,13 @@ function PendingReply({
   );
 }
 
-/** No messages, one array so an item nobody wrote on hands down the same one. */
 const NO_MESSAGES: readonly InboxMessage[] = [];
 
-/**
- * A form's values as a member filled them, one a line in the form's order:
- * each field's name, then what was put in it, a text field's words drawn as
- * the agent's tab draws a sent message, so a mention they hold is its chip,
- * and any other field's value in its words, "yes" or "no" for a yes or no.
- */
 function AnswerValues({
   values,
   texts,
 }: {
   values: readonly InboxFormValue[];
-  /** The labels of the form's text fields. */
   texts: ReadonlySet<string>;
 }): React.JSX.Element | null {
   if (values.length === 0) return null;
@@ -459,7 +348,6 @@ function AnswerValues({
   );
 }
 
-/** Where a thread read carries only its latest messages: a line saying the earlier ones stand in the agent's tab, the agent's name opening it. */
 function EarlierMessages({
   by,
   place,
@@ -482,27 +370,14 @@ function EarlierMessages({
   );
 }
 
-/** The reader's draft reply at the thread's end, where the box stands. */
 function draftReplyOf(scroller: HTMLElement): Element | null {
   return scroller.querySelector('[data-inbox-comment="draft"]');
 }
 
-/** How far the scroller's foot stands in from its edge: its scroll padding, which clears the fade over it. */
 function footPadding(scroller: HTMLElement): number {
   return Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
 }
 
-/**
- * Scrolls the board to a message of the reader's own the moment it lands
- * on the thread, inside the board's own scroller, since the pane may still
- * be sliding in (`AGENTS.md`'s panel motion): far enough that the draft
- * reply under it, the box written in again, stands whole over the board's
- * foot, and no further than the message's head. A message another wrote,
- * or another item opened, scrolls nothing. Note that a reader already near
- * the thread's end is followed there by the log itself
- * (`ConversationRows`' `followOnAppend`), so this is what brings the
- * message in for a reader scrolled up, whom the log leaves where they are.
- */
 function useScrollToOwnMessage(
   board: React.RefObject<HTMLDivElement | null>,
   item: InboxItem,
@@ -530,16 +405,8 @@ function useScrollToOwnMessage(
   }, [board, item.id, last, own]);
 }
 
-/** What an ask's box says where its type is one this build does not know. */
 const NEWER_APP_ASK = `Answer this in a newer ${PRODUCT_NAME}.`;
 
-/**
- * Who an open ask waits on where that is a teammate (`inboxWaitsOn`): its
- * task's assignee, else the one who started its agent, in the muted ink, as the list's Waiting on others does,
- * though any member may still answer. Where the item is the reader's
- * (`readersItem`) it draws nothing: the draft reply under the thread,
- * holding the ask's controls, already says the answer is theirs.
- */
 function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | null {
   const starter = usePerson(on);
   if (on === undefined) return null;
@@ -550,13 +417,6 @@ function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | nu
   );
 }
 
-/**
- * What the agent's line says it did to an ask of its own, after its name:
- * withdrew it, or replaced it by a newer question where the post that
- * replaced it asks one, by a newer message where it asks nothing, as a post
- * that asks nothing replaces the ask it posts over, or by one the thread
- * read no longer carries.
- */
 const AGENT_DID = {
   WITHDREW: "withdrew this",
   REPLACED_BY_QUESTION: "replaced this with a newer question",
@@ -564,11 +424,6 @@ const AGENT_DID = {
   REPLACED: "replaced this",
 } as const;
 
-/**
- * What ends an agent's message whose ask of words alone was answered, where
- * the thread read carries the reply: a small pill saying "Answered", with
- * no card, the reply's words being the answer.
- */
 function AnsweredMarker(): React.JSX.Element {
   return (
     <span data-inbox-settled="answered">
@@ -579,25 +434,7 @@ function AnsweredMarker(): React.JSX.Element {
   );
 }
 
-/**
- * What ends an agent's message whose ask was replaced or withdrawn: its
- * controls as it offered them (`HeldControls`), stepped back to the muted
- * ink (`SteppedBack`), nothing picked and taking nothing, so what it used to
- * ask still reads in the thread and never as an answer; what became of it
- * is the thread's own line (`ThreadEvent`). An `answer` of words alone,
- * which has no controls, keeps none, as does a to-do naming no steps, whose
- * one step was the item's title as it stood then, which a later post may
- * have renamed.
- */
-function HeldAsk({
-  ask,
-  title,
-}: {
-  ask: InboxKnownAsk;
-  /** The item's title, which stands as the one step of a to-do that names none. */
-  title: string;
-}): React.JSX.Element | null {
-  // A to-do naming no steps draws the item's title as its one step, and a later post may have renamed the item since, so the title it drew then is not known.
+function HeldAsk({ ask, title }: { ask: InboxKnownAsk; title: string }): React.JSX.Element | null {
   if (!hasControls(ask) || (ask.type === INBOX_ASK.DO && ask.steps.length === 0)) return null;
   return (
     <div
@@ -616,30 +453,16 @@ function HeldAsk({
   );
 }
 
-/**
- * Whether a member resolved the item without an answer while that close
- * stands, as its row's card says it (`inboxSettledStanding`), which the
- * thread says in a line of its own among its messages (`ThreadEvent`).
- */
 function resolvedByMember(item: InboxItem): boolean {
   return inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
 }
 
-/** What a line of what happened to the thread says: a member resolved it, or the agent withdrew or replaced one of its asks. */
 const THREAD_EVENT = {
   RESOLVED: "resolved",
   WITHDRAWN: "withdrawn",
   REPLACED: "replaced",
 } as const;
 
-/**
- * A line of what happened to the thread, drawn among its messages: a member
- * resolving it without an answer, by whom where that is known, and the note
- * the close carried, where it carried one; the agent withdrawing an ask, and why; or the agent replacing one, by the
- * post that replaced it where the thread read carries it. Each says when,
- * where that is known, and is keyed by what it is about: the ask's message,
- * or the item for its standing close.
- */
 type ThreadEventLine = { readonly key: string } & (
   | {
       readonly kind: typeof THREAD_EVENT.RESOLVED;
@@ -659,10 +482,8 @@ type ThreadEventLine = { readonly key: string } & (
     }
 );
 
-/** Each line of what happened to the thread, by the index of the message it follows; -1 before every message read. */
 type ThreadEventsAfter = ReadonlyMap<number, readonly ThreadEventLine[]>;
 
-/** Where a line dated `at` stands: after the last message written by then, and never before the message at `from` it is about. */
 function standsAfter(
   thread: readonly InboxMessage[],
   from: number,
@@ -675,12 +496,6 @@ function standsAfter(
   );
 }
 
-/**
- * The note a member's close carried, which the service writes as their
- * message in the close's own write, so stamped with the close's very time:
- * a member's message written then that answers nothing, by the closer where
- * the close names one; none where the close carried no note.
- */
 function closeNote(
   thread: readonly InboxMessage[],
   at: number | undefined,
@@ -696,13 +511,6 @@ function closeNote(
   );
 }
 
-/**
- * Where the post that replaced the ask at `index` stands: the agent's next
- * post that asks, since a follow-up asking nothing on a thread still asking
- * leaves its ask open; or, where none does, its next post, as a deployment
- * that replaced an ask with a post asking nothing left it; -1 where the
- * thread read carries neither.
- */
 function replacingPost(thread: readonly InboxMessage[], index: number): number {
   const later = (message: InboxMessage, at: number) =>
     at > index && message.author === INBOX_MESSAGE_AUTHOR.AGENT;
@@ -710,13 +518,6 @@ function replacingPost(thread: readonly InboxMessage[], index: number): number {
   return asked === -1 ? thread.findIndex(later) : asked;
 }
 
-/**
- * Whether the ask at `index`, withdrawn with no why, is the one the
- * member's close that still stands withdrew, whose line the item's own close
- * draws: the ask withdrawn at the close's stamp, or, for an ask withdrawn
- * before its time was kept, the latest ask, since a post asking since would
- * have opened the item again.
- */
 function withdrawnByStandingClose(
   item: InboxItem,
   thread: readonly InboxMessage[],
@@ -728,15 +529,6 @@ function withdrawnByStandingClose(
   return thread.findLastIndex((message) => message.ask !== undefined) === index;
 }
 
-/**
- * The line a settled ask's message gives the thread, and where it stands:
- * for a replaced one, just before the post that replaced it
- * (`replacingPost`), dated as that post, or right after it where the thread
- * read no longer carries that post; for one withdrawn with why, where it was
- * withdrawn; and for one withdrawn with none, which a member's close leaves,
- * the line saying it was resolved without an answer, unless it is the close
- * that still stands (`withdrawnByStandingClose`).
- */
 function askEvent(
   item: InboxItem,
   thread: readonly InboxMessage[],
@@ -760,7 +552,6 @@ function askEvent(
     return { after, line };
   }
   if (withdrawnByStandingClose(item, thread, index)) return undefined;
-  // Note that a close no longer standing names no closer, but the note it carried was written by them.
   const note = closeNote(thread, ask.withdrawnAt, undefined);
   const line = {
     key,
@@ -772,13 +563,6 @@ function askEvent(
   return { after, line };
 }
 
-/**
- * Every line of what happened to the thread, by the message each follows:
- * what became of each settled ask (`askEvent`), then the member's close
- * where it stands, after the last message written by the time of the close,
- * since a settled item still takes messages, or at the thread's end where
- * that time is not known.
- */
 function threadEvents(item: InboxItem, thread: readonly InboxMessage[]): ThreadEventsAfter {
   const events = new Map<number, ThreadEventLine[]>();
   const add = (after: number, line: ThreadEventLine) => {
@@ -806,7 +590,6 @@ function threadEvents(item: InboxItem, thread: readonly InboxMessage[]): ThreadE
   return events;
 }
 
-/** The messages a close's line draws as its note, which the thread draws there rather than as messages of their own. */
 function closeNotes(events: ThreadEventsAfter): ReadonlySet<string> {
   const notes = new Set<string>();
   for (const lines of events.values()) {
@@ -817,7 +600,6 @@ function closeNotes(events: ThreadEventsAfter): ReadonlySet<string> {
   return notes;
 }
 
-/** What a row of the thread draws: a line of what happened to it, a message, the line saying earlier messages are cut, a reply on its way, or the reader's draft reply. */
 const THREAD_ROW = {
   EVENT: "event",
   MESSAGE: "message",
@@ -841,20 +623,8 @@ type ThreadRow =
     }
   | { readonly kind: typeof THREAD_ROW.DRAFT; readonly key: string };
 
-/** The height a row of the thread is taken to have before it is drawn, in pixels: a short message's. */
 const THREAD_ROW_ESTIMATE_PX = 96;
 
-/**
- * The thread's rows in order, each one of its comments, as the log's run
- * draws them (`ConversationRows`): the lines of what happened before its
- * first message, then each message, a close's note drawn under the close's
- * own line instead, with the lines that follow it, the line saying earlier
- * messages are cut after the first, which always stands, the reader's
- * replies on their way, and the draft reply last. Note that the run names
- * its rows by one string each (`VirtualRows`), and a line of what happened
- * is kept by the message it follows, so its row is that message's id with
- * the line's kind after it.
- */
 function threadRows(
   thread: readonly InboxMessage[],
   events: ThreadEventsAfter,
@@ -880,16 +650,8 @@ function threadRows(
   return rows;
 }
 
-/** What a member resolving the item says after their name. */
 const RESOLVED_IT = "resolved this without an answer";
 
-/**
- * A line of what happened to the thread, drawn as a description comment's
- * "resolved this" is: whoever did it, their face on the gutter's line, their
- * name, what they did, and when; a close's note under it, as a member's
- * message draws its words and files, and a withdrawal's why, in the muted
- * ink. The member's is the closer where known, and the agent's its tile.
- */
 function ThreadEvent({
   itemId,
   line,
@@ -957,31 +719,12 @@ function ThreadEvent({
   );
 }
 
-/**
- * The small pill that ends the agent's message while what it asks waits on
- * a teammate: "Waiting on" them, after a dot in the muted ink. Where it
- * waits on the reader it draws nothing, the draft reply at the thread's
- * end (`DraftReply`) holding its controls saying so already.
- */
 function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element | null {
   const starter = usePerson(on);
   if (on === undefined) return null;
   return <WaitingMarker on={actorName(starter, { sentence: true })} />;
 }
 
-/**
- * The box closing a message that asks: while it waits, a marker alone
- * saying which teammate it waits on (`AskMarker`), or nothing where it
- * waits on the reader, its controls standing in the draft reply; once answered, nothing, the card standing at the head
- * of the reply that answered it (`AnsweredCard`), or, for an ask of words
- * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
- * a card saying
- * "Answered" alone where the thread read no longer carries that reply; for
- * a replaced or withdrawn ask, no card, its controls as it offered them,
- * stepped back (`HeldAsk`), the thread's own line saying what became of it
- * (`ThreadEvent`); and an ask this build does not know a card naming a newer
- * version of the app.
- */
 function AskBox({
   title,
   message,
@@ -989,12 +732,10 @@ function AskBox({
   thread,
   waitingOn,
 }: {
-  /** The item's title, as `cardTitle` reads it. */
   title: string;
   message: InboxMessage;
   ask: InboxReadAsk;
   thread: readonly InboxMessage[];
-  /** The teammate the ask waits on while open; none where it waits on the reader. */
   waitingOn: InboxItem["startedBy"];
 }): React.JSX.Element | null {
   if (!knownAsk(ask)) {
@@ -1015,10 +756,8 @@ function AskBox({
   if (ask.status === INBOX_ASK_STATUS.OPEN) {
     return <AskMarker on={waitingOn} />;
   }
-  // The card goes with the reply that answered it, wherever the thread read still carries that reply.
   const answered = ask.status === INBOX_ASK_STATUS.ANSWERED;
   if (answered && answerOf(thread, message.id)?.answers !== undefined) {
-    // An answer of words alone draws no card, so its marker says here that it was answered.
     return ask.type === INBOX_ASK.ANSWER && ask.fields === undefined ? <AnsweredMarker /> : null;
   }
   return (
@@ -1036,7 +775,6 @@ function AskBox({
   );
 }
 
-/** The ask a message's answer answers, where the thread read still carries it. */
 function answeredAsk(
   thread: readonly InboxMessage[],
   answers: InboxAnswers,
@@ -1044,24 +782,8 @@ function answeredAsk(
   return thread.find((message) => message.id === answers.ask)?.ask;
 }
 
-/** No text fields' labels, for values whose ask this build cannot read, so none is known to be a text field. */
 const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
 
-/**
- * One message of the thread, a Markdown document, as its
- * writer's comment: a member by their face and name, the agent by its tile
- * and name and a quiet "agent" after it, then when. An answer leads with
- * the card of the ask it answered, filled in as it was answered
- * (`AnsweredCard`), or, where the thread read no longer carries that ask,
- * its stamp and its values listed; then its words, the agent's drawn as its
- * question's are and a member's as a sent message's, and the files it
- * carried after them, a picture its words draw standing there alone;
- * an agent's message that asks ends with its ask's box, a marker alone
- * while it waits, until it is answered. It is drawn again only where it is
- * handed another prop (`memo`), each the part of the item it draws, so a
- * change to the item that leaves the message as it was, as marking it read
- * does, draws none of the thread's messages again.
- */
 const ThreadMessage = memo(function ThreadMessage({
   itemId,
   title,
@@ -1075,9 +797,7 @@ const ThreadMessage = memo(function ThreadMessage({
   place,
 }: {
   itemId: string;
-  /** The item's title, as `cardTitle` reads it. */
   title: string;
-  /** The member the item's agent addressed its thread to (`inboxAddressedTo`), which an open ask from before messages kept their own addressee is addressed to. */
   threadAddressedTo: InboxItem["waitsOn"];
   message: InboxMessage;
   thread: readonly InboxMessage[];
@@ -1089,7 +809,6 @@ const ThreadMessage = memo(function ThreadMessage({
 }): React.JSX.Element {
   const writer = useMessageWriter(message, by);
   const answers = message.answers;
-  // Note that an open ask from before messages kept their own addressee is addressed as its thread is.
   const addressedTo =
     message.addressedTo ??
     (message.ask?.status === INBOX_ASK_STATUS.OPEN ? threadAddressedTo : undefined);
@@ -1109,7 +828,6 @@ const ThreadMessage = memo(function ThreadMessage({
         <AnsweredCard ask={answered} title={title} answers={answers} />
       ) : (
         <>
-          {/* Where the thread read no longer carries the ask, or this build does not know it, the answer is its stamp and its values listed. */}
           <InboxStamp stamp={sentStamp(answers, answered)} />
           <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
@@ -1128,22 +846,13 @@ const ThreadMessage = memo(function ThreadMessage({
   );
 });
 
-/** No groups over the item's own. */
 const NO_LEAD: readonly MenuAction[][] = [];
 
-/** What a phone's item offers in its ⋯ over the item's own actions, past the bar's buttons it stands for. */
 export interface InboxPanePhone {
-  /** Opens the side panel beside the item, which the title bar's toggle opens elsewhere; none while it is open or where there is none. */
   readonly onShowPanel: (() => void) | undefined;
-  /** The task the Inbox is narrowed to, by its name, which the head says the item stands in; none while it lists every task's. */
   readonly narrowedTask?: string | undefined;
 }
 
-/**
- * What a phone's ⋯ leads with, in place of what the wide bar draws as
- * buttons and crumbs: the pager's steps, then what the crumbs open, the
- * item's task or automation and its agent, then the side panel.
- */
 function phoneItemGroups(
   holder: InboxHolder,
   by: ItemAgent,
@@ -1198,7 +907,6 @@ function phoneItemGroups(
               onSelect: onOpenHolder,
             },
           ];
-  // ⌘O opens the item's task, or its agent where no task holds it (`desktop-inbox.tsx`).
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
@@ -1214,23 +922,12 @@ function phoneItemGroups(
   return [steps, [...holderItem, agentItem], panel].filter((group) => group.length > 0);
 }
 
-/** What a phone's ⋯ calls the crumbs' presses. */
 const OPEN_TASK = "Open task";
 const OPEN_AUTOMATION = "Open automation";
 const OPEN_AGENT = "Open agent";
 
-/** What the pane's ⋯ menu is called, which is its tooltip too, as the item's row names its own. */
 const ITEM_THING = "Inbox item";
 
-/**
- * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
- * agent's tab end theirs, offering what the item's row's menu offers in the
- * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U, and Remind me, naming H; and, while the
- * item is open, Resolve without answering, asked first. It is keyed by its
- * item where it is drawn, so a question asked on one item never closes the
- * next, and the menu and the question go with the pane once it is hidden.
- */
 function InboxItemMenu({
   item,
   shown,
@@ -1245,21 +942,17 @@ function InboxItemMenu({
   onMark: InboxPaneDoors["onMark"];
   onRemind?: InboxReminder | undefined;
   onClose: InboxCloser | undefined;
-  /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
-  /** Muted over the items, pressed by nothing: where the item stands in the list, on a phone. */
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
   const close = useInboxClose(item, onClose, shown);
-  // Note that a time of the reader's own is picked from the item's row, whose list holds the picker, so this menu offers the times alone.
   const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
     onAskClose: close.ask,
     keyed: true,
     remind: onRemind === undefined ? undefined : { onRemind },
   });
-  // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read here as the menu is drawn rather than as the lead was made.
   const groups = itemGroups(lead === NO_LEAD ? lead : [...lead, ...phoneFindGroups()]);
   if (groups.length === 0) return null;
   return (
@@ -1280,14 +973,6 @@ function InboxItemMenu({
   );
 }
 
-/**
- * The open question's ×, at its card's top end: Resolve without answering,
- * which asks nothing and only stages the resolve on the item's draft, the
- * box's Send doing it (`DraftResolving`), so the item's ⋯ keeps its own
- * close and the question it asks (`inbox-close.tsx`). It is keyed by its
- * item where it is drawn, so a resolve staged on one item never lands on
- * the next, and takes back the focus Undo had where it came of Undo's press.
- */
 function QuestionClose({
   item,
   closer,
@@ -1297,11 +982,9 @@ function QuestionClose({
   item: InboxItem;
   closer: InboxCloser | undefined;
   takesFocus: boolean;
-  /** Stages the resolve on the item's draft. */
   onStage: () => void;
 }): React.JSX.Element | null {
   const cross = useRef<HTMLButtonElement>(null);
-  // Note that only the mount reads it, so a question drawn as the item opens takes no focus from where the reader stands.
   const focused = useRef(takesFocus);
   useEffect(() => {
     if (focused.current) cross.current?.focus();
@@ -1320,20 +1003,13 @@ function QuestionClose({
   );
 }
 
-/**
- * The thread's subject, as a description or a pull request leads with one: the
- * item's title alone, the thread under it, its words quoted into a reply
- * as the thread's are.
- */
 function Subject({
   item,
   heading,
   first,
 }: {
   item: InboxItem;
-  /** Takes the title's heading, which the bar watches scroll away (`useHeadingAway`). */
   heading: (element: HTMLElement | null) => void;
-  /** Whether it is the page's first heading, as on a phone, whose bar names what holds the item and whose list is not drawn beside it. */
   first: boolean;
 }): React.JSX.Element {
   return (
@@ -1354,13 +1030,6 @@ function Subject({
   );
 }
 
-/**
- * Whether the item's heading has scrolled up out of the thread's view, as
- * the thread's scroller reports it, so the bar names the item in its place.
- * Note that a heading the pane does not draw, its list standing alone in its
- * place, has not scrolled away, and that another item opens with its own
- * heading in view until its scroller says otherwise.
- */
 function useHeadingAway(
   board: React.RefObject<HTMLElement | null>,
   heading: HTMLElement | null,
@@ -1393,7 +1062,6 @@ function useHeadingAway(
   return away.itemId === itemId && away.away;
 }
 
-/** The box's mentions where the pane is handed them; the page's own where it is not. */
 function AnswerMentions({
   value,
   children,
@@ -1404,7 +1072,6 @@ function AnswerMentions({
   return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
-/** The words a dictation into an item's box is likely to say: its repository's, its title's, and its thread's. */
 function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[] {
   const repository =
     holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.agent.repository;
@@ -1412,35 +1079,20 @@ function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[]
   return dictationKeywords({ repository, title: item.title, body });
 }
 
-/** What the pane's crumbs open, and the cards they hang. */
 export interface InboxPaneDoors {
-  /** Opens what holds the item: its task, or its automation's page; nothing where there is none to open. */
   readonly onOpenHolder: (() => void) | undefined;
-  /** The task's hover card, as its sidebar row hangs it; none for an automation. */
   readonly taskCard: React.ReactNode;
-  /** Opens the agent's tab on its task. */
   readonly onOpenAgent: (agentId: string) => void;
   readonly code: InboxCodeDoors;
-  /** Marks the item read or unread, from the bar's ⋯ menu; none where the pane offers no mark. */
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
-  /** Sets the item's reminder from its ⋯ menu, or cancels it; none where the pane offers no reminder. */
   readonly onRemind?: InboxReminder | undefined;
-  /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
 }
 
-/** What starts a new thread from an item's box instead of a reply, where the page offers one. */
 export interface InboxNewThread {
-  /** Starts a thread with the item's agent and opens it; answers why it did not start, or nothing once it did. */
   readonly onStart: (item: InboxItem, start: NewThreadStart) => Promise<string | undefined>;
 }
 
-/**
- * The box's new thread for one item: the item's agent's chip, wearing its
- * tile as a mention of the agent does, hanging its card and opening the
- * agent, as a chip does elsewhere. Note that a chip is a button, so its
- * press opens it rather than ticking the checkbox whose words it stands in.
- */
 function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
   const { name, tile } = by.subject;
   return {
@@ -1457,11 +1109,6 @@ function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent):
   };
 }
 
-/**
- * An automation's crumb, as its page's own look names it: its clock and its
- * name, hanging its card where the window reads it, and opening its page
- * where that can be opened.
- */
 function useAutomationCrumb(
   holder: InboxHolder,
   onOpen: (() => void) | undefined,
@@ -1472,7 +1119,6 @@ function useAutomationCrumb(
   const name = holderName(holder);
   return {
     label: name,
-    // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
     glyph: <HolderGlyph holder={holder} />,
     hint: name,
     card:
@@ -1483,22 +1129,6 @@ function useAutomationCrumb(
   };
 }
 
-/**
- * The pane's path, task › agent, each crumb wearing its tab's glyph in the task's column,
- * the task's document glyph and the agent's mark: each opens what it names,
- * the task or the agent's tab, and hangs the card its sidebar row or tab
- * hangs. An agent with no task stands under the automation that started it
- * instead, by its clock and name, which hang its card and open the
- * automation's page where that can be opened, and are words alone where it
- * cannot. An agent this window
- * does not list, one started on another Mac, hangs a card saying so and
- * still opens its tab. Once the thread's heading has scrolled away, the
- * item's title joins the path as its last words, in the text's own ink, so
- * the bar still says what is read; it fades in as it comes and out as the
- * heading comes back, so the title never stands twice. A narrow bar cuts the
- * task's crumb short first, then the title, which fades out where it is cut
- * as every title does, and the agent's keeps its size.
- */
 function Crumbs({
   holder,
   by,
@@ -1509,15 +1139,12 @@ function Crumbs({
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
-  /** The item's title, as its heading reads it. */
   title: string;
-  /** Whether the heading has scrolled away, so the path names the item. */
   titleShown: boolean;
 }): React.JSX.Element {
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
   const crumbs: Crumb[] = [
     taskCrumb(holder, doors) ?? automation,
-    // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
     agentCrumb(by, titleShown),
     { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
@@ -1528,7 +1155,6 @@ function Crumbs({
   );
 }
 
-/** The path's task crumb, wearing its plan's glyph and hanging its card, which opens the task; none for an item no task holds. */
 function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefined {
   if (holder.kind !== INBOX_HOLDER.TASK) return undefined;
   const { onOpenHolder } = doors;
@@ -1542,7 +1168,6 @@ function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefine
   };
 }
 
-/** The path's agent crumb, wearing its mark and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
 function agentCrumb(by: ItemAgent, fixed = false): Crumb {
   const { name, agent } = by.subject;
   return {
@@ -1555,15 +1180,6 @@ function agentCrumb(by: ItemAgent, fixed = false): Crumb {
   };
 }
 
-/**
- * A phone's bar's name for the item: what holds it, its task as the wide
- * path leads with it, or its agent where no task holds it, each crumb
- * pressing where the wide path's does. Where the Inbox is narrowed to a
- * task, the Inbox leads it, pressing back to that narrowed list, so the
- * screen a thread's link lands on says the list it stands in. Note that the
- * bar never names the item's title, because the thread's heading right
- * under it already does.
- */
 function PhoneHolder({
   holder,
   by,
@@ -1573,7 +1189,6 @@ function PhoneHolder({
   holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
-  /** Goes back to the list narrowed to the task; none while it lists every task's. */
   narrowed: (() => void) | undefined;
 }): React.JSX.Element {
   const holds = taskCrumb(holder, doors) ?? agentCrumb(by);
@@ -1585,17 +1200,6 @@ function PhoneHolder({
   );
 }
 
-/**
- * One item at reading size, as a comment thread: under the pane's crumbs,
- * the item's title alone as the thread's subject, then every message of
- * its thread, oldest first, the reader's plain replies on their way after
- * them, in the order sent (`PendingReply`), and the reader's draft reply at
- * its end, the open ask's controls standing in it.
- * Where the item stands alone, the whole Inbox wide, the crumbs follow a
- * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
- * chord, which goes back as Escape does, and the bar ends in the pager,
- * "2 of 8" and the arrows up and down the list (`inbox-pager.tsx`).
- */
 export function InboxPane({
   holder,
   item,
@@ -1609,36 +1213,22 @@ export function InboxPane({
   phone,
   newThread,
 }: {
-  /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
   item: InboxItem;
-  /** The live read of the item's task, or of its agent with no task, which answers it and holds its draft. */
   control: TaskInboxControl;
   agents: AgentsControl;
   doors: InboxPaneDoors;
-  /** Whether the list stands alone in the item's place. */
   hidden: boolean;
-  /** Goes back to the list, where the item stands alone. */
   onBack: (() => void) | undefined;
-  /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
   pager: InboxPager | undefined;
-  /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
   mentions?: TaskMentionsValue | undefined;
-  /**
-   * A phone's head (`phone-head.tsx`), where the item stands alone on a
-   * phone: the way back's glyph, what holds the item centered (`PhoneHolder`), and one ⋯
-   * holding the pager, what the crumbs open, the panel, and the item's own
-   * actions; none elsewhere, where the bar draws its crumbs and buttons.
-   */
   phone?: InboxPanePhone | undefined;
-  /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
   const connected = useConnected();
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
-  // The box's door a quote is laid in through, which the pages the thread draws offer Reply through; held in a record, since a function handed to a state's setter is read as an update.
   const [quoteDoor, setQuoteDoor] = useState<{ readonly lay: (words: string) => void } | undefined>(
     undefined,
   );
@@ -1652,11 +1242,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
-  // A phone heads the item with its own row, the item standing alone in the list's place.
   const phoneHead = phone !== undefined && onBack !== undefined;
-  // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
-  // Note that the agent and the pictures are handed to the thread's messages as the same objects while they say the same, so a message is drawn again only where it moved (`ThreadMessage`).
   const onOpenAgent = useSteadyDoor(() => doors.onOpenAgent(item.agentId));
   const { agents: listedAgents, archived, models, me, pullRequests } = agents;
   const by: ItemAgent = useMemo(
@@ -1688,17 +1275,12 @@ export function InboxPane({
     keywords: answerKeywords(holder, item),
     onEnter: () => sendFromPane(pane.current),
   };
-  // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder);
   const onDraft = (next: InboxDraft) => control.onDraft(item, next);
-  // The open ask's controls stand in the draft reply, over its note.
   const asking = openAskOf(thread);
   const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
-  // Note that an ask of words alone has no controls, so the box stands plain and its words answer it.
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
-  // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
   const resolving = open && draft.resolving === true && doors.onClose !== undefined;
-  // Which of the × and Undo was pressed last, and on which item, so the one that takes its place takes its focus, and never on another item the pane goes on to show.
   const [pressed, setPressed] = useState<
     { readonly itemId: string; readonly which: "close" | "undo" } | undefined
   >(undefined);
@@ -1735,7 +1317,6 @@ export function InboxPane({
         />
       </DraftQuestion>
     );
-  // The box stands at the thread's end as the reader's draft reply.
   const draftReply = (place: VirtualRowPlace) => (
     <AnswerMentions value={mentions}>
       <DraftReply readerId={readerId} place={place}>
@@ -1822,7 +1403,6 @@ export function InboxPane({
           }
           actions={
             <>
-              {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
               {pager === undefined ||
               (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
                 <ReplayUnmask>
@@ -1842,16 +1422,13 @@ export function InboxPane({
         />
       )}
       <Fill className="desktop-inbox">
-        {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation list={board}>
           <ConversationContent
             className={`inbox-board ${LOG_OVER_COMPOSER_CLASS} ph-no-capture flex flex-col pt-section-gap`}
           >
-            {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
             <ItemWords itemId={item.id} workspaceId={workspaceId} images={images} code={doors.code}>
               <Subject item={item} heading={setHeading} first={phoneHead} />
               <ReplyDoorProvider value={quoteDoor?.lay}>
-                {/* Each item's thread is a run of its own, so it opens at its newest message. Note that every row is drawn, because the thread is a few dozen messages at most and its comments' timeline is drawn from each to the next. */}
                 <ConversationRows
                   key={item.id}
                   keys={rowKeys}
@@ -1911,7 +1488,6 @@ export function InboxPane({
                 </ConversationRows>
               </ReplyDoorProvider>
             </ItemWords>
-            {/* Note that the thread above keeps its words with no line under it while the app is offline, since the Offline mark says why. */}
             {control.failed && connected ? (
               <ErrorState
                 failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}

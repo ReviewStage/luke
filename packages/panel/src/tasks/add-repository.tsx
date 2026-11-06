@@ -34,36 +34,14 @@ import { addRepositoryFailureWords } from "./agent-model.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { type AgentsControl, agentAddRepositoryMutation } from "./use-agents.js";
 
-/**
- * add-repository.tsx -- Add repository… on an agent's ⋯: a repository the GitHub App reaches, added beside the ones the agent works in.
- *
- * The item opens a dialog holding the repository chooser every task's
- * repository is picked with (`repository-chip.tsx`'s searchable menu),
- * offering only what the workspace's GitHub App reaches, since one App
- * token reaches all of an agent's repositories; Add sends the pick, and the
- * service appends it, checks it out, and tells the agent
- * (`agent-repository-add.ts`). A toast then says whether it was checked out
- * beside the agent now or will be at its next turn, where no place of the
- * agent's ran, which tells the agent nothing so an idle one is not woken. A
- * refusal keeps the dialog up saying why under the chooser. It stands only on
- * an agent the reader started that runs in the cloud and is not archived,
- * under nothing archived, where the control can add one; the service still
- * refuses an agent in no repository and a repository already among its
- * own, which the row cannot tell, since it lists no repositories.
- */
-
-/** The agent Add repository… is offered on, as the item reads it. */
 type AddedTo = Pick<AgentSummary, "id" | "archivedAt" | "machine" | "startedBy">;
 
-/** What the item reads of the control: the reader, where the agents' workspace is known, and the door the add goes through. */
 type AddDoors = Pick<AgentsControl, "me" | "workspaceId" | "onUnarchive" | "addRepository">;
 
-/** The add of a surface that offers none, which no dialog ever sends. */
 const NO_ADD = agentAddRepositoryMutation(() =>
   Promise.reject(new Error("This surface adds no repository.")),
 );
 
-/** The item's words, the dialog's, and what it says while no repository is picked. */
 const ADD_WORDS = {
   ITEM: "Add repository…",
   TITLE: "Add a repository to this agent",
@@ -73,14 +51,12 @@ const ADD_WORDS = {
   BODY: "It is checked out beside the agent's own, and the agent's GitHub token reaches it.",
 } as const;
 
-/** What a repository added says once the service took it: checked out beside the agent now, or at its next turn, which a service that named neither is read as. */
 function addedWords(repository: string, checkout: AddedRepositoryCheckout | undefined): string {
   return checkout === ADDED_REPOSITORY_CHECKOUT.NOW
     ? `${repository} is checked out beside the agent.`
     : `${repository} is checked out at the agent's next turn.`;
 }
 
-/** Whether the reader may add a repository to the agent, on the terms the header says. */
 function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
   const own = agent.startedBy === undefined || agent.startedBy.userId === agents.me;
   return (
@@ -92,7 +68,6 @@ function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
   );
 }
 
-/** The dialog over the window while the add is asked, running, or refused, and through its fade as it goes. */
 function AddRepositoryCard({
   open,
   confirm,
@@ -160,13 +135,11 @@ function AddRepositoryCard({
   );
 }
 
-/** One agent's Add repository… as its menu holds it: the item, none where it is not offered, and the dialog drawn beside the menu. */
 export interface AddRepositoryDoor {
   readonly action: MenuAction | undefined;
   readonly dialog: React.JSX.Element;
 }
 
-/** One agent's Add repository…, held for whichever surface offers its menu, the question kept while the surface is shown. */
 export function useAddRepository(
   agent: AddedTo,
   agents: AddDoors,
@@ -180,7 +153,6 @@ export function useAddRepository(
     if (agents.addRepository === undefined || picked === null) return;
     const answer = await adding.mutateAsync({ agentId: agent.id, repository: picked });
     if ("failure" in answer) return;
-    // Note that a repository added to an agent whose place does not run is checked out at its next turn, and the agent hears nothing now.
     toast({
       words: addedWords(picked, answer.addedCheckout),
       tone: STATUS_TONE.COMPLETE,

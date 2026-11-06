@@ -16,48 +16,18 @@ import { agentStillWriting, offersContinue } from "./agent-model.js";
 import { deviceMark, RUNS_ON_WORDS } from "./runs-on.js";
 import type { AgentsControl } from "./use-agents.js";
 
-/**
- * move-agent.tsx -- an agent moved between the cloud and the member's own devices: its menu's Move to ›, which continues it at the place picked.
- *
- * A move is a continue onto another place (`use-agents.ts`'s
- * `continueAgent` with a `runsOn`), not a mechanism of its own: the service
- * stops the source, replays its transcript into a new agent at the place,
- * named `<title> (continued)`, and copies a cloud source's work, what it had
- * not committed included, to a branch of its own; the new agent's tab opens
- * as a continue's does, and a refusal is said in a toast. An agent on a
- * device brings only what it pushed, which each place says under its name,
- * and its folder stays on that device. Move to lists Cloud, then each device
- * the member registered, by what every list of machines calls it, its glyph
- * wearing its standing's dot (`runs-on.tsx`), less the place the agent runs
- * now, or the cloud alone for an agent on a device the service did not name;
- * a device that takes no agent now is listed dimmed, saying why. It
- * stands only while Bring your own host is on, and only where a Continue is
- * offered: where a Start from the agent could run (`continueAgent`), under
- * nothing archived, on an agent not archived and at rest, of a task whose
- * mode offers it a continue (`offersContinue`). Note that it also stands
- * only where the control lists the agent, its task's or its own page's,
- * because a surface drawing agents of other tasks, such as a person's page,
- * hands the open task's control, whose continue would start on that task.
- */
-
-/** What Move to says beyond the places' names. */
 export const MOVE_WORDS = {
   PUSHED_ONLY: "Only pushed work comes along",
 } as const;
 
-/** No devices, held steady for a member with none, or while the menu offers no move. */
 const NO_DEVICES: readonly MacOffer[] = [];
 
-/** The cloud, as a move names it. */
 const TO_THE_CLOUD: AgentRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };
 
-/** The agent a move is offered on, as Move to reads it. */
 type MovedAgent = Pick<AgentSummary, "id" | "status" | "archivedAt" | "machine" | "mac" | "pilot">;
 
-/** What Move to reads of the control: where a continue could start, the agents it lists, and the member's devices. */
 type MoveDoors = Pick<AgentsControl, "agents" | "continueAgent" | "macs" | "mode" | "onUnarchive">;
 
-/** Whether the agent offers a move at all, on the terms the header says, the continue that carries it aside. */
 function useMoveOffered(agent: MovedAgent, agents: MoveDoors): boolean {
   return (
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) })
@@ -70,12 +40,6 @@ function useMoveOffered(agent: MovedAgent, agents: MoveDoors): boolean {
   );
 }
 
-/**
- * The agent moved to the cloud, as Move to's Cloud does, for a surface that
- * offers that move alone, such as a launch its Mac could not start; none
- * where Move to would not offer the cloud: no move offered, or an agent
- * already in the cloud.
- */
 export function useMoveToCloud(agent: MovedAgent, agents: MoveDoors): (() => void) | undefined {
   const offered = useMoveOffered(agent, agents);
   const { continueAgent } = agents;
@@ -84,12 +48,10 @@ export function useMoveToCloud(agent: MovedAgent, agents: MoveDoors): (() => voi
   return () => void continueAgent(agent.id, undefined, [], TO_THE_CLOUD);
 }
 
-/** The agent's Move to ›, the places it may move to, or none where it offers no move or has nowhere to go. */
 export function useMoveToEntry(agent: MovedAgent, agents: MoveDoors): MenuSubmenu | undefined {
   const { continueAgent } = agents;
   const offered = useMoveOffered(agent, agents);
   const devices = (offered ? agents.macs : undefined) ?? NO_DEVICES;
-  // Note that the beats are read only while a device is listed, so a member with none reads nothing.
   const book = useDevicePresence(devices.length > 0);
   const thisMac = useThisMac();
   if (!offered || continueAgent === undefined) return undefined;
@@ -107,8 +69,6 @@ export function useMoveToEntry(agent: MovedAgent, agents: MoveDoors): MenuSubmen
         },
       ]
     : [];
-  // Note that a local agent whose device the service did not name is offered the cloud alone, because
-  // any of the devices listed may be the one it runs on.
   const here = local ? agent.mac?.deviceId : undefined;
   const elsewhere =
     local && here === undefined ? NO_DEVICES : devices.filter((each) => each.deviceId !== here);

@@ -46,16 +46,6 @@ import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * An agent's Terminal tab as the developer meets it: a shell in the agent's
- * own sandbox, found and attached only while the tab is shown, under a bar
- * naming the agent and where the connection stands, with each state said the
- * way a terminal says it. Main is the process boundary: its act channel
- * answers from a staged sandbox, and a shell's port is handed into the page
- * as the preload hands it, the test speaking for the host on it. The screen
- * is the real terminal bundle.
- */
-
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const AGENT: AgentSummary = {
@@ -73,7 +63,6 @@ const OLDEST = "3f1c5a7b-9d2e-4b6f-8a1c-3e5f7a9b1d20";
 const NEWER = "4a2d6b8c-0e3f-4c7a-9b2d-4f6a8b0c2e31";
 const MADE = "5b3e7c9d-1f4a-4d8b-8c3e-5a7b9c1d3f42";
 
-/** A shell as the sandbox lists it. */
 function shell(id: string, title: string) {
   return { id, title, command: "zsh", cwd: "/vercel/sandbox/luke", running: false };
 }
@@ -83,49 +72,34 @@ const RUNNING: TerminalsAnswer = {
   terminals: [shell(OLDEST, "zsh"), shell(NEWER, "dev server")],
 };
 
-/** A shell's port as the test holds it: what the tab posted on it, whether the tab closed it, and the host's voice on it. */
 interface HostPort {
   readonly posted: TerminalPortInbound[];
   readonly closed: () => boolean;
-  /** A message main sends, or one no message of main's, which the tab must ignore. */
   readonly say: (message: TerminalPortOutbound | UnparsedWireValue) => void;
 }
 
 type TerminalKind = (typeof TERMINAL_ACT_KIND)[keyof typeof TERMINAL_ACT_KIND];
 
-/** One Terminal tab act as it rides the act port: its kind, and the payload the kind takes. */
 type TerminalAct = {
   [Kind in TerminalKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[TerminalKind];
 
-/** Any act the tab sends on its act port. */
 type SentAct = AnyAct | TerminalAct;
 
-/** What main answers and posts, as the test stages it. */
 interface Main {
-  /** Every act the tab sent, by kind and payload, in order. */
   readonly sent: SentAct[];
-  /** The sandbox's list as `terminal.list` answers it, which a test may change. */
   listed: TerminalsAnswer;
-  /** The kinds main refuses outright, as it does when the service cannot be reached. */
   readonly down: Set<PortActKind | TerminalKind>;
-  /** What `terminal.create` answers in place of a shell, where the sandbox refuses one. */
   createRefused: TerminalRefusal | undefined;
-  /** What `terminal.list` answers in place of the list, where the service refuses it. */
   listRefused: TerminalRefusal | undefined;
-  /** What `terminal.resume` answers in place of the sandbox, where the service refuses it. */
   resumeRefused: TerminalRefusal | undefined;
-  /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
-  /** The kinds whose answers are held back until the test lets them go. */
   readonly holding: Set<PortActKind | TerminalKind>;
-  /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
 
 const roots: Root[] = [];
 
-// The terminal bundle landed before any tab is drawn, as it is once a terminal has been shown in this window.
 beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
 let main: Main;
 
@@ -137,7 +111,6 @@ beforeEach(() => {
         return main.listRefused === undefined ? main.listed : { refused: main.listRefused };
       case ACT_KIND.TERMINAL_CREATE: {
         if (main.createRefused !== undefined) return { refused: main.createRefused };
-        // Note that each shell made has an id of its own, as the service mints one per shell, the first of them MADE.
         const made = shell(
           main.listed.terminals.some((each) => each.id === MADE) ? crypto.randomUUID() : MADE,
           "zsh",
@@ -197,13 +170,11 @@ beforeEach(() => {
       return {
         posted,
         closed: () => close.mock.calls.length > 0,
-        // The host's message, delivered to the tab's own handler as the port would.
         say: (message) =>
           act(() => port.onmessage?.(new MessageEvent("message", { data: message }))),
       };
     },
   };
-  /** A Terminal tab act answered as main's procedure would: refused, held back, or answered now. */
   const respond = (request: TerminalAct): Promise<PortActResult<TerminalKind>> => {
     sent.push(request);
     if (main.down.has(request.kind)) {
@@ -211,7 +182,6 @@ beforeEach(() => {
         new ORPCError(ACT_ERROR.REFUSED, { message: "Could not reach this agent's sandbox." }),
       );
     }
-    // A held answer says what main said when it was asked, landing whenever it is let go.
     if (main.holding.has(request.kind)) {
       const value = answer(request);
       return new Promise((resolve) => main.held.push(() => resolve(value)));
@@ -219,7 +189,6 @@ beforeEach(() => {
     return Promise.resolve(answer(request));
   };
   fakeAppBridge({});
-  // SAFETY: each procedure answers its own kind, whose answer `answer` gives by the same kind; the casts are the one dispatch on it.
   fakeActPort({
     [ACT_KIND.TERMINAL_LIST]: (payload) =>
       respond({ kind: ACT_KIND.TERMINAL_LIST, payload }) as Promise<
@@ -250,7 +219,6 @@ beforeEach(() => {
         PortActResult<typeof ACT_KIND.TERMINAL_DETACH>
       >,
   });
-  // jsdom has neither constructed sheets nor media queries; the window has both.
   Object.defineProperty(document, "adoptedStyleSheets", {
     configurable: true,
     writable: true,
@@ -277,23 +245,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Lets the act channel's answers, and the redraws they cause, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** The tab mounted for the agent, shown or not, with what it draws. */
 async function mount(
   shown = true,
   shellsOpen = true,
   before?: (registry: AtomRegistry.AtomRegistry) => void,
-  /** Whether the tab stands in a find scope holding the window's keys, as the side panel draws it. */
   findable = false,
-  /** The bundles the tab reads its terminal from; the window's own, landed, unless a test hands others. */
   bundles: SideBundles = SIDE_BUNDLES,
-  /** Whether the tab is drawn as a phone's panel draws it, what it hands the task's header's ⋯ held. */
   phone = false,
 ) {
   const container = document.createElement("div");
@@ -301,8 +264,6 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  // Note that the window's ticks never start here, because the working agent's mark steps on one
-  // forever, and a test that runs every fake timer out would never finish.
   const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
   before?.(registry);
   const wrapped = (tab: React.ReactElement) =>
@@ -352,20 +313,15 @@ async function mount(
   };
   return {
     container,
-    /** What the tab handed the task's header's ⋯, drawn on a phone. */
     handed: () => handed,
-    /** How many times the tab asked to open its agent. */
     agentOpened: () => agentOpened,
     render: async (on: boolean) => {
       render(on);
       await settle();
     },
-    /** How many times the tab asked to close. */
     closed: () => closed,
-    /** How many times the shells list's toggle was pressed. */
     toggled: () => toggled,
     registry,
-    /** The shells as the list draws them: each one's name, what it says under it, whether it is shown, and whether it runs something. */
     rows: () =>
       [...container.querySelectorAll('[aria-label="Shell list"] > li')].map((row) => ({
         name: row.querySelector(".ui-list-row-title")?.textContent,
@@ -373,34 +329,27 @@ async function mount(
         shown: row.querySelector('[aria-current="true"]') !== null,
         running: row.querySelector(".terminal-shell-running") !== null,
       })),
-    /** Presses the button the label names, wherever it stands in the tab. */
     press: async (label: string) => {
       const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
       assert.ok(button, `a button named ${label}`);
       await act(async () => button.click());
       await settle();
     },
-    /** Presses a shell's row, which shows it. */
     choose: async (name: string) => {
       const row = [
         ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Shell list"] > li > button'),
       ].find((each) => each.querySelector(".ui-list-row-title")?.textContent === name);
       assert.ok(row, `a row for ${name}`);
-      // A press takes the keyboard to the row first, as the window's does.
       row.focus();
       await act(async () => row.click());
       await settle();
     },
-    /** The acts the tab sent, by kind, from the n-th on. */
     kinds: (from = 0) => main.sent.slice(from).map((request) => request.kind),
-    /** Where the bar says the connection stands. */
     standing: () => container.querySelector(".terminal-tab-standing")?.textContent,
-    /** The slim bar's words, its action's label, or nothing without one. */
     bar: () => container.querySelector(".terminal-bar-words")?.textContent,
     action: () => container.querySelector<HTMLButtonElement>(".terminal-bar-end button"),
     dimmed: () =>
       container.querySelector(".terminal-tab-screen")?.getAttribute("data-dim") === "true",
-    /** A key pressed in the screen, as the window delivers it: its keypress only where its keydown went unclaimed. */
     type: async (key: string, keyCode: number) => {
       const field = keyboard();
       const down = new KeyboardEvent("keydown", { key, keyCode, bubbles: true, cancelable: true });
@@ -422,16 +371,10 @@ async function mount(
   };
 }
 
-/**
- * Text as the bytes a shell prints, in this page's own `Uint8Array`, as a
- * port's structured clone delivers them. Note that jsdom's `TextEncoder`
- * answers another realm's.
- */
 function bytes(text: string): Uint8Array {
   return Uint8Array.from(text, (character) => character.charCodeAt(0));
 }
 
-/** The attach the tab sent last, as main received it. */
 function lastAttach() {
   const attach = main.sent.findLast((request) => request.kind === "terminal.attach");
   assert.ok(attach);
@@ -493,7 +436,6 @@ test("a stopped sandbox shows its bar over the dimmed screen and resumes only on
   assert.equal(tab.standing(), "· sandbox · sandbox stopped");
   assert.equal(tab.bar(), "Sandbox stopped.");
   assert.match(tab.action()?.textContent ?? "", /^Resume sandbox/);
-  // Typing anything but Return resumes nothing.
   await tab.type("x", 88);
   assert.deepEqual(tab.kinds(), ["terminal.list"]);
   await act(async () => tab.action()?.click());
@@ -534,7 +476,6 @@ test("an agent that has not opened its sandbox yet shows the waiting bar", async
   assert.equal(tab.action(), null);
 });
 
-/** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
 function revealBar(): void {
   act(() => {
     for (const name of ["animationend", "webkitAnimationEnd"]) {
@@ -553,7 +494,6 @@ test("a dropped connection shows its bar, and its action asks for the shell agai
   revealBar();
   assert.equal(announcedPolitely(), "Connection lost. Reconnecting…", "it is said once shown");
 
-  // A later drop hides its bar again, so its words wait for that reveal too.
   port.say({ type: "state", state: "starting" });
   assert.equal(announcedPolitely(), "Waiting for the agent to open its sandbox…");
   port.say({ type: "state", state: "reconnecting" });
@@ -582,7 +522,6 @@ test("after five idle minutes the screen dims with no bar, and any key reconnect
   const attach = lastAttach();
   assert.ok(attach instanceof Object && "terminalId" in attach);
   assert.equal(attach.terminalId, OLDEST);
-  // The key reconnected; it never reached the shell.
   assert.equal(port.posted.length, 0);
 });
 
@@ -708,7 +647,6 @@ test("a deployment that serves no terminal relay says so, and leaves the tab ope
 
 test("of two attaches out at once, only the newest one's port is taken, and the late one is closed", async () => {
   const tab = await mount();
-  // Hidden and shown again before the first attach's port lands, the tab attaches again.
   await tab.render(false);
   await tab.render(true);
   assert.deepEqual(tab.kinds(), [
@@ -717,10 +655,8 @@ test("of two attaches out at once, only the newest one's port is taken, and the 
     "terminal.list",
     "terminal.attach",
   ]);
-  // Main posts the ports in the order the attaches went out.
   const late = main.post(OLDEST);
   assert.equal(late.closed(), true);
-  // What the late port says moves nothing: the tab waits on the newest.
   late.say({ type: "state", state: "attached" });
   assert.equal(tab.standing(), "· sandbox · connecting…");
   const newest = main.post(OLDEST);
@@ -751,7 +687,6 @@ test("the bar's action hands the keyboard back to the screen, since its button g
   resume.focus();
   await act(async () => resume.click());
   await settle();
-  // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
   assert.ok(
     document.activeElement === tab.container.querySelector("textarea"),
     "the screen holds the keyboard",
@@ -773,7 +708,6 @@ test("a port that answers no attach in line is closed without losing the tab its
   const tab = await mount();
   await tab.render(false);
   await tab.render(true);
-  // Two attaches are out for the oldest shell; a port for another shell answers neither.
   assert.equal(main.post(NEWER).closed(), true);
   const late = main.post(OLDEST);
   assert.equal(late.closed(), true);
@@ -784,7 +718,6 @@ test("a port that answers no attach in line is closed without losing the tab its
 test("a tab taken down with an attach still out lets its shell go, and closes the port that lands after it", async () => {
   await mount();
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the detach reaches the act port a few steps after the tab goes, as its mutation sends it.
   await vi.waitFor(() =>
     assert.deepEqual(main.sent.at(-1), {
       kind: ACT_KIND.TERMINAL_DETACH,
@@ -798,12 +731,10 @@ test("a paste longer than one message is cut between characters, never inside on
   const tab = await mount();
   const port = main.post(OLDEST);
   port.say({ type: "state", state: "attached" });
-  // An emoji straddling the cut: two UTF-16 units across the limit.
   const paste = `${"a".repeat(65_535)}😀b`;
   const field = tab.container.querySelector("textarea");
   assert.ok(field);
   act(() => {
-    // jsdom draws no clipboard; the paste carries the one reader the terminal asks of it.
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: { getData: () => paste } });
     field.dispatchEvent(event);
@@ -829,25 +760,21 @@ test("an attach refused after its tab was taken down leaves nothing waiting, so 
 test("a tab taken down with attaches out for two shells closes both ports, whichever lands first", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "idle" });
-  // A key re-attaches the oldest shell; hidden and shown, the tab attaches again before any port lands.
   await tab.type("q", 81);
   main.listed = { sandbox: SANDBOX_STATE.RUNNING, terminals: [shell(NEWER, "dev server")] };
   await tab.render(false);
   await tab.render(true);
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // The later attach's port lands first.
   assert.equal(main.post(NEWER).closed(), true);
   assert.equal(main.post(OLDEST).closed(), true);
 });
 
-/** The payload of the last act of the kind the tab sent, as main received it. */
 function lastPayload(kind: PortActKind | TerminalKind) {
   const request = main.sent.findLast((each) => each.kind === kind);
   assert.ok(request, `the tab sent ${kind}`);
   return "payload" in request ? request.payload : undefined;
 }
 
-/** What the shells list says to a reader in place of its rows: the reading region's words, or the failure's. */
 function shellsSaid(container: HTMLElement) {
   const list = container.querySelector("aside[aria-label='Shells']");
   assert.ok(list, "the shells list stands");
@@ -946,7 +873,6 @@ test("the list's + starts a shell in the same agent's sandbox and shows it", asy
   );
 });
 
-/** Answers the question standing over the window with its act's button. */
 async function confirmWith(verb: string): Promise<void> {
   const dialog = document.querySelector('[role="alertdialog"]');
   assert.ok(dialog, "a question stands over the window");
@@ -1007,7 +933,6 @@ test("a shell renamed from its row's menu is renamed in place, and the list says
   assert.equal(tab.rows()[0]?.name, "server");
 });
 
-/** Opens the oldest shell's name field from its row's menu and ends it on `name`, as Return does. */
 async function renameOldest(container: HTMLElement, name: string): Promise<void> {
   const row = container.querySelector<HTMLButtonElement>('[aria-label="Shell list"] > li > button');
   assert.ok(row);
@@ -1051,7 +976,6 @@ test("a refused shell rename reopens its field holding the name typed, says unde
   act(() => {
     reopened?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  // Note that the refusal is let go of as its mutation resets, which reaches React a tick later.
   await vi.waitFor(() => assert.equal(tab.rows()[0]?.name, "zsh"));
   assert.ok(!tab.container.textContent?.includes("could not be renamed"));
 });
@@ -1101,7 +1025,6 @@ test("a shell row's ⋯, its right-click and the menu key open the same menu of 
 
 test("under a finger, a shell row draws its × but no ⋯, and held it opens its menu", async () => {
   underAFinger();
-  // Note that the screen listens on a media query by its old door, which a finger's stub leaves out.
   const finger = vi.mocked(window.matchMedia);
   const answer = finger.getMockImplementation() ?? assert.fail("a finger answers the window");
   finger.mockImplementation((query) =>
@@ -1190,7 +1113,6 @@ test("a shell chosen from the list takes the keyboard to the screen, the shell's
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   await tab.choose("dev server");
-  // Note that the elements are compared as a yes or no, because a failing comparison of two elements prints them whole.
   assert.ok(
     document.activeElement === tab.container.querySelector("textarea"),
     "the screen holds the keyboard",
@@ -1223,7 +1145,6 @@ test("a read of the shells that went out before a rename lands nowhere, so the n
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
   await settle();
-  // The read from before the rename lands now, holding the old name.
   for (const release of main.held.splice(0)) release();
   await settle();
   assert.equal(tab.rows()[0]?.name, "server");
@@ -1238,7 +1159,6 @@ test("ending the shown shell starts one shell in its place, though the host says
   main.holding.add(ACT_KIND.TERMINAL_KILL);
   await tab.press("End shell");
   await confirmWith("End shell");
-  // The host says the shell is gone, on the port the tab let go, before the end answers.
   port.say({ type: "state", state: "gone" });
   await settle();
   main.holding.clear();
@@ -1308,7 +1228,6 @@ test("an idle close is the shown shell's alone: one said on a shell no longer sh
   await tab.choose("dev server");
   const shown = main.post(NEWER);
   shown.say({ type: "state", state: "attached" });
-  // The relay closes each terminal on its own five idle minutes: the one no longer shown first.
   first.say({ type: "state", state: "idle" });
   assert.equal(tab.standing(), "· sandbox · connected");
   shown.say({ type: "state", state: "idle" });
@@ -1343,7 +1262,6 @@ test("a new shell asked for while a shell is connected starts at once, and shows
   act(() => {
     tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
   });
-  // Note that the relist is a read sent beside the attach's mutation, so the two reach the port in either order.
   await vi.waitFor(() =>
     assert.deepEqual([...tab.kinds(before)].sort(), [
       "terminal.attach",
@@ -1394,7 +1312,6 @@ test("a new shell asked for while the tab is hidden waits for a stopped sandbox'
   assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 1);
 });
 
-/** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
   const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field, "the find bar stands open");
@@ -1404,7 +1321,6 @@ function typeFind(text: string): void {
   });
 }
 
-/** What the find bar's tally says. */
 function findTally(): string | null | undefined {
   return document.querySelector('[role="search"][aria-label="Find"] .ui-search-field-tally')
     ?.textContent;
@@ -1433,7 +1349,6 @@ test("⌘F finds in the shell's scrollback, which the terminal draws on a canvas
   });
   await act(async () => vi.advanceTimersByTimeAsync(100));
   assert.equal(findTally(), "2 of 2");
-  // What the find draws over the matches stands inside the tab, which the recording leaves out whole.
   for (const drawn of tab.container.querySelectorAll('[class*="xterm-decoration"]')) {
     assert.ok(drawn.closest(".ph-no-capture"));
   }
@@ -1457,12 +1372,10 @@ test("a find with more matches than it counts says there are more", async () => 
   assert.match(findTally() ?? "", /1000\+/);
 });
 
-/** The shells list over the screen, as it floats where the panel has no room for it beside. */
 function floatedShells(tab: { container: HTMLElement }): HTMLElement | null {
   return tab.container.querySelector<HTMLElement>('[aria-label="Shells"]');
 }
 
-/** The toggle that floats the shells, which the stylesheet draws in a narrow panel alone. */
 function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
   const toggle = tab.container.querySelector<HTMLButtonElement>(
     '.file-tree-toggle[data-place="over"] button',
@@ -1471,11 +1384,9 @@ function shellsToggle(tab: { container: HTMLElement }): HTMLButtonElement {
   return toggle;
 }
 
-/** A panel too narrow for the shells beside the screen, the list closed. */
 async function narrowTab() {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
-  // Only the sheet that draws the toggles, since each style read weighs every rule laid.
   layContainersAt({ "side-panel": 400 }, { only: ["./tasks.css"] });
   return mount(true, false);
 }
@@ -1557,7 +1468,6 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
     onClose: () => undefined,
     shells: { open: true, onToggle: () => undefined },
   });
-  // The window's opener is a new closure whenever what it reads changes, as the window draws it.
   const draw = () =>
     act(() =>
       root.render(

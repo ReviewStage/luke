@@ -20,8 +20,6 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { useSettingsRoute } from "../settings-link.js";
-// Note that Settings is loaded as the window loads it, on first use (`panel-router.tsx`'s lazy routes),
-// so its module is read here first and its load settles within the test's own ticks.
 import "./settings-route.lazy.js";
 import { useStageRoom } from "../stage-room.js";
 import {
@@ -41,29 +39,13 @@ import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { shellRouterEachTest } from "../testing/shell-router.js";
 import { tasksControl } from "../testing/tasks-control.js";
-// Note that Settings is loaded as the shell loads it, on first use, so the
-// module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
 import { DesktopShell } from "./desktop-shell.js";
 import { useSidebarCollapse } from "./sidebar-collapse.js";
 
-/**
- * narrow-screens.test.ts -- on a stage as narrow as a phone's, Settings and a
- * description's version history each show their list or the item chosen
- * in it, one at a time and the whole width: each opens on its list, a row
- * pressed stands its item alone under a way back to the list, and a link to
- * an item opens on it with the same way back. The focus goes with each swap:
- * to the item's way back, and back to the row chosen. The desktop's width
- * keeps both columns side by side, with no way back drawn, and the focus where
- * it was. A Settings page standing alone on a phone is named by its bar and
- * opens a section's gap under the way back, over the places bar. A synthetic
- * plan, no account of anyone's.
- */
-
 const ignore = () => undefined;
 const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** A signed-in account's Settings, its page and its presses given by the window. */
 const SETTINGS: SettingsPanelProps = {
   account: {
     status: ACCOUNT_STATUS.SIGNED_IN,
@@ -100,19 +82,14 @@ const SETTINGS: SettingsPanelProps = {
   },
 };
 
-/** The desktop's window at its usual width. */
 const WIDE = 1280;
 
-/** A phone's width. */
 const PHONE = 390;
 
-/** A stage wide enough for the window's panes side by side, though under the split's line for a screen that fills it, as a narrow Mac window or browser tab is. */
 const UNDER_SPLIT = 800;
 
-/** The screens that take the whole window, and so are as wide as the stage they fill. */
 const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-history"];
 
-/** A revision of the description by the notetaker. */
 function line(seq: number) {
   return {
     seq,
@@ -122,14 +99,12 @@ function line(seq: number) {
   };
 }
 
-/** The description's history as main holds it for the version history: two revisions, each the description as it stands. */
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
   failed: false,
   onRetry: () => undefined,
 };
 
-/** The history's older pages and its restore, as the service answers them. */
 const HISTORY: DescriptionHistorySource = {
   readPage: () => Promise.resolve({ revisions: [] }),
   restore: () => Promise.resolve(false),
@@ -138,10 +113,8 @@ const HISTORY: DescriptionHistorySource = {
 let root: Root | undefined;
 let sheets: HTMLStyleElement | undefined;
 
-/** How wide the panel's stage is laid out, which jsdom, laying out nothing, leaves to the test. */
 let stageWidth = 0;
 
-// The version history's chunk loaded once, as it is once it has opened, so the first history drawn stands within a settle.
 beforeAll(() => import("./desktop-version-history.js"));
 
 beforeEach(() => {
@@ -157,7 +130,6 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({});
-  // Each version reads as the service answers it, the plan as it stands.
   fakeActPort({
     [ACT_KIND.TASKS_REVISION]: ({ seq }) =>
       Promise.resolve({
@@ -175,15 +147,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The router the shell this test draws stands under, read before each test (`shell-router.ts`). */
 const routed = shellRouterEachTest();
 
-/** `shell` drawn under the test's router, standing where `standing` says, else where its props say. */
 function underRouter(shell: ReactElement, standing?: string): ReactElement {
   return routed().under(shell, standing);
 }
 
-/** The shell on the stage, as the panel's root draws it: the stage measured, its room, and the real sidebar. */
 function Shell({
   tab,
   tasks,
@@ -223,14 +192,12 @@ function Shell({
   return createElement("div", { ref: stage.ref, className: "app-stage" }, shell);
 }
 
-/** Settings as the window holds it, by the router (`settings-link.ts`), opened plainly or by the link given, as the window's root opens it. */
 function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX.Element {
   const place = useSettingsRoute({ workspaces: [], listedId: undefined, narrow: false });
   const opened = useRef(false);
   useEffect(() => {
     if (opened.current) return;
     opened.current = true;
-    // Entering Settings stands it on its list, as `App`'s tab switch does.
     place.open(link ?? { page: SETTINGS_VIEW.ACCOUNT, listed: true });
   }, [link, place]);
   return createElement(Shell, {
@@ -241,10 +208,8 @@ function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX
   });
 }
 
-/** The version history the last window drew, which the window's history moves as it goes back and forth. */
 let standingVersions: ReturnType<typeof useDescriptionHistory> | undefined;
 
-/** The description's version history over the window, opened on the description as it stands or where `returnTo` says. */
 function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
   const versions = useDescriptionHistory({
     source: HISTORY,
@@ -268,7 +233,6 @@ function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): Rea
   return createElement(Shell, { tab: PANEL_TAB.TASKS, tasks });
 }
 
-/** Draws the window on a stage of a width, and lets what it reads land. */
 async function mount(width: number, window: React.JSX.Element): Promise<HTMLElement> {
   stageWidth = width;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -285,45 +249,37 @@ async function mount(width: number, window: React.JSX.Element): Promise<HTMLElem
   return container;
 }
 
-/** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
-/** Resizes the panel's stage, as a phone turned or a browser window dragged does. */
 function resizeStage(width: number): void {
   stageWidth = width;
   act(() => relayout());
 }
 
-/** The element a selector names, which must stand. */
 function the(page: HTMLElement, selector: string): HTMLElement {
   return page.querySelector<HTMLElement>(selector) ?? assert.fail(`${selector} stands`);
 }
 
-/** Which of a screen's two columns are on screen, by the names given them. */
 function onScreen(page: HTMLElement, columns: Readonly<Record<string, string>>): string[] {
   return Object.entries(columns)
     .filter(([, selector]) => shown(the(page, selector)))
     .map(([name]) => name);
 }
 
-/** What a control is named: its words, folded or not, or its label where it has no words. */
 function controlName(control: Element | null | undefined): string | null {
   return control?.textContent?.trim() || control?.getAttribute("aria-label") || null;
 }
 
-/** The button in `within` that says `words`, by its words or its name, or none. */
 function buttonSaying(within: HTMLElement, words: string): HTMLButtonElement | undefined {
-  // Note that a phone's way back is its glyph alone, so it says its words by its name.
   return [...within.querySelectorAll("button")].find(
     (button) => button.textContent?.trim() === words || button.getAttribute("aria-label") === words,
   );
 }
 
-/** Presses the button in `within` that says `words`, and lets where it leads stand, the router's places among them. */
 async function press(within: HTMLElement, words: string): Promise<void> {
   const button = buttonSaying(within, words) ?? assert.fail(`a button says ${words}`);
   act(() => button.click());
@@ -362,7 +318,6 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
 });
 
 test("a Settings page standing alone on a phone is named by its bar, opens a section's gap under the way back, and keeps the places bar with no place current", async () => {
-  // Note that the stage wears the web's profile, whose tokens the gap is read in.
   document.documentElement.dataset.uiProfile = PROFILE.WEB;
   onTestFinished(() => {
     delete document.documentElement.dataset.uiProfile;
@@ -472,7 +427,6 @@ const HISTORY_COLUMNS = {
   version: 'section[aria-label="Version"]',
 };
 
-/** The version list's row of the revision drawn `at` places down, newest first. */
 function versionRow(page: HTMLElement, at: number): HTMLButtonElement {
   const rows = [
     ...the(page, '[aria-label="Version list"]').querySelectorAll<HTMLButtonElement>(
@@ -541,7 +495,6 @@ test("a version history gone back to on its list in a narrow room opens on its l
   assert.equal(standingVersions?.selected, 2, "the list stands over the version chosen");
 });
 
-/** Focuses the button in `within` that says `words`, as a press of a key or a tap does, and presses it. */
 async function pressFocused(within: HTMLElement, words: string): Promise<void> {
   const button = buttonSaying(within, words) ?? assert.fail(`a button says ${words}`);
   act(() => {
@@ -551,7 +504,6 @@ async function pressFocused(within: HTMLElement, words: string): Promise<void> {
   await settle();
 }
 
-/** The words the focused element says, and the column it stands in, by the names given the columns. */
 function focusIn(page: HTMLElement, columns: Readonly<Record<string, string>>): string | undefined {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement)) return undefined;

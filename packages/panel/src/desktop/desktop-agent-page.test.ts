@@ -96,25 +96,14 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { pushedTranscripts, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
-// Note that a Pull request tab is loaded as the side panel loads it, on first use
-// (`pages-on-demand.ts`), so the module is read here first and its load settles
-// within the test's own ticks.
 import "../tasks/agent-pull-request-tab.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
-/**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it is deleted, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
- *
- * The service is a script at the act boundary; synthetic agents and words throughout.
- */
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-/** The task an agent on a task stands on, whose pages it shows. */
 const PAGE_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** The agent a Continue or a Fork on the page starts. */
 const STARTED_ID = "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
 
 const PAGE: AgentPage = {
@@ -131,7 +120,6 @@ const PAGE: AgentPage = {
   repository: "acme/relay",
 };
 
-/** The automation whose run started the agent, as the workspace's automations list it. */
 const SWEEP: AutomationSummary = {
   id: PAGE.automationId ?? "",
   planId: null,
@@ -149,14 +137,12 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** The prompt an automation's run handed its agent: the automation's own, then what we add of the firing. */
 const HANDED = `Sweep the flaky tests.
 
 ---
 
 Vespin started this run for the automation "Flaky-test sweep" because its schedule was due.`;
 
-/** The agent an automation's run started, read as its page with the run. */
 const RUN_PAGE: AgentPage = {
   ...PAGE,
   title: null,
@@ -165,7 +151,6 @@ const RUN_PAGE: AgentPage = {
   origin: { prompt: "Sweep the flaky tests." },
 };
 
-/** The agent's workspace, as the account lists it. */
 const ACME = {
   id: PAGE.workspaceId,
   name: "Acme",
@@ -176,65 +161,42 @@ const ACME = {
 
 let root: Root | undefined;
 
-/** Where the task list's read stands, which the page draws the agent from. */
 const LIST_STATUS = { READ: "read", READING: "reading", FAILED: "failed" } as const;
 
 type ListStatus = (typeof LIST_STATUS)[keyof typeof LIST_STATUS];
 
-/** The agent as the task list carries it: its own workspace and repository beside it, and no run, which the host holds apart. */
 function listedOf(agent: AgentPage): ListedAgent {
   const { automationId, origin: _origin, ...row } = agent;
   return automationId === null ? row : { ...row, automationId };
 }
 
-// A message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
-/** Every address handed to GitHub, in order. */
 let openedOnGitHub: string[] = [];
-/** The agent as the task list carries it, with the run that started it, which the host holds apart; none where the list carries it not. */
 let listed: AgentPage | undefined;
-/** Whether the task list carries the agent the service holds as `listed`, as it does once it caught up with it. */
 let carried = true;
-/** Where the task list's read stands: read, not read yet, or failed. */
 let listStatus: ListStatus = LIST_STATUS.READ;
-/** Reads the task list again, as its Retry asks. */
 let retryList: () => void = () => undefined;
-/** Every agent read fresh by its id, as the archive confirm reads it, in order. */
 let read: string[] = [];
-/** Every agent whose origin the page held, in order. */
 let originHolds: string[] = [];
-/** Every archive or Unarchive asked, as the act carried it. */
 let archives: { agentId: string; archived: boolean }[] = [];
-/** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
 let archiveRefused = false;
-/** Every agent a delete asked for, in order. */
 let deletes: string[] = [];
-/** Why a delete is refused, as the service answers it; none lets it land. */
 let deleteRefused: AgentCallFailure | undefined;
-/** What the agent's workspace's members read answers; none refuses it. */
 let members: readonly WorkspaceMember[] | undefined;
-/** What the host lays of the agent's transcript once its tab holds it, and what a read of it answers once; none refuses it. */
 let transcript: AgentMessagesAnswerView | undefined;
-/** Every act the page told or asked, in order. */
 let told: AnyAct[] = [];
-/** What a read of what the agent published answers; none refuses it. */
 let published: AgentPullRequestAnswer | undefined;
 
-/** What the agent published, as the task list carries it of the agent's row, where the host lays it; none where it published nothing. */
 function listedPublished(): TasksControl["listedPullRequests"] {
   const opened = published?.pullRequest ?? undefined;
   return opened === undefined
     ? undefined
     : [{ agentId: AGENT_ID, taskId: null, pullRequest: opened }];
 }
-/** How many of the pull request's conversation entries its read left on GitHub; none answers no read. */
 let earlier = 0;
-/** What the window copied, in order. */
 let copied: string[] = [];
-/** What the workspace's list of agents answers, whatever it was asked. */
 let workspace: readonly AgentSummary[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -279,10 +241,8 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AGENTS_ARCHIVE) {
         archives.push(request.payload);
-        // The agent answered is the one the list carries, archived or brought back as asked.
         const { archivedAt: _archived, ...back } = listed ?? PAGE;
         const answered = request.payload.archived ? { ...back, archivedAt: 3 } : back;
-        // Archived or brought back, the agent is read so from then on.
         if (!archiveRefused) listed = answered;
         const value = archiveRefused
           ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
@@ -300,7 +260,6 @@ beforeEach(() => {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AGENTS_MESSAGES && transcript !== undefined) {
-        // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
         const value = transcript;
         transcript = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
@@ -334,10 +293,8 @@ beforeEach(() => {
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
-  // Note that the agent's workspace's people are laid on the document as the page holds them, refused where the test names none.
   handMembers(() => (members === undefined ? { failed: true } : { rows: { members } }));
   handCapabilities(DESKTOP_CAPABILITIES);
-  // The host holds a Pull request tab's parts, read from what the agent published, as the service reads both from one pull request; refused where the test names none.
   const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.PULL_REQUEST]: () => {
@@ -366,7 +323,6 @@ beforeEach(() => {
       ),
     [PULL_REQUEST_PART.PUBLISHED]: () => Promise.resolve(published ?? unanswered),
   });
-  // The host lays the agent's transcript once its tab holds it.
   pushedTranscripts(() => (transcript === undefined ? [] : [transcript]));
 });
 
@@ -377,7 +333,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The window's tasks control with the task list carrying `listed`, where it carries it, as `listStatus` says. */
 function withList(tasks: TasksControl): TasksControl {
   const read = listStatus === LIST_STATUS.READ;
   return {
@@ -389,7 +344,6 @@ function withList(tasks: TasksControl): TasksControl {
   };
 }
 
-/** Hands the window main's document with the host holding the agent's origin as `listed` names it, where it names one, beside whatever else the bridge already holds. */
 function handOrigin(): void {
   const origin = listed?.origin;
   if (origin === undefined) return;
@@ -404,13 +358,6 @@ function handOrigin(): void {
   });
 }
 
-/**
- * The page of the agent, standing in the task's place, as the window's
- * tasks control holds it, the task list carrying `listed` as `listStatus`
- * says and the host holding its origin, its atoms held by `registry`.
- * Answers the page's container, and `relist`, which draws it again as the
- * list now stands.
- */
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
@@ -448,7 +395,6 @@ function mount(
   return Object.assign(container, { relist: () => act(draw) });
 }
 
-/** Lets every promise settled so far run its continuations, and every notification TanStack Query queued reach what it draws. */
 async function settle(): Promise<void> {
   const ticks = () =>
     act(async () => {
@@ -629,8 +575,6 @@ test("an agent forked at one of its messages names the fork under it, which open
   assert.deepEqual(opened, [STARTED_ID]);
 });
 
-/** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
-/** The side panel the page last drew, whose toggle the shell's button presses. */
 let drawnPanel: SidePanelControl | undefined;
 
 function PanelPage(): React.JSX.Element {
@@ -696,7 +640,6 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
   );
 });
 
-/** A page the agent showed on itself, working on no task. */
 const FUNNEL: PageLine = {
   id: "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b",
   title: "Flaky funnel",
@@ -705,7 +648,6 @@ const FUNNEL: PageLine = {
   shownBy: { kind: PAGE_SHOWER.AGENT, agentId: AGENT_ID },
 };
 
-/** The page over the window's own side panel, holding the pages the agent showed on itself as the window does. */
 function PagesPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
@@ -800,7 +742,6 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
-  // Note that only the task the agent stands on holds a page, laid on the document as the host lays the pages a card holds.
   holdPages(handHostReads({}).deliverPages, (place) => ({
     rows: "taskId" in place && place.taskId === PAGE_TASK ? [FUNNEL] : [],
   }));
@@ -857,7 +798,6 @@ test("an agent on a task, an archived one's page among them, opens on its descri
   );
 });
 
-/** The page drawn over the window's own side panel, held by the agent. */
 async function mountPanelPage(): Promise<HTMLElement> {
   localStorage.clear();
   installScrollIntoView();
@@ -937,7 +877,6 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
     rows.map((each) => each.textContent),
     offered,
   );
-  // Note that an agent's page offers no fixed kind, so the menu heads only its own sections.
   assert.deepEqual(
     [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
@@ -1058,7 +997,6 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.ok(own, "the agent's pull request is its chip");
   act(() => own.click());
   await settle();
-  // Note that the tab is known by its conversation rather than its name, which is its agent's until the pull request's read lands and the pull request's after.
   assert.ok(
     container.querySelector('aside.side-panel [aria-label="Conversation"]'),
     "the Pull request tab stands in the panel, on its conversation",
@@ -1068,8 +1006,6 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   act(() => chip("billing#7")?.click());
   assert.deepEqual(openedOnGitHub, [other]);
 
-  // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  // Note that the link stands once the conversation's read reaches its query.
   const more = await vi.waitFor(
     () =>
       container.querySelector<HTMLAnchorElement>("aside.side-panel .pull-request-earlier a") ??
@@ -1155,7 +1091,6 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
   pushedTranscripts(() => (transcript === undefined ? [] : [transcript]));
   localStorage.clear();
   installScrollIntoView();
-  // Note that the skills are read once the frame that asked for them has painted.
   holdFrames();
   const page = document.createElement("div");
   document.body.append(page);
@@ -1163,7 +1098,6 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
   act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
   await settle();
 
-  // The skills are read once a sent message first asks for them, a settle after the transcript lands.
   await settleFrames();
   const chip = page.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is its chip");
@@ -1232,7 +1166,6 @@ test("an agent the task list does not carry, as a link to another workspace's ma
     /Not foundThis agent doesn't exist, or you don't have access to it\./u,
   );
   assert.equal(page.querySelector("h1"), null);
-  // The window's bar stands over the words saying so, as it stands over every page.
   assert.equal(
     page.querySelector("section[aria-label='Not found']")?.firstElementChild?.tagName,
     "HEADER",
@@ -1347,7 +1280,6 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   ];
   transcript = {
     messages: [
-      // The first of the developer's messages is what the agent was handed, drawn as its card.
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
       {
         id: "line",
@@ -1360,7 +1292,6 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
     status: AGENT_STATUS.COMPLETED,
     title: null,
   };
-  // Note that the workspace's people stand on the document from the first frame, as the host holds them for a page drawn again.
   handHostReads({ members: { [PAGE.workspaceId]: { rows: { members } } } });
   const page = mount(
     tasksControl({
@@ -1385,7 +1316,6 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
 
-/** The transcript of an automation's agent: the prompt its run handed it, and its answer. */
 function handedTranscript(): AgentMessagesAnswerView {
   return {
     messages: [
@@ -1398,7 +1328,6 @@ function handedTranscript(): AgentMessagesAnswerView {
   };
 }
 
-/** What a line says, its actors' faces left out, as a reader reads it. */
 function words(line: Element | null | undefined): string {
   if (line == null) return "";
   const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
@@ -1409,13 +1338,11 @@ function words(line: Element | null | undefined): string {
   return said;
 }
 
-/** The card a page opens on, and the line naming who sent it. */
 interface OpenedOrigin {
   readonly card: HTMLElement;
   readonly sender: HTMLElement | null;
 }
 
-/** The card the page opens on, opened, and the line naming who sent it. */
 function origin(page: HTMLElement): OpenedOrigin {
   const card =
     page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
@@ -1490,7 +1417,6 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   const url = "https://github.com/acme/relay/pull/2905";
   const acme = { ...ACME, github: { login: "acme", active: true } };
   const pullRequest = { number: 2905, title: "View commands", url, state: PULL_REQUEST_STATE.OPEN };
-  // The host holds the pull request's standing as the workspace's GitHub App reads it.
   const state = {
     ...stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } }),
     [LIVE_READ.LINK_STANDINGS]: { [acme.id]: { [url]: { rows: { pullRequest } } } },
@@ -1542,7 +1468,6 @@ test("an automation's agent the model has not named yet is titled by its automat
   const page = mount();
   await settle();
 
-  // Note that its bar leads with its automation's path, so its title is the trail's last crumb, the page it stands on.
   assert.equal(page.querySelector('[aria-current="page"]')?.textContent, "Flaky-test sweep");
 });
 
@@ -1572,7 +1497,6 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
   assert.equal(newestToastSays(), "Link copied");
 });
 
-/** Opens the page's menu as a reader does: a right-click on the agent's name in its toolbar. */
 function openPageMenu(page: HTMLElement): void {
   const name =
     page.querySelector(".ui-toolbar-title-menu") ?? assert.fail("the toolbar names the agent");
@@ -1581,7 +1505,6 @@ function openPageMenu(page: HTMLElement): void {
   });
 }
 
-/** Opens the page's menu and answers the item under `label`, or fails saying it is not offered. */
 function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   openPageMenu(page);
   return (
@@ -1658,10 +1581,8 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   );
 });
 
-/** What a side panel is asked to show. */
 type SidePanelChoice = Parameters<SidePanelControl["onChoose"]>[0];
 
-/** The page over a side panel that hears what it is asked to show, and shows nothing, so no terminal mounts. */
 function mountHearingPanel() {
   const chosen: SidePanelChoice[] = [];
   const tasks = tasksControl({});
@@ -1781,14 +1702,12 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   );
 });
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({
     initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
 }
 
-/** The clock moved past the pause the typing rests before agents are searched for, and what the search answered drawn. */
 const pastSearchPause = Effect.gen(function* () {
   yield* TestClock.adjust("300 millis");
   yield* Effect.promise(settle);
@@ -1907,7 +1826,6 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   await settle();
   const chipsNow = () => [...page.querySelectorAll<HTMLElement>(".agent-page [data-mention-ref]")];
 
-  // Note that the agent's words stand once its transcript reaches its query.
   await vi.waitFor(() =>
     assert.deepEqual(
       chipsNow().map((chip) => [
@@ -1972,7 +1890,6 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
   const chipsNow = () => [...page.querySelectorAll(".agent-page [data-mention-ref]")];
-  // Note that the agent's words stand once its transcript reaches its query.
   await vi.waitFor(() =>
     assert.equal(chipsNow().length, 2, "the pull request and its files are chips"),
   );
@@ -1989,7 +1906,6 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
   }
 });
 
-/** The page's dialog's button with these words, or a failure saying the dialog offers none. */
 function dialogAnswer(words: string): HTMLButtonElement {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("a dialog asks");

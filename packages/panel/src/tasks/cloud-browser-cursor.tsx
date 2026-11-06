@@ -1,29 +1,3 @@
-/**
- * cloud-browser-cursor.tsx -- the agent's pointer over a cloud Browser tab's live view: an arrow the panel draws over the page, never in it, gliding to each point the agent clicks or types at.
- *
- * The agent's actions report each point a beat before their input lands
- * (`@repo/features/browser-agent-cdp`'s `BROWSER_CURSOR_BEAT`), in the page's
- * CSS pixels of its visible area, and the tab's live read carries the last
- * one (`AgentBrowserTab.cursor`). The arrow stands at that point scaled onto
- * the drawn page, and glides there over `--ui-duration-fast` on
- * `--ui-spring-fast`, about the beat, so it arrives as the action lands. It is
- * drawn as a compact arrowhead in the brand's amber with a white edge, in the
- * dark mode's brighter amber over a dark page (`onDarkPage`). While
- * the agent is active on the tab it rocks gently about its tip, a loop
- * `--ui-loop-motion` holds still; a click presses it, with an amber ripple at
- * the point, and typing bobs it over an amber glow. It fades once the agent has done nothing
- * for `CLOUD_BROWSER_CURSOR_IDLE`, timed on the renderer's runtime, and back
- * in on its next move. Near the page's right or bottom edge it is mirrored
- * about its tip, so its body stays on the page rather than clipped past it.
- * It is hidden while a member drives the tab, since the
- * pointer is theirs then. Reduced motion holds it still: no rock, no bob,
- * no press, and a move jumps.
- *
- * The arrow takes no pointer events, is no part of the frame the canvas
- * draws, and is left out of the screen recording (`ph-no-capture`); a point
- * and a kind are no page content.
- */
-
 import { useAtomValue } from "@effect/atom-react";
 import type { AgentBrowserTabCursor } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
@@ -33,28 +7,17 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type CSSProperties, useMemo } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
 
-/** How long after the agent last acted on the tab its pointer stands; past it the pointer fades. */
 const CLOUD_BROWSER_CURSOR_IDLE = Duration.seconds(4);
 
-/**
- * The arrowhead's outline, a dart along the diagonal like a map's location
- * arrow: its tip at (1, 1), where the view box starts, the one sharp corner,
- * pointing up and to the left and opening 52 degrees, wide enough to read as a
- * pointer at a glance; its two wings rounded; and its tail, at the bottom
- * right, notched.
- */
 const ARROW = "M1 1 13.07 5.16Q15.2 5.89 13.56 6.58L8.64 8.64 6.58 13.56Q5.89 15.2 5.16 13.07Z";
 
-/** How far the arrow reaches from its tip, in CSS pixels: `--ui-space-16`, its drawn size. */
 const ARROW_REACH = 16;
 
-/** The drawn page's size in CSS pixels of the panel. */
 export interface CloudBrowserCursorFrame {
   readonly width: number;
   readonly height: number;
 }
 
-/** Where the pointer stands on the drawn page: its point scaled from the page's visible area onto the frame; none where either has no size. */
 export function cursorPlacement(
   cursor: AgentBrowserTabCursor,
   frame: CloudBrowserCursorFrame,
@@ -68,7 +31,6 @@ export function cursorPlacement(
   };
 }
 
-/** Settles once the agent has stood idle past the bound since `activeAt`, at once where it already has. */
 function idleSince(activeAt: number): Effect.Effect<void> {
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -77,13 +39,11 @@ function idleSince(activeAt: number): Effect.Effect<void> {
   });
 }
 
-/** Whether the agent has stood idle on the tab past the bound since `activeAt`, in epoch milliseconds. */
 function useIdle(activeAt: number): boolean {
   const idle = useMemo(() => rendererRuntime.atom(idleSince(activeAt)), [activeAt]);
   return AsyncResult.isSuccess(useAtomValue(idle));
 }
 
-/** The agent's pointer, drawn over the page, hidden where `hidden`: while a member drives the tab, or no page stands. */
 export function CloudBrowserCursor({
   cursor,
   lastActedAt,
@@ -92,11 +52,9 @@ export function CloudBrowserCursor({
   onDarkPage,
 }: {
   cursor: AgentBrowserTabCursor | undefined;
-  /** Epoch milliseconds the agent last acted on the tab. */
   lastActedAt: number;
   frame: CloudBrowserCursorFrame;
   hidden: boolean;
-  /** Whether the page is dark where the pointer stands, which draws it lighter. */
   onDarkPage: boolean;
 }): React.JSX.Element | null {
   const still = useMotionHeld();
@@ -104,7 +62,6 @@ export function CloudBrowserCursor({
   const placed = cursor === undefined ? undefined : cursorPlacement(cursor, frame);
   if (cursor === undefined || placed === undefined) return null;
   const shown = !hidden && !idle;
-  // Mirrored about the tip where its body would reach past the page's edge.
   const flipX = placed.x > frame.width - ARROW_REACH;
   const flipY = placed.y > frame.height - ARROW_REACH;
   const style = {
@@ -125,7 +82,6 @@ export function CloudBrowserCursor({
     >
       <span className="cloud-browser-cursor-halo" />
       <div className="cloud-browser-cursor-rock">
-        {/* Keyed by the move, so each click presses afresh. */}
         <svg
           key={cursor.at}
           className="cloud-browser-cursor-arrow"

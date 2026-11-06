@@ -22,25 +22,12 @@ import { useMutation } from "@tanstack/react-query";
 import { pressMutation } from "../act-mutations.js";
 import { failureShown, type ShownFailure } from "../failure-report.js";
 
-/**
- * An install a read-only volume refused, as its note reports it: a refusal
- * the row named, so Sentry hears a log line under its own code rather than
- * an issue, and one value, so the note standing is reported once.
- */
 const READ_ONLY_VOLUME_FAILURE: ShownFailure = {
   surface: FAILURE_SURFACE.UPDATE_CHECK,
   cause: { code: UPDATE_FAILURE.READ_ONLY_VOLUME },
   refused: true,
 };
 
-/**
- * The row's one act, in the outline face every Settings row's act wears:
- * restart into the release, reach its page in the browser as a link, move
- * the app into Applications beside that link, check for one,
- * or check again — or none at all, while a download runs or for a
- * development build no release is newer than. The accent is kept for a
- * form's Save alone.
- */
 function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element | null {
   switch (action) {
     case UPDATE_ROW_ACTION.NONE:
@@ -67,7 +54,6 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
           variant={BUTTON_VARIANT.OUTLINE}
           icon={<ExternalIcon />}
           href={UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL}
-          // Note that the page opens through the update act, as a toast's link does, so a refusal toasts.
           onClick={(event) => {
             event.preventDefault();
             control.onOpenLatest();
@@ -76,7 +62,6 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
           Download
         </ButtonLink>
       );
-    // Note that a failed check's Retry stands in its `FailureNote` under the row.
     case UPDATE_ROW_ACTION.RETRY:
       return null;
     default:
@@ -93,22 +78,11 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
   }
 }
 
-/**
- * Where the build stands against the latest release, and what it changed: the
- * About page's one group, while the sidebar's update row carries the news
- * outside. A platform that offers no updates draws the changelog alone.
- *
- * The group is `@repo/ui`'s `SettingsSection` and each line its
- * `SettingsRow`, every act the outline `Button` or, where it opens a page, `ButtonLink`. Note that each row stands
- * in a wrapper wearing its search anchor, because the shared row takes no
- * attribute of a caller's.
- */
 export function UpdatesSection({
   control,
   offered,
 }: {
   control: UpdateControl;
-  /** Whether the platform offers updates; where it does not, the changelog stands alone. */
   offered: boolean;
 }): React.JSX.Element {
   const { mutate: sendUpdateOpenChangelog } = useMutation(
@@ -130,15 +104,10 @@ export function UpdatesSection({
               row.failed ? undefined : (
                 <>
                   {row.detail}
-                  {/* Note that the bar is the picture of the detail's numbers, so it says nothing to a reader. */}
                   {row.progress === undefined ? null : <Progress value={row.progress} />}
                 </>
               )
             }
-            // Note that a failure is a `FailureNote` under the row, an alert
-            // announced as it lands, with Retry where asking again can mend
-            // it; every other detail is read with the row rather than spoken
-            // over whatever the reader is on.
             below={
               row.failed
                 ? () => (
@@ -167,8 +136,6 @@ export function UpdatesSection({
           </SettingsRow>
         </div>
       ) : null}
-      {/* What the versions the row talks about actually changed — beside the
-          version, as a trip to the fixed changelog page in the browser. */}
       <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.CHANGELOG)}>
         <SettingsRow label="Changelog">
           {() => (

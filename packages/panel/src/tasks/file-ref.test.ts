@@ -13,16 +13,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { InboxCodeCard } from "./inbox-code-card.js";
 
-/**
- * file-ref.test.ts -- a file named in place, as the head of an Inbox item's
- * code card names it: its path and its lines, hanging the file's card naming
- * the repository the lines are read from, and a press opening the file on
- * those lines at the item's commit.
- */
-
 const PATH = "src/invites/accept.ts";
 
-/** Lines 3–5 of the file at a commit of another repository than the task's, as an Inbox item names them. */
 const BLOCK: InboxCodeBlock = {
   type: "code",
   repo: "acme/relay",
@@ -39,7 +31,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The item's code card, its lines still being read, each file opened recorded. */
 function mount(opened: unknown[][]): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

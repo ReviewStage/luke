@@ -11,17 +11,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { MenuTab, TabStrip } from "./tab-strip.js";
 
-/**
- * tab-strip.test.ts -- the window's strip, `@repo/ui`'s Tabs with the
- * window's hints and menus: a tab other than the chosen one names itself in
- * its hint; its menu moves it a place either way, under a finger's long press
- * and a mouse's right-click alike, leaving the strip's row holding its tabs
- * alone while it stands; and ⇧⌘→ moves the focused tab a place along. The plan's column and the side panel
- * draw this one strip, so this holds for both. The strip's own keys, drag,
- * and scroll are `@repo/ui`'s (`components/tabs/tabs.test.ts`). Synthetic
- * throughout.
- */
-
 const ignore = () => undefined;
 
 const roots: Root[] = [];
@@ -35,7 +24,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The browser's `matchMedia` on a device worked by a finger or by a mouse. */
 function pointerMedia(finger: boolean) {
   return (query: string) => ({
     matches: finger && query === "(pointer: coarse)",
@@ -44,10 +32,8 @@ function pointerMedia(finger: boolean) {
   });
 }
 
-/** Every move the strip asked for, as its place before and after. */
 let moves: [number, number][] = [];
 
-/** The pill of the tab labeled `label`. */
 function pill(container: HTMLElement, label: string): HTMLElement {
   const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === label,
@@ -55,7 +41,6 @@ function pill(container: HTMLElement, label: string): HTMLElement {
   return tab?.closest<HTMLElement>(".ui-tab") ?? assert.fail(`${label}'s tab stands`);
 }
 
-/** A strip of three tabs with menus, each with a Close of its own, which may be moved. */
 function MenuStrip(): ReactNode {
   return createElement(TabStrip, {
     label: "Tabs",
@@ -73,14 +58,12 @@ function MenuStrip(): ReactNode {
   });
 }
 
-/** The words of every item of the menus standing. */
 function menuWords(): string[] {
   return [...document.querySelectorAll(".ui-menu-item-label")].map(
     (each) => each.textContent ?? "",
   );
 }
 
-/** The menu item named `label`. */
 function menuItem(label: string): HTMLElement {
   const name = [...document.querySelectorAll(".ui-menu-item-label")].find(
     (each) => each.textContent === label,
@@ -88,7 +71,6 @@ function menuItem(label: string): HTMLElement {
   return name?.closest<HTMLElement>('[role="menuitem"]') ?? assert.fail(`no ${label} item`);
 }
 
-/** The strip of menu tabs drawn, and the tab named `label`'s button. */
 async function menuStripTab(label: string): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

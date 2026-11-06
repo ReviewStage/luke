@@ -1,29 +1,3 @@
-/**
- * cloud-browser-live.ts -- one cloud Browser tab's live view as the panel holds it: its socket opened through the window's shell, read, sized, and opened again, and what its member sends on it.
- *
- * The socket (`@repo/features/browser-live-wire`) is opened through the
- * shell's door (`AppPlatform.openBrowserLive`): the desktop's from its host
- * under the account's bearer, the web's from its own page under the session
- * cookie. Everything past the door is here, the same on both. A socket is
- * sized with the viewport the pane draws at as soon as it opens, and again
- * each time the pane resizes, and says the member is watching once a minute
- * while it stands, which keeps the relay from closing it as idle until the
- * member has sent it no input for fifteen minutes (`browser-live/bounds.ts`'s
- * `INPUT_IDLE`), so a window left open on the pane lets its sandbox stop. The pane
- * holds a view only while it is shown and its window's page visible
- * (`cloud-browser-pane.tsx`), so a hidden one holds no socket and lets its
- * agent's sandbox stop (`browser-live/relay.ts`). A socket that drops is
- * opened again after a wait that doubles to thirty seconds and starts over
- * once a socket has been heard on; one whose agent has not opened its
- * sandbox is asked after every five seconds; and one the relay closed as
- * idle or gone stays closed until the pane is shown again or Watch again is
- * pressed, which opens a new view. Each frame is handed to the pane to draw and let go:
- * neither a frame, an address, nor a title is kept past the view, traced, or
- * counted (root `AGENTS.md`'s cloud browser line). Input is sent only while
- * the member drives the tab; a step from the tab's bar is sent whoever
- * drives it, for the relay to take a free tab over first or refuse.
- */
-
 import type { BrowserLiveTarget } from "@repo/features/browser-live-acts";
 import {
   BROWSER_LIVE_CLIENT,
@@ -51,48 +25,33 @@ import {
   SubscriptionRef,
 } from "effect";
 
-/** What a shell's door tells the panel of one socket: each text frame, and its close, once and last. */
 export interface BrowserLiveListener {
   message(text: string): void;
   closed(code: number): void;
 }
 
-/** One open socket, as the panel sends on it and lets it go. */
 export interface BrowserLiveSocket {
-  /** Sends one text frame; one sent before the socket opened is held for it. */
   send(text: string): void;
-  /** Closes the socket; the listener hears nothing after. */
   close(): void;
 }
 
-/** Opens one tab's live view socket through the window's shell. */
 export type OpenBrowserLive = (
   target: BrowserLiveTarget,
   listener: BrowserLiveListener,
 ) => BrowserLiveSocket;
 
-/** How long the view waits before it opens its socket again. */
 const CLOUD_BROWSER_RECONNECT = {
-  /** The first wait after a drop, doubling on each drop before a socket is heard on again. */
   FIRST: Duration.seconds(1),
-  /** The longest wait after a drop. */
   LONGEST: Duration.seconds(30),
-  /** The wait between asks while the agent has not opened its sandbox. */
   NOT_OPENED_EVERY: Duration.seconds(5),
 } as const;
 
-/** How often the panel says it is watching while the socket stands, well inside the relay's idle bound. */
 const CLOUD_BROWSER_WATCHING_EVERY = Duration.minutes(1);
 
-/** Where a view stands. */
 export const CLOUD_BROWSER_PHASE = {
-  /** The first socket is opening, or the agent's sandbox is. */
   CONNECTING: "connecting",
-  /** A socket stands and has been heard on. */
   LIVE: "live",
-  /** The socket dropped, and another opens after a wait. */
   RECONNECTING: "reconnecting",
-  /** The relay closed it as idle or gone; a new view opens it again. */
   ENDED: "ended",
 } as const;
 
@@ -103,27 +62,18 @@ type ServerOf<Type extends BrowserLiveServerMessage["type"]> = Extract<
   { type: Type }
 >;
 
-/** One frame of the page, which the pane draws and lets go. */
 export type CloudBrowserFrame = Omit<ServerOf<typeof BROWSER_LIVE_SERVER.FRAME>, "type">;
 
-/** A view as the pane draws it. */
 export interface CloudBrowserView {
   readonly phase: CloudBrowserPhase;
-  /** Why the relay ended the view, once it did. */
   readonly ended: BrowserLiveCloseReason | undefined;
-  /** Whether a frame has arrived since the view opened, before which the pane says it waits for the page. */
   readonly painted: boolean;
-  /** The page as it last stood: its address, title, and whether it is loading. */
   readonly page: Omit<ServerOf<typeof BROWSER_LIVE_SERVER.PAGE>, "type"> | undefined;
-  /** Who drives the tab, as the relay last said; none before it said. */
   readonly driver: Omit<ServerOf<typeof BROWSER_LIVE_SERVER.DRIVER>, "type"> | undefined;
-  /** Whether the relay refused a takeover as this member's not to take. */
   readonly takeoverRefused: boolean;
-  /** Whether the relay refused a step from the bar because another member holds the tab, until its driver next changes. */
   readonly stepRefused: boolean;
 }
 
-/** A view before its first socket opens. */
 export const OPENING_VIEW: CloudBrowserView = {
   phase: CLOUD_BROWSER_PHASE.CONNECTING,
   ended: undefined,
@@ -134,31 +84,21 @@ export const OPENING_VIEW: CloudBrowserView = {
   stepRefused: false,
 };
 
-/** A size in the pane's own pixels. */
 export interface CloudBrowserViewport {
   readonly width: number;
   readonly height: number;
 }
 
-/** One view of one tab, and what its member sends on it. */
 export interface CloudBrowserLive {
-  /** The view's life: opened, read, opened again after a drop, its state each time it changes; it ends with its stream. */
   readonly views: Stream.Stream<CloudBrowserView>;
-  /** Sends the viewport as it now stands, as the pane does on each resize. */
   resized(): void;
-  /** Takes the tab over, or moves the member's own takeover on. */
   takeOver(): void;
-  /** Hands the tab back to its agent. */
   handBack(): void;
-  /** Opens an http or https address in the tab, from its bar, taking a tab nobody drives over first. */
   navigate(address: string): void;
-  /** Steps the tab back or forward, or reloads it, from its bar, taking a tab nobody drives over first. */
   step(step: BrowserLiveHistory): void;
-  /** Sends a mouse, wheel, key, or text message, only while the member drives the tab. */
   input(message: InputMessage): void;
 }
 
-/** The messages that drive the page, which only the member driving the tab sends. */
 export type InputMessage = Extract<
   BrowserLiveClientMessage,
   {
@@ -170,20 +110,14 @@ export type InputMessage = Extract<
   }
 >;
 
-/** What arrives on a socket's queue: a text frame, or its close, last. */
 type Arrival = { readonly text: string } | { readonly close: number };
 
-/** The socket dropped, or never opened, before it was heard on. */
 class Dropped extends Data.TaggedError("Dropped") {}
 
-/** The agent has not opened its sandbox yet. */
 class NotOpened extends Data.TaggedError("NotOpened") {}
 
-/** How one socket's life ended, where the view does not try again on its own schedule. */
 const SOCKET_ENDING = {
-  /** The relay ended the view. */
   ENDED: "ended",
-  /** The socket had been heard on, and dropped: the view opens again, its wait started over. */
   DROPPED: "dropped",
 } as const;
 
@@ -195,18 +129,15 @@ const RECONNECT_BACKOFF = Schedule.exponential(CLOUD_BROWSER_RECONNECT.FIRST).pi
   ),
 );
 
-/** The reason each of the relay's close codes says. */
 const REASON_BY_CODE: ReadonlyMap<number, BrowserLiveCloseReason> = new Map(
   Object.entries(BROWSER_LIVE_CLOSE_CODE).map(([reason, code]) => [
     code,
-    // SAFETY: the entries' keys are the record's own, every one a close reason.
     reason as BrowserLiveCloseReason,
   ]),
 );
 
 const readServer = readEither(browserLiveServerMessageSchema, { excess: EXCESS_KEYS.DROP });
 
-/** A text frame as the relay's own message, or nothing where it is not JSON this build reads. */
 function serverMessage(text: string): BrowserLiveServerMessage | undefined {
   try {
     return Result.getOrUndefined(readServer(unparsedWire(JSON.parse(text))));
@@ -215,10 +146,6 @@ function serverMessage(text: string): BrowserLiveServerMessage | undefined {
   }
 }
 
-/**
- * One tab's live view over the shell's door. `viewport` is the size the pane
- * draws the page at now, none before it is laid out; `onFrame` draws a frame.
- */
 export function cloudBrowserLive(input: {
   readonly open: OpenBrowserLive;
   readonly target: BrowserLiveTarget;
@@ -249,7 +176,6 @@ export function cloudBrowserLive(input: {
           Effect.sync(() => MutableRef.set(latest, view)),
         );
 
-      /** One message the relay sent, taken into the view; a frame is drawn and let go. */
       const heard = (message: BrowserLiveServerMessage) => {
         switch (message.type) {
           case BROWSER_LIVE_SERVER.FRAME: {
@@ -284,12 +210,6 @@ export function cloudBrowserLive(input: {
         }
       };
 
-      /**
-       * One socket's life: opened, sized, read until it closes, and its close
-       * read as how the view stands. A drop before it was heard on fails, for
-       * the backoff to wait on; one after answers dropped, so the wait starts
-       * over; an agent with no sandbox yet fails as not opened.
-       */
       const attempt = Effect.scoped(
         Effect.gen(function* () {
           const arrivals = yield* Queue.unbounded<Arrival>();
@@ -308,7 +228,6 @@ export function cloudBrowserLive(input: {
                 opened.close();
               }),
           );
-          // The viewport goes as the socket opens, and the pane sends it again on each resize; watching goes on the beat.
           yield* Effect.sync(sendViewport);
           yield* Effect.forkScoped(
             Effect.forever(

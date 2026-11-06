@@ -3,7 +3,6 @@ import { test } from "vitest";
 import { tasksControl } from "../testing/tasks-control.js";
 import { welcomed } from "./desktop-welcome.js";
 
-/** A plan of the account's, standing in some workspace. */
 const PLAN = {
   id: "00000000-0000-4000-8000-000000000001",
   workspaceId: "workspace-team",

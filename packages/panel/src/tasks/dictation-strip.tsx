@@ -19,22 +19,6 @@ import { useEffect, useRef, useState } from "react";
 import { frameLevel } from "./frame-level.js";
 import { DICTATION_PHASE, type DictationControl } from "./use-dictation.js";
 
-/**
- * dictation-strip.tsx -- the composer's Dictate button, and the strip that stands at the card's foot while a dictation does: the voice drawn as it is heard, how long it has run, and the two ways out.
- *
- * Drawn the way ChatGPT's is. The button is a microphone just left of the
- * card's other presses. Pressed, the card's foot becomes the strip: bars
- * that scroll in from the right as loud as the voice is, the time so far,
- * ✕ that drops the recording, and ✓ that sends it, which Escape and Enter
- * are as well. Sent, the strip says it is transcribing under the window's
- * one spinner until the words land in the box. The bars are the
- * microphone's level and nothing else, so the screen recording, which
- * masks every word, keeps no more than their heights; reduced motion
- * holds them still at rest while the clock still counts. A clip is heard on
- * the account's own OpenAI key, so with none saved the button says to add
- * one and its press opens Settings › Agents (`../openai-key.tsx`).
- */
-
 const LABEL = {
   DICTATE: "Dictate",
   CANCEL: "Cancel",
@@ -42,20 +26,16 @@ const LABEL = {
   TRANSCRIBING: "Transcribing",
 } as const;
 
-/** How many bars the strip holds: enough to cross the widest message box, newest at the right, the oldest clipped at the left. */
 const BAR_COUNT = 128;
 
-/** How many frames each bar stands for: about twenty bars a second, a speaking pace. */
 const FRAMES_PER_BAR = 3;
 
-/** The least a bar is drawn at, so silence is a line rather than nothing. */
 const REST_SCALE = 0.08;
 
 const BAR_INDEXES = Array.from({ length: BAR_COUNT }, (_, index) => index);
 
 const MS_PER_SECOND = 1_000;
 
-/** The microphone press at the card's foot; held boxes take none. */
 export function DictateButton({
   dictation,
   disabled,
@@ -65,8 +45,6 @@ export function DictateButton({
 }): React.JSX.Element {
   const label = dictation.keyMissing ? OPENAI_KEY_MISSING_NOTE : LABEL.DICTATE;
   return (
-    // Note that the box is what a narrow card's stylesheet hides and its ⋯ reads, and
-    // the press keeps the caret where it was in the box, which is where the words go.
     <span className="dictate-button flex">
       <Tooltip label={label}>
         <IconButton
@@ -81,7 +59,6 @@ export function DictateButton({
   );
 }
 
-/** The voice as it is heard: one bar per slice of time, the newest at the right. */
 function DictationWave({ analyzer }: { analyzer: AnalyserNode | undefined }): React.JSX.Element {
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
   const reduced = useMotionHeld();
@@ -132,14 +109,12 @@ function DictationWave({ analyzer }: { analyzer: AnalyserNode | undefined }): Re
   );
 }
 
-/** How long the recording has run, counted on the page's frames and drawn once a second. */
 function DictationClock({ startedAt }: { startedAt: number | undefined }): React.JSX.Element {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (startedAt === undefined) return;
     let animationFrame = 0;
-    // React keeps a render whose second is the one already shown, so this draws once a second.
     const tick = () => {
       setElapsed(Math.floor((performance.now() - startedAt) / MS_PER_SECOND) * MS_PER_SECOND);
       animationFrame = requestAnimationFrame(tick);
@@ -158,7 +133,6 @@ function DictationClock({ startedAt }: { startedAt: number | undefined }): React
   );
 }
 
-/** The card's foot while a dictation stands: recording, then transcribing. */
 export function DictationStrip({ dictation }: { dictation: DictationControl }): React.JSX.Element {
   const transcribing = dictation.phase === DICTATION_PHASE.TRANSCRIBING;
   return (
@@ -168,7 +142,6 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
     >
       {transcribing ? (
         <span className="dictation-transcribing flex min-w-0 flex-1 items-center gap-icon-gap">
-          {/* Note that the ring stands at once, because the press that sent the clip has just landed and "Transcribing" is already drawn beside it. */}
           <Spinner delay={false} label={LABEL.TRANSCRIBING} />
           <span aria-hidden="true">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>

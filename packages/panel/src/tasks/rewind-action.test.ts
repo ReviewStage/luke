@@ -12,14 +12,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { RevertMessageAction, RewindProvider, rewindPoints } from "./rewind-action.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 
-/**
- * A coding agent taken back to an earlier point of its transcript, as its
- * tab offers it: which lines Edit writes again and where each reply's Revert
- * to here drops from, an edit's send taking the agent back before it sends,
- * and a rewind that did not go sending nothing and keeping the edit.
- */
-
-/** A message of the role given, its words its id. */
 function message(
   id: string,
   role: typeof MESSAGE_ROLE.USER | typeof MESSAGE_ROLE.ASSISTANT,
@@ -33,7 +25,6 @@ function message(
   };
 }
 
-/** The description, two answered lines, and a line a turn took in while it ran. */
 const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
   message("plan", MESSAGE_ROLE.USER),
   message("first-reply", MESSAGE_ROLE.ASSISTANT),
@@ -97,7 +88,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The agent's box over the transcript, every call it makes written down in order, a rewind answered by `rewound` and a send by `sent`. */
 async function box(rewound: AgentAgentAnswer, sent: AgentAgentAnswer = REWOUND) {
   const calls: string[] = [];
   const held: { composer: HeldComposer | undefined } = { composer: undefined };
@@ -220,7 +210,6 @@ test("a revert hides the line and everything after it until the transcript drops
   assert.deepEqual([...(composer().cut ?? [])], ["third-line", "third-reply"]);
 });
 
-/** A line a member sent: the reader's own, or a teammate's by name. */
 function lineFrom(id: string, name: string, userId: string | undefined): AgentTranscriptMessage {
   return {
     ...message(id, MESSAGE_ROLE.USER),
@@ -228,7 +217,6 @@ function lineFrom(id: string, name: string, userId: string | undefined): AgentTr
   };
 }
 
-/** The transcript a teammate joined: the reader's line, then Sam's two, a reply between, and Priya's. */
 const SHARED: readonly AgentTranscriptMessage[] = [
   lineFrom("mine", "Dean", "user-1"),
   message("reply-1", MESSAGE_ROLE.ASSISTANT),
@@ -262,7 +250,6 @@ test("a rewind names the teammates whose messages it drops and how many, and non
   assert.equal(own.editTakes.size, 0);
 });
 
-/** The body of the question a press on Revert to here raises, over `shared` as the reader `readerId` sees it. */
 async function revertBody(
   readerId: string,
   shared: readonly AgentTranscriptMessage[] = SHARED,

@@ -33,20 +33,9 @@ import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
-/**
- * replay-card.test.ts -- an agent started from another opens on the brief
- * as its source's did, then one folded card saying Continued or Forked from
- * the source's chip and how many of its steps, which opens onto the steps
- * one row each, every step onto its words exactly, and the way back to the
- * source's transcript, then the developer's note as their own line. No
- * marker its first message holds is drawn, and a message whose markers do
- * not add up is drawn whole as today. Synthetic throughout.
- */
-
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-/** When the new agent's first message was sent. */
 const SENT_AT = Date.UTC(2026, 9, 14, 15, 42);
 const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
@@ -90,7 +79,6 @@ function replay(overrides: Partial<Replay> = {}): Replay {
   return { agentId: SOURCE.id, preamble: PREAMBLE, steps: STEPS, totalSteps: 3, ...overrides };
 }
 
-/** The source's tile as its tab wears it. */
 const SOURCE_TILE: Actor = {
   kind: ACTOR_KIND.AGENT,
   agentId: SOURCE.id,
@@ -101,7 +89,6 @@ const SOURCE_TILE: Actor = {
 
 let root: Root | undefined;
 
-// The words are drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 afterEach(() => {
@@ -110,7 +97,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The new agent's tab drawn with its first message as given, sent when given, every tab and place it opens recorded. */
 async function drawn(
   agent: AgentSummary,
   first: string,
@@ -129,7 +115,6 @@ async function drawn(
     },
     { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "On it." }] },
   ];
-  // The host holds what the source published, its branch among it.
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.PUBLISHED]: () =>
       Promise.resolve({ repository: "acme/app", branch: "luke/start-from", pullRequest: null }),
@@ -144,7 +129,6 @@ async function drawn(
   ]);
   const control = agentsControl({
     agents: [agent],
-    // An agent's own page lists that agent alone, and reads any other by its id.
     archived: listed ? [source] : [],
     readAgent: (agentId) => Promise.resolve(agentId === source.id ? source : undefined),
     me: DEAN.userId,
@@ -191,13 +175,11 @@ function press(element: Element | null | undefined): void {
   act(() => element.click());
 }
 
-/** The card's summary row as a reader reads it, its spacing made one. */
 function headOf(container: Element): string {
   const head = container.querySelector("[data-replay-card] > summary");
   return (head?.textContent ?? "").replace(/\s+/gu, " ").trim();
 }
 
-/** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
 function cardMeta(container: Element) {
   const meta = container.querySelector(":has(> [data-replay-card]) ~ .ui-message-line");
   assert.ok(meta !== null);
@@ -208,7 +190,6 @@ function cardMeta(container: Element) {
   };
 }
 
-/** A replay of `count` steps, the agent's words each, numbered from the oldest. */
 function longReplay(count: number, overrides: Partial<Replay> = {}): Replay {
   const steps: Replay["steps"] = Array.from({ length: count }, (_, at) => ({
     kind: REPLAY_STEP_KIND.SAID,
@@ -218,7 +199,6 @@ function longReplay(count: number, overrides: Partial<Replay> = {}): Replay {
   return replay({ steps, totalSteps: count, ...overrides });
 }
 
-/** The button that draws the page of steps before the ones drawn, by its words, while one stands. */
 function earlierRow(container: Element): HTMLButtonElement | null {
   return (
     [...container.querySelectorAll("button")].find((button) =>
@@ -227,7 +207,6 @@ function earlierRow(container: Element): HTMLButtonElement | null {
   );
 }
 
-/** The steps the opened card draws, by their words. */
 function drawnSteps(container: Element): string[] {
   return [...container.querySelectorAll("[data-replay-step]")].map((step) =>
     (step.textContent ?? "").trim(),
@@ -247,13 +226,11 @@ test("an agent continued from another opens on the description's card, the folde
 
   const cards = [...container.querySelectorAll(".agent-origin")];
   assert.equal(cards.length, 2);
-  // The description's card is titled by the brief's first line.
   assert.match(
     cards[0]?.querySelector("[data-origin-description] > summary")?.textContent ?? "",
     /Invite flow/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
-  // The reader started it, and the message's time is unknown, so the card's line names nobody and no time, and holds its Copy alone.
   const cardLine = cards[1]?.querySelector(":scope > .ui-message-line");
   assert.equal(cardLine?.querySelector(".ui-message-line-sender") ?? null, null);
   assert.equal(cardLine?.querySelector("time") ?? null, null);
@@ -261,20 +238,17 @@ test("an agent continued from another opens on the description's card, the folde
     cardLine?.querySelector('button[aria-label="Copy message"]') instanceof HTMLElement,
     true,
   );
-  // The note is the developer's own bubble after the card.
   const bubbles = [...container.querySelectorAll(".is-user")].filter(
     (each) => !each.classList.contains("agent-origin"),
   );
   assert.equal(bubbles.length, 1);
   assert.match(bubbles[0]?.textContent ?? "", /Try five days\./u);
-  // The note is a part of the first message, drawn under no id of the transcript's, so neither a link to the first message nor a Copy link under the note brings the wrong one into view.
   assert.equal(cards[0]?.getAttribute("data-message-id"), "first");
   assert.notEqual(bubbles[0]?.getAttribute("data-message-id"), "first");
   assert.ok(!container.textContent?.includes("<!--"));
   assert.ok(!container.textContent?.includes("The work you continue from"));
   assert.ok(!container.textContent?.includes("Note from the developer"));
 
-  // The source's chip opens its tab, and leaves the card folded.
   press(container.querySelector("[data-replay-card] ~ .ui-disclosure-actions [data-actor-ref]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.equal(container.querySelector("[data-replay-step]"), null);
@@ -290,7 +264,6 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   await settle();
 
   const body = container.querySelector("[data-replay-card] .ui-disclosure-body");
-  // Note that the foot stands once what the source published reaches its query.
   await vi.waitFor(() => assert.match(body?.textContent ?? "", /Builds on luke\/start-from/u));
   assert.doesNotMatch(body?.textContent ?? "", /left out/u);
   const steps = [...container.querySelectorAll("[data-replay-step]")];
@@ -298,12 +271,10 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
     steps.map((step) => step.getAttribute("data-replay-step")),
     ["line", "tool", "said"],
   );
-  // A line is a sent message, named by whoever sent it, Charles here though Dean started the source.
   const [line, call, said] = steps;
   assert.match(line?.textContent ?? "", /Use seven days\./u);
   assert.equal(line?.querySelector(".ui-message-head-sender")?.textContent, "Charles Pan");
   assert.match(said?.textContent ?? "", /Seven days it is\./u);
-  // A call is a call's row, its verb and subject on the line, folded until opened.
   const head = call?.querySelector("summary");
   assert.match(head?.textContent ?? "", /Read/u);
   assert.match(head?.textContent ?? "", /src\/invite\.ts/u);
@@ -329,7 +300,6 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
     ),
   );
   assert.equal(headOf(container), "Forked from Wire the start from field · 3 of 212 steps");
-  // The prompt is the developer's bubble, as the source's was, holding the brief alone.
   const prompt = container.querySelector(".is-user:not(.agent-origin)");
   assert.equal(prompt?.textContent?.includes("Find why the toast fires twice."), true);
   assert.equal(prompt?.textContent?.includes(PREAMBLE), false);
@@ -424,12 +394,10 @@ test("a replay holding Vespin's summary of the oldest steps opens on one folded 
   await settle();
   const row = container.querySelector("[data-replay-summary]");
   assert.equal(row?.textContent, "Summary of 174 earlier steps (written by Vespin)");
-  // The summary stands for the steps it summarized, so none is said to be left out.
   assert.doesNotMatch(
     container.querySelector("[data-replay-card] .ui-disclosure-body")?.textContent ?? "",
     /left out/u,
   );
-  // It stands ahead of the steps.
   const first = container.querySelector("[data-replay-step]");
   assert.ok(row !== null && first !== null);
   assert.ok(row.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -453,7 +421,6 @@ test("a replayed line is named under its sender as a transcript names one: Vespi
     line("Nightly: deploy: Go.", { kind: REPLAY_SENDER.AUTOMATION }),
     line("octocat: Go.", { kind: REPLAY_SENDER.GITHUB }),
     line("The developer: Go.", { kind: REPLAY_SENDER.DEVELOPER }),
-    // The reader's own line, sent as a member, names nobody either.
     line("Dean Stratakos: Go.", { kind: REPLAY_SENDER.MEMBER, memberId: DEAN.userId }),
     line("Ana Ruiz: Go.", { kind: REPLAY_SENDER.MEMBER, memberId: "user-ana" }),
     line("Charles Pan: Go."),
@@ -548,7 +515,6 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
   assert.deepEqual(drawnSteps(container), numbered(26, 45));
   const row = () => earlierRow(container);
   assert.equal(row()?.textContent, "Show 20 of 25 earlier steps");
-  // The row stands over the steps it draws more of.
   const first = container.querySelector("[data-replay-step]");
   assert.ok(first !== null && row() !== null);
   assert.ok((row()?.compareDocumentPosition(first) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -560,9 +526,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
   press(row());
   assert.deepEqual(drawnSteps(container), numbered(1, 45));
   assert.equal(row(), null);
-  // The row went with the last page, and the keys stand on the steps it drew rather than on nothing.
   assert.equal(document.activeElement, container.querySelector("[data-replay-steps]"));
-  // The replay kept every step, so none is said to be left out.
   assert.doesNotMatch(
     container.querySelector("[data-replay-card] .ui-disclosure-body")?.textContent ?? "",
     /left out/u,
@@ -609,7 +573,6 @@ test("Vespin's summary and the steps left out stand over the earlier-steps row, 
   }
   press(row);
   assert.equal(body?.querySelectorAll("[data-replay-step]").length, 30);
-  // Every kept step drawn, the summary and the line saying what was left out still stand as they did.
   assert.equal(
     body?.querySelector("[data-replay-summary]")?.textContent,
     "Summary of 100 earlier steps (written by Vespin)",
@@ -653,13 +616,10 @@ test("a replayed call whose marker names its tool is drawn as the live transcrip
   await settle();
 
   const [command, patch, read] = [...container.querySelectorAll("[data-replay-step]")];
-  // A command's line says what it is for, as the live transcript's does.
   assert.match(command?.querySelector("summary")?.textContent ?? "", /Run the invite tests/u);
-  // A patch opens onto its body drawn as a patch, which wears its added and removed lines' colors.
   press(patch?.querySelector("summary"));
   assert.ok(patch?.querySelector('[data-row="added"]') instanceof HTMLElement);
   assert.ok(patch?.querySelector('[data-row="removed"]') instanceof HTMLElement);
-  // A call about an agent names it by the chip its tab wears.
   assert.equal(
     read?.querySelector("[data-tool-agent-ref] .ui-inline-ref-label")?.textContent,
     "Wire the start from field",

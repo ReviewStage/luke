@@ -58,16 +58,6 @@ import {
 } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 
-/**
- * inbox-side-panel.test.ts -- what an item of the window's Inbox opens that
- * its task's side panel draws opens in that panel beside the Inbox, the
- * Inbox still standing: a file of the task's repository, a page of the
- * task, and a pull request one of its agents opened. A page of another
- * task opens there too, and its Open task goes to that task with the page
- * still chosen. Synthetic workspace, plan, agent, page, and pull request.
- */
-
-// A Markdown block is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const ACME: Workspace = {
@@ -79,7 +69,6 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
-/** The task's repository, where its agent opened the pull request. */
 const REPOSITORY = "acme/relay";
 
 const TASK: TaskSummary = {
@@ -104,7 +93,6 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
-/** An agent of the task archived since, whose Pull request tab the task may still keep. */
 const ARCHIVED: AgentSummary = {
   ...AGENT,
   id: "5e7d9c3b-1a2f-4b6e-9d8c-7f6a5b4c3d2e",
@@ -115,7 +103,6 @@ const ARCHIVED: AgentSummary = {
 
 const PULL = "https://github.com/acme/relay/pull/42";
 
-/** The pull request the task's agents opened, as GitHub last answered the service. */
 const BATCHED = {
   number: 42,
   title: "Send invitations in batches",
@@ -134,7 +121,6 @@ const FUNNEL: PageLine = {
   at: 1_500,
 };
 
-/** The item's words, naming a pull request, a page of its plan, a file of its repository, a page of another plan, and an agent of its plan. */
 const WORDS = [
   `Opened [@relay#42](${PULL}).`,
   `See [@Invite funnel](https://vespin.dev/acme/plan/${TASK.id}/page/${FUNNEL.id}).`,
@@ -143,7 +129,6 @@ const WORDS = [
   `Ask [@Batch the invitations](https://vespin.dev/acme/plan/${TASK.id}/agent/${AGENT.id}).`,
 ].join(" ");
 
-/** What the agent's transcript says, naming a page of its task, as an agent's words do. */
 const TRANSCRIPT: AgentMessagesAnswerView = {
   messages: [
     {
@@ -199,11 +184,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Answers each act as the service would for the plan, its agent, and the pull request it opened. */
-/** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
-/** Every file a File tab read, by the task it was read through and its path. */
 let filesRead: string[][] = [];
 
 function answer(request: AnyAct): Promise<FakeActAnswer> {
@@ -228,7 +210,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   }
 }
 
-/** The window's Inbox on the plan's item, its side panel the window's own hook held by the chosen item's plan, and every place it was asked to leave for. */
 async function inbox(
   { pages }: { pages: readonly PageLine[] | undefined } = {
     pages: [FUNNEL],
@@ -237,27 +218,22 @@ async function inbox(
   let control: SidePanelControl | undefined;
   const links: ReadLink[] = [];
   const tasks: string[] = [];
-  /** The tabs asked for on a task the window was to go to, as a link pressed with ⌘ asks. */
   const went: string[] = [];
   const left = { links, tasks, went };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   fakeActs({ act: answer });
   fakeActPort({ ...fakeActPortCalls() });
   handState(NO_EXPERIMENTS);
-  // The account's feed holds the task's one item, which the Inbox draws from.
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [ITEM] }, [INBOX_SCOPE_KIND.AGENT]: {} },
   });
-  // The host lays the agent's transcript, which names a page of its task, once its tab holds it.
   pushedTranscripts(() => [TRANSCRIPT]);
   function Page() {
-    // Note that the item stands chosen, as a press on its row chooses it.
     const [chosen, setChosen] = useState<InboxChoice | undefined>({
       taskId: TASK.id,
       itemId: ITEM.id,
     });
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
-    // The task's agents as the Inbox read them, which the window's own hook holds its panel to (`use-tasks-tab.ts`).
     const taskAgents = useInboxTaskAgents(panelFor);
     const sidePanel = useSidePanel(
       undefined,
@@ -271,7 +247,6 @@ async function inbox(
       taskAgents.heldIds,
     );
     control = sidePanel;
-    // The window's keymap, which hears a chord as the window's root mounts it.
     useAppKeymap(true);
     return createElement(
       OpenLinkProvider,
@@ -281,7 +256,6 @@ async function inbox(
           workspace: ACME,
           tasks: [TASK, OTHER],
           liveAgents: [ARCHIVED, AGENT].map((agent) => listedAgent(agent)),
-          // Both agents' rows keep the pull request they opened, which the list carries beside them.
           listedPullRequests: [ARCHIVED, AGENT].map((agent) => ({
             agentId: agent.id,
             taskId: TASK.id,
@@ -319,14 +293,11 @@ async function inbox(
   return { container, left, panel };
 }
 
-/** Lets every promise settled so far run its continuations, and the frames a paint takes pass. */
 async function settle(): Promise<void> {
   await settleFrames();
 }
 
-/** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
-  // Note that the item's words stand once the account's inbox read reaches its query.
   const chip = await vi.waitFor(
     () =>
       [
@@ -340,13 +311,11 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
   await settle();
 }
 
-/** How many tabs of the panel beside the Inbox stand as its preview. */
 function previewTabs(container: HTMLElement): number {
   return container.querySelectorAll('aside[aria-label="Panel"] .ui-tab[data-preview="true"]')
     .length;
 }
 
-/** The panel beside the Inbox as a reader hears it: each tab's label, `▸ ` before the one shown; nothing where no panel stands. */
 function panelTabs(container: HTMLElement): string[] | undefined {
   const panel = container.querySelector('aside[aria-label="Panel"]');
   if (panel === null) return undefined;
@@ -376,7 +345,6 @@ test("a pull request, a page, and a file the item names open one after another i
   );
   assert.ok(open, "with Open task");
   act(() => open.click());
-  // The task's chip opens it as Open task does.
   const chip = notice?.querySelector<HTMLElement>("p [data-inline-ref], p button, p a");
   assert.ok(chip, "the task named by its chip");
   act(() => chip.click());
@@ -420,7 +388,6 @@ test("a page the item names before its plan's pages are read is still the panel'
 
 test("an archived agent's Pull request tab stands beside the Inbox as any other, and closing the last tab drawn shuts the panel, as on a task's page", async () => {
   const { container, panel } = await inbox();
-  // The archived agent's tab, as one opened on the task's page before the agent was archived, which still draws its pull request.
   act(() => panel().onChoose({ changes: ARCHIVED.id }));
   await settle();
   await pressChip(container, "relay#42");
@@ -468,7 +435,6 @@ test("an agent beside the Inbox has the agent's menu on its tab's right-click, w
   await pressChip(container, "Batch the invitations");
   const aside = container.querySelector<HTMLElement>('aside[aria-label="Panel"]');
   assert.ok(aside, "the panel stands beside the Inbox");
-  /** What the open menu offers, by each item's words, the menu left open. */
   const offered = () => {
     const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
     assert.ok(menu, "a menu stands open");
@@ -524,8 +490,6 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   await pressChip(container, "Batch the invitations");
   assert.match(panelTabs(container)?.[0] ?? "", /^▸ Batch the invitations/);
 
-  // Note that the chip is the transcript's, drawn in the panel, not the item's words.
-  // Note that the transcript is drawn once its page reaches its query.
   const chip = await vi.waitFor(
     () =>
       [

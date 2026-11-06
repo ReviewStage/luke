@@ -22,82 +22,34 @@ import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { replayMaskedError, SettingMarks } from "./marks.js";
 
-/**
- * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.
- *
- * Every pop-up in Settings is this control, so a short fixed set and the
- * forty-model catalog read as one thing: the chip shows the current value
- * with a chevron, and a press drops the shared menu, searched where the list
- * is long and plain where it is short. The menu scrolls on its own and the
- * page behind it stays still; it closes on a choice, on Escape (which stops
- * here, so it closes the menu and not Settings), and on focus leaving it,
- * and a close hands the keyboard back to the chip the way a native menu
- * returns it to its button. The menu hangs from the chip in `@repo/ui`'s
- * `SearchableMenu`, at its narrow width, above the chip or below it where
- * only there is room, within what is seen of the window.
- *
- * The chip is `@repo/ui`'s field `Chip`, at the column a settings row's
- * pop-ups share unless its place names another width, and a `PickerRow`
- * stands it in `@repo/ui`'s `SettingsRow`. A place that is no form, a task's
- * head, may draw it as a toolbar's chip instead, quiet until the pointer is
- * on it or its menu is open, and with no chevron.
- */
-
-/** What a picker is handed: the value it names and the menu it drops. */
 interface PickerProps {
-  /** The control's name for a reader: the row's own name, or a fuller one where that is too short. */
   label: string;
-  /** The id of the why drawn beside it, which describes the chip. */
   describedBy?: string | undefined;
-  /** Whether the chip's last pick was refused, as its row says under it. */
   invalid?: true | undefined;
-  /** The id of the value chosen now, checked in the menu; none where nothing is chosen yet, which keeps no row a check's room. */
   value: string | undefined;
-  /** What the chip says: the chosen value's own words. */
   valueLabel: string;
-  /** Whether those words are a person's, a repository's or a host's name, kept masked in a screen recording though the page around the chip shows its own. */
   valueReplayMasked?: boolean | undefined;
-  /** The chosen value's mark, where values carry one. */
   valueIcon?: React.ReactNode;
-  /** Whether the chip draws that mark alone, its words read as its name and its hover, where its place is too narrow for them. */
   iconOnly?: boolean | undefined;
-  /** Whether its menu's words are the app's own, which a screen recording shows as they read, but for a row that is `replayMasked` (`SearchableMenu`'s `replayUnmasked`). */
   replayUnmasked?: boolean | undefined;
   rows: readonly MenuRow[];
-  /** Present, the menu opens on a search over the rows; absent, the list is short enough to read whole. */
   placeholder?: string | undefined;
   noMatch: string;
-  /** Drawn in place of the rows while they are being read or could not be. */
   note?: React.ReactNode;
-  /** The id a pressed search result lands on: marked on the chip, which takes the keyboard. */
   anchor?: string | undefined;
   disabled?: boolean | undefined;
-  /** What the chip's hover says beyond its value, such as when a change takes; none where its name says enough. */
   hint?: string | undefined;
-  /** The chip's edge the menu hangs from; the trailing one where none is named. */
   align?: PopoverAlign | undefined;
-  /** How wide the chip stands; the settings column where none is named. */
   width?: ChipWidth | undefined;
-  /** The chip's look: a field's, ending in its chevron, where none is named, or a toolbar's. */
   look?: typeof CHIP_LOOK.FIELD | typeof CHIP_LOOK.TOOLBAR | undefined;
-  /** Whether the chip ends in the menu's chevron: a field's always does, and a toolbar's where it asks, as the model chip beside it does. */
   chevron?: boolean | undefined;
-  /** How wide the menu stands, the room allowing; narrow where none is named. */
   menuWidth?: PopoverWidth | undefined;
-  /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
   onOpen?: (() => void) | undefined;
-  /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed unfiltered. */
   onSearch?: ((query: string) => void) | undefined;
-  /** Counts the asks from elsewhere to open the menu, as the S key's for a task's status, each opening it. */
   openRequest?: number | undefined;
   onPick: (id: string) => void;
 }
 
-/**
- * The chip and its menu alone, for a row that stands it beside another
- * control of its own, a time beside its zone; a row holding nothing else is
- * a `PickerRow`.
- */
 export function Picker({
   label,
   describedBy,
@@ -131,14 +83,11 @@ export function Picker({
   const row = useRef<HTMLSpanElement>(null);
   const chip = useRef<HTMLButtonElement>(null);
 
-  // Note that we hand focus back to the chip, as a native menu returns it to
-  // its button, because closing takes the focused menu away with it.
   const close = () => {
     setOpen(false);
     chip.current?.focus();
   };
 
-  // Each ask from elsewhere opens the menu, as a press on the chip would.
   useEffect(() => {
     if (openRequest === undefined || openRequest === 0 || disabled) return;
     onOpen?.();
@@ -205,12 +154,6 @@ export function Picker({
   );
 }
 
-/**
- * A settings row picking one value: `@repo/ui`'s `SettingsRow`, its name
- * and why, then the picker, and under both the refusal of its last write.
- * The why describes the chip, and a refusal marks it invalid and describes
- * it too.
- */
 export function PickerRow({
   detail,
   changed,
@@ -221,19 +164,12 @@ export function PickerRow({
   labelReplayUnmasked = false,
   ...picker
 }: Omit<PickerProps, "describedBy" | "invalid"> & {
-  /** Whether its name is the app's own words, which a screen recording shows as they read; masked where none is named. */
   labelReplayUnmasked?: boolean | undefined;
-  /** The why under the row's name: words, and where a row needs one, a link among them. */
   detail?: React.ReactNode;
-  /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean | undefined;
-  /** How many of the row's writes have landed, which its Saved tick confirms each of. */
   saves?: number | undefined;
-  /** What the last write was refused with, or nothing while none was. */
   error?: ShownError | undefined;
-  /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
-  /** Whether the row stands inset under the row above, one of its things. */
   indent?: SettingsRowIndent | undefined;
 }): React.JSX.Element {
   return (

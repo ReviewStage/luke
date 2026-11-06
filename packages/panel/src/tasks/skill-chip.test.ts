@@ -21,15 +21,6 @@ import { SentWords, SkillFiles } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { SkillRef } from "./skill-ref.js";
 
-/**
- * skill-chip.test.ts -- a skill's chip opens its `SKILL.md`, the composer's
- * on a press as a sent message's does, and a sent chip's hover card is the
- * window's task card: the skill's name, what it is for, and its file's
- * line, which opens the file too. A coding agent's row that loaded the
- * skill names it as the chip does, hangs the same card, and opens the
- * same file.
- */
-
 const RELEASE: SkillOption = {
   name: "release",
   description: "Use to cut a release of the relay.",
@@ -39,10 +30,8 @@ const RELEASE: SkillOption = {
 
 const roots: Root[] = [];
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-// A sent message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
@@ -60,18 +49,15 @@ afterEach(() => {
 
 const ignore = () => undefined;
 
-/** A source answering the task's skills as the service read them. */
 const reading: SkillSource = () =>
   Promise.resolve({ skills: [RELEASE] satisfies readonly SkillOption[] });
 
-/** A skill installed for the whole workspace, which names no file of the repository's. */
 const TRIAGE: SkillOption = {
   name: "triage",
   description: "Use to triage a Sentry issue.",
   source: TASK_SKILL_SOURCE.WORKSPACE,
 };
 
-/** The view drawn under the task's skills, every file it opens recorded, once the skills' read has landed. */
 async function mounted(view: ReactNode, source: SkillSource = reading) {
   const opened: string[] = [];
   const container = document.createElement("div");
@@ -93,7 +79,6 @@ async function mounted(view: ReactNode, source: SkillSource = reading) {
   return { container, opened };
 }
 
-/** The composer holding the words given, as the developer left them. */
 function Composer({ words }: { words: string }): ReactNode {
   const [draft, setDraft] = useState(words);
   const [attachments, setAttachments] = useState<readonly AgentAttachment[]>([]);
@@ -115,7 +100,6 @@ function Composer({ words }: { words: string }): ReactNode {
   });
 }
 
-/** A press on an element of the box, as the pointer lands it. */
 function pressOn(element: Element): void {
   act(() => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -175,7 +159,6 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   );
   const chip = container.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is a chip");
-  // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(chip);
   const card = document.querySelector<HTMLElement>(".ui-tooltip-card > [data-skill-card]");
@@ -222,7 +205,6 @@ test("an installed skill's chip is no button, yet takes the focus for its card, 
   assert.equal(repository?.querySelector(".ui-hover-card-sub")?.textContent, "Repository skill");
 });
 
-/** A node's words as drawn, without those only a screen reader hears. */
 function drawnWords(node: Node): string {
   if (!(node instanceof Element)) return node.textContent ?? "";
   const drawn = node.cloneNode(true) as Element;
@@ -230,7 +212,6 @@ function drawnWords(node: Node): string {
   return drawn.textContent ?? "";
 }
 
-/** The lines a message's first paragraph is drawn on, each line's words as they read. */
 function drawnLines(container: HTMLElement): readonly string[] {
   const paragraph = container.querySelector("p");
   assert.ok(paragraph, "the words are drawn as a paragraph");
@@ -257,7 +238,6 @@ test("a sent message naming a skill keeps its lines too, the skill still its chi
   assert.deepEqual(drawnLines(container), ["Cut it with /release", "then tell me."]);
 });
 
-/** A coding agent's turn that loaded the skill named, as the service stores it. */
 function loadedTurn(skill: string, state = "output-available"): AgentTranscriptMessage {
   return {
     id: "turn",
@@ -274,7 +254,6 @@ function loadedTurn(skill: string, state = "output-available"): AgentTranscriptM
   };
 }
 
-/** The turn drawn as an agent's tab draws it. */
 function agentTurn(message: AgentTranscriptMessage): ReactNode {
   return createElement(AgentMessage, {
     message,
@@ -285,7 +264,6 @@ function agentTurn(message: AgentTranscriptMessage): ReactNode {
   });
 }
 
-/** The skill's card the control hangs as the keyboard reaches it, the newest hung where an earlier one is still on its way out. */
 function cardOf(control: HTMLElement): string | undefined {
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(control);

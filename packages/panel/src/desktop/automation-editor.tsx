@@ -205,43 +205,8 @@ import { useAutomationRuns } from "./use-automation-runs.js";
 import { AUTOMATION_DELETE_MUTATION, WEBHOOK_SECRET_MUTATION } from "./use-automations.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
-/**
- * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
- *
- * It stands where the list stood, in the task's place, and the first crumb
- * goes back to the list. Its form is drawn as a Settings page is, from
- * Settings' own rows: a group per part, each a card of rows naming a
- * setting and why on the left and its control on the right, every pick a
- * Settings picker on the window's menu and every yes or no a switch. Who
- * owns it is the form's first row, wherever a team workspace offers the
- * choice: Only you under the account's own picture, or the workspace under
- * its photo (`automation-owner.tsx`). Where its runs land is picked: a new agent each
- * run, on the agent box's model chip and archived once it succeeds where
- * asked, or the same agent, chosen from the workspace's agents on its
- * repository. Its runs stand in the panel on
- * the right (`automation-runs-panel.tsx`), with Run now in the toolbar. A schedule is chosen as the
- * picker writes one, every hour, every day, on weekdays, or on one day of
- * the week, at a time in a zone, and a cron the picker did not write stands
- * as custom, kept as it was; its next two runs are said under it. What
- * stops a draft saving is said at its field once a save is pressed. A
- * Sentry trigger picks its event, keeps to the projects, environments, and
- * levels named, and waits so many hours before the same issue runs again;
- * where the workspace has no Sentry installed, an Install Sentry prompt
- * stands in its rows' place. A
- * save the service refuses says why in one line under the name. A save
- * sends only what moved (`automation-draft-model.ts`), so the model and the
- * target it runs on stand as they were.
- */
-
-/** A schedule's cron or time, or a review's rules file, at a picker's width beside them, giving way to a narrow form. */
 const AUTOMATION_FIELD = "automation-field w-automation-field max-w-full";
 
-/**
- * The workspace's Sentry as the editor offers it: the read, nothing while
- * it is out or where it failed, whether it failed with the Retry that asks
- * again, and the install, with whether one is under way and why the last
- * was refused.
- */
 export interface SentryOffer {
   readonly read: WorkspaceSentry | undefined;
   readonly failed: boolean;
@@ -251,12 +216,6 @@ export interface SentryOffer {
   readonly onInstall: () => void;
 }
 
-/**
- * Whether a draft fires on Sentry where the deployment holds no Sentry
- * integration and the automation did not already: a choice made before the
- * read said so, which is held back from saving rather than written as a
- * trigger nothing can fire. One saved on Sentry stays as it was.
- */
 function sentryWithheld(
   sentry: SentryOffer,
   automation: AutomationSummary | undefined,
@@ -269,23 +228,18 @@ function sentryWithheld(
   );
 }
 
-/** Why Sentry cannot be picked where the deployment holds no Sentry integration, as the Type menu says it. */
 const SENTRY_NOT_SET_UP = "Not set up on this deployment yet";
 
-/** What the page says where a Sentry trigger is held back from saving. */
 const SENTRY_WITHHELD = `${PRODUCT_NAME} cannot receive Sentry events here. Choose another trigger.`;
 
-/** What the Trigger card says where the read of the workspace's Sentry did not land. */
 const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
 
-/** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
   create(params: AutomationCreateParams): Promise<AutomationView>;
   change(params: AutomationChangeParams): Promise<AutomationView>;
   toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
 }
 
-/** The kinds of schedule as the picker offers them, in its order. */
 const SCHEDULE_KINDS: readonly { value: ScheduleKind; label: string }[] = [
   { value: SCHEDULE_KIND.HOURLY, label: "Hourly" },
   { value: SCHEDULE_KIND.DAILY, label: "Daily" },
@@ -294,7 +248,6 @@ const SCHEDULE_KINDS: readonly { value: ScheduleKind; label: string }[] = [
   { value: SCHEDULE_KIND.CUSTOM, label: "Custom" },
 ];
 
-/** What may fire an automation, as the Type picker names them. */
 const TRIGGERS: readonly { value: AutomationTriggerKind; label: string }[] = [
   { value: AUTOMATION_TRIGGER.SCHEDULE, label: "Schedule" },
   { value: AUTOMATION_TRIGGER.GITHUB, label: "GitHub event" },
@@ -302,18 +255,15 @@ const TRIGGERS: readonly { value: AutomationTriggerKind; label: string }[] = [
   { value: AUTOMATION_TRIGGER.INTEGRATION, label: "Sentry" },
 ];
 
-/** The Sentry events the event menu offers, the recommended one first. */
 const SENTRY_EVENTS: readonly { value: SentryTriggerEvent; label: string }[] = [
   { value: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED, label: "Alert triggered (recommended)" },
   { value: SENTRY_TRIGGER_EVENT.ISSUE_CREATED, label: "New issue" },
 ];
 
-/** What a Sentry event's row says under its name where its name alone cannot: how an alert reaches us. */
 const SENTRY_EVENT_DETAIL: Partial<Record<SentryTriggerEvent, string>> = {
   [SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED]: `Set the alert rule's action to send a notification to the ${PRODUCT_NAME} integration.`,
 };
 
-/** Sentry's levels as the level pills name them, least severe first. */
 const SENTRY_LEVELS: readonly { value: SentryLevel; label: string }[] = [
   { value: SENTRY_LEVEL.DEBUG, label: "Debug" },
   { value: SENTRY_LEVEL.INFO, label: "Info" },
@@ -322,7 +272,6 @@ const SENTRY_LEVELS: readonly { value: SentryLevel; label: string }[] = [
   { value: SENTRY_LEVEL.FATAL, label: "Fatal" },
 ];
 
-/** The GitHub events the event menu offers, in its order. */
 const GITHUB_EVENTS: readonly { value: GitHubTriggerEvent; label: string }[] = [
   { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED, label: "Pull request opened or updated" },
   { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED, label: "Pull request opened" },
@@ -333,7 +282,6 @@ const GITHUB_EVENTS: readonly { value: GitHubTriggerEvent; label: string }[] = [
   { value: GITHUB_TRIGGER_EVENT.PUSH, label: "Commits pushed" },
 ];
 
-/** The days of the week as cron numbers them. */
 const WEEKDAYS = [
   "Sunday",
   "Monday",
@@ -344,20 +292,16 @@ const WEEKDAYS = [
   "Saturday",
 ] as const;
 
-/** The minutes past the hour an hourly schedule offers. */
 const HOURLY_MINUTES = [0, 15, 30, 45] as const;
 
-/** Every zone this Mac knows, as the zone menu lists them. */
 const TIME_ZONES = timeZoneNames();
 
-/** What a short menu says where a search matches nothing, which it has no search to say. */
 const NO_MATCH = {
   DAYS: "No days match",
   TIMES: "No times match",
   AGENTS: noMatchWords(TERM.AGENT),
 } as const;
 
-/** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The automation could not be saved. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_FOUND]: "This automation, or its workspace, is gone.",
@@ -369,7 +313,6 @@ const SAVE_REFUSAL_WORDS = {
     "Only its creator, or the workspace's owners and admins, can change it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
-/** Why a Run now did not start a run, as the line under the name says it. */
 export const RUN_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not run it now. Try again.",
@@ -377,7 +320,6 @@ export const RUN_REFUSAL_WORDS = {
     "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
-/** Why a switch did not move, as its toast says it. */
 function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
   if (!("failure" in answer)) return undefined;
   if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
@@ -388,14 +330,6 @@ function toggleRefusal(answer: AutomationView, enabled: boolean): string | undef
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/**
- * An automation's on/off switch, the list row's and the editor's alike. It
- * reads the automation as the host draws it, which a press turns at once and
- * a write the service refuses turns back (`@repo/host`'s
- * `automation-collections.ts`), and says why in a FAILED toast, as a settings
- * switch does; it never rests for a write. Writes to one automation go to the
- * service in the order pressed, which the host keeps.
- */
 export function AutomationSwitch({
   automation,
   write,
@@ -432,17 +366,8 @@ export function AutomationSwitch({
   );
 }
 
-/** What a time of day that cannot be read is told to be, under the time's row. */
 const UNREADABLE_TIME = "Write the time as 2:00 AM.";
 
-/**
- * The schedule's time of day, written as the summary says it ("2:00 AM")
- * rather than in the engine's own time input, which pads it ("02:00 AM").
- * What is typed stands as typed while it is unreadable, even after the
- * caret leaves, marked invalid and said to the editor (`onUnreadable`),
- * which refuses a save over it; a time that reads changes the schedule at
- * once and the schedule's own words return once the field is left.
- */
 function ClockField({
   hour,
   minute,
@@ -462,7 +387,6 @@ function ClockField({
 }): React.JSX.Element {
   const [typed, setTyped] = useState<string | undefined>(undefined);
   const unreadable = typed !== undefined && parseAutomationClock(typed) === undefined;
-  // Note that the editor is told while the words stand and told otherwise as they go, the field's leaving the schedule included, because a save must never run over words it cannot see.
   useEffect(() => {
     onUnreadable(unreadable);
     return () => onUnreadable(false);
@@ -485,21 +409,14 @@ function ClockField({
   );
 }
 
-/** A minute past the hour as the hourly picker names it: "At :15". */
 function hourlyLabel(minute: number): string {
   return `At :${String(minute).padStart(2, "0")}`;
 }
 
-/** A zone as the zone picker names it, its underscores read as spaces. */
 function zoneLabel(zone: string): string {
   return zone.replaceAll("_", " ");
 }
 
-/**
- * Who owns it, the form's first row: Only you under the account's own
- * picture, or the workspace under its photo, on the chip and in its menu
- * alike.
- */
 function OwnerRow({
   owner,
   owners,
@@ -510,15 +427,12 @@ function OwnerRow({
 }: {
   owner: AutomationScope;
   owners: readonly { value: AutomationScope; label: string }[];
-  /** Whether the reading account made it, so Only you is drawn as its own; a new one is. */
   mine: boolean;
-  /** Who made it, whom its detail names among those who change it: You for the reader's own, its creator while the members do not name them. */
   maker: Actor;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
   const parse = optionValue(owners);
-  // Note that a teammate's maker the members do not name yet is said as its creator, never as the reader.
   const changers = mine
     ? "You"
     : maker.kind === ACTOR_KIND.SOMEONE
@@ -570,11 +484,6 @@ function OwnerRow({
   );
 }
 
-/**
- * Who made a saved automation, under its Owner: their face and name, which
- * hang their card, read and never changed, and what being its maker means,
- * since a run starts as them. Nothing where the members do not name them.
- */
 function MakerRow({ maker, at }: { maker: Actor; at: number }): React.JSX.Element | null {
   const now = useMinute();
   if (maker.kind === ACTOR_KIND.SOMEONE) return null;
@@ -599,7 +508,6 @@ function MakerRow({ maker, at }: { maker: Actor; at: number }): React.JSX.Elemen
   );
 }
 
-/** A server the creator switched off, as another reader sees it: its provider's name, and its place where it is not the provider's first account. */
 function switchedOffName(connection: string): string {
   const account = integrationConnectionOf(connection);
   if (account === undefined) return connection;
@@ -607,22 +515,11 @@ function switchedOffName(connection: string): string {
   return account.place === 1 ? name : `${name} (account ${account.place})`;
 }
 
-/**
- * Which of the owner's connected MCP servers a run's new agent is handed:
- * a field chip like its neighbors', holding the marks of those left on and
- * opening the agent box's own servers popover, whose switches, search, and
- * way to Settings › Integrations are the ones a task's Start offers, with the
- * row's words naming those switched off. Every server is on until switched
- * off. Note that a run starts on its creator's connections, so only its
- * creator is shown them to switch; anyone else reads which the creator
- * switched off.
- */
 function ServersRow({
   mine,
   disabled,
   onSwitch,
 }: {
-  /** Whether the reading account made it, so its connections are the ones a run is handed. */
   mine: boolean;
   disabled: readonly string[];
   onSwitch: (disabled: readonly string[]) => void;
@@ -651,22 +548,14 @@ function ServersRow({
   return <OwnServersRow disabled={disabled} onSwitch={onSwitch} />;
 }
 
-/** Names as a sentence says them: "Linear", "Linear and Notion", "Linear, Notion, and Sentry". */
 function namesSaid(providers: readonly IntegrationProvider[]): string {
   return andList(providers.map((provider) => INTEGRATION_NAME[provider]));
 }
 
-/** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
 const SERVERS_CHIP_MARKS = 4;
 
-/** How wide the servers row's words stand while the connections are read, as a share of their line. */
 const SERVERS_DETAIL_SKELETON = "40%";
 
-/**
- * The servers row while no read of the owner's connections has answered:
- * blocks where the words and the chip will stand, claiming nothing, or the
- * failure and Retry where the read was refused.
- */
 function UnreadServersRow({
   failed,
   onRetry,
@@ -694,7 +583,6 @@ function UnreadServersRow({
   return <ServersRowSkeleton />;
 }
 
-/** The servers row while the connections are read: its name, and blocks where its words and its field chip will stand, claiming nothing. */
 function ServersRowSkeleton(): React.JSX.Element {
   return (
     <SettingsRow
@@ -710,7 +598,6 @@ function ServersRowSkeleton(): React.JSX.Element {
   );
 }
 
-/** The servers row as the automation's creator sees it: their connections, switched in the agent box's own popover from a field chip. */
 function OwnServersRow({
   disabled,
   onSwitch,
@@ -720,7 +607,6 @@ function OwnServersRow({
 }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const openSettings = useOpenSettings();
-  // Note that no provider standing yet is a read still to answer, so the row claims nothing until one does.
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read) {
     return <UnreadServersRow failed={statuses.readFailed} onRetry={() => void statuses.read()} />;
@@ -774,14 +660,12 @@ function OwnServersRow({
   );
 }
 
-/** The parse a picker of `options` reads its picked id back with: the option of that value, or none. */
 function optionValue<Value extends string>(
   options: readonly { value: Value; label: string }[],
 ): (raw: string) => Value | undefined {
   return (raw) => options.find((option) => option.value === raw)?.value;
 }
 
-/** When the draft runs next, its next two runs; nothing for one we cannot read. */
 function nextRunsText(draft: AutomationDraft): string | undefined {
   const [first, second] = draftNextRuns(draft, new Date(), 2);
   if (first === undefined) return undefined;
@@ -789,20 +673,13 @@ function nextRunsText(draft: AutomationDraft): string | undefined {
   return `Next: ${dayAndTimeText(first)}${then}`;
 }
 
-/** The parse the schedule's picker reads its kind back with. */
 const scheduleKindOf = optionValue(SCHEDULE_KINDS);
 
-/** Which field a schedule is written in: a cron for a custom one, a clock for the rest. */
 const SCHEDULE_FIELD = {
   CRON: "cron",
   CLOCK: "clock",
 } as const;
 
-/**
- * A schedule's rows: how often, under its next runs; then the time, day,
- * or cron that kind asks for; then its zone, searched since every zone this
- * Mac knows is listed.
- */
 function ScheduleRows({
   draft,
   problem,
@@ -811,19 +688,15 @@ function ScheduleRows({
   onUnreadableTime,
 }: {
   draft: AutomationDraft;
-  /** What stops a save in the schedule, said under the row it is about. */
   problem: string | undefined;
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
-  /** Hears whether the time's field holds words that are no time. */
   onUnreadableTime: (unreadable: boolean) => void;
 }): React.JSX.Element {
-  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does.
   const cron = useRef<HTMLInputElement>(null);
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
   const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
-  // Note that a zone we cannot read is said under the zone's row, and any other refusal under the cron's or the time's.
   const read =
     problem === undefined
       ? undefined
@@ -942,7 +815,6 @@ function ScheduleRows({
   );
 }
 
-/** The form's groups, by their headings, in the order the form stands them. */
 const EDITOR_SECTION = {
   SHARING: "Sharing",
   TRIGGER: "Trigger",
@@ -950,16 +822,8 @@ const EDITOR_SECTION = {
   WHERE_IT_RUNS: "Where it runs",
 } as const;
 
-/** How many lines the prompt's field stands, written in or read. */
 const PROMPT_ROWS = 5;
 
-/**
- * The rows a saved automation's groups stand before it is read, as a
- * scheduled one, the kind most are, runs on a new agent each time: Sharing's
- * Owner and Created by; Trigger's Type, Repeats, Time, and Time zone; and Where it runs'
- * Repository, Runs land in, Model on the account's default, MCP servers, and Archive
- * finished runs, each with the words under its name where it says them.
- */
 const SCHEDULED_ROWS = {
   [EDITOR_SECTION.SHARING]: [
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
@@ -968,7 +832,6 @@ const SCHEDULED_ROWS = {
   [EDITOR_SECTION.TRIGGER]: [
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
     { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
-    // The time's field stands at a picker's width beside the pickers (`.automation-field`).
     { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
     { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
   ],
@@ -981,33 +844,20 @@ const SCHEDULED_ROWS = {
   ],
 } as const satisfies Record<string, readonly SettingsRowSkeletonShape[]>;
 
-/** How wide a placeholder page's name stands. */
 const SKELETON_NAME = { TITLE: "160px" } as const;
 
-/** How wide the placeholder toolbar's worded acts stand: where the draft stands, Run now, and Save. */
 const SKELETON_ACTS = { STATUS: "34px", RUN_NOW: "100px", SAVE: "56px" } as const;
 
-/** An icon press's width, the ⋯'s and the Runs toggle's, as tall as it is wide. */
 const ICON_PRESS_WIDTH = "var(--ui-control-height)";
 
-/** What an automation's placeholder page says to a reader while the list is first read. */
 const READING_AUTOMATION = "Reading the automation…";
 
-/** What a new automation's page is called until it is made. */
 const NEW_AUTOMATION = "New automation";
 
-/** The place above the editor, which its toolbar's first crumb names and goes back to. */
 const AUTOMATIONS_PLACE = "Automations";
 
-/** What the title's field says while it holds no name. */
 const UNTITLED_AUTOMATION = "Untitled automation";
 
-/**
- * The page's title: the automation's tile beside its name, the page's one
- * `h1`, the name written where it is drawn (the title-sized field), so the
- * page names the automation once and the name is edited there. An
- * automation not yet made stands as New automation until it is named.
- */
 function EditorTitle({
   automation,
   name,
@@ -1016,9 +866,7 @@ function EditorTitle({
   onName,
 }: {
   automation: AutomationSummary | undefined;
-  /** The name as it is written now, saved or not. */
   name: string;
-  /** The field's input, which its Escape lets go of the caret from. */
   nameField: RefObject<HTMLInputElement | null>;
   invalid: boolean;
   onName: (name: string) => void;
@@ -1047,19 +895,12 @@ function EditorTitle({
   );
 }
 
-/** What the editor's ⋯ is called. */
 const ACTIONS_THING = "Automation";
 
-/** Run now, as an automation's row and its editor's ⋯ offer it, dimmed while one is out. */
 export function runNowAction(running: boolean, onRunNow: () => void): MenuAction {
   return { label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow };
 }
 
-/**
- * An automation's own acts, as its row and its editor's ⋯ offer them alike:
- * Copy link, where the page hands down a workspace; Run now, where it can
- * run; and Delete, red, which asks first, last and alone.
- */
 export function automationActionGroups({
   copyLink,
   runNow,
@@ -1076,7 +917,6 @@ export function automationActionGroups({
   ].filter((group) => group.length > 0);
 }
 
-/** The editor's ⋯: the automation's own acts (`automationActionGroups`), under whatever a phone leads it with. */
 function AutomationActions({
   automation,
   onDelete,
@@ -1085,15 +925,11 @@ function AutomationActions({
   lead,
   heading,
 }: {
-  /** The automation, whose link and Delete the menu offers, and Run now on a phone; none on a new automation's page, a phone's alone. */
   automation: AutomationSummary | undefined;
   onDelete: () => void;
-  /** Whether a Run now is out. */
   running: boolean;
   onRunNow: () => void;
-  /** Groups over the automation's own, as a phone's ⋯ leads with the toolbar's acts (`EditorToolbar`); none elsewhere. */
   lead?: readonly MenuAction[][];
-  /** Muted over the items: where the draft stands, on a phone. */
   heading?: ReactNode;
 }): React.JSX.Element {
   const menu = useMenu(true);
@@ -1103,7 +939,6 @@ function AutomationActions({
       ? []
       : automationActionGroups({
           copyLink: linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id }),
-          // Note that the desktop's toolbar stands Run now beside the ⋯, so only a phone's ⋯, the one given a lead, offers it.
           runNow: lead === undefined ? undefined : runNowAction(running, onRunNow),
           onDelete,
         });
@@ -1116,7 +951,6 @@ function AutomationActions({
           replayUnmasked
           menu={menu.drawn}
           heading={heading}
-          // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read as the menu is drawn.
           groups={[...(lead === undefined ? [] : [...lead, ...phoneFindGroups()]), ...own].filter(
             (group) => group.length > 0,
           )}
@@ -1127,13 +961,6 @@ function AutomationActions({
   );
 }
 
-/**
- * The editor's toolbar: the crumb back to the list leading it, the
- * automation's name after it once the page's header has scrolled away
- * (`pickUp`), with the page's acts at its end. Its own
- * width, which a container query reads, folds its acts' words before they
- * crowd its crumbs.
- */
 function EditorToolbarFrame({
   pickUp,
   onBack,
@@ -1154,27 +981,18 @@ function EditorToolbarFrame({
   );
 }
 
-/** Where the draft stands, said beside its save, and gone where the toolbar folds its acts. */
 function EditorStatus({ children }: { children: ReactNode }): React.JSX.Element {
   return <span className="automation-editor-status whitespace-nowrap">{children}</span>;
 }
 
-/**
- * The toolbar's Runs: the Runs panel's toggle beside the setup, or in a
- * narrow room the way to the runs' own screen, which it names by `screen`.
- */
 interface RunsControl {
-  /** Whether the Runs panel stands beside the setup; a narrow room's setup never stands beside them. */
   readonly shown: boolean;
-  /** The id of the runs' own screen, in a narrow room alone. */
   readonly screen: string | undefined;
   readonly onPress: () => void;
 }
 
-/** Where a phone's way back from an automation's page leads, as its hint names it. */
 const AUTOMATIONS_PLACE_NAME = "automations";
 
-/** A phone's way back from an automation's page to the list, the glyph alone in its corner, with the key that leaves Automations. */
 function AutomationsBack({ onBack }: { onBack: () => void }): React.JSX.Element {
   return (
     <BackButton
@@ -1186,10 +1004,8 @@ function AutomationsBack({ onBack }: { onBack: () => void }): React.JSX.Element 
   );
 }
 
-/** What the toolbar's way to a narrow room's runs says. */
 const RUNS_LABEL = "Runs";
 
-/** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
   automation,
   pickUp,
@@ -1206,21 +1022,17 @@ function EditorToolbar({
   narrow,
 }: {
   automation: AutomationSummary | undefined;
-  /** The page's name as the bar picks it up from the header. */
   pickUp: ToolbarPickUp;
   dirty: boolean;
   saving: boolean;
-  /** Whether the last save was refused, read as its ring leaves: one that was not lands on a check. */
   saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
   onToggle: (enabled: boolean) => Promise<AutomationView>;
   onDelete: () => void;
-  /** Whether a Run now is out. */
   running: boolean;
   onRunNow: () => void;
   runs: RunsControl;
-  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
   narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
@@ -1233,8 +1045,6 @@ function EditorToolbar({
           ? "Unsaved changes"
           : "Saved";
   if (narrow) {
-    // A phone heads the page as it heads every page (`phone-head.tsx`): the way back to the list, the automation's
-    // name picked up from the page's header, and one ⋯ holding the toolbar's acts over the automation's own, where the draft stands its heading.
     const lead: MenuAction[][] = [
       [
         {
@@ -1314,7 +1124,6 @@ function EditorToolbar({
           />
         </>
       )}
-      {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right; in a narrow room, the way to the runs' own screen. */}
       {runs.screen === undefined ? (
         <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
           <IconButton
@@ -1338,7 +1147,6 @@ function EditorToolbar({
   );
 }
 
-/** Whose events a GitHub trigger may hear, as its switches name them. */
 const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: string }[] = [
   { value: GITHUB_SENDER.PEOPLE, label: "From people" },
   {
@@ -1353,7 +1161,6 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   },
 ];
 
-/** The moments of a pull request an update may fire on, as its switches name them. */
 const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail?: string }[] = [
   { value: PULL_REQUEST_MOMENT.OPENED, label: "When opened" },
   { value: PULL_REQUEST_MOMENT.READY, label: "When marked ready" },
@@ -1364,26 +1171,18 @@ const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail
   },
 ];
 
-/** The GitHub events a pull request's drafts and forks speak to. */
 const PULL_REQUEST_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
   GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
   GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
   GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
 ]);
 
-/** A list with a value in it or out of it, as a switch leaves it. */
 function toggled<Value>(list: readonly Value[], value: Value, on: boolean): readonly Value[] {
   return on
     ? [...list.filter((each) => each !== value), value]
     : list.filter((each) => each !== value);
 }
 
-/**
- * A GitHub trigger's settings, as rows of the Trigger card, a switch each
- * as Settings lists several: whose events fire it, the moments an update
- * fires on, and whether drafts are skipped and forks heard, each shown
- * only for the events it speaks to. A check names no sender, so it shows none.
- */
 function GitHubSettingsRows({
   event,
   settings,
@@ -1450,11 +1249,6 @@ function GitHubSettingsRows({
   );
 }
 
-/**
- * One filter's field: its values written comma-separated, read back into
- * the draft as they are typed. Note that the words typed stand in the row's
- * own state, so a comma still to be followed by a value is not taken away.
- */
 function FilterRow({
   label,
   detail,
@@ -1465,11 +1259,9 @@ function FilterRow({
   label: string;
   detail: string;
   values: readonly string[];
-  /** What stops a save in this filter, said under its row. */
   problem: string | undefined;
   onValues: (values: readonly string[]) => void;
 }): React.JSX.Element {
-  // The field's Escape lets go of the caret and keeps the press, as every field's here does.
   const field = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => values.join(", "));
   return (
@@ -1501,16 +1293,8 @@ function FilterRow({
   );
 }
 
-/** The parse the Sentry event picker reads its event back with. */
 const sentryEventOf = optionValue(SENTRY_EVENTS);
 
-/**
- * A Sentry trigger's rows, in the Trigger card: its event, the projects,
- * environments, and levels it keeps to, and the hours before the same
- * issue may start another run. Where the workspace has no Sentry installed
- * a row saying so stands in their place, its button going to where it is
- * installed.
- */
 function SentryRows({
   draft,
   sentry,
@@ -1519,15 +1303,11 @@ function SentryRows({
   onDraft,
 }: {
   draft: AutomationDraft;
-  /** The workspace's Sentry, through whose installation its events arrive. */
   sentry: SentryOffer;
-  /** Whether the deployment holds no Sentry integration for this new choice of it (`sentryWithheld`). */
   withheld: boolean;
-  /** What stops a save, each said under the row of the field it is about. */
   problems: DraftProblems;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  // The cooldown's Escape lets go of the caret and keeps the press, as every field's here does.
   const hours = useRef<HTMLInputElement>(null);
   if (withheld) {
     return (
@@ -1539,7 +1319,6 @@ function SentryRows({
       </SettingsRow>
     );
   }
-  // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable, a failed one saying so above its rows.
   if (sentry.read !== undefined && sentry.read.installations.length === 0) {
     return (
       <SettingsRow
@@ -1663,19 +1442,11 @@ function SentryRows({
   );
 }
 
-/** Why a new secret could not be made, as its dialog says it. */
 const NEW_SECRET_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "The secret could not be made. Try again.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
-/**
- * A webhook's secret, shown the one time the write that minted it answers:
- * read-only, with Copy and Done, and said never to be shown again. Note that
- * it is left out of the screen recording whole (`ph-no-capture`), beside the
- * masking every input already has, because it is a credential; and that it
- * is keyed by the secret, so a Copied said of one is never said of the next.
- */
 function ShownSecretRow({
   secret,
   onDone,
@@ -1700,14 +1471,6 @@ function ShownSecretRow({
   );
 }
 
-/**
- * A webhook's rows: its address to copy once it is saved as a webhook, and
- * its secret, shown once where the write that minted it just answered, and
- * New secret, which asks first, since the new one stops the one a sender
- * holds, and then shows the new one once. Note that a shown secret stands
- * in this page's state alone, never the window's app state, so it is gone
- * once Done is pressed or the page is left.
- */
 function WebhookRows({
   automation,
   writes,
@@ -1716,7 +1479,6 @@ function WebhookRows({
 }: {
   automation: AutomationSummary | undefined;
   writes: AutomationWrites;
-  /** The secret a write just minted for this page to show once, or none. */
   secret: string | undefined;
   onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
@@ -1805,17 +1567,11 @@ function WebhookRows({
   );
 }
 
-/** Where a run may land, as the row's picker names them. */
 const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
   { value: AUTOMATION_TARGET.NEW_AGENT, label: "New agent each run" },
   { value: AUTOMATION_TARGET.SAME_AGENT, label: "Same agent" },
 ];
 
-/**
- * Choose a model, where the default could not be read: a chip naming no
- * model, whose menu is the agent box's model menu with nothing checked, so
- * nothing is chosen until a model is picked in it.
- */
 function ModelPicker({
   models,
   modelsFailed,
@@ -1823,9 +1579,7 @@ function ModelPicker({
   onChoose,
 }: {
   models: RunChoices["models"];
-  /** Whether the catalog could not be read, which the menu says with Retry. */
   modelsFailed: boolean;
-  /** Asks the host for the catalog again, as the menu's Retry asks. */
   readModels: () => void;
   onChoose: (choice: ModelChoice) => void;
 }): React.JSX.Element {
@@ -1878,7 +1632,6 @@ function ModelPicker({
   );
 }
 
-/** A new agent's model: the agent box's chip and menu at a form's look, on the account's default until one is chosen. */
 function ModelRow({
   draft,
   mine,
@@ -1886,14 +1639,11 @@ function ModelRow({
   onDraft,
 }: {
   draft: AutomationDraft;
-  /** Whether the reading account made it, so the catalog's marks of what its credentials lack are its runs' own. */
   mine: boolean;
   choices: RunChoices;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const shown = draft.choice ?? choices.defaultChoice;
-  // Note that a default that could not be read is said as unknown rather than drawn as some
-  // model it may not be, and a model can still be chosen, which the chip then names.
   const note =
     shown !== undefined
       ? draft.choice === null
@@ -1932,32 +1682,19 @@ function ModelRow({
   );
 }
 
-/** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
-/** What the agent row says where the workspace's agents could not be read, and where the search among them did not answer. */
 const AGENTS_UNREAD = readFailedWords("the workspace's agents");
 const AGENT_SEARCH_FAILED = readFailedWords("the search for agents");
 
-/** What the agent row says under its name. */
 const AGENT_DETAIL =
   "Each run is sent to that agent as a message, even mid-turn. It keeps its own model and effort.";
 
-/** What the agent row names and says where no agent is chosen, so the first run starts one, and the menu's row that chooses none. */
 const FIRST_RUN_LABEL = "Started by its first run";
 const FIRST_RUN_ROW = "first-run";
 const FIRST_RUN_DETAIL =
   "Every later run is sent to it. If it is archived or deleted, the next run starts another.";
 
-/**
- * The agent each run goes to, chosen from the workspace's agents on the
- * repository, each drawn as every agent menu draws it (`agentMenuRow`). The
- * menu lists the newest while nothing is typed and, once a word is, those
- * the service finds on the repository, so an agent past the newest is
- * found; the agent chosen from a search stays named after the list moves
- * on. The agent it goes to as saved is kept first in the menu where the
- * list no longer holds it, so another pick can still be taken back.
- */
 function AgentRow({
   draft,
   savedAgentId,
@@ -1965,7 +1702,6 @@ function AgentRow({
   onDraft,
 }: {
   draft: AutomationDraft;
-  /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   choices: RunChoices;
   onDraft: (patch: Partial<AutomationDraft>) => void;
@@ -1982,7 +1718,6 @@ function AgentRow({
   const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
   const known = useKnownNames();
   const place = useAgentRowPlace();
-  // Note that the catalog this row read names the models, since the window's own may not hold it yet.
   const drawn = { ...place, models: models ?? place.models };
   const detail = draft.agentId === null ? FIRST_RUN_DETAIL : AGENT_DETAIL;
   if (agents !== undefined && "failed" in agents) {
@@ -2007,8 +1742,6 @@ function AgentRow({
     mentionableAgent(agent, known.tasks, drawn.models),
   );
   const searched = found?.map((agent) => mentionableAgent(agent, known.tasks, drawn.models));
-  // Note that the newest are matched here too, because the service matches an agent by its
-  // title and its task, not by a name its row takes from its model.
   const matched = new Set(
     matchingRows(
       offered.map((agent) => agentMenuRow(agent, drawn)),
@@ -2031,7 +1764,6 @@ function AgentRow({
     savedAgentId !== null && !offered.some((agent) => agent.id === savedAgentId)
       ? savedAgentId
       : undefined;
-  // Note that a search lists only what it found, so choosing none and the kept agent stand in the menu while none is typed.
   const rows = [
     ...(words !== "" ? [] : [{ id: FIRST_RUN_ROW, label: FIRST_RUN_LABEL }]),
     ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
@@ -2085,10 +1817,8 @@ function AgentRow({
   );
 }
 
-/** The parse the Runs land in picker reads its target back with. */
 const targetOf = optionValue(TARGETS);
 
-/** Where a run lands, under the repository it works in: a new agent each time, on a model, archived once it succeeds where asked, or the one agent chosen. */
 function RunsGroup({
   draft,
   mine,
@@ -2101,15 +1831,12 @@ function RunsGroup({
   onDraft,
 }: {
   draft: AutomationDraft;
-  /** Whether the reading account made it, whose connections its runs are handed. */
   mine: boolean;
-  /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
   workspace: Workspace | undefined;
   problems: DraftProblems;
   taskBacked: boolean;
   repositories: RepositoryChooser;
-  /** Whether its runs' results may be sent on Slack: the workspace's bot is connected, or it sends them already. */
   slackOffered: boolean;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
@@ -2119,7 +1846,6 @@ function RunsGroup({
     repository: draft.repository,
     wantsAgents: sameAgent,
   });
-  // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
     <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.WHERE_IT_RUNS}</ReplayUnmask>}>
@@ -2150,7 +1876,6 @@ function RunsGroup({
               chooser={repositories}
               onChoose={(repository) => onDraft(withRepository(draft, repository))}
               onClear={
-                // A GitHub trigger is fired by its repository's events, so it never stands on none.
                 draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
                   ? undefined
                   : () => onDraft(withRepository(draft, null))
@@ -2211,16 +1936,10 @@ function RunsGroup({
   );
 }
 
-/** The parse the Trigger picker reads its kind back with. */
 const triggerKindOf = optionValue(TRIGGERS);
 
-/** The parse the event picker reads its event back with. */
 const githubEventOf = optionValue(GITHUB_EVENTS);
 
-/**
- * The form, as Settings draws a page: its trigger, its task, where its runs
- * land, and, where the workspace is shared, its owner, each a group of rows.
- */
 function EditorForm({
   draft,
   automation,
@@ -2248,17 +1967,12 @@ function EditorForm({
   repositories: RepositoryChooser;
   shownSecret: string | undefined;
   onSecret: (secret: string | undefined) => void;
-  /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
-  /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
   sentry: SentryOffer;
-  /** Whether the workspace's Slack bot is connected, which a run's result is sent by. */
   slackBot: boolean;
   onDraft: (patch: Partial<AutomationDraft>) => void;
-  /** Hears whether the schedule's time field holds words that are no time, which a save is refused over. */
   onUnreadableTime: (unreadable: boolean) => void;
 }): React.JSX.Element {
-  // Note that Sentry stays listed where the deployment holds no integration, unpickable and saying why, so it can be found.
   const triggers =
     sentry.read?.configured === false && draft.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION
       ? TRIGGERS.map((trigger) =>
@@ -2267,9 +1981,7 @@ function EditorForm({
             : trigger,
         )
       : TRIGGERS;
-  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
-  // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
   const form = useRef<HTMLDivElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const mine = automation === undefined || automation.mine === true;
@@ -2375,7 +2087,6 @@ function EditorForm({
             onEscape={() => prompt.current?.blur()}
             onChange={(text) => onDraft({ prompt: text })}
           />
-          {/* What stops a save, said under the prompt once a save was pressed. */}
           {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
             <ErrorState failure={UNREPORTED.INPUT}>
               <ReplayUnmask>{problems[DRAFT_FIELD.PROMPT]}</ReplayUnmask>
@@ -2390,7 +2101,6 @@ function EditorForm({
           problems={problems}
           taskBacked={taskBacked}
           repositories={repositories}
-          // A saved delivery stays offered once the bot is gone, so it can still be turned off.
           slackOffered={slackBot || automation?.slackDelivery === true}
           onDraft={onDraft}
         />
@@ -2399,11 +2109,6 @@ function EditorForm({
   );
 }
 
-/**
- * An automation's page: its toolbar over its setup, with the Runs panel
- * `beside` it, and what stands apart from the setup after it, a narrow room's
- * runs screen and the page's questions.
- */
 function AutomationPageFrame({
   screenRef,
   layoutRef,
@@ -2416,11 +2121,8 @@ function AutomationPageFrame({
 }: {
   screenRef?: Ref<HTMLDivElement> | undefined;
   layoutRef?: RefObject<HTMLDivElement | null> | undefined;
-  /** Whether the setup's screen is hidden, as a narrow room hides it while its runs stand. */
   hidden?: boolean | undefined;
-  /** The setup's header: the page's one `h1`. */
   title: ReactNode;
-  /** The window's bar over the setup and what stands beside it, handed the name it picks up from the header once that has scrolled away. */
   toolbar: (pickUp: ToolbarPickUp) => ReactNode;
   setup: ReactNode;
   beside: ReactNode;
@@ -2443,12 +2145,10 @@ function AutomationPageFrame({
   );
 }
 
-/** The setup's column: the name over the form, a step apart. */
 function AutomationSetup({ children }: { children: ReactNode }): React.JSX.Element {
   return <div className="automation-editor flex flex-col gap-block-gap">{children}</div>;
 }
 
-/** The form, as Settings draws a page: each group's name over its card, the groups a section apart. */
 function AutomationForm({
   ref,
   children,
@@ -2468,7 +2168,6 @@ function AutomationForm({
   );
 }
 
-/** The prompt's field while the automation is read: a block its rows tall. */
 function PromptSkeleton(): React.JSX.Element {
   return (
     <div
@@ -2480,12 +2179,6 @@ function PromptSkeleton(): React.JSX.Element {
   );
 }
 
-/**
- * The setup while the automation is read, as a scheduled one on a new agent
- * stands: its name's field, then each group under its heading,
- * Sharing where the workspace is shared, its rows' words and controls as
- * blocks, and the prompt's field, so the editor lands where they stood.
- */
 function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_AUTOMATION}>
@@ -2515,7 +2208,6 @@ function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.El
   );
 }
 
-/** A saved automation's acts while it is read: where the draft stands, Run now, Save, its switch, its ⋯, and the Runs toggle. */
 function EditorActsSkeleton(): React.JSX.Element {
   return (
     <>
@@ -2533,21 +2225,12 @@ function EditorActsSkeleton(): React.JSX.Element {
   );
 }
 
-/**
- * One automation's page opened before the list is first read, from a link,
- * ⌘K, or a run's card, in the editor's own frame: its toolbar, the crumbs'
- * way back to the list ending in a block where the name will stand and its
- * acts as blocks, over the setup as blocks and the Runs panel reading, until
- * the list says what it holds. A narrow room stands the setup alone, as the
- * editor does.
- */
 export function AutomationPageSkeleton({
   room,
   offersOwner,
   onBack,
 }: {
   room: ShellRoom;
-  /** Whether the workspace is shared, where the setup opens on Sharing. */
   offersOwner: boolean;
   onBack: () => void;
 }): React.JSX.Element {
@@ -2562,7 +2245,6 @@ export function AutomationPageSkeleton({
       }
       toolbar={(pickUp) =>
         room === SHELL_ROOM.NARROW ? (
-          // A phone's page while it is read stands as it will be drawn: the way back alone, the name read in the page's header.
           <PhoneHead
             place="automation"
             start={<AutomationsBack onBack={onBack} />}
@@ -2594,29 +2276,13 @@ export function AutomationPageSkeleton({
   );
 }
 
-/** The setup's own scrolling column, which a run with nothing of its own to open hands the keyboard. */
 const SETUP_COLUMN = ".ui-detail-page-main";
 
-/** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
 const EDITOR_SCREENS: NarrowColumns = {
   list: ":scope > .automation-editor-screen",
   item: ":scope > .automation-runs-screen",
 };
 
-/**
- * One automation's page, or a new one's where none is given. A new one,
- * once made, is handed to `onCreated`, which stands its own page where
- * this one stood. A deleted one is handed to `onDeleted`, which goes back
- * to the list.
- *
- * A narrow room, a phone's, or a page narrower than the split's line by its
- * own width (`column-split.ts`), has no room for the runs beside the setup,
- * so it stands the setup the whole width and the runs as a screen of their
- * own (`hiddenColumns`), reached by the toolbar's Runs and left by the way
- * back at their head, each a step of the window's history in a narrow room;
- * the focus goes with each swap (`useNarrowFocus`). The Runs panel's width
- * and fold are the split page's alone.
- */
 export function AutomationEditor({
   automation,
   workspace,
@@ -2637,33 +2303,19 @@ export function AutomationEditor({
 }: {
   automation: AutomationSummary | undefined;
   workspace: Workspace | undefined;
-  /** Whether the workspace is shared, so an automation in it may be the workspace's rather than its maker's. */
   offersOwner: boolean;
   repositories: RepositoryChooser;
   writes: AutomationWrites;
   onBack: () => void;
   onCreated: (automationId: string) => void;
   onDeleted: (automationId: string) => void;
-  /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
-  /**
-   * The page as the window was last sent to it, by a link or a press: the
-   * run a link named, which its runs mark and bring into view, none where
-   * no link named one. Each sending is a new value, so a link opened again
-   * shows the runs again.
-   */
   linked?: { readonly runId?: string | undefined } | undefined;
-  /** The window's ask before leaving unsaved work, which this page stands while it holds some. */
   leaveGuard: LeaveGuard;
-  /** The room the panel's stage gives, narrow where the runs are a screen of their own. */
   room: ShellRoom;
-  /** Whether one column stands the runs rather than the setup. */
   runsShown: boolean;
-  /** Stands the runs' screen, or the setup again, through the window's history. */
   onRuns: (shown: boolean) => void;
-  /** The workspace's Sentry: a Sentry trigger offers its install in place of its rows where none is installed. */
   sentry: SentryOffer;
-  /** Whether the workspace's Slack bot is connected, so a run's result may be sent on Slack. */
   slackBot: boolean;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
@@ -2673,7 +2325,6 @@ export function AutomationEditor({
     timezone: readerZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
-  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does.
   const [start] = useState(() =>
     automation !== undefined
       ? automationDraft(automation, defaults)
@@ -2683,48 +2334,34 @@ export function AutomationEditor({
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  // The webhook secret a write just minted, shown once on this page and gone when it is left.
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
   const taskBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
   const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
-  // Note that a draft is unsaved wherever it differs from the automation, even where what differs
-  // cannot be written yet, so Save stands to say what is missing.
-  // Note that words the time's field holds that are no time are unsaved work too, though no draft holds them.
   const [unreadableTime, setUnreadableTime] = useState(false);
   const dirty = saved === undefined || !sameDraft(draft, saved) || unreadableTime;
-  // Note that the saved agent is offered back only on the repository it was saved on, because an agent works in its own repository.
   const savedAgentId =
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
-  // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? unreadableTime || !sameDraft(draft, start) : dirty;
   const narrow = room === SHELL_ROOM.NARROW;
-  // One column's runs stand as a screen of their own over the setup, and the setup the whole width.
   const split = useScreenSplit(room);
   const { single } = split;
   const runsAlone = single && runsShown;
   const hidden = hiddenColumns(split.columns, !runsAlone);
   const screen = useScreenRef(useNarrowFocus(split.columns, !runsAlone, EDITOR_SCREENS), split.ref);
   const runsScreen = useId();
-  // Escape goes back to the list, asking first, as every way out does, where something written would be lost;
-  // from the runs standing alone, it goes back to the setup first.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, runsAlone ? () => onRuns(false) : onBack);
   const runsPanel = useRunsPanel();
   const toggleRuns = single ? () => onRuns(!runsShown) : runsPanel.onToggle;
-  // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
   const editorLayout = useRef<HTMLDivElement>(null);
-  // The name's Escape lets go of the caret and keeps the press, as every field's here does.
   const nameField = useRef<HTMLInputElement>(null);
-  // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, toggleRuns);
-  // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
   const showRuns = useRef(runsPanel.onShow);
   showRuns.current = runsPanel.onShow;
   useEffect(() => {
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
   const drafted = draftProblems(draft, repositoryHeld(automation), new Date());
-  // Note that a time the field cannot read stops a save as the schedule's own problem does, since the draft holds only what read before it.
   const problems: DraftProblems =
     unreadableTime && drafted[DRAFT_FIELD.SCHEDULE] === undefined
       ? { ...drafted, [DRAFT_FIELD.SCHEDULE]: UNREADABLE_TIME }
@@ -2739,12 +2376,9 @@ export function AutomationEditor({
       setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);
       return;
     }
-    // Note that the draft is kept rather than replaced by the answer, so what was typed while the save was out stands, unsaved.
     setShownProblems(false);
-    // A save that leaves it no webhook lets go of any secret shown, since that secret no longer admits anything.
     if (answer.automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) setShownSecret(undefined);
     else if (answer.webhookSecret !== undefined) setShownSecret(answer.webhookSecret);
-    // Note that the page it now stands as is this one, saved, so the move there passes the ask.
     if (automation === undefined) leaveGuard.pass(() => onCreated(answer.automation.id));
   };
   const save = () => {
@@ -2773,8 +2407,6 @@ export function AutomationEditor({
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
   };
-  // Note that any way out of the page, a crumb, Escape, a run's agent, the sidebar, ⌘K, history,
-  // or Settings, asks first while something written would be lost, and goes once Leave is pressed.
   const [leavingBy, setLeavingBy] = useState<{ readonly leave: () => void } | undefined>(undefined);
   const leaving = useConfirmDialog(
     { subject: leavingBy !== undefined, surfaceOpen: true },
@@ -2812,9 +2444,6 @@ export function AutomationEditor({
     deletionAct,
     confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: automation?.id }),
   );
-  // A run with nothing of its own to open opens the setup, where whatever kept it from starting is mended:
-  // in one column it stands the setup again, as the runs' way back does; in two, where the setup already
-  // stands beside the runs, it hands the setup's column the keyboard, scrolled to its top.
   const openSetup = () => {
     const column = editorLayout.current?.querySelector<HTMLElement>(SETUP_COLUMN);
     if (single) onRuns(false);
@@ -2850,7 +2479,6 @@ export function AutomationEditor({
       toolbar={(pickUp) => (
         <EditorToolbar
           automation={automation}
-          // Note that the bar is handed the written name, because the title is a field and a field's value is no words the page can read off its heading.
           pickUp={{
             ...pickUp,
             name:

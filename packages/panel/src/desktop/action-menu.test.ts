@@ -10,14 +10,6 @@ import { MenuRow } from "../settings/menu-row.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 
-/**
- * The window's menus as the developer opens them: a ⋯ that drops its menu
- * and closes it again, a right-click that hangs the same menu at the
- * pointer, or under the row where the menu key asked with no point of its
- * own, and a row's acts in groups ruled apart. How the menu itself behaves
- * is `@repo/ui`'s `Menu`'s, tested beside it.
- */
-
 const roots: Root[] = [];
 
 beforeEach(installScrollIntoView);
@@ -40,7 +32,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The menu standing open, if one is: drawn and not on its way out. */
 function openMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
 }
@@ -62,8 +53,6 @@ function rightClick(target: HTMLElement, at: { x: number; y: number }): void {
   });
 }
 
-/** Lays an element out where the window would, which jsdom never does. */
-/** Where the open menu hangs, once Base UI has placed it over the few promises it places it in: its positioner's offset. */
 async function hungAt(): Promise<{ left: string; top: string } | undefined> {
   await act(async () => {
     for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
@@ -127,8 +116,6 @@ test("a right-click opens the row's menu at the pointer, and the menu key's unde
     "and hands focus to the row's ⋯, its door from the keyboard",
   );
 
-  // The menu key's right-click says no point of its own: the menu drops
-  // under the row from its start rather than into the window's corner.
   placeAt(row, { left: 40, top: 60, bottom: 100 });
   rightClick(row, { x: 0, y: 0 });
   const under = await hungAt();

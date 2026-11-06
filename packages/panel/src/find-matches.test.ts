@@ -4,18 +4,6 @@ import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
 import { FIND_SHADOW_ATTRIBUTE, findRanges, matchFrom, watchText } from "./find-matches.js";
 
-/**
- * find-matches.test.ts -- a find reads the words a marked host's shadow
- * root draws, as a Files changed diff's are, in the host's place among the
- * tab's own and set apart from them, leaving out what the host's selector
- * names there, as a diff's gutter of numbers; an unmarked shadow root, as
- * the file tree's, is not read. A find kept at a match keeps to it across
- * the shadow's edge, and a change inside the shadow root is a change of
- * the tab's text, heard once in the frame after it however many land
- * before. Synthetic words only.
- */
-
-/** The frames asked for and not yet run, which a test runs as the window would draw its next. */
 let frames: FrameRequestCallback[] = [];
 
 afterEach(() => {
@@ -24,7 +12,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Asks for frames into `frames` rather than the window's clock, so a test says when the next is drawn. */
 function holdFrames(): void {
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((heard) => frames.push(heard));
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frame) => {
@@ -32,14 +19,12 @@ function holdFrames(): void {
   });
 }
 
-/** Draws the next frame: every frame asked for so far runs. */
 function drawFrame(): void {
   const due = frames;
   frames = [];
   for (const heard of due) heard?.(0);
 }
 
-/** A tab: a line of its own, a marked host drawing a gutter and two lines, an unmarked host, and a line after. */
 function drawTab() {
   const tab = document.body.appendChild(document.createElement("div"));
   tab.innerHTML = "<p>seats before</p><div id='diff'></div><div id='tree'></div><p>seats after</p>";
@@ -65,7 +50,6 @@ test("a marked shadow root's words are found in its host's place, its gutter and
     ["seats before", "const seats = 3;", "const seats = 42;", "seats after"],
   );
   assert.deepEqual(findRanges(tab, "42").length, 1);
-  // A match never runs from the tab's own words into the shadow's.
   assert.equal(findRanges(tab, "beforeconst").length, 0);
 });
 

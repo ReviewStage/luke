@@ -15,44 +15,22 @@ import {
 } from "@repo/ui";
 import { type ReactNode, useRef } from "react";
 
-/**
- * person-frame.tsx -- a person's page's boxes, which the page and its placeholders both draw.
- *
- * The page's title, its content's top, and its sections each stand in one
- * component here, drawn by the page with what it read and by its
- * placeholders with blocks in what is still being read, so a placeholder is
- * the page's own shape rather than a copy of it. The page names its person
- * once, as its header's title (`PageHeader`, the page's one `h1`). Under the
- * header its blocks stand in one body, the root its lists move under
- * (`ListMotion`), so a row glides as its list changes, and one taken out of
- * a section and drawn in another, an agent done working, glides across. It stands outside the
- * page's chunk (its lazy route, `panel-router.tsx`), so what the window draws while that
- * chunk loads draws through the same boxes.
- */
-
-/** How wide a placeholder section's name stands, as a short section name does. */
 const SKELETON_SECTION_NAME = "120px";
 
-/** How wide the placeholder head's name and the line under it stand, as a name and a role and email do. */
 const SKELETON_HEAD = { NAME: "180px", LINE: "240px" } as const;
 
-/** The placeholder head's face, at the page's size (`.ui-avatar[data-size="page"]`). */
 const SKELETON_FACE = "48px";
 
-/** A placeholder row's tile, an automation's or a repository's at its inline size (`.home-row-picture`). */
 const SKELETON_MARK = "16px";
 
-/** How wide each placeholder row's name and what is said beside it stand, so the rows read as rows of their own. */
 const SKELETON_ROWS = [
   { name: "46%", context: "96px" },
   { name: "38%", context: "120px" },
   { name: "54%", context: "80px" },
 ] as const;
 
-/** What the page is called where it cannot name the person yet. */
 export const PROFILE = "Profile";
 
-/** The page's title, the page's one `h1`: their face beside their name, the badge that says it is the reader left to the line under it. */
 export function PersonTitle({
   face,
   name,
@@ -68,7 +46,6 @@ export function PersonTitle({
   );
 }
 
-/** The title while the members are read: a block where their face stands, and their name where the place that opened the page knew it, else a block. */
 export function PersonTitleSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
   return (
     <PersonTitle
@@ -78,26 +55,14 @@ export function PersonTitleSkeleton({ name }: { name: string | undefined }): Rea
   );
 }
 
-/** The line under the title while the members are read: a block where who they are here will stand. */
 export function PersonLineSkeleton(): React.JSX.Element {
   return <Skeleton width={SKELETON_HEAD.LINE} />;
 }
 
-/**
- * The page's top, which the sections stand a section's gap under: it holds
- * the note that stands where the profile could not be read, and the region
- * that says the members are being read (`PersonReadingSkeleton`).
- */
 export function PersonTop({ children }: { children?: ReactNode }): React.JSX.Element {
   return <div className="person-top">{children}</div>;
 }
 
-/**
- * What stands under the page's header: its top and its sections, the root
- * their lists move under (`ListMotion`). While what the page lists is still
- * being read (`reading`), a row arriving fades in where it stands rather
- * than slides in after the last.
- */
 export function PersonBody({
   reading,
   children,
@@ -115,12 +80,10 @@ export function PersonBody({
   );
 }
 
-/** What says, to a reader, that the members are read: the header's blocks are decoration. */
 export function PersonReadingSkeleton(): React.JSX.Element {
   return <SkeletonRegion label="Reading who they are…">{null}</SkeletonRegion>;
 }
 
-/** A section: its name and count over what it holds, a region named `label` where it names one. */
 export function PersonSectionFrame({
   label,
   title,
@@ -131,7 +94,6 @@ export function PersonSectionFrame({
   label?: string | undefined;
   title: ReactNode;
   count?: number | undefined;
-  /** The count's status tone, muted where absent: attention for what waits on the reader. */
   tone?: StatusTone | undefined;
   children: ReactNode;
 }): React.JSX.Element {
@@ -151,7 +113,6 @@ export function PersonSectionFrame({
   );
 }
 
-/** A section still being read: a block where its name will stand, over the placeholder rows in `children`. */
 export function SectionSkeleton({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <PersonSectionFrame title={<Skeleton width={SKELETON_SECTION_NAME} />}>
@@ -160,7 +121,6 @@ export function SectionSkeleton({ children }: { children: ReactNode }): React.JS
   );
 }
 
-/** A list still being read, which `label` names: rows of a tile, a name, and what is said beside it, as a task's or an automation's row stands. */
 export function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
   return (
     <SectionSkeleton>
@@ -180,11 +140,6 @@ export function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/**
- * A person's page while its chunk loads: its header, their name where the
- * place that opened it knew it, and their face and who they are as blocks,
- * as the page stands it until the members are read.
- */
 export function PersonPageSkeleton({ name }: { name: string | undefined }): React.JSX.Element {
   return (
     <DetailPage

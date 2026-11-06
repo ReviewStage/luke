@@ -10,26 +10,14 @@ import { test } from "vitest";
 import { stateWith } from "../testing/app-state.js";
 import { fixtureActAnswer, fixtureAppState, fixtureTasksView } from "./tasks-fixture.js";
 
-/**
- * tasks-fixture.test.ts -- a fixture run's tasks carry the times and the
- * creator a service would answer, so no row reads the epoch's first day or
- * "Created by someone"; every profile holds its workspaces' members,
- * so ⌘K's People lists them rather than saying the read failed; and the open
- * task's version history reads real versions by more than one writer rather
- * than waiting on a read main answers with nothing.
- */
-
-/** The first day a fixture task may stand on: the year the fixture is set in. */
 const FIXTURE_YEAR_START = Date.parse("2026-01-01T00:00:00Z");
 
-/** The tasks profile's list, as the sidebar, the Tasks list, and ⌘K draw it. */
 function listedTasks(): readonly TaskSummary[] {
   const view = fixtureTasksView({ fixtureMode: true, profile: RUN_PROFILE.TASKS });
   assert.ok(view);
   return view.tasks;
 }
 
-/** A workspace's members as a profile holds them on the document, which ⌘K's People reads. */
 function membersOf(profile: string, workspaceId: string): readonly WorkspaceMember[] {
   const main = stateWith({}, {});
   const staged = fixtureAppState({ ...main, run: { ...main.run, profile } });
@@ -81,7 +69,6 @@ test("the open task's version history lists at least four versions by more than 
   const first = page.revisions.at(-1);
   const second = page.revisions.at(-2);
   assert.ok(first !== undefined && second !== undefined);
-  // SAFETY: the profile answered each revision read, with its result.
   const opened = read(second.seq) as TasksRevisionAnswer;
   const oldest = read(first.seq) as TasksRevisionAnswer;
   assert.ok("revision" in opened && "revision" in oldest);

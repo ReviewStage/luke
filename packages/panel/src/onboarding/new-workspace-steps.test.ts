@@ -12,13 +12,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewWorkspaceSteps } from "./new-workspace-steps.js";
 
-/**
- * New workspace's cards as the developer walks them: Cancel before Create
- * makes nothing; Create makes the workspace, lists it, and goes on to
- * GitHub, whose Skip lands on the new workspace's Home; and an invitation
- * refused holds the first card on what was refused. Synthetic throughout.
- */
-
 const PAPERSTAR: Workspace = {
   id: "workspace-paperstar",
   name: "Paperstar",
@@ -45,7 +38,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The cards over a window that writes each press it would hand on into `pressed`. */
 function mount(pressed: string[]): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -68,7 +60,6 @@ function mount(pressed: string[]): HTMLElement {
   return container;
 }
 
-/** The card's button by its words. */
 function button(container: HTMLElement, words: string): HTMLButtonElement {
   return (
     [...container.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -77,7 +68,6 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-/** Types `words` into the field labeled `label`, as a person does. */
 function type(container: HTMLElement, label: string, words: string): void {
   const labeled = [...container.querySelectorAll("label")].find(
     (candidate) => candidate.textContent?.startsWith(label) === true,

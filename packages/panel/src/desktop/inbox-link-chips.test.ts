@@ -35,22 +35,11 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 
-/**
- * inbox-link-chips.test.ts -- a link in a window Inbox item's words reads
- * through the item's own workspace, as it would in its task: a plan's item
- * through the plan's workspace, an item of an agent with no plan through
- * the agent's, whichever workspace the Inbox lists; an item whose workspace
- * the service did not name reads nothing and says what its address says.
- * Synthetic workspaces, plans, agents, and pull requests.
- */
-
 const PULL = "https://github.com/acme/relay/pull/42";
 const LEDGER_PULL = "https://github.com/globex/ledger/pull/5";
 
-// A Markdown block is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-/** Acme and Globex, each with its GitHub App installed. */
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "Acme",
@@ -78,7 +67,6 @@ const TASK: TaskSummary = {
 const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SWEEP_AGENT = "5d7e8f90-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 
-/** A notice an agent posted, asking nothing, its thread one message of the words given. */
 function item(id: string, agentId: string, words: string): InboxItem {
   return {
     id,
@@ -102,7 +90,6 @@ function item(id: string, agentId: string, words: string): InboxItem {
   };
 }
 
-/** One waiting item of the agent no plan holds, as main's read names it: in the workspace given, or in none where the service did not name one. */
 function waitingSweep(waiting: InboxItem, workspaceId: string | undefined): AppInboxTasklessItem {
   return {
     ...waitingOf(waiting),
@@ -116,7 +103,6 @@ function waitingSweep(waiting: InboxItem, workspaceId: string | undefined): AppI
   };
 }
 
-/** What the host holds of each pull request linked, by its address, as the App answers it through any workspace. */
 const STANDINGS = {
   [PULL]: {
     rows: {
@@ -148,17 +134,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Inbox listing `listed`, holding the plan's items and the agent's given, the first of them chosen, and every act it asked. */
 async function inbox(options: {
   listed: Workspace | undefined;
   taskItems: readonly InboxItem[];
   sweep: { readonly item: InboxItem; readonly workspaceId: string | undefined } | undefined;
-  /** The account's workspaces as main's document holds them; Acme and Globex unless said. */
   workspaces?: readonly Workspace[];
 }) {
   const asked: AnyAct[] = [];
   const workspaces = options.workspaces ?? [ACME, GLOBEX];
-  // The account's feed holds the task's items, and the sweep agent's, which the Inbox draws from; the host holds each link's standing through every workspace.
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
     tasks: {
@@ -182,7 +165,6 @@ async function inbox(options: {
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
       switch (request.kind) {
-        // A link's standing is held quietly, as the host holds one, what it holds already on the document.
         case ACT_KIND.TASKS_LINK_STANDING_FOLLOW:
           return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
         default:
@@ -195,9 +177,7 @@ async function inbox(options: {
   });
   fakeActPort({ ...fakeActPortCalls() });
   const sweep = options.sweep;
-  // The Inbox's own choice is held as the plans tab holds it, so the item it stands chosen is drawn.
   function Page() {
-    // Note that the first item stands chosen, as a press on its row chooses it.
     const [chosen, setChosen] = useState<InboxChoice | undefined>(() => {
       const [first] = options.taskItems;
       if (first !== undefined) return { taskId: TASK.id, itemId: first.id };
@@ -241,7 +221,6 @@ async function inbox(options: {
   return { container, asked };
 }
 
-/** The chips the chosen item's words draw, by the name each says and the state after it. */
 function chips(container: HTMLElement): [string | null, string | null][] {
   return [
     ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
@@ -251,7 +230,6 @@ function chips(container: HTMLElement): [string | null, string | null][] {
   ]);
 }
 
-/** The workspace each link's standing was held through, with the link. */
 function readThrough(asked: readonly AnyAct[]): string[] {
   return asked.flatMap((each) =>
     each.kind === ACT_KIND.TASKS_LINK_STANDING_FOLLOW
@@ -267,7 +245,6 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
     sweep: undefined,
   });
 
-  // Note that the item's words stand once the account's inbox read reaches its query.
   await vi.waitFor(() => assert.deepEqual(chips(container), [["#42", "Merged"]]));
   assert.deepEqual(readThrough(asked), [`workspace-acme ${PULL}`]);
 });

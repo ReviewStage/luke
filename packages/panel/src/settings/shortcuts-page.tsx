@@ -33,38 +33,8 @@ import {
   Text,
 } from "@repo/ui";
 
-/**
- * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: the window's own shortcuts and the keys that answer in place, grouped by what they act on, listed to be found rather than changed.
- */
-
-/** What stands between the first and the last key of a run, 1 – 9. */
 const RUN_DASH = "–";
 
-/**
- * The window's own shortcuts rather than keys taken from the machine: each
- * answers only while the app's window has the keyboard, so they are fixed and
- * listed here to be found, not chosen, under the groups the table keeps
- * (`APP_SHORTCUT_GROUPS`), by what they act on: each row the command's name
- * and its chord, then the group's keys that answer in place, where focus or
- * a selection stands (`IN_CONTEXT_SHORTCUTS`). Escape is one row, under
- * General, for every layer it steps back from. A gated feature's shortcut is
- * listed only while the account has its experiment on, and a platform
- * feature's only where the platform offers it.
- *
- * Each group is `@repo/ui`'s `SettingsSection` and each command its
- * `SettingsRow` at the list density, a reference's line rather than a
- * setting's, the chord in the row's controls. Note that each row stands
- * in a wrapper wearing its search anchor, because the shared row takes no
- * attribute of a caller's.
- *
- * Writing follows them, read from the vocabulary the editors bind their
- * chords from: each mark and block with the Markdown typed in text that makes
- * it, where there is one, and its chord, where it has one, then a link's ⌘K
- * over selected words and the `@` list's keys. Files changed's
- * own keys follow under a group of their own, read from the
- * table the view's handler answers to (`changes-list.tsx`), the order its
- * `?` sheet lists them in, and Chapters' after them (`agent-chapters-tab.tsx`).
- */
 export function WindowShortcutSections({
   experiments,
   capabilities,
@@ -131,7 +101,6 @@ export function WindowShortcutSections({
   );
 }
 
-/** A key that answers in place: its name, then its chord, or the first and the last of a run of keys, 1 – 9. */
 function InContextRow({ inContext }: { inContext: InContextKey }): React.JSX.Element {
   const { label, chord, through }: InContextShortcut = IN_CONTEXT_SHORTCUTS[inContext];
   return (
@@ -155,7 +124,6 @@ function InContextRow({ inContext }: { inContext: InContextKey }): React.JSX.Ele
   );
 }
 
-/** A writing action's Markdown rule, set as the code it is, then its chord: whichever of the two it has. */
 function WritingKeys({ action }: { action: WritingAction }): React.JSX.Element {
   const { markdown, chord }: WritingShortcut = WRITING_SHORTCUTS[action];
   return (

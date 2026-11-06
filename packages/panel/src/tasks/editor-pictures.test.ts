@@ -25,20 +25,7 @@ import { DescriptionBody } from "./description-body.js";
 import { descriptionEditMutation } from "./description-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * editor-pictures.test.ts -- a picture laid into the description's editor is drawn
- * at once from the Mac's own bytes, dimmed, with "Uploading" where its
- * caption will stand, and as the kept picture once the service kept it; a
- * keep that failed says why with Retry and Remove, and Remove takes it out;
- * a video of another description pasted in is kept on this one as it is, waiting
- * as a quiet box rather than a picture its bytes cannot draw; and Insert
- * image is offered while the text is edited, and only then; and
- * a selected picture's tools are each still named in a narrow column.
- * Synthetic description and pictures.
- */
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
@@ -73,13 +60,10 @@ const SECTION_LINKS = {
 
 const roots: Root[] = [];
 
-/** The texts the editor saved, in order. */
 const saved: string[] = [];
 
-/** The keep the host answers next: held until the test lets it go, with what it answers. */
 let keeping: { resolve: (answer: TasksPictureKeepAnswer) => void } | undefined;
 
-// Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
@@ -119,7 +103,6 @@ function drawn(node: ReactNode): HTMLElement {
   return container;
 }
 
-/** The plan's page, editable, with its editor opened on the Approach section. */
 async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(DescriptionBody, {
@@ -138,7 +121,6 @@ async function editing(): Promise<HTMLElement> {
   return container;
 }
 
-/** A screenshot pasted into the editor. */
 async function pasteScreenshot(container: HTMLElement): Promise<void> {
   const editable = container.querySelector(".ProseMirror") ?? assert.fail("the editor stands");
   const screenshot = new File(
@@ -158,7 +140,6 @@ async function pasteScreenshot(container: HTMLElement): Promise<void> {
   await settle();
 }
 
-/** Waits for the Mac to have encoded the picture and asked the host to keep it. */
 async function keepAsked(): Promise<void> {
   for (let tries = 0; tries < 20 && keeping === undefined; tries += 1) await settle();
   assert.ok(keeping, "a keep is asked");
@@ -320,7 +301,6 @@ test("Escape while a picture is being kept leaves the editor open until it is, t
   );
 });
 
-/** The kept picture in the editor selected, as a press on it selects it, and its tools. */
 function selectPicture(container: HTMLElement): HTMLElement {
   const editable =
     container.querySelector<TiptapEditorHTMLElement>(".ProseMirror") ??
@@ -339,10 +319,6 @@ function selectPicture(container: HTMLElement): HTMLElement {
   );
 }
 
-/**
- * The column the picture stands in laid out at `width`, its picture 200
- * pixels under the top of the description's scroller, as the window would report it.
- */
 function layOutColumn(container: HTMLElement, width: number): void {
   const column =
     container.querySelector<HTMLElement>(".editor-picture") ?? assert.fail("the picture stands");

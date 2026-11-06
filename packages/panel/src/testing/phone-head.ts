@@ -1,17 +1,11 @@
 import { act } from "react";
 
-/**
- * phone-head.ts -- a phone's header read as a reader meets it (`desktop/phone-head.tsx`): each corner's controls by name and the title between them, and the ⋯'s items once it is pressed.
- */
-
-/** A phone's header as it reads: the start corner's controls, the title centered between the corners, and the end corner's controls. */
 export interface ReadPhoneHead {
   readonly start: readonly string[];
   readonly title: string | undefined;
   readonly end: readonly string[];
 }
 
-/** The names of the controls in one of the header's three places, none where the place is not drawn. */
 function namesIn(slot: Element | null): string[] {
   if (slot === null) return [];
   return [...slot.querySelectorAll("button")].map(
@@ -19,14 +13,12 @@ function namesIn(slot: Element | null): string[] {
   );
 }
 
-/** The phone's headers heading `place` within `root` that stand, as `Toolbar`'s phone look draws them. */
 function standingHeads(root: ParentNode, place: string): HTMLElement[] {
   return [
     ...root.querySelectorAll<HTMLElement>(`header.ui-toolbar[data-look="phone"].${place}-head`),
   ].filter((each) => each.closest("[hidden]") === null);
 }
 
-/** The header heading `place` within `root`, the one standing where several are drawn, by its corners and its title. */
 export function readPhoneHead(root: ParentNode, place: string): ReadPhoneHead {
   const heads = standingHeads(root, place);
   const [head] = heads;
@@ -38,7 +30,6 @@ export function readPhoneHead(root: ParentNode, place: string): ReadPhoneHead {
   };
 }
 
-/** Presses the control named `label` in the standing header heading `place`. */
 export function pressInPhoneHead(root: ParentNode, place: string, label: string): void {
   const button = standingHeads(root, place)
     .flatMap((head) => [...head.querySelectorAll("button")])
@@ -47,7 +38,6 @@ export function pressInPhoneHead(root: ParentNode, place: string, label: string)
   act(() => button.click());
 }
 
-/** The open menu's items as a reader meets them: each one's words, and whether it is unavailable. */
 export function menuItems(): { label: string; disabled: boolean }[] {
   return [
     ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),
@@ -59,7 +49,6 @@ export function menuItems(): { label: string; disabled: boolean }[] {
   }));
 }
 
-/** Presses the open menu's item whose words are `label`. */
 export function chooseMenuItem(label: string): void {
   const item = [
     ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .ui-menu-item'),

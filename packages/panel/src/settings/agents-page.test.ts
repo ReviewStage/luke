@@ -36,17 +36,6 @@ import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { AgentsPage } from "./agents-page.js";
 
-/**
- * Settings › Coding agents' Default model over a bridge answering as the host
- * would: Fast is a settings switch like every other, resting while its write
- * is out and saying a refusal under its own row with the switch left where
- * it stood, and Effort and Context are each a radio group a reader hears the
- * way they hear every segmented control. Where the service withholds a fast
- * version because Anthropic never granted the key's organization fast mode,
- * Fast rests saying so, and on the account's own Anthropic key links to
- * where the organization asks Anthropic for it. Synthetic catalog and keys.
- */
-
 const OPUS: CatalogModel = {
   id: "anthropic/claude-opus-5.5",
   name: "Claude Opus 5.5",
@@ -67,7 +56,6 @@ const SONNET: CatalogModel = {
   efforts: ["low", "high"],
 };
 
-/** The account's own Anthropic key, as the service answers it. */
 const OWN_ANTHROPIC: ProviderKeySummary = {
   provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
   hint: "sk-ant-…wxyz",
@@ -76,16 +64,11 @@ const OWN_ANTHROPIC: ProviderKeySummary = {
   statusAt: Date.UTC(2026, 9, 14, 12),
 };
 
-/** The models the test's service offers, and the keys it holds for the account. */
 let models: readonly CatalogModel[] = [OPUS, OPUS_FAST];
 let keys: readonly ProviderKeySummary[] = [];
-/** The default the test's service holds. */
 let stored: ModelChoice = { model: OPUS.id, effort: "high" };
-/** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** Whether the service refuses the next write. */
 let refuseWrite = false;
-/** Whether the service answers that it could not read the models. */
 let refuseModels = false;
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
@@ -93,7 +76,6 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   value,
 });
 
-/** The bridge, answering the page's acts the way the host would. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
@@ -103,11 +85,8 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
-      // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
-      // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
       keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
       models = [OPUS, OPUS_FAST];
-      // The host lays the save's own answer where it holds the keys before it answers, and asks the models again as the keys moved.
       deliverKeys({ rows: { keys } });
       deliverModels(modelsHeld());
       return Promise.resolve(done({ keys }));
@@ -127,7 +106,6 @@ const roots: Root[] = [];
 let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
-  // jsdom runs no motion, so a Saved tick would be taken the moment it stood.
   motion = holdExits((element) => element.classList.contains("ui-saved-tick"));
   stored = { model: OPUS.id, effort: "high" };
   models = [OPUS, OPUS_FAST];
@@ -146,7 +124,6 @@ afterEach(() => {
   motion.restore();
 });
 
-/** Waits until no write is out, each answered, so the next press meets the service as the test now stands it. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -154,23 +131,18 @@ async function settle(): Promise<void> {
   await vi.waitFor(() => assert.equal(testQueryClientNow().isMutating(), 0));
 }
 
-/** Where the page opened Settings, as the window's opener heard it. */
 let opened: SettingsLink[] = [];
 
-/** How the keys, the models, and the account's row the host holds are delivered to the window again, as the host tells them. */
 let deliverKeys: HostReadsHanded["deliverKeys"] = () => undefined;
 let deliverModels: HostReadsHanded["deliverModels"] = () => undefined;
 let deliverPreferences: HostReadsHanded["deliverPreferences"] = () => undefined;
 
-/** The models as the host holds them from what the test's service offers. */
 const modelsHeld = () => (refuseModels ? { failed: true as const } : { rows: { models } });
 
-/** The account's row as the host holds it from what the test's service stores. */
 const preferencesHeld = () => ({
   rows: { agent: stored, chaptersModel: CHAPTERS_MODEL.HAIKU, slackNotifications: true },
 });
 
-/** The account's keys, models, and row as they stand, laid where the host holds them. */
 function holdKeys(): void {
   ({ deliverKeys, deliverModels, deliverPreferences } = handHostReads({
     keys: { rows: { keys } },
@@ -190,7 +162,6 @@ async function mount(): Promise<HTMLElement> {
       createElement(
         OpenSettingsProvider,
         { value: (link: SettingsLink) => opened.push(link) },
-        // Note that the toasts draw from the window's registry under the page's one client, since a second subscription would write that registry's document over the test's.
         onRegistry(
           AtomRegistry.make(),
           createElement(
@@ -216,37 +187,31 @@ const fastSwitch = (page: HTMLElement) =>
   page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
   assert.fail("no Fast switch");
 
-/** What the page announces now: its alerts and its error lines that say something. */
 const announced = (page: HTMLElement) =>
   [...page.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 
-/** The settings row a name heads. */
 const rowOf = (page: HTMLElement, label: string) =>
   [...page.querySelectorAll<HTMLElement>(".ui-settings-row")].find((row) =>
     row.textContent?.startsWith(label),
   ) ?? assert.fail(`no ${label} row`);
 
-/** What stands beside a row's name: its Saved tick and its Modified word. */
 const marksIn = (row: HTMLElement) =>
   [...row.querySelectorAll(".ui-saved-tick, .ui-settings-changed-mark")].map(
     (each) => each.textContent ?? "",
   );
 
-/** What a row says under itself about its last write. */
 const errorsIn = (row: HTMLElement) =>
   [...row.querySelectorAll('[role="alert"], [data-slot="field-error"]')]
     .map((each) => each.textContent ?? "")
     .filter((words) => words !== "");
 
-/** The defaults the page asked the service to keep, in order. */
 const written = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.AGENTS_DEFAULT_WRITE ? [request.payload] : [],
   );
 
-/** The placeholders standing for reads still out, each what it says it reads and how many rows it stands. */
 const placeholders = (page: HTMLElement) =>
   [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map((status) => [
     status.textContent,
@@ -305,7 +270,6 @@ test("Effort and Context are each a radio group, the stored value checked and th
   pressKeyIn(effort, "ArrowLeft");
   await settle();
   assert.equal(focusedSegment(), "Medium");
-  // Note that each row draws its option once the default the host lays after its write reaches the preferences' query, so the next write starts from it.
   await vi.waitFor(() =>
     assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Medium"]),
   );
@@ -314,7 +278,6 @@ test("Effort and Context are each a radio group, the stored value checked and th
   await vi.waitFor(() =>
     assert.deepEqual(readSegmented(segmentedGroup(page, "Context")).checked, ["200K"]),
   );
-  // A press on the option already chosen asks nothing of the service.
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
   await settle();
 
@@ -338,7 +301,6 @@ test("a refused Effort or Context says so under its own row until that row's nex
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
-  // Note that Low stands once the default the host lays after the save reaches the preferences' query, so High is a change again.
   await vi.waitFor(() =>
     assert.deepEqual(readSegmented(segmentedGroup(page, "Effort")).checked, ["Low"]),
   );
@@ -350,7 +312,6 @@ test("a refused Effort or Context says so under its own row until that row's nex
   await settle();
   const refusal = "The default could not be saved. Try again.";
   assert.deepEqual(fastRefused, []);
-  // Note that each row's line moves once its write's answer, and the default the host lays after a save, reach their queries.
   await vi.waitFor(() => assert.deepEqual([effort(), context()], [[refusal], [refusal]]));
   refuseWrite = false;
   act(() => segment(segmentedGroup(page, "Effort"), "High").click());
@@ -381,7 +342,6 @@ test("the model, Effort and Context rows each tick Saved once their write lands,
 
   act(() => segment(segmentedGroup(page, "Effort"), "Low").click());
   await settle();
-  // Note that each row ticks once the default the host lays after its write reaches the preferences' query.
   await vi.waitFor(() => assert.deepEqual(marks(), [[], ["Modified", "Saved"], []]));
 
   act(() => segment(segmentedGroup(page, "Context"), "200K").click());
@@ -427,7 +387,6 @@ test("on an OpenAI key alone, the GPT-6.1 Sol default the account never chose re
   );
 });
 
-/** The Fast row's words under its name, which describe its switch. */
 const fastNote = (page: HTMLElement) =>
   document.getElementById(fastSwitch(page).getAttribute("aria-describedby")?.split(" ")[0] ?? "") ??
   assert.fail("no Fast note");
@@ -527,14 +486,12 @@ test("replacing the account's own Anthropic key moves the models the host holds,
   act(() => field.form?.requestSubmit());
   await settle();
 
-  // Note that Fast turns once the models the host lays after the save reach their query.
   await vi.waitFor(() => assert.equal(fastSwitch(page).disabled, false));
 });
 
 test("a catalog that could not be read says so in the Default model menu with Retry, and Retry reads it again", async () => {
   refuseModels = true;
   const page = await mount();
-  // Note that the Default model row stands once the failed read reaches its query.
   const control = await vi.waitFor(
     () =>
       page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??

@@ -10,13 +10,6 @@ import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 
-/**
- * worker-mac.test.ts -- a worker runs as its agent does, so a command a
- * teammate's agent's worker ran on a Mac says it ran on the teammate's,
- * and the reader's own agent's worker's on the reader's. Synthetic
- * throughout.
- */
-
 const DEAN = "user-dean";
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
@@ -40,7 +33,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Where the worker's tab says its Mac command ran once its page is read, as `reader` sees it. */
 async function workerTabFor(reader: string): Promise<string> {
   pushedTranscripts(() => [
     {
@@ -91,7 +83,6 @@ async function workerTabFor(reader: string): Promise<string> {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   await settleQueries();
-  // The place's words, the owner's disc left out of them.
   const place = container.querySelector(".actor-words") ?? assert.fail("the row says whose Mac");
   const disc = place.querySelector(".actor-mark") ?? assert.fail("by the owner's disc");
   return (place.textContent ?? "").replace(disc.textContent ?? "", "");

@@ -70,54 +70,6 @@ import { PickerRow } from "./picker-row.js";
 import { type RowWrite, refusalToast, rowWrite } from "./row-write.js";
 import { SwitchRow } from "./switch-row.js";
 
-/**
- * agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on.
- *
- * The page opens on one line of what it is for, then the harnesses' rows,
- * each saying how Claude Code or Codex is connected and opening the dialog
- * that connects it with a plan or an API key (`agent-auth-section.tsx`),
- * then this file's Default model, then the page's schema rows. The
- * harnesses and the Default model share the one read of the keys, so a
- * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
- * on the service beside the settings preferences and written by this page
- * alone; the page draws it, and the models, from what the host holds for
- * the account (`account-choices.ts`), and until the page writes it, the
- * fallback the models mark as paid for (`agentDefaultOf`), which the host
- * moves on its own as a key saved or removed moves the models. The model row is the same picker every settings row uses,
- * searched because the catalog is long: each base model under the mark
- * of the harness that runs it, the newest first within each provider, every fast
- * and Ultrafast version folded into its model, the chosen one checked; a model no
- * subscription or API key of the account's pays for says "Connect Claude" or
- * "Connect Codex" at its end, and its pick lands on that harness's row above
- * rather than keeping it, and a default that is such a model, as a stored
- * Claude default is once no Claude credential pays for it, says it cannot
- * run under the row, with the same press. Under it a Fast
- * switch runs the model's fast version, resting where the model has none
- * or the service withholds it because Anthropic never granted the key's
- * organization fast mode, saying which, and on the account's own key with
- * a link to ask Anthropic for it; for a model nothing pays for, its press
- * lands on that harness's row as the pick's does, and writes nothing;
- * the stored id is the catalog's own, the fast version's where the switch
- * is on. For a model with an Ultrafast version a Speed row stands in Fast's
- * place, a segmented control over the speeds the model offers, Standard,
- * Fast, and Ultrafast, storing that version's id. The effort row is a segmented control over the efforts the chosen
- * model lists, and for a model that offers two context windows a context
- * row is one over the two, the whole window the default, saying what it
- * costs past the standard one; a change of model keeps the standard window
- * where the next model offers two. A write is one ask of the service, which
- * the host draws over the account's preferences on the press, so the rows
- * stay live while it is out; the model, Effort, and Context rows each write through
- * a mutation of their own (`row-write.ts`), so each says its own refusal under it and ticks Saved
- * once its write lands, and Modified while it differs from the fallback this
- * account would start on with none stored. Fast is a `SwitchRow` like every other settings switch, so its
- * refusal is said in a toast as the switch flips back. With no account signed in
- * there is no default to show, and the page says so.
- *
- * The group is `@repo/ui`'s `SettingsSection`, and Speed, Effort, and Context each
- * its `SettingsRow` holding the shared `ChoiceBar`, segmented.
- */
-
-/** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
   FAILED: "The default could not be read.",
   MODELS_NONE_MATCH: "No models match",
@@ -125,34 +77,24 @@ const PAGE_LINE = {
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
-/**
- * The rows that stand in the Default model group's place while it is read:
- * the model's picker over its note, Fast's switch over its own, and effort's
- * segments, which every model draws; context's stands only for a model with a
- * long window, so none stands for it.
- */
 const DEFAULT_SKELETON: readonly SettingsRowSkeletonShape[] = [
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.SWITCH] },
   { described: false, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
 ];
 
-/** The link under a resting Fast row that asks Anthropic for fast mode. */
 const FAST_ACCESS_WORD = "Request access";
 
-/** A default's write refused, in the page's words; one the service kept answers no failure. */
 function choiceRefused(answer: object): string | undefined {
   return "failure" in answer ? PAGE_LINE.WRITE_FAILED : undefined;
 }
 
-/** A row's write of the default, as its mutation stands, resting on it until answered. */
 function choiceWrite<Answer extends object>(
   mutation: UseMutationResult<Answer, Error, ModelChoice>,
 ): RowWrite<ModelChoice> {
   return rowWrite(mutation, { ask: (choice: ModelChoice) => choice, refused: choiceRefused });
 }
 
-/** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
   choice,
   models,
@@ -161,16 +103,11 @@ function DefaultRows({
   onRetryModels,
 }: {
   choice: ModelChoice;
-  /** The catalog, or nothing where it could not be read. */
   models: readonly CatalogModel[] | undefined;
-  /** How each provider the account holds a key of its own for last answered it. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
-  /** Whether a read of the catalog, asked for again after it failed, is out. */
   modelsRetrying: boolean;
-  /** Reads the catalog again: the failure's Retry. */
   onRetryModels: () => void;
 }): React.JSX.Element {
-  // Fast's switch says its own refusal in a toast, and each of the others words its own under its row and ticks Saved when its write lands, each on a mutation of its own.
   const modelWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
   const effortWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
   const speedWrite = choiceWrite(useMutation(actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE)));
@@ -180,10 +117,8 @@ function DefaultRows({
     onSettled: refusalToast(choiceRefused),
   });
   const listed = models?.find((model) => model.id === choice.model);
-  // Modified reads against the default this account would run on with none stored, as its credentials decide it.
   const fallback = agentFallbackChoice(models ?? []);
   const remedy = useRepositoryRemedy();
-  // A default nothing pays for says so under the model row, with the press that connects it.
   const unrunnable = models === undefined ? undefined : unrunnableChoice(models, choice);
   const note =
     unrunnable === undefined ? undefined : (
@@ -194,21 +129,17 @@ function DefaultRows({
         </TextButton>
       </>
     );
-  // The stored effort stands alone until the catalog is read, and where the catalog has
-  // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
   const efforts = offered.length === 0 ? [choice.effort] : offered;
   const read = readModelChoice(models ?? [], choice.model);
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
   const fastNote =
     base === undefined ? undefined : fastRestingNote(base.model.id, base, models ?? []);
-  // Only the account's own organization can ask for fast mode, so the link stands on its own key alone.
   const fastAskable = base?.model.fastNotEnabled === true && ownKeys.has(MODEL_PROVIDER.ANTHROPIC);
   const openLink = useOpenLink();
   const unsearched = unsearchedModels(models ?? [], read.base);
   const windows = contextWindowsOf(models ?? [], choice.model);
   const window = windowOf(models ?? [], choice);
-  /** The choice at a catalog id, at the stored effort where the model lists it, else its first, on the stored window where the model offers it. */
   const choiceAt = (modelId: string): ModelChoice =>
     choiceOn(
       models ?? [],
@@ -229,7 +160,6 @@ function DefaultRows({
   return (
     <>
       <PickerRow
-        // Note that the models are the service's catalog, the app's own words.
         replayUnmasked
         label="Default model"
         labelReplayUnmasked
@@ -270,16 +200,13 @@ function DefaultRows({
         }
         anchor={SETTINGS_SEARCH_ROW.AGENT_MODEL}
         onPick={(id) => {
-          // The pick keeps the speed chosen where the model has a version at it, and drops to standard where it has none.
           const picked = offeredModels(models ?? []).find((each) => each.model.id === id);
           if (picked === undefined) return;
-          // A model nothing pays for is never kept as the default: its pick goes to connect it.
           const missing = modelConnectFailure(picked.model);
           if (missing !== undefined) return remedy(missing)?.();
           modelWrite.run(choiceAt(choiceModelId(picked, read.speed)));
         }}
       />
-      {/* Speed in Fast's place where the model has an Ultrafast version. */}
       {base?.ultrafast !== undefined ? (
         <SettingsRow
           label={SPEED_LABEL}
@@ -299,7 +226,6 @@ function DefaultRows({
               look={CHOICE_BAR_LOOK.SEGMENTED}
               {...searchAnchorProps(SETTINGS_SEARCH_ROW.AGENT_FAST)}
               onChange={(speed) => {
-                // A model nothing pays for runs no faster: the press goes to connect it, as its pick does.
                 const missing = modelConnectFailure(base.model);
                 if (missing !== undefined) return remedy(missing)?.();
                 speedWrite.run(choiceAt(choiceModelId(base, speed)));
@@ -338,7 +264,6 @@ function DefaultRows({
           disabled={base?.fast === undefined}
           write={{
             ...fastWrite,
-            // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
             run: (fast) => {
               if (base === undefined) return;
               const missing = modelConnectFailure(base.model);
@@ -393,25 +318,17 @@ function DefaultRows({
   );
 }
 
-/**
- * The Default model group: the model, Fast, effort, and context rows, or why
- * they cannot be drawn, over the default and the models the host holds for
- * the account (`account-choices.ts`), which a key saved or removed moves on
- * its own, since the host asks the models again as the keys move.
- */
 function AgentsSection({
   signedIn,
   ownKeys,
 }: {
   signedIn: boolean;
-  /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them; nothing until they are read. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus> | undefined;
 }): React.JSX.Element {
   const drawn = useAgentDefault();
   const offered = useOfferedModels(signedIn);
   const models = offered.data?.models;
   const modelsFailed = offered.isError;
-  // Note that the catalog's Retry is out while its mutation is pending, which the menu says while it is.
   const { mutate: retryModels, isPending: modelsRetrying } = useMutation(modelsRetryMutation());
   const onRetryModels = useCallback(() => retryModels(), [retryModels]);
 
@@ -443,12 +360,6 @@ function AgentsSection({
   );
 }
 
-/**
- * The harnesses and the Default model group, over the keys the harnesses'
- * rows hold: Fast's link to ask Anthropic for fast mode stands on the account's
- * own key, so it reads them from the rows that change them rather than from
- * a read of its own that a save there would leave behind.
- */
 export function AgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {

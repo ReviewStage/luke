@@ -16,16 +16,6 @@ import { failureShown, installShownFailureReporter, type ShownFailure } from "./
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 
-/**
- * failure-report.test.ts -- a failure drawn in place, through `ErrorState`
- * as the panel hands it one, is reported once as it first stands: not again
- * as it is drawn anew or remounted, as a tab switched away and back, but
- * again for another failure, and again once it comes back after standing
- * unshown past the lapse. Its Copy details copies what its report sent. A
- * recording SDK stands in for Sentry. Synthetic throughout.
- */
-
-/** How long a failure no one shows stays the same one, as the panel keeps it. */
 const LAPSE_MS = 5 * 60 * 1000;
 
 const LINE = "Your tasks could not be read.";
@@ -41,7 +31,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `failure` in place, as a site of the panel draws one, or nothing. */
 function draw(failure: ShownFailure | undefined): void {
   if (root === undefined) {
     root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -56,7 +45,6 @@ function draw(failure: ShownFailure | undefined): void {
   act(() => root?.render(onRegistry(held, createElement("div", null, element))));
 }
 
-/** A read of a workspace's tasks that did not land, built afresh as a site builds it on each render. */
 function unreadTasks(): ShownFailure {
   return {
     surface: FAILURE_SURFACE.TASKS_READ,

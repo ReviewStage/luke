@@ -21,15 +21,6 @@ import {
   type WindowStanding,
 } from "./tab-switcher-model.js";
 
-/**
- * tab-switcher-model.test.ts -- ⌃Tab's order and its keys: whole screens
- * most recent first across every task, a task's screen named by both its
- * panes' tabs, a tab chosen by a press a stop of its own and one the window
- * chose by itself taking the stop in place, a tap flipping to the screen
- * before, a hold stepping on and back around the cards, and a let-go on the
- * screen here going nowhere.
- */
-
 const screen = (
   taskId: string,
   column?: MainTab,
@@ -45,12 +36,10 @@ const screen = (
 const inbox: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.INBOX };
 const automationsPage: Stop = { kind: STOP_KIND.PLACE, place: SWITCHER_PLACE.AUTOMATIONS };
 
-/** The stops visited in order, the last the most recent. */
 function walked(...stops: Stop[]): readonly Stop[] {
   return stops.reduce<readonly Stop[]>((kept, stop) => visited(kept, stop), []);
 }
 
-/** The switcher after each press, from let go. */
 function pressed(
   stops: readonly Stop[],
   here: Stop | undefined,

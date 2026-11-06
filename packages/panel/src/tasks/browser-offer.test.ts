@@ -20,17 +20,6 @@ import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
-/**
- * Where a Browser tab is offered: the side panel's "+" lists New browser tab
- * under Browser while the task has a coding agent, always in an agent's cloud browser: one agent's
- * at once, and with several, a submenu of whose, the one viewed first. A
- * pick lands on a draft, which opens nothing until its bar's Enter
- * (`cloud-browser-tab.test.ts`). With no agent, or only one on a Mac, which
- * runs no browser, the "+" offers none. A tab an agent's browser already
- * holds is offered there too, since the strip draws only the tabs opened in
- * this window. A synthetic plan and agents throughout.
- */
-
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
@@ -50,7 +39,6 @@ const SUMMARY: TaskSummary = {
   repository: TASK.repository,
 };
 
-/** A coding agent on the task, and a second beside it. */
 const AGENT: AgentSummary = {
   id: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
   planId: TASK.id,
@@ -82,7 +70,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the window's state, and the redraws it causes, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -90,7 +77,6 @@ async function settle(): Promise<void> {
   await settleQueries();
 }
 
-/** The plan drawn with its side panel open on its Comments, answering the tabs it was asked to show. */
 async function mount(
   agents: readonly AgentSummary[] = [],
   viewed?: string,
@@ -135,7 +121,6 @@ async function mount(
   return { chosen };
 }
 
-/** Opens the side panel's "+" and answers its rows under Browser. */
 async function browserRows(): Promise<HTMLElement[]> {
   const add = document.querySelector<HTMLButtonElement>(
     '.side-panel-tabs button[aria-label="Open a tab"]',
@@ -157,12 +142,10 @@ test("on a task with no coding agent, or only one on a Mac, the panel's + offers
   assert.deepEqual(await browserRows(), []);
 });
 
-/** The words of the rows under Browser. */
 function rowWords(rows: readonly HTMLElement[]): readonly (string | null | undefined)[] {
   return rows.map((row) => row.querySelector(".ui-combobox-option-label")?.textContent);
 }
 
-/** Whether a draft cloud Browser tab is among the tabs the panel was asked to show. */
 function landedOnDraft(chosen: readonly SidePanelTab[]): boolean {
   return chosen.some(
     (tab) => tab instanceof Object && "cloudBrowser" in tab && tab.cloudBrowser.length > 0,
@@ -189,7 +172,6 @@ test("on a task with one coding agent, the panel's + New browser tab drafts a ta
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 
-/** The choices of the submenu standing open beside a row of the "+". */
 function submenuChoices(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('.ui-searchable-menu-submenu [role="option"]')];
 }
@@ -208,7 +190,6 @@ test("on a task with several coding agents, the panel's + New browser tab opens 
   assert.deepEqual(rowWords(rows), ["New browser tab"]);
   const [row] = rows;
   assert.ok(row, "the one row");
-  // Choosing the row opens its submenu rather than a tab.
   await act(async () => row.click());
   await settle();
   assert.deepEqual(task.chosen, []);
@@ -221,7 +202,6 @@ test("on a task with several coding agents, the panel's + New browser tab opens 
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 
-/** A tab Invite emails' cloud browser holds, on a sign-in page. */
 const SIGN_IN = {
   id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
   agentId: OTHER_AGENT.id,
@@ -233,7 +213,6 @@ const SIGN_IN = {
   lastActedAt: 5,
 } as const;
 
-/** The host holding the agents' cloud browsers as holding `SIGN_IN`, as it lays them for the panel that holds them. */
 function listSignIn(): void {
   holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [SIGN_IN]);
 }

@@ -170,7 +170,6 @@ test("a file read and a search say the path and the pattern, and answer with the
   assert.equal(grep.subject, "invit");
   assert.deepEqual(grep.output, { kind: TOOL_BLOCK.TEXT, text: "a.ts:1: invite" });
 
-  // A search the tool cut short says so after its matches, so they are not read as all of them.
   const cut = toolCallView({
     tool: "grep",
     input: { pattern: "invit" },
@@ -243,7 +242,6 @@ test("a patch names the first file it touches and how many more, a moved file by
     text: "update apps/web/a.ts\nadd apps/web/b.ts",
   });
 
-  // A problem the patch reported is told after the files, not dropped.
   const flagged = toolCallView({
     tool: "apply_patch",
     input: { root: "/w", patchText },
@@ -274,7 +272,6 @@ test("a tool this build does not know is named as it is, with its input and answ
     kind: TOOL_BLOCK.JSON,
     text: '{\n  "url": "https://github.com/acme/relay/pull/7"\n}',
   });
-  // An answer that is already words is shown as they are.
   assert.deepEqual(toolCallView({ tool: "gh", input: undefined, output: "done" }).output, {
     kind: TOOL_BLOCK.JSON,
     text: "done",

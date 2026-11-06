@@ -19,14 +19,6 @@ import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
-/**
- * subagent-tab.test.ts -- a worker's tab folds its calls as its agent's
- * tab does: a run of calls under one line while the worker works, and a
- * finished run's lead under one line ahead of its last words. Its rows open
- * and hang what an agent's rows do, and a worker of its own, which has no
- * tab, folds open on its task. Synthetic throughout.
- */
-
 const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -46,7 +38,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** One stored tool part, answered where `output` is given and still running where not. */
 function toolPart(tool: string, callId: string, input: WireRecord, output?: WireRecord) {
   return {
     type: `tool-${tool}`,
@@ -57,14 +48,12 @@ function toolPart(tool: string, callId: string, input: WireRecord, output?: Wire
   };
 }
 
-/** Another agent on the task, which a worker's call may be about. */
 const TEAMMATE: AgentSummary = {
   ...AGENT,
   id: "3f9d2b7e-6a41-4c58-9e0d-2b8c5a1f7d64",
   title: "Invoice export",
 };
 
-/** The worker's tab once its one page is read, the worker standing at `status`, opening what its rows name through `opens` where handed. */
 async function workerTab(
   status: AgentStatus,
   parts: readonly WireRecord[],
@@ -138,7 +127,6 @@ async function workerTab(
   return container;
 }
 
-/** The words of every call's row drawn in the tab, open folds and all. */
 function callRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll("[data-turn-fold] summary")]
     .slice(1)
@@ -296,7 +284,6 @@ test("a worker's tab whose earlier messages could not be read says so over its l
     ),
   );
   await settle();
-  // A log its lines do not fill asks for the earlier ones at once.
   assert.equal(asked.length, 1);
   assert.ok(container.textContent?.includes("Earlier messages could not be read."));
   const retry = [...container.querySelectorAll("button")].find((button) =>

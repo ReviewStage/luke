@@ -87,23 +87,6 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { ToastHost } from "../toast.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 
-/**
- * Settings' Workspace page over a bridge answering as the host would: it
- * shows the workspace the sidebar lists, with no picker of its own, and the
- * account's role in it, an owner or an admin renames
- * it in place and uploads or removes its photo while a member is offered
- * neither, a team workspace's members
- * are read and listed, the page holding itself back while they are, an
- * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
- * a member leaves, a refusal the role earns says so, an owner or admin
- * invites addresses as a role from Members' Invite and copies or cancels
- * what is pending, and
- * every workspace's GitHub group, the first one's too, holds GitHub:
- * an owner's or an admin's to connect, or to manage on GitHub from its one
- * button once connected, its accounts listed under it, and a member's to
- * read. Synthetic accounts.
- */
-
 const OWNER: WorkspaceMember = {
   userId: "user-dana",
   name: "Dana",
@@ -118,7 +101,6 @@ const MEMBER: WorkspaceMember = {
   pictureUrl: "https://lh3.googleusercontent.com/a/photo-7",
 };
 
-/** The account reading the page: Dana, the owner. */
 const READER_ID = OWNER.userId;
 
 const ACME: Workspace = {
@@ -137,61 +119,35 @@ const FIRST: Workspace = {
   personal: true,
 };
 
-/** The members the test's service holds. */
 let stored: WorkspaceMember[] = [];
-/** Every act the section sent, in order. */
 let sent: Asked[] = [];
-/** Whether the service refuses to read the invitations. */
 let refuseInvitationsRead = false;
-/** Whether the service refuses to read the members. */
 let refuseMembersRead = false;
-/** Lays each workspace's people on the window's document, as the host does once the page holds them. */
 let deliverPeople: HostReadsHanded["deliverMembers"] = () => undefined;
-/** Each workspace's people the host holds for the window, as last laid. */
 let people: AppWorkspaceMembers = NO_KEYS_HELD;
-/** Lays each workspace's pending invitations on the window's document, as the host does once the page holds them. */
 let deliverInvitations: HostReadsHanded["deliverInvitations"] = () => undefined;
-/** Each workspace's pending invitations the host holds for the window, as last laid. */
 let heldInvitations: AppWorkspaceInvitations = NO_KEYS_HELD;
-/** Whether the service refuses the next removal for the account's role. */
 let refuseRemoval = false;
-/** The invitations the test's service holds pending. */
 let invitations: WorkspaceInvitation[] = [];
-/** The addresses the service refuses as already invited. */
 let alreadyInvited: string[] = [];
-/** Whether the browser could not be opened on GitHub's page. */
 let refuseGitHubOpen = false;
-/** The workspace's Sentry on a deployment that holds no Sentry integration, which every test reads unless it says otherwise. */
 const SENTRY_NOT_SET_UP: WorkspaceSentry = { configured: false, installations: [] };
-/** The workspace's Sentry as the service holds it; none where the host's read of it fails. */
 let sentry: WorkspaceSentry | undefined = SENTRY_NOT_SET_UP;
-/** The workspace's Slack bot as the fake service holds it; unset, it holds none. */
 let slackBot: WorkspaceSlackBot = { configured: false };
-/** Lays each workspace's integrations on the window's document, as the host does once the page holds them. */
 let deliverIntegrations: HostReadsHanded["deliverIntegrations"] = () => undefined;
-/** Each workspace's integrations the host holds for the window, as last laid. */
 let integrations: AppWorkspaceIntegrations = NO_KEYS_HELD;
-/** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
-/** Whether the service refuses a photo for the account's role. */
 let refusePhoto = false;
-/** Whether the service refuses a role change for the account's role. */
 let refuseRole = false;
-/** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
-/** What the listing says each installation was given; absent, as from a service older than it. */
 let listedInstallations: GitHubRepositoriesAnswer["installations"];
-/** Whether the workspace's repositories' read never answers, as one still out on the wire. */
 let repositoriesReadHeld = false;
-/** Whether the workspace's repositories' read is refused rather than answered. */
 let repositoriesReadFails = false;
-/** A repository as the picker's listing answers it, by its full name and what reaches it. */
 function listedRepository(fullName: string, access: GitHubAccess) {
   const [owner = "", name = ""] = fullName.split("/");
   return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
 }
 
-/** The repositories the workspace's picker lists, as the service answers them: the App's, and the reader's token's as addable, or among them from a service older than `addable`. */
 function listing(): RepositoriesRead | undefined {
   if (repositoriesReadHeld) return undefined;
   if (repositoriesReadFails) return { failure: TASK_CALL_FAILURE.UNANSWERED };
@@ -219,7 +175,6 @@ function listing(): RepositoriesRead | undefined {
   };
 }
 
-/** A token the reader saved, as the token's read answers it. */
 const SAVED_TOKEN = {
   login: "octo-member",
   hint: "ghp_…wxyz",
@@ -229,25 +184,16 @@ const SAVED_TOKEN = {
   expiresAt: null,
 };
 
-/** The repositories the reader's own token may push to that the picker's listing answers as addable, by full name. */
 let tokenReach: string[] = [];
-/** Whether the listing answers as a service older than `addable`, the token's repositories among its own. */
 let beforeAddable = false;
-/** The repositories members added to the workspace on their tokens, as the service lists them to the reader. */
 let tokenRepositories: WorkspaceTokenRepository[] = [];
-/** While set, the token repositories' read waits on it before answering what it read. */
 let tokenReadHeld: Promise<void> | undefined;
-/** Whether the token repositories' read is refused rather than answered. */
 let tokenReadFails = false;
-/** Whether the reader has a GitHub token saved, as the host holds it. */
 let tokenSaved = true;
-/** Each workspace's token repositories as the host holds them for the window. */
 let heldTokenRepositories: AppTokenRepositories = NO_KEYS_HELD;
 let deliverTokenRepositories: HostReadsHanded["deliverTokenRepositories"] = () => undefined;
-/** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
-/** One automation of the workspace's, named and the reader's or not, as the list answers it. */
 function automationOf(
   { name, mine }: { name: string; mine?: boolean },
   at: number,
@@ -270,18 +216,14 @@ function automationOf(
   return mine === undefined ? summary : { ...summary, mine };
 }
 
-/** One ask of the window on its act port. */
 type Asked = AnyAct;
 
-/** Any answer a kind gives. */
 type AnswerValue = PortActResult<PortActKind>;
 
-/** What the fake host answers an ask with. */
 type Answered = FakeActAnswer;
 
 const done = (value: AnswerValue): Answered => ({ status: FAKE_ANSWER.DONE, value });
 
-/** Lays a workspace's people on the window's document as the service holds them, or as refused where it refuses them. */
 function layPeople(workspaceId: string): void {
   people = {
     ...people,
@@ -290,7 +232,6 @@ function layPeople(workspaceId: string): void {
   deliverPeople(people);
 }
 
-/** The Slack bot as the workspace's held read carries it: its team, its default repository, and each channel's. */
 function slackOf(bot: WorkspaceSlackBot): WorkspaceSlack {
   const { configured, team, defaultRepository, channels = [] } = bot;
   return {
@@ -305,7 +246,6 @@ function slackOf(bot: WorkspaceSlackBot): WorkspaceSlack {
   };
 }
 
-/** Lays a workspace's integrations on the window's document as the service holds them, or as failed where the host's read of them fails. */
 function layIntegrations(workspaceId: string): void {
   integrations = {
     ...integrations,
@@ -315,7 +255,6 @@ function layIntegrations(workspaceId: string): void {
   deliverIntegrations(integrations);
 }
 
-/** Lays a workspace's pending invitations on the window's document as the service holds them, or as refused where it refuses them. */
 function layInvitations(workspaceId: string): void {
   heldInvitations = {
     ...heldInvitations,
@@ -324,7 +263,6 @@ function layInvitations(workspaceId: string): void {
   deliverInvitations(heldInvitations);
 }
 
-/** Lays a workspace's token repositories on the window's document as the host holds them: as the service lists them, or failed where it refused them. */
 function layTokenRepositories(workspaceId: string, refused = tokenReadFails): void {
   heldTokenRepositories = {
     ...heldTokenRepositories,
@@ -333,7 +271,6 @@ function layTokenRepositories(workspaceId: string, refused = tokenReadFails): vo
   deliverTokenRepositories(heldTokenRepositories);
 }
 
-/** The bridge, answering the section's acts the way the host would, a member or invitation write drawn on the document from its answer. */
 function answer(request: Asked): Promise<Answered> {
   sent.push(request);
   switch (request.kind) {
@@ -380,7 +317,6 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
       return Promise.resolve(done(undefined));
-    // Note that the host draws each write over the workspace's held integrations, so the window reads it there.
     case ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT:
       slackBot = { configured: true, team: SLACK_TEAM, notifications: true };
       layIntegrations(request.payload.workspaceId);
@@ -474,10 +410,8 @@ function answer(request: Asked): Promise<Answered> {
   }
 }
 
-/** One kind on the act port, answered by `answer`, a refusal as the port's declared error. */
 function onPort(kind: PortActKind) {
   return async (payload: PortActPayload<PortActKind>) => {
-    // SAFETY: the port hands each procedure the payload its own kind takes.
     const outcome = await answer({ kind, payload } as Asked);
     if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
     throw refusedOnPort(
@@ -486,14 +420,12 @@ function onPort(kind: PortActKind) {
   };
 }
 
-/** The act port answering every workspace and task kind, as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
   const kinds: readonly PortActKind[] = [
     ...Object.values(TASKS_ACT_KIND),
     ...Object.values(WORKSPACE_ACT_KIND),
   ];
   const procedures = kinds.map((kind) => [kind, onPort(kind)]);
-  // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }
 
@@ -527,11 +459,9 @@ beforeEach(() => {
   tokenReadFails = false;
   tokenSaved = true;
   heldTokenRepositories = NO_KEYS_HELD;
-  // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   fakeActPort({
     ...workspacePort(),
-    // Note that the host lays what it read once the hold is taken, never inside it.
     [ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: (input) => {
       sent.push({ kind: ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, payload: input });
       void Promise.resolve().then(() => layPeople(input.workspaceId));
@@ -546,7 +476,6 @@ beforeEach(() => {
       void Promise.resolve().then(() => layInvitations(input.workspaceId));
       return quietHold();
     },
-    // Note that the token repositories' read waits where the test holds it, as one still out on the wire.
     [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: (input) => {
       sent.push({ kind: ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, payload: input });
       const held = tokenReadHeld;
@@ -564,7 +493,6 @@ beforeEach(() => {
   deliverIntegrations = reads.deliverIntegrations;
   deliverInvitations = reads.deliverInvitations;
   deliverTokenRepositories = reads.deliverTokenRepositories;
-  // Note that a workspace's automations are laid as the leave holds them, where the test names any.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () =>
       automations === undefined ? undefined : { rows: automations.map(automationOf) },
@@ -587,7 +515,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The page over `workspace` listed beside the account's first one, or as it, and how often a leave asked to fall back. */
 async function mount(
   workspace: Workspace,
   others: readonly Workspace[] = [],
@@ -636,20 +563,17 @@ async function mount(
       ),
     );
   };
-  // Each page holds its own atoms, so a toast one test raised is not the next one's.
   const registry = AtomRegistry.make();
   registries.push(registry);
   render(workspace.id);
   await settle();
   await peopleLanded(container);
-  /** Stands the page again over another workspace, as the sidebar listing it does. */
   const relist = async (next: Workspace) => {
     workspaces.push(next);
     render(next.id);
     await settle();
     await peopleLanded(container);
   };
-  /** Stands the page again over the workspace as the window's list now says it, as a list read after a change elsewhere does. */
   const restand = async (next: Workspace) => {
     workspaces.splice(
       workspaces.findIndex((each) => each.id === next.id),
@@ -671,39 +595,31 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
-/** Every row of the page, the shared row and the window's own alike. */
 const ROWS = ".settings-row, .ui-settings-row";
 
-/** What a row names: the shared row's label, or the window's own row's first words. */
 const nameOf = (row: Element) =>
   row.matches(".ui-settings-row")
     ? row.querySelector('[id$="label"]')?.textContent
     : row.querySelector("strong")?.firstChild?.textContent;
 
-/** The page's row naming `name`, the reader's own beside its You. */
 const rowNamed = (page: HTMLElement, name: string) =>
   [...page.querySelectorAll<HTMLElement>(ROWS)].find((row) => nameOf(row) === name) ??
   assert.fail(`no ${name} row`);
 
-/** The Members row naming `name`, the reader's own beside its You. */
 const memberNamed = (page: HTMLElement, name: string) =>
   [...page.querySelectorAll<HTMLElement>(".menu-row")].find(
     (row) => row.querySelector(".actor-card-name")?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} member`);
 
-/** A member row's line under the name: their email. */
 const emailOf = (row: HTMLElement) => row.querySelector("p")?.textContent;
 
-/** The rows of the invitations still pending, by the line each wears. */
 const invitationRows = (page: HTMLElement) =>
   [...page.querySelectorAll<HTMLElement>(".menu-row")].filter((row) =>
     row.querySelector("p")?.textContent?.startsWith("Invited as "),
   );
 
-/** A pending invitation's address, its row's label. */
 const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .ui-one-line');
 
-/** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
   const ellipsis = row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
   if (ellipsis === null) return [];
@@ -715,7 +631,6 @@ function rowActions(row: HTMLElement): string[] {
   return items;
 }
 
-/** Chooses `label` from the ⋯ on `row`, or presses its button of that name where the row's one act stands alone. */
 async function chooseAction(row: HTMLElement, label: string): Promise<void> {
   const lone = row.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
   if (lone !== null) {
@@ -735,12 +650,10 @@ async function chooseAction(row: HTMLElement, label: string): Promise<void> {
   await settle();
 }
 
-/** The confirm dialog a press raised. */
 function dialog(): HTMLElement {
   return document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
 }
 
-/** Types `words` into the standing question's gate, as a reader typing the subject's name does. */
 function typeGate(words: string): void {
   const field = dialog().querySelector<HTMLInputElement>("input") ?? assert.fail("no gate");
   act(() => {
@@ -749,31 +662,25 @@ function typeGate(words: string): void {
   });
 }
 
-/** Answers the standing question with its dangerous answer. */
 async function confirm(verb: string): Promise<void> {
   act(() => button(dialog(), verb).click());
   await settle();
 }
 
-/** The page's first row: the workspace's tile, name, and line, its Rename, and its ⋯. */
 const identity = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(".menu-row") ?? assert.fail("no identity row");
 
-/** What a row says its last act was refused with, in its error line, or nothing while that is empty. */
 const refusalOf = (within: Element) =>
   [...within.querySelectorAll('[data-slot="field-error"]')]
     .map((each) => each.textContent)
     .find((words) => words !== null && words !== "");
 
-/** Whether anything drawn is busy, as a placeholder standing for a read still out is. */
 const busy = (container: HTMLElement) => container.querySelector('[aria-busy="true"]') !== null;
 
-/** The page's group a Settings link names by `anchor`. */
 const section = (page: HTMLElement, anchor: string) =>
   page.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${anchor}"]`) ??
   assert.fail(`no ${anchor} group`);
 
-/** Waits until the members the host laid, or their refusal, reach their query, as the page draws them a tick after they land. */
 const peopleLanded = (page: HTMLElement) =>
   vi.waitFor(() => {
     const members = page.querySelector(
@@ -782,7 +689,6 @@ const peopleLanded = (page: HTMLElement) =>
     assert.equal(members === null || placeholderOf(members) === undefined, true);
   });
 
-/** The placeholder standing for a read still out, what it says it reads, and how many rows it stands. */
 const placeholderOf = (within: Element) => {
   const status = within.querySelector('[role="status"][aria-busy="true"]');
   return status === null
@@ -790,24 +696,19 @@ const placeholderOf = (within: Element) => {
     : [status.textContent, status.querySelectorAll(".ui-settings-row").length];
 };
 
-/** The boxes the first settings row in `within` is built of, in order, its words and blocks aside. */
 const rowBoxes = (within: Element) =>
   [...(within.querySelector(".ui-settings-row")?.querySelectorAll("[class]") ?? [])]
     .map((element) => element.getAttribute("class") ?? "")
     .filter((name) => name.startsWith("ui-settings-row"));
 
-/** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
 
-/** Who shares the workspace, as the identity row's line says it, or nothing where it draws no line. */
 const sharedLine = (page: HTMLElement) =>
   identity(page).querySelector('[id$="description"]')?.textContent;
 
-/** The renames the page asked for, by their payloads. */
 const renames = () =>
   sent.flatMap((request) => (request.kind === ACT_KIND.WORKSPACE_RENAME ? [request.payload] : []));
 
-/** Opens the name's field with Rename, types `typed` over the name, and ends the edit with `key`. */
 async function renameTo(page: HTMLElement, typed: string, key: string): Promise<void> {
   act(() => button(identity(page), "Rename").click());
   const field =
@@ -830,8 +731,6 @@ test("an owner renames the workspace in place with its ends trimmed, and Escape 
 
   assert.deepEqual(renames(), [{ workspaceId: ACME.id, name: "Acme Labs" }]);
   assert.equal(page.querySelector('input[aria-label="Workspace name"]') === null, true);
-  // Note that the elements are compared as a yes or no, because a failure's
-  // diff of two would print the whole document.
   assert.equal(document.activeElement === button(identity(page), "Rename"), true);
 });
 
@@ -877,7 +776,6 @@ test("a personal workspace shows its owner's name with no Rename to its owner an
   assert.equal(buttons(team.page, "Rename").length, 1);
 });
 
-/** The slugs the page sent, by their payloads. */
 const slugs = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.WORKSPACE_SLUG_SET ? [request.payload] : [],
@@ -908,13 +806,11 @@ test("the owner's Change slug opens on the slug as it stands, says what is wrong
   assert.deepEqual(slugs(), [{ workspaceId: ACME.id, slug: "acme-labs" }]);
 });
 
-/** The photos the page sent, by their payloads. */
 const photos = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.WORKSPACE_PHOTO_SET ? [request.payload] : [],
   );
 
-/** Lets the encoder's file read, which jsdom answers on the next turn, land. */
 async function drain(): Promise<void> {
   for (let turn = 0; turn < 4; turn += 1) {
     await act(async () => {
@@ -924,18 +820,15 @@ async function drain(): Promise<void> {
   await settle();
 }
 
-/** The identity row's tile, the press that picks the photo or offers Replace and Remove; none for a reader who manages nothing. */
 function photoTile(page: HTMLElement): HTMLButtonElement | null {
   return identity(page).querySelector<HTMLButtonElement>('button[aria-label$="photo"]');
 }
 
-/** The items the tile's menu offers once pressed, by their words. */
 function tileMenu(page: HTMLElement): HTMLElement[] {
   act(() => photoTile(page)?.click());
   return [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
 }
 
-/** Picks `file` in the identity row's hidden picker, as the tile's press opens it. */
 async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
   const picker =
     identity(page).querySelector<HTMLInputElement>('input[type="file"]') ??
@@ -992,7 +885,6 @@ test("a photo the service refuses, a file that is no PNG, JPEG, or WebP, and a p
 });
 
 test("the tile stands still while an upload is under way, so the upload cannot put a removed photo back", async () => {
-  // The picked image is still being drawn: the encoder's bitmap never arrives.
   vi.stubGlobal("createImageBitmap", () => new Promise(() => undefined));
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
   await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
@@ -1011,7 +903,6 @@ test("Remove photo, offered on the tile only where a photo is set, asks first an
   act(() => remove?.click());
   await settle();
   assert.deepEqual(photos(), []);
-  // The confirm repeats the menu's verb and says in one line what goes, with no ellipsis.
   assert.match(
     dialog().textContent ?? "",
     /The photo is deleted, and the workspace is marked by its first letter instead\./u,
@@ -1052,14 +943,12 @@ test("the chosen team workspace's members are listed with their email and role, 
   assert.deepEqual(rowActions(memberNamed(page, "Sam")), []);
 });
 
-/** Lays `words` out narrower than they run, as a row too narrow for an address does, and tells the window. */
 function cutShort(words: Element): void {
   Object.defineProperty(words, "scrollWidth", { configurable: true, value: 320 });
   Object.defineProperty(words, "clientWidth", { configurable: true, value: 180 });
   act(() => relayout());
 }
 
-/** The pill the pointer resting on `words` raises, or nothing where it raises none. */
 function pillOver(words: Element): string | undefined {
   restOn(words);
   const pill = document.querySelector('[role="tooltip"]:not([inert])')?.textContent ?? undefined;
@@ -1072,7 +961,6 @@ test("a member's address and an invited one, where the row cuts them short, are 
   stored = [OWNER, { ...MEMBER, email: LONG }];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
-  // Note that the invitation is listed once the invitations the host lays reach their query.
   const invited = await vi.waitFor(
     () => invitationRows(page)[0] ?? assert.fail("no pending invitation"),
   );
@@ -1098,7 +986,6 @@ test("each member's row leads with their face, their picture where the read list
   );
   assert.equal(dana.querySelector(".actor-you")?.textContent, "You");
   assert.equal(sam.querySelector(".actor-you"), null);
-  // The person card's wrapper holds the name and You together, which is what stands the badge off the name.
   assert.equal(
     dana.querySelector(".actor-card-name")?.textContent,
     "DanaYou",
@@ -1152,7 +1039,6 @@ test("while the members are being read the rest of the page stands, a placeholde
   await settle();
   await vi.waitFor(() => memberNamed(container, "Sam"));
   assert.equal(busy(container), false);
-  // A member's placeholder stood in the boxes of the row that landed: its face, its email, its role.
   assert.deepEqual(placeholderBoxes, rowBoxes(section(container, SETTINGS_SECTION.MEMBERS)));
 });
 
@@ -1177,7 +1063,6 @@ test("before the workspaces are read, placeholder sections stand in the page's s
     ),
   );
 
-  // The identity unheaded, the members, and a row to each integration the page draws.
   const sections = [...container.querySelectorAll('[role="status"] .ui-settings-section')].map(
     (group) => [
       group.querySelector(".ui-settings-section-head") !== null,
@@ -1198,7 +1083,6 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   assert.deepEqual(rowActions(memberNamed(page, "Dana")), []);
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
-  // The confirm names the kind it removes, a member.
   await confirm("Remove member");
 
   assert.equal(askedFirst, true);
@@ -1249,7 +1133,6 @@ test("an admin is offered no Remove on another admin, and the owner is, as the s
   ]);
 });
 
-/** The role changes and handovers the page asked for, by kind and payload. */
 const roleSent = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.WORKSPACE_MEMBER_ROLE || request.kind === ACT_KIND.WORKSPACE_TRANSFER
@@ -1257,7 +1140,6 @@ const roleSent = () =>
       : [],
   );
 
-/** An admin of the workspace beside the owner and a member. */
 const ADMIN_OLA: WorkspaceMember = {
   userId: "user-ola",
   name: "Ola",
@@ -1335,13 +1217,11 @@ test("an admin is offered no role change, and a role change the service refuses 
   assert.equal(refusalOf(memberNamed(asOwner.page, "Sam")), WORKSPACE_NOT_PERMITTED_REFUSAL);
 });
 
-/** The page's last group, the way out of the workspace, where it draws one. */
 const leaveGroup = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.LEAVE}"]`,
   );
 
-/** What the leave group's one row says under its name. */
 const leaveLine = (group: HTMLElement) =>
   rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
@@ -1407,13 +1287,11 @@ test("the owner with no admin is told to make one first and offered no handover,
 
 test("the leave names the automations the reader made where the service says whose they are, and leaves them out where none is the reader's", async () => {
   const UNSAID = "Automations you created stop running.";
-  /** The leave dialog's lines for the automations the workspace holds, once `read` says the automations the host laid reached them. */
   const linesFor = async (
     held: { name: string; mine?: boolean }[],
     read: (lines: readonly (string | null)[]) => boolean,
   ) => {
     automations = held;
-    // Note that each world reads its own automations, never those the last one's page left cached.
     startQueriesAfresh();
     const { page } = await mount(ACME);
     act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
@@ -1461,7 +1339,6 @@ test("the members the host lays on the document are drawn with nothing asked aga
   ).length;
   act(() => deliverPeople({ [ACME.id]: { rows: { members: [OWNER, ADMIN_OLA, MEMBER] } } }));
   await settle();
-  // Note that Transfer ownership is offered once the members laid reach their query.
   const transfer = await vi.waitFor(() =>
     button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership"),
   );
@@ -1482,7 +1359,6 @@ test("the members the host lays on the document are drawn with nothing asked aga
 });
 
 test("an admin's leave says the invitations they sent stay valid, and a member's, who sends none, says nothing of them", async () => {
-  /** The leave dialog's lines for a reader of `role`. */
   const linesAs = async (role: Workspace["role"]) => {
     const { page } = await mount({ ...ACME, role });
     act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
@@ -1507,7 +1383,6 @@ test("an admin's leave says the invitations they sent stay valid, and a member's
 test("a removal the account's role does not allow says so in a toast", async () => {
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  // A press's refusal is said on the window's own toasts, which the page's registry does not hold.
   const toasts = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(toasts);
   act(() => toasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
@@ -1575,7 +1450,6 @@ const CONNECTED: Workspace = {
   githubInstallations: [{ installationId: 11, login: "acme-org", active: true }],
 };
 
-/** A workspace holding two GitHub accounts, the first linked first, the second suspended. */
 const SEVERAL: Workspace = {
   ...CONNECTED,
   githubInstallations: [
@@ -1584,13 +1458,11 @@ const SEVERAL: Workspace = {
   ],
 };
 
-/** The Workspace page's GitHub group, found by the anchor its links have always named. */
 const githubGroup = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.GITHUB_REPOSITORIES}"]`,
   ) ?? assert.fail("no GitHub group");
 
-/** What a row says: its name, and the line under it, its facts read apart by one space whatever joins or separates them. */
 const rowWords = (row: HTMLElement) => [
   nameOf(row),
   (row.matches(".ui-settings-row")
@@ -1601,22 +1473,18 @@ const rowWords = (row: HTMLElement) => [
     .trim(),
 ];
 
-/** What every row of the Integrations group says, in order. */
 const integrationRows = (page: HTMLElement) =>
   [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)]
     .filter((row) => row.closest("[hidden]") === null)
     .map(rowWords);
 
-/** The chevrons folding an integration's own rows under its row. */
 const FOLD = { GITHUB: "GitHub accounts", SLACK_BOT: "Slack settings" } as const;
 
-/** The words of every button a row draws, bar the chevron folding its rows. */
 const rowButtons = (row: HTMLElement) =>
   [...row.querySelectorAll("button")]
     .filter((each) => !Object.values<string | null>(FOLD).includes(each.getAttribute("aria-label")))
     .map((each) => each.textContent);
 
-/** Opens the rows an integration's row folds under it, which start closed. */
 function unfold(page: HTMLElement, label: string): void {
   const chevron =
     page.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ??
@@ -1625,12 +1493,10 @@ function unfold(page: HTMLElement, label: string): void {
   act(() => chevron.click());
 }
 
-/** The row's ⋯, which opens its menu. */
 const ellipsisOn = (row: HTMLElement) =>
   row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
   assert.fail("the row draws no ⋯");
 
-/** The connects and disconnects sent, by their payloads. */
 const githubSent = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT ||
@@ -1639,7 +1505,6 @@ const githubSent = () =>
       : [],
   );
 
-/** The words GitHub's row says once an account is connected, as every integration's does. */
 const MANAGED_ON_GITHUB = "Connected";
 
 test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
@@ -1686,11 +1551,9 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
   }
 });
 
-/** What each line folded open under an account's row says. */
 const foldLines = (row: HTMLElement) =>
   [...row.querySelectorAll("li")].map((line) => line.textContent);
 
-/** The chevron that folds an account's repositories open under its row. */
 const foldOn = (row: HTMLElement) =>
   row.querySelector<HTMLButtonElement>('button[aria-label$="repositories"]') ??
   assert.fail("no fold");
@@ -1832,7 +1695,6 @@ test("a GitHub page the browser could not open is said under the row, from Manag
 });
 
 test("an owner or an admin of a workspace with no GitHub, or none still active, is offered Connect beside Add repository, which opens the same connect", async () => {
-  // Note that the admin's workspace holds one installation GitHub suspended or removed, which counts as none.
   const inactive = [{ installationId: 12, login: "acme-labs", active: false }];
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const installations = role === WORKSPACE_ROLE.ADMIN ? inactive : [];
@@ -1900,7 +1762,6 @@ test("the repositories members added on their tokens stand by owner after the Ap
 
   await chooseAction(rowNamed(group, "acme"), "Remove relay");
   const asked = sent.some((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET);
-  // The repository goes for every member's agents, so its removal asks first, in the accent.
   act(() => button(dialog(), "Remove repository").click());
   await settle();
 
@@ -1985,7 +1846,6 @@ test("with a token saved and nothing left to add, Add repository still says ther
   assert.match(document.querySelector('[role="dialog"]')?.textContent ?? "", /No repositories/u);
 });
 
-/** A picker option's name and its muted owner, as the repository chip's menu draws a repository. */
 function optionWords(option: Element): (string | null | undefined)[] {
   return [".ui-combobox-option-label", ".ui-combobox-option-detail"].map(
     (part) => option.querySelector(part)?.textContent,
@@ -2033,7 +1893,6 @@ test("the token repositories say Reading while they are read, and a refused read
   const reading = page.textContent?.includes("Reading token repositories");
   release();
   await settle();
-  // Note that the refusal is said once it reaches the read's query.
   await vi.waitFor(() =>
     assert.equal(page.textContent?.includes("The token repositories could not be read."), true),
   );
@@ -2082,33 +1941,24 @@ test("the page has no workspace picker of its own, and shows another workspace, 
   );
 });
 
-/** The Invite card standing over the page. */
 function inviteDialog(): HTMLElement {
   return document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("no Invite card");
 }
 
-/** The Invite card's address field. */
 const addressField = () =>
   inviteDialog().querySelector<HTMLInputElement>("input") ?? assert.fail("no address field");
 
-/** The Invite card's act, whatever count it names. */
 const inviteAct = () =>
   [...inviteDialog().querySelectorAll<HTMLButtonElement>("button")].find((each) =>
     each.textContent?.startsWith("Invite"),
   ) ?? assert.fail("no Invite act");
 
-/** The Invite card's roles, each its name and whether it is checked; none where the card offers no role. */
 const roleOptions = () =>
   [...inviteDialog().querySelectorAll<HTMLElement>('[role="radio"]')].map((each) => [
     each.textContent,
     each.getAttribute("aria-checked"),
   ]);
 
-/**
- * Opens Members' Invite where its card is not already standing, types
- * `addresses`, chooses `role` where the card offers one, and presses the
- * card's act, as many times as asked before any answer.
- */
 async function invite(
   page: HTMLElement,
   addresses: string,
@@ -2121,7 +1971,6 @@ async function invite(
   }
   const field = addressField();
   act(() => {
-    // React reads a typed value off the element's own setter, as a keystroke sets it.
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
       field,
       addresses,
@@ -2138,7 +1987,6 @@ async function invite(
   await settle();
 }
 
-/** The addresses the page has invited, in the order sent. */
 const invitedAddresses = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.email] : [],
@@ -2358,7 +2206,6 @@ test("each pending invitation's Cancel invitation stands in a group named by its
 test("Invite pressed again while one is on its way sends one invitation", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  // The second press lands before the first answer: the card refuses it.
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER, 2);
 
   assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
@@ -2374,7 +2221,6 @@ test("an address already invited is said in the Invite card, and a member is off
   await settle();
   assert.equal(said, ALREADY_INVITED_REFUSAL);
   assert.deepEqual(invitationRows(admin.page), []);
-  // Note that the admin's page goes before the member's is drawn, since a second page's subscription would follow the admin's invitations again.
   for (const root of roots.splice(0)) act(() => root.unmount());
   const follows = () =>
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW).length;
@@ -2469,7 +2315,6 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   );
 });
 
-/** The workspace Sentry installs and disconnects sent, by their payloads. */
 const sentrySent = () =>
   sent.flatMap((request) =>
     request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL ||
@@ -2483,7 +2328,6 @@ const SENTRY_INSTALLED: WorkspaceSentry = {
   installations: [{ installationId: "installation-1", account: "acme" }],
 };
 
-/** The line a Sentry read that did not land draws in the row's place, with Retry. */
 const sentryFailure = (page: HTMLElement) =>
   [...githubGroup(page).querySelectorAll('[role="alert"]')].find(
     (each) => each.textContent === "The workspace's Sentry could not be read.Retry",
@@ -2493,7 +2337,6 @@ test("a Disconnect still being asked is dismissed once the read finds its instal
   sentry = SENTRY_INSTALLED;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  // Note that the Sentry row stands once the workspace's integrations reach their query.
   const row = await vi.waitFor(() => rowNamed(githubGroup(page), "Sentry"));
   await chooseAction(row, "Disconnect");
   const asked = document.querySelector('[role="alertdialog"]') !== null;
@@ -2526,7 +2369,6 @@ test("a Sentry read that failed says so with Retry, for a member too, and Retry 
   await settle();
 
   assert.equal(failed, true);
-  // Note that the failure is checked as a yes or no, because a failure's diff of an element would print the whole document.
   await vi.waitFor(() => assert.equal(sentryFailure(page) === undefined, true));
   assert.deepEqual(rowWords(rowNamed(githubGroup(page), "Sentry")), ["Sentry", "Connected"]);
 });
@@ -2548,7 +2390,6 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
 test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, which asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  // Note that each row stands, and moves, once the workspace's integrations reach their query.
   const row = await vi.waitFor(() => rowNamed(githubGroup(admin.page), "Sentry"));
   const words = rowWords(row);
 
@@ -2562,7 +2403,6 @@ test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, 
   );
   const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the member's page reads its own world, never the integrations the admin's page left cached.
   startQueriesAfresh();
   sentry = SENTRY_INSTALLED;
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
@@ -2586,7 +2426,6 @@ test("an admin connects the Slack bot, which then says Connected, and disconnect
   slackBot = { configured: true };
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const slackRow = () => rowNamed(githubGroup(admin.page), "Slack");
-  // Note that the row stands, and moves, once the workspace's integrations reach their query.
   const before = rowWords(await vi.waitFor(slackRow));
 
   act(() => button(slackRow(), "Connect").click());
@@ -2598,7 +2437,6 @@ test("an admin connects the Slack bot, which then says Connected, and disconnect
   await vi.waitFor(() => assert.deepEqual(rowWords(slackRow()), before));
   const after = rowWords(slackRow());
   for (const root of roots.splice(0)) act(() => root.unmount());
-  // Note that the member's page reads its own world, never the integrations the admin's page left cached.
   startQueriesAfresh();
   slackBot = { configured: true, team: SLACK_TEAM };
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });

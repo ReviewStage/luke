@@ -30,14 +30,6 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { CommentFocusScope } from "./description-comments.js";
 
-/**
- * A description comment the service refuses goes back to its box above whatever
- * was typed or pasted while it was out, so neither the refused words and
- * files nor the newer ones are dropped; where the two together are more
- * than one comment carries, the refused one stands apart, marked as not
- * sent, with Retry under its key. Synthetic thread, plain field.
- */
-
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
 
 const THREAD: DescriptionCommentThread = {
@@ -64,7 +56,6 @@ const THREAD: DescriptionCommentThread = {
   revision: 1,
 };
 
-/** The plan the thread stands on, its words under Goal. */
 const PLAN: Task = {
   ...DOCUMENT_TASK,
   id: "plan-1",
@@ -90,7 +81,6 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** A signed-in identity: its id, where it was stored with one, and its address. */
 interface Identity {
   readonly id?: string;
   readonly email: string;
@@ -98,13 +88,11 @@ interface Identity {
 
 const DEAN = { id: "u-dean", email: "dean@example.com" } as const;
 
-/** The account signed in to the window, as the panel's root hands it what the window keeps for it. */
 function SignedIn({ account }: { account: Identity }): null {
   useDraftsOwner(account);
   return null;
 }
 
-/** The Comments tab over the one open thread, whose reply the service answers with `landing`, as `account` reads it. */
 function drawn(
   landing: () => Promise<boolean>,
   asked: DescriptionCommentActionRequest[] = [],
@@ -129,7 +117,6 @@ function drawn(
   const root = createRoot(container);
   roots.push(root);
   const draw = (reader: Identity) => {
-    // Note that the thread is drawn whole, its reply field open, in the description's comments list.
     const tab = createElement(DescriptionBody, {
       task: PLAN,
       reader: { readerId: reader.id },
@@ -156,10 +143,8 @@ function drawn(
   );
 }
 
-/** Draws the last tab drawn again in place, as `account` reads it. */
 let redrawAs: (account: Identity) => void = () => assert.fail("nothing drawn");
 
-/** Types `words` into the plain field, as a keyboard's input lands. */
 function typeInto(field: HTMLTextAreaElement, words: string): void {
   act(() => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -168,7 +153,6 @@ function typeInto(field: HTMLTextAreaElement, words: string): void {
   });
 }
 
-/** Pastes a picture named `name` into the plain field, and waits for it to be read. */
 async function pastePicture(field: HTMLTextAreaElement, name: string): Promise<void> {
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
   const paste = new Event("paste", { bubbles: true, cancelable: true });
@@ -178,11 +162,9 @@ async function pastePicture(field: HTMLTextAreaElement, name: string): Promise<v
   await act(async () => {
     field.dispatchEvent(paste);
   });
-  // Note that a file is read off the disk before it lands in the field.
   for (let round = 0; round < 4; round += 1) await act(() => Promise.resolve());
 }
 
-/** The files the card's field holds, by name. */
 function heldFiles(card: HTMLElement): (string | null)[] {
   const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
   return [...field.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
@@ -222,7 +204,6 @@ test("a refused reply's files go back before the files pasted while it was out",
   assert.equal(field.value, "Like this.");
 });
 
-/** Draws the thread, sends `refused`, types `newer` while it is out, and has the service refuse it; later sends land. */
 async function refusedBesideNewer(refused: string, newer: string, account: Identity = DEAN) {
   const answer = Promise.withResolvers<boolean>();
   const asked: DescriptionCommentActionRequest[] = [];
@@ -244,7 +225,6 @@ async function refusedBesideNewer(refused: string, newer: string, account: Ident
   };
 }
 
-/** The key each comment was sent under, in order. */
 function keys(asked: readonly DescriptionCommentActionRequest[]): (string | undefined)[] {
   return asked.map((each) => ("clientKey" in each ? each.clientKey : undefined));
 }
@@ -259,7 +239,6 @@ test("a refused reply too long to go back beside the newer words stands apart as
   assert.equal(drawnFirst.field.value, TOO_LONG.NEWER, "the newer words stay in the box as typed");
   assert.ok(drawnFirst.card.querySelector("[data-unsent]"), "the refused reply is marked not sent");
 
-  // Note that the field goes with its thread, as a press away closes it, and comes back as it opens again.
   for (const root of roots.splice(0)) act(() => root.unmount());
   const other = drawnFirst.redraw({ id: "u-charles", email: "charles@example.com" });
   assert.equal(

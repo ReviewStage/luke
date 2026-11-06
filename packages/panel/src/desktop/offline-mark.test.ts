@@ -13,14 +13,6 @@ import { deliveryOf, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { OfflineMark } from "./offline-mark.js";
 
-/**
- * The pill says what the window shows may be behind, from main's document:
- * offline while the Mac or the service is, the service's calls going
- * unanswered among it, catching up while the host's live follow is behind,
- * and nothing once it is live again. Each document is
- * delivered as main's push delivers it.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -28,7 +20,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Main's document with the Mac's network, the host's live state, and whether the service answers its calls, as given. */
 function documentOf(
   online: boolean,
   live: HostLive | undefined,
@@ -39,7 +30,6 @@ function documentOf(
   return { ...stateWith({}, { network: { online, reachable }, tasks }), version };
 }
 
-/** The pill drawn over `first`, and a push that delivers a later document to it. */
 async function mount(first: AppStateSnapshot): Promise<(next: AppStateSnapshot) => Promise<void>> {
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
   fakeAppBridge({
@@ -59,12 +49,10 @@ async function mount(first: AppStateSnapshot): Promise<(next: AppStateSnapshot) 
     });
 }
 
-/** The pill's announced name, or none where nothing is drawn. */
 function said(): string | undefined {
   return document.querySelector(".offline-mark")?.getAttribute("aria-label") ?? undefined;
 }
 
-/** Why the pill says what it says, as its hint's words are heard. */
 function why(): string | undefined {
   const mark = document.querySelector(".offline-mark");
   const id = mark?.getAttribute("aria-describedby") ?? mark?.getAttribute("aria-owns");

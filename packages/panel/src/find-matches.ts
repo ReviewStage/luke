@@ -1,40 +1,5 @@
-/**
- * find-matches.ts -- what a find in a tab finds: the words of a query in the text under one element, as ranges, painted with the CSS Custom Highlight API and brought into view one at a time.
- *
- * Nothing here writes to the page it searches. A match is a `Range` over the
- * text nodes React drew, painted through `CSS.highlights` rather than
- * wrapped in a `<mark>`, so React's tree is never touched behind its back,
- * and the screen recording, which masks every word, has no new element to
- * mask (`session-replay.ts`). It is its own file because it is the DOM's
- * half of the find, apart from the bar that asks it (`find-in-tab.tsx`).
- *
- * A query is matched against the element's text read as one string, so a
- * match runs across the inline spans a line is drawn in, as a word split
- * over a code line's colored tokens is, but never from one line or
- * paragraph into the next: text in another block is set apart by a line
- * break, which a query, typed in a one-line field, never holds. What is
- * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`. A closed
- * `<details>` is searched, since what it folds is still the tab's to find,
- * and opened when its match is brought into view, as Chromium's own find
- * opens one; so is what is `hidden="until-found"`, the rest of a cut code
- * card's lines (`CodeCard`), told of the match (`beforematch`) and shown
- * as Chromium's own find shows it.
- *
- * What a shadow root draws is not searched, as a File tab's tree is not,
- * unless its host wears `FIND_SHADOW_ATTRIBUTE`, as a diff drawn by Pierre
- * does (`diff-view/index.ts`): its open shadow root's words are then read
- * in the host's place, less what the attribute's selector names, and its
- * changes watched (`watchText`), each walk up from a match crossing from
- * the shadow root to its host, so a match there is painted, ordered among
- * the rest, and scrolled into view as any other; what its host slots into
- * it, a diff's review threads under their lines, is read where its slot
- * stands. The rules that paint a match are the document's, and a shadow
- * root takes none of them, so such a root adopts its own.
- */
-
 import { FIND_SKIP_ATTRIBUTE } from "@repo/ui/find-skip";
 
-/** The two highlights every find paints into: each match, and the one it is at, drawn over the rest. */
 const FIND_HIGHLIGHT = {
   MATCH: "find-match",
   CURRENT: "find-current",
@@ -42,7 +7,6 @@ const FIND_HIGHLIGHT = {
 
 type FindHighlight = (typeof FIND_HIGHLIGHT)[keyof typeof FIND_HIGHLIGHT];
 
-/** The tags whose text runs on into its neighbors' on one line; any other element sets its text apart. */
 const INLINE_TAGS = new Set([
   "A",
   "ABBR",
@@ -71,44 +35,30 @@ const INLINE_TAGS = new Set([
   "VAR",
 ]);
 
-/** The `hidden` worn by what a find still searches, and shows when a match lands in it. */
 const UNTIL_FOUND = "until-found";
 
-/** The event fired at what `UNTIL_FOUND` hides before a match in it is shown. */
 const BEFORE_MATCH = "beforematch";
 
-/** The elements whose text is never read as words. */
 const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
 
-/**
- * The attribute worn by a host whose open shadow root is searched in its
- * place; its value is a selector naming what in that root is left out of
- * the words, as a gutter of numbers is, or nothing.
- */
 export const FIND_SHADOW_ATTRIBUTE = "data-find-shadow";
 
-/** What a find watches of the tab's text and of each shadow root searched. */
 const WATCHED: MutationObserverInit = { childList: true, subtree: true, characterData: true };
 
-/** What sets the text of two blocks apart in the string a query is matched against. */
 const BLOCK_BREAK = "\n";
 
-/** The characters a query matches literally that a pattern would read as syntax. */
 const PATTERN_SYNTAX = /[.*+?^${}()|[\]\\/]/g;
 
-/** One text node as it stands in the string read: where its text starts there. */
 interface TextRun {
   readonly node: Text;
   readonly start: number;
 }
 
-/** An element's text read as one string, and the run each part of it came from. */
 interface ReadText {
   readonly text: string;
   readonly runs: readonly TextRun[];
 }
 
-/** The matches a find paints, and the one it is at; -1 where it is at none. */
 export interface FindPainting {
   readonly ranges: readonly Range[];
   readonly at: number;
@@ -116,17 +66,14 @@ export interface FindPainting {
 
 export const NO_PAINTING: FindPainting = { ranges: [], at: -1 };
 
-/** Whether an element is `hidden="until-found"`, as the attribute's value is read, without regard to case. */
 function hiddenUntilFound(element: Element): boolean {
   return element.getAttribute("hidden")?.toLowerCase() === UNTIL_FOUND;
 }
 
-/** Whether an element is `hidden` from a find, as what is hidden until found is not. */
 function hiddenFromFind(element: Element): boolean {
   return element.hasAttribute("hidden") && !hiddenUntilFound(element);
 }
 
-/** Whether an element's subtree is left out of the words searched, `skipped` naming more of it within a shadow root. */
 function unread(element: Element, skipped: string | undefined): boolean {
   return (
     UNREAD_TAGS.has(element.tagName) ||
@@ -136,13 +83,11 @@ function unread(element: Element, skipped: string | undefined): boolean {
   );
 }
 
-/** The element a node stands in, crossing from a shadow root to its host. */
 function parentAcross(node: Node): Element | null {
   if (node.parentElement !== null) return node.parentElement;
   return node.parentNode instanceof ShadowRoot ? node.parentNode.host : null;
 }
 
-/** The shadow root searched in an element's place, and what in it is left out; none where it is not searched. */
 function searchedShadow(
   element: Element,
 ): { root: ShadowRoot; skipped: string | undefined } | undefined {
@@ -152,7 +97,6 @@ function searchedShadow(
   return { root, skipped: skipped === "" ? undefined : skipped };
 }
 
-/** The nearest element around a text node that sets its text apart from the next block's, or the shadow root it stands at the top of. */
 function blockOf(node: Text, root: Element): Node {
   let element = node.parentElement;
   while (element !== null && element !== root && INLINE_TAGS.has(element.tagName)) {
@@ -161,24 +105,16 @@ function blockOf(node: Text, root: Element): Node {
   return element ?? (node.parentNode instanceof ShadowRoot ? node.parentNode : root);
 }
 
-/** A string being read, and the block its last text stood in. */
 interface Reading {
   text: string;
   readonly runs: TextRun[];
   block: Node | undefined;
 }
 
-/** Reads every searched text node under `parent`, in document order, onto the string, a shadow root searched in its host's place. */
 function readUnder(parent: Node, root: Element, skipped: string | undefined, into: Reading): void {
   readNodes(parent.childNodes, root, skipped, into);
 }
 
-/**
- * Reads every searched text node in and under `nodes`, in order, onto the
- * string: a shadow root searched in its host's place, and a slot in it in
- * the place of what its host slots there, as a diff's review threads stand
- * under their lines.
- */
 function readNodes(
   nodes: Iterable<Node>,
   root: Element,
@@ -206,21 +142,18 @@ function readNodes(
   }
 }
 
-/** Reads every searched text node under `root`, in document order, into one string. */
 function readText(root: Element): ReadText {
   const into: Reading = { text: "", runs: [], block: undefined };
   readUnder(root, root, undefined, into);
   return { text: into.text, runs: into.runs };
 }
 
-/** The node a node stands for in the document's own tree: itself, or the host of each shadow root it stands in. */
 function inDocumentTree(node: Node): Node {
   let at = node;
   for (let top = at.getRootNode(); top instanceof ShadowRoot; top = at.getRootNode()) at = top.host;
   return at;
 }
 
-/** The node a node stands for where a shadow root draws it: the slot it is assigned to, or itself where it is slotted nowhere. */
 function inFlatTree(node: Node): Node {
   for (let at: Node | null = node; at !== null; at = at.parentNode) {
     if (at instanceof Element && at.assignedSlot !== null) return at.assignedSlot;
@@ -228,14 +161,6 @@ function inFlatTree(node: Node): Node {
   return node;
 }
 
-/**
- * Whether range `a` starts before range `b`. Note that two ranges in
- * different trees, one in a shadow root and one outside it, are ordered by
- * where each is drawn: what a host slots into its shadow root where its
- * slot stands there, as the words are read (`readNodes`), and otherwise
- * where each stands in the document's own tree, because a range compares
- * boundary points only within its own tree.
- */
 function startsBefore(a: Range, b: Range): boolean {
   if (a.startContainer.getRootNode() === b.startContainer.getRootNode()) {
     return a.compareBoundaryPoints(Range.START_TO_START, b) < 0;
@@ -252,7 +177,6 @@ function startsBefore(a: Range, b: Range): boolean {
   );
 }
 
-/** The run an offset into the string read falls in, the last one starting at or before it. */
 function runAt(runs: readonly TextRun[], offset: number): TextRun {
   let low = 0;
   let high = runs.length - 1;
@@ -267,7 +191,6 @@ function runAt(runs: readonly TextRun[], offset: number): TextRun {
   return run;
 }
 
-/** The range over the string read from `start` up to `end`, in the text nodes it came from. */
 function rangeOver(read: ReadText, start: number, end: number): Range {
   const first = runAt(read.runs, start);
   const last = runAt(read.runs, end - 1);
@@ -277,18 +200,15 @@ function rangeOver(read: ReadText, start: number, end: number): Range {
   return range;
 }
 
-/** The highlight a name paints, registered the first time it is asked for. */
 function highlightOf(name: FindHighlight): Highlight {
   const registered = CSS.highlights.get(name);
   if (registered !== undefined) return registered;
   const highlight = new Highlight();
-  // The match a find is at is drawn over the tint every match wears.
   highlight.priority = name === FIND_HIGHLIGHT.CURRENT ? 1 : 0;
   CSS.highlights.set(name, highlight);
   return highlight;
 }
 
-/** Whether an element scrolls along an axis, holding more than it shows. */
 function scrollsAlong(element: Element, axis: "x" | "y"): boolean {
   const style = getComputedStyle(element);
   const overflow = axis === "y" ? style.overflowY : style.overflowX;
@@ -298,13 +218,6 @@ function scrollsAlong(element: Element, axis: "x" | "y"): boolean {
     : element.scrollWidth > element.clientWidth;
 }
 
-/**
- * Scrolls each scroller between a range and `root` that has the range out
- * of its view until the range stands in the middle of it. Note that the
- * scrollers are moved themselves rather than through `scrollIntoView`,
- * which would scroll every box around the tab, the window's own panes
- * included (`renderer/CLAUDE.md`).
- */
 function scrollToRange(range: Range, root: Element): void {
   let element = parentAcross(range.startContainer);
   while (element !== null) {
@@ -321,10 +234,6 @@ function scrollToRange(range: Range, root: Element): void {
   }
 }
 
-/**
- * Every match of `query` in the text under `root`, in document order,
- * without regard to case; none for an empty query.
- */
 export function findRanges(root: Element, query: string): Range[] {
   if (query.length === 0) return [];
   const read = readText(root);
@@ -336,11 +245,6 @@ export function findRanges(root: Element, query: string): Range[] {
   return ranges;
 }
 
-/**
- * The box a range is seen through: the nearest scroller around it up to
- * `root`, or `root`, each element's answer kept in `seen` for the next
- * range in it.
- */
 function viewOf(range: Range, root: Element, seen: Map<Element, Element>): Element {
   const start = parentAcross(range.startContainer) ?? root;
   const known = seen.get(start);
@@ -354,14 +258,6 @@ function viewOf(range: Range, root: Element, seen: Map<Element, Element>): Eleme
   return view;
 }
 
-/**
- * The match a find should be at among `ranges`: the first at or after
- * `anchor`, the match it was at before the ranges were read again, so new
- * text arriving around it does not move it; or, with no anchor, the first
- * not scrolled above the top of the scroller it is read in, so the find
- * starts where the reader is. The first of all where none follows, and -1
- * where there is none.
- */
 export function matchFrom(
   ranges: readonly Range[],
   anchor: Range | undefined,
@@ -378,9 +274,7 @@ export function matchFrom(
   return Math.max(0, after);
 }
 
-/** Paints `next` in place of `previous`, each find painting only its own matches into the shared highlights. */
 export function repaint(previous: FindPainting, next: FindPainting): void {
-  // A find with nothing painted and nothing to paint leaves the document's highlights be.
   if (previous.ranges.length === 0 && next.ranges.length === 0) return;
   const match = highlightOf(FIND_HIGHLIGHT.MATCH);
   const current = highlightOf(FIND_HIGHLIGHT.CURRENT);
@@ -392,12 +286,6 @@ export function repaint(previous: FindPainting, next: FindPainting): void {
   if (now !== undefined) current.add(now);
 }
 
-/**
- * Brings a match into view: every closed `<details>` around it opened, and
- * every element `hidden="until-found"` told (`beforematch`) and shown, as
- * Chromium's own find does both, and every scroller up to `root` moved
- * until it stands in the middle.
- */
 export function reveal(range: Range, root: Element): void {
   for (
     let element = parentAcross(range.startContainer);
@@ -413,7 +301,6 @@ export function reveal(range: Range, root: Element): void {
   scrollToRange(range, root);
 }
 
-/** Whether `element` stands under `root`, across the shadow roots between them. */
 function containsAcross(root: Element, element: Element): boolean {
   for (let at: Element | null = element; at !== null; at = parentAcross(at)) {
     if (at === root) return true;
@@ -421,15 +308,6 @@ function containsAcross(root: Element, element: Element): boolean {
   return false;
 }
 
-/**
- * Calls `onChange` once in the frame after the text under `root` changes,
- * or the text in a shadow root searched in a host's place
- * (`FIND_SHADOW_ATTRIBUTE`), each such root watched from the moment its host
- * stands under `root`, until the answer is called. Note that every change
- * landing before that frame is heard in its one call, because an agent at
- * work streams its words a few at a time, and a search of the whole tab on
- * each would outrun the frames that draw them.
- */
 export function watchText(root: Element, onChange: () => void): () => void {
   const watched = new WeakSet<Node>();
   let frame: number | undefined;
@@ -457,17 +335,11 @@ export function watchText(root: Element, onChange: () => void): () => void {
   };
 }
 
-/**
- * The words selected inside `root` to seed a find with: the selection's
- * text where it stands on one line within the tab, outside the bar, and
- * nothing otherwise.
- */
 export function selectedWords(root: Element): string | undefined {
   const selection = document.getSelection();
   if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return undefined;
   const within = selection.getRangeAt(0).commonAncestorContainer;
   const element = within instanceof Element ? within : within.parentElement;
-  // Words selected in the bar's own field are the query already.
   if (element === null || !containsAcross(root, element)) return undefined;
   if (element.closest(`[${FIND_SKIP_ATTRIBUTE}]`) !== null) return undefined;
   const words = selection.toString();

@@ -13,17 +13,8 @@ import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
-/**
- * sidebar-admin.test.ts -- the Admin row stands after Automations for an
- * admin alone, and a non-admin is drawn nothing in its place; its press
- * opens the window's Admin place rather than a browser, asking the host for
- * nothing; the place then takes the window, its own list where this sidebar
- * stood (`desktop-admin.test.ts`).
- */
-
 const roots: Root[] = [];
 
-/** Every act the sidebar sent, in order. */
 let sent: SentPortAct[] = [];
 
 beforeEach(() => {
@@ -41,7 +32,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The sidebar beside the work, for an account that is an admin or not. */
 async function mount(admin: boolean): Promise<{ sidebar: HTMLElement; opened: number }> {
   handState({}, { access: { admin } });
   const counted = { opened: 0 };
@@ -78,13 +68,11 @@ async function mount(admin: boolean): Promise<{ sidebar: HTMLElement; opened: nu
   };
 }
 
-/** The names of the rows the sidebar's places draw, top to bottom. */
 function placeNames(sidebar: HTMLElement): string[] {
   const places = sidebar.querySelector(".sidebar-places") ?? assert.fail("the sidebar's places");
   return [...places.querySelectorAll(".ui-nav-item-name")].map((name) => name.textContent ?? "");
 }
 
-/** The Admin row, wherever it is drawn. */
 function adminRow(sidebar: HTMLElement): HTMLElement | undefined {
   return [...sidebar.querySelectorAll<HTMLElement>(".ui-nav-item")].find(
     (row) => row.querySelector(".ui-nav-item-name")?.textContent === "Admin",

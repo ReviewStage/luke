@@ -9,15 +9,6 @@ import { afterEach, test } from "vitest";
 import { useAppCommand, useAppKeymap } from "./app-commands.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 
-/**
- * command-key.test.ts -- the key a chord's Command is pressed with is the
- * shell's to name (`AppPlatform.commandKey`): where it names Ctrl, as a
- * browser on Windows or Linux does, Ctrl+K opens the command palette and ⌘K,
- * the Windows key the system keeps, opens nothing, and the palette's hint
- * reads Ctrl K; where it names none, as the Mac app never does, ⌘K opens it
- * and its hint reads ⌘K. Synthetic throughout.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -36,14 +27,12 @@ afterEach(() => {
   fakeAppPlatform(QUIET_PANEL);
 });
 
-/** A window whose keymap answers, offering the command palette, each opening counted, with the palette's hint drawn. */
 function PaletteWindow({ opened }: { opened: string[] }): ReactElement {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.COMMAND_PALETTE, () => opened.push("palette"));
   return createElement(Fragment, null, createElement(Shortcut, { chord: PALETTE }));
 }
 
-/** The window drawn under a shell naming `commandKey`, or none, answering the palette's openings. */
 function drawWindow(commandKey: CommandKey | undefined): string[] {
   fakeAppPlatform({ ...QUIET_PANEL, ...(commandKey === undefined ? undefined : { commandKey }) });
   const opened: string[] = [];
@@ -53,7 +42,6 @@ function drawWindow(commandKey: CommandKey | undefined): string[] {
   return opened;
 }
 
-/** Presses K with the modifier given held. */
 function pressK(held: "ctrlKey" | "metaKey"): void {
   act(() => {
     document.body.dispatchEvent(
@@ -62,7 +50,6 @@ function pressK(held: "ctrlKey" | "metaKey"): void {
   });
 }
 
-/** The palette's hint as its keys read, one word or glyph to a key. */
 function hint(): string {
   return [...document.querySelectorAll(".ui-shortcut-glyph")]
     .map((glyph) => glyph.textContent)

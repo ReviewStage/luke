@@ -26,12 +26,6 @@ import { restOn } from "../testing/hint-rest.js";
 import { agentActor } from "./agent-model.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 
-/**
- * agent-automation.test.ts -- an agent an automation's run started says so
- * on its card, "Started by" the automation's tile and name, which hang the
- * automation's card and open its page. Synthetic throughout.
- */
-
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
@@ -85,7 +79,6 @@ const AGENT: AgentSummary = {
 };
 
 let root: Root | undefined;
-/** The workspace's automations, as the host lays them once read. */
 let automations: readonly AutomationSummary[] = [TRIAGE];
 
 beforeEach(() => {
@@ -105,17 +98,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Rests the pointer on `element`, as hovering it does. */
 function hover(element: Element): void {
   restOn(element);
 }
 
-/** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>(".ui-tooltip-card:not([data-leaving])")];
 }
 
-/** The agent named in a place of the workspace as Dean reads it, its card hung, and every automation page opened. */
 async function agentCard() {
   const opened: string[] = [];
   const read = agentCardReading(AGENT, "Triage", NOTHING_HELD, false, {
@@ -145,7 +135,6 @@ async function agentCard() {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  // Note that the card names the automation once the workspace's automations reach their query, each hover drawing it afresh.
   const card = await vi.waitFor(() => {
     hover(container.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named"));
     const hung = cards()[0] ?? assert.fail("the agent's card hangs");

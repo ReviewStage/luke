@@ -32,7 +32,6 @@ const SIGNED_IN: AccountSnapshot = {
   email: "ada@example.com",
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
-/** What the dialog asked the main process to send, and how the next send is answered. */
 let sent: PortActPayload<typeof ACT_KIND.FEEDBACK_SEND>[] = [];
 let answer: FeedbackResult = { delivered: true };
 let menuListener: ((command: AppCommand) => void) | undefined;
@@ -73,7 +72,6 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** The dialog, wired the way the app wires it to the menu bar's Help items. */
 function Harness({ account }: { account: AccountSnapshot }): React.JSX.Element {
   const [kind, setKind] = useState<FeedbackKind>();
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setKind(FEEDBACK_KIND.FEEDBACK));
@@ -96,7 +94,6 @@ function mount(account: AccountSnapshot = SIGNED_IN): void {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Each surface holds its own atoms, so a toast one test raised is not the next one's.
   const registry = AtomRegistry.make();
   registries.push(registry);
   act(() => root.render(onRegistry(registry, createElement(Harness, { account }))));
@@ -114,7 +111,6 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** Help's Send feedback, chosen, and the dialog it opened. */
 function openFromHelp(): HTMLElement {
   act(() => menuListener?.(APP_COMMAND.SEND_FEEDBACK));
   const opened = dialog();
@@ -169,7 +165,6 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
   );
 
   assert.equal(dialog()?.querySelector("h2")?.textContent, "Feedback on Memory");
-  // React reads a typed value off the element's own setter, as a keystroke sets it.
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field(), "The board missed a plan.");
@@ -220,13 +215,11 @@ test("a note kept from one experiment's row is not sent under another place's ti
   });
   assert.equal(field().value, "The board missed a plan.");
 
-  // The same dialog, now opened from Help about no experiment.
   draw(undefined);
   assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(field().value, "");
 });
 
-/** Writes `words` into the field, as typing does. */
 function write(words: string): void {
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
@@ -235,7 +228,6 @@ function write(words: string): void {
   });
 }
 
-/** Escape pressed on whatever holds focus. */
 function pressEscape(): void {
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
@@ -259,12 +251,10 @@ test("a note being written is nudged rather than closed by the first Escape, clo
   assert.equal(field().value, "The board missed a plan.");
 });
 
-/** The counter the field's label line draws once the words near the cap, or nothing before. */
 function counter(): string | null {
   return dialog()?.querySelector(".ui-length-counter")?.textContent ?? null;
 }
 
-/** Pastes `text` into the field, as the clipboard does. */
 function paste(text: string): void {
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", { value: { files: [], getData: () => text } });
@@ -301,7 +291,6 @@ test("a paste past the cap says it was cut until the words change", () => {
     "the note waits for the words the paste leaves",
   );
 
-  // The browser keeps the room that was left, which is what the note is about.
   write(`${"x".repeat(limit - 3)}yyy`);
   assert.equal(dialog()?.textContent?.includes(note), true);
 

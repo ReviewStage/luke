@@ -14,26 +14,18 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { DescriptionBody } from "./description-body.js";
 import { type DescriptionEditSend, descriptionEditMutation } from "./description-edit-mutation.js";
 
-// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-
-/**
- * description-body-memo.test.ts -- a section's byline moves its edit time on with
- * the clock.
- */
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const GOAL = "## Goal\nInvite a teammate by email.";
 const APPROACH = "## Approach\nModel an invite as a pending membership.";
 
-// jsdom draws no layout, so it has no `scrollIntoView` for the view to follow the caret with.
 Element.prototype.scrollIntoView ??= () => undefined;
 
 let root: Root | undefined;
 const standingMatchMedia = Object.getOwnPropertyDescriptor(window, "matchMedia");
 
 beforeEach(() => {
-  // The OS's motion setting, which jsdom has none of: motion is not reduced.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: (query: string) => ({ matches: false, media: query }),
@@ -49,7 +41,6 @@ afterEach(() => {
   else Object.defineProperty(window, "matchMedia", standingMatchMedia);
 });
 
-/** The task with `body` as its text, last saved by `by` at `at`. */
 function taskWith(body: string, by: typeof DEAN, at: number): Task {
   return {
     ...DOCUMENT_TASK,
@@ -60,11 +51,6 @@ function taskWith(body: string, by: typeof DEAN, at: number): Task {
 
 const NEVER_SAVED: DescriptionEditSend = () => new Promise(() => undefined);
 
-/**
- * Draws `task` on Dean's page as the task's own page hands it over: every
- * prop made afresh on each draw, as a page drawn again on each delivery of
- * the window's state makes them.
- */
 function draw(task: Task): void {
   if (root === undefined) {
     const container = document.createElement("div");

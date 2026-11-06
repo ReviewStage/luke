@@ -20,17 +20,9 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
 import { EditComposer } from "./edit-composer.js";
 
-/**
- * One of the developer's lines written again where it stands, in the
- * agent's own box: it opens on the line's words and the file it carried,
- * Send hands on what the box then holds, and Cancel and Escape send
- * nothing and keep what was written for the next Edit of the line.
- */
-
 const PIXEL =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-/** A line of the developer's that carried one picture inline. */
 const LINE: AgentTranscriptMessage = {
   id: "line-2",
   role: MESSAGE_ROLE.USER,
@@ -66,7 +58,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The line's box mounted in the window `registry` stands for, every way it ended written down, its pictures read through `door` where one is handed. */
 async function opened(
   line: AgentTranscriptMessage = LINE,
   door?: AgentPictureDoor,
@@ -176,7 +167,6 @@ test("a file taken off before an Escape stays off when Edit opens the line again
   pressInComposer(first.container, "Escape");
   first.close();
 
-  // A window of its own, as a relaunch opens, which finds the draft's words and none of its files.
   const again = await opened(LINE, undefined, "Also email the inviter.", AtomRegistry.make());
   pressInComposer(again.container, "Enter");
   await settle();
@@ -212,7 +202,6 @@ test("one of two like files taken off stays off after a relaunch, and the other 
   ]);
 });
 
-/** A line whose picture was kept apart, which the window reads through the agent's door. */
 const KEPT: AgentTranscriptMessage = {
   id: "line-3",
   role: MESSAGE_ROLE.USER,

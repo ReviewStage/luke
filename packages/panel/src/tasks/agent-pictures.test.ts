@@ -21,28 +21,8 @@ import {
 } from "./agent-pictures.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 
-/**
- * agent-pictures.test.ts -- an agent's pictures in its transcript, drawn by
- * the agent's own turn: a set it showed stays out of the finished turn's
- * fold and reads each picture once through the door it is given; two calls
- * one after another are one set; an integration's call keeps its row and
- * gains its pictures as tiles under it, one left out saying so; a tile
- * whose bytes are gone says so in words and opens nothing; a refused
- * call is a row where its error is read; a picture written in the
- * agent's words is a link, never an image; a WebM it showed plays in a
- * player of its own, from a `blob:` address let go of as the player goes;
- * and an image a line handed the agent, which its row names by id, is read
- * through the door as a chip, while one a row keeps the bytes of is drawn
- * from them. A line still on its way draws its files going up, with no
- * share to read, and each takes its check as the line lands.
- *
- * Synthetic turns and pictures throughout: the door answers a PNG's first
- * bytes for every picture it is asked for.
- */
-
 const roots: Root[] = [];
 
-/** The tiles of a set the agent showed, as a reader finds them: the items of the list it names. */
 const SHOWN_TILES = 'ul[aria-label="Pictures the agent showed"] > li';
 
 afterEach(() => {
@@ -52,7 +32,6 @@ afterEach(() => {
 
 let minted = 0;
 
-/** A picture as a stored output names it, its id fresh, so no test reads another's from the window's cache. */
 function picture(width: number, height: number) {
   minted += 1;
   return {
@@ -94,13 +73,11 @@ function finished(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts, startedAt: 1_000, finishedAt: 61_000 };
 }
 
-/** The message drawn as an agent's turn is, under a door recording each picture it is asked to read. */
 async function drawn(
   message: AgentTranscriptMessage,
   moving = false,
   answer: (id: string) => Promise<PictureAnswer> = () =>
     Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }),
-  /** Whether to wait for every picture to land, which a read the test holds never does. */
   waitForPictures = true,
 ) {
   const read: string[] = [];
@@ -136,7 +113,6 @@ async function drawn(
   return { container, read };
 }
 
-/** Waits until no picture in `container` is still being read, as the window's queries hand each read to React a tick after it lands. */
 async function landed(container: HTMLElement): Promise<void> {
   await vi.waitFor(() =>
     assert.equal((container.textContent ?? "").includes("Reading the picture"), false),
@@ -359,7 +335,6 @@ test("a refused set is a row that failed, its reason read in it, and nothing wai
   );
 
   assert.equal(container.querySelectorAll(`.picture-block, ${SHOWN_TILES}`).length, 0);
-  // The group the call stands in, then the call's own row, each opened as a reader would.
   for (let opened = 0; opened < 3; opened += 1) {
     const closed = container.querySelector<HTMLElement>("details:not([open]) > summary");
     if (closed === null) break;
@@ -497,7 +472,6 @@ test("a set shown between calls stands on its own row, never in a group that fol
 
 test("a recording and a set shown after it stay out of every fold of the finished turn", async () => {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
-  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = () => "blob:recording-2";
   URL.revokeObjectURL = () => undefined;
   try {
@@ -582,7 +556,6 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
   const created: string[] = [];
   const revoked: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
-  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = (blob: Blob) => {
     created.push(blob.type);
     return `blob:video-${String(created.length)}`;
@@ -655,7 +628,6 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(viewerPlace(document), "1 of 2");
-    // Note that the viewer's strip makes a third, for the video's first frame its thumb shows.
     assert.deepEqual(created, [
       CONVERSATION_MEDIA_TYPE.WEBM,
       CONVERSATION_MEDIA_TYPE.WEBM,
@@ -678,7 +650,6 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
 
 test("a call that shows a recording between two pictures draws it first, and the viewer walks the call as it is drawn", async () => {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
-  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = () => "blob:interleaved-1";
   URL.revokeObjectURL = () => undefined;
   try {
@@ -753,7 +724,6 @@ test("a call that shows a recording between two pictures draws it first, and the
 
 test("a recording a finished browser call kept plays under its row, out of the turn's fold, its caption under it, and its Expand opens the viewer", async () => {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
-  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = () => "blob:recording-1";
   URL.revokeObjectURL = () => undefined;
   try {
