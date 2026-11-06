@@ -236,6 +236,11 @@ function written(outcome: PlanCommentOutcome): WireRecord {
   return commentAnswerRead(outcome.answer);
 }
 
+/** Whether a thread is the plan's, standing on no page, and so out of reach while Plans is off; a thread not found is left to the call to refuse as none. */
+export function planThreadOff(thread: PlanCommentThread | undefined, plansOn: boolean): boolean {
+  return !plansOn && thread !== undefined && thread.page === undefined;
+}
+
 /** One call of a comment tool on the plan the door bound, answered as the result the model reads. */
 export function runCommentTool(
   name: CommentToolName,
@@ -247,9 +252,7 @@ export function runCommentTool(
     Effect.map(actOnPlanCommentThread(writer, taskId, thread, action), written);
   const threadOf = (thread: string) =>
     Effect.map(readPlanCommentThread(writer.userId, taskId, thread), Option.getOrUndefined);
-  // Note that a thread on no page is the plan's, which a call reaches only while Plans is on.
-  const planOff = (thread: PlanCommentThread | undefined) =>
-    !plansOn && thread !== undefined && thread.page === undefined;
+  const planOff = (thread: PlanCommentThread | undefined) => planThreadOff(thread, plansOn);
   const run = Effect.gen(function* () {
     switch (name) {
       case AGENT_TOOL.READ_COMMENTS: {

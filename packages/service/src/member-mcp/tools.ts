@@ -201,6 +201,7 @@ import {
   COMMENT_TOOL_REFUSAL,
   commentAnswerRead,
   commentToolRejected,
+  planThreadOff,
   READ_COMMENTS_TOOL,
   REPLY_TO_COMMENT_TOOL,
   runCommentTool,
@@ -1566,8 +1567,7 @@ const memberReply = (writer: MemberCommentWriter, asked: ReplyToCommentInput, pl
       const standing = Option.getOrUndefined(
         yield* readPlanCommentThread(writer.userId, asked.taskId, asked.thread),
       );
-      // Note that a thread on no page is the plan's, which takes no reply while Plans is off.
-      if (!plansOn && standing !== undefined && standing.page === undefined) {
+      if (planThreadOff(standing, plansOn)) {
         return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
       }
       if (standing?.status === PLAN_COMMENT_STATUS.RESOLVED) {
