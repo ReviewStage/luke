@@ -38,7 +38,12 @@ import {
 } from "../description-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith, stateWith } from "../testing/app-state.js";
-import { onRegistry, settledWrites, writeAppState } from "../testing/copy-feedback.js";
+import {
+  onRegistry,
+  settledWrites,
+  settleQueries,
+  writeAppState,
+} from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -598,10 +603,10 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
       { base: written, value: written.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
-  // Note that we wait on the saved tick, because the saves' answers reach the boxes on Query's notify queue, a turn after the requests are sent.
-  await vi.waitFor(() =>
-    assert.equal(nested.getAttribute("aria-checked") === "true", true, "a saved tick stands"),
-  );
+  // Note that we wait for the saves to settle, because their answers, the refused one's rollback among them, reach the boxes on Query's notify queue.
+  await settledWrites();
+  await settleQueries();
+  assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
   assert.equal(newestToastSays(), "The description could not be saved.");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
