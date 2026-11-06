@@ -26,7 +26,7 @@ import { Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
   type DescriptionEditorModule,
@@ -643,13 +643,14 @@ test("a press while a tick is out waits its turn, and both land, the second over
     ["One", "Upload screenshot"],
   );
 
+  const ticked = () => boxes.map((box) => box.getAttribute("aria-checked") === "true");
   act(() => {
     for (const box of boxes) box.click();
   });
-  await settle();
-  assert.equal(sent.length, 1, "the second waits for the first");
+  await vi.waitFor(() => expect(ticked()).toEqual([true, true]));
+  assert.equal(sent.length, 1, "the second waits for the first, drawn as pressed meanwhile");
   answers[0]?.resolve({ saved: true });
-  await settle();
+  await vi.waitFor(() => expect(sent.length).toBe(2));
   answers[1]?.resolve({ saved: true });
   await settle();
 
@@ -661,10 +662,7 @@ test("a press while a tick is out waits its turn, and both land, the second over
       { base: first, value: first.replace("[ ] ![Upload", "[x] ![Upload") },
     ],
   );
-  assert.deepEqual(
-    boxes.map((box) => box.getAttribute("aria-checked") === "true"),
-    [true, true],
-  );
+  await vi.waitFor(() => expect(ticked()).toEqual([true, true]));
   assert.equal(newestToastSays(), undefined, "nothing is said of ticks that saved");
 });
 
@@ -754,8 +752,11 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   assert.ok(box, "the box is drawn");
 
   act(() => box.click());
+  await vi.waitFor(() => expect(box.getAttribute("aria-checked")).toBe("true"));
   act(() => box.click());
+  await vi.waitFor(() => expect(box.getAttribute("aria-checked")).toBe("false"));
   first.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
+  await vi.waitFor(() => expect(newestToastSays()).toBe("The description could not be saved."));
   await settle();
 
   assert.equal(
@@ -765,6 +766,26 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
   );
   assert.equal(box.getAttribute("aria-checked"), "false");
   assert.equal(newestToastSays(), "The description could not be saved.");
+});
+
+test("a box in a later section ticks its own item after an earlier section's words grew", async () => {
+  const body = "## Goal\n\nInvite by email.\n\n## Steps\n- [ ] One\n";
+  const grown = body.replace("Invite by email.", "Invite by email, or by a link.");
+  const { container, sent, render } = mount();
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  render({ ...DOCUMENT_TASK, document: { body: grown, assumptions: [] } });
+  await settle();
+  const box = container.querySelector<HTMLElement>('[role="checkbox"][aria-label="One"]');
+  assert.ok(box, "the box is drawn");
+
+  act(() => box.click());
+  await vi.waitFor(() => expect(sent.length).toBe(1));
+
+  assert.deepEqual(sent[0]?.document, {
+    base: grown,
+    value: grown.replace("[ ] One", "[x] One"),
+  });
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
