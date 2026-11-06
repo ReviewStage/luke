@@ -11,9 +11,10 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
  * site serves, so no page ships a blank tab; the web app installs from a
  * manifest whose icons are the sizes they claim; a pasted Vespin link unfurls
  * as the landing page's card under Vespin's name, since an unfurler reads it
- * signed out; every page's card says the same to X as to everyone else, and
- * its title still reads as one once iMessage drops the site's name from it; the page the app frames carries its one style by the digest
- * its policy admits and loads nothing; and every Tailwind entry takes
+ * signed out; every page's card draws an image and says the same to X as to
+ * everyone else, and its title still reads as one once iMessage drops the
+ * site's name from it; the page the app frames carries its one style by the
+ * digest its policy admits and loads nothing; and every Tailwind entry takes
  * `@repo/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
  * utilities compile to nothing; and the panel's root stops a phone's text
  * autosizing, without which iOS Safari draws a code block's lines larger
@@ -86,8 +87,9 @@ const TWITTER_TWINS = [
 const LEADING_SITE_NAME = /^Vespin\s*[:|\-–—]\s*/u;
 
 /**
- * Where a page's card tells X something else than its Open Graph tags, or
- * its title opens on a lowercase word once iMessage drops "Vespin: " from it.
+ * Where a page's card draws no image, tells X something else than its Open
+ * Graph tags, or its title opens on a lowercase word once iMessage drops
+ * "Vespin: " from it.
  */
 export function cardProblems(page: string, html: string): readonly string[] {
   const tags = metaOf(html);
@@ -96,6 +98,8 @@ export function cardProblems(page: string, html: string): readonly string[] {
   const problems: string[] = [];
   if (tags.get("twitter:card") !== "summary_large_image")
     problems.push(`${page}: twitter:card is not summary_large_image`);
+  // Note that a card missing both images would pass the twins' check below, each side as absent as the other.
+  if (tags.get("og:image") === undefined) problems.push(`${page}: carries no og:image`);
   for (const [og, twitter] of TWITTER_TWINS) {
     if (tags.get(twitter) !== tags.get(og))
       problems.push(`${page}: ${twitter} is ${tags.get(twitter) ?? "missing"}, not its ${og}`);
