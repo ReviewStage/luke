@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   DESCRIPTION_ACTOR,
   type DescriptionSectionEdit,
@@ -166,28 +165,9 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
   assert.deepEqual(stay(true), []);
 });
 
-/** A task's agents as its row names them, one agent's pull request standing `state`, its agents' newest settled activity at `activityAt`. */
-function agentsAt(
-  activityAt: number,
-  state: TaskAgentsSummary["pullRequests"][number]["state"] = PULL_REQUEST_STATE.OPEN,
-): TaskAgentsSummary {
-  return {
-    total: 1,
-    working: 0,
-    activityAt,
-    agents: [],
-    pullRequestTotal: 1,
-    pullRequests: [
-      {
-        number: 7,
-        title: "Fix it",
-        state,
-        checks: CHECK_SUMMARY.PASSING,
-        additions: 1,
-        deletions: 1,
-      },
-    ],
-  };
+/** A task's agents as its row counts them, one pull request among them, its agents' newest settled activity at `activityAt`. */
+function agentsAt(activityAt: number): TaskAgentsSummary {
+  return { total: 1, working: 0, activityAt, pullRequestTotal: 1 };
 }
 
 test("a plan's look is sent as it opens, as its agents move while it stays open, and as it is left, and never on a save", async () => {
@@ -232,7 +212,7 @@ test("a task reads unread while it changed after the reader's mark or stands mar
     ...DOCUMENT_TASK,
     updatedAt: LOOKED_AT,
     readThrough: LOOKED_AT + 1,
-    agents: agentsAt(LOOKED_AT + 1, PULL_REQUEST_STATE.MERGED),
+    agents: agentsAt(LOOKED_AT + 1),
   };
   const finished: TaskSummary = { ...read, agents: agentsAt(LOOKED_AT + 2) };
   const marked: TaskSummary = { ...read, markedUnread: true };

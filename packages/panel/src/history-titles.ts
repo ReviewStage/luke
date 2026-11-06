@@ -39,19 +39,19 @@ export const VERSION_HISTORY_WORDS = "Version history";
 export const INBOX_WORDS = "Inbox";
 
 /** The parts of the Tasks tab a step's name is read again from: the task list, the open task's agents and pages. */
-type StepNameTasks = Pick<TasksControl, "tasks" | "activeTaskId" | "agents" | "pages">;
+type StepNameTasks = Pick<
+  TasksControl,
+  "tasks" | "activeTaskId" | "agents" | "liveAgents" | "pages"
+>;
 
-/** The name an agent of a task goes by now: as the open task's agents say, else as the task's row's agent line does; none where neither names it. */
+/** The name an agent of a task goes by now: as the open task's agents say, else as the list followed live does; none where neither names it. */
 function agentNameNow(tasks: StepNameTasks, taskId: string, agentId: string): string | undefined {
   const open =
     taskId === tasks.activeTaskId
       ? tasks.agents.agents?.find((agent) => agent.id === agentId)
       : undefined;
   const line =
-    open ??
-    tasks.tasks
-      .find((task) => task.id === taskId)
-      ?.agents?.agents?.find((agent) => agent.id === agentId);
+    open ?? tasks.liveAgents?.find((agent) => agent.id === agentId && agent.planId === taskId);
   return line === undefined ? undefined : agentName(line, tasks.agents.models);
 }
 
@@ -94,6 +94,7 @@ export type StepTitleTasks = Pick<
   | "boundFor"
   | "activeTaskId"
   | "agents"
+  | "liveAgents"
   | "pages"
   | "mainTabs"
   | "sidePanel"

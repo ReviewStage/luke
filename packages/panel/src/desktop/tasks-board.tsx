@@ -67,7 +67,6 @@ import {
   Stack,
   selectionRun,
   TASK_AGENTS_MARK_SIZE,
-  TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -159,6 +158,7 @@ import {
   useTaskMenuItems,
   useTaskRowTab,
 } from "./task-actions.js";
+import { TaskRowStatus } from "./task-card.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -570,7 +570,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
             />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
+            <TaskRowStatus task={task} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
         </div>
         {menu.moreDrawn ? (

@@ -71,6 +71,7 @@ import {
 import {
   type DescriptionRevisionAnswer,
   type DescriptionRevisionsAnswer,
+  type HeldTaskListAnswer,
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
@@ -80,7 +81,6 @@ import {
   type TaskCreateRequest,
   type TaskFileAnswer,
   type TaskFileRequest,
-  type TaskListAnswer,
   type TaskParentRequest,
   type TaskRelationChangeRequest,
   type TaskRenameRequest,
@@ -420,7 +420,7 @@ export class HostedTaskClient {
 
   /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived agents among them. */
   list(): Effect.Effect<
-    TaskCallResult<TaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
+    TaskCallResult<HeldTaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {

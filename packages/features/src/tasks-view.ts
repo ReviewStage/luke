@@ -182,9 +182,10 @@ export const tasksViewSchema = EffectSchema.Struct({
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(listedAgentSchema)),
   /**
-   * Every pull request of each plan that has one, uncapped, as its row names
-   * the first few: present only while the list is followed live, when the
-   * Tasks page's cards name each one rather than a count of the rest.
+   * Every pull request of each plan that has one, those still open first:
+   * present only while the list is followed live, when it is what every
+   * reader of a task's pull requests reads, its row's mark and chips and its
+   * card among them, the row itself only counting them.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   /**
