@@ -567,14 +567,15 @@ function usePlaceCommands(
     APP_COMMAND.AUTOMATIONS,
     pastGate && tasks.signedIn ? () => tasks.automationsView.onOpen() : undefined,
   );
-  const { onReopenClosedTab } = tasks;
+  // Note that the turn to Tasks and the reopen are one way out, asked once, as the sidebar's are (`desktop-sidebar.tsx`'s `leaveFor`).
+  const { onReopenClosedTab, leaveGuard } = tasks;
   useAppCommand(
     APP_COMMAND.REOPEN_CLOSED_TAB,
     pastGate && tasks.signedIn && onReopenClosedTab !== undefined
-      ? () => {
+      ? leaveGuard.guard(() => {
           onTabChange(PANEL_TAB.TASKS);
           onReopenClosedTab();
-        }
+        })
       : undefined,
   );
   // The page lists an installed app's chords, and stands nowhere else (`pages.tsx`).
