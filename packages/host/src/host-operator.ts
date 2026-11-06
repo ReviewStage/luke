@@ -1008,6 +1008,8 @@ export interface HostOperator {
   terminalInput(params: { connectionId: string; data: string }): Effect.Effect<void>;
   terminalResize(params: { connectionId: string; cols: number; rows: number }): Effect.Effect<void>;
   terminalAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
+  /** The connection's tab is shown in the window the developer is using, which moves its idle bound on. */
+  terminalShown(params: { connectionId: string }): Effect.Effect<void>;
   terminalDisconnect(params: { connectionId: string }): Effect.Effect<void>;
   /** Every waiting connection opened again now, as after the Mac woke. */
   terminalWake(): Effect.Effect<void>;
@@ -2730,6 +2732,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           bytes: params.bytes,
         }),
       ),
+    terminalShown: (params) =>
+      fire(client.call(GATEWAY_METHOD.TERMINALS_SHOWN, { connectionId: params.connectionId })),
     terminalDisconnect: (params) =>
       fire(client.call(GATEWAY_METHOD.TERMINALS_DISCONNECT, { connectionId: params.connectionId })),
     terminalWake: () => fire(client.call(GATEWAY_METHOD.TERMINALS_WAKE)),

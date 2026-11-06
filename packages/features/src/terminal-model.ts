@@ -24,7 +24,7 @@ export const TERMINAL_STATE = {
   ATTACHED: "attached",
   /** The socket dropped and the host is reconnecting by itself. */
   RECONNECTING: "reconnecting",
-  /** Ended by the host, as a sign-out ends it; a key reconnects. */
+  /** Ended after ten minutes with nothing typed, printed, or shown, or by the host as a sign-out ends it; a key reconnects. */
   IDLE: "idle",
   /** The sandbox is stopped; only the developer's click resumes it. */
   STOPPED: "stopped",

@@ -31,8 +31,8 @@ export const CODER = {
    * idle sandbox ends, and it bills its memory until then: at the default
    * size, 4 GB for twenty minutes. Twenty, because a live turn shows use far
    * more often than that: a native runner posts at least every heartbeat
-   * (`RUNNER_HEARTBEAT`, five minutes), and a terminal or a watched browser
-   * closes after five idle minutes. Each of them keeps it alive at most every
+   * (`RUNNER_HEARTBEAT`, five minutes), a terminal closes after ten idle
+   * minutes, and a watched browser after five. Each of them keeps it alive at most every
    * `SANDBOX_KEEP_ALIVE_EVERY`.
    */
   SANDBOX_TIMEOUT_MS: 20 * 60 * 1_000,
