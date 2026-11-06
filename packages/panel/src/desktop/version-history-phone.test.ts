@@ -13,6 +13,7 @@ import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
@@ -97,24 +98,30 @@ function drawn(
   roots.push(root);
   act(() =>
     root.render(
-      createElement(TaskVersionHistory, {
-        sidebar: {
-          collapsed: false,
-          compact: false,
-          overlay: SIDEBAR_OVERLAY.CLOSED,
-          width: 264,
-          onToggle: ignore,
-          onOverlay: ignore,
-          onResize: ignore,
-          staged: false,
-        },
-        room,
-        history: FROM_INBOX,
-        tasks,
-        account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
-        onExit: () => exits.push("exit"),
-        onRestored: ignore,
-      }),
+      withQueryClient(
+        createElement(TaskVersionHistory, {
+          sidebar: {
+            collapsed: false,
+            compact: false,
+            overlay: SIDEBAR_OVERLAY.CLOSED,
+            width: 264,
+            onToggle: ignore,
+            onOverlay: ignore,
+            onResize: ignore,
+            staged: false,
+          },
+          room,
+          history: FROM_INBOX,
+          tasks,
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            email: "dev@example.com",
+            provider: "github",
+          },
+          onExit: () => exits.push("exit"),
+          onRestored: ignore,
+        }),
+      ),
     ),
   );
   return { view, exits };

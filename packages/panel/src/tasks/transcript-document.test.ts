@@ -5,7 +5,7 @@ import { inboxAttachmentAddress } from "@repo/features/inbox-attachment-link";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import {
@@ -108,7 +108,7 @@ function inPane(
   images: ReadonlyMap<string, InboxImage> = new Map(),
   asked: string[] = [],
   read: { path: string; ref: string | undefined }[] = [],
-): ReactNode {
+): ReactElement {
   // A file's lines are held unread, so a code card stands as it reads them.
   fakeActPort({
     ...openingLinks((link) => told.push(link)),
@@ -136,7 +136,7 @@ function inPane(
 }
 
 /** The node drawn into a fresh container. */
-function drawn(node: ReactNode): HTMLElement {
+function drawn(node: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

@@ -1,7 +1,8 @@
 import { AGENT_BOUNDS, type AgentSummary, type ListedAgent } from "@repo/features/agent-wire";
 import { summaryOfTaskless, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectTasks } from "../use-app-state.js";
 
 /**
  * use-workspace-agents.ts -- a workspace's newest agents as the task list the host holds carries them: what an automation's Agent picker and an `@` list offer before a word is typed.
@@ -64,7 +65,7 @@ export function useWorkspaceAgents(
   workspaceId: string | undefined,
   repository: string | null,
 ): WorkspaceAgents {
-  const tasks = useAppSlice(APP_SLICE.TASKS);
+  const tasks = useQuery({ ...appStateQuery, select: selectTasks }).data;
   return useMemo(
     () => (workspaceId === undefined ? undefined : newestOf(tasks, workspaceId, repository)),
     [tasks, workspaceId, repository],

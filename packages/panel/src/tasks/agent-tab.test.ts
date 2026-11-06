@@ -27,7 +27,7 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient, writeAppState } from "../testing/copy-feedback.js";
 import { heardWords } from "../testing/heard-words.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -725,6 +725,8 @@ test("a call about an agent the place lists not, whose answer names no model, we
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -800,6 +802,8 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
+  // Note that the test's Query client is handed the document at once, as the registry is, so the first frame draws on it.
+  writeAppState(state);
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   const cards = taskCards({
     agents: agentsControl({}),

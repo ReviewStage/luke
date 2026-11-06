@@ -15,6 +15,7 @@ import {
   openingLinks,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -68,9 +69,11 @@ function pressedEach(openPlace: ((link: ReadLink) => void) | undefined): void {
   const words: ReactNode = createElement(TranscriptWords, { text: WORDS });
   act(() =>
     root.render(
-      openPlace === undefined
-        ? words
-        : createElement(OpenLinkProvider, { value: openPlace }, words),
+      withQueryClient(
+        openPlace === undefined
+          ? words
+          : createElement(OpenLinkProvider, { value: openPlace }, words),
+      ),
     ),
   );
   for (const link of container.querySelectorAll<HTMLElement>(

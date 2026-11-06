@@ -64,6 +64,7 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { isWireString } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -87,7 +88,7 @@ import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -325,7 +326,7 @@ const DRAFT_HEAD = {
 
 /** The reader as the window draws them: as the workspace's members list them, else as their account signs in, else by their id alone. */
 function useReader(readerId: string | undefined): Actor {
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const { members } = useMemberDirectory();
   const member = members?.find((each) => each.userId === readerId);
   if (member !== undefined) return memberActor(member, readerId);

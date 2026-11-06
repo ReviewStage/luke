@@ -59,8 +59,9 @@ import type {
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
+  AppStateSnapshot,
 } from "@repo/host/app-state";
-import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn } from "@repo/settings";
+import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
@@ -107,8 +108,7 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
@@ -136,7 +136,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SETTINGS_VIEW, useAppSlice, useExperimentChoices } from "../use-app-state.js";
+import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -1148,10 +1148,8 @@ const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
-const OPENS_NEW_TASK = Atom.map(
-  APP_SETTINGS_VIEW,
-  (settings) => settings?.openNewTask ?? APP_SETTING_DEFAULTS.openNewTask,
-);
+const selectOpensNewTask = (state: AppStateSnapshot): boolean =>
+  selectAppSettingsView(state)?.openNewTask ?? APP_SETTING_DEFAULTS.openNewTask;
 
 /** What the toast says once New task started a task it did not open. */
 const TASK_STARTED_NOTE = "Task started";
@@ -1734,7 +1732,8 @@ export function useTasksTab(input: {
     [panelTaskId, panelPagesAgent],
   );
   // The account's experiments, which hold where a link to the plan's parts lands.
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -2690,7 +2689,9 @@ export function useTasksTab(input: {
     onRestored: (undo) => sayRestored(toast, undo),
   });
 
-  const opensNewTask = useAppSlice(OPENS_NEW_TASK);
+  const opensNewTask =
+    useQuery({ ...appStateQuery, select: selectOpensNewTask }).data ??
+    APP_SETTING_DEFAULTS.openNewTask;
   // A task opened from a list or a started task's toast, its pin no longer chosen.
   const openUnpinned = (taskId: string) => {
     setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));

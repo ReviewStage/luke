@@ -28,14 +28,7 @@ import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import {
-  type QueryClient,
-  useIsMutating,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import * as Atom from "effect/reactivity/Atom";
+import { type QueryClient, useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
 import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
@@ -53,7 +46,12 @@ import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
+import {
+  appStateQuery,
+  memoizedSelect,
+  selectExperiment,
+  selectPullRequestPublished,
+} from "../use-app-state.js";
 import { HOST_READ_STATUS } from "../use-host-read.js";
 import {
   ARCHIVE_NOT_READY,
@@ -119,8 +117,8 @@ const NO_NUMBERED_PULL_REQUESTS: ByPullRequestTab<AgentPullRequest> = new Map();
  * failed, or named no pull request, holds none, and the agents' own stand
  * apart (`pullRequests`).
  */
-const numberedPullRequestsAtom = Atom.map(
-  APP_SLICE.PULL_REQUEST_PUBLISHED,
+const selectNumberedPullRequests = memoizedSelect(
+  (state) => [selectPullRequestPublished(state)],
   (held): ByPullRequestTab<AgentPullRequest> => {
     const numbered = new Map<string, Map<number | undefined, AgentPullRequest>>();
     for (const [agentId, ofAgent] of Object.entries(held ?? {})) {
@@ -1484,7 +1482,9 @@ export function useAgents(input: {
 
   // A pull request a tab names by its number is kept by agent and number,
   // apart from the agents' own, so it never stands for what an agent published.
-  const numberedPullRequests = useAppSlice(numberedPullRequestsAtom);
+  const numberedPullRequests =
+    useQuery({ ...appStateQuery, select: selectNumberedPullRequests }).data ??
+    NO_NUMBERED_PULL_REQUESTS;
 
   // Note that who a pull request names is kept beside the agent, with the
   // pull request it was read for, so its Changes card says them wherever it
