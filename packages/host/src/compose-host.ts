@@ -366,6 +366,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
                 })),
                 (snapshot) => experimentOn(snapshot.experiments, experiment),
               ),
+            settingsTold: settings.told,
             hostListed: (deviceId) =>
               Effect.map(agentClient.hosts(), (answer) =>
                 "failure" in answer

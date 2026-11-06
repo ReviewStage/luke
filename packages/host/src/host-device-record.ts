@@ -1,6 +1,7 @@
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { Effect, Option, Path, Schema } from "effect";
+import { Effect, Option, Path, Schema, type Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { folderMoves } from "./folder-moves.js";
 
 /**
  * host-device-record.ts -- a machine's record of the device it enrolled as (`device.json` in `vespin-host`'s state): its id, its device secret, the service it enrolled with, and whether that service has since refused the secret.
@@ -49,6 +50,11 @@ export const readHostDevice = Effect.fnUntraced(function* (stateRoot: string) {
     .pipe(Effect.orElseSucceed(() => ""));
   return decodeDevice(text);
 });
+
+/** A pulse each time the record may have moved, as the folder it is written in is watched, since a write moves a new file over it. */
+export const hostDeviceMoves = (
+  stateRoot: string,
+): Stream.Stream<void, never, FileSystem.FileSystem | Path.Path> => folderMoves(stateRoot);
 
 /** The record written whole, readable by its owner alone, beside the file and moved over it. */
 export const writeHostDevice = Effect.fnUntraced(function* (stateRoot: string, device: HostDevice) {
