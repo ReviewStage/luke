@@ -76,6 +76,14 @@ import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
+  COLUMN,
+  pressTab,
+  TAB_OPENS,
+  TAB_PRESS,
+  type TabPressed,
+  type TabPressHow,
+} from "../tasks/tab-press.js";
+import {
   heldTaskMentions,
   TaskMentions,
   type TaskMentionsValue,
@@ -118,7 +126,6 @@ import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./ph
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
 import {
-  COLUMN,
   changesTabOf,
   SIDE_PANEL_HOLDER,
   SidePanel,
@@ -191,11 +198,15 @@ import {
  *
  * ⌘T opens the "+" of the column holding the window's focus, ⌘W closes
  * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
- * panel's once the pointer or the focus went into it, else this column's,
- * which a panel shut hands them back to.
+ * panel's once the pointer or the focus went into it, or a press opened a
+ * tab in it, else this column's, which a panel shut hands them back to. A
+ * row, a link, or a chip opens what it names through the window's one door
+ * for a press (`../tasks/tab-press.ts`), which hands the keys to the column
+ * it opened in, so ⌘W closes the tab it just opened.
  *
  * A skill named in a message to a coding agent, in either column, opens
- * its `SKILL.md` in a File tab of the side panel (`../tasks/skill-chip.tsx`).
+ * its `SKILL.md` in the side panel as a file a chip names does, as the
+ * panel's preview (`../tasks/skill-chip.tsx`).
  *
  * What is wrong with the task itself, whichever tab is read, is said in one
  * line under the toolbar, over every tab of the column, and under the side
@@ -477,7 +488,7 @@ function DescriptionDocument({
     if (commentAsk === undefined || inboxTaskId === undefined || !commentsRead) return;
     onCommentRevealed(commentAsk.ask);
   }, [commentAsk, inboxTaskId, commentsRead, onCommentRevealed]);
-  const { onArea: setArea, focus, setFocus } = useColumnFocus();
+  const { onArea: setArea, focus, setFocus } = useColumnFocus(tasks.tabKeys, tasks.onTabKeysTaken);
   const [column, setColumn] = useState<HTMLElement | null>(null);
   // The description in the column, whose heading a phone's row picks up once it scrolls away under the row (`useHeadingAway`).
   // Note that each box is handed afresh as it mounts, and the document's for each task, because the document stands only once the task is read, and the heading watched is that task's.
@@ -571,15 +582,22 @@ function DescriptionDocument({
   );
   const openMention = tasks.onShowMention;
   const revealed = tasks.sectionReveal;
-  // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
-  const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
-    lines === undefined
-      ? tasks.sidePanel.onPreviewFile({ path })
-      : tasks.sidePanel.onPreviewFile(
-          { path, startLine: lines.startLine, endLine: lines.endLine },
-          lines.commit,
-        );
   const { mainTabs, sidePanel, agents } = tasks;
+  // What a row, a link, or a chip on the page names opens through the window's one door for a press,
+  // which hands the keys to the column it opened in, so ⌘W closes the tab it opened (`tab-press.ts`).
+  const onPressTab = (pressed: TabPressed, how?: TabPressHow) =>
+    pressTab({ sidePanel, mainTabs, onKeys: setFocus }, pressed, how);
+  // A file a mention names opens as a link pressed does, its lines at the commit the mention pins them to.
+  const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
+    onPressTab(
+      lines === undefined
+        ? { kind: TAB_PRESS.FILE, ref: { path } }
+        : {
+            kind: TAB_PRESS.FILE,
+            ref: { path, startLine: lines.startLine, endLine: lines.endLine },
+            commit: lines.commit,
+          },
+    );
   const { tab } = mainTabs;
   const home =
     opened === undefined
@@ -591,11 +609,7 @@ function DescriptionDocument({
   // A row that opens a tab of this column, as a coding agent's start in an
   // agent's tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
-  const openColumnTab = (opened: MainTab) => {
-    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    mainTabs.onChoose(opened);
-    setFocus(COLUMN.MAIN);
-  };
+  const openColumnTab = (opened: MainTab) => onPressTab({ kind: TAB_PRESS.COLUMN, tab: opened });
   // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page
   // instead, where it is read and brought back, a panel filling the window over it giving way and
   // the keys handed to the page, as a tab of this column opens.
@@ -642,12 +656,14 @@ function DescriptionDocument({
     panelWasOpen.current = sidePanel.open;
     if (opened && detailsOver) leaveDetailsDoor();
   }, [sidePanel.open, detailsOver, leaveDetailsDoor]);
-  // A row that opens the comments, which stand in the side panel, shows the
-  // panel on them and hands it the keys, as a terminal shown does.
-  const openPanelTab = (opened: SidePanelTab) => {
-    sidePanel.onChoose(opened);
-    showSide();
-  };
+  // A row that names a tab of the side panel rather than linking to it, as the
+  // summary's do, opens it kept, handing the panel the keys (`tab-press.ts`).
+  const openPanelTab = (opened: SidePanelTab) =>
+    onPressTab({ kind: TAB_PRESS.PANEL, tab: opened }, { opens: TAB_OPENS.KEPT });
+  // What a link or a chip in a transcript or the description names in the side panel opens as the panel's
+  // preview, the panel taking the keys, so ⌘W closes what it opened (`tab-press.ts`).
+  const previewPanelTab = (opened: SidePanelTab, place?: PagePlace) =>
+    onPressTab({ kind: TAB_PRESS.PANEL, tab: opened, place });
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: an agent or the plan in this column, the
   // thread a call names in the window's Inbox as it stands, where the task's
@@ -673,7 +689,7 @@ function DescriptionDocument({
         );
       }
       case TOOL_TARGET.PAGE:
-        return sidePanel.onPreview(pageTab(target.page));
+        return previewPanelTab(pageTab(target.page));
       case TOOL_TARGET.TASK:
         // A call that named this very task opens its plan in the column, as one on its own plan does.
         if (target.agent === undefined && target.task === taskId) return openOverview();
@@ -684,12 +700,18 @@ function DescriptionDocument({
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (agent: string, callId: string, task: string, status: AgentStatus) => {
     views.onWorkerStatus(callId, status);
-    sidePanel.onPreview(subagentTab(callId, { agent, task }));
+    previewPanelTab(subagentTab(callId, { agent, task }));
   };
   // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
   // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
   const openPullRequest = (agentId: string, number?: number) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
+    showPullRequest(
+      { ...sidePanel, onPreview: previewPanelTab },
+      agents,
+      agentId,
+      PULL_REQUEST_VIEW.CONVERSATION,
+      number,
+    );
   // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
   // An agent the task lists not has no tab here, so a link to it, which names no task, wears what the window reads of it.
   const agentLook = (agentId: string) => {
@@ -739,7 +761,7 @@ function DescriptionDocument({
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   // A page of another task, a subtask's among them, opens beside this one, read on its own task, so the reader stays here.
   const openPageBeside = useSteadyDoor((page: string, place: PagePlace) =>
-    sidePanel.onPreview(pageTab(page), place),
+    previewPanelTab(pageTab(page), place),
   );
   const openAgent = useSteadyDoor(openAgentColumn);
   const openAgentTab = useSteadyDoor(openColumnTab);
@@ -1199,17 +1221,16 @@ function DescriptionDocument({
   );
   // The description stands in the column's Overview and the task's Inbox
   // in the side panel, each drawn here, where what they read is held.
-  // A summary row that opens a tab of the side panel hands the panel the
-  // keys, as a transcript's row does (`openPanelTab`), so ⌘W closes what it opened.
+  // A summary row that opens a tab of the side panel opens it kept, since it
+  // names the tab rather than linking to it, through the one door a press
+  // opens a tab by (`openPanelTab`), so the panel takes the keys and ⌘W closes what it opened.
   const summaryTasks: TasksControl = {
     ...tasks,
     sidePanel: {
       ...sidePanel,
       onChoose: openPanelTab,
-      onOpenFile: (ref, commit) => {
-        sidePanel.onOpenFile(ref, commit);
-        showSide();
-      },
+      onOpenFile: (ref, commit) =>
+        onPressTab({ kind: TAB_PRESS.FILE, ref, commit }, { opens: TAB_OPENS.KEPT }),
     },
   };
   // Note that the document stays laid out while another tab of the column is
@@ -1623,9 +1644,13 @@ export const DesktopTasks = memo(function DesktopTasks({
       return (
         <SkillFiles
           source={tasks.agents.readSkills}
-          // Note that a skill's file opens as a file the palette finds does, whole,
-          // so its tab stands on this task though the app never showed it.
-          onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
+          // A skill's file opens whole, as a chip naming a file does: as the panel's preview (`tab-press.ts`).
+          onOpen={(skill) =>
+            pressTab(
+              { ...tasks, onKeys: tasks.onTabKeys },
+              { kind: TAB_PRESS.FILE, ref: { path: skill.path } },
+            )
+          }
         >
           <DescriptionDocument
             tasks={tasks}

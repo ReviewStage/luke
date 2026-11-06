@@ -1311,6 +1311,34 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   assert.equal(tab.told.length, told, "the late read opens no other task");
 });
 
+test("a pinned agent of another task, archived since it was pinned, opens on its own page, as its row's card does", async () => {
+  const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
+  const tab = mount(
+    {
+      shown: true,
+      tasks: withAgents([
+        RUNNING_AGENT,
+        { ...RUNNING_AGENT, id: ARCHIVED, planId: OTHER_TASK_ID, archivedAt: 3 },
+      ]),
+    },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+
+  act(() =>
+    tab.control().onOpenPinnedTab({
+      task: OTHER_TASK_ID,
+      tab: agentTab(ARCHIVED),
+      label: "Sweep",
+      at: 5,
+      model: RUNNING_AGENT.model,
+    }),
+  );
+  await settle();
+
+  assert.equal(tab.control().agentView.agentId, ARCHIVED);
+});
+
 test("a Vespin link to a worker of an archived agent's task, opened before the list followed live lands, reads the agent and opens its page, a side panel gone full screen meanwhile giving way", async () => {
   const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
   let answer: () => void = () => undefined;

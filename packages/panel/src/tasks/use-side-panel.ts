@@ -735,6 +735,8 @@ export interface SidePanelControl {
   onNewTabAnswered: () => void;
   /** Shows the panel on the tab, opening it at the strip's end where the strip does not draw it, and choosing it where it does; a fixed tab stays open on that task. */
   onChoose: (tab: SidePanelTab) => void;
+  /** Shows the panel on the tab as `onChoose` does, as a door naming it opens it, so the history takes it as a step of its own (`opened`): a row of the task's summary (`tab-press.ts`). */
+  onOpen: (tab: SidePanelTab) => void;
   /**
    * Shows the panel on the tab as a link pressed opens it: as the task's
    * one preview, drawn in italics, which the next tab a link opens takes
@@ -782,8 +784,9 @@ export interface SidePanelControl {
   onPlacePins: (places: ReadonlyMap<number, string | undefined>) => void;
   /**
    * Shows the panel on the file's tab, opening one at the strip's end where
-   * none stands: the window's one door for a file named in place
-   * (`file-ref.tsx`). A reference naming lines lights them; with `commit`,
+   * none stands, kept: what a row naming a file asks, the summary's or ⌘K's,
+   * as against a file named in place, which opens as the preview
+   * (`onPreviewFile`, `tab-press.ts`). A reference naming lines lights them; with `commit`,
    * as an inbox item's code opens it, the file as it stood at that commit.
    * Either is drawn on the open task. One
    * naming the file alone, as ⌘K finds it, leaves a tab it has as it stands
@@ -2312,6 +2315,14 @@ export function useSidePanel(
     },
     [update, drawn, taskId, pagePlace],
   );
+  const onOpen = useCallback(
+    (tab: SidePanelTab) => {
+      if (retiredKind(tab)) return;
+      setOpened((was) => was + 1);
+      onChoose(tab);
+    },
+    [onChoose],
+  );
   // Note that the retired kinds, which a step of the history or a pin an
   // earlier version kept may still name, are never chosen nor shown: a
   // task's threads open in the window's Inbox, and the description lists its comments. A tab shown on another task
@@ -2560,6 +2571,7 @@ export function useSidePanel(
     onNewTab,
     onNewTabAnswered,
     onChoose,
+    onOpen,
     onShow,
     onCarry,
     onClose,

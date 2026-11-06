@@ -645,7 +645,7 @@ function PanelPage(): React.JSX.Element {
   });
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Description or Comments", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page as its preview, as on a task, whose + offers no Inbox, its threads opening in the window's Inbox, and none of a task's Description or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -681,6 +681,9 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
   await settle();
   const panel = container.querySelector("aside.side-panel");
   const opened = [...(panel?.querySelectorAll("[role='tab']") ?? [])].map((tab) => tab.textContent);
+  const previewed = [...(panel?.querySelectorAll(".ui-tab[data-preview='true']") ?? [])].map(
+    (tab) => tab.textContent,
+  );
   const add = panel?.querySelector<HTMLButtonElement>("button[aria-label='Open a tab']");
   assert.ok(add, "the panel offers its +");
   act(() => add.click());
@@ -690,6 +693,10 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
   assert.ok(
     opened.some((label) => label?.includes("Find the flakiest test.")),
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
+  );
+  assert.ok(
+    previewed.some((label) => label?.includes("Find the flakiest test.")),
+    `the worker opens as the panel's preview, as a link pressed opens a tab: ${previewed.join(", ")}`,
   );
   assert.deepEqual(
     offered.filter((label) => /^(Description|Comments|Inbox)/u.test(label ?? "")),
