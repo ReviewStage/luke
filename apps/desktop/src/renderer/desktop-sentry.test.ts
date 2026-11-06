@@ -200,7 +200,7 @@ test("a span the sample leaves out is never measured", async () => {
     endedAt: Date.now(),
     attributes: () => {
       measured = true;
-      return { [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: 4_000 };
+      return { [PANEL_SPAN_ATTRIBUTE.DESCRIPTION_CHARS]: 4_000 };
     },
   });
   sentry.load();

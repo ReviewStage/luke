@@ -276,7 +276,7 @@ test("two pieces of work under way stand apart, each settles its own card in pla
       words: "Couldn't save",
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
-      failure: { surface: FAILURE_SURFACE.PLAN_SAVE, cause: FAILURE_CONDITION.NOT_KEPT },
+      failure: { surface: FAILURE_SURFACE.DESCRIPTION_SAVE, cause: FAILURE_CONDITION.NOT_KEPT },
     }),
   );
   act(() => first?.({ words: "Saved", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }));

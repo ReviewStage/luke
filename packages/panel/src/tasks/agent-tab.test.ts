@@ -9,7 +9,7 @@ import {
 } from "@repo/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import type { PlanMention } from "@repo/features/mention-link";
+import type { DescriptionMention } from "@repo/features/mention-link";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -143,7 +143,7 @@ const OPENING_CALLS: readonly {
   },
   {
     name: "a plan edit, named by the plan's chip, called Plan until the window holds its name, and no count",
-    tool: "edit_plan",
+    tool: "edit_description",
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
     target: { kind: TOOL_TARGET.PLAN },
@@ -210,7 +210,10 @@ for (const call of OPENING_CALLS) {
     });
     const page = {
       ...TASK_PAGE,
-      doors: { ...TASK_PAGE.doors, onOpenTask: (plan: PlanMention) => left.push(plan.taskId) },
+      doors: {
+        ...TASK_PAGE.doors,
+        onOpenTask: (plan: DescriptionMention) => left.push(plan.taskId),
+      },
     };
     const { container } = drawn(
       assistant([toolPart(call.tool, call.input, call.output)]),
@@ -353,7 +356,9 @@ const FOLDING_CALLS: readonly {
   },
   {
     name: "a plan edit still running",
-    part: toolPart("edit_plan", { notes: [{ kind: "add", section: "Goal", text: "Export" }] }),
+    part: toolPart("edit_description", {
+      notes: [{ kind: "add", section: "Goal", text: "Export" }],
+    }),
   },
   {
     name: "a file the agent read, which its checkout holds and GitHub may not",
@@ -902,7 +907,7 @@ test("a call about the plan or another task hangs that task's card as its Plan t
   const root = createRoot(container);
   roots.push(root);
   const message = assistant([
-    toolPart("edit_plan", { notes: [] }, ACCEPTED),
+    toolPart("edit_description", { notes: [] }, ACCEPTED),
     toolPart(
       "read_task",
       { taskId: "task-retries" },
@@ -947,7 +952,7 @@ test("a call about the plan or another task hangs that task's card as its Plan t
     };
   };
 
-  assert.deepEqual(cardOf("edit_plan"), { task: "task-invoices", name: "Invoice export" });
+  assert.deepEqual(cardOf("edit_description"), { task: "task-invoices", name: "Invoice export" });
   assert.deepEqual(cardOf("read_task"), { task: "task-retries", name: "Retry audit" });
   assert.deepEqual(cardOf("create_task"), { task: "", name: "Billing cleanup" });
 });

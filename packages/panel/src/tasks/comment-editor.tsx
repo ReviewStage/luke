@@ -10,14 +10,14 @@ import {
 import { FileDiffIcon } from "@repo/ui/icons";
 import { markdownClass } from "@repo/ui/markdown-class";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
-import { enterSends } from "../enter-sends.js";
 import {
+  type DescriptionEditorHandle,
   EDITOR_ROOT_SELECTOR,
   FINISH,
   type Finish,
   PLACEMENT_END,
-  type PlanEditorHandle,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
+import { enterSends } from "../enter-sends.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import type { OwnBlock } from "./block-picker.js";
 import { MarkdownEditor } from "./markdown-editor.js";
@@ -139,7 +139,7 @@ export function CommentEditor({
   foot?: ReactNode;
 }): React.JSX.Element {
   const { opened, said } = useOpened(value);
-  const handle = useRef<PlanEditorHandle | undefined>(undefined);
+  const handle = useRef<DescriptionEditorHandle | undefined>(undefined);
   const room = useRef<HTMLElement>(null);
   // Whether the last key the editor finished on is one no owner answers, which goes on as an untaken key does.
   const unanswered = useRef(false);

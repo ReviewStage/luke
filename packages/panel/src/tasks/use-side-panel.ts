@@ -57,7 +57,7 @@ import {
  * plan's Comments once a comment was left on it; none is drawn or offered
  * now, since the column's Overview holds the plan, a task's threads open
  * in the window's Inbox, and the plan lists its own comments in its
- * margin's place (`plan-comments.tsx`'s `PlanCommentList`), and what an
+ * margin's place (`description-comments.tsx`'s `DescriptionCommentList`), and what an
  * earlier version kept of any of them reads and opens nothing
  * (`DRAWN_KINDS`). So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
@@ -187,7 +187,7 @@ export const SIDE_PANEL_TAB = {
   INBOX: "inbox",
   /**
    * The plan's comment threads, which the plan lists in its margin's place
-   * now (`plan-comments.tsx`'s `PlanCommentList`). Note that it is kept
+   * now (`description-comments.tsx`'s `DescriptionCommentList`). Note that it is kept
    * here, drawn and offered nowhere (`DRAWN_KINDS`), because what an earlier
    * version kept and pinned names it.
    */

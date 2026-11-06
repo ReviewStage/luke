@@ -1,8 +1,8 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
 import type { CatalogModel } from "@repo/features/models-wire";
-import { planSections } from "@repo/features/plan-document";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { TASKS_READ } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
@@ -18,8 +18,8 @@ import {
   useState,
 } from "react";
 import { askAct, useAct } from "../act.js";
+import type { MentionNode } from "../description-editor/contract.js";
 import type { LinkDrawer } from "../markdown-message.js";
-import type { MentionNode } from "../plan-editor/contract.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { useHeldRows } from "../use-host-read.js";
 import { agentActor, agentName } from "./agent-model.js";
@@ -40,7 +40,7 @@ import { workspaceAgentSearchQueryOptions } from "./workspace-agent-search.js";
  * task-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
  *
  * The plan's own words draw their mentions through the document
- * (`plan-body.tsx`); an agent's message box on the same page picks them with
+ * (`description-body.tsx`); an agent's message box on the same page picks them with
  * `@` (`agent-composer.tsx`), the task's pages and agents among them, and its transcript draws the ones a message
  * holds as chips (`transcript-blocks.tsx`). Those stand far from the task's
  * page in the tree, so the page hands them this, as it hands them its skills
@@ -58,7 +58,7 @@ import { workspaceAgentSearchQueryOptions } from "./workspace-agent-search.js";
  *
  * The Inbox's box on a thread of a task hands what the task's page does
  * (`heldTaskMentions`), off that page: the plan's sections as last saved
- * (`useSavedPlanText`), and the pages, agents, and pull requests the
+ * (`useSavedDescriptionText`), and the pages, agents, and pull requests the
  * Inbox holds of the task.
  *
  * The page also carries a mention made elsewhere on it into the agent's
@@ -246,7 +246,7 @@ export function heldTaskMentions(
       anchors:
         text === undefined
           ? NO_ANCHORS
-          : new Set(sectionAnchors(planSections(text).map((section) => section.heading))),
+          : new Set(sectionAnchors(descriptionSections(text).map((section) => section.heading))),
     },
   };
 }
@@ -286,10 +286,10 @@ async function newestRevisionText(taskId: string): Promise<string | null> {
  * the words last read standing meanwhile; none until first read, or where
  * the read failed. A plan with no revision yet has no words to offer.
  */
-export function useSavedPlanText(
+export function useSavedDescriptionText(
   task: Pick<TaskSummary, "id" | "updatedAt"> | undefined,
 ): string | undefined {
-  const held = useHeldRows(LIVE_READ.PLAN_DOCUMENT, task?.id);
+  const held = useHeldRows(LIVE_READ.DESCRIPTION_DOCUMENT, task?.id);
   const openText = held !== undefined && "task" in held ? held.task.document.body : undefined;
   const reading = openText === undefined ? task?.id : undefined;
   const savedAt = task?.updatedAt;

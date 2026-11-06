@@ -3,9 +3,9 @@ import { AGENT_BRIEF } from "@repo/features/agent-wire";
 import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@repo/features/mention-link";
 import { test } from "vitest";
+import { EDIT_DESCRIPTION_TOOL } from "./coder-host/description-edit.js";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
-import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
 
 /**
  * link-examples.test.ts -- the link every author is shown how to write a
@@ -88,7 +88,7 @@ test("a coding agent is shown to name each kind as a mention Vespin draws as its
 });
 
 test("the thread post tool and the plan's edit tool show a file's link Vespin draws as its chip, written as a mention", () => {
-  for (const description of [INBOX_TOOLS.POST.description, EDIT_PLAN_TOOL.description]) {
+  for (const description of [INBOX_TOOLS.POST.description, EDIT_DESCRIPTION_TOOL.description]) {
     assert.deepEqual(drawnAs(description), [MENTION_KIND.FILE]);
     assert.ok(
       linksIn(description).every(({ label }) => isMentionLabel(label)),

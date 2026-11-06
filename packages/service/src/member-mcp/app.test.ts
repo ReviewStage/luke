@@ -13,13 +13,13 @@ import {
   listAutomationRuns,
   readAutomation,
 } from "@repo/database/models/automation-store";
-import { listMemories, rememberMemory } from "@repo/database/models/memory-store";
 import {
-  PLAN_COMMENT_OUTCOME,
-  readPlanCommentThreads,
-  startPlanCommentThread,
-} from "@repo/database/models/plan-comments";
-import { listRevisions } from "@repo/database/models/plan-revisions";
+  DESCRIPTION_COMMENT_OUTCOME,
+  readDescriptionCommentThreads,
+  startDescriptionCommentThread,
+} from "@repo/database/models/description-comments";
+import { listRevisions } from "@repo/database/models/description-revisions";
+import { listMemories, rememberMemory } from "@repo/database/models/memory-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
@@ -40,17 +40,17 @@ import {
   AUTOMATION_FIRING,
   AUTOMATION_TRIGGER,
 } from "@repo/features/automation-wire";
-import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-} from "@repo/features/plan-comment-wire";
-import { NOTE_KIND } from "@repo/features/plan-notes";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+} from "@repo/features/description-comment-wire";
+import { NOTE_KIND } from "@repo/features/description-notes";
+import { INBOX_ANSWER_LEAD, INBOX_ASK, INBOX_REPLY, INBOX_STATUS } from "@repo/features/inbox-wire";
 import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
-import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { settleJsonSchemaGolden } from "@repo/wire/testing";
@@ -58,7 +58,7 @@ import { eq, sql } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { afterEach, vi } from "vitest";
 import { readWorkspaceMemories, WORKSPACE_MEMORY } from "../accounts/workspace-memories.js";
-import { recordMemberPlanNotes } from "../agents/coder-host/plan-edit.js";
+import { recordMemberDescriptionNotes } from "../agents/coder-host/description-edit.js";
 import { DESKTOP_OAUTH_CLIENT } from "../auth/oauth-clients.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread, readInboxItem } from "../inbox/inbox-store.js";
@@ -211,7 +211,7 @@ const decodeFound = Schema.decodeUnknownSync(
 const PLAN_NOTE = { kind: NOTE_KIND.ADD, section: "Problem", text: "Seats drift." } as const;
 
 /** Plans turned on or off for the account, as Settings › Experimental turns it. */
-const plansFor = (userId: string, on: boolean) =>
+const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
 /** Memory turned on for the account, as Settings › Experimental turns it on. */
@@ -228,7 +228,7 @@ const standingAgent = (userId: string, taskId: string) =>
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         repository: null,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: "Size the seats.",
         runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         payer: AGENT_PAYER.API_KEY,
@@ -547,25 +547,27 @@ it.effect(
           nextRunAt: null,
           webhookSecretHash: null,
         });
-        yield* recordMemberPlanNotes(
+        yield* recordMemberDescriptionNotes(
           { userId: stranger.userId, taskId: task.id },
           { notes: [PLAN_NOTE] },
         );
         const { text } = Option.getOrThrow(yield* readTask(stranger.userId, task.id));
         const from = text.indexOf(PLAN_NOTE.text);
-        const started = yield* startPlanCommentThread(
-          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: stranger.userId },
+        const started = yield* startDescriptionCommentThread(
+          { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: stranger.userId },
           task.id,
           {
             clientKey: randomUUID(),
-            scope: PLAN_COMMENT_SCOPE.WORDS,
+            scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
             quote: PLAN_NOTE.text,
             anchor: { from, to: from + PLAN_NOTE.text.length },
             text,
             words: "A stranger's comment.",
           },
         );
-        assert.ok(started.status === PLAN_COMMENT_OUTCOME.DONE && "thread" in started.answer);
+        assert.ok(
+          started.status === DESCRIPTION_COMMENT_OUTCOME.DONE && "thread" in started.answer,
+        );
         const kept = yield* rememberMemory(
           elsewhere,
           stranger.userId,
@@ -601,7 +603,7 @@ it.effect(
           [MEMBER_MCP_TOOL.CREATE_TASK, { workspace, name: "Planted" }],
           [MEMBER_MCP_TOOL.UPDATE_TASK, { taskId, name: "Renamed" }],
           [
-            MEMBER_MCP_TOOL.EDIT_PLAN,
+            MEMBER_MCP_TOOL.EDIT_DESCRIPTION,
             { taskId, notes: [{ kind: NOTE_KIND.ADD, section: "Problem", text: "Planted." }] },
           ],
           [MEMBER_MCP_TOOL.CREATE_SECTION, { workspace, title: "Planted" }],
@@ -613,7 +615,10 @@ it.effect(
           [MEMBER_MCP_TOOL.STOP_AGENT, { agentId }],
           [MEMBER_MCP_TOOL.UPDATE_AGENT, { agentId, archived: true }],
           [MEMBER_MCP_TOOL.READ_COMMENTS, { taskId }],
-          [MEMBER_MCP_TOOL.COMMENT_ON_PLAN, { taskId, quote: PLAN_NOTE.text, words: "Planted." }],
+          [
+            MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION,
+            { taskId, quote: PLAN_NOTE.text, words: "Planted." },
+          ],
           [MEMBER_MCP_TOOL.REPLY_TO_COMMENT, { taskId, thread: threadId, words: "Planted." }],
           [MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread: threadId, resolved: true }],
           [MEMBER_MCP_TOOL.SEARCH_MEMORY, { workspace }],
@@ -653,7 +658,7 @@ it.effect(
           task: yield* readTask(stranger.userId, taskId),
           sections: yield* listTaskSections(stranger.userId),
           agent: yield* readAgent(stranger.userId, agentId),
-          threads: yield* readPlanCommentThreads(stranger.userId, taskId),
+          threads: yield* readDescriptionCommentThreads(stranger.userId, taskId),
           memories: yield* listMemories(rows.elsewhere),
           ownMemories: yield* listMemories(rows.own),
           automation: yield* readAutomation(stranger.userId, automationId),
@@ -679,7 +684,7 @@ it.effect(
           status: thread.status,
           comments: thread.entries.map(({ words }) => words),
         })),
-        [{ status: PLAN_COMMENT_STATUS.OPEN, comments: ["A stranger's comment."] }],
+        [{ status: DESCRIPTION_COMMENT_STATUS.OPEN, comments: ["A stranger's comment."] }],
       );
       assert.deepEqual(
         after.memories.map(({ text }) => text),
@@ -704,7 +709,7 @@ it.effect(
       const member = yield* Effect.promise(() => signUp(auth));
       const agentId = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
-        yield* plansFor(member.userId, true);
+        yield* descriptionsFor(member.userId, true);
         return yield* openTaskAgent(member.userId, own, null);
       }).pipe(Effect.provide(services));
       const token = yield* Effect.promise(() =>
@@ -729,7 +734,7 @@ it.effect(
         }),
       );
       const taskId = made.task.id;
-      yield* call(MEMBER_MCP_TOOL.EDIT_PLAN, {
+      yield* call(MEMBER_MCP_TOOL.EDIT_DESCRIPTION, {
         taskId,
         notes: [{ kind: NOTE_KIND.ADD, section: "Problem", text: "Invoices lag too." }],
       });
@@ -767,7 +772,7 @@ it.effect(
       // The plan's first text and the note are the member's own, as their window writes it, and no agent's.
       assert.deepEqual(
         [...new Set(after.revisions.revisions.map(({ lastEdit }) => lastEdit.actor))],
-        [PLAN_ACTOR.DEVELOPER],
+        [DESCRIPTION_ACTOR.DEVELOPER],
       );
       assert.deepEqual(after.agent.archivedBy, {
         by: AGENT_ARCHIVER.MEMBER,
@@ -974,10 +979,10 @@ it.effect(
       const member = yield* Effect.promise(() => signUp(auth));
       const { taskId, agentId } = yield* Effect.gen(function* () {
         const own = yield* openWorkspace(member.userId);
-        yield* plansFor(member.userId, true);
+        yield* descriptionsFor(member.userId, true);
         yield* connectAgentApiKeys(member.userId);
         const task = yield* createTask(member.userId, { organizationId: own, name: "Seats" });
-        yield* recordMemberPlanNotes(
+        yield* recordMemberDescriptionNotes(
           { userId: member.userId, taskId: task.id },
           { notes: [PLAN_NOTE] },
         );
@@ -1000,7 +1005,7 @@ it.effect(
       const mention = `[@Seats](https://vespin.dev/acme/plan/${taskId}/agent/${agentId})`;
 
       const { thread } = decodeThread(
-        yield* call(MEMBER_MCP_TOOL.COMMENT_ON_PLAN, {
+        yield* call(MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION, {
           taskId,
           quote: PLAN_NOTE.text,
           words: `${mention} do seats still drift?`,
@@ -1011,11 +1016,11 @@ it.effect(
       const resolved = decodeThread(
         yield* call(MEMBER_MCP_TOOL.UPDATE_COMMENT, { taskId, thread, resolved: true }),
       );
-      yield* plansFor(member.userId, false).pipe(Effect.provide(services));
+      yield* descriptionsFor(member.userId, false).pipe(Effect.provide(services));
       const planless = decodeAnswer(
         yield* Effect.promise(() =>
           client.callTool({
-            name: MEMBER_MCP_TOOL.COMMENT_ON_PLAN,
+            name: MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION,
             arguments: { taskId, quote: PLAN_NOTE.text, words: "Still drifting?" },
           }),
         ),
@@ -1028,7 +1033,7 @@ it.effect(
           .from(messages)
           .where(sql`${messages.metadata} ->> 'thread_id' = ${thread}`);
       }).pipe(Effect.provide(services));
-      const stored = yield* readPlanCommentThreads(member.userId, taskId).pipe(
+      const stored = yield* readDescriptionCommentThreads(member.userId, taskId).pipe(
         Effect.provide(services),
       );
 
@@ -1046,7 +1051,7 @@ it.effect(
           },
         ],
       );
-      assert.equal(resolved.state, PLAN_COMMENT_STATUS.RESOLVED);
+      assert.equal(resolved.state, DESCRIPTION_COMMENT_STATUS.RESOLVED);
       assert.equal(planless.isError, true);
       assert.match(planless.content[0].text, /has Plans off/u);
       // The thread was handed to the agent once for each comment, as the member's words, as a reply in the window hands it.
@@ -1061,11 +1066,11 @@ it.effect(
       const entries = Option.getOrThrow(stored)[0]?.entries ?? [];
       assert.deepEqual(
         entries
-          .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT)
+          .filter((entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT)
           .map((entry) => [entry.writer.actor, entry.writer.by?.userId]),
         [
-          [PLAN_COMMENT_ACTOR.MEMBER, member.userId],
-          [PLAN_COMMENT_ACTOR.MEMBER, member.userId],
+          [DESCRIPTION_COMMENT_ACTOR.MEMBER, member.userId],
+          [DESCRIPTION_COMMENT_ACTOR.MEMBER, member.userId],
         ],
       );
     }),

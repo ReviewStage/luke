@@ -52,6 +52,7 @@ import {
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
+import { taskCommentsLiveAnswerSchema } from "../description-comment-live.js";
 import { hostsLiveAnswerSchema } from "../host-live.js";
 import { installedSkillsLiveAnswerSchema } from "../installed-skill-live.js";
 import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
@@ -70,7 +71,6 @@ import {
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
 import { workspaceMemoriesLiveAnswerSchema } from "../memory-live.js";
-import { taskCommentsLiveAnswerSchema } from "../plan-comment-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";

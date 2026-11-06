@@ -530,7 +530,7 @@ const TASK_MENU_LABEL = "Task actions";
  * task's card, that opens the
  * task's details across the page and, pressed again, goes back to the agents
  * (`details`), as a channel's name opens its details, and whose right-click
- * is the task's own menu (`planMenu`), whichever the page shows; then
+ * is the task's own menu (`descriptionMenu`), whichever the page shows; then
  * `actions`. No ⋯ stands on the bar, as none stands on the tab rows under
  * it: every menu there is a right-click. The window's side panel toggle
  * stands at its end (`desktop-shell.tsx`).
@@ -538,7 +538,7 @@ const TASK_MENU_LABEL = "Task actions";
 export function TaskTopbar({
   task,
   details,
-  planMenu,
+  descriptionMenu,
   shown,
   actions,
 }: {
@@ -547,7 +547,7 @@ export function TaskTopbar({
   /** Whether the task's details stand in the column, and the press that opens or leaves them. */
   details: { readonly shown: boolean; readonly onToggle: () => void } | undefined;
   /** The task's own menu, which its ⋯ draws. */
-  planMenu: DocumentMenu | undefined;
+  descriptionMenu: DocumentMenu | undefined;
   /** Whether the task's page is on screen, for the menu not to outlive it. */
   shown: boolean;
   actions?: React.ReactNode;
@@ -564,7 +564,7 @@ export function TaskTopbar({
         lead={details === undefined ? look?.icon : undefined}
         title={task?.name}
         titleMenu={
-          task === undefined || planMenu === undefined
+          task === undefined || descriptionMenu === undefined
             ? undefined
             : { contextMenu: menu.contextMenu(), keyMenu: menu.keyMenu }
         }
@@ -588,13 +588,13 @@ export function TaskTopbar({
         measure
         actions={actions}
       />
-      {menu.drawn === undefined || planMenu === undefined ? null : (
+      {menu.drawn === undefined || descriptionMenu === undefined ? null : (
         <ActionMenu
           label={TASK_MENU_LABEL}
           menu={menu.drawn}
-          subject={planMenu.subject}
-          footer={planMenu.footer}
-          groups={planMenu.groups()}
+          subject={descriptionMenu.subject}
+          footer={descriptionMenu.footer}
+          groups={descriptionMenu.groups()}
           onClose={menu.close}
         />
       )}

@@ -49,7 +49,7 @@ import type {
 } from "@repo/features/slack-bot-wire";
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
-  type PlanRevisionsAnswer,
+  type DescriptionRevisionsAnswer,
   startRelationsOf,
   TASK_BLOCK_CHANGE,
   TASK_CREATE_RELATION_KIND,
@@ -210,28 +210,28 @@ import {
 } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import {
+  type CommentSubjectKey,
+  commentSubjectOf,
+  descriptionCommentReads,
+} from "./description-comment-reads.js";
+import { descriptionCommentWrites } from "./description-comment-writes.js";
+import { descriptionDocumentReads } from "./description-document-reads.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
+  DescriptionPictureKey,
   FileAtCommitKey,
   type KeptContent,
   keptOfTask,
   PageVersionKey,
-  PlanPictureKey,
 } from "./kept-content.js";
 import { type HeldAnswers, heldSlice, rowWriteOn } from "./live-collection.js";
 import { confirmWrite, FOLLOW_BACKOFF, LIVE_GONE, LiveBroken, type TxWait } from "./live-follow.js";
 import { pushLive } from "./live-push.js";
-import {
-  type CommentSubjectKey,
-  commentSubjectOf,
-  planCommentReads,
-} from "./plan-comment-reads.js";
-import { planCommentWrites } from "./plan-comment-writes.js";
-import { planDocumentReads } from "./plan-document-reads.js";
 import type { PullRequestListing } from "./pull-request-parts.js";
 import { type OfflineRefused, untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
@@ -267,7 +267,7 @@ import { followSidebarRows, workspacesMoves } from "./workspaces-follow.js";
  *
  * Nothing here writes a plan but a restore or an edit the developer asks
  * for: the task's coding agents are its writers, on the service. Each plan
- * a window opened is held for it per task (`plan-document-reads.ts`), read
+ * a window opened is held for it per task (`description-document-reads.ts`), read
  * as it is first held and again as its record's plan mark moves, and never
  * on a clock. The list itself is followed over Neon Realtime from the
  * account gate opening until a sign-out (`task-list-follow.ts`), and is read
@@ -440,7 +440,7 @@ function listedChannel({
 const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 
 /** The plan a task starts on, empty, as the service makes it. */
-const EMPTY_PLAN = { body: "", assumptions: [] } as const satisfies Task["document"];
+const EMPTY_DESCRIPTION = { body: "", assumptions: [] } as const satisfies Task["document"];
 
 /** A start's request as the service is sent it, under the id the host minted for its task where the window named none. */
 type StartRequest = Omit<TasksStartRequest, "quiet"> & { readonly id: string };
@@ -686,9 +686,9 @@ function relationDrawn(change: RelationChange): (row: PlanRow) => Partial<PlanRo
  * older page is read from with them.
  */
 function withNewestPage(
-  held: PlanRevisionsAnswer | undefined,
-  page: PlanRevisionsAnswer,
-): PlanRevisionsAnswer {
+  held: DescriptionRevisionsAnswer | undefined,
+  page: DescriptionRevisionsAnswer,
+): DescriptionRevisionsAnswer {
   const oldest = page.revisions.at(-1)?.seq;
   if (held === undefined || oldest === undefined || page.earlier === undefined) return page;
   const older = held.revisions.filter((line) => line.seq < oldest);
@@ -704,10 +704,10 @@ function withNewestPage(
  * the page says.
  */
 function withOlderPage(
-  held: PlanRevisionsAnswer,
+  held: DescriptionRevisionsAnswer,
   before: number,
-  page: PlanRevisionsAnswer,
-): PlanRevisionsAnswer {
+  page: DescriptionRevisionsAnswer,
+): DescriptionRevisionsAnswer {
   const revisions = [...held.revisions.filter((line) => line.seq >= before), ...page.revisions];
   return page.earlier === undefined ? { revisions } : { revisions, earlier: page.earlier };
 }
@@ -884,7 +884,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * answers are applied in the order the reads were made, because a list
    * that left before a task started would otherwise land last and roll the
    * view back. A held plan is read outside it, ordered by its task's own
-   * numbers instead (`plan-document-reads.ts`).
+   * numbers instead (`description-document-reads.ts`).
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
 
@@ -929,7 +929,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * laid over the older ones held (`withNewestPage`) and told through
    * `answers`, and its wait for a write's transaction kept while it stands.
    */
-  function followHistory(taskId: string, answers: HeldAnswers<PlanRevisionsAnswer>) {
+  function followHistory(taskId: string, answers: HeldAnswers<DescriptionRevisionsAnswer>) {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
     /** The wait this follow handed last, so letting it go takes back its own alone. */
@@ -1118,9 +1118,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Each plan's or page's comments the windows show, and the few let go
    * latest, each thread a row of the pool with every write standing drawn
    * over it, told whole on the app state every window draws
-   * (`LIVE_READ.PLAN_COMMENTS`), on the terms the pages are held.
+   * (`LIVE_READ.DESCRIPTION_COMMENTS`), on the terms the pages are held.
    */
-  const comments = yield* planCommentReads({
+  const comments = yield* descriptionCommentReads({
     pool: dependencies.pool,
     seal: (subject, userId, poll, after) =>
       Effect.map(served(client.commentsLive(subject, userId, poll, after)), (sealed) =>
@@ -1135,12 +1135,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     accountId: dependencies.accountId,
     gate,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.PLAN_COMMENTS_CHANGED, carried(held)),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED, carried(held)),
   });
   /** The windows' hold on each subject's comments, one fiber standing until let go. */
   const commentHolds = yield* FiberMap.make<CommentSubjectKey>();
   /** The windows' writes to a task's comments, each drawn over its thread at once; behind a closed gate each answers unanswered, taken back as it is drawn. */
-  const commentWrites = planCommentWrites({
+  const commentWrites = descriptionCommentWrites({
     start: (planId, start) =>
       gate() ? served(client.startComment(planId, start)) : Effect.succeed(COMMENT_UNANSWERED),
     act: (planId, threadId, action) =>
@@ -1154,17 +1154,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * The plan of each task a window opened, and of the few opened latest,
    * told whole on the app state every window draws
-   * (`LIVE_READ.PLAN_DOCUMENT`), so a task opened again draws its plan in
-   * its first frame (`plan-document-reads.ts`).
+   * (`LIVE_READ.DESCRIPTION_DOCUMENT`), so a task opened again draws its plan in
+   * its first frame (`description-document-reads.ts`).
    */
-  const documents = yield* planDocumentReads({
+  const documents = yield* descriptionDocumentReads({
     gate,
     accountId: dependencies.accountId,
     open: (taskId) => served(client.open(taskId)),
     recordLive: (taskId, userId, poll, after) =>
       served(client.recordLive(taskId, userId, poll, after)),
     listed: asListed,
-    tell: (held) => kernel.emit(GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED, carried(held)),
+    tell: (held) => kernel.emit(GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED, carried(held)),
   });
   /** Each edit's waits for its transaction, on its task's record and on the list, by the task, a newer edit's replacing an older one's. */
   const editWaits = yield* FiberMap.make<string>();
@@ -2109,7 +2109,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if (listed === undefined) return { ...opened, drawn: false };
       const { agents: _agents, ...row } = listed;
       // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
-      yield* documents.started({ ...row, document: EMPTY_PLAN });
+      yield* documents.started({ ...row, document: EMPTY_DESCRIPTION });
       write({ activeTaskId: taskId });
       return { ...opened, drawn: true };
     });
@@ -2181,7 +2181,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Lays `answered`, a write's answer about `taskId`, on its plan wherever
    * that is held, over the copy held by `lay`, so no read that left before
    * the answer lands over it; a plan whose first read is still out takes the
-   * answer whole (`plan-document-reads.ts`).
+   * answer whole (`description-document-reads.ts`).
    */
   function documentTook(taskId: string, answered: Task, lay: (held: Task) => Task): void {
     documents.written(taskId, (held) => (held === undefined ? answered : lay(held)));
@@ -3114,7 +3114,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return {};
       }),
     // A task's plan is held for a window while it has the task open, and
-    // told only on the app state (`PLAN_DOCUMENTS_CHANGED`). Note that the
+    // told only on the app state (`DESCRIPTION_DOCUMENTS_CHANGED`). Note that the
     // windows' hold is one fiber standing until let go, so a window holding
     // it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW]: (params) =>
@@ -3161,7 +3161,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksPictureAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const picture = yield* kept.answer(
-          new PlanPictureKey({ planId: read.planId, attachmentId: read.attachmentId }),
+          new DescriptionPictureKey({ planId: read.planId, attachmentId: read.attachmentId }),
           dependencies.accountId,
           served(client.readPicture(read.planId, read.attachmentId)),
           (answer) => ("base64" in answer ? answer : undefined),
@@ -3170,7 +3170,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A plan's comments, or a page's, are held for a window while it shows
     // them, the open task's plan's, or a page tab's beside the task or an
-    // Inbox item, and told only on the app state (`PLAN_COMMENTS_CHANGED`).
+    // Inbox item, and told only on the app state (`DESCRIPTION_COMMENTS_CHANGED`).
     // Note that the windows' hold is one fiber standing until let go, so a
     // window holding it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW]: (params) =>
@@ -3212,7 +3212,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // A write to a task's comments is drawn over its thread at once, a
     // thread started drawn under the id its window minted, standing until
     // the subject's read carries it, or taken back where the service
-    // refused it (`plan-comment-writes.ts`).
+    // refused it (`description-comment-writes.ts`).
     [GATEWAY_METHOD.TASKS_COMMENT_START]: declaredMethod(
       dependencies.pool,
       commentWrites.started,

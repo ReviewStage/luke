@@ -11,6 +11,7 @@ import {
   readerZone,
   suggestedDates,
 } from "@repo/features/date-mention";
+import { descriptionSections } from "@repo/features/description-document";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
@@ -25,7 +26,6 @@ import {
 } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import type { PageLine } from "@repo/features/page-wire";
-import { planSections } from "@repo/features/plan-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
 import { thingOfMention } from "@repo/features/thing-kind";
@@ -97,17 +97,17 @@ import {
 import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { askAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
-import { useAutomations } from "../desktop/use-automations.js";
-import { unreadShown } from "../failure-report.js";
-import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
-import { useMemberDirectory } from "../member-directory.js";
-import { memberRows, YOU_WORD } from "../member-rows.js";
 import {
   type ComposerTrigger,
   type EditorAria,
   listAria,
   type MentionNode,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
+import { useAutomations } from "../desktop/use-automations.js";
+import { unreadShown } from "../failure-report.js";
+import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
+import { useMemberDirectory } from "../member-directory.js";
+import { memberRows, YOU_WORD } from "../member-rows.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
@@ -583,7 +583,7 @@ function taskRows(
   text: string,
 ): MentionRow[] {
   if (taskId === undefined) return [];
-  const headings = planSections(text).map((section) => section.heading);
+  const headings = descriptionSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [
     ...headings.flatMap((heading, at): MentionRow[] => {
@@ -1596,7 +1596,7 @@ function kindsOf(
           {
             from: MENTION_FROM.PLAN,
             name: MENTION_GROUP.PLAN,
-            detail: sectionCount(planSections(source.text()).length),
+            detail: sectionCount(descriptionSections(source.text()).length),
           },
         ]),
     ...(pages === 0
@@ -1787,9 +1787,9 @@ export function useMentionPicker({
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const descriptionsOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const taskRowsOffered = open
-    ? workspaceTaskRows(plansOn ? taskId : undefined, tasksWorkspace, listed.tasks)
+    ? workspaceTaskRows(descriptionsOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];
   // The threads offered are the workspace's as the account's feed holds them, which the host holds for the session.
   const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
@@ -1824,7 +1824,7 @@ export function useMentionPicker({
           threads: threadRowsOffered.length,
           automations: automationRowsOffered.length,
         },
-        plansOn,
+        descriptionsOn,
       )
     : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
@@ -1880,7 +1880,7 @@ export function useMentionPicker({
           scope,
           pathsSearched,
           {
-            plan: plansOn ? taskRows(taskId, source.taskName, planKey, source.text()) : [],
+            plan: descriptionsOn ? taskRows(taskId, source.taskName, planKey, source.text()) : [],
             tasks: taskRowsOffered,
             pages: pageRows(holder, source.pages ?? NO_PAGES, now),
             agents: agentRows(

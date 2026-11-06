@@ -102,7 +102,7 @@ function unkeyed(verb: string, icon: React.JSX.Element, noun?: string): PanelCom
 /** Every command a menu offers beside ⌘K, by what it does. */
 export const PANEL_COMMAND = {
   COPY_CONTENT: keyed(APP_COMMAND.COPY_CONTENT, <GLYPH.COPY />),
-  COPY_PLAN: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy description", <GLYPH.COPY />),
+  COPY_DESCRIPTION: keyedAs(APP_COMMAND.COPY_CONTENT, "Copy description", <GLYPH.COPY />),
   COPY_LINK: keyed(APP_COMMAND.COPY_LINK, <GLYPH.LINK />),
   MARK_TASK_DONE: unkeyed("Mark done", <GLYPH.DONE />),
   DELETE: keyed(APP_COMMAND.DELETE, <GLYPH.DELETE />),

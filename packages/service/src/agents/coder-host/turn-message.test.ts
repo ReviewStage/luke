@@ -13,12 +13,12 @@ import { EXPERIMENT } from "@repo/settings";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS, RUN_EVENT, TURN_ORIGIN, unparsedWire } from "../../core.js";
-import { saveNotes } from "../../tasks/plan-notes.js";
+import { saveNotes } from "../../tasks/description-notes.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { added } from "../../testing/task-contents.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { runAgentEditPlan } from "./agent-doors.js";
+import { runAgentEditDescription } from "./agent-doors.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { handedAfterCompaction, type TurnHanded, taskWithLead } from "./turn-context.js";
@@ -37,7 +37,7 @@ import { coderTurnMessage } from "./turn-message.js";
  * its own notes. Synthetic accounts, tasks, and words throughout.
  */
 
-const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
+const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
 /** When the agent's first turn starts, which a test reads against its own clock, which starts at nothing. */
 const TURN_STARTS_AT = 10 * 60_000;
@@ -55,7 +55,7 @@ const openAgent = Effect.gen(function* () {
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: PLAN_TEXT,
+    descriptionSnapshot: DESCRIPTION_TEXT,
     prompt: null,
     repository: "acme/relay",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -154,7 +154,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
           );
         const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
           Effect.map(
-            runAgentEditPlan(
+            runAgentEditDescription(
               admitted,
               unparsedWire({ taskId: binding.taskId, notes }),
               0,
@@ -195,7 +195,9 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         assert.ok(!changed.includes("## This turn is spoken"), changed);
 
         // With Plans off a save hands nothing, and the plan is never what a turn reads.
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: false } });
+        yield* writeAccountPreferences(userId, {
+          experiments: { [EXPERIMENT.DESCRIPTIONS]: false },
+        });
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
         assert.equal(yield* typedAt(nextTurn), undefined);
@@ -204,7 +206,9 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         yield* TestClock.adjust("1 minute");
         yield* ranTurn(admitted, nextTurn, yield* Clock.currentTimeMillis);
         yield* TestClock.adjust("1 minute");
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
+        yield* writeAccountPreferences(userId, {
+          experiments: { [EXPERIMENT.DESCRIPTIONS]: true },
+        });
         const back = (yield* typedAt(randomUUID())) ?? "";
         assert.ok(back.includes("Only admins withdraw invites."), back);
       }),

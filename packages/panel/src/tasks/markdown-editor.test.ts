@@ -10,7 +10,7 @@ import { Effect } from "effect";
 import { act, createElement, type RefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { type PlanEditorHandle, SLASH_INSERT } from "../plan-editor/contract.js";
+import { type DescriptionEditorHandle, SLASH_INSERT } from "../description-editor/contract.js";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
@@ -100,7 +100,7 @@ afterEach(() => {
 /** The editor mounted on `markdown` with none of the plan's options but those given, each draft it hands over kept. */
 function mounted(markdown: string, options: Partial<MarkdownEditorProps> = {}) {
   const drafts: string[] = [];
-  const handle: RefObject<PlanEditorHandle | undefined> = { current: undefined };
+  const handle: RefObject<DescriptionEditorHandle | undefined> = { current: undefined };
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);

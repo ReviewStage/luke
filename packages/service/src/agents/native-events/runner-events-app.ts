@@ -724,7 +724,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
     writer,
     read: reader,
     payer: Option.getOrUndefined(routing)?.payer ?? undefined,
-    brief: agent.value.prompt ?? agent.value.planSnapshot ?? "",
+    brief: agent.value.prompt ?? agent.value.descriptionSnapshot ?? "",
   };
   // Note that the turns the batch settles are heard once its transaction commits, not as the
   // writer's savepoint inside it ends, so what a listener reads of a turn (its final words, for

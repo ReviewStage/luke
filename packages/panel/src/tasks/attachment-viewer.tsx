@@ -434,7 +434,7 @@ function AttachmentBody({
         {diagram.refused ? (
           <FailureNote
             failure={failureShown({
-              surface: FAILURE_SURFACE.PLAN_DIAGRAM,
+              surface: FAILURE_SURFACE.DESCRIPTION_DIAGRAM,
               cause: FAILURE_CONDITION.REFUSED,
               refused: true,
             })}

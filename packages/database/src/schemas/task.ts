@@ -1,7 +1,7 @@
+import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
-import type { PlanAgentEdit } from "@repo/features/plan-notes";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -37,7 +37,7 @@ import { organization, user } from "./auth.js";
  * agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
  * left the row as it stood. What the text held before is kept beside it, in
- * `plan_revision` (`plan-revision.ts`). The text is stored as written,
+ * `description_revision` (`description-revision.ts`). The text is stored as written,
  * like the conversation, readable by an operator and kept the developer's
  * own by the account it is keyed by.
  *
@@ -96,7 +96,7 @@ export const task = pgTable(
     creatorActor: text("creator_actor")
       .$type<TaskCreatorActor>()
       .notNull()
-      .default(PLAN_ACTOR.DEVELOPER),
+      .default(DESCRIPTION_ACTOR.DEVELOPER),
     /** The coding agent that made the task; null for any other maker, and once the agent's row is gone. */
     creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",
@@ -109,10 +109,10 @@ export const task = pgTable(
     madeByStart: boolean("made_by_start").notNull().default(false),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
-      .$type<readonly PlanAgentEdit[]>()
+      .$type<readonly DescriptionAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@repo/features/plan-document`). */
+    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@repo/features/description-document`). */
     document: text("document").notNull(),
     /**
      * The GitHub repository the task is about, `owner/name` as GitHub spells

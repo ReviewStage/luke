@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { listPublishedAgentsById, taskNamesOf } from "@repo/database/models/agent-store";
-import { listPages } from "@repo/database/models/plan-pages";
 import { taskIdOfNumber } from "@repo/database/models/task-number-store";
+import { listPages } from "@repo/database/models/task-pages";
 import { numberedTasksIn } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import type { PageLine, PageOwner } from "@repo/features/page-wire";

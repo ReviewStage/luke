@@ -19,8 +19,11 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "./automation-wire.js";
 import { keptPictureIdOf } from "./conversation-picture-wire.js";
+import {
+  DESCRIPTION_COMMENT_ACTOR,
+  descriptionCommentActorSchema,
+} from "./description-comment-wire.js";
 import { PAGE_SHOWER, pageShowerSchema } from "./page-wire.js";
-import { PLAN_COMMENT_ACTOR, planCommentActorSchema } from "./plan-comment-wire.js";
 
 const PULL_REQUEST_OPENED = {
   kind: AUTOMATION_TRIGGER.GITHUB,
@@ -41,8 +44,8 @@ test.each([
   ],
   [
     "a comment's actor",
-    () => Schema.decodeUnknownSync(planCommentActorSchema)("luke"),
-    PLAN_COMMENT_ACTOR.APP,
+    () => Schema.decodeUnknownSync(descriptionCommentActorSchema)("luke"),
+    DESCRIPTION_COMMENT_ACTOR.APP,
   ],
   [
     "a wakeup line's channel",

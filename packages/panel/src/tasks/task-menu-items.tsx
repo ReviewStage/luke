@@ -19,7 +19,7 @@ import type { MenuAction } from "../desktop/action-menu.js";
  * naming it by its number where it has one (`taskLinkStep`), so it opens the
  * task in the app as a mention's chip does.
  * Mark as unread turns to Mark as read on a task already unread, as Mail,
- * Slack, and Linear offer it (`use-plan-looks.ts`).
+ * Slack, and Linear offer it (`use-description-looks.ts`).
  */
 
 /** Where a task's links are written: its workspace by slug, or by id until the workspaces are read, and its repository. */

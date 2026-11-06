@@ -1,10 +1,10 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import {
+  type DescriptionMention,
   encodeMention,
   MENTION_KIND,
   type MentionLines,
-  type PlanMention,
 } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
@@ -53,7 +53,7 @@ import {
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
-  useSavedPlanText,
+  useSavedDescriptionText,
 } from "../tasks/task-mentions.js";
 import {
   cardTitle,
@@ -441,11 +441,11 @@ export const DesktopInbox = memo(function DesktopInbox({
     if (!openHere(address)) elsewhere();
   };
   // A task or a section a mention names opens as a link to it would.
-  const openMention = (mention: PlanMention) =>
+  const openMention = (mention: DescriptionMention) =>
     openPlaceHere(placeOfMention(mention), () => tasks.onShowMention(mention));
   // An item of a task offers what the task's page does: its plan and sections as saved, its pages, its agents, and their pull requests.
   const heldTask = chosen?.holder.kind === INBOX_HOLDER.TASK ? chosen.holder.task : undefined;
-  const planText = useSavedPlanText(heldTask);
+  const descriptionText = useSavedDescriptionText(heldTask);
   const mentions =
     place === undefined
       ? undefined
@@ -456,7 +456,7 @@ export const DesktopInbox = memo(function DesktopInbox({
         : heldTaskMentions(
             heldTask,
             place.workspace,
-            planText,
+            descriptionText,
             { pages: view.pages, agents: named, readAgents: readMentionAgents },
             { onOpenTask: openMention, onOpenFile: openMentionedFile },
           );

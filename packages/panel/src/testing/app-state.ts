@@ -31,6 +31,7 @@ import {
   type AppAutomationReads,
   type AppBrowserTabs,
   type AppChapters,
+  type AppDescriptionComments,
   type AppDevicePresence,
   type AppGitHubToken,
   type AppHolderInboxes,
@@ -40,7 +41,6 @@ import {
   type AppInboxItems,
   type AppIntegrationTools,
   type AppPages,
-  type AppPlanComments,
   type AppProviderKeyList,
   type AppPullRequestParts,
   type AppRepositoryLists,
@@ -58,10 +58,10 @@ import {
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
+  NO_DESCRIPTION_COMMENTS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
-  NO_PLAN_COMMENTS,
   NO_TRANSCRIPTS,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
@@ -172,9 +172,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.DESCRIPTION_COMMENTS]: NO_DESCRIPTION_COMMENTS,
     [LIVE_READ.HISTORY]: NO_KEYS_HELD,
-    [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -329,7 +329,7 @@ export interface HostReadsHanded {
   readonly deliverChapters: (next: AppChapters) => void;
   readonly deliverBrowserTabs: (next: AppBrowserTabs) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
-  readonly deliverComments: (next: AppPlanComments) => void;
+  readonly deliverComments: (next: AppDescriptionComments) => void;
   readonly deliverTools: (next: AppIntegrationTools) => void;
   readonly deliverParts: (next: Partial<AppPullRequestParts>) => void;
   /** The signed-in account's keys, held under its id. */
@@ -451,7 +451,7 @@ export function handHostReads(first: {
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
     deliverBrowserTabs: (next) => deliver({ [LIVE_READ.BROWSER_TABS]: next }),
     deliverAutomations: (next) => deliver(next),
-    deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
+    deliverComments: (next) => deliver({ [LIVE_READ.DESCRIPTION_COMMENTS]: next }),
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverParts: (next) => deliver(next),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),

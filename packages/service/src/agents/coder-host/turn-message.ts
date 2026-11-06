@@ -16,17 +16,17 @@ import {
   readNativeHanded,
   recordNativeHanded,
 } from "@repo/database/models/agent-store";
+import { readDescriptionCommentThreads } from "@repo/database/models/description-comments";
+import { listRevisions } from "@repo/database/models/description-revisions";
 import { turnsBefore } from "@repo/database/models/message-reads";
-import { readPlanCommentThreads } from "@repo/database/models/plan-comments";
-import { listRevisions } from "@repo/database/models/plan-revisions";
 import { readTask } from "@repo/database/models/task-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { plansOnFor } from "../plans-on.js";
 import {
   handedAfterCompaction,
   savedByAnotherSince,
@@ -96,22 +96,24 @@ const taskOf = (
   Effect.gen(function* () {
     const { taskId } = agent;
     if (taskId === null) return undefined;
-    const plansOn = yield* plansOnFor(agent.userId, agent.kind);
+    const descriptionsOn = yield* descriptionsOnFor(agent.userId, agent.kind);
     const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
         // Note that the plan's threads are neither read nor handed where its starter has Plans off.
-        plansOn ? readPlanCommentThreads(admitted.caller, taskId) : Effect.succeedNone,
+        descriptionsOn
+          ? readDescriptionCommentThreads(admitted.caller, taskId)
+          : Effect.succeedNone,
         previousTurnStart(admitted.target, turn.turnId),
       ],
       { concurrency: "unbounded" },
     );
     if (Option.isNone(stored)) return undefined;
     const threads = Option.getOrElse(comments, () => []);
-    const key = taskKey(stored.value, threads, plansOn);
+    const key = taskKey(stored.value, threads, descriptionsOn);
     const opening = since === undefined;
     const saved =
-      plansOn &&
+      descriptionsOn &&
       since !== undefined &&
       savedByAnotherSince(
         (yield* listRevisions(admitted.caller, taskId)).revisions,
@@ -120,12 +122,12 @@ const taskOf = (
       );
     // Note that Plans gone off leaves the words handed as they were but the plan, so it hands nothing again, and keeps the key Plans going back on is told apart by.
     const unchanged =
-      key === handed.task || (!plansOn && taskKey(stored.value, threads) === handed.task);
+      key === handed.task || (!descriptionsOn && taskKey(stored.value, threads) === handed.task);
     if (!saved && (opening || unchanged)) {
       return { key: opening ? handed.task : key, text: undefined };
     }
     const clock = { now, timeZone: admitted.timeZone };
-    const text = taskWithLead(standingContext(stored.value, clock, threads, plansOn));
+    const text = taskWithLead(standingContext(stored.value, clock, threads, descriptionsOn));
     return { key, text };
   }).pipe(
     Effect.tapError(logStoreFailure),

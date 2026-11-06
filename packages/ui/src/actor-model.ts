@@ -4,10 +4,10 @@ import type { AutomationFiring, AutomationTrigger } from "@repo/features/automat
 import type { ModelProvider } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
-  PLAN_ACTOR,
-  type PlanEditor,
-  type PlanLastEdit,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionEditor,
+  type DescriptionLastEdit,
+  type DescriptionSectionEdit,
   type TaskOrigin,
 } from "@repo/features/task-wire";
 import { andList } from "@repo/features/words";
@@ -308,7 +308,10 @@ export function accountActor(account: {
  * never a face with no name.
  */
 export function creatorActor(
-  task: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  task: {
+    readonly createdBy?: DescriptionEditor | undefined;
+    readonly ownerId?: string | undefined;
+  },
   reader: EditReader,
   account: PersonActor | undefined,
 ): Actor {
@@ -333,7 +336,10 @@ export function creatorActor(
  * quiet outline.
  */
 export function teammateCreator(
-  task: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  task: {
+    readonly createdBy?: DescriptionEditor | undefined;
+    readonly ownerId?: string | undefined;
+  },
   reader: EditReader,
 ): Actor | undefined {
   const creatorId = task.createdBy?.userId ?? task.ownerId;
@@ -401,7 +407,7 @@ export function originActor(
   agent: OriginAgent | undefined,
 ): Actor | undefined {
   if (origin === undefined) return undefined;
-  if (origin.actor === PLAN_ACTOR.NOTETAKER) return APP_ACTOR;
+  if (origin.actor === DESCRIPTION_ACTOR.NOTETAKER) return APP_ACTOR;
   if (agent?.automationName !== undefined) {
     return { kind: ACTOR_KIND.AUTOMATION, name: agent.automationName, state: ACTOR_STATE.REST };
   }
@@ -435,7 +441,7 @@ export interface EditAgent {
 }
 
 /** The member an edit names, for the reader, as the directory reads them. */
-function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
+function editPerson(edit: DescriptionLastEdit, reader: EditReader): Actor {
   return personActor(edit.by, reader.members, reader.readerId, reader.former);
 }
 
@@ -445,16 +451,16 @@ function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
  * the window found it; nobody for the one revision from before history.
  */
 export function editActor(
-  edit: PlanLastEdit,
+  edit: DescriptionLastEdit,
   reader: EditReader,
   agent?: EditAgent,
 ): Actor | undefined {
   switch (edit.actor) {
-    case PLAN_ACTOR.DEVELOPER:
+    case DESCRIPTION_ACTOR.DEVELOPER:
       return editPerson(edit, reader);
-    case PLAN_ACTOR.NOTETAKER:
+    case DESCRIPTION_ACTOR.NOTETAKER:
       return APP_ACTOR;
-    case PLAN_ACTOR.AGENT:
+    case DESCRIPTION_ACTOR.AGENT:
       return {
         kind: ACTOR_KIND.AGENT,
         ...(edit.agentId === undefined ? undefined : { agentId: edit.agentId }),
@@ -462,7 +468,7 @@ export function editActor(
         provider: agent?.provider,
         state: agent?.state ?? ACTOR_STATE.REST,
       };
-    case PLAN_ACTOR.EARLIER:
+    case DESCRIPTION_ACTOR.EARLIER:
       return undefined;
   }
 }
@@ -474,15 +480,15 @@ export interface ActorActivity {
 }
 
 /** Whether a section's last change is the actor's: a member's by their id, the app's, or a coding agent's by its name. */
-function changedBy(edit: PlanLastEdit, actor: Actor): boolean {
+function changedBy(edit: DescriptionLastEdit, actor: Actor): boolean {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
-      return edit.actor === PLAN_ACTOR.DEVELOPER && edit.by?.userId === actor.userId;
+      return edit.actor === DESCRIPTION_ACTOR.DEVELOPER && edit.by?.userId === actor.userId;
     case ACTOR_KIND.APP:
-      return edit.actor === PLAN_ACTOR.NOTETAKER;
+      return edit.actor === DESCRIPTION_ACTOR.NOTETAKER;
     case ACTOR_KIND.AGENT:
       return (
-        edit.actor === PLAN_ACTOR.AGENT &&
+        edit.actor === DESCRIPTION_ACTOR.AGENT &&
         (edit.agentId !== undefined && actor.agentId !== undefined
           ? edit.agentId === actor.agentId
           : edit.label === actor.name)
@@ -498,7 +504,7 @@ function changedBy(edit: PlanLastEdit, actor: Actor): boolean {
  * automation or someone the window cannot name, whom no section names.
  */
 export function latestActivity(
-  edits: readonly PlanSectionEdit[],
+  edits: readonly DescriptionSectionEdit[],
   actor: Actor,
 ): ActorActivity | undefined {
   const theirs = edits.filter((edit) => changedBy(edit, actor));

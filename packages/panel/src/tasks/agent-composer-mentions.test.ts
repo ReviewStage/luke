@@ -99,7 +99,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
 
 const TASK_ID = "pl_1";
 
-const PLAN_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
+const DESCRIPTION_TEXT = "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.\n";
 
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" };
 
@@ -354,7 +354,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
-    text: () => PLAN_TEXT,
+    text: () => DESCRIPTION_TEXT,
     doors: {
       holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },

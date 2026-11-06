@@ -26,13 +26,17 @@ import { PhoneHead, PlaceMore, phoneFindGroups } from "../desktop/phone-head.js"
 import { unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
+import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./description-history-model.js";
+import { DescriptionPictures, useDescriptionPictureDrawer } from "./description-pictures.js";
 import { DocumentScroll } from "./document-frame.js";
-import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
-import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { type MentionedTask, useMentionLink } from "./task-mentions.js";
 import { TextTitle } from "./task-title.js";
+import {
+  type DescriptionHistoryControl,
+  HISTORY_READ,
+  type ViewedVersion,
+} from "./use-description-history.js";
 import { useOpenLink } from "./use-open-link.js";
-import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history.js";
 
 /**
  * version-view.tsx -- one version of a plan, drawn read-only with what it changed marked, under a bar with its restore.
@@ -46,9 +50,9 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
  * words struck out are struck, so neither reads by its color alone
- * (`plan-history-model.ts`). A Mermaid fence draws as its diagram, and one
+ * (`description-history-model.ts`). A Mermaid fence draws as its diagram, and one
  * whose code the revision changed as its code with the changes marked,
- * since two diagrams side by side would hide what changed (`../plan-diagram.tsx`).
+ * since two diagrams side by side would hide what changed (`../description-diagram.tsx`).
  * A version is drawn under the plan's name, as
  * the plan's own tab draws it. The first version has nothing before it, so
  * it is drawn with nothing marked. A section opened from its revision's
@@ -113,7 +117,7 @@ const CHANGE_CLASS = {
 
 /** A version's text, as the plan's own tab sets it: its units a section apart, in the body's type. */
 function VersionText({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className="plan-body">{children}</div>;
+  return <div className="description-body">{children}</div>;
 }
 
 /** A unit of the plan in a note's own type, as `MarkdownMessage` sets one: its heading at a section's level over what follows it. */
@@ -125,7 +129,7 @@ function NoteUnit({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className={markdownClass("plan-unit")}>
+    <div className={markdownClass("description-unit")}>
       <p className={MARKDOWN_CLASS.HEADING} data-level={SECTION_LEVEL}>
         {heading}
       </p>
@@ -149,7 +153,7 @@ function VersionBody({
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
   const link = useMentionLink(task);
   const openLink = useOpenLink();
-  const picture = usePlanPictureDrawer();
+  const picture = useDescriptionPictureDrawer();
   return (
     <VersionText>
       {title === undefined || section !== undefined ? null : <TextTitle name={title} />}
@@ -158,7 +162,7 @@ function VersionBody({
           // A unit's heading may stand twice, struck and written again, so its place keys it.
           key={at}
           words={unit.words}
-          className={`plan-unit${CHANGE_CLASS[unit.change]}`}
+          className={`description-unit${CHANGE_CLASS[unit.change]}`}
           edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
           link={link}
           openLink={openLink}
@@ -222,7 +226,10 @@ function VersionContent({
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <div className={VERSION_NOTE}>
-        <ErrorState failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)} onRetry={onRetry}>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_VERSION_READ)}
+          onRetry={onRetry}
+        >
           {VERSION_FAILED}
         </ErrorState>
       </div>
@@ -238,12 +245,12 @@ function VersionContent({
         <VersionBody diff={diff} title={title} section={section} task={task} />
       ) : (
         // A version struck a picture as well as wrote one in, so both texts name the pictures it draws.
-        <PlanPictures
+        <DescriptionPictures
           taskId={task.taskId}
           text={`${read.document.body}\n${read.previous?.body ?? ""}`}
         >
           <VersionBody diff={diff} title={title} section={section} task={task} />
-        </PlanPictures>
+        </DescriptionPictures>
       )}
     </>
   );
@@ -266,7 +273,7 @@ export interface VersionRestore {
  * disable the button.
  */
 export function useVersionRestore(
-  history: Pick<PlanHistoryControl, "onRestore">,
+  history: Pick<DescriptionHistoryControl, "onRestore">,
   onRestored: () => void,
 ): VersionRestore {
   const toast = useToast();
@@ -286,7 +293,7 @@ export function useVersionRestore(
           words: result.reason,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
-          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: result },
+          failure: { surface: FAILURE_SURFACE.DESCRIPTION_RESTORE, cause: result },
         });
       }
     });
@@ -320,7 +327,7 @@ export function sayRestored(
         toast({
           replayUnmasked: true,
           words: RESTORE_UNDO_REFUSED_NOTE,
-          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: undone.cause },
+          failure: { surface: FAILURE_SURFACE.DESCRIPTION_RESTORE, cause: undone.cause },
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });
@@ -373,7 +380,7 @@ function VersionPageFrame({
           }
         />
       )}
-      <Fill className="desktop-document @container/plan-document">
+      <Fill className="desktop-document @container/description-document">
         <DocumentScroll>{children}</DocumentScroll>
       </Fill>
     </>

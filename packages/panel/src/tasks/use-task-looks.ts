@@ -2,8 +2,8 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { READ_MARK, type ReadMark, readsUnread } from "@repo/features/read-mark";
 import {
-  PLAN_ACTOR,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionSectionEdit,
   type Task,
   type TaskSummary,
 } from "@repo/features/task-wire";
@@ -99,7 +99,7 @@ function lookAtAgent(agentId: string, readMark: ReadMark): void {
 }
 
 /** The save that last changed each of the plan's sections, each by its heading. */
-function sectionSavesOf(task: Task): readonly PlanSectionEdit[] {
+function sectionSavesOf(task: Task): readonly DescriptionSectionEdit[] {
   return task.sectionEdits ?? [];
 }
 
@@ -134,8 +134,8 @@ function newestChangeOf(task: Pick<TaskSummary, "updatedAt" | "agents">): number
  * developer's save did before saves named their member, because a save the
  * window cannot place is as likely the reader's as anyone's.
  */
-function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolean {
-  if (edit.actor !== PLAN_ACTOR.DEVELOPER) return false;
+function readersOwn(edit: DescriptionSectionEdit, readerId: string | undefined): boolean {
+  if (edit.actor !== DESCRIPTION_ACTOR.DEVELOPER) return false;
   return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
 }
 

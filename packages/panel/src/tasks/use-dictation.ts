@@ -10,8 +10,8 @@ import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import type { ComposerEditorHandle, ComposerMark } from "../description-editor/contract.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
-import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { appSettingsNow, appStateNow, capabilityNow } from "../use-app-state.js";
 import { base64Of } from "./attached-files.js";
@@ -29,7 +29,7 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
  * which has OpenAI hear it and answers the words; the renderer never
  * reaches OpenAI. The words go in at the caret the press found, carried
  * through whatever changed the words since as a mark the box's editor keeps
- * (`../plan-editor/composer-editor.ts`), spaced from the words around them,
+ * (`../description-editor/composer-editor.ts`), spaced from the words around them,
  * never over the draft, and the box takes the caret back after them; words a
  * full box has no room for are not put in at all.
  * Canceling, or a press elsewhere that unmounts the box, drops the clip

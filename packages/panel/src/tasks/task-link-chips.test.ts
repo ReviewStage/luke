@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
@@ -13,9 +13,9 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions.js";
-import { HISTORY_READ } from "./use-plan-history.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -111,7 +111,7 @@ function PageWords({ words, marks }: { words: string; marks: MarkdownMark[] }): 
 
 test("the plan read on its page draws a plan's link, a file's lines, and a Linear page as chips, any other link a link, and code as code", () => {
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: TASK,
       sectionLinks: {
         workspace: "acme",
@@ -178,7 +178,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
+          lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

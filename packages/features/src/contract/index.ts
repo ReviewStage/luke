@@ -13,6 +13,7 @@ import { agentPortsContract } from "./agent-ports.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
 import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
+import { descriptionCommentsContract } from "./description-comments.js";
 import { deviceAgentsContract } from "./device-agents.js";
 import { dictationContract } from "./dictation.js";
 import { eventsContract } from "./events.js";
@@ -27,7 +28,6 @@ import { macCommandsContract } from "./mac-commands.js";
 import { mcpClientsContract } from "./mcp-clients.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
-import { planCommentsContract } from "./plan-comments.js";
 import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { pullRequestsContract } from "./pull-requests.js";
 import { repositoryPinsContract } from "./repository-pins.js";
@@ -72,7 +72,7 @@ export const hostedContract = {
   mcpClients: mcpClientsContract,
   messages: messagesContract,
   models: modelsContract,
-  planComments: planCommentsContract,
+  descriptionComments: descriptionCommentsContract,
   plans: tasksContract,
   pullRequestChapters: pullRequestChaptersContract,
   pullRequests: pullRequestsContract,

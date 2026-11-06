@@ -58,7 +58,7 @@ test("the chart's days are the window's own, every feature zero-filled, today la
   assert.deepEqual(overview.activity.daily.at(0), {
     day: "2026-10-15",
     [ACTIVITY_FEATURE.AGENTS_STARTED]: 0,
-    [ACTIVITY_FEATURE.PLAN_REVISIONS]: 0,
+    [ACTIVITY_FEATURE.DESCRIPTION_REVISIONS]: 0,
     [ACTIVITY_FEATURE.INBOX_ANSWERED]: 2,
     [ACTIVITY_FEATURE.AUTOMATION_RUNS]: 0,
   });

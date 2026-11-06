@@ -11,8 +11,8 @@ import {
 import { agentTable } from "@repo/database/schemas/agent";
 import { member, user } from "@repo/database/schemas/auth";
 import { automation } from "@repo/database/schemas/automation";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { inboxItem } from "@repo/database/schemas/inbox";
-import { planRevision } from "@repo/database/schemas/plan-revision";
 import { task } from "@repo/database/schemas/task";
 import { pinnedPictureUrl } from "@repo/features/account-picture";
 import { AUTOMATION_SCOPE } from "@repo/features/automation-wire";
@@ -120,9 +120,11 @@ function formerOf(organizationId: string): SQL | undefined {
       inArray(
         user.id,
         queryBuilder
-          .select({ id: planRevision.userId })
-          .from(planRevision)
-          .where(and(inArray(planRevision.taskId, tasks), isNotNull(planRevision.userId))),
+          .select({ id: descriptionRevision.userId })
+          .from(descriptionRevision)
+          .where(
+            and(inArray(descriptionRevision.taskId, tasks), isNotNull(descriptionRevision.userId)),
+          ),
       ),
       inArray(
         user.id,

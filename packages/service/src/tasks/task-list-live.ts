@@ -182,7 +182,7 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
           effort: agentTable.effort,
           contextWindow: agentTable.contextWindow,
           title: agentTable.title,
-          brief: sql<string>`case when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT} when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN} else ${AGENT_BRIEF.BLANK} end`,
+          brief: sql<string>`case when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT} when ${agentTable.descriptionSnapshot} is not null then ${AGENT_BRIEF.PLAN} else ${AGENT_BRIEF.BLANK} end`,
           repository: agentTable.repository,
           starterId: agentTable.userId,
           starterName: starter.name,

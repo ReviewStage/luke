@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
@@ -21,10 +21,10 @@ import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace } from "../settings-link.js";
 import { useStageRoom } from "../stage-room.js";
 import {
+  type DescriptionHistorySource,
   type HistorySpot,
-  type PlanHistorySource,
-  usePlanHistory,
-} from "../tasks/use-plan-history.js";
+  useDescriptionHistory,
+} from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -113,7 +113,7 @@ const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
@@ -127,7 +127,7 @@ const HELD_HISTORY = {
 };
 
 /** Each version as the service answers it, the plan as it stands. */
-const HISTORY: PlanHistorySource = {
+const HISTORY: DescriptionHistorySource = {
   readPage: () => Promise.resolve({ revisions: [] }),
   readRevision: (_taskId, seq) =>
     Promise.resolve({
@@ -231,11 +231,11 @@ function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX
 }
 
 /** The version history the last window drew, which the window's history moves as it goes back and forth. */
-let standingVersions: ReturnType<typeof usePlanHistory> | undefined;
+let standingVersions: ReturnType<typeof useDescriptionHistory> | undefined;
 
 /** The plan's version history over the window, opened on the plan as it stands or where `returnTo` says. */
 function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
-  const versions = usePlanHistory({
+  const versions = useDescriptionHistory({
     source: HISTORY,
     taskId: DOCUMENT_TASK.id,
     history: HELD_HISTORY,

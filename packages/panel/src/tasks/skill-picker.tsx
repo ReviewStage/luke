@@ -29,12 +29,12 @@ import {
   useMemo,
   useState,
 } from "react";
-import { SettingsPageLink } from "../open-settings.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
   ComposerTrigger,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
+import { SettingsPageLink } from "../open-settings.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide, wordBox } from "./mention-picker.js";
 import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-ref.js";
 
@@ -55,7 +55,7 @@ import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-re
  * nothing is read for a message that names none. Where there are none it
  * says so, and where one is installed or added.
  *
- * The box is an editor (`../plan-editor/composer-editor.ts`), which finds
+ * The box is an editor (`../description-editor/composer-editor.ts`), which finds
  * the `/` word the caret ends and says where its slash stands in the
  * window, so the list hangs over that line (`@repo/ui`'s `RectFloat`), as
  * the box stands at the foot of its tab, and closes on a press outside it

@@ -20,7 +20,12 @@ import {
   type InboxItem,
 } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  TASK_TREE_ENTRY,
+  type Task,
+  type TaskSummary,
+} from "@repo/features/task-wire";
 import type { TasksTreeAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -1605,8 +1610,8 @@ test("a task Vespin or a coding agent made says who in its detail and is found b
     tasksControl({
       me: dean.userId,
       tasks: [
-        task("Invite emails", { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" }),
-        task("Audit log export", { actor: PLAN_ACTOR.NOTETAKER }),
+        task("Invite emails", { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" }),
+        task("Audit log export", { actor: DESCRIPTION_ACTOR.NOTETAKER }),
         task("Rate limits"),
       ],
     }),

@@ -305,7 +305,7 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
     const words = coderInstructions("Acme/Relay", brief, true, task);
     return [
       words.includes(UPDATING),
-      words.includes(CODER_TOOL.EDIT_PLAN),
+      words.includes(CODER_TOOL.EDIT_DESCRIPTION),
       words.includes(READ_FIRST),
     ];
   };
@@ -358,7 +358,7 @@ test("every agent on a task is told to keep its task's status with update_task, 
 
 test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, or a page, on its task or on itself", () => {
   const NO_DOCUMENT = "never commit the write-up as a document";
-  const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
+  const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_DESCRIPTION}\``;
   const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
   const told = (brief: AgentBrief, task: OwnTask | null) => {
     const words = coderInstructions("Acme/Relay", brief, true, task);
@@ -590,9 +590,9 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
   }
 });
 
-test("with Plans off the instructions say nothing of a plan: no edit_plan, no plan handed with a task's link or read_task, no plan to name or write a write-up into, and comments on pages alone", () => {
-  const PLAN_WORDS = [
-    `\`${CODER_TOOL.EDIT_PLAN}\``,
+test("with Plans off the instructions say nothing of a plan: no edit_description, no plan handed with a task's link or read_task, no plan to name or write a write-up into, and comments on pages alone", () => {
+  const DESCRIPTION_WORDS = [
+    `\`${CODER_TOOL.EDIT_DESCRIPTION}\``,
     "## Updating the plan",
     "take that decision into the plan",
     "write it into the plan",
@@ -603,7 +603,7 @@ test("with Plans off the instructions say nothing of a plan: no edit_plan, no pl
     "comment threads on a plan's text",
   ];
   for (const brief of Object.values(AGENT_BRIEF)) {
-    const told = (plansOn: boolean) =>
+    const told = (descriptionsOn: boolean) =>
       coderInstructions(
         "Acme/Relay",
         brief,
@@ -617,13 +617,13 @@ test("with Plans off the instructions say nothing of a plan: no edit_plan, no pl
         false,
         undefined,
         [],
-        plansOn,
+        descriptionsOn,
       );
     const on = told(true);
     const off = told(false);
     assert.equal(on, coderInstructions("Acme/Relay", brief, true, TASK_LINK), brief);
     assert.deepEqual(
-      PLAN_WORDS.filter((words) => off.includes(words)),
+      DESCRIPTION_WORDS.filter((words) => off.includes(words)),
       [],
       brief,
     );
@@ -633,7 +633,7 @@ test("with Plans off the instructions say nothing of a plan: no edit_plan, no pl
   }
   const planned = coderInstructions("Acme/Relay", AGENT_BRIEF.PLAN, true, TASK_LINK);
   assert.deepEqual(
-    PLAN_WORDS.filter((words) => !planned.includes(words)),
+    DESCRIPTION_WORDS.filter((words) => !planned.includes(words)),
     [],
   );
 });

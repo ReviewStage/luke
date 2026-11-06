@@ -42,7 +42,7 @@ const source: Agent = {
   model: "claude-sonnet",
   effort: "high",
   contextWindow: CONTEXT_WINDOW.STANDARD,
-  planSnapshot: "The plan.",
+  descriptionSnapshot: "The plan.",
   prompt: null,
   repository: "acme/app",
   branch: null,

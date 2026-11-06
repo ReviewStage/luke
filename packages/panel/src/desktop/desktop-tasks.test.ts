@@ -9,6 +9,12 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import {
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+} from "@repo/features/description-comment-wire";
+import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
@@ -21,13 +27,7 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-} from "@repo/features/plan-comment-wire";
-import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -147,16 +147,19 @@ test("a task's comments are held from its open, so its first ready frame marks t
   const from = body.indexOf("seven days");
   const thread = {
     id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "seven days",
     anchor: { from, to: from + "seven days".length },
     section: "Goal",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       {
         id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-        kind: PLAN_COMMENT_ENTRY.COMMENT,
-        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-lee", name: "Lee Park" } },
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: {
+          actor: DESCRIPTION_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-lee", name: "Lee Park" },
+        },
         words: "Should this be a setting?",
         at: 1,
       },
@@ -212,7 +215,8 @@ test("a task's comments are held from its open, so its first ready frame marks t
     ),
   );
   assert.equal(
-    container.querySelector(`mark.plan-comment-mark[data-threads~="${thread.id}"]`)?.textContent,
+    container.querySelector(`mark.description-comment-mark[data-threads~="${thread.id}"]`)
+      ?.textContent,
     "seven days",
   );
   act(() => root.unmount());
@@ -561,7 +565,7 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
     ...TASK,
     repository: "acme/web",
     lastEdit: {
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       by: { userId: "user-lee", name: "Lee Park" },
       at: 2,
       duringCall: false,
@@ -588,7 +592,9 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
       ),
     ),
   );
-  const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
+  const body = container.querySelector(
+    ".desktop-document .description-document-body .description-body",
+  );
   // A task from before statuses draws no standing chip.
   const path = body?.firstElementChild;
   const first = path?.nextElementSibling;
@@ -610,7 +616,7 @@ test("a plan's document, its way back to the agents pinned in its card, opens on
     "the repository is words, not a press",
   );
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title stands under it");
-  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.ok(byline?.classList.contains("description-byline"), "the byline stands under the title");
   assert.match(byline?.textContent ?? "", /^Created by .*Edited /u);
   act(() => root.unmount());
   container.remove();

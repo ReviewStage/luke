@@ -6,8 +6,8 @@ import {
 import { queryBuilder } from "@repo/database/core/query";
 import { taskSeenBy } from "@repo/database/models/workspace-store";
 import { member } from "@repo/database/schemas/auth";
-import { planPageVersion } from "@repo/database/schemas/plan-page";
 import { task } from "@repo/database/schemas/task";
+import { taskPageVersion } from "@repo/database/schemas/task-page";
 import { and, eq, max, sql } from "drizzle-orm";
 import { Option } from "effect";
 
@@ -44,7 +44,7 @@ function memberOfTask(userId: string) {
  * (`Task.updatedAt`): a rename, a status, or a pin is no save, so none of
  * them moves it, and a save by anyone does.
  */
-function planStatement(userId: string, taskId: string) {
+function descriptionStatement(userId: string, taskId: string) {
   return queryBuilder
     .select(liveSelection({ taskId: task.id }, { savedAt: task.updatedAt }))
     .from(task)
@@ -56,14 +56,14 @@ function planStatement(userId: string, taskId: string) {
 function pagesStatement(userId: string, taskId: string) {
   return queryBuilder
     .select({
-      ...liveSelection({ pageId: planPageVersion.pageId }),
-      version: max(planPageVersion.version).as("version"),
+      ...liveSelection({ pageId: taskPageVersion.pageId }),
+      version: max(taskPageVersion.version).as("version"),
     })
-    .from(planPageVersion)
-    .innerJoin(task, eq(task.id, planPageVersion.taskId))
+    .from(taskPageVersion)
+    .innerJoin(task, eq(task.id, taskPageVersion.taskId))
     .innerJoin(member, memberOfTask(userId))
-    .where(and(eq(planPageVersion.taskId, taskId), taskSeenBy(userId)))
-    .groupBy(planPageVersion.pageId);
+    .where(and(eq(taskPageVersion.taskId, taskId), taskSeenBy(userId)))
+    .groupBy(taskPageVersion.pageId);
 }
 
 /**
@@ -95,7 +95,7 @@ export function taskRecordLiveStatements(
   taskId: string,
 ): Option.Option<TaskRecordLiveStatements> {
   return Option.all({
-    plan: liveStatementOf(planStatement(userId, taskId)),
+    plan: liveStatementOf(descriptionStatement(userId, taskId)),
     pages: liveStatementOf(pagesStatement(userId, taskId)),
     calls: liveStatementOf(callsStatement()),
     code: liveStatementOf(codeStatement()),

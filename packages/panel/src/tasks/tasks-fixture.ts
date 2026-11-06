@@ -1,18 +1,18 @@
+import {
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentEntry,
+  type DescriptionCommentThread,
+  type DescriptionCommentWriter,
+} from "@repo/features/description-comment-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentEntry,
-  type PlanCommentThread,
-  type PlanCommentWriter,
-} from "@repo/features/plan-comment-wire";
-import {
-  PLAN_ACTOR,
-  type PlanDocument,
-  type PlanRevisionLine,
-  type PlanRevisionsAnswer,
+  DESCRIPTION_ACTOR,
+  type DescriptionDocument,
+  type DescriptionRevisionLine,
+  type DescriptionRevisionsAnswer,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -27,10 +27,10 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  type AppDescriptionComments,
+  type AppDescriptionDocuments,
   type AppHeldById,
   type AppHistories,
-  type AppPlanComments,
-  type AppPlanDocuments,
   type AppRepositoryLists,
   type AppStateSnapshot,
   EVERY_WORKSPACE,
@@ -183,7 +183,7 @@ const FIXTURE_TASK: Task = {
  * The fixture task's plan as it stood after its first `sections` sections,
  * each a heading and its words, as a revision partway through drafting saved it.
  */
-function draftOf(sections: number): PlanDocument {
+function draftOf(sections: number): DescriptionDocument {
   return { body: `${FIXTURE_SECTIONS.slice(0, sections * 2).join("\n\n")}\n`, assumptions: [] };
 }
 
@@ -197,14 +197,14 @@ function draftOf(sections: number): PlanDocument {
  * the task, and an id would offer an Open into a tab that has none.
  */
 const FIXTURE_HISTORY: readonly {
-  readonly line: PlanRevisionLine;
-  readonly document: PlanDocument;
+  readonly line: DescriptionRevisionLine;
+  readonly document: DescriptionDocument;
 }[] = [
   {
     line: {
       seq: 5,
       lastEdit: {
-        actor: PLAN_ACTOR.DEVELOPER,
+        actor: DESCRIPTION_ACTOR.DEVELOPER,
         by: FIXTURE_PERSON.ADA,
         at: CALL_AT,
         duringCall: false,
@@ -218,7 +218,7 @@ const FIXTURE_HISTORY: readonly {
     line: {
       seq: 4,
       lastEdit: {
-        actor: PLAN_ACTOR.AGENT,
+        actor: DESCRIPTION_ACTOR.AGENT,
         label: "Invite emails",
         at: CALL_AT - 2 * HOUR,
         duringCall: false,
@@ -232,7 +232,7 @@ const FIXTURE_HISTORY: readonly {
     line: {
       seq: 3,
       lastEdit: {
-        actor: PLAN_ACTOR.NOTETAKER,
+        actor: DESCRIPTION_ACTOR.NOTETAKER,
         by: FIXTURE_PERSON.ADA,
         at: CALL_AT - 5 * HOUR,
         duringCall: false,
@@ -246,7 +246,7 @@ const FIXTURE_HISTORY: readonly {
     line: {
       seq: 2,
       lastEdit: {
-        actor: PLAN_ACTOR.DEVELOPER,
+        actor: DESCRIPTION_ACTOR.DEVELOPER,
         by: FIXTURE_PERSON.THEO,
         at: CALL_AT - DAY,
         duringCall: false,
@@ -260,7 +260,7 @@ const FIXTURE_HISTORY: readonly {
     line: {
       seq: 1,
       lastEdit: {
-        actor: PLAN_ACTOR.DEVELOPER,
+        actor: DESCRIPTION_ACTOR.DEVELOPER,
         by: FIXTURE_PERSON.ADA,
         at: FIXTURE_TASK.createdAt,
         duringCall: false,
@@ -273,7 +273,7 @@ const FIXTURE_HISTORY: readonly {
 ];
 
 /** A page of the fixture task's history, newest first, before the revision `before` names where it names one. */
-function historyPage(before: number | undefined): PlanRevisionsAnswer {
+function historyPage(before: number | undefined): DescriptionRevisionsAnswer {
   return {
     revisions: FIXTURE_HISTORY.filter(({ line }) => before === undefined || line.seq < before).map(
       ({ line }) => line,
@@ -415,16 +415,18 @@ const FIXTURE_OPEN_TASK: TasksView = {
 /** One thread's comment, written by `writer` at `at`. */
 function comment(
   id: string,
-  writer: PlanCommentWriter,
+  writer: DescriptionCommentWriter,
   at: number,
   words: string,
-): PlanCommentEntry {
-  return { id, kind: PLAN_COMMENT_ENTRY.COMMENT, writer, words, at };
+): DescriptionCommentEntry {
+  return { id, kind: DESCRIPTION_COMMENT_ENTRY.COMMENT, writer, words, at };
 }
 
 /** A member of the fixture's first workspace as an entry's writer. */
-function memberWrote(by: (typeof FIXTURE_PERSON)[keyof typeof FIXTURE_PERSON]): PlanCommentWriter {
-  return { actor: PLAN_COMMENT_ACTOR.MEMBER, by };
+function memberWrote(
+  by: (typeof FIXTURE_PERSON)[keyof typeof FIXTURE_PERSON],
+): DescriptionCommentWriter {
+  return { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by };
 }
 
 /**
@@ -434,12 +436,12 @@ function memberWrote(by: (typeof FIXTURE_PERSON)[keyof typeof FIXTURE_PERSON]): 
  */
 function thread(input: {
   readonly id: string;
-  readonly scope: PlanCommentThread["scope"];
+  readonly scope: DescriptionCommentThread["scope"];
   readonly quote: string;
   readonly section: string;
-  readonly status: PlanCommentThread["status"];
-  readonly entries: readonly PlanCommentEntry[];
-}): PlanCommentThread {
+  readonly status: DescriptionCommentThread["status"];
+  readonly entries: readonly DescriptionCommentEntry[];
+}): DescriptionCommentThread {
   const from = FIXTURE_TASK.document.body.indexOf(input.quote);
   if (from < 0) throw new Error(`The fixture's plan holds no "${input.quote}"`);
   const times = input.entries.map((entry) => entry.at);
@@ -459,13 +461,13 @@ function thread(input: {
  * only the plan's comments list shows. The open ones stand in the plan's first
  * sections, so the window's first screen of it shows their marks.
  */
-const FIXTURE_THREADS: readonly PlanCommentThread[] = [
+const FIXTURE_THREADS: readonly DescriptionCommentThread[] = [
   thread({
     id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e61",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "so removal covers invites and members alike",
     section: "Approach",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       comment(
         "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e62",
@@ -481,7 +483,7 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
       ),
       comment(
         "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e64",
-        { actor: PLAN_COMMENT_ACTOR.APP },
+        { actor: DESCRIPTION_COMMENT_ACTOR.APP },
         CALL_AT - 4 * HOUR + 2 * 60_000,
         'Added under Hard parts: a withdrawn link reads "This invite is no longer valid" and grants nothing.',
       ),
@@ -489,14 +491,14 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
   }),
   thread({
     id: "9d2e4f6a-8b0c-4d3e-9f5a-7b9c1d3e5f71",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "The teammate joins the workspace by opening the link.",
     section: "Goal",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       comment(
         "9d2e4f6a-8b0c-4d3e-9f5a-7b9c1d3e5f72",
-        { actor: PLAN_COMMENT_ACTOR.AGENT, agentId: FIXTURE_AGENT_ID },
+        { actor: DESCRIPTION_COMMENT_ACTOR.AGENT, agentId: FIXTURE_AGENT_ID },
         CALL_AT - 20 * 60_000,
         "A teammate with no account yet has nothing to join with. Should opening the link start sign-up first, then join?",
       ),
@@ -504,12 +506,12 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
   }),
   thread({
     id: "ae3f5a7b-9c1d-4e4f-8a6b-8c0d2e4f6a81",
-    scope: PLAN_COMMENT_SCOPE.BLOCK,
+    scope: DESCRIPTION_COMMENT_SCOPE.BLOCK,
     quote:
       "Only an admin can add someone to a workspace, by creating their account by hand, so " +
       "members wait on an admin to bring a teammate in.",
     section: "Context",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       comment(
         "ae3f5a7b-9c1d-4e4f-8a6b-8c0d2e4f6a82",
@@ -521,10 +523,10 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
   }),
   thread({
     id: "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b91",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "lost because removing a member would then have to clear two tables",
     section: "Alternatives",
-    status: PLAN_COMMENT_STATUS.RESOLVED,
+    status: DESCRIPTION_COMMENT_STATUS.RESOLVED,
     entries: [
       comment(
         "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b92",
@@ -540,7 +542,7 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
       ),
       {
         id: "bf4a6b8c-0d2e-4f5a-9b7c-9d1e3f5a7b94",
-        kind: PLAN_COMMENT_ENTRY.RESOLVED,
+        kind: DESCRIPTION_COMMENT_ENTRY.RESOLVED,
         writer: memberWrote(FIXTURE_PERSON.ADA),
         at: CALL_AT - DAY + HOUR + 60_000,
       },
@@ -549,17 +551,17 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
 ].sort((older, newer) => older.createdAt - newer.createdAt);
 
 /** Main's held comments with the fixture task's plan's threads among them, one object for each of main's. */
-const STAGED_COMMENTS = new WeakMap<AppPlanComments, AppPlanComments>();
+const STAGED_COMMENTS = new WeakMap<AppDescriptionComments, AppDescriptionComments>();
 
 /**
  * Main's document as the tasks-comments profile draws it: the fixture
  * task's plan's threads held as the window's read of them holds them
- * (`LIVE_READ.PLAN_COMMENTS`), none on its pages. The same document, the
+ * (`LIVE_READ.DESCRIPTION_COMMENTS`), none on its pages. The same document, the
  * very object, under any other profile.
  */
 function commentsAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (state.run.profile !== RUN_PROFILE.TASKS_COMMENTS) return state;
-  const held = state[LIVE_READ.PLAN_COMMENTS];
+  const held = state[LIVE_READ.DESCRIPTION_COMMENTS];
   let staged = STAGED_COMMENTS.get(held);
   if (staged === undefined) {
     staged = {
@@ -571,7 +573,7 @@ function commentsAppState(state: AppStateSnapshot): AppStateSnapshot {
     };
     STAGED_COMMENTS.set(held, staged);
   }
-  return { ...state, [LIVE_READ.PLAN_COMMENTS]: staged };
+  return { ...state, [LIVE_READ.DESCRIPTION_COMMENTS]: staged };
 }
 
 /** The side panels the fixture profiles open their task with: open, for an agent profile to stage a tab in, or shut. */
@@ -665,7 +667,7 @@ export function fixtureActAnswer(
 }
 
 /** Main's held plans with the fixture's task's plan held, one object for each of main's. */
-const STAGED_PLANS = new WeakMap<AppPlanDocuments, AppPlanDocuments>();
+const STAGED_DESCRIPTIONS = new WeakMap<AppDescriptionDocuments, AppDescriptionDocuments>();
 /** Main's held histories with the fixture's task's history held, one object for each of main's. */
 const STAGED_HISTORIES = new WeakMap<AppHistories, AppHistories>();
 
@@ -684,7 +686,7 @@ function stagedOn<Rows>(
 
 /**
  * Main's document with the fixture's task's plan and its history held as the
- * window's reads of them hold them (`LIVE_READ.PLAN_DOCUMENT`,
+ * window's reads of them hold them (`LIVE_READ.DESCRIPTION_DOCUMENT`,
  * `LIVE_READ.HISTORY`), under the profiles that open the task
  * (`fixtureTasksView`), so it opens on its plan and its version history on
  * its versions; the very document under any other.
@@ -693,9 +695,13 @@ function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (fixtureTasksView(state.run)?.activeTaskId !== FIXTURE_TASK_ID) return state;
   return {
     ...state,
-    [LIVE_READ.PLAN_DOCUMENT]: stagedOn(STAGED_PLANS, state[LIVE_READ.PLAN_DOCUMENT], {
-      task: FIXTURE_TASK,
-    }),
+    [LIVE_READ.DESCRIPTION_DOCUMENT]: stagedOn(
+      STAGED_DESCRIPTIONS,
+      state[LIVE_READ.DESCRIPTION_DOCUMENT],
+      {
+        task: FIXTURE_TASK,
+      },
+    ),
     [LIVE_READ.HISTORY]: stagedOn(
       STAGED_HISTORIES,
       state[LIVE_READ.HISTORY],

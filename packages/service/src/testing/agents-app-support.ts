@@ -8,7 +8,7 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { readAgent } from "@repo/database/models/agent-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { savePlanText } from "@repo/database/models/task-store";
+import { saveDescriptionText } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, messages } from "@repo/database/schemas/storage";
@@ -678,7 +678,7 @@ export const openTask = (
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
-    yield* savePlanText(owner, task.id, SAVED);
+    yield* saveDescriptionText(owner, task.id, SAVED);
     // Both accounts have Plans on, so an agent started on the task is handed its plan.
     for (const account of [owner, other]) {
       yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });

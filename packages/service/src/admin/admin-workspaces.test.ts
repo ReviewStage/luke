@@ -10,9 +10,9 @@ import {
 } from "@repo/database/github-installation-vocabulary";
 import { agentTable } from "@repo/database/schemas/agent";
 import { invitation, member, organization, user } from "@repo/database/schemas/auth";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
-import { planRevision } from "@repo/database/schemas/plan-revision";
 import { conversations } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
@@ -23,7 +23,7 @@ import {
   type AdminMetricsScope,
   type AdminWorkspacesKind,
 } from "@repo/features/admin-wire";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
@@ -221,10 +221,10 @@ const insertTask = (organizationId: string, userId: string, createdAt: Date) =>
 
 const insertRevision = (taskId: string, userId: string, at: Date) =>
   Database.use((db) =>
-    db.insert(planRevision).values({
+    db.insert(descriptionRevision).values({
       taskId,
       seq: 1,
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       userId,
       document: "Confidential plan text, revised.",
       changes: 1,

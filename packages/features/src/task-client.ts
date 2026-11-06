@@ -15,6 +15,22 @@ import type { AgentAgentAnswer } from "./agent-view.js";
 import type { LocalAgentRefusal } from "./agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
+import {
+  DESCRIPTION_ATTACHMENT_REFUSAL,
+  descriptionAttachmentTypeSchema,
+} from "./description-attachment-wire.js";
+import type { TaskCommentsLiveAnswer } from "./description-comment-live.js";
+import {
+  type DescriptionCommentActionRequest,
+  type DescriptionCommentStart,
+  descriptionCommentActionRequestSchema,
+  descriptionCommentStartRequestSchema,
+} from "./description-comment-wire.js";
+import {
+  type DescriptionEditAnswer,
+  type DescriptionEditRequest,
+  descriptionEditRequestSchema,
+} from "./description-edit.js";
 import type { FailureFacts } from "./failure-facts.js";
 import type {
   GitHubRepositoriesAnswer,
@@ -42,16 +58,11 @@ import {
   type TaskRecordLiveAnswer,
 } from "./live-wire.js";
 import { type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
-import { PLAN_ATTACHMENT_REFUSAL, planAttachmentTypeSchema } from "./plan-attachment-wire.js";
-import type { TaskCommentsLiveAnswer } from "./plan-comment-live.js";
 import {
-  type PlanCommentActionRequest,
-  type PlanCommentStart,
-  planCommentActionRequestSchema,
-  planCommentStartRequestSchema,
-} from "./plan-comment-wire.js";
-import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
-import { planAttachmentPath, type RepositoryPlace, type SkillsPlace } from "./service-paths.js";
+  descriptionAttachmentPath,
+  type RepositoryPlace,
+  type SkillsPlace,
+} from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -66,8 +77,8 @@ import {
   taskSectionWriteSchema,
 } from "./task-section-wire.js";
 import {
-  type PlanRevisionAnswer,
-  type PlanRevisionsAnswer,
+  type DescriptionRevisionAnswer,
+  type DescriptionRevisionsAnswer,
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
@@ -100,9 +111,9 @@ import {
   type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
   type BrowserTabOpenFailure,
+  DESCRIPTION_COMMENT_CALL_FAILURE,
   type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
-  PLAN_COMMENT_CALL_FAILURE,
   type RelationCallFailure,
   type RepositoryCallFailure,
   type RepositoryListFailure,
@@ -169,18 +180,18 @@ const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const
 
 /** Why a keep the service refused in band was not kept, as the editor hears it. */
 const KEEP_REFUSED = {
-  [PLAN_ATTACHMENT_REFUSAL.TOO_MANY]: PICTURE_KEEP_FAILURE.TOO_MANY,
-  [PLAN_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS]: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS,
+  [DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY]: PICTURE_KEEP_FAILURE.TOO_MANY,
+  [DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS]: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS,
 } as const satisfies Record<
-  (typeof PLAN_ATTACHMENT_REFUSAL)[keyof typeof PLAN_ATTACHMENT_REFUSAL],
+  (typeof DESCRIPTION_ATTACHMENT_REFUSAL)[keyof typeof DESCRIPTION_ATTACHMENT_REFUSAL],
   (typeof PICTURE_KEEP_FAILURE)[keyof typeof PICTURE_KEEP_FAILURE]
 >;
 
 /** A comment call that answered nothing to draw. */
-const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
+const COMMENT_UNANSWERED = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** A comment call refused because the plan is not the account's to read or write. */
-const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
+const COMMENT_NOT_FOUND = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
 
 /** What a task's mark names: pinned or not and where the pin stands, or the reader's read mark. */
 export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "readMark">;
@@ -367,13 +378,18 @@ export class HostedTaskClient {
   /** A thread started on the plan, or one of its task's pages, with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
   startComment(
     planId: string,
-    request: PlanCommentStart,
+    request: DescriptionCommentStart,
   ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(planCommentStartRequestSchema)(request));
+    const admitted = Result.getOrUndefined(
+      readEither(descriptionCommentStartRequestSchema)(request),
+    );
     if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
     return commentAnswer(
       Effect.map(
-        askHosted(this.#hosted.planComments.start, { params: { id: planId }, body: admitted }),
+        askHosted(this.#hosted.descriptionComments.start, {
+          params: { id: planId },
+          body: admitted,
+        }),
         (started) => started.body,
       ),
     );
@@ -383,12 +399,14 @@ export class HostedTaskClient {
   actOnComment(
     planId: string,
     threadId: string,
-    request: PlanCommentActionRequest,
+    request: DescriptionCommentActionRequest,
   ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(planCommentActionRequestSchema)(request));
+    const admitted = Result.getOrUndefined(
+      readEither(descriptionCommentActionRequestSchema)(request),
+    );
     if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
     return commentAnswer(
-      askHosted(this.#hosted.planComments.act, {
+      askHosted(this.#hosted.descriptionComments.act, {
         params: { id: planId, thread: threadId },
         body: admitted,
       }),
@@ -468,16 +486,16 @@ export class HostedTaskClient {
    */
   edit(
     taskId: string,
-    edit: PlanEditRequest,
+    edit: DescriptionEditRequest,
   ): Effect.Effect<
     TaskCallResult<
-      PlanEditAnswer,
+      DescriptionEditAnswer,
       typeof TASK_CALL_FAILURE.UNANSWERED | typeof TASK_CALL_FAILURE.NOT_FOUND
     >,
     never,
     HttpClient.HttpClient
   > {
-    const admitted = Result.getOrUndefined(readEither(planEditRequestSchema)(edit));
+    const admitted = Result.getOrUndefined(readEither(descriptionEditRequestSchema)(edit));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(
       askHosted(this.#hosted.plans.edit, { params: { id: taskId }, body: admitted }),
@@ -859,7 +877,7 @@ export class HostedTaskClient {
   readRevisions(
     taskId: string,
     before?: number,
-  ): Effect.Effect<PlanRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<DescriptionRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
     return orNothing(
       askHosted(this.#hosted.plans.revisions, {
         id: taskId,
@@ -872,7 +890,11 @@ export class HostedTaskClient {
   readRevision(
     taskId: string,
     seq: number,
-  ): Effect.Effect<PlanRevisionAnswer["revision"] | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    DescriptionRevisionAnswer["revision"] | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
     return orNothing(
       Effect.map(
         askHosted(this.#hosted.plans.revision, { id: taskId, seq: String(seq) }),
@@ -885,7 +907,7 @@ export class HostedTaskClient {
    * One attachment of one plan, a picture its text names or a file one of
    * its comments carries, fetched under the account: its bytes in base64
    * under its media type, where the service answered with a type a plan's
-   * attachment may be (`PLAN_ATTACHMENT_TYPE`), a video among them; not found where the plan is not one the account
+   * attachment may be (`DESCRIPTION_ATTACHMENT_TYPE`), a video among them; not found where the plan is not one the account
    * reaches or holds no such attachment; unanswered for anything else,
    * another media type included, so nothing a window draws is a type it did
    * not expect.
@@ -898,14 +920,14 @@ export class HostedTaskClient {
     return Effect.gen(function* () {
       const answer = yield* send({
         method: HTTP_METHOD.GET,
-        path: planAttachmentPath(taskId, attachmentId),
+        path: descriptionAttachmentPath(taskId, attachmentId),
       });
       if (!callAnswered(answer)) return { failure: TASK_CALL_FAILURE.UNANSWERED };
       if (!answer.response.ok) {
         const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
         return { failure: refused.ok ? TASK_CALL_FAILURE.UNANSWERED : refused.failure };
       }
-      const picture = yield* imageBodyOf(answer.response, planAttachmentTypeSchema);
+      const picture = yield* imageBodyOf(answer.response, descriptionAttachmentTypeSchema);
       return picture ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
   }

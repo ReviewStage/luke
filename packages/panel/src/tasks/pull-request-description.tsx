@@ -15,11 +15,11 @@ import {
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
+import { type DescriptionEditorPlacement, PLACEMENT_END } from "../description-editor/contract.js";
 import { confirmFailure } from "../failure-report.js";
-import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { clickPlacement, documentWordsAt } from "./description-document-editor.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
-import { clickPlacement, documentWordsAt } from "./plan-document-editor.js";
 import {
   PullRequestWriteNote,
   type ReadAgain,
@@ -88,7 +88,7 @@ type Editing =
       readonly opened: string;
       /** The words GitHub holds, as far as the tab knows: those it opened on, or those last written. */
       readonly base: string;
-      readonly placement: PlanEditorPlacement | undefined;
+      readonly placement: DescriptionEditorPlacement | undefined;
       /** Each opening's own, so a reload opens a new editor rather than keeping the old one's words. */
       readonly generation: number;
       /** The read standing when the last write went out, which a newer read closes the editor after. */
@@ -231,7 +231,7 @@ export function PullRequestDescription({
     writes.dismiss();
     setHeldNote(undefined);
   };
-  const open = (placement: PlanEditorPlacement | undefined) => {
+  const open = (placement: DescriptionEditorPlacement | undefined) => {
     draft.current = undefined;
     setEditing((was) => ({
       kind: EDITING.OPEN,

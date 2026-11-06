@@ -17,7 +17,7 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@repo/database/models/recorded-session";
-import { readTaskPlan } from "@repo/database/models/task-store";
+import { readTaskDescription } from "@repo/database/models/task-store";
 import { readAccountNames } from "@repo/database/models/workspace-store";
 import {
   type AwaitingLineMetadata,
@@ -52,6 +52,7 @@ import {
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -62,7 +63,6 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
-import { plansOnFor } from "../plans-on.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";
@@ -195,7 +195,7 @@ const opensUnclaimed = (agent: Agent) =>
   Effect.map(
     Clock.currentTimeMillis,
     (now) =>
-      (agent.planSnapshot === null && agent.prompt === null) ||
+      (agent.descriptionSnapshot === null && agent.prompt === null) ||
       agentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
   );
 
@@ -342,7 +342,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)
-          : hostedStoreOrUnavailable(readTaskPlan(userId, agent.taskId)),
+          : hostedStoreOrUnavailable(readTaskDescription(userId, agent.taskId)),
       ),
       workspace: Effect.result(hostedStoreOrUnavailable(agentWorkspace(userId, agent))),
       sessionId: Effect.result(hostedStoreOrUnavailable(recordedRuntimeSession(target))),
@@ -428,7 +428,13 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   const reads = yield* Effect.fromResult(reached.reads);
   const mentioned = reviewers
     ? undefined
-    : mentionedContext(pointed, task, reads, agent.id, yield* plansOnFor(agent.userId, agent.kind));
+    : mentionedContext(
+        pointed,
+        task,
+        reads,
+        agent.id,
+        yield* descriptionsOnFor(agent.userId, agent.kind),
+      );
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the

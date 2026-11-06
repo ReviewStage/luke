@@ -135,7 +135,7 @@ export const COMMENT_LINE_LEAD = {
 } as const satisfies LineLead;
 
 /** What a comment line's chip names where no page does: the plan of the task it is on. */
-const PLAN_WORDS = "the description";
+const DESCRIPTION_WORDS = "the description";
 
 /** The link a comment line's chip is read from: the page it is on, or its task's plan; none where no task or workspace names it. */
 function commentLink(line: CommentLineMetadata, doors: MentionDoors): string | undefined {
@@ -150,7 +150,7 @@ function commentLink(line: CommentLineMetadata, doors: MentionDoors): string | u
 
 /** What a comment line's head names: the page by its title, or the plan. */
 export function commentLineSubject(line: CommentLineMetadata): string {
-  return line.page_title ?? PLAN_WORDS;
+  return line.page_title ?? DESCRIPTION_WORDS;
 }
 
 /**

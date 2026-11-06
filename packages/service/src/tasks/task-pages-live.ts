@@ -7,8 +7,8 @@ import { queryBuilder } from "@repo/database/core/query";
 import { agentVisibleTo, taskSeenBy } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { member } from "@repo/database/schemas/auth";
-import { planPageVersion } from "@repo/database/schemas/plan-page";
 import { task } from "@repo/database/schemas/task";
+import { taskPageVersion } from "@repo/database/schemas/task-page";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { Option } from "effect";
 
@@ -46,11 +46,11 @@ function newestLines(newest: ReturnType<typeof taskPagesNewest>) {
 
 /** The columns each page's newest version is read with. */
 const NEWEST_COLUMNS = {
-  pageId: planPageVersion.pageId,
-  title: planPageVersion.title,
-  version: planPageVersion.version,
-  at: planPageVersion.at,
-  shownBy: planPageVersion.shownBy,
+  pageId: taskPageVersion.pageId,
+  title: taskPageVersion.title,
+  version: taskPageVersion.version,
+  at: taskPageVersion.at,
+  shownBy: taskPageVersion.shownBy,
 };
 
 /** Each page of the task by its newest version, as `listPages` reads it. */
@@ -58,16 +58,16 @@ function taskPagesNewest(userId: string, taskId: string) {
   // Note that the newest version is picked by `distinct on`, as the held read picks it.
   return (
     queryBuilder
-      .selectDistinctOn([planPageVersion.pageId], NEWEST_COLUMNS)
-      .from(planPageVersion)
-      .innerJoin(task, eq(task.id, planPageVersion.taskId))
+      .selectDistinctOn([taskPageVersion.pageId], NEWEST_COLUMNS)
+      .from(taskPageVersion)
+      .innerJoin(task, eq(task.id, taskPageVersion.taskId))
       // Note that membership is a join, as the record's live read reads it, rather than the held read's subquery.
       .innerJoin(
         member,
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
       )
-      .where(and(eq(planPageVersion.taskId, taskId), taskSeenBy(userId)))
-      .orderBy(planPageVersion.pageId, desc(planPageVersion.version))
+      .where(and(eq(taskPageVersion.taskId, taskId), taskSeenBy(userId)))
+      .orderBy(taskPageVersion.pageId, desc(taskPageVersion.version))
       .as("newest")
   );
 }
@@ -75,17 +75,17 @@ function taskPagesNewest(userId: string, taskId: string) {
 /** Each page of the coding agent on no task by its newest version, as `listPages` reads it, under the agent's rule of who may read it. */
 function agentPagesNewest(userId: string, agentId: string) {
   return queryBuilder
-    .selectDistinctOn([planPageVersion.pageId], NEWEST_COLUMNS)
-    .from(planPageVersion)
-    .innerJoin(agentTable, eq(agentTable.id, planPageVersion.agentId))
+    .selectDistinctOn([taskPageVersion.pageId], NEWEST_COLUMNS)
+    .from(taskPageVersion)
+    .innerJoin(agentTable, eq(agentTable.id, taskPageVersion.agentId))
     .where(
       and(
-        isNull(planPageVersion.taskId),
-        eq(planPageVersion.agentId, agentId),
+        isNull(taskPageVersion.taskId),
+        eq(taskPageVersion.agentId, agentId),
         agentVisibleTo(userId),
       ),
     )
-    .orderBy(planPageVersion.pageId, desc(planPageVersion.version))
+    .orderBy(taskPageVersion.pageId, desc(taskPageVersion.version))
     .as("newest");
 }
 

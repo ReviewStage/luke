@@ -1,5 +1,9 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@repo/features/task-wire";
+import {
+  DESCRIPTION_ACTOR,
+  type DescriptionLastEdit,
+  type DescriptionSectionEdit,
+} from "@repo/features/task-wire";
 import { agoText } from "@repo/features/time-format";
 import { useMinute } from "@repo/ui";
 import {
@@ -66,12 +70,15 @@ export type TaskReader = Pick<EditReader, "readerId">;
  */
 export interface EditPlace {
   readonly reader: EditReader;
-  readonly sections: readonly PlanSectionEdit[];
+  readonly sections: readonly DescriptionSectionEdit[];
   readonly agents: EditAgents | undefined;
 }
 
 /** The agent an edit names, among the task's agents, archived or not; none where the edit names none or the list holds no such agent. */
-function agentOf(edit: PlanLastEdit, agents: EditAgents | undefined): AgentSummary | undefined {
+function agentOf(
+  edit: DescriptionLastEdit,
+  agents: EditAgents | undefined,
+): AgentSummary | undefined {
   const { agentId } = edit;
   if (agentId === undefined || agents === undefined) return undefined;
   const { control } = agents;
@@ -82,7 +89,7 @@ function agentOf(edit: PlanLastEdit, agents: EditAgents | undefined): AgentSumma
 }
 
 /** Who wrote an edit, an agent wearing the harness and state the task's list finds it in; nobody for the plan before history. */
-function writerOf(edit: PlanLastEdit, place: EditPlace): Actor | undefined {
+function writerOf(edit: DescriptionLastEdit, place: EditPlace): Actor | undefined {
   const agent = agentOf(edit, place.agents);
   const found: EditAgent | undefined =
     agent === undefined
@@ -115,7 +122,10 @@ const OWN_CONFLICT: ConflictWords = {
  * editing." and "Use Charles Pan’s"; the app; a coding agent as the task's list
  * names it, or its row where the list holds no such agent.
  */
-export function conflictWords(edit: PlanLastEdit | undefined, place: EditPlace): ConflictWords {
+export function conflictWords(
+  edit: DescriptionLastEdit | undefined,
+  place: EditPlace,
+): ConflictWords {
   const writer = edit === undefined ? undefined : writerOf(edit, place);
   if (writer === undefined || edit === undefined) return UNNAMED_CONFLICT;
   if (writer.kind === ACTOR_KIND.PERSON && writer.you) return OWN_CONFLICT;
@@ -165,7 +175,7 @@ function WriterRef({
   sentence,
   faceOnly,
 }: {
-  edit: PlanLastEdit;
+  edit: DescriptionLastEdit;
   place: EditPlace;
   sentence: boolean;
   faceOnly: boolean;
@@ -211,7 +221,10 @@ export function useEditReader(reader: TaskReader): EditReader {
 }
 
 /** Who last wrote each of `edits`, each once, in the order they stand, as a facepile draws them. */
-export function editorsOf(edits: readonly PlanLastEdit[], place: EditPlace): readonly Actor[] {
+export function editorsOf(
+  edits: readonly DescriptionLastEdit[],
+  place: EditPlace,
+): readonly Actor[] {
   return distinctActors(edits.flatMap((edit) => writerOf(edit, place) ?? []));
 }
 
@@ -229,11 +242,11 @@ export function EditedBy({
   sentence = false,
   faceOnly = false,
 }: {
-  edit: PlanLastEdit;
+  edit: DescriptionLastEdit;
   place: EditPlace;
   sentence?: boolean;
   faceOnly?: boolean;
 }): React.JSX.Element | null {
-  if (edit.actor === PLAN_ACTOR.EARLIER) return null;
+  if (edit.actor === DESCRIPTION_ACTOR.EARLIER) return null;
   return <WriterRef edit={edit} place={place} sentence={sentence} faceOnly={faceOnly} />;
 }

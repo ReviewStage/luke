@@ -73,9 +73,9 @@ import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import { CODER_TOOL, type OfferedBeside } from "../coder-host/tool-set.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
-import { plansOnFor } from "../plans-on.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { workspaceMcpCallKey } from "./call-key.js";
 import { workspaceMcpDoorSeams } from "./door-seams.js";
@@ -257,7 +257,7 @@ const ALWAYS_LOADED_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.READ_THREADS,
   CODER_TOOL.WITHDRAW_ASK,
   CODER_TOOL.OPEN_PULL_REQUEST,
-  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.EDIT_DESCRIPTION,
   CODER_TOOL.UPDATE_TASK,
   CODER_TOOL.READ_TASK,
   CODER_TOOL.SHOW_IMAGE,
@@ -274,7 +274,7 @@ const ALWAYS_LOADED_META = { ...TOOL_META, "anthropic/alwaysLoad": true } as con
 const NO_AGENT_OFFERED: WorkspaceMcpOfferedTo = { repository: null, machine: AGENT_MACHINE.VERCEL };
 
 /** What beside its row an agent whose row is gone is offered by: no Memory, and no Plans. */
-const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, plansOn: false };
+const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, descriptionsOn: false };
 
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
@@ -366,7 +366,7 @@ function listWorkspaceTools(
         Option.isSome(found)
           ? Effect.all({
               memoryOn: memoryOnFor(found.value.userId),
-              plansOn: plansOnFor(found.value.userId, found.value.kind),
+              descriptionsOn: descriptionsOnFor(found.value.userId, found.value.kind),
             })
           : Effect.succeed(NO_AGENT_BESIDE),
         (beside) =>

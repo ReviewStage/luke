@@ -10,10 +10,10 @@ import {
   upsertBrowserTab,
 } from "@repo/database/models/agent-browser-tabs";
 import { createAgent, renameAgent } from "@repo/database/models/agent-store";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
 import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
 import { readGitHubTokenRow, removeGitHubToken } from "@repo/database/models/github-token-store";
-import { startPlanCommentThread } from "@repo/database/models/plan-comments";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
@@ -27,11 +27,11 @@ import {
 } from "@repo/database/testing";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import { PAGE_OWNER, PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { saveNotes } from "../tasks/plan-notes.js";
+import { saveNotes } from "../tasks/description-notes.js";
 import { openTokenMember } from "../testing/github-app-fake.js";
 import { added } from "../testing/task-contents.js";
 import {
@@ -114,11 +114,15 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
         );
         const pageId = Option.getOrThrow(shown.value).id;
         yield* wakes(
-          startPlanCommentThread({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: owner }, task.id, {
-            clientKey: randomUUID(),
-            page: { id: pageId, version: 1 },
-            words: "Add a chart.",
-          }),
+          startDescriptionCommentThread(
+            { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: owner },
+            task.id,
+            {
+              clientKey: randomUUID(),
+              page: { id: pageId, version: 1 },
+              words: "Add a chart.",
+            },
+          ),
           onTask,
           [taskCommentsLive.topics({ ...params, pageId })],
         );
@@ -166,7 +170,7 @@ it.layer(getTestDB())("what moves an open task's record notifies", (it) => {
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Try the checkout.",
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,

@@ -12,6 +12,8 @@ import {
   type AgentTodos,
   agentTodosInputSchema,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
+import type { DescriptionAgentEdit } from "@repo/features/description-notes";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -35,8 +37,6 @@ import {
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
 import { linkLabels } from "@repo/features/mention-link";
 import type { ModelChoice } from "@repo/features/models-wire";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
-import type { PlanAgentEdit } from "@repo/features/plan-notes";
 import {
   browserCallWords,
   CALL_KIND,
@@ -48,7 +48,7 @@ import { skillWord } from "@repo/ui/skill-mention";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@repo/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
-import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
+import { INLINE_SPAN, readInline } from "../description-editor/composer-markdown.js";
 import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
@@ -299,7 +299,7 @@ const NOTE_VERB = {
   add: "added",
   replace: "corrected",
   remove: "struck",
-} as const satisfies Record<PlanAgentEdit["notes"][number]["kind"], string>;
+} as const satisfies Record<DescriptionAgentEdit["notes"][number]["kind"], string>;
 
 /** What one note of a call's input did, by its kind: a replacement with no words is a strike. */
 function noteKind(note: WireValue): string {
@@ -309,7 +309,7 @@ function noteKind(note: WireValue): string {
 }
 
 /** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
-function planEditSummary(input: WireValue | undefined): string {
+function descriptionEditSummary(input: WireValue | undefined): string {
   const notes = isRecord(input) ? input.notes : undefined;
   if (notes === undefined || !isWireArray(notes)) return "";
   const pictured = isRecord(input) ? input.pictures : undefined;
@@ -1036,9 +1036,9 @@ const AGENT_TOOL_VIEWS = {
     };
   },
   [AGENT_TOOL.DELEGATE]: delegateView,
-  [AGENT_TOOL.EDIT_PLAN]: ({ input, output }) => ({
-    kind: CALL_KIND.EDIT_PLAN,
-    subject: planEditSummary(input),
+  [AGENT_TOOL.EDIT_DESCRIPTION]: ({ input, output }) => ({
+    kind: CALL_KIND.EDIT_DESCRIPTION,
+    subject: descriptionEditSummary(input),
     input: input === undefined ? textBlock("") : jsonBlock(input),
     output: output === undefined ? undefined : jsonBlock(output),
   }),
@@ -1334,14 +1334,16 @@ function planOf(task: string | undefined): ToolTarget {
 }
 
 /** The plan a call named by its task, an edit's or a comment tool's, which its row opens; the task's own plan for a call made before every such call named one. */
-function namedPlan(call: TargetedCall): ToolTarget {
+function namedDescription(call: TargetedCall): ToolTarget {
   return planOf(stringAt(call.input, "taskId"));
 }
 
 /** The plan a look's address names, which its row opens; the task's own plan where the address names no picture. */
-function lookedPlan(call: TargetedCall): ToolTarget {
+function lookedDescription(call: TargetedCall): ToolTarget {
   const address = stringAt(call.input, "address");
-  return planOf(address === undefined ? undefined : planAttachmentOf(address.trim())?.taskId);
+  return planOf(
+    address === undefined ? undefined : descriptionAttachmentOf(address.trim())?.taskId,
+  );
 }
 
 /** The task a change answered, which its row opens as the sidebar opens it. */
@@ -1413,13 +1415,13 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
-  [AGENT_TOOL.EDIT_PLAN, namedPlan],
-  [AGENT_TOOL.LOOK_AT_PICTURE, lookedPlan],
-  [AGENT_TOOL.READ_COMMENTS, namedPlan],
-  [AGENT_TOOL.REPLY_TO_COMMENT, namedPlan],
-  [AGENT_TOOL.UPDATE_COMMENT, namedPlan],
-  [RETIRED_TOOL.RESOLVE_THREAD, namedPlan],
-  [RETIRED_TOOL.REOPEN_THREAD, namedPlan],
+  [AGENT_TOOL.EDIT_DESCRIPTION, namedDescription],
+  [AGENT_TOOL.LOOK_AT_PICTURE, lookedDescription],
+  [AGENT_TOOL.READ_COMMENTS, namedDescription],
+  [AGENT_TOOL.REPLY_TO_COMMENT, namedDescription],
+  [AGENT_TOOL.UPDATE_COMMENT, namedDescription],
+  [RETIRED_TOOL.RESOLVE_THREAD, namedDescription],
+  [RETIRED_TOOL.REOPEN_THREAD, namedDescription],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],
   [RETIRED_TOOL.POST_TO_INBOX, namedThread],

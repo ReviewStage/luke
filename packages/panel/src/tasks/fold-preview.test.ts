@@ -146,7 +146,7 @@ test("an open row whose body says its subject drops its verb's colon, which its 
 const PLAN_LINE = "Refuse a withdrawn invite link the way a used one is refused";
 
 /** The plan an agent was handed, as its transcript opens on it. */
-function handedPlan(text: string) {
+function handedDescription(text: string) {
   return createElement(AgentMessage, {
     message: { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] },
     plan: true,
@@ -157,7 +157,7 @@ function handedPlan(text: string) {
 }
 
 test("the plan card's head previews the plan's first line while closed, reads Plan alone while open, and previews it again once closed", () => {
-  const drawing = drawn(handedPlan(`# ${PLAN_LINE}\n\nSay so on the page.`));
+  const drawing = drawn(handedDescription(`# ${PLAN_LINE}\n\nSay so on the page.`));
   assert.equal(line(drawing).trim(), `Description · ${PLAN_LINE}`);
 
   press(drawing);
@@ -172,7 +172,7 @@ test("the plan card's head previews the plan's first line while closed, reads Pl
 });
 
 test("the plan card's head reads Plan alone while a find draws the plan hidden", () => {
-  const drawing = drawn(handedPlan(`${PLAN_LINE}\n\nSay so on the page.`), true);
+  const drawing = drawn(handedDescription(`${PLAN_LINE}\n\nSay so on the page.`), true);
   assert.equal(line(drawing).trim(), "Description");
 });
 

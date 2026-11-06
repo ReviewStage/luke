@@ -203,6 +203,7 @@ import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
+import { DescriptionPictures } from "./description-pictures.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
@@ -224,7 +225,6 @@ import {
 } from "./message-links.js";
 import { useMoveToCloud } from "./move-agent.js";
 import { PilotComposerNote } from "./pilot-note.js";
-import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyDoorProvider, ReplyToSelection } from "./reply-to-selection.js";
@@ -1134,7 +1134,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
  * the text's own first line gives way to the card's label while the text
  * is drawn under it, so an opened plan never says that line twice. Where the agent
  * works on a task, the plan's own pictures are drawn in the card as its
- * page draws them (`plan-pictures.tsx`), read only once the card is opened.
+ * page draws them (`description-pictures.tsx`), read only once the card is opened.
  */
 function PlanCard({
   text,
@@ -1169,7 +1169,7 @@ function PlanCard({
   const status = lead.plan ? (listed ?? handed) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
-      <Plan data-origin-plan="" aria-label={lead.label}>
+      <Plan data-origin-description="" aria-label={lead.label}>
         <PlanHeader>
           <PlanIcon>
             {status === undefined ? lead.icon : <TaskStatusMark status={status} />}
@@ -1182,9 +1182,9 @@ function PlanCard({
           {taskId === undefined ? (
             words
           ) : (
-            <PlanPictures taskId={taskId} text={text}>
+            <DescriptionPictures taskId={taskId} text={text}>
               {words}
-            </PlanPictures>
+            </DescriptionPictures>
           )}
           {body === undefined ? null : <OriginBody body={body} />}
         </PlanContent>

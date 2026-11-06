@@ -1,3 +1,7 @@
+import {
+  DESCRIPTION_COMMENT_SCOPE,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   PAGE_FIND_ACT,
@@ -17,7 +21,6 @@ import {
   pagePickAnswerSchema,
 } from "@repo/features/page-pick";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
-import { PLAN_COMMENT_SCOPE, type PlanCommentThread } from "@repo/features/plan-comment-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@repo/features/tasks-view";
 import { readingWords } from "@repo/features/words";
@@ -39,6 +42,7 @@ import {
   Tooltip,
   useResizeEdge,
 } from "@repo/ui";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -47,7 +51,6 @@ import {
   MessageSquarePlusIcon,
   RotateCwIcon,
 } from "@repo/ui/icons";
-import type { PlanCommentsControl } from "@repo/ui/plan-comments";
 import { Option, Schema } from "effect";
 import {
   type ReactNode,
@@ -59,7 +62,7 @@ import {
   useState,
 } from "react";
 import { appPlatform } from "../app-platform.js";
-import { type PlanCommentPlace, useDraftWriter } from "../composer-drafts.js";
+import { type DescriptionCommentPlace, useDraftWriter } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
@@ -77,8 +80,6 @@ import {
 } from "../find-in-tab.js";
 import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
-import { type HeldComment, PageReviewSection, usePageReview } from "./page-review.js";
-import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
   COMMENTS_FILTER,
   type CommentsFilter,
@@ -91,7 +92,9 @@ import {
   pageDraftPlace,
   threadsByElement,
   withQuote,
-} from "./plan-comments.js";
+} from "./description-comments.js";
+import { type HeldComment, PageReviewSection, usePageReview } from "./page-review.js";
+import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
@@ -640,7 +643,7 @@ function versionStepAction(
  * kept where it holds words or files of the writer's own, and dropped where
  * it holds only the quotes it was started from, so the next starts afresh.
  */
-function useCommenting(place: PlanCommentPlace | undefined) {
+function useCommenting(place: DescriptionCommentPlace | undefined) {
   const drafts = useDraftWriter();
   const [column, setColumn] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -701,11 +704,11 @@ function pageReserve(row: HTMLElement): number {
 
 /** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected; then those holding only comments held in the reader's review. */
 function threadMarks(
-  threads: readonly PlanCommentThread[],
+  threads: readonly DescriptionCommentThread[],
   held: readonly HeldComment[],
 ): readonly PageMark[] {
   const posted = [...threadsByElement(threads)].map(([path, [first]]) =>
-    first?.scope === PLAN_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
+    first?.scope === DESCRIPTION_COMMENT_SCOPE.WORDS ? { path, words: first.quote } : { path },
   );
   const marked = new Set(posted.map((mark) => mark.path));
   const heldMarks = held.flatMap((comment) => {
@@ -742,7 +745,7 @@ export function PagePane({
   /** The page's comment threads and who writes them; none for a page with no comments, one an agent on no task showed. */
   comments?:
     | {
-        readonly control: PlanCommentsControl;
+        readonly control: DescriptionCommentsControl;
         readonly doors: Parameters<typeof PageComments>[0]["doors"];
       }
     | undefined;

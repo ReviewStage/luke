@@ -7,9 +7,9 @@ import { queryBuilder } from "@repo/database/core/query";
 import { taskSeenBy } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { member, user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
-import { PLAN_HISTORY_BOUNDS } from "@repo/features/task-wire";
+import { DESCRIPTION_HISTORY_BOUNDS } from "@repo/features/task-wire";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -34,53 +34,64 @@ export interface TaskHistoryLiveStatements {
 }
 
 /** The revision a restore brought back, read beside the restore that names it. */
-const restored = alias(planRevision, "restored");
+const restored = alias(descriptionRevision, "restored");
 
 /** The newest revisions as `listRevisions` reads its newest page, one past the page among them. */
 function revisionsStatement(userId: string, taskId: string) {
   const newest = queryBuilder
-    .select({ seq: planRevision.seq })
-    .from(planRevision)
-    .where(eq(planRevision.taskId, taskId))
-    .orderBy(desc(planRevision.seq))
-    .limit(PLAN_HISTORY_BOUNDS.PAGE + 1);
+    .select({ seq: descriptionRevision.seq })
+    .from(descriptionRevision)
+    .where(eq(descriptionRevision.taskId, taskId))
+    .orderBy(desc(descriptionRevision.seq))
+    .limit(DESCRIPTION_HISTORY_BOUNDS.PAGE + 1);
   return (
     queryBuilder
       .select(
         liveSelection(
           {
-            seq: planRevision.seq,
-            actor: planRevision.actor,
+            seq: descriptionRevision.seq,
+            actor: descriptionRevision.actor,
             editorId: user.id,
             editorName: user.name,
             // No revision is written on a call any more; a released desktop still decodes the key.
             liveSessionId: sql<string | null>`null::text`,
-            agentId: planRevision.agentId,
+            agentId: descriptionRevision.agentId,
             agentModel: agentTable.model,
             agentTitle: agentTable.title,
             // No call stands to name, since we take no calls; a released desktop still decodes the key.
             callId: sql<string | null>`null::text`,
-            changes: planRevision.changes,
-            restoredFrom: planRevision.restoredFrom,
+            changes: descriptionRevision.changes,
+            restoredFrom: descriptionRevision.restoredFrom,
           },
-          { at: planRevision.at, startedAt: planRevision.startedAt, restoredAt: restored.at },
+          {
+            at: descriptionRevision.at,
+            startedAt: descriptionRevision.startedAt,
+            restoredAt: restored.at,
+          },
         ),
       )
-      .from(planRevision)
-      .innerJoin(task, eq(task.id, planRevision.taskId))
+      .from(descriptionRevision)
+      .innerJoin(task, eq(task.id, descriptionRevision.taskId))
       // Note that membership is a join, as the record's live read reads it, rather than the held read's subquery.
       .innerJoin(
         member,
         and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
       )
-      .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
-      .leftJoin(user, eq(user.id, planRevision.userId))
+      .leftJoin(agentTable, eq(agentTable.id, descriptionRevision.agentId))
+      .leftJoin(user, eq(user.id, descriptionRevision.userId))
       .leftJoin(
         restored,
-        and(eq(restored.taskId, planRevision.taskId), eq(restored.seq, planRevision.restoredFrom)),
+        and(
+          eq(restored.taskId, descriptionRevision.taskId),
+          eq(restored.seq, descriptionRevision.restoredFrom),
+        ),
       )
       .where(
-        and(eq(planRevision.taskId, taskId), taskSeenBy(userId), inArray(planRevision.seq, newest)),
+        and(
+          eq(descriptionRevision.taskId, taskId),
+          taskSeenBy(userId),
+          inArray(descriptionRevision.seq, newest),
+        ),
       )
   );
 }

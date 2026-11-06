@@ -11,9 +11,9 @@
  */
 
 import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
+import { DESCRIPTION_COMMENT_TOOL } from "./description-comment-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
-import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
 
 /** Every tool we author or declare for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
@@ -62,7 +62,7 @@ export const AGENT_TOOL = {
   APPLY_PATCH: "apply_patch",
   // A coding agent's own, and the delegation every agent makes.
   DELEGATE: AGENT_DELEGATE_TOOL,
-  EDIT_PLAN: "edit_plan",
+  EDIT_DESCRIPTION: "edit_description",
   WRITE_TODOS: AGENT_TODOS_TOOL,
   POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
@@ -73,9 +73,9 @@ export const AGENT_TOOL = {
   // An interactive page shown in the plan's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
   // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
-  READ_COMMENTS: PLAN_COMMENT_TOOL.READ,
-  REPLY_TO_COMMENT: PLAN_COMMENT_TOOL.REPLY,
-  UPDATE_COMMENT: PLAN_COMMENT_TOOL.UPDATE,
+  READ_COMMENTS: DESCRIPTION_COMMENT_TOOL.READ,
+  REPLY_TO_COMMENT: DESCRIPTION_COMMENT_TOOL.REPLY,
+  UPDATE_COMMENT: DESCRIPTION_COMMENT_TOOL.UPDATE,
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",

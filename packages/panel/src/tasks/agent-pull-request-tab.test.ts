@@ -64,6 +64,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import type { TabActionGroups } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
@@ -76,7 +77,6 @@ import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -289,7 +289,8 @@ beforeAll(async () => {
     landedBundles({
       diffView: () => Promise.resolve(DIFF_STAND_IN),
       fileTree: () => Promise.resolve(TREE_STAND_IN),
-      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
+      descriptionEditor: () =>
+        import("../description-editor/index.js").then((entry) => entry.descriptionEditor),
     }),
   );
 });

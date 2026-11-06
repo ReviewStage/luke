@@ -23,23 +23,23 @@ import {
   recordAutomationRun,
 } from "@repo/database/models/automation-store";
 import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
+import { listRevisions } from "@repo/database/models/description-revisions";
 import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { linkIntegrationInstallation } from "@repo/database/models/integration-installation-store";
 import { listMemories } from "@repo/database/models/memory-store";
-import { writePage } from "@repo/database/models/plan-pages";
-import { listRevisions } from "@repo/database/models/plan-revisions";
 import {
   listProviderKeyRows,
   setProviderKeyFastAccess,
 } from "@repo/database/models/provider-key-store";
+import { writePage } from "@repo/database/models/task-pages";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   createTask,
   listTasks,
   readTask,
   readTaskHeader,
-  savePlanText,
+  saveDescriptionText,
   updateTask,
 } from "@repo/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
@@ -92,7 +92,7 @@ import {
 } from "@repo/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BOUNDS,
   TASK_CREATE_RELATION_KIND,
   TASK_MODE,
@@ -298,7 +298,7 @@ async function agentOn(
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: taskId,
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
     automationRunId,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -316,7 +316,7 @@ async function tasklessAgentOn(
     idempotencyKey: randomUUID(),
     taskId: null,
     organizationId: workspaceId,
-    planSnapshot: null,
+    descriptionSnapshot: null,
     prompt: "Sweep the flaky tests.",
     automationRunId,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -806,7 +806,7 @@ test("list_agents from an agent another started names its starter first, ahead o
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: tasks.billing,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     startedByAgentId: agents.caller.id,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -818,7 +818,7 @@ test("list_agents from an agent another started names its starter first, ahead o
         ...AGENT_CHOICE,
         idempotencyKey: randomUUID(),
         taskId: tasks.billing,
-        planSnapshot: "# Billing",
+        descriptionSnapshot: "# Billing",
         prompt: null,
         runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),
@@ -1162,7 +1162,7 @@ function forwardedPng(attachmentId: string, bytes: Uint8Array) {
 test("start_agent on the plan with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
-  await turnPlans(caller.userId, true);
+  await turnDescriptions(caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const shown = pngOf(64, 1);
@@ -1729,7 +1729,7 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: tasks.invitations,
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
     kind: AGENT_KIND.PILOT,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -1738,7 +1738,7 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: tasks.invitations,
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
     startedByAgentId: pilot.id,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -1747,7 +1747,7 @@ test("start_agent refuses a coder continuing the pilot that started it, directly
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: tasks.invitations,
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
     startedByAgentId: coder.id,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -1782,7 +1782,7 @@ async function agentOnBranch(
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId: taskId,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     startBranch: branch,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
@@ -2084,7 +2084,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
   // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
-  await turnPlans(bob, true);
+  await turnDescriptions(bob, true);
   const caller = await agentOn(bob, tasks.invitations);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
@@ -2124,7 +2124,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     [caller.id],
   );
   // It names the agent that made it for Bob, which the window draws apart from a task Bob made by hand.
-  assert.deepEqual(stored.task.origin, { actor: PLAN_ACTOR.AGENT, agentId: caller.id });
+  assert.deepEqual(stored.task.origin, { actor: DESCRIPTION_ACTOR.AGENT, agentId: caller.id });
   assert.equal(eve.sent.length, 0, "a task is made with no agent on it");
   // It stands in the workspace's list as any task does, for a teammate too, and in no other workspace.
   const alice = agents.caller.userId;
@@ -2210,7 +2210,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
 
   // With Plans off a plan given is not written, and a start with no prompt hands the brief in the plan's place.
-  await turnPlans(bob, false);
+  await turnDescriptions(bob, false);
   const planless = await call(
     CODER_TOOL.CREATE_TASK,
     { name: "Seat audit", brief: "Audit seat counts.", plan: "## Goal\n\nCount seats." },
@@ -2256,7 +2256,7 @@ test("only a pilot makes a task in pilot mode, as a child of another", async () 
     idempotencyKey: randomUUID(),
     taskId: tasks.invitations,
     kind: AGENT_KIND.PILOT,
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
@@ -2901,7 +2901,7 @@ test("message_agent to a pilot a continue took over and archived reaches the pil
   const start = {
     ...AGENT_CHOICE,
     taskId: tasks.invitations,
-    planSnapshot: "# Teammate invitations",
+    descriptionSnapshot: "# Teammate invitations",
     prompt: null,
   };
   const pilot = await claimed(agents.caller.userId, {
@@ -3572,7 +3572,7 @@ async function claudeCodeAgentOn(userId: string, taskId: string): Promise<Starte
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     runtime: AGENT_RUNTIME.CLAUDE_CODE,
     payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
@@ -3585,7 +3585,7 @@ async function eveAgentOn(userId: string, taskId: string): Promise<StartedAgent>
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
     taskId,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     runtime: AGENT_RUNTIME.EVE,
     payer: undefined,
@@ -3720,7 +3720,7 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
     model: SOL,
     idempotencyKey: randomUUID(),
     taskId: tasks.billing,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     runtime: AGENT_RUNTIME.CODEX,
     payer: AGENT_PAYER.MAC_SIGN_IN,
@@ -3782,7 +3782,7 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
     model: SOL,
     idempotencyKey: randomUUID(),
     taskId: tasks.billing,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     runtime: AGENT_RUNTIME.CODEX,
     payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
@@ -3822,7 +3822,7 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
     model: SOL,
     idempotencyKey: randomUUID(),
     taskId: tasks.billing,
-    planSnapshot: "# Billing",
+    descriptionSnapshot: "# Billing",
     prompt: null,
     runtime: AGENT_RUNTIME.CODEX,
     payer: AGENT_PAYER.API_KEY,
@@ -3849,12 +3849,12 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
 test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, reads no plan once the caller's starter turned Plans off, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
-  await turnPlans(caller.userId, true);
+  await turnDescriptions(caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const plan = "# Billing\n\nCharge by seat.";
   assert.ok(
-    Option.isSome(await database.run(savePlanText(teammates.userId, taskIds.billing, plan))),
+    Option.isSome(await database.run(saveDescriptionText(teammates.userId, taskIds.billing, plan))),
   );
 
   const home = `https://vespin.dev/workspace-${workspaceId}/task`;
@@ -3872,14 +3872,14 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   // A plan past the bound is cut on a line, and what was left out is counted.
   const line = `${"x".repeat(999)}\n`;
   const long = line.repeat(41);
-  await database.run(savePlanText(teammates.userId, taskIds.billing, long));
+  await database.run(saveDescriptionText(teammates.userId, taskIds.billing, long));
   const cut = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.ok(isRecord(cut.plan) && isWireString(cut.plan.text), JSON.stringify(cut).slice(0, 200));
   assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
 
   // With Plans off the task is read all the same, without its plan.
-  await turnPlans(caller.userId, false);
+  await turnDescriptions(caller.userId, false);
   const planless = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
   assert.deepEqual([isRecord(planless.task), "plan" in planless], [true, false]);
@@ -4417,8 +4417,10 @@ test("create_automation and update_automation take a Sentry trigger once the wor
 });
 
 /** Turns the Plans experiment on or off for a member, whose agents read and write no plan while it is off. */
-async function turnPlans(userId: string, on: boolean): Promise<void> {
-  await database.run(writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }));
+async function turnDescriptions(userId: string, on: boolean): Promise<void> {
+  await database.run(
+    writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }),
+  );
 }
 
 /** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
@@ -4639,7 +4641,7 @@ test("update_agent refuses a repository added with Several repositories off, to 
     idempotencyKey: randomUUID(),
     taskId: null,
     organizationId: workspaceId,
-    planSnapshot: null,
+    descriptionSnapshot: null,
     prompt: "Sweep the flaky tests.",
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });

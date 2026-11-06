@@ -343,6 +343,8 @@ import type {
   AppAutomationReads,
   AppBrowserTabs,
   AppChapters,
+  AppDescriptionComments,
+  AppDescriptionDocuments,
   AppDevicePresences,
   AppGitHubTokens,
   AppHistories,
@@ -358,8 +360,6 @@ import type {
   AppMemories,
   AppModels,
   AppPages,
-  AppPlanComments,
-  AppPlanDocuments,
   AppProviderKeys,
   AppPullRequestParts,
   AppRepositoryLists,
@@ -521,14 +521,14 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
-  /** One task's plan held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onPlanDocumentsChanged`. */
+  /** One task's plan held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onDescriptionDocumentsChanged`. */
   tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
   /** One task's plan let go by the windows: it stays followed among those let go lately until later ones push it out. */
   tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
   /** One task's held plan read again at once, as Try again asks. */
   tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
   /** Every task's plan the host holds for the windows, whole, each time any of them moves. */
-  onPlanDocumentsChanged(listener: (held: AppPlanDocuments) => void): () => void;
+  onDescriptionDocumentsChanged(listener: (held: AppDescriptionDocuments) => void): () => void;
   /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -547,14 +547,14 @@ export interface HostOperator {
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPlanCommentsChanged`. */
+  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onDescriptionCommentsChanged`. */
   tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** One plan's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** One held plan's or page's comments read again at once, as Try again asks. */
   tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** Every plan's or page's comments the host holds for the windows, whole, each time any of them moves. */
-  onPlanCommentsChanged(listener: (held: AppPlanComments) => void): () => void;
+  onDescriptionCommentsChanged(listener: (held: AppDescriptionComments) => void): () => void;
   /** A comment thread started on one task's plan, answered as it stands, or why not. */
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
   /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
@@ -1513,11 +1513,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
     tasksCommentsRetry: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
-    onPlanCommentsChanged: (listener) =>
+    onDescriptionCommentsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
         // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppPlanComments>(payload) : undefined),
+        (payload) => (isRecord(payload) ? answered<AppDescriptionComments>(payload) : undefined),
         listener,
       ),
     tasksCommentStart: (params) =>
@@ -1577,11 +1577,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: scope.taskId })),
     tasksDocumentRetry: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_RETRY, { taskId: scope.taskId })),
-    onPlanDocumentsChanged: (listener) =>
+    onDescriptionDocumentsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED,
+        GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
         // Note that the held plans are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
-        (payload) => (isRecord(payload) ? answered<AppPlanDocuments>(payload) : undefined),
+        (payload) => (isRecord(payload) ? answered<AppDescriptionDocuments>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>

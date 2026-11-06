@@ -21,7 +21,7 @@ import { MENTION_KIND } from "@repo/features/mention-link";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_CREATE_RELATION_KIND,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -36,9 +36,9 @@ import {
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  type AppDescriptionDocuments,
   type AppInboxTask,
   type AppInboxTaskHolding,
-  type AppPlanDocuments,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
@@ -95,9 +95,9 @@ import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { useInboxTask } from "./use-inbox-task.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
-import { HISTORY_READ } from "./use-plan-history.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -130,20 +130,20 @@ const OPEN: TasksView = {
 };
 
 /** The plans the host holds for the window as a test's tab opens on them: the open task's, unless a test names others. */
-const HELD_PLANS: AppPlanDocuments = { [TASK.id]: { rows: { task: TASK } } };
+const HELD_DESCRIPTIONS: AppDescriptionDocuments = { [TASK.id]: { rows: { task: TASK } } };
 
 /**
  * Lays `plans` over whatever document the window was handed, as the host
- * holds them for it (`LIVE_READ.PLAN_DOCUMENT`), for a registry that reads
+ * holds them for it (`LIVE_READ.DESCRIPTION_DOCUMENT`), for a registry that reads
  * the document from here on.
  */
-function handPlans(plans: AppPlanDocuments): void {
+function handDescriptions(plans: AppDescriptionDocuments): void {
   const handed = fakeAppBridgeCalls().requestAppState;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: async () => ({
       ...(handed === undefined ? stateWith({}, {}) : await handed()),
-      [LIVE_READ.PLAN_DOCUMENT]: plans,
+      [LIVE_READ.DESCRIPTION_DOCUMENT]: plans,
     }),
   });
 }
@@ -170,8 +170,8 @@ interface Standing {
   room: ShellRoom;
   /** Whether the window's history stands over the tab, as the panel's root keeps it. */
   history: boolean;
-  /** The plans the host holds for the window as the tab mounts (`LIVE_READ.PLAN_DOCUMENT`). */
-  plans: AppPlanDocuments;
+  /** The plans the host holds for the window as the tab mounts (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
+  plans: AppDescriptionDocuments;
 }
 
 /**
@@ -213,10 +213,10 @@ function mount(
     account: "dev@example.com",
     room: SHELL_ROOM.WIDE,
     history: false,
-    plans: HELD_PLANS,
+    plans: HELD_DESCRIPTIONS,
     ...initial,
   };
-  handPlans(standing.plans);
+  handDescriptions(standing.plans);
   let windowHistory: WindowHistoryLists | undefined;
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
@@ -371,7 +371,7 @@ function _undoButton(): HTMLButtonElement {
 function revisionLine(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };
@@ -1738,7 +1738,7 @@ test("a Vespin link to a version of a task the service will not hand the reader 
     {
       shown: true,
       tasks: OPEN,
-      plans: { ...HELD_PLANS, [OTHER_TASK_ID]: { rows: { gone: true } } },
+      plans: { ...HELD_DESCRIPTIONS, [OTHER_TASK_ID]: { rows: { gone: true } } },
     },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
   );
@@ -3058,8 +3058,8 @@ const readAgentNamed = Schema.decodeUnknownOption(
 const AGENT_TASK: TasksView = { ...OPEN, activeTaskId: OTHER_TASK_ID };
 
 /** The plans the host holds once Agent mode's task started: the started task's beside the open one's. */
-const AGENT_PLANS: AppPlanDocuments = {
-  ...HELD_PLANS,
+const AGENT_DESCRIPTIONS: AppDescriptionDocuments = {
+  ...HELD_DESCRIPTIONS,
   [OTHER_TASK_ID]: {
     rows: { task: { ...TASK, id: OTHER_TASK_ID, name: "Untitled", repository: "acme/web" } },
   },
@@ -3130,7 +3130,7 @@ test("a group's quick add sends one quiet start with the group's standing and no
 test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), plans: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3190,7 +3190,7 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), plans: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3212,7 +3212,7 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
 test("New task's agent opens alone, no plan beside it, and the task left draws no panel until asked, since a tab standing opens none", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), plans: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3233,7 +3233,7 @@ test("New task's agent opens alone, no plan beside it, and the task left draws n
 test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN, plans: AGENT_PLANS },
+    { shown: true, tasks: OPEN, plans: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
@@ -3256,7 +3256,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
-    { shown: true, tasks: withAgents([started]), plans: AGENT_PLANS },
+    { shown: true, tasks: withAgents([started]), plans: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
     },
@@ -3427,7 +3427,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN, plans: AGENT_PLANS },
+    { shown: true, tasks: OPEN, plans: AGENT_DESCRIPTIONS },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({
@@ -3637,7 +3637,10 @@ test("a task opened is timed from the press to its document drawn ready, and one
     {
       shown: true,
       tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID },
-      plans: { ...HELD_PLANS, [OTHER_TASK_ID]: { rows: { task: { ...TASK, id: OTHER_TASK_ID } } } },
+      plans: {
+        ...HELD_DESCRIPTIONS,
+        [OTHER_TASK_ID]: { rows: { task: { ...TASK, id: OTHER_TASK_ID } } },
+      },
     },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(opens) },
   );
@@ -3666,7 +3669,7 @@ test("a task opened is timed from the press to its document drawn ready, and one
       {
         name: PANEL_SPAN.TASK_OPEN,
         waited: 650,
-        attributes: { [PANEL_SPAN_ATTRIBUTE.PLAN_CHARS]: TASK.document.body.length },
+        attributes: { [PANEL_SPAN_ATTRIBUTE.DESCRIPTION_CHARS]: TASK.document.body.length },
       },
     ],
   );

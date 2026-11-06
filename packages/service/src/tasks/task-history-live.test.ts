@@ -4,18 +4,18 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@repo/database/core/live-statement";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
-import { listRevisions } from "@repo/database/models/plan-revisions";
+import { listRevisions } from "@repo/database/models/description-revisions";
 import { user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { revisionsOfLiveRows, taskHistoryLiveRowsSchema } from "@repo/features/live-wire";
-import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, DESCRIPTION_HISTORY_BOUNDS } from "@repo/features/task-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { added } from "../testing/task-contents.js";
-import { restoreRevision, saveNotes } from "./plan-notes.js";
+import { restoreRevision, saveNotes } from "./description-notes.js";
 import { taskHistoryLiveStatements } from "./task-history-live.js";
 
 /**
@@ -72,26 +72,26 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
 
         const db = yield* Database;
         yield* saveNotes(binding, [added("Context", "A member cannot bring a teammate in.")], {
-          actor: PLAN_ACTOR.NOTETAKER,
+          actor: DESCRIPTION_ACTOR.NOTETAKER,
         });
         const started = yield* createAgent(owner, {
           taskId: task.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          planSnapshot: "# Teammate invitations",
+          descriptionSnapshot: "# Teammate invitations",
           prompt: null,
           repository: "acme/relay",
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         yield* later;
         yield* saveNotes(binding, [added("Open questions", "- Who may withdraw an invite?")], {
-          actor: PLAN_ACTOR.AGENT,
+          actor: DESCRIPTION_ACTOR.AGENT,
           agentId: Option.getOrThrow(started).agent.id,
         });
         yield* later;
         yield* saveNotes(binding, [added("Hard parts", "- Links expire.")], {
-          actor: PLAN_ACTOR.DEVELOPER,
+          actor: DESCRIPTION_ACTOR.DEVELOPER,
         });
         yield* later;
         yield* restoreRevision(binding, 1);
@@ -100,11 +100,11 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
         assert.ok(written.revisions.some((line) => line.restoredFrom !== undefined));
 
         // A history longer than a page answers its newest page and where the older one is read from.
-        yield* db.insert(planRevision).values(
-          Array.from({ length: PLAN_HISTORY_BOUNDS.PAGE }, (_, index) => ({
+        yield* db.insert(descriptionRevision).values(
+          Array.from({ length: DESCRIPTION_HISTORY_BOUNDS.PAGE }, (_, index) => ({
             taskId: task.id,
             seq: 5 + index,
-            actor: PLAN_ACTOR.DEVELOPER,
+            actor: DESCRIPTION_ACTOR.DEVELOPER,
             userId: owner,
             document: `# Teammate invitations\n\nSave ${index}.`,
             changes: 1,
@@ -113,7 +113,7 @@ it.layer(getTestDB())("a task's history followed live", (it) => {
           })),
         );
         const paged = yield* agrees;
-        assert.equal(paged.revisions.length, PLAN_HISTORY_BOUNDS.PAGE);
+        assert.equal(paged.revisions.length, DESCRIPTION_HISTORY_BOUNDS.PAGE);
         assert.notEqual(paged.earlier, undefined);
 
         assert.deepEqual(yield* liveHistoryOf(stranger, task.id), { revisions: [] });

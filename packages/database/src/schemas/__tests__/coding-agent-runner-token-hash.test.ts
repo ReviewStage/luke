@@ -56,7 +56,7 @@ const agentHolding = () =>
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         repository: null,
-        planSnapshot: "# Teammate invitations\n",
+        descriptionSnapshot: "# Teammate invitations\n",
         prompt: null,
         runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
       }),

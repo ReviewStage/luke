@@ -27,7 +27,7 @@ import { LINK_PLACE } from "@repo/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { formatCount } from "@repo/features/number-format";
 import { pageFrameUrl } from "@repo/features/page-frame";
-import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, TASK_STATUS } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { pasteCutWords } from "@repo/features/words";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
@@ -1204,7 +1204,7 @@ test("in the window's Inbox an @ in the box of a task's item offers that plan's 
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.TASKS_REVISIONS) {
-        const lastEdit = { actor: PLAN_ACTOR.AGENT, at: 2, duringCall: false };
+        const lastEdit = { actor: DESCRIPTION_ACTOR.AGENT, at: 2, duringCall: false };
         const newest = { seq: 2, lastEdit, startedAt: 2, changes: 1 };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { revisions: [newest] } });
       }

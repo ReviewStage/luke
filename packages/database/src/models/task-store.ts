@@ -4,18 +4,21 @@ import {
   type AgentMachineKind,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { descriptionAttachmentIdsIn } from "@repo/features/description-attachment-link";
+import type { DescriptionSectionWriter } from "@repo/features/description-document";
+import {
+  type DescriptionAgentEdit,
+  descriptionAgentEditSchema,
+} from "@repo/features/description-notes";
 import { DEVICE_KIND } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { agentName } from "@repo/features/model-label";
-import { planAttachmentIdsIn } from "@repo/features/plan-attachment-link";
-import type { PlanSectionWriter } from "@repo/features/plan-document";
-import { type PlanAgentEdit, planAgentEditSchema } from "@repo/features/plan-notes";
 import { READ_MARK, type ReadMark } from "@repo/features/read-mark";
 import {
-  PLAN_ACTOR,
-  type PlanLastEdit,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionLastEdit,
+  type DescriptionSectionEdit,
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -66,6 +69,8 @@ import { taskRead } from "../schemas/task-read.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
+import { stampSavedAttachments } from "./description-attachments.js";
+import { readLastEdit, readSectionWriters } from "./description-revisions.js";
 import { type Device, devicesNamed } from "./device-store.js";
 import {
   reopenAgentInboxItems,
@@ -73,8 +78,6 @@ import {
   settleAgentInboxItems,
   settleTaskInboxItems,
 } from "./inbox-settle.js";
-import { stampSavedAttachments } from "./plan-attachments.js";
-import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { taskMadeByRun } from "./run-tasks.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
 import {
@@ -204,7 +207,7 @@ export interface TaskArchivedAgent {
 }
 
 /** One save a coding agent made, with the agent named as its row names it now. */
-export interface LabeledAgentEdit extends PlanAgentEdit {
+export interface LabeledAgentEdit extends DescriptionAgentEdit {
   readonly label: string;
 }
 
@@ -221,7 +224,7 @@ export interface StoredTask {
   /** Whether the text was ever saved since the task started: false while nobody has written it. */
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
-  readonly sectionWriters: readonly PlanSectionWriter[];
+  readonly sectionWriters: readonly DescriptionSectionWriter[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
 }
@@ -229,7 +232,7 @@ export interface StoredTask {
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
  * and the repository it is about where one is chosen. A plan started with no
- * name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is renamed. A brief is the developer's own words about the task, kept as
+ * name, or a blank one, stands as `UNTITLED_DESCRIPTION_NAME` until it is renamed. A brief is the developer's own words about the task, kept as
  * written; a blank one is none.
  */
 export interface NewTask {
@@ -304,9 +307,9 @@ function newestAgentColumn<T>(column: typeof agentTable.machine | typeof agentTa
 
 /** Who made a task, as its row holds it. */
 const TaskCreatorActorSchema = Schema.Literals([
-  PLAN_ACTOR.DEVELOPER,
-  PLAN_ACTOR.NOTETAKER,
-  PLAN_ACTOR.AGENT,
+  DESCRIPTION_ACTOR.DEVELOPER,
+  DESCRIPTION_ACTOR.NOTETAKER,
+  DESCRIPTION_ACTOR.AGENT,
 ]);
 
 /**
@@ -399,7 +402,7 @@ const TaskListRowSchema = Schema.Struct({
 
 const TaskRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
-  agentEdits: Schema.Array(planAgentEditSchema),
+  agentEdits: Schema.Array(descriptionAgentEditSchema),
   // Every task is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
@@ -601,13 +604,13 @@ const findAgentLabels = SqlSchema.findAll({
  * the name its tab shows (`agentName`). The row's own
  * account is the one they are read under. Note that an agent is found by
  * its id alone, wherever it works now, because an agent edits any plan of
- * its workspace by naming the task (`edit_plan`), and the task may move to
+ * its workspace by naming the task (`edit_description`), and the task may move to
  * another workspace after while the agent stays with its own. The ids are
  * the service's own, written by the save, never a caller's.
  */
 function agentLabelsOf(
   row: TaskRow,
-  sectionWriters: readonly PlanSectionWriter[],
+  sectionWriters: readonly DescriptionSectionWriter[],
 ): TaskStoreEffect<ReadonlyMap<string, string>> {
   const named = [
     ...row.agentEdits.map((edit) => edit.agentId),
@@ -627,15 +630,15 @@ function agentLabelsOf(
  * before agents were; a member by their id and name, where one is named.
  */
 function sectionEditOf(
-  writer: PlanSectionWriter,
+  writer: DescriptionSectionWriter,
   labels: ReadonlyMap<string, string>,
-): PlanSectionEdit {
+): DescriptionSectionEdit {
   const { section, actor, at } = writer;
   const label = writer.agentId === undefined ? undefined : labels.get(writer.agentId);
   return {
     section,
     actor,
-    ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
+    ...(actor === DESCRIPTION_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
     ...(writer.agentId === undefined ? undefined : { agentId: writer.agentId }),
     ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
@@ -648,9 +651,9 @@ function sectionEditOf(
  * whose history has not begun: an agent's save made before it is the newest
  * thing the service can name a writer for.
  */
-function journaledEdit(edit: LabeledAgentEdit): PlanLastEdit {
+function journaledEdit(edit: LabeledAgentEdit): DescriptionLastEdit {
   return {
-    actor: PLAN_ACTOR.AGENT,
+    actor: DESCRIPTION_ACTOR.AGENT,
     label: edit.label,
     agentId: edit.agentId,
     at: edit.at,
@@ -832,7 +835,7 @@ function summaryOf(
 
 /** Who made a task for its member, as the wire names them: nothing for a task made by hand. */
 function originOf(row: TaskSummaryRow): { readonly origin?: TaskOrigin } {
-  if (row.creatorActor === PLAN_ACTOR.DEVELOPER) return {};
+  if (row.creatorActor === DESCRIPTION_ACTOR.DEVELOPER) return {};
   const agentId = row.creatorAgentId;
   return {
     origin: { actor: row.creatorActor, ...(agentId === null ? undefined : { agentId }) },
@@ -1032,7 +1035,7 @@ const replaceText = SqlSchema.findOneOption({
     userId: Schema.String,
     taskId: Schema.String,
     text: Schema.String,
-    agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
+    agentEdits: Schema.optionalKey(Schema.Array(descriptionAgentEditSchema)),
     now: Schema.Date,
   }),
   Result: TaskRowSchema,
@@ -1239,7 +1242,7 @@ const nameUntitled = SqlSchema.findOneOption({
  * Starts a task under the account, in the workspace it was handed, as one
  * empty document, with the repository it was handed; it stands first in
  * the list. A plan handed no name, or a blank one, starts as
- * `UNTITLED_PLAN_NAME`.
+ * `UNTITLED_DESCRIPTION_NAME`.
  */
 /** A started task's row as it is inserted: its name, or Untitled, its plan's text, empty where none is named, and its brief, or none for a blank one. */
 const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =>
@@ -1261,7 +1264,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
       assigneeId: started.assigneeId ?? null,
-      creatorActor: started.origin?.actor ?? PLAN_ACTOR.DEVELOPER,
+      creatorActor: started.origin?.actor ?? DESCRIPTION_ACTOR.DEVELOPER,
       creatorAgentId: started.origin?.agentId ?? null,
       madeByStart: started.madeByStart ?? false,
       number: yield* nextTaskNumber(started.organizationId),
@@ -1472,7 +1475,10 @@ export function readTask(
  * write need. Nothing for a task of a
  * workspace the account is not in.
  */
-export function readTaskPlan(userId: string, taskId: string): TaskStoreEffect<Option.Option<Task>> {
+export function readTaskDescription(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<Task>> {
   return Effect.flatMap(findTask({ userId, taskId }), (found) =>
     Effect.transposeOption(Option.map(found, (row) => taskOf(userId, row))),
   );
@@ -1569,9 +1575,9 @@ export function readTaskForUpdate(
 }
 
 /** What a save of a document plan's text writes beside it, where it is handed. */
-export interface PlanTextSaveExtras {
+export interface DescriptionTextSaveExtras {
   /** The coding agents' journal. */
-  readonly agentEdits?: readonly PlanAgentEdit[];
+  readonly agentEdits?: readonly DescriptionAgentEdit[];
 }
 
 /**
@@ -1580,17 +1586,18 @@ export interface PlanTextSaveExtras {
  * the task as saved, or nothing where the account reaches no such task; nothing
  * is ever created here.
  */
-export function savePlanText(
+export function saveDescriptionText(
   userId: string,
   taskId: string,
   text: string,
-  extras: PlanTextSaveExtras = {},
+  extras: DescriptionTextSaveExtras = {},
 ): TaskStoreEffect<Option.Option<Task>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const row = yield* replaceText({ userId, taskId, text, ...extras, now });
     // The pictures the text names are saved now, so the sweep leaves them for as long as the plan stands.
-    if (Option.isSome(row)) yield* stampSavedAttachments(taskId, planAttachmentIdsIn(text, taskId));
+    if (Option.isSome(row))
+      yield* stampSavedAttachments(taskId, descriptionAttachmentIdsIn(text, taskId));
     return yield* Effect.transposeOption(Option.map(row, (saved) => taskOf(userId, saved)));
   });
 }
@@ -1723,7 +1730,7 @@ const lockStandingAgents = SqlSchema.findAll({
           id: agentTable.id,
           conversationId: agentTable.conversationId,
           createdAt: agentTable.createdAt,
-          blank: sql<boolean>`${agentTable.planSnapshot} is null and ${agentTable.prompt} is null`,
+          blank: sql<boolean>`${agentTable.descriptionSnapshot} is null and ${agentTable.prompt} is null`,
         })
         .from(agentTable)
         .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))

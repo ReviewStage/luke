@@ -11,7 +11,7 @@
  * a frame's, a whole tab's above all, is answered not found and mints nothing
  * (`page-links.ts`'s `loadsAFrame`), so no link ever stands in a tab's history.
  * The version is read on the account's own reach first, the rule the
- * desktop's page read is held to (`@repo/database/models/plan-pages`), so a
+ * desktop's page read is held to (`@repo/database/models/task-pages`), so a
  * page the account does not reach answers not found and no link is minted
  * for it, with a sandbox or without.
  *
@@ -25,7 +25,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readPageVersion } from "@repo/database/models/plan-pages";
+import { readPageVersion } from "@repo/database/models/task-pages";
 import {
   PAGE_FRAME_STATUS,
   PAGE_IN_MAC_APP_PATH,

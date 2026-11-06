@@ -94,9 +94,9 @@ import {
   recordNativeHanded,
   recordTurnFastRefused,
   renameAgent,
-  reserveTurnPlanNotes,
+  reserveTurnDescriptionNotes,
   settleAgentAuthor,
-  settleTurnPlanNotes,
+  settleTurnDescriptionNotes,
   takeAgentMentionedServers,
   taskHasMergedPullRequest,
   taskNamesOf,
@@ -517,11 +517,11 @@ it.layer(getTestDB())("the coding-agent store's plan notes of a turn", (it) => {
           status: TURN_STATUS.RUNNING,
         });
 
-        const stranger = yield* reserveTurnPlanNotes(other, agent, 5);
-        yield* settleTurnPlanNotes(other, running, 0, 7);
-        const first = yield* reserveTurnPlanNotes(owner, agent, 3);
-        yield* settleTurnPlanNotes(owner, running, 3, 2);
-        const second = yield* reserveTurnPlanNotes(owner, agent, 4);
+        const stranger = yield* reserveTurnDescriptionNotes(other, agent, 5);
+        yield* settleTurnDescriptionNotes(other, running, 0, 7);
+        const first = yield* reserveTurnDescriptionNotes(owner, agent, 3);
+        yield* settleTurnDescriptionNotes(owner, running, 3, 2);
+        const second = yield* reserveTurnDescriptionNotes(owner, agent, 4);
 
         assert.ok(Option.isNone(stranger));
         assert.deepEqual(first, Option.some({ turnId: running, taken: 3 }));
@@ -766,7 +766,7 @@ it.layer(getTestDB())("the coding-agent store's agents read by id", (it) => {
         });
         const started = yield* createAgent(starter, {
           taskId: task.id,
-          planSnapshot: "# Billing",
+          descriptionSnapshot: "# Billing",
           prompt: null,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -1244,7 +1244,7 @@ it.layer(getTestDB())("the coding-agent store's merged pull request on a task", 
           Effect.map(
             createAgent(starter, {
               taskId: task.id,
-              planSnapshot: "# Billing",
+              descriptionSnapshot: "# Billing",
               prompt: null,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
@@ -1589,7 +1589,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const source = Option.getOrThrow(
           yield* createAgent(starter, {
             taskId: task.id,
-            planSnapshot: "# Billing",
+            descriptionSnapshot: "# Billing",
             prompt: null,
             idempotencyKey: randomUUID(),
             ...choice,
@@ -1606,7 +1606,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const forked = Option.getOrThrow(
           yield* createAgent(teammate, {
             taskId: task.id,
-            planSnapshot: "# Billing",
+            descriptionSnapshot: "# Billing",
             prompt: null,
             idempotencyKey: randomUUID(),
             ...choice,
@@ -1637,7 +1637,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         const task = yield* createTask(owner, { organizationId: workspace, name: "Rollout" });
         const start = (startedByAgentId?: string): NewAgent => ({
           taskId: task.id,
-          planSnapshot: "# Rollout",
+          descriptionSnapshot: "# Rollout",
           prompt: null,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -1674,7 +1674,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           more: Pick<NewAgent, "startedByAgentId" | "startedFrom" | "takesOverFrom">,
         ): NewAgent => ({
           taskId: task.id,
-          planSnapshot: "# Rollout",
+          descriptionSnapshot: "# Rollout",
           prompt: null,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -1741,7 +1741,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
             const { agent } = Option.getOrThrow(
               yield* createAgent(by, {
                 taskId: task.id,
-                planSnapshot: "# Billing",
+                descriptionSnapshot: "# Billing",
                 prompt: null,
                 idempotencyKey: randomUUID(),
                 model: "anthropic/claude-opus-5.5",
@@ -1801,7 +1801,7 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
             const { agent } = Option.getOrThrow(
               yield* createAgent(starter, {
                 taskId: task.id,
-                planSnapshot: "# Billing",
+                descriptionSnapshot: "# Billing",
                 prompt: null,
                 idempotencyKey: randomUUID(),
                 model: "anthropic/claude-opus-5.5",
@@ -1858,7 +1858,7 @@ it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => 
         const start = (taskId: string, githubAccess?: typeof GITHUB_ACCESS.TOKEN) =>
           createAgent(starter, {
             taskId,
-            planSnapshot: "# Billing",
+            descriptionSnapshot: "# Billing",
             prompt: null,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -1897,7 +1897,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
     brief: line.brief,
     automationName: line.automationName,
     startedFrom: line.startedFrom,
-    text: ["planSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
+    text: ["descriptionSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
   });
 
   /** The agent a Start made, failing the test where it made none. */
@@ -1921,7 +1921,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           yield* createAgent(starter, {
             ...asked,
             taskId: onTask.id,
-            planSnapshot: largeText,
+            descriptionSnapshot: largeText,
             prompt: null,
             title: "Invite emails",
             idempotencyKey: randomUUID(),
@@ -1934,7 +1934,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           yield* createAgent(starter, {
             ...asked,
             taskId: onTask.id,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: largeText,
             startedFrom: source,
             idempotencyKey: randomUUID(),
@@ -1947,7 +1947,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
             ...asked,
             taskId: null,
             organizationId: workspace,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: largeText,
             automationOrigin: {
               name: "Nightly triage",
@@ -2004,7 +2004,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
         const whole = Option.getOrThrow(yield* readAgent(starter, run.id));
         const {
           automationOrigin: _origin,
-          planSnapshot: _snapshot,
+          descriptionSnapshot: _snapshot,
           prompt: _prompt,
           ...rest
         } = whole;
@@ -2040,7 +2040,7 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
         const { agent } = Option.getOrThrow(
           yield* createAgent(starter, {
             taskId: task.id,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: null,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -2052,8 +2052,12 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
 
         const read = Option.getOrThrow(yield* readAgent(teammate, agent.id));
         assert.deepEqual(
-          { repository: read.repository, planSnapshot: read.planSnapshot, prompt: read.prompt },
-          { repository: null, planSnapshot: null, prompt: null },
+          {
+            repository: read.repository,
+            descriptionSnapshot: read.descriptionSnapshot,
+            prompt: read.prompt,
+          },
+          { repository: null, descriptionSnapshot: null, prompt: null },
         );
         const lines = yield* listAgentLines(teammate, task.id);
         assert.deepEqual(
@@ -2075,7 +2079,7 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
       createAgent(starter, {
         taskId: null,
         organizationId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: "Sweep the flaky tests.",
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
@@ -2398,7 +2402,7 @@ it.layer(getTestDB())("the coding-agent store's agent of a conversation", (it) =
       createAgent(starter, {
         taskId: null,
         organizationId,
-        planSnapshot: null,
+        descriptionSnapshot: null,
         prompt: "Sweep the flaky tests.",
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
@@ -2629,7 +2633,7 @@ it.layer(getTestDB())("the coding-agent store's pilots", (it) => {
         });
         const pilotOn = (startedFrom?: StoredStartedFrom): NewAgent => ({
           taskId: piloted.id,
-          planSnapshot: "# Invitations\n",
+          descriptionSnapshot: "# Invitations\n",
           prompt: null,
           kind: AGENT_KIND.PILOT,
           idempotencyKey: randomUUID(),

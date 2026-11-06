@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_BLOCK_CHANGE,
   TASK_PRIORITY,
   TASK_RELATION_KIND,
@@ -77,7 +77,7 @@ const SHARED_TASK: Task = {
   updatedAt: 120_000,
   ownerId: CHARLES.userId,
   createdBy: CHARLES,
-  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
+  lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
 };
 
 /** What the task actions asked of the tab, by the task each named. */
@@ -160,7 +160,10 @@ function mountReading(element: ReactElement): HTMLElement {
 }
 
 /** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu; on `registry` where one is named. */
-function mountPlanTab(tasks: TasksControl, registry?: AtomRegistry.AtomRegistry): HTMLElement {
+function mountDescriptionTab(
+  tasks: TasksControl,
+  registry?: AtomRegistry.AtomRegistry,
+): HTMLElement {
   const page = createElement(DesktopTasks, {
     summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
@@ -257,7 +260,7 @@ async function confirmDelete(): Promise<void> {
 test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
   const { tasks, asked } = openTab();
 
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   assert.equal(asking(), false);
   choose("Permanently delete");
   const question = dialog();
@@ -368,7 +371,7 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
 
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   choose("Permanently delete");
   const drawn = dialog()?.parentElement;
   assert.ok(drawn);
@@ -391,7 +394,7 @@ function sharedTab(me: string): TasksControl {
 }
 
 /** `tasks` with its side panel open on the plan, whose tab's ⋯ drops the task's menu. */
-function planShown(tasks: TasksControl): TasksControl {
+function descriptionShown(tasks: TasksControl): TasksControl {
   return { ...tasks, sidePanel: { ...tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN } };
 }
 
@@ -402,7 +405,7 @@ function menuFooter(): string[] {
 }
 
 test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
-  openTaskMenu(mountPlanTab(planShown(sharedTab(DEAN.userId))));
+  openTaskMenu(mountDescriptionTab(descriptionShown(sharedTab(DEAN.userId))));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
   const faces = document.querySelectorAll('[role="menu"] .ui-menu-footer .actor-mark');
@@ -420,7 +423,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   );
   unmountAll();
 
-  openTaskMenu(mountPlanTab(planShown(sharedTab(CHARLES.userId))));
+  openTaskMenu(mountDescriptionTab(descriptionShown(sharedTab(CHARLES.userId))));
   assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
   unmountAll();
 
@@ -519,8 +522,11 @@ test("a sidebar task Vespin or a coding agent made wears who is on it rather tha
     return worn;
   };
   const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
-  const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
-  const byApp = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
+  const byAgent = {
+    ...deans,
+    origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
+  } as const;
+  const byApp = { ...deans, origin: { actor: DESCRIPTION_ACTOR.NOTETAKER } } as const;
   assert.deepEqual(marks(byAgent), ["unassigned"]);
   assert.deepEqual(marks({ ...byApp, assignee: DEAN }), []);
   assert.deepEqual(marks({ ...byApp, assignee: CHARLES }), ["person"]);
@@ -667,7 +673,7 @@ test("Copy link copies the plan's address on vespin.dev, alike from the Plan tab
     await act(async () => item.click());
   };
 
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   await copyFromMenu();
   const title = document.querySelector<HTMLButtonElement>(
     '.ui-page-header-actions button[aria-label="Copy link"]',
@@ -714,7 +720,7 @@ test("a task's card says who created it where others share its workspace, the re
     ...charles,
     ownerId: DEAN.userId,
     createdBy: DEAN,
-    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+    origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
   } as const;
   assert.deepEqual(details(byAgent, PERSONAL), ["Created by Agent for you"]);
 });
@@ -748,7 +754,7 @@ test("a task's card's creator line opens the creator's page in the window, and i
   // A task an agent made for Charles still opens Charles's page, the member it names.
   const byAgent = drawn(true, {
     ...charles,
-    origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
+    origin: { actor: DESCRIPTION_ACTOR.AGENT, agentId: "agent-gone" },
   });
   assert.equal(byAgent?.tagName, "BUTTON");
   act(() => byAgent?.click());
@@ -940,7 +946,7 @@ const CHIP_ITEMS = ["Status", "Priority", "Assignee"];
 test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Status, Priority, and Assignee to the plan's chips, which a row keeps, and keeps Change repository, Choose a repository on a task with none, which a row leaves to it; another task's row prints only U, S, and P, which act on the focused row", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
-  openTaskMenu(mountPlanTab(tasks));
+  openTaskMenu(mountDescriptionTab(tasks));
   assert.deepEqual(itemChords(), [
     ["Copy description", "⌥⌘C"],
     ["Version history", "⌥⇧⌘H"],
@@ -957,7 +963,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
   assert.ok(offered.includes("Change repository"), "the plan's repository is words, not a chip");
 
   unmountAll();
-  openTaskMenu(mountPlanTab(openTab().tasks));
+  openTaskMenu(mountDescriptionTab(openTab().tasks));
   assert.ok(
     menuItems().map(itemLabel).includes("Choose a repository"),
     "a task with no repository is offered the pick it still needs",
@@ -986,7 +992,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
 test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version history, and neither chord answers", () => {
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
 
-  openTaskMenu(mountPlanTab(tasks, registryWith({})));
+  openTaskMenu(mountDescriptionTab(tasks, registryWith({})));
   const offered = menuItems().map(itemLabel);
   assert.deepEqual(
     ["Copy description", "Version history"].filter((item) => offered.includes(item)),

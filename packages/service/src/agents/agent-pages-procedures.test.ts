@@ -3,15 +3,15 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
   PAGE_OWNER,
   PAGE_SHOWER,
-  planPageVersionAnswerSchema,
   taskPagesAnswerSchema,
+  taskPageVersionAnswerSchema,
 } from "@repo/features/page-wire";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
@@ -94,7 +94,7 @@ it.layer(getTestDB())("an agent's own pages over HTTP", (it) => {
         const started = yield* createAgent(starter, {
           taskId: null,
           organizationId: workspace,
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Chart the funnel",
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -121,7 +121,7 @@ it.layer(getTestDB())("an agent's own pages over HTTP", (it) => {
 
         const listed = readOk(taskPagesAnswerSchema, yield* ask(teammate, pagesPath(agentId)));
         const first = readOk(
-          planPageVersionAnswerSchema,
+          taskPageVersionAnswerSchema,
           yield* ask(teammate, versionPath(agentId, chart.id, "1")),
         );
 

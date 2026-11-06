@@ -5,7 +5,7 @@
  * tablet's keyboard has no Shift+Enter to type a line with, so on a coarse
  * pointer Enter is the new line and the box's visible Send sends; ⌘ or Ctrl
  * with Enter, from a keyboard attached to it, still sends. Every box that
- * sends asks here, the composer's editor (`plan-editor/composer-editor.ts`),
+ * sends asks here, the composer's editor (`description-editor/composer-editor.ts`),
  * a pull request's Markdown boxes (`tasks/comment-editor.tsx`), and the plain
  * text areas that stand in for them, so one key does one thing in each. A
  * document's text, a plan's or a pull request's description, is the one

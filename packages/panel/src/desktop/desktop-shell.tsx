@@ -845,7 +845,7 @@ export function DesktopShell({
   // Automations page stands in the plan's place, so it draws
   // no panel to toggle; an agent's page draws the agent's own, and the Inbox
   // the chosen item's task's.
-  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  const descriptionToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -991,7 +991,7 @@ export function DesktopShell({
   const adminOpen = tasks.adminView.open && (adminAccess || adminPending);
   // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
-    (planToggle && room !== SHELL_ROOM.NARROW) ||
+    (descriptionToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
     (inboxOpen && inboxItemShown);
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
@@ -1184,13 +1184,13 @@ export function DesktopShell({
       {panelToggle && room === SHELL_ROOM.NARROW ? (
         <SidePanelChord
           panel={tasks.sidePanel}
-          disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+          disabled={descriptionToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
         />
       ) : panelToggle ? (
         <div ref={setToggleRoom} className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
-            disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
+            disabled={descriptionToggle && tasks.region.kind !== DOCUMENT_REGION.READY}
           />
         </div>
       ) : null}

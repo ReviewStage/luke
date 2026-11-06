@@ -648,7 +648,7 @@ function fakeService() {
         return { text: "Run the tests" };
       }),
     taskInboxLive: (taskId, _userId, poll, after) => {
-      if (poll !== true) asked.push(`plan-inbox-live:${taskId}`);
+      if (poll !== true) asked.push(`description-inbox-live:${taskId}`);
       return scopeLive(poll, after);
     },
     agentInboxLive: (agentId, _userId, poll, after) => {
@@ -2654,7 +2654,7 @@ it.effect(
           },
         ],
       );
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`]);
 
       // Let go, the plan stays held among those let go lately, so a change still tells it.
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
@@ -2681,7 +2681,7 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
-      assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`], "nothing is read from cold");
+      assert.deepEqual(asked, [`description-inbox-live:${TASK_ID}`], "nothing is read from cold");
       assert.deepEqual(heldOf(told, PLAN_SCOPE), { rows: [LIVE_ITEM] });
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_UNFOLLOW, PLAN_SCOPE);
       yield* settled;
@@ -2699,7 +2699,7 @@ it.effect(
       }
       assert.equal(heldOf(told, PLAN_SCOPE), undefined, "the plan is told no more");
       assert.equal(
-        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
         1,
         "letting it go reads nothing",
       );
@@ -2707,7 +2707,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
       assert.equal(
-        asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length,
+        asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length,
         2,
         "held again past the bound, it is read anew",
       );
@@ -2825,7 +2825,7 @@ it.effect(
       yield* open;
       yield* settled;
       assert.equal(live.scope.held(), 1, "the window's hold reads again");
-      assert.equal(asked.filter((read) => read === `plan-inbox-live:${TASK_ID}`).length, 2);
+      assert.equal(asked.filter((read) => read === `description-inbox-live:${TASK_ID}`).length, 2);
     }),
 );
 

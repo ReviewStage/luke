@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
-  PLAN_ACTOR,
-  type PlanSectionEdit,
+  DESCRIPTION_ACTOR,
+  type DescriptionSectionEdit,
   type Task,
   type TaskAgentsSummary,
   type TaskSummary,
@@ -91,7 +91,7 @@ function windowOn(): {
 /** The sections `readerId` is shown as changed on a task whose row reads it through before every save here. */
 function changedFor(
   readerId: string | undefined,
-  edits: readonly Omit<PlanSectionEdit, "at" | "duringCall">[],
+  edits: readonly Omit<DescriptionSectionEdit, "at" | "duringCall">[],
 ): string[] {
   const task: Task = {
     ...DOCUMENT_TASK,
@@ -103,9 +103,9 @@ function changedFor(
 }
 
 const EDITS = [
-  { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: DEAN },
-  { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES },
-  { section: "Context", actor: PLAN_ACTOR.NOTETAKER },
+  { section: "Goal", actor: DESCRIPTION_ACTOR.DEVELOPER, by: DEAN },
+  { section: "Approach", actor: DESCRIPTION_ACTOR.DEVELOPER, by: CHARLES },
+  { section: "Context", actor: DESCRIPTION_ACTOR.NOTETAKER },
 ];
 
 test("a teammate's saves are shown as changed, and the reader's own are not", () => {
@@ -114,7 +114,7 @@ test("a teammate's saves are shown as changed, and the reader's own are not", ()
 });
 
 test("a developer's save the window cannot place counts as the reader's, as before saves named a member", () => {
-  const unnamed = [{ section: "Goal", actor: PLAN_ACTOR.DEVELOPER }];
+  const unnamed = [{ section: "Goal", actor: DESCRIPTION_ACTOR.DEVELOPER }];
 
   assert.deepEqual(changedFor(DEAN.userId, unnamed), []);
   assert.deepEqual(changedFor(undefined, EDITS), ["Context"]);
@@ -134,7 +134,7 @@ test("a reader's id arriving while the plan stays open lights a teammate's saves
 });
 
 test("a reader's id arriving mid-stay lights neither a save that landed during the stay nor a section dismissed", () => {
-  const charles = { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES };
+  const charles = { section: "Approach", actor: DESCRIPTION_ACTOR.DEVELOPER, by: CHARLES };
   const task: Task = {
     ...DOCUMENT_TASK,
     updatedAt: LOOKED_AT + 1,
@@ -145,7 +145,12 @@ test("a reader's id arriving mid-stay lights neither a save that landed during t
     updatedAt: LOOKED_AT + 2,
     sectionEdits: [
       { ...charles, at: LOOKED_AT + 1, duringCall: false },
-      { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 2, duringCall: false },
+      {
+        section: "Context",
+        actor: DESCRIPTION_ACTOR.NOTETAKER,
+        at: LOOKED_AT + 2,
+        duringCall: false,
+      },
     ],
   };
   const stay = (dismissing: boolean) => {

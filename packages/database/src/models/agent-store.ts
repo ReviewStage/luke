@@ -198,7 +198,7 @@ export interface Agent {
   readonly effort: string;
   readonly contextWindow: ContextWindow;
   /** The plan text the agent was handed; null where it was handed a prompt instead. */
-  readonly planSnapshot: string | null;
+  readonly descriptionSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
   readonly prompt: string | null;
   /** The GitHub repository the agent works in, as `owner/name`; null for an agent with none, which does no repository work. */
@@ -235,7 +235,8 @@ export interface Agent {
  * its own turns read; which of the two it was handed, or neither, which its
  * tab's brief is drawn from, and its automation's name stand in their place.
  */
-export interface AgentLine extends Omit<Agent, "automationOrigin" | "planSnapshot" | "prompt"> {
+export interface AgentLine
+  extends Omit<Agent, "automationOrigin" | "descriptionSnapshot" | "prompt"> {
   /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
   readonly automationName: string | null;
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
@@ -284,9 +285,9 @@ export function hasRepository<A extends { readonly repository: string | null }>(
 
 /** What a Start hands the agent as its first message: the plan's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
 export type AgentBriefText =
-  | { readonly planSnapshot: string; readonly prompt: null }
-  | { readonly planSnapshot: null; readonly prompt: string }
-  | { readonly planSnapshot: null; readonly prompt: null };
+  | { readonly descriptionSnapshot: string; readonly prompt: null }
+  | { readonly descriptionSnapshot: null; readonly prompt: string }
+  | { readonly descriptionSnapshot: null; readonly prompt: null };
 
 /**
  * Where a Start puts the agent: on a task, whose workspace it joins and
@@ -303,7 +304,7 @@ export type AgentPlace =
   | {
       readonly taskId: null;
       readonly organizationId: string;
-      readonly planSnapshot: null;
+      readonly descriptionSnapshot: null;
       readonly prompt: string;
       readonly kind?: typeof AGENT_KIND.CODER | undefined;
     };
@@ -390,7 +391,7 @@ const AGENT_COLUMNS = {
   model: agentTable.model,
   effort: agentTable.effort,
   contextWindow: agentTable.contextWindow,
-  planSnapshot: agentTable.planSnapshot,
+  descriptionSnapshot: agentTable.descriptionSnapshot,
   prompt: agentTable.prompt,
   repository: agentTable.repository,
   branch: agentTable.branch,
@@ -432,7 +433,7 @@ const AGENT_LINE_COLUMNS = {
   contextWindow: agentTable.contextWindow,
   brief: sql<AgentBrief>`case
     when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT}
-    when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN}
+    when ${agentTable.descriptionSnapshot} is not null then ${AGENT_BRIEF.PLAN}
     else ${AGENT_BRIEF.BLANK}
   end`,
   repository: agentTable.repository,
@@ -451,14 +452,19 @@ const AGENT_LINE_COLUMNS = {
 } as const;
 
 /** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
-export function agentBriefOf(agent: Pick<Agent, "planSnapshot" | "prompt">): AgentBrief {
+export function agentBriefOf(agent: Pick<Agent, "descriptionSnapshot" | "prompt">): AgentBrief {
   if (agent.prompt !== null) return AGENT_BRIEF.PROMPT;
-  return agent.planSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.PLAN;
+  return agent.descriptionSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.PLAN;
 }
 
 /** The line a full read of an agent draws, as `AGENT_LINE_COLUMNS` reads it from the row. */
 export function agentLineOf(agent: Agent): AgentLine {
-  const { automationOrigin, planSnapshot: _planSnapshot, prompt: _prompt, ...line } = agent;
+  const {
+    automationOrigin,
+    descriptionSnapshot: _descriptionSnapshot,
+    prompt: _prompt,
+    ...line
+  } = agent;
   return {
     ...line,
     automationName: automationOrigin?.name ?? null,
@@ -529,7 +535,7 @@ const AgentRowSchema = Schema.Struct({
   model: Schema.String,
   effort: Schema.String,
   contextWindow: contextWindowSchema,
-  planSnapshot: Schema.NullOr(Schema.String),
+  descriptionSnapshot: Schema.NullOr(Schema.String),
   prompt: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   branch: Schema.NullOr(Schema.String),
@@ -548,7 +554,7 @@ const AgentRowSchema = Schema.Struct({
 
 const {
   automationOrigin: _automationOrigin,
-  planSnapshot: _planSnapshot,
+  descriptionSnapshot: _descriptionSnapshot,
   prompt: _prompt,
   ...LINE_ROW_FIELDS
 } = AgentRowSchema.fields;
@@ -822,7 +828,7 @@ const insertAgent = SqlSchema.findOne({
     model: Schema.String,
     effort: Schema.String,
     contextWindow: contextWindowSchema,
-    planSnapshot: Schema.NullOr(Schema.String),
+    descriptionSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
     repository: Schema.NullOr(Schema.String),
     startBranch: Schema.NullOr(Schema.String),
@@ -855,7 +861,7 @@ const insertAgent = SqlSchema.findOne({
           model: write.model,
           effort: write.effort,
           contextWindow: write.contextWindow,
-          planSnapshot: write.planSnapshot,
+          descriptionSnapshot: write.descriptionSnapshot,
           prompt: write.prompt,
           repository: write.repository,
           startBranch: write.startBranch,
@@ -1049,7 +1055,7 @@ const reserveTurnNotes = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(turns)
-        .set({ planNotesTaken: sql`${turns.planNotesTaken} + ${requested}` })
+        .set({ descriptionNotesTaken: sql`${turns.descriptionNotesTaken} + ${requested}` })
         .where(
           and(
             eq(turns.userId, userId),
@@ -1070,7 +1076,7 @@ const reserveTurnNotes = SqlSchema.findOneOption({
             ),
           ),
         )
-        .returning({ turnId: turns.id, taken: turns.planNotesTaken }),
+        .returning({ turnId: turns.id, taken: turns.descriptionNotesTaken }),
     ),
 });
 
@@ -1080,7 +1086,9 @@ const releaseTurnNotes = SqlSchema.void({
     Database.use((db) =>
       db
         .update(turns)
-        .set({ planNotesTaken: sql`greatest(0, ${turns.planNotesTaken} - ${released})` })
+        .set({
+          descriptionNotesTaken: sql`greatest(0, ${turns.descriptionNotesTaken} - ${released})`,
+        })
         .where(and(eq(turns.userId, userId), eq(turns.id, turnId))),
     ),
 });
@@ -2480,7 +2488,7 @@ export function createAgent(
           model: started.model,
           effort: started.effort,
           contextWindow: started.contextWindow ?? CONTEXT_WINDOW.LONG,
-          planSnapshot: started.planSnapshot,
+          descriptionSnapshot: started.descriptionSnapshot,
           prompt: started.prompt,
           repository: started.repository,
           startBranch: started.startBranch ?? null,
@@ -3171,7 +3179,7 @@ export function recordTurnFastRefused(userId: string, turnId: string): AgentStor
 }
 
 /** A turn's count of plan notes, as a reservation left it: the turn, and every note it has taken or holds reserved, the reservation's own among them. */
-export interface TurnPlanNotes {
+export interface TurnDescriptionNotes {
   readonly turnId: string;
   readonly taken: number;
 }
@@ -3182,18 +3190,18 @@ export interface TurnPlanNotes {
  * nothing where no turn of the conversation runs, or the account does not
  * hold it. Note that the count is raised in one statement, because a
  * native agent's calls of one step run at once, and each must see the
- * other's reservation, as eve's session state does (`plan-edit.ts`).
+ * other's reservation, as eve's session state does (`description-edit.ts`).
  */
-export function reserveTurnPlanNotes(
+export function reserveTurnDescriptionNotes(
   userId: string,
   conversationId: string,
   requested: number,
-): AgentStoreEffect<Option.Option<TurnPlanNotes>> {
+): AgentStoreEffect<Option.Option<TurnDescriptionNotes>> {
   return reserveTurnNotes({ userId, conversationId, requested });
 }
 
 /** Settles a reservation once its save answered: the notes it reserved and did not take given back, which is all of them for a refused call. */
-export function settleTurnPlanNotes(
+export function settleTurnDescriptionNotes(
   userId: string,
   turnId: string,
   requested: number,
