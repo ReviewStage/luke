@@ -5,6 +5,11 @@
  * docs' Testing guide makes one per test with `retry: false`, so no test
  * reads what another cached and a failed read shows at once. One client
  * stands for the whole test, so a surface drawn again keeps its cache.
+ *
+ * The window's drafts owner (`useDraftsOwner`) stands for each test in a
+ * root of its own, no one signed in, and goes after it, so what one test
+ * typed, attached, or held unsent is let go before the next, as the window's
+ * root going lets it go.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -19,8 +24,10 @@ import {
   type ReactNode,
   useContext,
 } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
+import { useDraftsOwner } from "../composer-drafts.js";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
@@ -49,12 +56,25 @@ let heldForFile: AppStateSnapshot | undefined;
 
 let testQueryClient = freshQueryClient();
 
+/** The root the window's drafts owner stands in for the test. */
+let draftsRoot: Root | undefined;
+
+/** No one signed in to the window, whose drafts it reads and writes. */
+function NoOneSignedIn(): null {
+  useDraftsOwner(undefined);
+  return null;
+}
+
 beforeEach(() => {
   testQueryClient = freshQueryClient();
+  draftsRoot = createRoot(document.createElement("div"));
+  act(() => draftsRoot?.render(createElement(NoOneSignedIn)));
 });
 
 afterEach(() => {
   testQueryClient.clear();
+  act(() => draftsRoot?.unmount());
+  draftsRoot = undefined;
 });
 
 /** Whether a tree already stands on the test's client, so a second `withQueryClient` inside it is caught. */

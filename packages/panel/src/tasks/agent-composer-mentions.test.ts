@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { MOTION_DELAY_MS } from "@repo/brand";
 import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
@@ -35,14 +36,13 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
-import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
+import { Clock, Context, Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { rendererRuntime } from "../renderer-runtime.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -1014,11 +1014,10 @@ function WorkspacePage({ children }: { children: ReactNode }): ReactNode {
   return createElement(TaskMentions, { value: { ...taskPage(), readAgents }, children });
 }
 
-/** A registry whose atoms wait on this clock, as the window's wait on its own. */
+/** A registry for a window whose waits run on this clock, as the window's run on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
-  return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
-  });
+  serveEffectsOn(Context.make(Clock.Clock, clock));
+  return AtomRegistry.make();
 }
 
 /** Longer than the typing rests before the service is searched for the words typed. */
@@ -1317,7 +1316,12 @@ it.effect(
           '.mention-menu [aria-label="Agents"] [role="option"]',
         ) ?? assert.fail("the list offers the agent");
       const reads = told.length;
-      restOn(option);
+      // Note that the hint's wait runs on this test's clock, so the pointer rests as the clock moves.
+      act(() => {
+        option.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+      });
+      yield* TestClock.adjust(Duration.millis(MOTION_DELAY_MS.HINT));
+      yield* Effect.promise(settle);
 
       const card =
         document.querySelector(".ui-tooltip-card") ?? assert.fail("the row hangs a card");
