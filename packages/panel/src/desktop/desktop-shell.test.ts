@@ -1381,10 +1381,16 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   assert.equal(opened, 1);
 });
 
-test("Admin stands in the plan's place beside the sidebar, its row marked and no row of the place under it, with no way back of its own", async () => {
+test("Admin stands in the plan's place beside the sidebar, its row marked and no row of the place under it, the Inbox under it kept but hidden, with no way back of its own, and the Inbox's row leaves it", async () => {
   handState({}, { access: { admin: true } });
+  const tabs: PanelTab[] = [];
   // Note that the Inbox stands under Admin, as the window's state holds it while Admin stands over it.
-  const page = mount(true, { adminView: { ...tasksControl().adminView, open: true } });
+  const page = mount(
+    true,
+    { adminView: { ...tasksControl().adminView, open: true } },
+    PANEL_TAB.TASKS,
+    (tab) => tabs.push(tab),
+  );
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
   // Note that the account's access lands through the app-state query, so its row is read once drawn.
@@ -1400,6 +1406,14 @@ test("Admin stands in the plan's place beside the sidebar, its row marked and no
     ).length,
     0,
   );
+  const inboxSearch = page.querySelector<HTMLElement>(
+    '.inbox-tasks input[aria-label="Search inbox"]',
+  );
+  assert.ok(inboxSearch, "the Inbox under Admin stays drawn, kept");
+  assert.equal(shownToReader(inboxSearch), false, "and hidden from a reader");
+
+  act(() => placeRow(page, "Inbox")?.click());
+  assert.deepEqual(tabs, [PANEL_TAB.TASKS], "the Inbox's row leaves Admin for the Inbox");
 });
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */

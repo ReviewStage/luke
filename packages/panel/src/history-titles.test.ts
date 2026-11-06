@@ -76,7 +76,7 @@ test("a task's step listed later on its Overview is named by the task and its pa
   });
 });
 
-test("the Inbox's step names the task its item is of, and Settings and Home are named alone", () => {
+test("the Inbox's step names the task its item is of, Settings and Home are named alone, and Admin's step as the place under it", () => {
   const chosen: InboxChoice = { itemId: "item-1", taskId: TASK.id };
   const base = tasksControl({ tasks: [TASK] });
   const inbox = tasksControl({
@@ -86,4 +86,5 @@ test("the Inbox's step names the task its item is of, and Settings and Home are 
   assert.deepEqual(stepTitle(undefined, inbox), { label: "Inbox", detail: "Auth refactor" });
   assert.deepEqual(stepTitle(ROUTED_PLACE.SETTINGS, base), { label: "Settings" });
   assert.deepEqual(stepTitle(undefined, base), { label: "Home" });
+  assert.deepEqual(stepTitle(ROUTED_PLACE.ADMIN, base), { label: "Home" });
 });

@@ -132,7 +132,7 @@ export function stepTitle(
   tasks: StepTitleTasks,
 ): StepTitle | undefined {
   if (routed === ROUTED_PLACE.SETTINGS) return { label: "Settings" };
-  if (routed === ROUTED_PLACE.ADMIN) return { label: "Admin" };
+  // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
   if (tasks.inboxView.open) {
     const { chosen } = tasks.inboxView;
     const holder = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;

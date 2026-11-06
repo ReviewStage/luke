@@ -1017,6 +1017,8 @@ export function ShellPlaces(): React.JSX.Element {
     descriptionToggle,
     setToggleRoom,
     focusHolder,
+    inboxKept,
+    phoneAccount,
   } = useShellPlaces();
   const { account } = settings;
   useFocusHandedBack(focusHolder);
@@ -1056,6 +1058,7 @@ export function ShellPlaces(): React.JSX.Element {
     );
   }
   const inboxOpen = tasks.inboxView.open;
+  const inboxShown = inboxOpen && !tasks.adminView.open;
   const pageAgent = tasks.agentView.agentId;
   const boardOpen = tasks.boardView.open;
   const inboxItemShown = tasks.inboxView.chosen !== undefined;
@@ -1102,7 +1105,7 @@ export function ShellPlaces(): React.JSX.Element {
       <main
         className="desktop-main"
         inert={drawerOver || phoneTasks}
-        data-inbox-shown={String(inboxOpen)}
+        data-inbox-shown={String(inboxShown)}
       >
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
@@ -1110,6 +1113,14 @@ export function ShellPlaces(): React.JSX.Element {
             <Outlet />
           </ChipCards>
         </MentionedAgents>
+        {/* Note that the Inbox kept stands after the place shown, so a lookup of the place's first box finds the place's,
+            and beside every place's route rather than in one, so a routed place standing over it, Admin, lets go of
+            nothing it held; Admin stands over the Inbox the window's state still holds, which is then no Inbox shown. */}
+        {inboxOpen || inboxKept ? (
+          <KeptPage shown={inboxShown} chipCards={chipCards} mentionedAgents={mentionedAgents}>
+            <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
+          </KeptPage>
+        ) : null}
       </main>
       {barShown ? <MobileBar tasks={tasks} /> : null}
       {/* Note that the floating sidebar's title-bar row is claimed back from the work's drag strips here, after the work,
@@ -1176,8 +1187,8 @@ export function ShellPlaces(): React.JSX.Element {
 /**
  * What a place the window's state says draws in the places' content slot:
  * a task, an agent's or a person's page, the Automations pages, a workspace
- * not there for the reader, or nothing where the Inbox or the Tasks page,
- * kept beside it, stands. Every route not yet moved onto the router draws
+ * not there for the reader, or nothing where the Inbox, kept beside every
+ * place's route (`ShellPlaces`), or the Tasks page, kept beside it here, stands. Every route not yet moved onto the router draws
  * this one component, so moving between them keeps it drawn.
  */
 export function StatePlace(): React.JSX.Element {
@@ -1191,8 +1202,6 @@ export function StatePlace(): React.JSX.Element {
     away,
     chipCards,
     mentionedAgents,
-    phoneAccount,
-    inboxKept,
     boardKept,
   } = useShellPlaces();
   const { account } = settings;
@@ -1276,11 +1285,6 @@ export function StatePlace(): React.JSX.Element {
           <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
             <TASKS_ROUTE.Route tasks={tasks} room={room} />
           </Suspense>
-        </KeptPage>
-      ) : null}
-      {inboxOpen || inboxKept ? (
-        <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-          <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
         </KeptPage>
       ) : null}
     </>
