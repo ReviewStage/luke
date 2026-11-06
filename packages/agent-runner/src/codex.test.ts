@@ -27,6 +27,7 @@ import type { RunnerSelf } from "./launch.js";
 import { processTable } from "./processes.js";
 import {
   CODEX_EFFORT,
+  CODEX_PLAN_BACKEND,
   CODEX_TOKEN_COMMAND,
   type CodexConfig,
   IMAGE_MEDIA_TYPE,
@@ -917,6 +918,52 @@ it.effect("never starts app-server on the plan when it does not know its own bun
     assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
     assert.deepEqual(spawned, []);
   }),
+);
+
+it.effect(
+  "on a device-code plan, app-server's provider sends to Codex's ChatGPT backend naming the workspace, its token from the same command; a backend this runner does not know starts nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const device = {
+        ...ENV,
+        [RUNNER_ENV.CODEX_PLAN_BACKEND]: CODEX_PLAN_BACKEND.CHATGPT,
+        [RUNNER_ENV.CHATGPT_ACCOUNT_ID]: "chatgpt-workspace-fixture",
+      };
+      const { spawned, write, run } = yield* launch(
+        [{ exchanges: [...RESUME, RESUMED_TURN] }],
+        service,
+        device,
+      );
+      yield* write({ ...CONFIG, threadId: THREAD });
+      yield* write(message("What exact line did you first write to PROBE.md?"));
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      const provider = (spawned[0]?.args ?? []).filter(
+        (arg, index, args) => args[index - 1] === "-c" && arg.startsWith("model_provider"),
+      );
+      assert.deepEqual(provider, [
+        'model_provider="chatgpt_backend_plan"',
+        'model_providers.chatgpt_backend_plan.name="ChatGPT plan"',
+        'model_providers.chatgpt_backend_plan.base_url="https://chatgpt.com/backend-api/codex"',
+        `model_providers.chatgpt_backend_plan.auth.command="${SELF.executable}"`,
+        `model_providers.chatgpt_backend_plan.auth.args=["${SELF.script}", "codex-token", "${TOKEN_URL}"]`,
+        "model_providers.chatgpt_backend_plan.auth.timeout_ms=30000",
+        "model_providers.chatgpt_backend_plan.auth.refresh_interval_ms=300000",
+        'model_providers.chatgpt_backend_plan.http_headers={ "ChatGPT-Account-ID" = "chatgpt-workspace-fixture", "version" = "0.163.0" }',
+        'model_providers.chatgpt_backend_plan.wire_api="responses"',
+        "model_providers.chatgpt_backend_plan.requires_openai_auth=false",
+        "model_providers.chatgpt_backend_plan.supports_websockets=false",
+      ]);
+
+      const unknown = yield* launch([WORKFLOW], fakeService(), {
+        ...ENV,
+        [RUNNER_ENV.CODEX_PLAN_BACKEND]: "elsewhere",
+      });
+      yield* unknown.write(CONFIG);
+      assert.equal(yield* Fiber.join(unknown.run), RUNNER_END.FAILED);
+      assert.deepEqual(unknown.spawned, []);
+    }),
 );
 
 /** A page of the thread's turns, newest first, each naming the client id of the line it took. */
