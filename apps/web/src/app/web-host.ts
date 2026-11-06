@@ -207,6 +207,21 @@ function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
   return Stream.as(changed, undefined);
 }
 
+/**
+ * Whether the tab's machine has a network: the browser's answer as the host
+ * starts, then again each time it says `online` or `offline`.
+ */
+function tabOnline(): Stream.Stream<boolean> {
+  const moved = Stream.merge(
+    Stream.fromEventListener(window, "online"),
+    Stream.fromEventListener(window, "offline"),
+  );
+  return Stream.concat(
+    Stream.fromEffect(Effect.sync(() => navigator.onLine)),
+    Stream.map(moved, () => navigator.onLine),
+  );
+}
+
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
 function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   return Layer.mergeAll(
@@ -431,7 +446,7 @@ const composedWeb = (
       });
       yield* linkNetworkWatch({
         state,
-        isOnline: () => navigator.onLine,
+        online: tabOnline(),
         regained: operator.host.tasksRegained(),
         report,
       });
