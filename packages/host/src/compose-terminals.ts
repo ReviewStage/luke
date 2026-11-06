@@ -1,13 +1,8 @@
-import {
-  type HostedTerminalClient,
-  TERMINAL_UNANSWERED,
-  type TerminalUnanswered,
-  terminalRelayAddress,
-  webSocketOrigin,
-} from "@repo/features";
+import { type HostedTerminalClient, terminalRelayAddress, webSocketOrigin } from "@repo/features";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
+  TERMINAL_REFUSAL,
   type TerminalConnection,
   terminalAckParamsSchema,
   terminalAgentParamsSchema,
@@ -411,12 +406,12 @@ function composed(
 
   /** The service asked behind the gate, over the host's own HTTP client; an answer it could not give is the call's refusal. */
   const asked = <Answer extends object>(
-    call: Effect.Effect<Answer | TerminalUnanswered, never, HttpClient.HttpClient>,
+    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<WireValue, RefusedRefusal> =>
     Effect.gen(function* () {
       if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
       const answer = yield* Effect.provideService(call, HttpClient.HttpClient, http);
-      if (answer === TERMINAL_UNANSWERED) {
+      if ("failure" in answer && answer.failure === TERMINAL_REFUSAL.UNANSWERED) {
         return yield* Effect.fail(new RefusedRefusal({ message: "the service did not answer" }));
       }
       return carried(answer);

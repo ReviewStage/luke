@@ -143,14 +143,14 @@ beforeEach(() => {
   const answer = (request: TerminalAct): PortActResult<TerminalKind> => {
     switch (request.kind) {
       case ACT_KIND.TERMINAL_CREATE:
-        if (main.createRefused !== undefined) return { refused: main.createRefused };
+        if (main.createRefused !== undefined) return { failure: main.createRefused };
         // Note that each shell made has an id of its own, as the service mints one per shell, the first of them MADE.
         made += 1;
         return { terminal: shell(made === 1 ? MADE : crypto.randomUUID()) };
       case ACT_KIND.TERMINAL_KILL:
         return { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
       case ACT_KIND.TERMINAL_RESUME:
-        if (main.resumeRefused !== undefined) return { refused: main.resumeRefused };
+        if (main.resumeRefused !== undefined) return { failure: main.resumeRefused };
         return { sandbox: SANDBOX_STATE.RUNNING };
       default:
         return undefined;

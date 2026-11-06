@@ -42,6 +42,7 @@ import {
 } from "../agent-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import {
   sandboxResumedAnswerSchema,
   terminalCreatedAnswerSchema,
@@ -50,13 +51,34 @@ import {
   terminalsAnswerSchema,
 } from "../terminal-wire.js";
 import { workspaceToolsAnswerSchema } from "../workspace-tools-wire.js";
-import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactBodyInput, hostedProcedure, refuses } from "./base.js";
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const CHOICE_BODY_BYTES = 4_096;
 
 /** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
 const TERMINAL_BODY_BYTES = 1_024;
+
+/**
+ * What every route in an agent's sandbox refuses (`sandbox-reach.ts`): an
+ * agent not found, not the caller's to reach, or archived, and a sandbox
+ * Vercel did not answer for or whose snapshot is gone.
+ */
+const SANDBOX_REFUSALS = [
+  HOSTED_API_ERROR.NOT_FOUND,
+  HOSTED_API_ERROR.NOT_PERMITTED,
+  HOSTED_API_ERROR.AGENT_RETIRED,
+  HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE,
+  HOSTED_API_ERROR.UPSTREAM_ERROR,
+] as const;
+
+/** A route in an agent's sandbox, refusing as every one does. */
+const sandboxProcedure = declaredProcedure.errors(refuses(...SANDBOX_REFUSALS));
+
+/** A route that acts on a shell, refusing too as a sandbox not yet opened or stopped. */
+const shellProcedure = sandboxProcedure.errors(
+  refuses(HOSTED_API_ERROR.AGENT_NOT_READY, HOSTED_API_ERROR.SANDBOX_STOPPED),
+);
 
 /** One agent's path, its id the `{id}` segment. */
 const AGENT_PATH = `${HOSTED_SERVICE_PATH.AGENTS}/{id}` as const;
@@ -212,17 +234,17 @@ export const agentsContract = {
     .input(idParams)
     .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
   /** One agent's stopped sandbox resumed, on the developer's click. */
-  sandboxResume: hostedProcedure
+  sandboxResume: sandboxProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))
     .input(idParams)
     .output(EffectSchema.flip(sandboxResumedAnswerSchema)),
   /** One agent's shells and where its sandbox stands. */
-  terminals: hostedProcedure
+  terminals: sandboxProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: TERMINALS_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(terminalsAnswerSchema)),
   /** A shell started in one agent's sandbox. */
-  openTerminal: hostedProcedure
+  openTerminal: shellProcedure
     .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
       openapi({
@@ -235,7 +257,7 @@ export const agentsContract = {
     .input(exactBodyInput(idParams, terminalCreateRequestSchema))
     .output(EffectSchema.flip(terminalCreatedAnswerSchema)),
   /** One shell named anew, answering the shells as they stand after. */
-  renameTerminal: hostedProcedure
+  renameTerminal: shellProcedure
     .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
       openapi({
@@ -247,7 +269,7 @@ export const agentsContract = {
     .input(exactBodyInput(terminalParams, terminalRenameRequestSchema))
     .output(EffectSchema.flip(terminalsAnswerSchema)),
   /** One shell ended, answering the shells as they stand after. */
-  endTerminal: hostedProcedure
+  endTerminal: shellProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: `${TERMINALS_PATH}/{terminal}` }))
     .input(terminalParams)
     .output(EffectSchema.flip(terminalsAnswerSchema)),
