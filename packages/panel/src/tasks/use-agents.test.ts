@@ -27,7 +27,7 @@ import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
 import { type FakeActPort, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
@@ -666,9 +666,13 @@ test("a pull request a tab names by its number is the one the host holds under t
   );
   await settle();
 
-  assert.deepEqual(
-    [...tab.control().numberedPullRequests].map(([agentId, numbered]) => [agentId, [...numbered]]),
-    [[AGENT, [[41, base]]]],
+  await vi.waitFor(() =>
+    expect(
+      [...tab.control().numberedPullRequests].map(([agentId, numbered]) => [
+        agentId,
+        [...numbered],
+      ]),
+    ).toEqual([[AGENT, [[41, base]]]]),
   );
 });
 
