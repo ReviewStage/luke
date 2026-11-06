@@ -1,7 +1,7 @@
 import { AUTOMATION_TRIGGER } from "@repo/features/automation-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@repo/features/task-wire";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import {
   ComposeIcon,
   MicrophoneIcon,
@@ -47,6 +47,7 @@ import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { GROUP_HEADING, GroupHeader } from "../group-header/group-header.js";
 import { INLINE_REF_LOOK, InlineRef } from "../inline-ref/inline-ref.js";
 import { LineRow } from "../line-button/line-button.js";
+import { ListMotion } from "../list-motion/list-motion.js";
 import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -89,7 +90,7 @@ import {
   MEMBER,
   SidePanelToggle,
 } from "./landing-desktop.js";
-import { LandingPhone, LandingWindow } from "./landing-devices.js";
+import { LandingPanel, LandingPhone, LandingWindow } from "./landing-devices.js";
 import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
 
 /**
@@ -107,7 +108,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  */
 
 /** How long each scene holds a step, in milliseconds. */
-const BEAT = { INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+const BEAT = { HERO: 2400, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -1146,6 +1147,157 @@ function KeysScene(): React.JSX.Element {
           })}
         </SettingsSection>
       </div>
+    </div>
+  );
+}
+
+/** One of the asks the hero's Inbox turns through: its task, its title, its line while open, and the answer it settles on. */
+type HeroAsk = {
+  readonly id: string;
+  readonly task: string;
+  readonly title: string;
+  readonly kind: Line;
+  readonly open: string;
+  readonly answer: string;
+};
+
+/** The asks agents post to the hero's Inbox, in the order they arrive, round and round; the last two stand on top where motion is held. */
+const HERO_ASKS: readonly HeroAsk[] = [
+  {
+    id: "migration",
+    task: "Teammate invitations",
+    title: "Run the memberships migration on preview?",
+    kind: LINE.DECIDE,
+    open: "Approve (recommended) / Decline",
+    answer: "Approved",
+  },
+  {
+    id: "domain",
+    task: "Weekly digest email",
+    title: "Verify the digest's sender domain",
+    kind: LINE.DO,
+    open: "3 steps left · Open the mail provider's Domains page",
+    answer: "Done",
+  },
+  {
+    id: "flag",
+    task: "Search ranking",
+    title: "Ship the new ranking behind a flag?",
+    kind: LINE.DECIDE,
+    open: "Yes (recommended) / No",
+    answer: "Yes (recommended)",
+  },
+  {
+    id: "secret",
+    task: "Onboarding checklist",
+    title: "Add the email provider's API key",
+    kind: LINE.DO,
+    open: "1 step left · Add the secret in Vercel",
+    answer: "Done",
+  },
+  {
+    id: "copy",
+    task: "Pricing page",
+    title: "Ready for review: #479",
+    kind: LINE.DECIDE,
+    open: "Merge / Request changes",
+    answer: "Merged",
+  },
+  {
+    id: "tests",
+    task: "Checkout redesign",
+    title: "Two flaky tests on the payment step",
+    kind: LINE.DECIDE,
+    open: "Fix them here (recommended) / Open a task",
+    answer: "Fix them here (recommended)",
+  },
+  {
+    id: "review",
+    task: "Teammate invitations",
+    title: "Ready for review: #482",
+    kind: LINE.DECIDE,
+    open: "Merge / Request changes",
+    answer: "Merged",
+  },
+  {
+    id: "currency",
+    task: "Billing export",
+    title: "Which currency goes in the CSV?",
+    kind: LINE.DECIDE,
+    open: "USD / The account's own (recommended)",
+    answer: "The account's own (recommended)",
+  },
+];
+
+/** How many of the asks the hero's Inbox lists at once, the last below the panel's crop; fewer than there are asks, so the one arriving on top is never one still listed. */
+const HERO_LISTED = 6;
+
+/** Minutes between one ask's arrival and the next's. */
+const HERO_SPACING = 9;
+
+/**
+ * The hero's Inbox at `step`: the newest ask arriving unread on top, the one
+ * before it opened, and every older one answered, each carried down by the
+ * next until it runs off the panel's foot. An ask's place in the story is
+ * its age alone, so the last step leads into the first with nothing reset.
+ */
+function heroItems(step: number): readonly InboxItem[] {
+  const count = HERO_ASKS.length;
+  return Array.from({ length: HERO_LISTED }, (_, age) => {
+    const ask = HERO_ASKS[(step - age + count) % count];
+    if (ask === undefined) throw new Error("heroItems: an ask out of range");
+    const answered = age >= 2;
+    return {
+      id: ask.id,
+      task: ask.task,
+      status: TASK_STATUS.IN_PROGRESS,
+      title: ask.title,
+      line: answered ? ask.answer : ask.open,
+      kind: answered ? LINE.SETTLED : ask.kind,
+      ago: 1 + age * HERO_SPACING,
+      unread: age === 0,
+      current: age === 1,
+    };
+  });
+}
+
+/** The hero's moving screen: the Inbox's column alone, agents' asks arriving on top as older ones are answered and carried off its foot. */
+export function LandingHeroScene(): React.JSX.Element {
+  const [ref, step] = useStory(HERO_ASKS.length, BEAT.HERO);
+  const rows = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={ref} className="ui-landing-scene">
+      <LandingPanel label="The Inbox, where agents' asks arrive and are answered">
+        <div className="ui-landing-desktop ui-landing-hero-inbox" {...DESKTOP_SURFACE}>
+          <Toolbar
+            title="Inbox"
+            start={TOOLBAR_INSET.COLUMN}
+            end={TOOLBAR_INSET.COLUMN}
+            actions={
+              <IconButton icon={<SlidersHorizontalIcon />} label="View options" onClick={still} />
+            }
+          />
+          <div ref={rows} className="ui-landing-hero-sheet">
+            <search className="ui-landing-search">
+              <SearchField
+                label="Search inbox"
+                placeholder="Search inbox"
+                value=""
+                onChange={still}
+              />
+            </search>
+            <div className="ui-landing-rows">
+              <ListMotion root={rows}>
+                <List label="Inbox items" moves>
+                  {heroItems(step).map((item) => (
+                    <InboxRow key={item.id} item={item} />
+                  ))}
+                </List>
+              </ListMotion>
+            </div>
+          </div>
+        </div>
+      </LandingPanel>
     </div>
   );
 }
