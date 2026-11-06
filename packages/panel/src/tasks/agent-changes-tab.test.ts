@@ -67,7 +67,7 @@ import {
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, handSettings, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
@@ -1177,8 +1177,11 @@ test("a write answered while a later one to the same setting is out leaves the l
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
   act(() => settingControl(popover, '[role="radio"]', "Unified").click());
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  // Note that the first write reaches the act port a few steps after its press, as its mutation sends it.
+  await vi.waitFor(() => assert.ok(held.length > 0));
   held[0]?.("Not in this test.");
   await flush();
+  await settleQueries(flush);
 
   assert.equal(lastDrawn().look.layout, "split");
 });
