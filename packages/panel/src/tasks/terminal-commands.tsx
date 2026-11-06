@@ -8,13 +8,13 @@ import {
   terminalTarget,
 } from "@repo/features/terminal-entry";
 import { sandboxRead, shellsAsked } from "@repo/features/terminal-store";
-import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useContext, useState } from "react";
-import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
+import { terminalListQueryOptions } from "./agent-reads.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 import { TerminalPicker } from "./terminal-picker.js";
 import type { AgentsControl } from "./use-agents.js";
@@ -72,7 +72,6 @@ export function TerminalCommands({
   /** Hands the keyboard to the side panel, where the terminal now stands. */
   onShown: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
   const registry = useContext(RegistryContext);
   const toast = useToast();
   const repositoryRemedy = useRepositoryRemedy();
@@ -101,16 +100,17 @@ export function TerminalCommands({
   useAppCommand(APP_COMMAND.SHOW_TERMINAL, () => run(TERMINAL_ASK.SHOW));
   useAppCommand(APP_COMMAND.NEW_TERMINAL, () => run(TERMINAL_ASK.NEW));
   // How each sandbox stands, read as the picker opens, which never wakes one.
+  const queryClient = useQueryClient();
   const readSandbox = useCallback(
     (agentId: string) => {
-      void act(ACT_KIND.TERMINAL_LIST, { agentId }).then(
+      void queryClient.fetchQuery(terminalListQueryOptions(agentId)).then(
         (answer) => {
           if (!("refused" in answer)) registry.set(sandboxRead(agentId), answer);
         },
         () => undefined,
       );
     },
-    [act, registry],
+    [queryClient, registry],
   );
   // A refused start says why on the toast, its repository's remedy as its action where it has one,
   // since the picker that pressed it has closed; a move starts the agent again once it lands.

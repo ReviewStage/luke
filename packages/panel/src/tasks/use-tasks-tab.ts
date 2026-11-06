@@ -107,7 +107,7 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -147,6 +147,7 @@ import {
   type SentLine,
   startsOwnAgents,
 } from "./agent-model.js";
+import { inboxItemHomeQueryOptions, taskByNumberQueryOptions } from "./agent-reads.js";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -1300,10 +1301,10 @@ function choiceAgentOf(choice: InboxChoice): string | undefined {
 
 /** Where an item stands, as the service says for one the account may read; nothing for one it may not, one that does not exist, or where the read failed. */
 function readInboxItemHome(
-  act: ActHandle["act"],
+  queryClient: QueryClient,
   itemId: string,
 ): Promise<InboxItemHome | undefined> {
-  return act(ACT_KIND.AGENTS_INBOX_ITEM_HOME, { itemId }).then(
+  return queryClient.fetchQuery(inboxItemHomeQueryOptions(itemId)).then(
     (answer) => ("failure" in answer ? undefined : answer),
     () => undefined,
   );
@@ -1349,6 +1350,7 @@ export function useTasksTab(input: {
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation, and
   // none invalidates a query, since what each changes comes back through app state.
   const { act } = input.acts;
+  const queryClient = useQueryClient();
   const { mutateAsync: sendSelect } = useMutation(actMutation(ACT_KIND.TASKS_SELECT));
   const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.TASKS_CLOSE));
   const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.TASKS_DELETE));
@@ -3124,7 +3126,7 @@ export function useTasksTab(input: {
     } else {
       // Before the list followed live lands, an agent of another task may yet be archived, so it is read first.
       const mine = navigations.current;
-      readAgentById(act, place.agentId).then((agent) => {
+      readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         if (agent?.archivedAt === undefined) showOnTask(planId, place);
         else openArchived(place);
@@ -3216,7 +3218,7 @@ export function useTasksTab(input: {
       if (navigations.current !== mine) return;
       openPlace(taskId === undefined ? link : { ...link, place: withTaskId(link.place, taskId) });
     };
-    act(ACT_KIND.TASKS_FIND, { workspace: link.workspace, number }).then(
+    queryClient.fetchQuery(taskByNumberQueryOptions(link.workspace, number)).then(
       (found) => opened("taskId" in found ? found.taskId : undefined),
       () => opened(undefined),
     );
@@ -3237,7 +3239,7 @@ export function useTasksTab(input: {
     else if (tasklessAgents?.some((agent) => agent.id === place.agentId)) openOnAgentPage(place);
     else {
       const mine = navigations.current;
-      readAgentById(act, place.agentId).then((agent) => {
+      readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
         if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
@@ -3285,7 +3287,7 @@ export function useTasksTab(input: {
    */
   const openInboxItemById = (place: InboxItemPlace) => {
     const mine = navigations.current;
-    readInboxItemHome(act, place.itemId).then((home) => {
+    readInboxItemHome(queryClient, place.itemId).then((home) => {
       if (navigations.current !== mine) return;
       if (home === undefined) {
         standInFor({ kind: STAND_IN.INBOX, chosen: { itemId: place.itemId, opened: true } });
@@ -3313,7 +3315,7 @@ export function useTasksTab(input: {
       openInboxItemOn(workspace, place, null);
     else {
       const mine = navigations.current;
-      readAgentById(act, place.agentId).then((agent) => {
+      readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         openInboxItemOn(workspace, place, agent?.planId ?? null);
       });

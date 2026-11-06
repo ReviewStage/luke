@@ -68,7 +68,7 @@ interface Asked {
   payload: unknown;
 }
 
-/** The kinds the hook sends on mutations rather than its `act`. */
+/** The kinds the hook sends on mutations or reads through Query rather than its `act`. */
 const SENT_ON_MUTATIONS: readonly AnyKind[] = [
   ACT_KIND.AGENTS_START,
   ACT_KIND.AGENTS_STOP,
@@ -84,6 +84,10 @@ const SENT_ON_MUTATIONS: readonly AnyKind[] = [
   ACT_KIND.AGENTS_INBOX_ANSWER,
   ACT_KIND.AGENTS_INBOX_MESSAGE,
   ACT_KIND.AGENTS_INBOX_START,
+  // The reads asked through fetchQuery reach the act port too.
+  ACT_KIND.TASKS_SKILLS,
+  ACT_KIND.AGENTS_PAGE,
+  ACT_KIND.AGENTS_MESSAGES,
 ];
 
 const roots: Root[] = [];

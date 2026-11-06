@@ -28,7 +28,13 @@ import type { PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useIsMutating, useMutation, useQuery } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
@@ -64,6 +70,11 @@ import {
   STOP_FAILED,
   startFailureNote,
 } from "./agent-model.js";
+import {
+  agentMessagesQueryOptions,
+  agentPageQueryOptions,
+  repositorySkillsQueryOptions,
+} from "./agent-reads.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
 import { type ByPullRequestTab, pullRequestAsked } from "./pull-request-number.js";
 import { keptSkills } from "./repository-skills.js";
@@ -601,11 +612,11 @@ function sameFiles(a: readonly AgentAttachment[], b: readonly AgentAttachment[])
  * task, reads it so before it archives it unasked.
  */
 export function readAgentById(
-  act: ActHandle["act"],
+  queryClient: QueryClient,
   agentId: string,
 ): Promise<AgentSummary | undefined> {
   // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then(
+  return queryClient.fetchQuery(agentPageQueryOptions(agentId)).then(
     (answer) => {
       if ("failure" in answer) return undefined;
       const {
@@ -631,8 +642,8 @@ const AGENT_LOOKUP = {
 type AgentLookup = (typeof AGENT_LOOKUP)[keyof typeof AGENT_LOOKUP];
 
 /** Whether the service still holds the agent for the reader, read once by its id, as a link to one the task list does not carry yet is opened. */
-function lookUpAgent(act: ActHandle["act"], agentId: string): Promise<AgentLookup> {
-  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then(
+function lookUpAgent(queryClient: QueryClient, agentId: string): Promise<AgentLookup> {
+  return queryClient.fetchQuery(agentPageQueryOptions(agentId)).then(
     (answer) => {
       if (!("failure" in answer)) return AGENT_LOOKUP.FOUND;
       return answer.failure === AGENT_CALL_FAILURE.NOT_FOUND
@@ -724,6 +735,7 @@ export function useAgents(input: {
   const { taskId, agentId, repository } = input;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
   const { act } = input.acts;
+  const queryClient = useQueryClient();
   const { mutateAsync: sendStart, isPending: starting } = useMutation(
     actMutation(ACT_KIND.AGENTS_START),
   );
@@ -853,7 +865,7 @@ export function useAgents(input: {
   useEffect(() => {
     if (lookUp === undefined) return;
     let live = true;
-    lookUpAgent(latest.current.acts.act, lookUp).then((outcome) => {
+    lookUpAgent(queryClient, lookUp).then((outcome) => {
       if (live) setLookedUp({ agentId: lookUp, outcome });
     });
     return () => {
@@ -1453,11 +1465,14 @@ export function useAgents(input: {
     });
   };
 
-  const readAgent = useCallback((named: string) => readAgentById(act, named), [act]);
+  const readAgent = useCallback(
+    (named: string) => readAgentById(queryClient, named),
+    [queryClient],
+  );
 
   const readTranscript = useCallback<TranscriptReader>(
-    (params) => act(ACT_KIND.AGENTS_MESSAGES, params),
-    [act],
+    (params) => queryClient.fetchQuery(agentMessagesQueryOptions(params)),
+    [queryClient],
   );
 
   // Note that every agent's pull request, an archived one's among them, is the task list's, so
@@ -1546,18 +1561,17 @@ export function useAgents(input: {
   const readSkills = useMemo(() => {
     if (!skillsOn) return undefined;
     if (taskId !== undefined) {
-      return keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId: taskId }));
+      return keptSkills(() =>
+        queryClient.fetchQuery(repositorySkillsQueryOptions({ planId: taskId })),
+      );
     }
     if (workspaceId === undefined) return undefined;
-    return keptSkills(() =>
-      act(
-        ACT_KIND.TASKS_SKILLS,
-        agentRepository === undefined
-          ? { workspaceId }
-          : { workspaceId, repository: agentRepository },
-      ),
-    );
-  }, [act, skillsOn, taskId, workspaceId, agentRepository, repository]);
+    const asked =
+      agentRepository === undefined
+        ? { workspaceId }
+        : { workspaceId, repository: agentRepository };
+    return keptSkills(() => queryClient.fetchQuery(repositorySkillsQueryOptions(asked)));
+  }, [queryClient, skillsOn, taskId, workspaceId, agentRepository, repository]);
 
   // A start reads the agents as they stand when it is pressed, so the doors to it stand across draws.
   const steadyStartPrompt = useSteadyDoor(startPrompt);

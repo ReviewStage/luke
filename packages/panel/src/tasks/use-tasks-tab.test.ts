@@ -183,7 +183,7 @@ interface Standing {
  * quiet, unless `press` hands the window's own press door, which goes out on
  * the act port the test installed.
  */
-/** The kinds the tab and its agents send on mutations rather than their `acts`. */
+/** The kinds the tab and its agents send on mutations or read through Query rather than their `acts`. */
 const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.AGENTS_START,
   ACT_KIND.AGENTS_STOP,
@@ -220,6 +220,10 @@ const SENT_ON_MUTATIONS: readonly PortActKind[] = [
   ACT_KIND.TASKS_RESTORE,
   ACT_KIND.TASKS_START,
   ACT_KIND.TASKS_REFRESH,
+  // The reads asked through fetchQuery reach the act port too.
+  ACT_KIND.TASKS_FIND,
+  ACT_KIND.AGENTS_PAGE,
+  ACT_KIND.AGENTS_INBOX_ITEM_HOME,
 ];
 
 function mount(
