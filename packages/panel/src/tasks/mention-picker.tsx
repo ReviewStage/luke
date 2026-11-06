@@ -81,7 +81,7 @@ import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@repo/ui
 import { searchTokens } from "@repo/ui/search-tokens";
 import { type SkillOption, skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
-import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
+import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -1750,6 +1750,13 @@ export function useMentionPicker({
     ...repositoryPathsQueryOptions({ taskId, workspaceId, repository }),
     enabled: open,
   });
+  // Each editor reads the paths afresh, since the default branch may have moved since another read them, so a new editor or a new place marks them stale.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    // Note that refetchOnMount cannot do it, because the query stays off until the list opens and only staleness is weighed then.
+    const { queryKey } = repositoryPathsQueryOptions({ taskId, workspaceId, repository });
+    void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  }, [queryClient, taskId, workspaceId, repository]);
   const read = paths.data;
   // Note that the paths are searched through one search per read, which keeps what each word found, rather than ranking every path on each render.
   const pathsSearched = useMemo(() => (read === undefined ? undefined : pathSearch(read)), [read]);
