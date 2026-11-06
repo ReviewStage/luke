@@ -459,7 +459,11 @@ const steerClaimed = Effect.fnUntraced(function* (
         text: automationStart(automation, run, found.value.githubAccess).prompt,
         serverWords: automation.action.prompt,
         clientKey: run.id,
-        sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+        sender: {
+          kind: MESSAGE_SENDER.AUTOMATION,
+          automationId: automation.id,
+          name: automation.name,
+        },
         metadata: automationLineMetadata(run.firing),
       },
     ),

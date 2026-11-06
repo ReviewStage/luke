@@ -1497,9 +1497,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
         // Our line from a call, an automation's run's, and another coding agent's, written as their sends write them.
+        const automationId = randomUUID();
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.APP }],
-          ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
+          [
+            "Triage the failures.",
+            { kind: MESSAGE_SENDER.AUTOMATION, automationId, name: "Nightly triage" },
+          ],
           [
             "Take the split view.",
             {
@@ -1531,9 +1535,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ["Sweep the flaky tests.", undefined],
           ["Use seven days.", { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
           ["Not five.", { userId: other, name: "Charles Pan", kind: AGENT_SENDER.MEMBER }],
-          // The app and an automation are named by kind, so the window draws each as itself.
+          // The app and an automation are named by kind, so the window draws each as itself, an automation by its id too, which its card and page are read by.
           ["Rebase on main.", { name: "Vespin", kind: AGENT_SENDER.APP }],
-          ["Triage the failures.", { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION }],
+          [
+            "Triage the failures.",
+            { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION, automationId },
+          ],
           // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
             "Take the split view.",

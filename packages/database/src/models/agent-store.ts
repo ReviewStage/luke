@@ -3995,7 +3995,12 @@ export type LineSent =
       readonly member: { readonly userId: string; readonly name: string } | undefined;
     }
   | { readonly kind: typeof MESSAGE_SENDER.APP }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AUTOMATION;
+      readonly name: string;
+      /** The automation's id, where the line kept it. */
+      readonly automationId: string | undefined;
+    }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
@@ -4018,6 +4023,7 @@ const LineSenderRowSchema = Schema.Struct({
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
+  automationId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -4038,6 +4044,7 @@ const findLineSenders = SqlSchema.findAll({
           senderName: messages.senderName,
           senderModel: messages.senderModel,
           agentId: agentTable.id,
+          automationId: messages.senderAutomationId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
@@ -4069,7 +4076,11 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
     case MESSAGE_SENDER.AUTOMATION:
       return row.senderName === null
         ? undefined
-        : { kind: MESSAGE_SENDER.AUTOMATION, name: row.senderName };
+        : {
+            kind: MESSAGE_SENDER.AUTOMATION,
+            name: row.senderName,
+            automationId: row.automationId ?? undefined,
+          };
     case MESSAGE_SENDER.GITHUB:
       return row.senderName === null
         ? undefined

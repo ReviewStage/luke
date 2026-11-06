@@ -304,15 +304,19 @@ type TurnEnqueueResult = Result.Result<
 
 /**
  * What sent a line to a coding agent, as its row keeps it: the member by
- * their account, the brain, an automation by its name as it stands at the send,
- * GitHub by the login of who caused what it tells of, or another coding
+ * their account, the brain, an automation by its id and its name as it stands
+ * at the send, GitHub by the login of who caused what it tells of, or another coding
  * agent by its name, its id, and the model it runs on, as they stand at the
  * send.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
   | { readonly kind: typeof MESSAGE_SENDER.APP }
-  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AUTOMATION;
+      readonly automationId: string | undefined;
+      readonly name: string;
+    }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
@@ -630,6 +634,7 @@ const MessageInsertSchema = Schema.Struct({
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
   senderAgentId: Schema.NullOr(Schema.String),
+  senderAutomationId: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
@@ -740,6 +745,7 @@ const insertMessageRow = SqlSchema.findOneOption({
           senderName: row.senderName,
           senderModel: row.senderModel,
           senderAgentId: row.senderAgentId,
+          senderAutomationId: row.senderAutomationId,
         })
         .returning({ id: messages.id, txid: CURRENT_TXID }),
     ),
@@ -1233,6 +1239,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     senderName: senderNameOf(row.sender),
     senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.model : null,
     senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.agentId : null,
+    senderAutomationId:
+      row.sender?.kind === MESSAGE_SENDER.AUTOMATION ? nullable(row.sender.automationId) : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq, txid: written.txid };

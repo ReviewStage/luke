@@ -2361,6 +2361,13 @@ const agentSenderSchema = EffectSchema.Struct({
    * kept, once that agent is gone, and from a service older than it.
    */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /**
+   * The id of the automation whose run sent the line, which the window opens
+   * its page and reads its card by; absent for any other sender, for an
+   * automation's line sent before it was kept, and from a service older
+   * than it.
+   */
+  automationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type AgentSender = typeof agentSenderSchema.Type;

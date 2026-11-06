@@ -67,6 +67,8 @@ export const transcriptWindowRowSchema = Schema.Struct({
   memberName: NullableString,
   /** The coding agent that sent the line, while it stands. */
   agentId: NullableString,
+  /** The automation that sent the line, where the line kept it; absent from a service older than it. */
+  automationId: Schema.optionalKey(NullableString),
   /** That agent's task, which the window reads no more, since a link names the agent; still selected while desktops that decode it as required stand. */
   agentTaskId: NullableString,
   /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
@@ -113,10 +115,16 @@ function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
     // Note that a row from before the app was named `app` keeps `luke`, which still reads as the app (a legacy read).
     case LEGACY_APP_WORD:
       return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
-    case MESSAGE_SENDER.AUTOMATION:
+    case MESSAGE_SENDER.AUTOMATION: {
+      const automationId = row.automationId ?? null;
       return row.senderName === null
         ? undefined
-        : { name: row.senderName, kind: AGENT_SENDER.AUTOMATION };
+        : {
+            name: row.senderName,
+            kind: AGENT_SENDER.AUTOMATION,
+            ...(automationId === null ? undefined : { automationId }),
+          };
+    }
     case MESSAGE_SENDER.GITHUB:
       return row.senderName === null
         ? undefined

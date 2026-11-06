@@ -241,6 +241,15 @@ export const messages = pgTable(
      */
     senderAgentId: uuid("sender_agent_id"),
     /**
+     * The automation whose run sent the line, by its id, which a reader opens
+     * its page and reads its card by; null on every other row, and on an
+     * automation's line sent before it was kept. Note that it is no
+     * reference, as `senderName` is none: an automation is deleted outright,
+     * and its lines then name an automation no longer there, which reads as
+     * none.
+     */
+    senderAutomationId: uuid("sender_automation_id"),
+    /**
      * The steps of its turn begun before the turn took the line in, on a
      * developer's line a coding agent's turn under way took after its first
      * step, so a reader draws the line among the turn's work where it
