@@ -105,7 +105,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
  * runs only while it is on screen (`landing-story.ts`). A page too narrow to
  * read a whole window crops the Inbox to its open thread and the task to its
- * agent's log, each drawn at true size, and the devices to the phone.
+ * agent's log, each drawn at true size.
  */
 
 /** How long each scene holds a step, in milliseconds. */
@@ -478,8 +478,19 @@ function QuestionThread({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The Inbox's last column at `step`: the empty choice, then the question's thread once opened. */
-function ThreadColumn({ step }: { step: number }): React.JSX.Element {
+/**
+ * The thread's steps that stand tallest: the draft with its options, and the
+ * answer sent, whichever a width makes the taller.
+ */
+const THREAD_TALLEST = [4, 5] as const;
+
+/**
+ * The Inbox's last column at `step`: the empty choice, then the question's
+ * thread once opened. Where it is `fitted`, its sheet keeps room for the
+ * thread's tallest steps, drawn unseen beneath the one on show, so the column
+ * holds every step whole at one height.
+ */
+function ThreadColumn({ step, fitted }: { step: number; fitted: boolean }): React.JSX.Element {
   const open = step >= 2;
   return (
     <section className="ui-landing-inbox-thread">
@@ -488,7 +499,14 @@ function ThreadColumn({ step }: { step: number }): React.JSX.Element {
         title={open ? <ThreadPath /> : undefined}
         actions={open ? <MoreButton thing="thread" onClick={still} /> : undefined}
       />
-      <div className="ui-landing-sheet-end">
+      <div className={fitted ? "ui-landing-sheet-end ui-landing-fit" : "ui-landing-sheet-end"}>
+        {fitted
+          ? THREAD_TALLEST.map((tall) => (
+              <div key={tall} className="ui-landing-fit-room">
+                <QuestionThread step={tall} />
+              </div>
+            ))
+          : null}
         {open ? (
           <QuestionThread step={step} />
         ) : (
@@ -536,7 +554,7 @@ function InboxPage({ step }: { step: number }): React.JSX.Element {
             </div>
           </div>
         </nav>
-        <ThreadColumn step={step} />
+        <ThreadColumn step={step} fitted={false} />
       </div>
       <SidePanelToggle />
     </div>
@@ -547,7 +565,8 @@ const INBOX_LABEL = "The Inbox, where an agent's question is answered";
 
 /**
  * Note that the cropped thread opens on the question, because the list it
- * would arrive in is cut away: its story is the pick, the note, and the send.
+ * would arrive in is cut away: its story is the pick, the note, and the send,
+ * all of it in view at every step.
  */
 function InboxScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.INBOX);
@@ -558,7 +577,7 @@ function InboxScene(): React.JSX.Element {
         <InboxPage step={at} />
       </DesktopWindow>
       <DesktopPane label={INBOX_LABEL}>
-        <ThreadColumn step={Math.max(at, 2)} />
+        <ThreadColumn step={Math.max(at, 2)} fitted />
       </DesktopPane>
     </div>
   );

@@ -484,6 +484,26 @@
     padding: 0 8px 8px;
   }
 
+  /* The Inbox's pane is as tall as its thread's tallest step, which its
+     sheet holds unseen beneath the step on show (`ThreadColumn`), so the
+     whole story stands in view at any width and the pane never changes
+     height as it plays. */
+  .ui-landing-stage[data-scene="inbox"] .ui-landing-pane {
+    height: auto;
+  }
+
+  .ui-landing-fit {
+    display: grid;
+  }
+
+  .ui-landing-fit > * {
+    grid-area: 1 / 1;
+  }
+
+  .ui-landing-fit-room {
+    visibility: hidden;
+  }
+
   /* A call keeps to its one line in a pane, as the panel's does on a phone:
      its verb whole, then the agent it named, then what it said, cut short. */
   .ui-landing-pane .ui-landing-call-words {
@@ -1055,9 +1075,9 @@
   /* Under 640px of room the page keeps to one column: the ball under the
      words, and each stage under its heading. A whole window scaled to that
      room draws its words too small to read, so a stage shows the one pane
-     that tells its story at true size instead: the Inbox its thread, the
-     task its agent's log, and the devices the phone alone, laid out at the
-     room's width rather than scaled into it. */
+     that tells its story at true size instead: the Inbox its thread, and
+     the task its agent's log. The devices keep both, the phone nearer the
+     window, since their story is that there are two. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {
@@ -1139,26 +1159,35 @@
     }
 
     .ui-landing-stage[data-scene="devices"] {
-      height: auto;
-      padding: 28px 5%;
+      height: 420px;
     }
 
     .ui-landing-devices-window {
-      display: none;
+      top: 30px;
+      left: 4%;
+      width: 86%;
     }
 
     .ui-landing-devices-phone {
-      position: relative;
-      top: auto;
-      right: auto;
-      width: min(100%, 320px);
-      margin: 0 auto;
+      top: 120px;
+      right: 5%;
+      width: 150px;
     }
 
-    .ui-landing-phone-screen {
-      width: 100%;
-      height: 100%;
-      transform: none;
+    .ui-landing-phone {
+      padding: 6px;
+      border-radius: var(--ui-display-phone-radius-narrow);
+    }
+
+    .ui-landing-phone-fit {
+      border-radius: var(--ui-display-phone-screen-radius-narrow);
+    }
+
+    .ui-landing-phone-island {
+      top: 12px;
+      width: 44px;
+      height: 13px;
+      margin-left: -22px;
     }
 
     .ui-landing-close {
