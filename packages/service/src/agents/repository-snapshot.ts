@@ -93,7 +93,7 @@ const SNAPSHOT_BEFORE_RENAME = {
 const CONFLICT_STATUS = 409;
 
 /** The folders the `agent` user's home holds from its making, as an agent's own sandbox makes them: Codex's `CODEX_HOME`. */
-const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME.slice(`/home/${AGENT_USER}/`.length)];
+const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME];
 
 /**
  * How long after its last use Vercel keeps a repository snapshot: as long as

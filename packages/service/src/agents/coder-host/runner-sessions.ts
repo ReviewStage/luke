@@ -197,7 +197,7 @@ import {
   sessionEnding,
 } from "../vercel-sandbox-api.js";
 import { BEARER_PREFIX, runnerTokenDigest } from "../workspace-mcp/bearer.js";
-import type { AgentImage } from "./agent-image.js";
+import { type AgentImage, AgentImageMissing } from "./agent-image.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
@@ -645,7 +645,7 @@ function failedStatus(failure: { readonly _tag: string }): number {
       ? FAILED_STATUS.UNAVAILABLE
       : FAILED_STATUS.REFUSED;
   }
-  if (failure._tag === "AgentImageMissing") return FAILED_STATUS.REFUSED;
+  if (failure instanceof AgentImageMissing) return FAILED_STATUS.REFUSED;
   return failure instanceof SandboxUnavailable
     ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
     : FAILED_STATUS.UNAVAILABLE;

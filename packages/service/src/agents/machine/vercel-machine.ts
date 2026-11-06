@@ -210,7 +210,7 @@ export const SANDBOX_NAME_BEFORE_RENAME = "luke-agent-";
 const RUNNER_SCRIPT = `${RUNNER_DIRECTORY}/agent-runner.mjs`;
 
 /** The folders the `agent` user's home holds from its making: Codex's `CODEX_HOME`, which Codex refuses to start without. */
-const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME.slice(`/home/${AGENT_USER}/`.length)];
+const AGENT_HOME_FOLDERS = [CODEX_PIN.HOME];
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;

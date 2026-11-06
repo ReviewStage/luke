@@ -21,7 +21,7 @@ export const AGENT_IMAGE_REPOSITORY = "agent-image";
 export const AGENT_IMAGE_FILE = "agent-image.txt";
 
 /** The reference could not be read where the build should have left it. */
-class AgentImageMissing extends Data.TaggedError("AgentImageMissing") {}
+export class AgentImageMissing extends Data.TaggedError("AgentImageMissing") {}
 
 export interface AgentImageService {
   /** The image as Vercel resolves it in the deployment's own project: its repository and tag. */

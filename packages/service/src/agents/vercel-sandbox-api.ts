@@ -409,10 +409,10 @@ export interface VercelSandboxApi {
   /**
    * Makes the user in the named sandbox as the SDK does (`createUser`), in
    * the group of the sandbox's default user, who writes what the API writes,
-   * the checkout among it, so the two share it; the folders given made its
-   * own in its home, and that home then closed to every other user, as
-   * Vercel's multi-agent docs suggest for files only that user should read
-   * (https://vercel.com/docs/sandbox/concepts/multi-agent).
+   * the checkout among it, so the two share it; the folders given, by their
+   * absolute paths in its home, made its own; and that home then closed to
+   * every other user, as Vercel's multi-agent docs suggest for files only
+   * that user should read (https://vercel.com/docs/sandbox/concepts/multi-agent).
    */
   readonly createUser: (
     name: string,
