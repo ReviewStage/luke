@@ -144,7 +144,8 @@ function pressOf(variables: unknown, id: string): boolean {
  * outcome, so a roster read that crossed it cannot leave a stale star, and
  * a refusal says so in a toast and puts the old value back unless a newer
  * press of the same star is still out. The presses share one scope, so they
- * reach the service in the order they were made.
+ * reach the service in the order they were made, and once the last settles
+ * the rosters are read again, as the guide invalidates them.
  */
 export function useFavoriteMutation(reads: AdminReads) {
   const queryClient = useQueryClient();
@@ -181,6 +182,13 @@ export function useFavoriteMutation(reads: AdminReads) {
         predicate: (mutation) => pressOf(mutation.state.variables, press.id),
       });
       if (newer <= 1) draw({ ...press, favorite: !press.favorite });
+    },
+    // Note that the rosters are read again once the last press of any star
+    // settles, since `onMutate` canceled whatever roster read was out (a
+    // search's among them), and a refetch while another press is out would
+    // overwrite its star.
+    onSettled: () => {
+      if (queryClient.isMutating({ mutationKey }) <= 1) void queryClient.invalidateQueries(rosters);
     },
   });
 }

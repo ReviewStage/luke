@@ -33,7 +33,7 @@ const MEMBER: AdminViewer = { userId: "user-1", role: "user" };
 /** What the page sent, as the route saw it: its method, path, and query. */
 type Sent = string;
 
-/** The admin resource's seams: the viewer given, a roster of one account, and a star that lands. */
+/** The admin resource's seams: the viewer given, a roster of one account, and a star that lands and is read back. */
 function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSeams {
   const unread = () => Effect.die(new Error("this screen reads only the roster"));
   return {
@@ -55,7 +55,7 @@ function seams(viewer: AdminViewer | null, written: string[]): AdminProcedureSea
                 activeDays: 3,
                 lastActiveDay: null,
                 lastSeenAt: null,
-                favorite: false,
+                favorite: written.includes(`${viewer?.userId} account-ada true`),
               },
             ],
           },
@@ -154,10 +154,14 @@ test("an admin reads the roster through the route and stars an account for thems
         ?.getAttribute("aria-pressed"),
     ).toBe("true"),
   );
-  expect(sent).toEqual([
-    "GET /api/admin/users?scope=all&window=7 include null",
-    "PUT /api/admin/favorite?id=account-ada include null",
-  ]);
+  // Note that the roster is read again once the star has landed.
+  await vi.waitFor(() =>
+    expect(sent).toEqual([
+      "GET /api/admin/users?scope=all&window=7 include null",
+      "PUT /api/admin/favorite?id=account-ada include null",
+      "GET /api/admin/users?scope=all&window=7 include null",
+    ]),
+  );
 });
 
 test("a signed-in non-admin is refused as before", async () => {
