@@ -123,7 +123,7 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
-import { useForwardEntry } from "./agent-forward.js";
+import { ForwardChip, useAutoForward, useForwardEntry } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -3098,7 +3098,12 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
+            tools={(narrow) => (
+              <>
+                <AgentPlace agent={agent} narrow={narrow} />
+                <ForwardChip agent={agent} narrow={narrow} />
+              </>
+            )}
             plus={forward === undefined ? undefined : [forward]}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its description or
@@ -3281,6 +3286,7 @@ function AgentTabBody({
     known: control.pullRequests.get(agent.id),
   });
   const moveToCloud = useMoveToCloud(agent, control);
+  useAutoForward(agent, shown);
   // Note that the log never waits on the pull request's dock over the box, because its read asks GitHub and would hold every tab's first draw for a second or more.
   // Note that nothing counts as landed before the first page.
   const surroundsLanded = messages.length > 0;

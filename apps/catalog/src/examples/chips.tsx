@@ -17,8 +17,9 @@ import {
   STATUS_TONE,
   Stack,
   StaticChip,
+  StatusGlyph,
 } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
+import { GLYPH, PlugIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -28,7 +29,8 @@ import { CatalogSection } from "../section";
  * menu open, unavailable, and with a long name in a narrow column; a row of
  * filters, one pressed at a time; a row of compact counts, one pressed and
  * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
- * its mark alone; a name in the code face; removable filters, each
+ * its mark alone; a name in the code face; a glyph wearing a status dot,
+ * sized as a bare one; removable filters, each
  * springing in as one is added and scaling out as its × lifts it, and
  * removable pills whose words open what they name; and a
  * branch cut in its middle, an ellipsis where the cut stands.
@@ -206,6 +208,23 @@ function Chips(): React.JSX.Element {
           <Chip look={CHIP_LOOK.PILL}>
             <ProviderMark provider={MARK_PROVIDER.GITHUB} />
             <ChipName mono>agent/expire-invitations</ChipName>
+          </Chip>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="chips-status-glyph" title="A glyph wearing a status dot">
+        <Inline>
+          <Chip look={CHIP_LOOK.PILL} chevron>
+            <StatusGlyph tone={STATUS_TONE.COMPLETE} label="Forwarding to this Mac">
+              <PlugIcon aria-hidden="true" />
+            </StatusGlyph>
+            <ChipName mono>localhost:3000</ChipName>
+            <ChipCount>+1</ChipCount>
+          </Chip>
+          <Chip look={CHIP_LOOK.PILL} chevron iconOnly aria-label="Ports: localhost:3000">
+            <StatusGlyph tone={STATUS_TONE.COMPLETE} label="Forwarding to this Mac">
+              <PlugIcon aria-hidden="true" />
+            </StatusGlyph>
+            <ChipName mono>localhost:3000</ChipName>
           </Chip>
         </Inline>
       </CatalogSection>
