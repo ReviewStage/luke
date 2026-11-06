@@ -126,8 +126,12 @@
     gap: var(--ui-space-8);
   }
 
+  /* A phone's tag stands under its title, both centered, as a phone's
+     header says what a page covers under its name, so the name stays the
+     row's center rather than moving aside for the tag beside it. */
   .ui-toolbar[data-look="phone"] > .ui-toolbar-heading:has(> .ui-toolbar-tag) {
-    align-items: last baseline;
+    flex-direction: column;
+    gap: 0;
   }
 
   .ui-toolbar[data-look="phone"]
