@@ -34,11 +34,9 @@ import {
   memorySearchQuerySchema,
 } from "../memory-wire.js";
 import {
-  chatGptCredentialsSaveRequestSchema,
   chatGptDeviceLoginRequestSchema,
   chatGptDevicePollAnswerSchema,
   chatGptDeviceStartAnswerSchema,
-  chatGptHostAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
   providerKeyForAgentsRequestSchema,
@@ -55,9 +53,6 @@ const PROVIDER_KEY_BODY_BYTES = 2_048;
 
 /** A memory's save is a workspace id, a statement of at most 400 characters at JSON's widest escape, and an id, so a body past this is not one. */
 const MEMORY_SAVE_BODY_BYTES = 4_096;
-
-/** A ChatGPT sign-in's save is three tokens of at most 16 KiB each and a few ids, so a body past this is not one. */
-const CHATGPT_CREDENTIALS_BODY_BYTES = 64 * 1_024;
 
 /** A device-code login's poll or cancel is one login id of at most 64 characters, so a body past this is not one. */
 const CHATGPT_DEVICE_LOGIN_BODY_BYTES = 512;
@@ -142,16 +137,6 @@ export const accountContract = {
       }),
     )
     .output(EffectSchema.flip(memorySearchAnswerSchema)),
-  chatGptHost: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_HOST }))
-    .output(EffectSchema.flip(chatGptHostAnswerSchema)),
-  saveChatGptCredentials: hostedProcedure
-    .meta(bodyCap(CHATGPT_CREDENTIALS_BODY_BYTES))
-    .meta(
-      openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_CREDENTIALS }),
-    )
-    .input(exactInput(chatGptCredentialsSaveRequestSchema))
-    .output(EffectSchema.flip(providerKeysAnswerSchema)),
   startChatGptDeviceLogin: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_DEVICE }))
     .output(EffectSchema.flip(chatGptDeviceStartAnswerSchema)),

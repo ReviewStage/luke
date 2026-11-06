@@ -4,8 +4,10 @@ import { Schema as EffectSchema } from "effect";
  * sandbox-tunnel-wire.ts -- a tunnel into a coding agent's sandbox: the socket the desktop's host opens to the service, the bridge it reaches, and the channel frames both ends speak on it.
  *
  * One socket is one bridge in one agent's running sandbox, picked by its
- * kind: a forwarded port today, whose bridge opens a TCP connection to
- * `127.0.0.1:<port>` in the sandbox for each channel the desktop opens. The
+ * kind: a forwarded port, whose bridge opens a TCP connection to
+ * `127.0.0.1:<port>` in the sandbox for each channel the desktop opens, or
+ * the mirror, whose bridge speaks `sandbox-mirror-wire.ts` on the one
+ * channel the desktop opens. The
  * desktop opens the socket from its main process under the account's bearer
  * and with no `Origin`, as it opens a terminal, and the member must reach the
  * agent as for its Terminal. Nothing is exposed from the sandbox: the service
@@ -24,7 +26,7 @@ import { Schema as EffectSchema } from "effect";
  * each a state of the tunnel rather than a failure.
  */
 
-/** The socket's path, and the query naming the agent, the bridge's kind, and its argument. */
+/** The socket's path, and the query naming the agent, the bridge's kind, and its argument: a port for a forward, none for the mirror. */
 export const SANDBOX_TUNNEL = {
   PATH: "/api/terminal/tunnels",
   QUERY: { AGENT: "agent", KIND: "kind", PORT: "port" },
@@ -34,6 +36,8 @@ export const SANDBOX_TUNNEL = {
 export const TUNNEL_KIND = {
   /** TCP connections to a port on the sandbox's loopback, one a channel. */
   PORT_FORWARD: "port-forward",
+  /** The agent's checkout, mirrored one way to the Mac (`sandbox-mirror-wire.ts`). */
+  MIRROR: "mirror",
 } as const;
 
 export type TunnelKind = (typeof TUNNEL_KIND)[keyof typeof TUNNEL_KIND];

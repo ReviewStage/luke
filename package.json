@@ -27,8 +27,6 @@
     "package:dir": "pnpm --filter @repo/desktop package:dir",
     "prepare": "husky",
     "probe:claude-code": "pnpm --filter @repo/claude-code-probe probe",
-    "probe:codex": "tsx tools/codex-probe/src/cli.ts",
-    "probe:codex:sign-in": "tsx tools/codex-probe/src/cli.ts sign-in",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @repo/desktop start",
     "test": "node scripts/turbo.mjs run test:vitest --concurrency=1",

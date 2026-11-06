@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
@@ -22,6 +21,7 @@ import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
+import { onRegistry } from "./testing/copy-feedback.js";
 
 /**
  * app-admin-link.test.ts -- a link to the Admin place the system hands the
@@ -112,11 +112,7 @@ async function settle(): Promise<void> {
 
 async function drawWindow(): Promise<void> {
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() =>
-    root?.render(
-      createElement(RegistryContext.Provider, { value: AtomRegistry.make() }, createElement(App)),
-    ),
-  );
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(App))));
   await settle();
 }
 

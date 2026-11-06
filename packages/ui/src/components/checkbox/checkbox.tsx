@@ -40,9 +40,12 @@ type Named =
  * The words beside the box, in the body's type, the box standing on their
  * first line. Note that their ink is `checkbox.css`'s, which a stepped-back
  * region quiets from the components layer, where a utility would outrank it.
+ * Note that the row stands at the top of its line rather than on its
+ * baseline, because the baseline is the box's, which moves as the tick
+ * mounts in it, and a row on it would grow and shrink as it is ticked.
  */
 const CHECKBOX =
-  "ui-checkbox inline-flex items-start gap-icon-gap min-w-0 font-ui text-body cursor-press";
+  "ui-checkbox inline-flex items-start gap-icon-gap min-w-0 align-top font-ui text-body cursor-press";
 
 /**
  * A box without words stands on no line of its own, and on a coarse

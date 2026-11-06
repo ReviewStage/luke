@@ -54,12 +54,13 @@ export type TunnelUpgrade =
   | { readonly status: number }
   | { readonly credential: RelayCredential; readonly ask: Omit<TunnelAsk, "userId"> };
 
-/** The bridge an upgrade's query names, or none where it names no kind and argument this service takes. */
+/** The bridge an upgrade's query names, or none where it names no kind and argument this service takes; the mirror takes none. */
 function bridgeOf(
   query: (name: string) => ReturnType<typeof unparsedWire>,
 ): TunnelBridge | undefined {
   const kind = readKind(query(SANDBOX_TUNNEL.QUERY.KIND));
   if (Result.isFailure(kind)) return undefined;
+  if (kind.success === TUNNEL_KIND.MIRROR) return { kind: kind.success };
   const port = readPort(query(SANDBOX_TUNNEL.QUERY.PORT));
   return Result.isFailure(port) ? undefined : { kind: kind.success, port: port.success };
 }

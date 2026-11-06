@@ -9,6 +9,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { type ActHandle, useAct } from "../act.js";
@@ -117,11 +118,14 @@ const colorings = new Map<string, Map<string, Coloring>>();
 let coloringCount = 0;
 
 /**
- * The markdown a transcript's words were drawn from, which a block reads to
- * tell whether its closing fence has arrived; Streamdown hands a component
- * the block's place in it but not the words.
+ * The last line written inside a fenced block of a transcript's words still
+ * waiting for its closing fence, or none where every fence closed, which a
+ * block reads to tell whether it is the one still streaming. Note that it
+ * is a line rather than the words, because Streamdown hands a component its
+ * place in its own block alone, and because a value that stands still while
+ * the words after the last block stream draws no block again.
  */
-const MarkdownSource = createContext("");
+const OpenFenceTail = createContext<string | undefined>(undefined);
 
 /** Forgets the oldest coloring, so a long session's window holds a bounded number. */
 function forgetOldest(): void {
@@ -166,19 +170,32 @@ function colorable(language: string, code: string): boolean {
   );
 }
 
+/** Whether `line` closes a fence opened with `marker`: the opening's character at least as long, alone but for the quote marks of a block inside a quote. */
+function closesFence(line: string, marker: string): boolean {
+  const bare = line.replace(QUOTE_MARKS, "").trim();
+  return bare.length >= marker.length && [...bare].every((character) => character === marker[0]);
+}
+
 /**
- * Whether a fenced block's markdown still waits for its closing fence: a
- * fence of the opening's character at least as long, alone on the last
- * line but for the quote marks of a block inside a quote. An indented
- * block has no fence to wait for.
+ * The last line written inside a fenced block that still waits for its
+ * closing fence at the end of `markdown`, empty for one with no line yet, or
+ * none where every fence closed. Only the last block can still be open,
+ * since a fence left open runs to the end of the words.
  */
-function fenceStillOpen(markdown: string): boolean {
-  const marker = FENCE_OPENING.exec(markdown)?.[1];
-  if (marker === undefined) return false;
-  const lines = markdown.trimEnd().split("\n");
-  const last = lines.length > 1 ? lines.at(-1)?.replace(QUOTE_MARKS, "").trim() : undefined;
-  if (last === undefined || last.length < marker.length) return true;
-  return [...last].some((character) => character !== marker[0]);
+function openFenceTail(markdown: string): string | undefined {
+  let marker: string | undefined;
+  let last: string | undefined;
+  for (const line of markdown.trimEnd().split("\n")) {
+    if (marker === undefined) {
+      marker = FENCE_OPENING.exec(line.replace(QUOTE_MARKS, ""))?.[1];
+      last = "";
+    } else if (closesFence(line, marker)) {
+      marker = undefined;
+    } else {
+      last = line;
+    }
+  }
+  return marker === undefined ? undefined : last;
 }
 
 /** A fenced block's code: the text its element holds, as the markdown wrote it. */
@@ -267,13 +284,11 @@ function TranscriptCodeBlock({
   className,
   node,
 }: ComponentProps<"code"> & MarkdownNodeProps): ReactNode {
-  const markdown = useContext(MarkdownSource);
+  const openTail = useContext(OpenFenceTail);
   const language = LANGUAGE_CLASS.exec(className ?? "")?.[1] ?? "";
   const code = blockText(node).replace(/\n$/u, "");
-  const start = node?.position?.start.offset;
-  const end = node?.position?.end.offset;
-  const whole =
-    start === undefined || end === undefined || !fenceStillOpen(markdown.slice(start, end));
+  // Note that the block still open is the one the words end on, so its last line ends them.
+  const whole = openTail === undefined || !openTail.endsWith(code.split("\n").at(-1) ?? "");
   const suggesting = language === SUGGESTION.LANGUAGE || language === SUGGESTED_CHANGE_LANGUAGE;
   // Note that a suggestion names no language of its own to color it in.
   const lines = useColoredLines(language, code, whole && !suggesting);
@@ -316,7 +331,7 @@ export const TRANSCRIPT_CODE_AND_TABLE_COMPONENTS: MarkdownComponents = {
   td: ({ children, style }) => <td style={style}>{children}</td>,
 };
 
-/** The markdown a transcript's words are drawn from, handed to the blocks inside them. */
+/** The markdown a transcript's words are drawn from, read for the block still waiting for its closing fence and handed to the blocks inside them. */
 export function TranscriptMarkdownSource({
   markdown,
   children,
@@ -324,5 +339,6 @@ export function TranscriptMarkdownSource({
   markdown: string;
   children: ReactNode;
 }): ReactNode {
-  return <MarkdownSource.Provider value={markdown}>{children}</MarkdownSource.Provider>;
+  const openTail = useMemo(() => openFenceTail(markdown), [markdown]);
+  return <OpenFenceTail.Provider value={openTail}>{children}</OpenFenceTail.Provider>;
 }

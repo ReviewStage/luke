@@ -1,58 +1,50 @@
 /**
- * chatgpt-credentials.ts -- an account's ChatGPT sign-in for our hosted runtime: kept sealed, its access renewed under the row's lock, and its renewable session revoked before it is removed.
+ * chatgpt-credentials.ts -- an account's ChatGPT plan for our hosted runtime: kept sealed, its access renewed under the row's lock, and its renewable session revoked before it is removed.
  *
- * The desktop completes OpenAI's open-source Sign in with ChatGPT for the
- * service (OpenAI's self-hosted VM recipe) under the account's host id, and
- * hands over what the token endpoint answered. The service then owns the
- * sign-in, as the recipe asks: the tokens, the issued client and the
- * account's subject are sealed together as one `chatgpt_oauth` row's
- * credential (`provider-key-seal.ts`, bound to the kind), and the access
- * token's expiry stands beside the seal so a renewal is due without it
- * being opened.
+ * The service connects the plan itself through Codex's device-code login
+ * (`chatgpt-device-login.ts`) and owns what it answered: the tokens, Codex's
+ * client and the account's subject are sealed together as one
+ * `chatgpt_oauth` row's credential (`provider-key-seal.ts`, bound to the
+ * kind), and the access token's expiry stands beside the seal so a renewal
+ * is due without it being opened.
  *
  * A renewal (`refreshChatGptAccess`) holds the row's lock across OpenAI's
- * token endpoint, as OpenAI's sessions guide asks renewals of one session
- * to be serialized, because each one rotates the refresh token: a second
- * caller waits, then reads the access token the first one stored and calls
- * nothing. A renewal replaces the access token, its expiry, the granted
- * scopes, and the refresh token together, and the ID token where one is
- * answered. A refusal that names the refresh token unusable marks the row
- * invalid and keeps it, so the account is asked to sign in again; any other
- * failure changes nothing and may be tried again.
+ * token endpoint, as renewals of one session must be serialized, because
+ * each one may rotate the refresh token: a second caller waits, then reads
+ * the access token the first one stored and calls nothing. A renewal
+ * replaces the access token and its expiry, and the refresh and ID tokens
+ * where they are answered. A refusal that names the refresh token unusable
+ * marks the row invalid and keeps it, so the account is asked to connect
+ * again; any other failure changes nothing and may be tried again. An
+ * access token's expiry is the earlier of its lifetime and its own `exp`
+ * claim.
  *
- * A renewal whose grant no longer carries the plan's scope is kept, since
- * it rotated the refresh token, and marks the row invalid as well. An access
- * token's expiry is the earlier of its lifetime and its own `exp` claim.
+ * A row sealed by the retired third-party Sign in with ChatGPT can no longer
+ * renew: a seal the ring opens that holds no device-code login's
+ * credentials is removed as it is opened, without asking OpenAI anything,
+ * so the plan reads as not connected and the account connects again.
  *
- * A sign-in is kept only once its ID token checks out against OpenAI's
- * published keys (`verifyChatGptIdToken`): signed by OpenAI for the issued
- * client, unexpired, and naming the account handed over; and only where
- * its access token's own claims name the same issued client, OpenAI's API
- * as its audience, and OpenAI as its issuer. Those claims are read unsigned,
- * as a consistency check: OpenAI does not document which key signs the
- * access token, so its signature is left to be settled by a live run, and the
- * refresh token, which is opaque, is bound to the client by OpenAI itself at
- * the first renewal. The nonce is the desktop's to check, since only the
- * desktop that began the sign-in holds it.
+ * A login is kept only once its ID token checks out against OpenAI's
+ * published keys (`verifyCodexDeviceIdToken`): signed by OpenAI for Codex's
+ * client and unexpired.
  *
- * Removing the sign-in revokes its renewable session at OpenAI's revocation
+ * Removing the plan revokes its renewable session at OpenAI's revocation
  * endpoint, which must be on OpenAI's own authorization server, first, under the same lock, retrying a failure to connect or a
  * server error a few times, and removes the row whether or not OpenAI
- * confirmed it, answering which, so the account can be told to disconnect
- * the app in ChatGPT's settings.
+ * confirmed it, answering which, so the account can be told to end the
+ * session in ChatGPT's settings.
  *
  * No token, code, or OpenAI's words of a refusal are ever logged or
  * answered: a refusal is read for its OAuth error code alone.
  */
 
-import { createPublicKey, randomUUID, verify } from "node:crypto";
+import { createPublicKey, verify } from "node:crypto";
 import {
   type KeyRing,
   openProviderKey,
   sealProviderKey,
 } from "@repo/database/models/provider-key-seal";
 import {
-  ensureChatGptHostId,
   type ProviderKeyRow,
   removeProviderKey,
   resealProviderKey,
@@ -60,7 +52,6 @@ import {
   withProviderKeyLocked,
 } from "@repo/database/models/provider-key-store";
 import {
-  type ChatGptCredentialsSaveRequest,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -71,31 +62,20 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
- * How a ChatGPT plan was connected: through OpenAI's third-party Sign in
- * with ChatGPT, which the desktop completes and hands over, or through
- * Codex's own device-code login, which the service runs itself
- * (`chatgpt-device-login.ts`). A seal from before the flows were told
- * apart is the third party's.
+ * The flow a seal names: Codex's device-code login, the one way a plan is
+ * connected. A seal that names none, or the retired third-party sign-in's
+ * `third_party`, holds credentials that can no longer renew. Note that it
+ * is still written, because a deployment from before the retirement reads a
+ * seal without it as the third party's.
  */
-export const CHATGPT_FLOW = {
-  THIRD_PARTY: "third_party",
-  CODEX_DEVICE: "codex_device",
-} as const;
+const CODEX_DEVICE_FLOW = "codex_device";
 
-export type ChatGptFlow = (typeof CHATGPT_FLOW)[keyof typeof CHATGPT_FLOW];
-
-/** OpenAI's endpoints and the fixed values of the open-source flow, as its guides publish them. */
+/** OpenAI's authorization server and where its published keys and revocation endpoint are read from. */
 export const CHATGPT_OAUTH = {
   /** OpenAI's authorization server: no call that carries a credential goes anywhere else. */
   ISSUER: "https://auth.openai.com",
-  TOKEN_URL: "https://auth.openai.com/api/accounts/oauth/token",
-  /** Where the revocation endpoint is read from, as the sessions guide asks. */
+  /** Where the published keys and the revocation endpoint are read from. */
   DISCOVERY_URL: "https://auth.openai.com/.well-known/openid-configuration",
-  RESOURCE: "https://api.openai.com/v1",
-  /** The first-registration client, which no saved sign-in may name as its own. */
-  REGISTRATION_CLIENT_ID: "dynamic_agent_client",
-  /** The scope without which a sign-in may not use the ChatGPT plan. */
-  USAGE_SCOPE: "chatgpt.tokens.use.direct",
 } as const;
 
 /** OpenAI's endpoints and the fixed values of Codex's device-code login, as Codex itself runs it. */
@@ -137,7 +117,7 @@ const CHATGPT_HINT = "ChatGPT";
 /**
  * The OAuth error codes on a renewal that say the refresh token can never be
  * used again, or the client is not one OpenAI knows, per OpenAI's errors
- * guide: the sign-in must be done again.
+ * guide: the plan must be connected again.
  */
 const UNUSABLE_REFRESH_ERRORS: ReadonlySet<string> = new Set([
   "invalid_grant",
@@ -152,14 +132,13 @@ const UNUSABLE_REFRESH_ERRORS: ReadonlySet<string> = new Set([
 const HTTP_STATUS = { OK: 200, BAD_REQUEST: 400, SERVER_ERROR: 500 } as const;
 
 /**
- * What the seal of a `chatgpt_oauth` row holds, as JSON: the flow it was
- * connected through, a seal from before flows reading as the third
- * party's, and the ChatGPT workspace its ID token named, where it named one.
+ * What the seal of a `chatgpt_oauth` row holds, as JSON: the device-code
+ * flow it was connected through, and the ChatGPT workspace its ID token
+ * named, where it named one. A seal of any other flow is no credential this
+ * reads.
  */
 const SealedCredentialsSchema = Schema.Struct({
-  flow: Schema.Literals(Object.values(CHATGPT_FLOW)).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(CHATGPT_FLOW.THIRD_PARTY)),
-  ),
+  flow: Schema.Literal(CODEX_DEVICE_FLOW),
   clientId: Schema.String,
   accountId: Schema.String,
   accessToken: Schema.String,
@@ -184,15 +163,6 @@ const CodexRefreshAnswerSchema = Schema.Struct({
   refresh_token: Schema.optionalKey(Schema.NonEmptyString),
   id_token: Schema.optionalKey(Schema.NonEmptyString),
   expires_in: Schema.optionalKey(Schema.Number.check(Schema.isGreaterThan(0))),
-});
-
-/** The token endpoint's answer to a renewal, as far as it is read. */
-const RefreshAnswerSchema = Schema.Struct({
-  access_token: Schema.NonEmptyString,
-  refresh_token: Schema.NonEmptyString,
-  expires_in: Schema.Number.check(Schema.isGreaterThan(0)),
-  scope: Schema.optionalKey(Schema.String),
-  id_token: Schema.optionalKey(Schema.NonEmptyString),
 });
 
 /** An OAuth refusal, read for its code alone. */
@@ -240,19 +210,6 @@ const AuthClaimJson = Schema.fromJsonString(
   Schema.Struct({ [CODEX_DEVICE_OAUTH.AUTH_CLAIM]: Schema.optionalKey(AuthClaimSchema) }),
 );
 
-/**
- * The access token's claims a save compares with the sign-in, unsigned:
- * OpenAI documents them but not which key signs the access token, so they
- * are checked for consistency and not trusted as proof.
- */
-const AccessTokenClaimsJson = Schema.fromJsonString(
-  Schema.Struct({
-    iss: Schema.String,
-    aud: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
-    client_id: Schema.String,
-  }),
-);
-
 /** How long OpenAI's published keys are reused before they are read again; a key they do not name is read again at once. */
 const SIGNING_KEYS_CACHE_FOR = Duration.hours(1);
 
@@ -266,8 +223,8 @@ const AccessClaimsJson = Schema.fromJsonString(Schema.Struct({ exp: Schema.Numbe
  * When an access token expires: the earlier of the lifetime the token
  * endpoint answered, counted from `now`, and the token's own `exp` claim
  * where it carries one. The claim is read for scheduling alone, never
- * trusted for anything else, so a sign-in handed over late is never served
- * past the instant OpenAI set.
+ * trusted for anything else, so a token is never served past the instant
+ * OpenAI set.
  */
 function accessExpiryOf(accessToken: string, now: Date, expiresInSeconds: number): Date {
   const answered = now.getTime() + Duration.toMillis(Duration.seconds(expiresInSeconds));
@@ -319,11 +276,11 @@ function onIssuer(url: string): boolean {
 export const CHATGPT_ACCESS = {
   /** An access token good for at least the renewal margin. */
   READY: "ready",
-  /** The account holds no ChatGPT sign-in. */
+  /** The account holds no ChatGPT plan, or held one the retired third-party sign-in connected, now removed. */
   NONE: "none",
-  /** The deployment's ring cannot open the sign-in it holds. */
+  /** The deployment's ring cannot open the plan it holds. */
   UNREADABLE: "unreadable",
-  /** OpenAI refused the refresh token for good: the account must sign in again. */
+  /** OpenAI refused the refresh token for good: the account must connect again. */
   SIGNED_OUT: "signed_out",
   /** OpenAI could not be asked, or answered nothing usable; nothing changed and it may be tried again. */
   UNREACHABLE: "unreachable",
@@ -333,9 +290,8 @@ export const CHATGPT_ACCESS = {
   INELIGIBLE: "ineligible",
 } as const;
 
-/** Which plan an access token pays from: the flow it was connected through, and the ChatGPT workspace its ID token named, where it named one. */
+/** Which plan an access token pays from: the ChatGPT workspace its ID token named, where it named one. */
 export interface ChatGptPlanIdentity {
-  readonly flow: ChatGptFlow;
   readonly chatgptAccountId: string | undefined;
 }
 
@@ -365,7 +321,7 @@ export function chatGptPlanOf(access: ChatGptAccess): ChatGptPlanIdentity | unde
 
 /** The plan opened credentials pay from. */
 function planOf(credentials: SealedCredentials): ChatGptPlanIdentity {
-  return { flow: credentials.flow, chatgptAccountId: credentials.chatgptAccountId };
+  return { chatgptAccountId: credentials.chatgptAccountId };
 }
 
 const OWNER_KIND = {
@@ -378,47 +334,48 @@ function sealCredentials(ring: KeyRing, userId: string, credentials: SealedCrede
   return sealProviderKey(ring, { userId, ...OWNER_KIND }, Redacted.make(json));
 }
 
-/** The credentials a row seals, or nothing where the ring cannot open them or they are not a sign-in's. */
+/** A seal the ring opens that holds no device-code login's credentials, as the retired third-party sign-in's do. */
+const RETIRED = "retired";
+
+/** What a row seals: its credentials; `RETIRED`; or nothing where the ring cannot open it. */
 function openCredentials(
   ring: KeyRing,
   userId: string,
   row: ProviderKeyRow,
-): SealedCredentials | undefined {
+): SealedCredentials | typeof RETIRED | undefined {
   const opened = openProviderKey(ring, { userId, ...OWNER_KIND }, row);
   if (Result.isFailure(opened)) return undefined;
-  return Option.getOrUndefined(
+  return Option.getOrElse(
     Schema.decodeUnknownOption(SealedCredentialsJson)(Redacted.value(opened.success)),
+    () => RETIRED,
   );
 }
 
-/** Why a third-party sign-in handed over is not kept, before anything is sealed; a Codex device-code login is never handed over, so never asked. */
-export function chatGptCredentialsRefusal(
-  request: ChatGptCredentialsSaveRequest,
-): "invalid" | undefined {
-  if (request.clientId === CHATGPT_OAUTH.REGISTRATION_CLIENT_ID) return "invalid";
-  if (!request.scopes.includes(CHATGPT_OAUTH.USAGE_SCOPE)) return "invalid";
-  return undefined;
+/** Whether a ChatGPT plan's row is sealed by the retired third-party sign-in, so it can no longer renew and reads as not connected. */
+export function retiredChatGptRow(ring: KeyRing, userId: string, row: ProviderKeyRow): boolean {
+  return openCredentials(ring, userId, row) === RETIRED;
 }
 
-/** The sign-in sealed for the account's row, with when its access token lapses and the hint it is shown by. */
-export function sealChatGptCredentials(
-  ring: KeyRing,
+/**
+ * Removes the account's ChatGPT plan where the retired third-party sign-in
+ * sealed it, under the row's lock, asking OpenAI nothing; a row a
+ * device-code login replaced meanwhile stands. Answers whether it removed one.
+ */
+export const dropRetiredChatGptCredentials = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  request: ChatGptCredentialsSaveRequest,
-  now: Date,
+  ring: KeyRing,
 ) {
-  const sealed = sealCredentials(ring, userId, {
-    flow: CHATGPT_FLOW.THIRD_PARTY,
-    clientId: request.clientId,
-    accountId: request.accountId,
-    accessToken: request.accessToken,
-    refreshToken: request.refreshToken,
-    idToken: request.idToken,
-    scopes: request.scopes,
-  });
-  const accessExpiresAt = accessExpiryOf(request.accessToken, now, request.expiresInSeconds);
-  return { sealed, accessExpiresAt, hint: CHATGPT_HINT };
-}
+  return yield* withProviderKeyLocked(
+    userId,
+    OWNER_KIND.provider,
+    OWNER_KIND.kind,
+    Effect.fnUntraced(function* (locked) {
+      if (Option.isNone(locked) || !retiredChatGptRow(ring, userId, locked.value)) return false;
+      yield* removeProviderKey(userId, OWNER_KIND.provider, OWNER_KIND.kind);
+      return true;
+    }),
+  );
+});
 
 /** The tokens Codex's device-code login answered the service, once its ID token checked out. */
 export interface CodexDeviceTokens {
@@ -438,7 +395,7 @@ export function sealCodexDeviceCredentials(
   tokens: CodexDeviceTokens,
 ) {
   const sealed = sealCredentials(ring, userId, {
-    flow: CHATGPT_FLOW.CODEX_DEVICE,
+    flow: CODEX_DEVICE_FLOW,
     clientId: CODEX_DEVICE_OAUTH.CLIENT_ID,
     accountId: tokens.accountId,
     accessToken: tokens.accessToken,
@@ -452,12 +409,12 @@ export function sealCodexDeviceCredentials(
   return { sealed, hint: CHATGPT_HINT };
 }
 
-/** What a sign-in's ID token check answers. */
+/** What a login's ID token check answers. */
 export const CHATGPT_ID_TOKEN = {
   VERIFIED: "verified",
-  /** Not signed by OpenAI for the issued client, expired, or another account's than the one handed over. */
+  /** Not signed by OpenAI for Codex's client, or expired. */
   UNVERIFIED: "unverified",
-  /** OpenAI's published keys could not be read; the same sign-in may be tried again. */
+  /** OpenAI's published keys could not be read; the same login may be tried again. */
   UNREACHABLE: "unreachable",
 } as const;
 
@@ -578,33 +535,6 @@ const checkIdToken = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The third-party sign-in checked before it is kept. Its access token's
- * unsigned claims must name the issued client, OpenAI's API and OpenAI; its
- * ID token is checked as `checkIdToken` checks one, under the issued client,
- * and its subject must be the account handed over. The nonce is the
- * desktop's, which only the desktop that began the sign-in holds.
- */
-export const verifyChatGptIdToken = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: ChatGptCredentialsSaveRequest,
-  cache: ChatGptSigningKeys,
-) {
-  const access = Schema.decodeUnknownOption(AccessTokenClaimsJson)(jwtPart(request.accessToken, 1));
-  if (
-    Option.isNone(access) ||
-    access.value.iss !== CHATGPT_OAUTH.ISSUER ||
-    access.value.client_id !== request.clientId ||
-    ![access.value.aud].flat().includes(CHATGPT_OAUTH.RESOURCE)
-  ) {
-    return CHATGPT_ID_TOKEN.UNVERIFIED;
-  }
-  const checked = yield* checkIdToken(request.idToken, request.clientId, cache);
-  if (checked.verdict !== CHATGPT_ID_TOKEN.VERIFIED) return checked.verdict;
-  return checked.claims.sub === request.accountId
-    ? CHATGPT_ID_TOKEN.VERIFIED
-    : CHATGPT_ID_TOKEN.UNVERIFIED;
-});
-
-/**
  * A Codex device-code login's ID token checked before its credentials are
  * kept, as `checkIdToken` checks one, under Codex's client, answering the
  * account it names and the ChatGPT workspace its claim names. Note that its
@@ -623,12 +553,6 @@ export const verifyCodexDeviceIdToken = /* @__PURE__ */ Effect.fnUntraced(functi
     accountId: checked.claims.sub,
     chatgptAccountId: auth?.chatgpt_account_id,
   };
-});
-
-/** The account's ChatGPT host id, minted the first time it is asked for and the same ever after. */
-export const chatGptHostId = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string) {
-  const now = yield* DateTime.nowAsDate;
-  return yield* ensureChatGptHostId(userId, `urn:uuid:${randomUUID()}`, now);
 });
 
 /** What a POST to OpenAI carries: a form, as the OAuth endpoints read one, or JSON, as Codex sends its device-code calls and its renewals. */
@@ -663,69 +587,16 @@ export const postToOpenAi = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The renewal OpenAI is asked for, by the flow the credentials were
- * connected through: the third party's form, naming OpenAI's API as its
- * resource, or Codex's JSON body under Codex's client, as Codex sends it.
- */
-function renewalRequestOf(credentials: SealedCredentials): { url: string; body: OpenAiBody } {
-  switch (credentials.flow) {
-    case CHATGPT_FLOW.THIRD_PARTY:
-      return {
-        url: CHATGPT_OAUTH.TOKEN_URL,
-        body: {
-          form: {
-            grant_type: "refresh_token",
-            client_id: credentials.clientId,
-            refresh_token: credentials.refreshToken,
-            resource: CHATGPT_OAUTH.RESOURCE,
-          },
-        },
-      };
-    case CHATGPT_FLOW.CODEX_DEVICE:
-      return {
-        url: CODEX_DEVICE_OAUTH.TOKEN_URL,
-        body: {
-          json: {
-            grant_type: "refresh_token",
-            client_id: credentials.clientId,
-            refresh_token: credentials.refreshToken,
-          },
-        },
-      };
-  }
-}
-
-/**
  * The credentials a renewal's answer replaces the ones it renewed with, and
- * when its access token expires; none where the answer is no renewal of
- * their flow. A third-party renewal replaces the refresh token and the
- * granted scopes; a Codex one keeps whichever token it did not answer, and
- * reads the ChatGPT workspace again from an ID token it answered.
+ * when its access token expires; none where the answer is no renewal. Every
+ * token it did not answer is kept, and the ChatGPT workspace is read again
+ * from an ID token it answered.
  */
 function renewedFrom(
   credentials: SealedCredentials,
   body: unknown,
   now: Date,
 ): { readonly credentials: SealedCredentials; readonly expiresAt: Date } | undefined {
-  if (credentials.flow === CHATGPT_FLOW.THIRD_PARTY) {
-    const renewed = Schema.decodeUnknownOption(RefreshAnswerSchema)(body);
-    if (Option.isNone(renewed)) return undefined;
-    const tokens = renewed.value;
-    const scopes =
-      tokens.scope === undefined
-        ? credentials.scopes
-        : tokens.scope.split(" ").filter((scope) => scope.length > 0);
-    return {
-      credentials: {
-        ...credentials,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        idToken: tokens.id_token ?? credentials.idToken,
-        scopes,
-      },
-      expiresAt: accessExpiryOf(tokens.access_token, now, tokens.expires_in),
-    };
-  }
   const renewed = Schema.decodeUnknownOption(CodexRefreshAnswerSchema)(body);
   if (Option.isNone(renewed)) return undefined;
   const tokens = renewed.value;
@@ -747,12 +618,13 @@ function renewedFrom(
 }
 
 /**
- * An access token for the account's ChatGPT sign-in, good for at least the
+ * An access token for the account's ChatGPT plan, good for at least the
  * renewal margin, or the longer one a caller names (a launch of Codex asks
  * for a token that outlasts its first turn's start): the one it holds where
  * it is, a renewed one otherwise. Runs under the row's lock, OpenAI's token
- * endpoint included, so two renewals of one sign-in never race its rotating
- * refresh token.
+ * endpoint included, so two renewals of one plan never race its rotating
+ * refresh token. A row the retired third-party sign-in sealed is removed,
+ * answering none.
  */
 export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -771,6 +643,10 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
         return { outcome: CHATGPT_ACCESS.INELIGIBLE };
       const credentials = openCredentials(ring, userId, row);
       if (credentials === undefined) return { outcome: CHATGPT_ACCESS.UNREADABLE };
+      if (credentials === RETIRED) {
+        yield* removeProviderKey(userId, OWNER_KIND.provider, OWNER_KIND.kind);
+        return { outcome: CHATGPT_ACCESS.NONE };
+      }
       const now = yield* DateTime.nowAsDate;
       const limitResetsAt = planLimitResetsAt(row, now.getTime());
       if (limitResetsAt !== undefined)
@@ -784,9 +660,14 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
           plan: planOf(credentials),
         };
       }
-      // The issued client and the refresh token are revealed here alone, into the one body OpenAI reads them from.
-      const renewal = renewalRequestOf(credentials);
-      const answered = yield* postToOpenAi(renewal.url, renewal.body);
+      // Codex's client and the refresh token are revealed here alone, into the one body OpenAI reads them from, as Codex sends it.
+      const answered = yield* postToOpenAi(CODEX_DEVICE_OAUTH.TOKEN_URL, {
+        json: {
+          grant_type: "refresh_token",
+          client_id: credentials.clientId,
+          refresh_token: credentials.refreshToken,
+        },
+      });
       if (Option.isNone(answered)) return { outcome: CHATGPT_ACCESS.UNREACHABLE };
       const { status, body } = answered.value;
       if (status !== HTTP_STATUS.OK) {
@@ -823,20 +704,6 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
         sealed,
         expiresAt,
       );
-      // The renewal is kept even so, since it rotated the refresh token; a third-party grant without the plan's scope may not use the plan.
-      if (
-        credentials.flow === CHATGPT_FLOW.THIRD_PARTY &&
-        !renewed.credentials.scopes.includes(CHATGPT_OAUTH.USAGE_SCOPE)
-      ) {
-        yield* setProviderKeyStatus(
-          userId,
-          OWNER_KIND.provider,
-          sealed.sealedKey,
-          PROVIDER_KEY_STATUS.INVALID,
-          now,
-        );
-        return { outcome: CHATGPT_ACCESS.SIGNED_OUT };
-      }
       return {
         outcome: CHATGPT_ACCESS.READY,
         accessToken: Redacted.make(renewed.credentials.accessToken),
@@ -863,7 +730,7 @@ const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(discovered)) return REVOKE_OUTCOME.RETRY;
   // A revocation endpoint off OpenAI's own server is sent no refresh token.
   if (!onIssuer(discovered.value.revocation_endpoint)) return REVOKE_OUTCOME.REFUSED;
-  // The issued client and the refresh token are revealed here alone, into the one form OpenAI reads them from.
+  // Codex's client and the refresh token are revealed here alone, into the one form OpenAI reads them from.
   const answered = yield* postToOpenAi(discovered.value.revocation_endpoint, {
     form: {
       token: credentials.refreshToken,
@@ -878,7 +745,7 @@ const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (
     : REVOKE_OUTCOME.REFUSED;
 });
 
-/** Revokes the sign-in's renewable session, trying again after a failure to connect or a server error; answers whether OpenAI confirmed it. */
+/** Revokes the plan's renewable session, trying again after a failure to connect or a server error; answers whether OpenAI confirmed it. */
 const revokeSession = (credentials: SealedCredentials) =>
   revokeOnce(credentials).pipe(
     Effect.repeat({
@@ -890,10 +757,11 @@ const revokeSession = (credentials: SealedCredentials) =>
   );
 
 /**
- * Removes the account's ChatGPT sign-in, revoking its renewable session at
+ * Removes the account's ChatGPT plan, revoking its renewable session at
  * OpenAI first, under the row's lock so no renewal rotates the token being
  * revoked. The row goes whether or not OpenAI confirmed it; answers whether
- * it did, and true where there was nothing to revoke.
+ * it did, and true where there was nothing to revoke, as for a row the
+ * retired third-party sign-in sealed, which OpenAI is never asked about.
  */
 export const removeChatGptCredentials = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -906,7 +774,10 @@ export const removeChatGptCredentials = /* @__PURE__ */ Effect.fnUntraced(functi
     Effect.fnUntraced(function* (locked) {
       if (Option.isNone(locked)) return true;
       const credentials = openCredentials(ring, userId, locked.value);
-      const confirmed = credentials === undefined ? false : yield* revokeSession(credentials);
+      const confirmed =
+        credentials === undefined
+          ? false
+          : credentials === RETIRED || (yield* revokeSession(credentials));
       yield* removeProviderKey(userId, OWNER_KIND.provider, OWNER_KIND.kind);
       return confirmed;
     }),

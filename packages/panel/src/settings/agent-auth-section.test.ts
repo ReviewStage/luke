@@ -15,7 +15,7 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppHostRead, AppProviderKeyList } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
-import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import type { HostCapability } from "@repo/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@repo/settings/settings-views";
 import { SETTINGS_ROW_STATE } from "@repo/ui";
@@ -691,16 +691,6 @@ test("a login that expires says so with Try again, which asks for a new code", a
   assert.ok(connectCodex().textContent?.includes(expired));
   await press(connectCodex(), "Try again");
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.CHATGPT_DEVICE_START).length, 2);
-  assert.match(connectCodex().textContent ?? "", /225Q-1343X/u);
-});
-
-test("on the web, without the desktop's sign-in, Codex's ChatGPT plan still offers Connect", async () => {
-  const page = await mount(
-    DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CHATGPT_SIGN_IN),
-  );
-  const dialog = await open(page, "Codex");
-  waitOpen = Promise.withResolvers();
-  await press(row(dialog, "ChatGPT plan"), "Connect ChatGPT plan");
   assert.match(connectCodex().textContent ?? "", /225Q-1343X/u);
 });
 

@@ -61,10 +61,8 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
     thisMacHostLayer(),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
-    // cipher. Every sign-in's consent is a loopback on this Mac: the browser
-    // hands the code back to a `node:http` listener on 127.0.0.1, the
-    // account's and ChatGPT's alike.
-    consent,
+    // cipher. Its consent is a loopback on this Mac: the browser hands the
+    // code back to a `node:http` listener on 127.0.0.1.
     Layer.provide(
       oauthAccountSourceLayer,
       Layer.merge(Layer.succeed(SecretCipher, cipher), consent),
