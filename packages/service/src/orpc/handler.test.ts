@@ -269,7 +269,7 @@ it.effect(
       ) as Context.Context<WebServices>;
       const declared = yield* bothAnswer({ path: DECLARED_PATH }, services);
       assert.deepEqual(declared.orpc, declared.old);
-      assert.deepEqual(reported, []);
+      assert.equal(reported.length, 0);
       const undeclared = yield* bothAnswer({ path: UNDECLARED_PATH }, services);
       assert.deepEqual(undeclared.orpc, undeclared.old);
       assert.equal(reported.length, 1);
