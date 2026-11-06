@@ -51,10 +51,10 @@ it.layer(getTestDB())("onboarding task activity", (it) => {
       Effect.gen(function* () {
         const ada = yield* openUser(new Date(SIGNED_UP_AT));
         const grace = yield* openUser(new Date(SIGNED_UP_AT));
-        // Two tasks on day 0, one in the last hour of day 2, and one on day 8; Grace's on day 5 is not Ada's.
+        // Day 0 in its first and last hour, day 2 from its first instant, and day 8; Grace's on day 5 is not Ada's.
         yield* startTaskAt(ada.userId, SIGNED_UP_AT + HOUR_MS);
-        yield* startTaskAt(ada.userId, SIGNED_UP_AT + 2 * HOUR_MS);
-        yield* startTaskAt(ada.userId, SIGNED_UP_AT + 3 * DAY_MS - HOUR_MS);
+        yield* startTaskAt(ada.userId, SIGNED_UP_AT + DAY_MS - HOUR_MS);
+        yield* startTaskAt(ada.userId, SIGNED_UP_AT + 2 * DAY_MS);
         yield* startTaskAt(ada.userId, SIGNED_UP_AT + 8 * DAY_MS + HOUR_MS);
         yield* startTaskAt(grace.userId, SIGNED_UP_AT + 5 * DAY_MS);
 
