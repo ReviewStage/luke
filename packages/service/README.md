@@ -1513,13 +1513,16 @@ and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
-The preferences snapshot carries seven parts. `preferences` is the settings
+The preferences snapshot carries nine parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
 `linkOpen`, where the account's app links open (null reads as the browser),
 `agentEnter`, what Enter does in an agent's box while it works (`steer`
-or `queue`, null reads as steer), and `setupFinished`, whether the account
-finished setup after sign-in (null reads as not yet), are synced settings
-kept as parts of their own (`link_open`, `agent_enter`, `setup_finished`), so a build that predates them neither
+or `queue`, null reads as steer), `commitAuthor`, who authors an agent's
+commits, `setupFinished`, whether the account
+finished setup after sign-in (null reads as not yet), and `setupPlace`, where
+it stands in setup as its JSON (null until setup starts), are synced settings
+kept as parts of their own (`link_open`, `agent_enter`, `commit_author`,
+`setup_finished`, `setup_place`), so a build that predates them neither
 refuses the snapshot nor clears them by writing `preferences` back whole.
 `agent` is the account's default model and effort for an agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog

@@ -166,6 +166,40 @@ export function accountToggleSetting<Field extends string, Id extends AppSetting
 }
 
 /**
+ * A stored value the account carries (`ACCOUNT_PREFERENCE_FIELDS`) that no
+ * row draws, written only by the flow it belongs to. Nothing stored is kept
+ * as nothing, as an account toggle's is, and it describes nothing, so the
+ * settings search never finds it.
+ */
+export function accountHiddenSetting<
+  Field extends string,
+  Value extends string,
+  Id extends AppSettingId,
+>(spec: {
+  field: Field;
+  id: Id;
+  page: SettingsPage;
+  order: number;
+  sideEffect: SettingSideEffectId;
+  /** The value's own guard, from the package that names what one is. */
+  guard: (value: UnparsedWireValue) => value is Value;
+}): AppSettingSchemaEntry<Field, Value | undefined, Id, undefined> {
+  return {
+    field: spec.field,
+    default: undefined,
+    guard: (value: UnparsedWireValue) => optional(value, spec.guard),
+    page: spec.page,
+    section: SETTING_SECTION.MAIN,
+    order: spec.order,
+    sideEffect: spec.sideEffect,
+    rows: SETTING_ROWS.SCHEMA,
+    ids: [spec.id],
+    describe: () => undefined,
+    visible: () => false,
+  };
+}
+
+/**
  * A stored one-of. `values` is the stored vocabulary and `token` is the word
  * the control stores each by — also what it shows, unless `optionLabel` words
  * it differently, which is the difference between "marin" as a token and

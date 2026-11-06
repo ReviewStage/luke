@@ -1,11 +1,18 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACT_KIND } from "@repo/host/acts";
-import { APP_SETTING_SCHEMA } from "@repo/settings";
+import {
+  APP_SETTING_SCHEMA,
+  SETUP_AUDIENCE,
+  type SetupAudience,
+  type SetupPlace,
+  setupPlaceFrom,
+  setupPlaceStored,
+} from "@repo/settings";
 import { AuthPage, AuthStepFoot, ChoiceList, type ChoiceOption, ProductMark } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Schema } from "effect";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
@@ -14,14 +21,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
-import {
-  SETUP_AUDIENCE,
-  SETUP_STEP,
-  type SetupAudience,
-  type SetupGate,
-  setupGate,
-  setupSteps,
-} from "./setup-model.js";
+import { SETUP_STEP, type SetupGate, setupGate, setupSteps } from "./setup-model.js";
 import { TeamForm, useTeamForm } from "./setup-team.js";
 import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
 
@@ -35,30 +35,13 @@ import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
  * is connected. A team's workspace is required too, once With my team is
  * chosen, since Back leads to Just me for anyone who changed their mind;
  * once made, its step coming back holds it to change rather than make again.
- * GitHub may be skipped, and the tools need nothing done. Finish
- * lets the app in and keeps, on the
- * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
- * stands once on every machine.
+ * GitHub may be skipped, and the tools need nothing done. Where setup
+ * stands is kept on the account (`APP_SETTING_SCHEMA.setupPlace`), so setup
+ * left partway resumes at the same step on another machine or on the web,
+ * and a team's workspace made is not offered to be made again. Finish lets
+ * the app in and keeps, on the account (`APP_SETTING_SCHEMA.setupFinished`),
+ * that it finished setup, so it stands once on every machine.
  */
-
-/** Where an account stands in setup: who it is for, the step it is on, and the team's workspace once made. */
-const setupPlace = Schema.Struct({
-  audience: Schema.Literals(Object.values(SETUP_AUDIENCE)),
-  at: Schema.Number,
-  team: Schema.optionalKey(Schema.String),
-});
-
-type SetupPlace = typeof setupPlace.Type;
-
-/**
- * Each account's place in setup on this machine, by its id, so a reload
- * comes back to the step it left rather than the first, and a team's
- * workspace made is not offered to be made again.
- */
-const SETUP_PLACE = keptKey(
-  "app.setupPlace",
-  Schema.fromJsonString(Schema.Record(Schema.String, setupPlace)),
-);
 
 /**
  * The accounts that finished setup on this device, by id: the account's own
@@ -91,7 +74,6 @@ export function useSetupGate(
   /** Whether setup was finished in this window, before the account's setting comes back from its write. */
   finishedHere: boolean,
 ): SetupGate {
-  const [places] = useKept(SETUP_PLACE, {});
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
   const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
   const finishedOnAccount = settings?.setupFinished === true;
@@ -115,7 +97,8 @@ export function useSetupGate(
     fresh,
     finished,
     accountRead: settings?.accountRead === true,
-    started: accountId !== undefined && places[accountId] !== undefined,
+    // Note that the place is the account's, so setup started on another machine stands here once its preferences are read.
+    started: accountId !== undefined && setupPlaceFrom(settings?.setupPlace) !== undefined,
     invited: invitedOf(tasks),
     agent,
   });
@@ -142,7 +125,7 @@ export function SetupSteps(props: SetupStepsProps): React.JSX.Element {
 /** What setup is handed. */
 interface SetupStepsProps {
   tasks: TasksControl;
-  /** The account set up, whose place in setup is kept under its id. */
+  /** The account set up, whose finish this device keeps under its id. */
   accountId: string;
   onFinish: () => void;
 }
@@ -151,23 +134,30 @@ interface SetupStepsProps {
 function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
   const { mutate: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: signOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
-  const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
+  const stored = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data?.setupPlace;
+  const kept = setupPlaceFrom(stored);
   // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
   const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
-  const place = places[accountId] ?? start;
+  const place = kept ?? start;
   const { audience, team } = place;
-  const move = (change: Partial<SetupPlace>) =>
-    changePlaces((kept) => ({
-      ...kept,
-      [accountId]: { ...(kept[accountId] ?? start), ...change },
-    }));
-  // Setup starting is kept at once, so it stands until finished on a reload, whatever it connects meanwhile.
+  // Note that each move is merged over the last one written, because two may land before the account's place comes back, as a team's workspace made and the step after it do.
+  const written = useRef<SetupPlace | undefined>(undefined);
   useEffect(() => {
-    changePlaces((kept) =>
-      kept[accountId] === undefined ? { ...kept, [accountId]: start } : kept,
-    );
-  }, [accountId, changePlaces, start]);
+    written.current = setupPlaceFrom(stored);
+  }, [stored]);
+  const keep = useCallback(
+    (next: SetupPlace) => {
+      written.current = next;
+      updateSetting({ field: APP_SETTING_SCHEMA.setupPlace.field, value: setupPlaceStored(next) });
+    },
+    [updateSetting],
+  );
+  const move = (change: Partial<SetupPlace>) => keep({ ...(written.current ?? place), ...change });
+  // Setup starting is kept at once, so it stands until finished on a reload or another machine, whatever it connects meanwhile.
+  useEffect(() => {
+    if (kept === undefined && written.current === undefined) keep(start);
+  }, [kept, keep, start]);
   const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
@@ -180,11 +170,10 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const step = steps[at] ?? SETUP_STEP.TOOLS;
   const last = at === steps.length - 1;
   const finish = () => {
-    // Finished, the account's place is let go of, as setup stands no more on any machine.
+    // Note that the account's place stands once finished, since finished is read ahead of it on every machine.
     // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
     updateSetting({ field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
     keepFinished((finished) => [...finished, accountId]);
-    changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
   };
   const forward = () => (last ? finish() : setAt(at + 1));

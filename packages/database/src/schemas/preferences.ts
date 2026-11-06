@@ -46,6 +46,14 @@ export const accountPreference = pgTable("account_preference", {
    */
   setupFinished: boolean("setup_finished"),
   /**
+   * Where the account stands in setup, as its JSON (`@repo/settings`'s
+   * `SetupPlace`: who it is for, the step it is on, and the team's workspace
+   * once made), so setup left partway resumes at the same step on another
+   * device; null until setup starts. A part of the snapshot of its own, as
+   * the link choice is.
+   */
+  setupPlace: text("setup_place"),
+  /**
    * The model and effort a coding agent starts on when Start is clicked, as
    * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both
    * means the account has never chosen and starts on the catalog's default.

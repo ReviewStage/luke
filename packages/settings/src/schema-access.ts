@@ -62,6 +62,7 @@ export const ACCOUNT_PREFERENCE_FIELDS = [
   APP_SETTING_SCHEMA.agentEnter.field,
   APP_SETTING_SCHEMA.commitAuthor.field,
   APP_SETTING_SCHEMA.setupFinished.field,
+  APP_SETTING_SCHEMA.setupPlace.field,
 ] as const satisfies readonly AppSettingField[];
 
 export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
@@ -83,12 +84,13 @@ const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFER
 
 const SHARED_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(SHARED_PREFERENCE_FIELDS);
 
-/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's app links open, what Enter does in an agent's box while it works, who authors an agent's commits, and whether the account finished setup. */
+/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's app links open, what Enter does in an agent's box while it works, who authors an agent's commits, whether the account finished setup, and where it stands in setup. */
 const OWN_PART_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
   APP_SETTING_SCHEMA.agentEnter.field,
   APP_SETTING_SCHEMA.commitAuthor.field,
   APP_SETTING_SCHEMA.setupFinished.field,
+  APP_SETTING_SCHEMA.setupPlace.field,
 ] as const satisfies readonly AccountPreferenceField[];
 
 type OwnPartField = (typeof OWN_PART_FIELDS)[number];

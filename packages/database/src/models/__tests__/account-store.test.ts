@@ -35,6 +35,9 @@ import {
 // SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
 const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
+/** A place midway through a team's setup, as setup keeps it on the account. */
+const SETUP_PLACE = '{"audience":"team","at":2,"team":"workspace-ada"}';
+
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const id = `user-${randomUUID()}`;
@@ -127,7 +130,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
   );
 });
 
-it.layer(getTestDB())("the account store's own-part choices and setup finished", (it) => {
+it.layer(getTestDB())("the account store's own-part choices and setup", (it) => {
   it.effect(
     "are each written on their own, stand through a shared preferences write, move no instant, and are no other account's",
     () =>
@@ -139,6 +142,8 @@ it.layer(getTestDB())("the account store's own-part choices and setup finished",
         yield* writeAccountPreferences(userId, { agentEnter: AGENT_ENTER.QUEUE });
         yield* writeAccountPreferences(userId, { commitAuthor: COMMIT_AUTHOR.APP });
         yield* writeAccountPreferences(userId, { setupFinished: true });
+        // Note that the place is written by one machine and read by another, as setup resumed elsewhere reads it.
+        yield* writeAccountPreferences(userId, { setupPlace: SETUP_PLACE });
 
         yield* writeAccountPreferences(userId, { preferences: {} });
         const read = yield* readAccountPreferences(userId);
@@ -147,6 +152,7 @@ it.layer(getTestDB())("the account store's own-part choices and setup finished",
           agentEnter: AGENT_ENTER.QUEUE,
           commitAuthor: COMMIT_AUTHOR.APP,
           setupFinished: true,
+          setupPlace: SETUP_PLACE,
         });
         assert.deepEqual(
           (yield* readAccountPreferences(yield* openAccount))?.preferences,
