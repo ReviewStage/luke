@@ -787,11 +787,14 @@ test("New task, by its chord or the sidebar's row, opens its card over the Inbox
   act(() => {
     card()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  act(() => placeRow(page, "New task")?.click());
+  // Note that the chord's card is put away first, so the one the row's press finds is its own.
+  const putAway = card() === null;
+  const row = placeRow(page, "New task") ?? assert.fail("the sidebar's New task row stands");
+  act(() => row.click());
   const byRow = card() !== null;
 
   // Note that leaving would stand the window's state, a task or Home, behind the card in the Inbox's place.
-  assert.deepEqual([byChord, byRow, tabs], [true, true, []]);
+  assert.deepEqual([byChord, putAway, byRow, tabs], [true, true, true, []]);
   act(() => root?.unmount());
 
   mount(false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
