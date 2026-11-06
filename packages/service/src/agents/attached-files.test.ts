@@ -3,9 +3,8 @@ import { keptImageOf, lineParts, receivedPartsOf } from "@repo/database/models/a
 import { COALESCED_LINE_SEPARATOR } from "@repo/database/models/message-reads";
 import { AGENT_ATTACHMENT_TYPE } from "@repo/features/agent-wire";
 import { PICTURE_OMISSION } from "@repo/features/conversation-picture-wire";
-import type { MessageReceivedPart } from "eve/client";
 import { test } from "vitest";
-import { eveContent, receivedMessage } from "./attached-files.js";
+import { eveContent, type MessageReceivedPart, receivedMessage } from "./attached-files.js";
 
 /**
  * attached-files.test.ts -- eve is handed a message's text files, inlined, before its images and

@@ -224,7 +224,6 @@
     "better-auth": "1.7.7",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "eve": "0.74.0",
     "pg": "8.23.0",
     "ws": "catalog:"
   },

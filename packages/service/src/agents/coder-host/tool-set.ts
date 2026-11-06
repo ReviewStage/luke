@@ -1,12 +1,9 @@
 import type { Agent } from "@repo/database/models/agent-store";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@repo/features/agent-tools";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { inboxSandboxPicturePaths } from "@repo/features/inbox-attachment-link";
 import { WireValueSchema } from "@repo/wire";
 import { verbatimJsonSchema } from "@repo/wire/effect";
 import type { ToolSet } from "ai";
-import { Option, Schema } from "effect";
-import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
@@ -232,64 +229,6 @@ export const RETIRED_CODER_TOOL = {
   REOPEN_THREAD: RETIRED_TOOL.REOPEN_THREAD,
 } as const;
 
-/**
- * The tools whose every call runs in the agent's sandbox, which is what
- * tells the host a sandbox was opened. A delegation is not among them: a
- * worker opens the agent's sandbox only when it reads the checkout, and a
- * refused or web-only delegation opens none, so counting it would have the
- * turn's end open a sandbox, checkout and all, only to stop it. A sandbox a
- * worker opened is stopped at the end of the first turn in which the agent
- * runs a sandbox tool of its own, which a turn that edits always does.
- */
-const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
-  CODER_TOOL.BASH,
-  CODER_TOOL.READ_FILE,
-  CODER_TOOL.WRITE_FILE,
-  CODER_TOOL.GLOB,
-  CODER_TOOL.GREP,
-  CODER_TOOL.APPLY_PATCH,
-  CODER_TOOL.SHOW_IMAGE,
-  // The browser runs in the sandbox, which its call opens first.
-  CODER_TOOL.BROWSER,
-]);
-
-/** What a thread post's input is read for here: its body, whose pictures name files in the sandbox. */
-const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.String }));
-
-/**
- * Whether an event of the agent's session opened its sandbox: a request for
- * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, or for a thread post
- * whose body draws one by a path naming no
- * scheme, each read from a file in the sandbox, or a message
- * received with files, which eve stages in the sandbox before the
- * turn opens, opening it to do so.
- */
-export function opensSandbox(event: MessageStreamEvent): boolean {
-  switch (event.type) {
-    case "actions.requested":
-      return event.data.actions.some(
-        (action) =>
-          action.kind === "tool-call" &&
-          (SANDBOX_TOOLS.has(action.toolName) ||
-            (action.toolName === CODER_TOOL.SHOW_PAGE && "path" in action.input) ||
-            (action.toolName === CODER_TOOL.EDIT_PLAN &&
-              Array.isArray(action.input.pictures) &&
-              action.input.pictures.length > 0) ||
-            (action.toolName === CODER_TOOL.POST_THREAD &&
-              Option.exists(
-                readPostedBody(action.input),
-                ({ body }) => inboxSandboxPicturePaths(body).length > 0,
-              ))),
-      );
-    case "message.received":
-      return event.data.parts?.some((part) => part.type === "file") ?? false;
-    default:
-      return false;
-  }
-}
-
-/** A call's input as the row keeps it: one JSON object, whose fields are eve's own tool's to read. */
 const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
