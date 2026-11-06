@@ -168,6 +168,16 @@ export function distanceText(deltaMs: number): string {
   return deltaMs > 0 ? `${AHEAD_WORD}${count}` : `${count}${AGO_WORD}`;
 }
 
+/**
+ * When a moment to come is due, as a row says it in few words: its time
+ * today, "3:04 PM"; its weekday and time inside a week, "Mon 9:00 AM"; and
+ * its date past that, "Nov 20", as a reminder's row names when it comes back.
+ */
+export function dueText(at: number, now: number): string {
+  if (midnightOf(at) === midnightOf(now)) return TIME_OF_DAY.format(at);
+  return at - now < WEEK_MS ? WEEKDAY_AND_TIME.format(at) : dateText(at, now, true);
+}
+
 /** A day and a time in the fewest words, as a version is named: "Oct 11, 2:14 PM". */
 export function dayAndTimeText(at: number): string {
   return DAY_AND_TIME.format(at);
