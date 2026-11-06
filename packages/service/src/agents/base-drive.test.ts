@@ -1,5 +1,5 @@
 /**
- * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill still runs, and gone after a fill that failed.
+ * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill's sandbox is still being created or still runs, and gone after a fill that failed.
  */
 
 import assert from "node:assert/strict";
@@ -85,9 +85,7 @@ it.effect(
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);
       assert.equal(sandbox.image, IMAGE);
-      assert.deepEqual(sandbox.mounts, {
-        [BASE_DRIVE.MOUNT_PATH]: { drive: name, mode: "read-write" },
-      });
+      assert.equal(sandbox.mounts?.[BASE_DRIVE.MOUNT_PATH]?.mode, "read-write");
       assert.equal(sandbox.deleted, true);
       const clone = fake.runs.findIndex((run) =>
         Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.URL),
@@ -113,6 +111,28 @@ it.effect("launches that fill at once leave one base drive", () =>
 
     assert.deepEqual([...fake.drives], [baseDriveName(RELAY)]);
     assert.equal(fake.sandboxes.filter((each) => !each.deleted).length, 0);
+  }),
+);
+
+it.effect("a base drive is not filled while its fill's sandbox is still being created", () =>
+  Effect.gen(function* () {
+    const { api } = yield* fixture;
+    let whileCreating: boolean | undefined;
+    const creating: VercelSandboxApi = {
+      ...api,
+      create: (ask) =>
+        Effect.andThen(
+          Effect.map(baseDriveFilled(api, RELAY), (filled) => {
+            whileCreating = filled;
+          }),
+          api.create(ask),
+        ),
+    };
+
+    yield* fillBaseDrive(creating, RELAY, IMAGE, CREDENTIAL, opener(api));
+
+    assert.equal(whileCreating, false);
+    assert.equal(yield* baseDriveFilled(api, RELAY), true);
   }),
 );
 

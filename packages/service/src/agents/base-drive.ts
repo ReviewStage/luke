@@ -11,16 +11,20 @@
  * `cloneRepository`) and its `node_modules`.
  *
  * It is filled the way Vercel's examples fill one: a sandbox opened from the
- * image's snapshot with the drive mounted read-write at the workspace, the
- * repository cloned through the token at the firewall for the clone alone,
- * so nothing on the drive carries a credential, the dependencies installed
- * with the package manager the checkout's lockfile names, and the sandbox
- * stopped, which lets the drive go, and then deleted, since a stopped sandbox
- * still holds its name. It is filled once and never refreshed: each agent
- * fetches its own branch onto its fork and installs again there, which fills
- * in only what changed. A fill that failed stops its sandbox, deletes the
- * drive, and deletes the sandbox, so it leaves no base drive, and agents
- * clone as they would without one.
+ * image's snapshot with a staging drive mounted read-write at the workspace,
+ * the repository cloned through the token at the firewall for the clone
+ * alone, so nothing on the drive carries a credential, the dependencies
+ * installed with the package manager the checkout's lockfile names, and the
+ * sandbox stopped, which lets the drive go; then the staging drive forked
+ * under the base drive's own name and deleted, and the sandbox deleted, since
+ * a stopped sandbox still holds its name. Note that the fill writes a staging
+ * drive rather than the base drive itself, because a launch forks the base
+ * drive as soon as it stands, and one that stood empty while its fill's
+ * sandbox was still being created was forked empty. It is filled once and
+ * never refreshed: each agent fetches its own branch onto its fork and
+ * installs again there, which fills in only what changed. A fill that failed
+ * stops its sandbox, deletes the staging drive, and deletes the sandbox, so
+ * it leaves no base drive, and agents clone as they would without one.
  */
 
 import { createHash } from "node:crypto";
@@ -46,6 +50,8 @@ import {
 export const BASE_DRIVE = {
   /** Every base drive, and the sandbox that fills it, is named with this, its digest after it. */
   NAME_PREFIX: "agent-base-",
+  /** What a base drive's staging drive, which its fill writes, is named with after the base drive's own name. */
+  STAGING_SUFFIX: "-staging",
   /** Where a base drive, and each fork of it, is mounted: the workspace, which the checkout and its record stand in. */
   MOUNT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE,
   /** How long a fill may take, its sandbox's own timeout included. */
@@ -69,6 +75,11 @@ const INSTALL_SCRIPT = [
   GROUP_WRITES,
   "if [ -f pnpm-lock.yaml ]; then pnpm install; elif [ -f package.json ]; then npm install; fi",
 ].join("\n");
+
+/** The staging drive a base drive's fill writes, forked under the base drive's own name once whole. */
+function stagingDriveName(name: string): string {
+  return `${name}${BASE_DRIVE.STAGING_SUFFIX}`;
+}
 
 /** What a fill clones through: a read token for the one repository, and whose it is. */
 interface BaseDriveCredential {
@@ -94,9 +105,10 @@ export function baseDriveName(of: BaseDriveOf): string {
 }
 
 /**
- * Whether the base drive is filled: it stands, and the sandbox that fills
- * it is gone, which a fill deletes only once its install is done, so a
- * drive a fill still writes is never forked half-cloned.
+ * Whether the base drive is filled: it stands, which it does only once its
+ * fill forked it whole from the staging drive (`fillBaseDrive`), and the
+ * sandbox that fills it is gone, which a fill deletes only after that fork,
+ * so a drive a fill still writes is never forked half-cloned.
  */
 export const baseDriveFilled = (api: VercelSandboxApi, of: BaseDriveOf) =>
   Effect.map(
@@ -124,15 +136,18 @@ export const installDependencies = Effect.fn("web/installCheckoutDependencies")(
 });
 
 /**
- * The workspace's repository's base drive filled, where it has none: the
- * drive created, a sandbox opened from the agents' image with it mounted
- * at the workspace, the default branch cloned whole onto it through the
- * token at the firewall for the clone alone, its dependencies installed, and
- * the sandbox stopped and deleted. A sandbox name another launch took first
- * is that launch's fill, and this one does nothing. A fill that failed or
- * outlasted `FILL_TIMEOUT` stops its sandbox, deletes the drive, and deletes
- * the sandbox; one whose sandbox was never created deletes the drive. `open`
- * is the sandbox as the clone reaches it, over the caller's runner.
+ * The workspace's repository's base drive filled, where it has none: its
+ * staging drive created, a sandbox opened from the agents' image with it
+ * mounted at the workspace, the default branch cloned whole onto it through
+ * the token at the firewall for the clone alone, its dependencies installed,
+ * the sandbox stopped, the staging drive forked under the base drive's name,
+ * and the sandbox and the staging drive deleted. A sandbox name another
+ * launch took first is that launch's fill, and this one does nothing. A fill
+ * that failed or outlasted `FILL_TIMEOUT` stops its sandbox, deletes the
+ * staging drive, and deletes the sandbox; one whose sandbox was never
+ * created deletes the staging drive. A staging drive left once the base
+ * drive stands is said in the log and let be, since the base drive is whole.
+ * `open` is the sandbox as the clone reaches it, over the caller's runner.
  */
 export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   api: VercelSandboxApi,
@@ -143,7 +158,8 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
 ) {
   const name = baseDriveName(of);
   if ((yield* api.getDrive(name)) !== undefined) return;
-  yield* api.getOrCreateDrive(name);
+  const staging = stagingDriveName(name);
+  yield* api.getOrCreateDrive(staging);
   // Note that a name another launch took first is that launch's fill, whose drive this one leaves be.
   const created = yield* api
     .create({
@@ -155,7 +171,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       // Note that no expiration is sent, because Vercel refuses one as short as the fill, and a sandbox that is not persistent takes no snapshot to expire.
       keepLastSnapshots: { count: 1, deleteEvicted: true },
       env: {},
-      mounts: { [BASE_DRIVE.MOUNT_PATH]: name },
+      mounts: { [BASE_DRIVE.MOUNT_PATH]: staging },
       persistent: false,
     })
     .pipe(
@@ -164,7 +180,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
         (failure) => failure.status === CONFLICT_STATUS,
         () => Effect.succeed(Option.none<OpenedSandbox>()),
       ),
-      Effect.tapError(() => Effect.ignore(api.deleteDrive(name))),
+      Effect.tapError(() => Effect.ignore(api.deleteDrive(staging))),
     );
   if (Option.isNone(created)) return;
   const running = created.value.currentSessionId;
@@ -186,6 +202,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
     );
     yield* installDependencies(sandbox);
     yield* stopped;
+    yield* api.forkDrive(staging, name);
     yield* api.deleteSandbox(name);
     yield* Effect.logInfo(`the base drive ${name} is filled`);
   }).pipe(
@@ -195,10 +212,17 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
     }),
     Effect.tapError(() =>
       Effect.forEach(
-        [stopped, api.deleteDrive(name), api.deleteSandbox(name)],
+        [stopped, api.deleteDrive(staging), api.deleteSandbox(name)],
         (step) => Effect.ignore(step),
         { discard: true },
       ),
     ),
   );
+  yield* api
+    .deleteDrive(staging)
+    .pipe(
+      Effect.catch(() =>
+        Effect.logWarning(`the base drive ${name}'s staging drive was not deleted`),
+      ),
+    );
 });

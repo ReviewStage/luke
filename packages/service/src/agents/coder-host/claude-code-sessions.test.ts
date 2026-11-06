@@ -2650,6 +2650,48 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a message after a launch whose clone failed clones the repository into the sandbox the launch left before its runner starts",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        // The fake runs no git, so the checkout stands once a clone has gone through.
+        const checkout = { refused: true, stands: false };
+        api.hooks.runExit = (args) => {
+          if (args[0] === "-d") return checkout.stands ? 0 : 1;
+          if (!args.some((arg) => arg.includes("git clone"))) return 0;
+          if (checkout.refused) return 1;
+          checkout.stands = true;
+          return 0;
+        };
+        const kept = keptAfterResponse();
+        const opened = yield* sessions
+          .open(message(agent, "Fix the relay."))
+          .pipe(Effect.provide(kept.layer));
+        // The launch, then the base drive's fill, whose clone is refused too.
+        yield* kept.run;
+        yield* kept.run;
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.FAILED);
+        const own = sandboxOfAgent(api, agent)?.currentSessionId;
+        const failedRuns = api.runs.length;
+        checkout.refused = false;
+
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Try again."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const relaunchRuns = api.runs.slice(failedRuns).filter((run) => run.session === own);
+        assert.equal(relaunchRuns.filter(isClone).length, 1);
+        assert.equal(api.commands.length, 1);
+        assert.equal(api.commands[0]?.sandboxSessionId, own);
+      }),
+  );
+
+  it.effect(
     "a Start on a repository with no base drive clones it whole onto a drive of its own, then fills the base drive past the answer apart from the launch",
     () =>
       Effect.gen(function* () {
@@ -2675,7 +2717,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [AGENT_DRIVE.MOUNT_PATH]: { drive: agentDriveName(opened.sessionId), mode: "read-write" },
         });
         assert.ok(api.runs.some((run) => run.session === own?.currentSessionId && isClone(run)));
-        assert.equal(api.driveForks.size, 0);
+        assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         const [base] = baseDrives(api);
         assert.ok(base !== undefined);
         assert.ok(api.sandboxes.some((each) => each.name === base && each.deleted));
@@ -2784,7 +2826,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* kept.run;
         const onBranch = yield* anotherAgent(userId, agent, "relay-fix");
 
-        yield* sessions.open(message(onBranch, "Go on.")).pipe(Effect.provide(kept.layer));
+        const opened = yield* sessions
+          .open(message(onBranch, "Go on."))
+          .pipe(Effect.provide(kept.layer));
         yield* kept.run;
         yield* kept.run;
 
@@ -2792,7 +2836,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(own?.image, IMAGE);
         const clone = api.runs.find((run) => run.session === own?.currentSessionId && isClone(run));
         assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
-        assert.equal(api.driveForks.size, 0);
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         assert.equal(baseDrives(api).length, 1);
       }),
   );

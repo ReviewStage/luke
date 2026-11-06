@@ -519,7 +519,7 @@ function deviceMachineOver(
     // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
     // so an agent whose repository was made before the field gets it too.
     // Note that only an agent in the cloud works in repositories beside its own, so a device clones none.
-    checkOutExtras: () => Effect.void,
+    checkOutMissing: () => Effect.void,
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);
