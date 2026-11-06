@@ -2,13 +2,6 @@ import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/crede
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
 import {
-  ADMIN_UNANSWERED,
-  type AdminFavoriteParams,
-  type AdminReadAnswer,
-  type AdminReadParams,
-  adminReadAnswerSchema,
-} from "@repo/features/admin-wire";
-import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
   type AgentAddRepositoryParams,
@@ -167,59 +160,16 @@ import {
   pullRequestChaptersAnswerViewSchema,
 } from "@repo/features/pull-request-chapters-view";
 import {
-  GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
   type TaskDocumentFollow,
   type TaskHistoryFollow,
   type TaskPagesFollow,
-  type TasksBlockAnswer,
-  type TasksBlockParams,
-  type TasksBrowserTabOpenAnswer,
-  type TasksBrowserTabOpenParams,
-  type TasksChangeRelationAnswer,
-  type TasksChangeRelationParams,
-  type TasksCommentActParams,
-  type TasksCommentAnswer,
-  type TasksCommentStartParams,
   type TasksCommentsFollow,
-  type TasksEditAnswer,
-  type TasksEditParams,
-  type TasksFileAnswer,
-  type TasksFileParams,
-  type TasksFindAnswer,
-  type TasksFindParams,
-  type TasksGitHubDisconnectAnswer,
-  type TasksGitHubPageAnswer,
   type TasksLinkStandingParams,
-  type TasksMarkReadParams,
-  type TasksMoveAnswer,
-  type TasksMoveParams,
   type TasksPageAnswer,
   type TasksPageParams,
-  type TasksPictureAnswer,
-  type TasksPictureKeepAnswer,
-  type TasksPictureKeepParams,
-  type TasksPictureParams,
-  type TasksPinParams,
-  type TasksPinRepositoryParams,
-  type TasksRenameParams,
   type TasksRepositoriesParams,
-  type TasksRevisionAnswer,
-  type TasksRevisionParams,
-  type TasksRevisionsAnswer,
-  type TasksRevisionsParams,
-  type TasksSetParentAnswer,
-  type TasksSetParentParams,
-  type TasksSetRepositoryAnswer,
-  type TasksSetRepositoryParams,
-  type TasksSetStandingParams,
-  type TasksSkillsAnswer,
-  type TasksSkillsParams,
-  type TasksStartAnswer,
-  type TasksStartRequest,
-  type TasksTreeAnswer,
-  type TasksTreeParams,
   type TasksView,
   type TasksWorkspaceAnswer,
   type TasksWorkspaceCreateParams,
@@ -247,27 +197,7 @@ import {
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
-  type TasksWriteSectionParams,
-  tasksBlockAnswerSchema,
-  tasksBrowserTabOpenAnswerSchema,
-  tasksChangeRelationAnswerSchema,
-  tasksCommentAnswerSchema,
-  tasksEditAnswerSchema,
-  tasksFileAnswerSchema,
-  tasksFindAnswerSchema,
-  tasksGitHubDisconnectAnswerSchema,
-  tasksGitHubPageAnswerSchema,
-  tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
-  tasksPictureAnswerSchema,
-  tasksPictureKeepAnswerSchema,
-  tasksRevisionAnswerSchema,
-  tasksRevisionsAnswerSchema,
-  tasksSetParentAnswerSchema,
-  tasksSetRepositoryAnswerSchema,
-  tasksSkillsAnswerSchema,
-  tasksStartAnswerSchema,
-  tasksTreeAnswerSchema,
   tasksWorkspaceAnswerSchema,
   tasksWorkspaceGitHubConnectAnswerSchema,
   tasksWorkspaceInvitationAnswerSchema,
@@ -426,35 +356,12 @@ export interface HostOperator {
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
-  /** The Tasks tab shows: the host reads the task list and the active document now and follows both until it is paused. */
-  tasksRefresh(): Effect.Effect<void>;
   /** The Mac woke or unlocked: the host follows the task list again from a fresh seal. */
   tasksResync(): Effect.Effect<void>;
   /** The app reaches the service again: the host asks every read a window holds again, and follows the task list again from a fresh seal. */
   tasksRegained(): Effect.Effect<void>;
-  /** A window said the changes made offline the service refused: the host clears their count for every window. */
-  tasksOfflineRefusedClear(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
-  /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
-  /** One task made the active one, replacing whichever was; answers whether the host took it. */
-  tasksOpen(taskId: string): Effect.Effect<boolean>;
-  /** The developer left the open task: its call ends and no task is active. */
-  tasksClose(): Effect.Effect<void>;
-  /** A named task started on the repository it names, where it names one, and made the active one; or why none started. */
-  tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
-  /** One task deleted; answers whether the service deleted it. */
-  tasksDelete(taskId: string): Effect.Effect<boolean>;
-  /** One task renamed; answers whether the service renamed it. */
-  tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
-  tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
-  /** One task pinned or unpinned; answers whether the service changed it. */
-  tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
-  /** The reader's own read mark of one task moved; answers whether the service took it. */
-  tasksMarkRead(params: TasksMarkReadParams): Effect.Effect<boolean>;
-  /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
-  tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
-  tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
   /** The repositories the account reaches in one workspace, or in every one, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onRepositoryListsChanged`. */
   tasksRepositoriesFollow(params: TasksRepositoriesParams): Effect.Effect<void>;
   /** One workspace's repositories let go by the windows. */
@@ -463,39 +370,12 @@ export interface HostOperator {
   tasksRepositoriesRetry(params: TasksRepositoriesParams): Effect.Effect<void>;
   /** Every workspace's repositories the host holds for the windows, whole, each time any of them moves. */
   onRepositoryListsChanged(listener: (held: AppRepositoryLists) => void): () => void;
-  /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
-  tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
-  /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
-  tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
-  /** One block of a task added or taken away; the task's blocks as they then stand, or why they are unchanged. */
-  tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
-  /** One task's parent set, or cleared with null; the parent as it then stands, or why it is unchanged. */
-  tasksSetParent(params: TasksSetParentParams): Effect.Effect<TasksSetParentAnswer>;
-  /** One relation of a task moved to another kind in one call; the task's relations as they then stand, or why they are unchanged. */
-  tasksChangeRelation(params: TasksChangeRelationParams): Effect.Effect<TasksChangeRelationAnswer>;
-  /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
-  tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-  /** A window of a file of a task's repository, colored; or why it is not shown. */
-  tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
-  tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
-  /** The skills a developer may choose of a task's repository; or why they are not read. */
-  tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
   /** What GitHub holds of the page a link names, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onLinkStandingsChanged`. */
   tasksLinkStandingFollow(params: TasksLinkStandingParams): Effect.Effect<void>;
   /** One link's standing let go by the windows. */
   tasksLinkStandingUnfollow(params: TasksLinkStandingParams): Effect.Effect<void>;
   /** Every link's standing the host holds for the windows, whole, each time any of them moves. */
   onLinkStandingsChanged(listener: (held: AppLinkStandings) => void): () => void;
-  /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
-  tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
-  /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
-  tasksFind(params: TasksFindParams): Effect.Effect<TasksFindAnswer>;
-  /** A page of a description's history; or that the service did not answer. */
-  tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
-  /** One revision of a description beside the one before it; or that the service did not answer. */
-  tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
-  /** One revision of a description restored as its content; answers whether the service restored it. */
-  tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's or agent's pages held followed for the windows from now until let go, and a while after among those let go lately, the open task's among them; what they hold is heard through `onPagesChanged`. */
@@ -526,10 +406,6 @@ export interface HostOperator {
   tasksHistoryRetry(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** Every task's description history the host holds for the windows, whole, each time any of them moves. */
   onHistoriesChanged(listener: (held: AppHistories) => void): () => void;
-  /** One picture of one description as its bytes in base64, or why there is none. */
-  tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
-  /** One picture kept on one description, answering the id its text names it by, or why it was not kept. */
-  tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
   /** One task's description's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onDescriptionCommentsChanged`. */
   tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** One description's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -538,10 +414,6 @@ export interface HostOperator {
   tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
   /** Every description's or page's comments the host holds for the windows, whole, each time any of them moves. */
   onDescriptionCommentsChanged(listener: (held: AppDescriptionComments) => void): () => void;
-  /** A comment thread started on one task's description, answered as it stands, or why not. */
-  tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
-  /** One thing done to one comment thread of one task's description, answered as it stands, or why not. */
-  tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
   integrationsFollow(): Effect.Effect<void>;
   /** The account's integrations let go by the windows. */
@@ -576,14 +448,6 @@ export interface HostOperator {
   onMcpClientsChanged(listener: (held: AppMcpClients) => void): () => void;
   /** One outside MCP client revoked under the Mac's session; the clients as they then stand, or why the revoke did not finish. */
   mcpClientsRevoke(params: McpClientRevokeParams): Effect.Effect<McpClientsView>;
-  /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
-  githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
-  /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
-  githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
-  /** One admin dashboard read under the account's session; the service's answer as it came, or why there is none. */
-  adminRead(params: AdminReadParams): Effect.Effect<AdminReadAnswer>;
-  /** The admin dashboard's star set or taken back on one account; whether it landed. */
-  adminFavorite(params: AdminFavoriteParams): Effect.Effect<boolean>;
   /** A workspace made under a name, owned by the account; the workspace, or why none was. */
   workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
@@ -1097,12 +961,6 @@ const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** A GitHub disconnect that reached no answer. */
-const GITHUB_DISCONNECT_UNANSWERED = { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED } as const;
-
-/** An admin read that reached no answer. */
-const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
-
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
@@ -1317,62 +1175,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           }),
         ),
       ),
-    tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
     tasksRegained: () => fire(client.call(GATEWAY_METHOD.TASKS_REGAINED)),
-    tasksOfflineRefusedClear: () => fire(client.call(GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
-    tasksOpen: (taskId) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_OPEN, { taskId }),
-        (answer) => record(answer)?.opened === true,
-      ),
-    tasksClose: () => fire(client.call(GATEWAY_METHOD.TASKS_CLOSE)),
-    tasksDelete: (taskId) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_DELETE, { taskId }),
-        (answer) => record(answer)?.deleted === true,
-      ),
-    tasksRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_RENAME, { taskId: params.taskId, name: params.name }),
-        (answer) => record(answer)?.renamed === true,
-      ),
-    tasksSetStanding: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_SET_STANDING, { ...params }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksPin: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PIN, {
-          taskId: params.taskId,
-          pinned: params.pinned,
-          ...(params.position === undefined ? undefined : { position: params.position }),
-        }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksMarkRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_MARK_READ, {
-          taskId: params.taskId,
-          readMark: params.readMark,
-        }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksPinRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, {
-          repository: params.repository,
-          pinned: params.pinned,
-        }),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksWriteSection: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
-        (answer) => record(answer)?.changed === true,
-      ),
     tasksRepositoriesFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, repositoryScope(params))),
     tasksRepositoriesUnfollow: (params) =>
@@ -1385,46 +1190,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held lists are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppRepositoryLists>(payload) : undefined),
         listener,
-      ),
-    tasksFile: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_FILE, {
-          ...("taskId" in params
-            ? { taskId: params.taskId }
-            : { workspaceId: params.workspaceId, repository: params.repository }),
-          path: params.path,
-          firstLine: params.firstLine,
-          lastLine: params.lastLine,
-          ...(params.raw === undefined ? undefined : { raw: params.raw }),
-          ...(params.ref === undefined ? undefined : { ref: params.ref }),
-        }),
-        answerOf(tasksFileAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksTree: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_TREE, {
-          ...("planId" in params
-            ? { planId: params.planId }
-            : { workspaceId: params.workspaceId, repository: params.repository }),
-          path: params.path,
-          ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
-        }),
-        answerOf(tasksTreeAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksSkills: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.TASKS_SKILLS,
-          "planId" in params
-            ? { planId: params.planId }
-            : {
-                workspaceId: params.workspaceId,
-                ...(params.repository === undefined
-                  ? undefined
-                  : { repository: params.repository }),
-              },
-        ),
-        answerOf(tasksSkillsAnswerSchema, TASK_UNANSWERED),
       ),
     tasksLinkStandingFollow: (params) =>
       fire(
@@ -1447,35 +1212,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppLinkStandings>(payload) : undefined),
         listener,
       ),
-    tasksBrowserTabOpen: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
-          agentId: params.agentId,
-          address: params.address,
-        }),
-        answerOf(tasksBrowserTabOpenAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksFind: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_FIND, {
-          workspace: params.workspace,
-          number: params.number,
-        }),
-        answerOf(tasksFindAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksRevisions: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_REVISIONS, {
-          taskId: params.taskId,
-          ...(params.before === undefined ? undefined : { before: params.before }),
-        }),
-        answerOf(tasksRevisionsAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksRevision: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
-        answerOf(tasksRevisionAnswerSchema, TASK_UNANSWERED),
-      ),
     tasksCommentsFollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, commentsFollowParams(scope))),
     tasksCommentsUnfollow: (scope) =>
@@ -1488,39 +1224,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
         (payload) => (isRecord(payload) ? answered<AppDescriptionComments>(payload) : undefined),
         listener,
-      ),
-    tasksCommentStart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENT_START, {
-          planId: params.planId,
-          start: params.start,
-        }),
-        answerOf(tasksCommentAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksCommentAct: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
-          planId: params.planId,
-          threadId: params.threadId,
-          action: params.action,
-        }),
-        answerOf(tasksCommentAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksPictureKeep: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, {
-          planId: params.planId,
-          picture: params.picture,
-        }),
-        answerOf(tasksPictureKeepAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksPicture: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PICTURE, {
-          planId: params.planId,
-          attachmentId: params.attachmentId,
-        }),
-        answerOf(tasksPictureAnswerSchema, TASK_UNANSWERED),
       ),
     tasksPage: (params) =>
       Effect.map(
@@ -1576,34 +1279,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held histories are the host's own, handed over in this process, so they are passed on as built, as the held descriptions are.
         (payload) => (isRecord(payload) ? answered<AppHistories>(payload) : undefined),
         listener,
-      ),
-    tasksRestore: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
-        (answer) => record(answer)?.restored === true,
-      ),
-    githubConnect: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_CONNECT),
-        answerOf(tasksGitHubPageAnswerSchema, TASK_UNANSWERED),
-      ),
-    githubDisconnect: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_DISCONNECT),
-        answerOf(tasksGitHubDisconnectAnswerSchema, GITHUB_DISCONNECT_UNANSWERED),
-      ),
-    adminRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.ADMIN_READ, {
-          procedure: params.procedure,
-          query: params.query,
-        }),
-        answerOf(adminReadAnswerSchema, ADMIN_READ_UNANSWERED),
-      ),
-    adminFavorite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.ADMIN_FAVORITE, { id: params.id, favorite: params.favorite }),
-        (answer) => answer.ok && answer.result === true,
       ),
     workspaceCreate: (params) =>
       Effect.map(
@@ -1875,56 +1550,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           invitationId: params.invitationId,
         }),
         answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    tasksSetRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, {
-          taskId: params.taskId,
-          repository: params.repository,
-        }),
-        answerOf(tasksSetRepositoryAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksMove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_MOVE, {
-          taskId: params.taskId,
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksMoveAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksBlock: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BLOCK, { taskId: params.taskId, block: params.block }),
-        answerOf(tasksBlockAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksSetParent: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_SET_PARENT, {
-          taskId: params.taskId,
-          parentTaskId: params.parentTaskId,
-        }),
-        answerOf(tasksSetParentAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksChangeRelation: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
-          taskId: params.taskId,
-          relation: params.relation,
-        }),
-        answerOf(tasksChangeRelationAnswerSchema, TASK_UNANSWERED),
-      ),
-    tasksEdit: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
-        answerOf(tasksEditAnswerSchema, TASK_UNANSWERED),
-      ),
-    // Note that the request goes on whole, as the act port decoded it against the same schema the
-    // Gateway's method reads, because a field copied by name is one a later field is left out of,
-    // as Runs on was, which sent every task to the cloud.
-    tasksStart: (request) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_START, request),
-        answerOf(tasksStartAnswerSchema, TASK_UNANSWERED),
       ),
     agentModelsFollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_FOLLOW, {})),
     agentModelsUnfollow: () => fire(client.call(GATEWAY_METHOD.AGENTS_MODELS_UNFOLLOW, {})),

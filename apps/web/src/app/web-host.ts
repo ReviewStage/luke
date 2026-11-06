@@ -344,6 +344,7 @@ function portDependencies(
     },
     tasks: {
       host,
+      acts: operator.acts,
       colorCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,

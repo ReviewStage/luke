@@ -21,7 +21,7 @@ import { macTerminalActsContract } from "./mac-terminals.js";
 import { portForwardActsContract } from "./port-forwards.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
-import { tasksActsContract } from "./tasks.js";
+import { TASKS_ACTS, tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
@@ -90,11 +90,13 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
+export { TASKS_ACTS } from "./tasks.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every act declared once (`declared-act.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
 export const HOST_ACTS = {
   ...ACCOUNT_ASK_ACTS,
+  ...TASKS_ACTS,
 };
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
