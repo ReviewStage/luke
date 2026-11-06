@@ -2,18 +2,20 @@
  * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox booted from the agents' image, the runner started in it as the SDK's own user for the agent, and our doors read through it.
  *
  * `open` opens a sandbox from the agents' image (`../coder-host/agent-image.ts`),
- * which carries the runner and every tool the harnesses run, makes the
- * `agent` user in it as the SDK does, and checks the agent's repository out
- * into it on eve's terms (`../coder-host/checkout.ts`, the same token at the
- * firewall, but cloned whole, since the history is deepened before the
- * runner starts anyway); or opens it from its workspace's repository
- * snapshot of the same image, whose build made the user already, and
- * fetches only what landed since (`../repository-snapshot.ts`), building
- * that snapshot past the answer where none was ready. A create Vercel
- * answers `image_not_ready` is asked again once the registry has had time to
- * prepare the image, as Vercel's docs say. The deepen is left to the launch
- * (`finishCheckout`), which runs it beside its own steps. A sandbox whose use
- * failed is deleted again.
+ * which carries the runner and every tool the harnesses run, with its
+ * session's drive mounted at the workspace (`../agent-drive.ts`), and makes
+ * the `agent` user in it as the SDK does. The checkout stands on the drive:
+ * kept as the agent left it where an earlier sandbox of the session made it;
+ * on a fork of its workspace's repository's base drive, fetched up to the
+ * default branch and installed again, which fills in only what landed since;
+ * or cloned onto an empty drive on eve's terms (`../coder-host/checkout.ts`,
+ * the same token at the firewall, but cloned whole, since the history is
+ * deepened before the runner starts anyway), the base drive filled past the
+ * answer where none was. A create Vercel answers `image_not_ready` is asked
+ * again once the registry has had time to prepare the image, as Vercel's
+ * docs say. The deepen is left to the launch (`finishCheckout`), which runs
+ * it beside its own steps. A sandbox whose use failed is deleted again, and
+ * the drive with it where this open made it.
  *
  * `launchRunner` readies the sandbox as root, sharing each checkout with the
  * `agent` user, and then starts the image's runner as that user through the
@@ -75,7 +77,14 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Brand, type Context, Duration, Effect, Layer, Option, Result, Schedule } from "effect";
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
-import { fillBaseDrive } from "../base-drive.js";
+import {
+  AGENT_DRIVE,
+  AGENT_DRIVE_FROM,
+  type AgentDrive,
+  type AgentDriveFrom,
+  agentDrive,
+} from "../agent-drive.js";
+import { type BaseDriveOf, fillBaseDrive, installDependencies } from "../base-drive.js";
 import { AgentImage } from "../coder-host/agent-image.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
@@ -96,13 +105,6 @@ import {
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
 import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
 import {
-  buildRepositorySnapshot,
-  forgetRepositorySnapshot,
-  REPOSITORY_SNAPSHOT_STATE,
-  type RepositorySnapshotOf,
-  readRepositorySnapshot,
-} from "../repository-snapshot.js";
-import {
   type FirewallSession,
   type FirewallSources,
   sandboxFirewall,
@@ -111,7 +113,6 @@ import {
   IMAGE_NOT_READY,
   type ListedSandbox,
   NAME_TAKEN,
-  NOT_FOUND_STATUS,
   type OidcTokenRead,
   type OpenedSandbox,
   SANDBOX_STATUS,
@@ -128,7 +129,6 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
-  describeFailure,
   type FoundPlace,
   type MachineKept,
   type MachineLayout,
@@ -611,15 +611,11 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       checkoutOver(context, sandbox, userId, beside),
     );
 
-  /** A new sandbox of the agent's, under the session given, opened from the image or snapshot named at the size its repository asks for. */
-  const createdFrom = (
-    agent: Agent,
-    sessionId: string,
-    from: { readonly image: string } | { readonly snapshotId: string },
-  ) =>
+  /** A new sandbox of the agent's, under the session given, opened from the image at the size its repository asks for, with the session's drive mounted at the workspace. */
+  const createdOn = (agent: Agent, sessionId: string, image: string, drive: AgentDrive) =>
     api.create({
       name: `${SANDBOX_NAME}${randomUUID()}`,
-      from,
+      image,
       tags: { [SESSION_TAG]: sessionId, [AGENT_TAG]: agent.id },
       timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
       vcpus: sandboxVcpus(agent.repository),
@@ -629,6 +625,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
       },
       env: SANDBOX_ENV,
+      mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive.name },
       // Note that the name is new, so one already taken is this create's own, which the SDK sent again after its first answer was lost.
       whenNameTaken: NAME_TAKEN.JOIN,
     });
@@ -639,20 +636,54 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     running: opened.currentSessionId,
   });
 
+  /** The session's drive deleted again where this open made it and no sandbox holds it, since no conversation records the session that would find it; one kept from an earlier sandbox holds the agent's work and is left be. */
+  const madeDriveDeleted = (drive: AgentDrive) =>
+    drive.from === AGENT_DRIVE_FROM.KEPT ? Effect.void : Effect.ignore(api.deleteDrive(drive.name));
+
   /**
-   * The repository snapshot the agent's sandbox may open from: one of its
-   * workspace's, made on the image this launch opens, of the repository's
-   * default branch; none for an agent started on another branch, or on its
-   * starter's own token, whose access is not the workspace's.
+   * The effect given, run on the sandbox the open made, which is let go of
+   * again where it fails: deleted alone where the session's drive was kept
+   * from an earlier sandbox, since the drive holds the agent's work. Where
+   * this open made the drive, nothing records the session that would find
+   * it, so the drive goes too, on an interruption as on a failure, in a base
+   * drive's failed fill's order (`base-drive.ts`): the session stopped, which
+   * lets the drive go at once, then the drive, then the sandbox. Note that
+   * the stop goes first, because Vercel refuses to delete a drive a running
+   * sandbox holds, and a sandbox's delete answers before its session stops.
    */
-  const repositorySnapshotOf = (
+  const discardedOnFailure = <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+    opened: OpenedPlace,
+    drive: AgentDrive,
+  ) =>
+    drive.from === AGENT_DRIVE_FROM.KEPT
+      ? effect.pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))))
+      : effect.pipe(
+          Effect.onError(() =>
+            Effect.forEach(
+              [
+                Effect.flatMap(api.session(sessionOfPlace(opened)), (session) => session.stop()),
+                api.deleteDrive(drive.name),
+                api.deleteSandbox(opened.name),
+              ],
+              (step) => Effect.ignore(step),
+              { discard: true },
+            ),
+          ),
+        );
+
+  /**
+   * The base drive the agent's own may be forked from: its workspace's, of
+   * the repository's default branch; none for an agent started on another
+   * branch, or on its starter's own token, whose access is not the
+   * workspace's.
+   */
+  const baseDriveOf = (
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
-    image: string,
-  ): Option.Option<RepositorySnapshotOf> =>
+  ): Option.Option<BaseDriveOf> =>
     agent.startBranch === null && read.access.kind === GITHUB_ACCESS.APP
       ? Option.some({
-          image,
           workspaceId: read.workspaceId,
           fullName: read.fullName,
           defaultBranch: read.defaultBranch,
@@ -660,32 +691,16 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       : Option.none();
 
   /**
-   * The repository snapshot built past the request's answer, apart from
-   * the launch and its runner lease, so neither waits on it; nothing where
-   * no request's answer is being kept, as for a relaunch a message makes,
-   * which leaves the build to the next Start.
-   */
-  const buildInBackground = (agent: Agent, of: RepositorySnapshotOf, read: AgentRepositoryRead) =>
-    Effect.gen(function* () {
-      if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
-      yield* afterResponse(
-        "A repository snapshot's build",
-        Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
-          buildRepositorySnapshot(api, of, read, (sandbox) =>
-            checkoutOver(context, sandbox, agent.userId),
-          ),
-        ),
-      );
-    });
-
-  /**
    * The workspace's repository's base drive filled past the request's
-   * answer where it has none (`base-drive.ts`), on the same terms as the
-   * repository snapshot's build.
+   * answer where it has none (`base-drive.ts`), apart from the launch and
+   * its runner lease, so neither waits on it; nothing where no request's
+   * answer is being kept, as for a relaunch a message makes, which leaves
+   * the fill to the next Start.
    */
   const fillBaseDriveInBackground = (
     agent: Agent,
-    of: RepositorySnapshotOf,
+    of: BaseDriveOf,
+    image: string,
     read: AgentRepositoryRead,
   ) =>
     Effect.gen(function* () {
@@ -693,7 +708,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       yield* afterResponse(
         "A base drive's fill",
         Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
-          fillBaseDrive(api, of, of.image, read, (sandbox) =>
+          fillBaseDrive(api, of, image, read, (sandbox) =>
             checkoutOver(context, sandbox, agent.userId),
           ),
         ),
@@ -701,148 +716,103 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     });
 
   /**
-   * The agent's sandbox opened from its repository snapshot and its
-   * checkout brought up to the default branch; none where the snapshot was
-   * gone or its checkout would not refresh, the snapshot then forgotten so
-   * the next launch builds it again, and the sandbox this opened deleted.
-   * A Vercel that did not answer the create opens nothing here either, and
-   * forgets nothing, so the launch goes on as without a snapshot.
+   * The agent's sandbox opened from the image with the session's drive
+   * mounted, asked again while the registry still prepares the image
+   * (`IMAGE_RETRY`), and the `agent` user made in it as the SDK makes one; a
+   * sandbox the user could not be made in is let go of again
+   * (`discardedOnFailure`), and a drive this open made goes where no sandbox
+   * opened on it.
    */
-  const openedFromRepositorySnapshot = (
-    agent: WithRepository<Agent>,
-    sessionId: string,
-    harness: string,
-    of: RepositorySnapshotOf,
-    snapshotId: string,
-    read: AgentRepositoryRead,
-  ) =>
-    Effect.gen(function* () {
-      const opened = runningOf(yield* createdFrom(agent, sessionId, { snapshotId }));
-      yield* refreshAgentCheckout(agent, yield* checkoutIn(opened, agent.userId), read).pipe(
-        Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))),
-      );
-      return Option.some(opened);
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.gen(function* () {
-          yield* Effect.logWarning(
-            `A ${harness} sandbox did not open from its repository snapshot: ${describeFailure(failure)}`,
-          );
-          const unusable =
-            failure instanceof CheckoutRefused ||
-            snapshotGone(failure) ||
-            failure.status === NOT_FOUND_STATUS;
-          if (unusable) yield* Effect.ignore(forgetRepositorySnapshot(api, of, snapshotId));
-          return Option.none<OpenedPlace>();
-        }),
-      ),
-    );
-
-  /**
-   * The agent's sandbox opened from the image, asked again while the
-   * registry still prepares it (`IMAGE_RETRY`), and the `agent` user made in
-   * it as the SDK makes one; a sandbox the user could not be made in is
-   * deleted again.
-   */
-  const openedFromImage = (agent: Agent, sessionId: string, image: string) =>
+  const openedFromImage = (agent: Agent, sessionId: string, image: string, drive: AgentDrive) =>
     Effect.gen(function* () {
       const opened = runningOf(
-        yield* createdFrom(agent, sessionId, { image }).pipe(
+        yield* createdOn(agent, sessionId, image, drive).pipe(
           Effect.retry({
             schedule: Schedule.spaced(IMAGE_RETRY.SPACED),
             times: IMAGE_RETRY.TIMES,
             while: (failure) => failure.code === IMAGE_NOT_READY,
           }),
+          Effect.onError(() => madeDriveDeleted(drive)),
         ),
       );
-      yield* api
-        .createUser(opened.name, AGENT_USER, AGENT_HOME_FOLDERS)
-        .pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+      yield* discardedOnFailure(
+        api.createUser(opened.name, AGENT_USER, AGENT_HOME_FOLDERS),
+        opened,
+        drive,
+      );
       return opened;
     });
 
   /**
-   * The agent's sandbox with its repository checked out, on the read the
-   * caller made of it, which confirmed its workspace still reaches it
-   * before any sandbox opens on its code. Where its workspace's repository
-   * snapshot is ready, the sandbox opens from it and fetches only what
-   * landed since; otherwise it opens from the image and clones the
-   * repository whole, and the snapshot is built past the answer for the
-   * next launch (`repository-snapshot.ts`). A snapshot Vercel could not be
-   * asked about is passed by, and no build is started on it.
+   * The agent's checkout on its drive, as the drive came: one kept from an
+   * earlier sandbox of the session stands as the agent left it; a fork of
+   * the base drive is brought up to the default branch and installed again,
+   * which fills in only what changed since the fill; an empty drive has the
+   * repository cloned onto it whole. An install that failed is said in the
+   * log and let be, since the agent installs for itself, as one did before
+   * drives.
    */
-  const primaryCheckedOut = (
+  const checkedOutOnDrive = (
     agent: WithRepository<Agent>,
+    sandbox: RepositorySandbox,
     read: AgentRepositoryRead,
-    sessionId: string,
-    harness: string,
-    image: string,
+    from: AgentDriveFrom,
   ) =>
     Effect.gen(function* () {
-      const of = repositorySnapshotOf(agent, read, image);
-      if (Option.isSome(of)) {
-        yield* fillBaseDriveInBackground(agent, of.value, read);
-        const found = yield* readRepositorySnapshot(api, of.value).pipe(Effect.option);
-        if (Option.isSome(found) && found.value.state === REPOSITORY_SNAPSHOT_STATE.READY) {
-          const fromSnapshot = yield* openedFromRepositorySnapshot(
-            agent,
-            sessionId,
-            harness,
-            of.value,
-            found.value.snapshotId,
-            read,
-          );
-          if (Option.isSome(fromSnapshot)) return fromSnapshot.value;
-        }
-        // The build reads the snapshot again and leaves one ready or being built be.
-        if (Option.isSome(found)) yield* buildInBackground(agent, of.value, read);
+      if (from === AGENT_DRIVE_FROM.KEPT) return;
+      if (from === AGENT_DRIVE_FROM.EMPTY) {
+        return yield* cloneAgentRepository(agent, sandbox, read, CHECKOUT_DEPTH.WHOLE);
       }
-      const opened = yield* openedFromImage(agent, sessionId, image);
-      yield* cloneAgentRepository(
-        agent,
-        yield* checkoutIn(opened, agent.userId),
-        read,
-        CHECKOUT_DEPTH.WHOLE,
-      ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
-      return opened;
+      yield* refreshAgentCheckout(agent, sandbox, read);
+      yield* installDependencies(sandbox).pipe(
+        Effect.catch(() => Effect.logWarning("An agent's install on its forked drive failed")),
+      );
     });
 
   /**
-   * The agent's sandbox with its repository checked out (`primaryCheckedOut`),
-   * and then each repository it works in beside its own cloned whole into
-   * its folder, on the reads the caller made of them (`cloneAgentExtras`),
-   * the sandbox deleted again where one would not clone; an agent in one
-   * repository clones nothing more.
+   * The agent's sandbox opened on its drive, its repository checked out
+   * there (`checkedOutOnDrive`), on the read the caller made of it, which
+   * confirmed its workspace still reaches it before any sandbox opens on its
+   * code, and then each repository it works in beside its own cloned whole
+   * into its folder, on the reads the caller made of them
+   * (`cloneAgentExtras`), one already standing on a kept drive left as it
+   * is; the sandbox is let go of again where one would not check out
+   * (`discardedOnFailure`).
    */
   const checkedOutSandbox = (
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     extras: readonly AgentExtraRead[],
     sessionId: string,
-    harness: string,
     image: string,
+    drive: AgentDrive,
   ) =>
     Effect.gen(function* () {
-      const opened = yield* primaryCheckedOut(agent, read, sessionId, harness, image);
-      if (extras.length === 0) return opened;
-      yield* cloneAgentExtras(yield* checkoutIn(opened, agent.userId), extras).pipe(
-        Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))),
+      const opened = yield* openedFromImage(agent, sessionId, image, drive);
+      const sandbox = yield* checkoutIn(opened, agent.userId);
+      yield* discardedOnFailure(
+        Effect.andThen(
+          checkedOutOnDrive(agent, sandbox, read, drive.from),
+          cloneAgentExtras(sandbox, extras),
+        ),
+        opened,
+        drive,
       );
       return opened;
     });
 
   /**
-   * The agent's sandbox opened from the image, its repository checked out
-   * in it where it has one (`checkedOutSandbox`). The image's reference and
-   * the repository are read at once, since neither waits on the other and
-   * both are read before any sandbox opens.
+   * The agent's sandbox opened from the image on its session's drive
+   * (`agent-drive.ts`), its repository checked out on it where it has one
+   * (`checkedOutSandbox`), each step letting go of what it made where it
+   * fails; with the drive, which the caller's own use lets go of on the same
+   * terms. The image's reference and the repository are
+   * read at once, since neither waits on the other and both are read before
+   * any drive or sandbox is made. A Start on the repository's default branch
+   * fills its base drive past the answer where it has none, for the agents
+   * after it.
    */
-  const openedCheckout = (
-    target: ConversationTarget,
-    agent: Agent,
-    sessionId: string,
-    harness: string,
-  ) =>
+  const openedCheckout = (target: ConversationTarget, agent: Agent, sessionId: string) =>
     Effect.gen(function* () {
       const [image, read, extras] = yield* Effect.all(
         [
@@ -852,9 +822,18 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         ],
         { concurrency: "unbounded" },
       );
-      return hasRepository(agent) && read !== undefined
-        ? yield* checkedOutSandbox(agent, read, extras, sessionId, harness, image)
-        : yield* openedFromImage(agent, sessionId, image);
+      const base =
+        hasRepository(agent) && read !== undefined
+          ? baseDriveOf(agent, read)
+          : Option.none<BaseDriveOf>();
+      if (Option.isSome(base) && read !== undefined) {
+        yield* fillBaseDriveInBackground(agent, base.value, image, read);
+      }
+      const drive = yield* agentDrive(api, sessionId, Option.getOrUndefined(base));
+      const opened = yield* hasRepository(agent) && read !== undefined
+        ? checkedOutSandbox(agent, read, extras, sessionId, image, drive)
+        : openedFromImage(agent, sessionId, image, drive);
+      return { ...opened, drive };
     });
 
   return {
@@ -868,9 +847,9 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // sandbox just opened holds no deepen's record, so none is looked for.
     open: (ask, use) =>
       Effect.gen(function* () {
-        const [{ name, running }, [deepen, beside]] = yield* Effect.all(
+        const [{ name, running, drive }, [deepen, beside]] = yield* Effect.all(
           [
-            openedCheckout(ask.target, ask.agent, ask.session, ask.harness),
+            openedCheckout(ask.target, ask.agent, ask.session),
             Effect.all(
               [
                 Effect.exit(
@@ -891,15 +870,19 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
             ? openWorkingFolder(repositorySandbox)
             : deepenCheckoutWith(repositorySandbox, plan),
         );
-        return yield* use(
-          {
-            place: vercelPlace(ask.session, name, running),
-            name: nameOfSandbox(name),
-            checkoutPath: SANDBOX_LAYOUT.checkoutPath,
-            finishCheckout,
-          },
-          beside,
-        ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
+        return yield* discardedOnFailure(
+          use(
+            {
+              place: vercelPlace(ask.session, name, running),
+              name: nameOfSandbox(name),
+              checkoutPath: SANDBOX_LAYOUT.checkoutPath,
+              finishCheckout,
+            },
+            beside,
+          ),
+          { name, running },
+          drive,
+        );
       }),
 
     // The sandbox is readied as root once the caller's steps are done, since the readying shares

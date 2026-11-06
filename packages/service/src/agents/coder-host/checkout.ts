@@ -59,9 +59,10 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * confirmed to reach it and a read token minted for that one repository,
  * set at the sandbox's firewall for the clone alone and withdrawn after it.
  * A native harness's clone is whole, since it deepens at once, or is no
- * clone at all where its workspace's repository snapshot opened the sandbox
- * on a checkout already made, which is fetched up to the branch instead
- * (`refreshAgentCheckout`, `repository-snapshot.ts`).
+ * clone at all where its drive was forked from its workspace's repository's
+ * base drive, whose checkout is fetched up to the branch instead
+ * (`refreshAgentCheckout`, `../agent-drive.ts`), or kept from an earlier
+ * sandbox of its session, whose checkout stands as the agent left it.
  * The launch then deepens it (`deepenCheckoutWith`): a write token is
  * minted, carrying contents and pull requests write, since the agent pushes
  * a branch and opens a pull request from it, and set at the firewall for
@@ -663,8 +664,8 @@ export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRep
 );
 
 /**
- * The checkout a repository snapshot opened the sandbox on brought up to the
- * repository's default branch, on the read the caller made of it, the token
+ * The checkout a fork of the repository's base drive holds brought up to
+ * the repository's default branch, on the read the caller made of it, the token
  * at the firewall for the fetch alone, and recorded under the name the
  * agent's row holds; refused, in git's words, where the sandbox holds no
  * checkout of that repository or the fetch failed. As after a clone, no

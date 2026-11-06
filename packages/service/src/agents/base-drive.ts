@@ -24,7 +24,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, Option, type Redacted } from "effect";
+import type { GitHubTokenAccess } from "../github/github-app.js";
 import { CODER } from "./coder-host/bounds.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import {
@@ -35,7 +36,6 @@ import {
   runInSandbox,
   snapshotRecordOf,
 } from "./repository-shell.js";
-import type { RepositorySnapshotCredential } from "./repository-snapshot.js";
 import {
   NAME_TAKEN,
   type OpenedSandbox,
@@ -68,6 +68,12 @@ const INSTALL_SCRIPT = [
   "if [ -f pnpm-lock.yaml ]; then pnpm install; elif [ -f package.json ]; then npm install; fi",
 ].join("\n");
 
+/** What a fill clones through: a read token for the one repository, and whose it is. */
+interface BaseDriveCredential {
+  readonly token: Redacted.Redacted;
+  readonly access: GitHubTokenAccess;
+}
+
 /** What a base drive is of: the workspace, and the repository and branch it holds. */
 export interface BaseDriveOf {
   readonly workspaceId: string;
@@ -85,8 +91,21 @@ export function baseDriveName(of: BaseDriveOf): string {
   return `${BASE_DRIVE.NAME_PREFIX}${digest.digest("hex").slice(0, 32)}`;
 }
 
-/** The dependencies installed in the checkout the sandbox holds, or the refusal in the installer's own words. */
-const installDependencies = Effect.fn("web/installBaseDriveDependencies")(function* (
+/**
+ * Whether the base drive is filled: it stands, and the sandbox that fills
+ * it is gone, which a fill deletes only once its install is done, so a
+ * drive a fill still writes is never forked half-cloned.
+ */
+export const baseDriveFilled = (api: VercelSandboxApi, of: BaseDriveOf) =>
+  Effect.map(
+    Effect.all([api.getDrive(baseDriveName(of)), api.getNamed(baseDriveName(of))], {
+      concurrency: "unbounded",
+    }),
+    ([drive, filling]) => drive !== undefined && filling === undefined,
+  );
+
+/** The dependencies installed in the checkout the sandbox holds, or the refusal in the installer's own words: a fill's, and an agent's on its fork, which installs only what changed since. */
+export const installDependencies = Effect.fn("web/installCheckoutDependencies")(function* (
   sandbox: RepositorySandbox,
 ) {
   const installed = yield* runInSandbox(
@@ -117,7 +136,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   api: VercelSandboxApi,
   of: BaseDriveOf,
   image: string,
-  credential: RepositorySnapshotCredential,
+  credential: BaseDriveCredential,
   open: (sandbox: { readonly name: string; readonly running: string }) => RepositorySandbox,
 ) {
   const name = baseDriveName(of);
@@ -127,7 +146,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   const created = yield* api
     .create({
       name,
-      from: { image },
+      image,
       tags: {},
       timeoutMs: Duration.toMillis(BASE_DRIVE.FILL_TIMEOUT),
       vcpus: CODER.SANDBOX_VCPUS,
