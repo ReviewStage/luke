@@ -1,5 +1,9 @@
 /**
- * snapshot.ts -- the source agent's work, pushed or not, copied to a new branch for an agent continued or forked from it.
+ * snapshot.ts -- the work of a source agent from before drives, pushed or not, copied to a new branch for an agent continued or forked from it.
+ *
+ * A source with a drive of its own hands its drive instead, which the new
+ * agent's is forked from (`../agent-drive.ts`), so this copy serves only an
+ * agent opened before drives, until its snapshots lapse.
  *
  * Each agent runs in a sandbox of its own, so what the source never
  * committed and pushed would be lost to the agent started from it. As that

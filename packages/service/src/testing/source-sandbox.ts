@@ -2,7 +2,9 @@
  * source-sandbox.ts -- a coding agent's sandbox at Vercel's REST boundary, as `@vercel/sandbox` reads it, its shell a real one over a git checkout on disk, for the suites that copy a source agent's work.
  *
  * The double answers Vercel Sandbox's API as the scenario has it: the
- * session's sandbox in the status given, a resume that brings it up under a
+ * session's drive where it is named, or none, as for a source from before
+ * drives; the session's sandbox
+ * in the status given, a resume that brings it up under a
  * fresh session, a stop that stops it where it is sent as JSON and is
  * refused with 415 where not, as Vercel refuses it, a firewall policy
  * written down, and each command run in a checkout the test made by a real
@@ -107,8 +109,12 @@ export interface SourceSandbox {
   readonly answer: (sent: SentToSandbox) => Response | undefined;
 }
 
-/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one. */
-export function sourceSandbox(source: SourceCheckout, status: string | undefined): SourceSandbox {
+/** The double over the checkout given, its sandbox first listed in the status given, or none listed for a session that never opened one, and the session's drive standing where it is named. */
+export function sourceSandbox(
+  source: SourceCheckout,
+  status: string | undefined,
+  drive?: string,
+): SourceSandbox {
   const state: SourceSandbox["state"] = {
     status,
     session: status === "running" ? SOURCE_SANDBOX.RUNNING : undefined,
@@ -150,6 +156,22 @@ export function sourceSandbox(source: SourceCheckout, status: string | undefined
       // An open policy carries a credential on no host.
       policies.push({ session, hosts: Object.keys(JSON.parse(body).allow ?? {}) });
       return Response.json(sessionAnswered({ id: session, status: "running" }));
+    }
+    // A source from before drives has no drive of its own, so its work is copied.
+    if (parsed.pathname.startsWith("/api/v2/sandboxes/drives/")) {
+      return parsed.pathname.endsWith(`/${drive}`)
+        ? Response.json({
+            drive: {
+              id: `drv_${drive}`,
+              name: drive,
+              projectId: "prj_fixture",
+              region: "iad1",
+              maxSizeBytes: 2 ** 40,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          })
+        : new Response(null, { status: 404 });
     }
     if (parsed.searchParams.get("resume") === "true") {
       state.status = "running";
