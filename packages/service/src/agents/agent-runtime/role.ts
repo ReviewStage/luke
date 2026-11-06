@@ -1,17 +1,6 @@
 /**
- * role.ts -- the two agents we run on our one agent runtime, and what sets each apart.
- *
- * The coding agent and the worker it delegates to each serve a role, which
- * names the tools each is offered (`tools.ts`) and the integrations its turn
- * is handed (`servers.ts`).
+ * role.ts -- the policies by which our agents are handed the integrations their turn reaches.
  */
-
-export const AGENT_ROLE = {
-  CODER: "coder",
-  CODER_WORKER: "coder-worker",
-} as const;
-
-export type AgentRole = (typeof AGENT_ROLE)[keyof typeof AGENT_ROLE];
 
 /**
  * Which integrations' MCP servers a turn is handed: every one the account
