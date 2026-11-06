@@ -457,6 +457,17 @@ test("an agent that has not opened its sandbox yet shows the waiting bar, and th
   assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.create", "terminal.attach"]);
 });
 
+test("a tab hidden while it waits on the agent to open its sandbox asks nothing more until shown", async () => {
+  main.createRefused = TERMINAL_REFUSAL.AGENT_NOT_READY;
+  vi.useFakeTimers();
+  const tab = await mount(true, false);
+  main.createRefused = undefined;
+  await tab.render(false);
+  await act(async () => vi.advanceTimersByTimeAsync(5_000));
+  await settle();
+  assert.deepEqual(tab.kinds(), ["terminal.create"]);
+});
+
 /** Ends the bar's reveal, as the browser does once its delay has run; a DOM without animation events is heard through React's webkit-prefixed name for it. */
 function revealBar(): void {
   act(() => {
