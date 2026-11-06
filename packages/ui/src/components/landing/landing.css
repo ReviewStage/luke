@@ -996,19 +996,30 @@
 
   /* Under the Pinned line (`docs/DESIGN.md`), the room beside the words is
      narrower than the ball, so the hero stacks as a phone's does: the words,
-     then the ball under them, as wide as the column and no taller than it
-     stands beside the words. A container query keeps no state, so the line
-     has its enter width alone, without the leave width a script would hold. */
+     then the ball under them, no wider than the column, no taller than it
+     stands beside the words, and no taller than a share of the screen, so a
+     phone held sideways keeps the words and the ball's top on its first
+     screen; the words' room above them gives way on a short screen too. The
+     small viewport is the one measured, so a browser's own bars never count.
+     A container query keeps no state, so the line has its enter width alone,
+     without the leave width a script would hold. */
   /* off-scale: 1120px, the Pinned line */
   @container (width < 1120px) {
     .ui-landing-hero {
+      /* off-scale: the ball's least size, and its share of the screen */
+      --ui-landing-orb-least: 160px;
+      --ui-landing-orb-screen: 58svh;
+      /* off-scale: the room above the words and above the ball, each a share of the screen */
+      --ui-landing-hero-top: min(96px, 8svh);
+      --ui-landing-orb-top: min(24px, 2svh);
+
       flex-direction: column;
       align-items: stretch;
       min-height: 0;
     }
 
     .ui-landing-hero-words {
-      padding: 96px var(--ui-landing-gutter) 0;
+      padding: var(--ui-landing-hero-top) var(--ui-landing-gutter) 0;
     }
 
     .ui-landing-hero-art {
@@ -1016,8 +1027,11 @@
       top: auto;
       right: auto;
       width: auto;
-      height: min(580px, 100cqw - 2 * var(--ui-landing-gutter));
-      margin: 24px var(--ui-landing-gutter) 40px;
+      height: max(
+        var(--ui-landing-orb-least),
+        min(580px, 100cqw - 2 * var(--ui-landing-gutter), var(--ui-landing-orb-screen))
+      );
+      margin: var(--ui-landing-orb-top) var(--ui-landing-gutter) 40px;
     }
   }
 
