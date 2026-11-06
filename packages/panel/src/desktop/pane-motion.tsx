@@ -382,8 +382,8 @@ function play(root: HTMLElement, before: Snapshot, sheets: SheetMotions): void {
 export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapshot | null> {
   readonly #sheets: SheetMotions = new WeakMap();
 
-  /** The frame waited on before the window's panes play anything, while it stands. */
-  #opening: number | undefined;
+  /** When the window opened, or last arrived at a place, in the page's time. */
+  #arrived = 0;
 
   /**
    * Lands every pane motion under way where it is going, as the window is
@@ -398,23 +398,24 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
   };
 
   /**
-   * Note that the window plays nothing until it has drawn twice, because
-   * what it opens with settles over its first frames, a summary's pin
-   * waiting on its column's width among it, and none of that is a change
-   * anyone asked for: the window opens as it stands.
+   * Whether the window is still settling where it opened or arrived, for as
+   * long as a pane's motion runs. Note that nothing plays meanwhile, because
+   * what a place stands with settles over the frames after it, a summary's
+   * pin waiting on its column's measure among it, and none of that is a
+   * change anyone asked for: the window stands as the place does.
    */
+  #settling(root: HTMLElement): boolean {
+    const duration = Number(paneTiming(root)?.duration ?? 0);
+    return performance.now() - this.#arrived < duration;
+  }
+
   override componentDidMount(): void {
     window.addEventListener("resize", this.#land);
-    this.#opening = requestAnimationFrame(() => {
-      this.#opening = requestAnimationFrame(() => {
-        this.#opening = undefined;
-      });
-    });
+    this.#arrived = performance.now();
   }
 
   override componentWillUnmount(): void {
     window.removeEventListener("resize", this.#land);
-    if (this.#opening !== undefined) cancelAnimationFrame(this.#opening);
   }
 
   /**
@@ -426,11 +427,11 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
     const root = this.props.root.current;
     if (previous.place !== this.props.place) {
       this.#land();
+      this.#arrived = performance.now();
       return null;
     }
-    if (root === null || this.#opening !== undefined) return null;
-    if (sameLayout(previous.layout, this.props.layout)) return null;
-    return measure(root, this.#sheets);
+    if (root === null || sameLayout(previous.layout, this.props.layout)) return null;
+    return this.#settling(root) ? null : measure(root, this.#sheets);
   }
 
   override componentDidUpdate(
