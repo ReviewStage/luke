@@ -314,6 +314,8 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on, This Mac enrolled, or off, its host removed; done, or why not. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */

@@ -212,6 +212,7 @@ async function machinesWithThisMac(
   hosts: readonly HostLine[],
   thisMac: AppThisMacHost,
   beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
+  procedures: Partial<FakeActPort> = {},
 ): Promise<void> {
   handBeats(Object.fromEntries(beats.map((beat) => [beat.deviceId, beat.ageMs])));
   holdHosts(() => hosts);
@@ -227,7 +228,7 @@ async function machinesWithThisMac(
         : snapshot;
     },
   });
-  drawHosts();
+  drawHosts(procedures);
   await settle();
 }
 
@@ -245,16 +246,24 @@ const SERVER_AND_THIS_MAC: readonly HostLine[] = [
   },
 ];
 
-test("This Mac stands first on the row of the machine it is, with no Remove", async () => {
+/** This Mac's switch, Run agents on this Mac. */
+function thisMacSwitch(): HTMLElement {
+  const found = document.querySelector<HTMLElement>('[aria-label="Run agents on this Mac"]');
+  assert.ok(found !== null, "This Mac's switch is drawn");
+  return found;
+}
+
+test("This Mac stands first on the row of the machine it is, its switch on, with no Remove", async () => {
   await machinesWithThisMac(
     SERVER_AND_THIS_MAC,
-    { machineId: MACHINE_ID },
+    { machineId: MACHINE_ID, enrolled: true },
     SERVER_AND_THIS_MAC.map((host) => ({ deviceId: host.id, ageMs: 0 })),
   );
   const text = document.body.textContent ?? "";
 
   assert.ok(text.indexOf("This Mac") < text.indexOf("fra-03"), "This Mac stands first");
   assert.ok(text.includes("Online · Mac"), text);
+  assert.equal(thisMacSwitch().getAttribute("aria-checked"), "true");
   assert.equal(
     [...document.querySelectorAll('button[aria-label="Remove"]')].some(
       (button) => button.closest(".ui-settings-row")?.textContent?.includes("This Mac") ?? false,
@@ -318,10 +327,73 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
   assert.ok(said.includes("Could not reach the service. Try again."), said);
 });
 
-test("a Mac whose host the service does not list yet keeps a This Mac row that reads offline, with nothing to press", async () => {
-  await machinesWithThisMac([], { deviceId: "2d4f6a8c-0e1b-4c3d-9e5f-7a9b1c3d5e60" });
+test("a host the service still lists for this Mac while it is off stands as any host does, with its Remove", async () => {
+  await machinesWithThisMac(SERVER_AND_THIS_MAC, { machineId: MACHINE_ID });
+
+  assert.equal(thisMacSwitch().getAttribute("aria-checked"), "false");
+  act(() => removeOf("Studio").click());
+  const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  assert.ok(asked.includes("Remove Studio?"), asked);
+});
+
+test("a Mac turned on whose host the service does not list yet reads offline on This Mac's row", async () => {
+  await machinesWithThisMac([], {
+    deviceId: "2d4f6a8c-0e1b-4c3d-9e5f-7a9b1c3d5e60",
+    enrolled: true,
+  });
   const row = document.body.textContent ?? "";
 
   assert.ok(row.includes("This MacOffline"), row);
-  assert.equal(document.querySelectorAll("button").length, 1, "Add hosts alone is drawn");
+});
+
+test("This Mac's switch turns it on at once, and off only once the question is answered", async () => {
+  const sent: unknown[] = [];
+  const answered = async (input: unknown) => {
+    sent.push(input);
+    return { done: true as const };
+  };
+  await machinesWithThisMac([], { machineId: MACHINE_ID }, [], {
+    [ACT_KIND.HOSTS_THIS_MAC_SET]: answered,
+  });
+  assert.equal(thisMacSwitch().getAttribute("aria-checked"), "false");
+
+  await act(async () => thisMacSwitch().click());
+  await settle();
+  assert.deepEqual(sent, [{ on: true }]);
+
+  // Note that the switch reads the host's record, so it is laid as turned on before it is turned off.
+  document.body.replaceChildren();
+  await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true }, [], {
+    [ACT_KIND.HOSTS_THIS_MAC_SET]: answered,
+  });
+  await act(async () => thisMacSwitch().click());
+  await settle();
+  assert.deepEqual(sent, [{ on: true }], "nothing is turned off before it is asked");
+  const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  assert.ok(asked.includes("Turn off agents on this Mac?"), asked);
+
+  await press("Turn off");
+  assert.deepEqual(sent, [{ on: true }, { on: false, deleteFolders: true }]);
+});
+
+test("turning This Mac off offers to keep its agents' folders, and keeps them where that is unchecked", async () => {
+  const sent: unknown[] = [];
+  await machinesWithThisMac([], { machineId: MACHINE_ID, enrolled: true, agentFolders: 3 }, [], {
+    [ACT_KIND.HOSTS_THIS_MAC_SET]: async (input: unknown) => {
+      sent.push(input);
+      return { done: true as const };
+    },
+  });
+  await act(async () => thisMacSwitch().click());
+  await settle();
+
+  const box = document.querySelector<HTMLElement>(
+    '[role="alertdialog"] [aria-label^="Delete its agents\' 3 folders"], [role="alertdialog"] [role="checkbox"]',
+  );
+  assert.ok(box !== null, "the question offers to delete the folders");
+  assert.equal(box.getAttribute("aria-checked"), "true", "deleting them is what it offers first");
+  await act(async () => box.click());
+  await press("Turn off");
+
+  assert.deepEqual(sent, [{ on: false, deleteFolders: false }]);
 });

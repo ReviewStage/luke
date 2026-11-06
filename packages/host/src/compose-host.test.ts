@@ -145,6 +145,7 @@ describe("the host's platform concerns", () => {
               loaded: Effect.succeed(false),
               install: () => Effect.succeed(Result.fail("no install in a fixture")),
               stop: Effect.succeed(Result.fail("no launchd in a fixture")),
+              uninstall: Effect.succeed(Result.fail("no install in a fixture")),
               machine: Effect.succeed({
                 name: "Studio",
                 platform: DEVICE_PLATFORM.DARWIN,
