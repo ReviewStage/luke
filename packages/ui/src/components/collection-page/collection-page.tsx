@@ -1,10 +1,11 @@
-import { type ReactNode, type Ref, useId } from "react";
+import { type ReactNode, type Ref, useCallback, useId, useRef } from "react";
 import {
   PAGE_FRAME,
   PAGE_WIDTH,
   type PageHeading,
   type PageWidth,
 } from "../page-frame/page-frame.js";
+import { PageScrollerContext } from "../page-frame/page-scroller.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
@@ -169,6 +170,17 @@ export function CollectionPage({
   scrollRef?: Ref<HTMLDivElement>;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
+  // The one scroller, held for what the content draws only in view (`PageScrollerContext`) and handed on to the caller's own ref.
+  const scroll = useRef<HTMLDivElement | null>(null);
+  const holdScroll = useCallback(
+    (element: HTMLDivElement | null) => {
+      scroll.current = element;
+      if (typeof scrollRef === "function") scrollRef(element);
+      else if (scrollRef !== undefined && scrollRef !== null) scrollRef.current = element;
+    },
+    [scrollRef],
+  );
+  const scroller = useCallback(() => scroll.current, []);
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
   const width = heading.width ?? PAGE_WIDTH.MEASURE;
   const sized = WIDTH_CLASS[width];
@@ -213,7 +225,7 @@ export function CollectionPage({
       )}
       <div
         className={`ui-collection-page-scroll flex flex-1 flex-col min-h-0 ${sized.scroll} overflow-y-auto overscroll-contain scrollbar-gutter-stable`}
-        ref={scrollRef}
+        ref={holdScroll}
       >
         <div
           className={`ui-collection-page-content ${COLUMN_CLASS} ${sized.measure} flex flex-col ${sized.content} ${toolbarGap}`}
@@ -227,7 +239,9 @@ export function CollectionPage({
           {state === COLLECTION_STATE.ERROR ? (
             <div className={`ui-collection-page-notice ${NOTICE_CLASS}`}>{error}</div>
           ) : null}
-          {state === COLLECTION_STATE.READY ? children : null}
+          {state === COLLECTION_STATE.READY ? (
+            <PageScrollerContext value={scroller}>{children}</PageScrollerContext>
+          ) : null}
         </div>
       </div>
     </section>

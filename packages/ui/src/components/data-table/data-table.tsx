@@ -12,10 +12,12 @@ import {
   sortFn_basic,
   sortFn_text,
   type TableOptions,
+  type Row as TableRowModel,
   tableFeatures,
   type Updater,
 } from "@tanstack/react-table";
-import { type MouseEvent, type ReactNode, useMemo, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { type MouseEvent, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import {
   Table,
@@ -28,6 +30,7 @@ import {
 import { SORT_DIRECTION } from "../../sort-direction.js";
 import { CARD_PADDING, Card } from "../card/card.js";
 import { Inline, JUSTIFY } from "../layout/layout.js";
+import { usePageScroller } from "../page-frame/page-scroller.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
@@ -54,6 +57,18 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * A keyboard opens a row through such a link in its cells, since a table row
  * is no control. The table owns every length in it and takes no class or
  * style.
+ *
+ * The body draws only the rows near the view, virtualized by TanStack
+ * Virtual as its docs' table example does: table rows cannot be placed
+ * absolutely, so the rows drawn stand in the table's own flow between a
+ * spacer row above them and one below, each as tall as the rows it stands
+ * for, and the columns keep the widths their words give them. The scroller
+ * is the page's (`usePageScroller`), the body counted from where it stands
+ * in it (`scrollMargin`), and each row drawn is measured, so a row taller
+ * than the rest is placed by what it measured. Since the rows left undrawn
+ * are not there to be counted, the table tells a reader how many rows it
+ * holds and each row where it stands among them (`aria-rowcount`,
+ * `aria-rowindex`).
  *
  * The table is shadcn/ui's (`../../shadcn/table.tsx`), drawn in Tailwind
  * utilities over the theme.
@@ -145,6 +160,15 @@ const SKELETON_TEXT_WIDTH = "96px";
 /** A figure's bone, about a count's or a date's width. */
 const SKELETON_FIGURE_WIDTH = "40px";
 
+/** The height a body row is taken to have before it is measured, in pixels: one line of words in its cell's padding. */
+const ROW_ESTIMATE_PX = 41;
+
+/** How many rows past each edge of the view are drawn, as the docs' table example draws them. */
+const ROW_OVERSCAN = 20;
+
+/** The header's row, which comes before the body's in a reader's count. */
+const HEADER_ROWS = 1;
+
 /** A skeleton's table, which has no rows yet. */
 const NO_ROWS: readonly never[] = [];
 
@@ -229,26 +253,38 @@ function DataTableFrame<Row extends RowData>({
   table,
   label,
   minWidth,
+  rowCount,
   children,
 }: {
   table: ReactTable<DataTableFeatures, Row>;
   label: string;
   minWidth: DataTableMinWidth;
+  /** How many rows the table holds, its headings' among them, where it draws only some. */
+  rowCount?: number | undefined;
+  /** The table's body. */
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <Table className={TABLE_MIN_WIDTH} aria-label={label} data-min-width={minWidth}>
+      <Table
+        className={TABLE_MIN_WIDTH}
+        aria-label={label}
+        aria-rowcount={rowCount}
+        data-min-width={minWidth}
+      >
         <TableHeader>
           {table.getHeaderGroups().map((group) => (
-            <TableRow key={group.id}>
+            <TableRow
+              key={group.id}
+              aria-rowindex={rowCount === undefined ? undefined : HEADER_ROWS}
+            >
               {group.headers.map((header) => (
                 <DataTableHeading key={header.id} header={header} />
               ))}
             </TableRow>
           ))}
         </TableHeader>
-        <TableBody>{children}</TableBody>
+        {children}
       </Table>
     </Card>
   );
@@ -339,13 +375,100 @@ export function DataTable<Row extends RowData>({
       </Card>
     );
   }
+  const { rows: drawn } = table.getRowModel();
   return (
-    <DataTableFrame table={table} label={label} minWidth={minWidth}>
-      {table.getRowModel().rows.map((row) => {
+    <DataTableFrame
+      table={table}
+      label={label}
+      minWidth={minWidth}
+      rowCount={HEADER_ROWS + drawn.length}
+    >
+      <DataTableBody
+        table={table}
+        rows={drawn}
+        onRowPress={onRowPress}
+        rowPressable={rowPressable}
+      />
+    </DataTableFrame>
+  );
+}
+
+/** A spacer row standing for the rows left undrawn above or below the view, as tall as they would stand. */
+function DataTableSpacer({ height, columns }: { height: number; columns: number }): ReactNode {
+  if (height <= 0) return null;
+  return (
+    <tr>
+      <td colSpan={columns} className="p-0" style={{ height }} />
+    </tr>
+  );
+}
+
+/**
+ * The body of `rows`, drawing those near the view between two spacer rows,
+ * as TanStack Virtual's table example does. Note that the virtualizer lives
+ * here rather than in `DataTable`, because each scroll draws again only the
+ * component holding it, as TanStack Table's virtualized rows example asks.
+ */
+function DataTableBody<Row extends RowData>({
+  table,
+  rows,
+  onRowPress,
+  rowPressable,
+}: {
+  table: ReactTable<DataTableFeatures, Row>;
+  rows: readonly TableRowModel<DataTableFeatures, Row>[];
+  onRowPress: ((row: Row) => void) | undefined;
+  rowPressable: ((row: Row) => boolean) | undefined;
+}): React.JSX.Element {
+  const scroller = usePageScroller();
+  const body = useRef<HTMLTableSectionElement>(null);
+  const [margin, setMargin] = useState(0);
+  const virtualizer = useVirtualizer<HTMLElement, HTMLTableRowElement>({
+    count: rows.length,
+    getScrollElement: scroller,
+    estimateSize: () => ROW_ESTIMATE_PX,
+    getItemKey: (index) => rows[index]?.id ?? index,
+    overscan: ROW_OVERSCAN,
+    scrollMargin: margin,
+    // Note that the view is taken to be the window's before the scroller is measured, which no view of it outgrows, so a table outside any page, as the catalog draws one, still draws a window's rows.
+    initialRect: { width: window.innerWidth, height: window.innerHeight },
+  });
+  // The body stands below whatever the page draws above it in the scroller, read again as the scroller or what it holds is sized anew.
+  useLayoutEffect(() => {
+    const box = scroller();
+    const element = body.current;
+    if (box === null || element === null) return;
+    const read = () => {
+      const at = Math.round(
+        element.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop,
+      );
+      setMargin((was) => (was === at ? was : at));
+    };
+    read();
+    const heard = new ResizeObserver(read);
+    heard.observe(box);
+    for (const child of box.children) heard.observe(child);
+    return () => heard.disconnect();
+  }, [scroller]);
+  const items = virtualizer.getVirtualItems();
+  const first = items[0];
+  const last = items.at(-1);
+  const columns = table.getAllLeafColumns().length;
+  const above = first === undefined ? 0 : first.start - margin;
+  const below = last === undefined ? 0 : virtualizer.getTotalSize() - (last.end - margin);
+  return (
+    <TableBody ref={body} className="[overflow-anchor:none]">
+      <DataTableSpacer height={above} columns={columns} />
+      {items.map((item) => {
+        const row = rows[item.index];
+        if (row === undefined) return null;
         const press = onRowPress && (rowPressable?.(row.original) ?? true) ? onRowPress : undefined;
         return (
           <TableRow
             key={row.id}
+            ref={virtualizer.measureElement}
+            data-index={item.index}
+            aria-rowindex={HEADER_ROWS + item.index + 1}
             className={press ? `${ROW} ${PRESSABLE_ROW}` : ROW}
             data-pressable={press ? "true" : undefined}
             onClick={
@@ -367,7 +490,8 @@ export function DataTable<Row extends RowData>({
           </TableRow>
         );
       })}
-    </DataTableFrame>
+      <DataTableSpacer height={below} columns={columns} />
+    </TableBody>
   );
 }
 
@@ -411,15 +535,17 @@ export function DataTableSkeleton<Row extends RowData>({
   const table = useAppTable({ columns, data: NO_ROWS, enableSorting: false });
   return (
     <DataTableFrame table={table} label={label} minWidth={minWidth}>
-      {Array.from({ length: rows }, (_, row) => (
-        <TableRow key={row} className={ROW}>
-          {table.getAllLeafColumns().map((column) => (
-            <DataTableCell key={column.id} kind={columnKind(column)}>
-              {cells[column.id] ?? <DataTableCellSkeleton kind={columnKind(column)} />}
-            </DataTableCell>
-          ))}
-        </TableRow>
-      ))}
+      <TableBody>
+        {Array.from({ length: rows }, (_, row) => (
+          <TableRow key={row} className={ROW}>
+            {table.getAllLeafColumns().map((column) => (
+              <DataTableCell key={column.id} kind={columnKind(column)}>
+                {cells[column.id] ?? <DataTableCellSkeleton kind={columnKind(column)} />}
+              </DataTableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
     </DataTableFrame>
   );
 }
