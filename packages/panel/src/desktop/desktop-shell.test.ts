@@ -1368,12 +1368,14 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   assert.equal(opened, 1);
 });
 
-test("Admin stands in the plan's place beside the sidebar, its row marked, with no way back of its own", async () => {
+test("Admin stands in the plan's place beside the sidebar, its row marked and no row of the place under it, with no way back of its own", async () => {
   handState({}, { access: { admin: true } });
-  const page = mount(false, { adminView: { ...tasksControl().adminView, open: true } });
+  // Note that the Inbox stands under Admin, as the window's state holds it while Admin stands over it.
+  const page = mount(true, { adminView: { ...tasksControl().adminView, open: true } });
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
   assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");
+  assert.equal(placeRow(page, "Inbox")?.getAttribute("aria-current") ?? null, null);
   const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
   assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
   assert.deepEqual(

@@ -703,6 +703,23 @@ test("the Admin place stands at its workspace's /admin though a task stands unde
   assert.deepEqual(copied, ["https://vespin.dev/acme/admin/user/user-ada"]);
 });
 
+test("Copy link copies the Admin view while Admin stands over the Inbox, the place its state still holds under it", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const window = mount(
+    tasksControl({
+      workspaces: [ACME],
+      workspace: ACME,
+      inboxView: { ...tasksControl().inboxView, open: true },
+    }),
+  );
+  window.openAdmin({ kind: ADMIN_TAB.COST });
+  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+  await settle();
+
+  assert.deepEqual(copied, ["https://vespin.dev/acme/admin/cost"]);
+});
+
 test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });

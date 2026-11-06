@@ -171,6 +171,8 @@ interface Standing {
   history: boolean;
   /** The plans the host holds for the window as the tab mounts (`LIVE_READ.PLAN_DOCUMENT`). */
   plans: AppPlanDocuments;
+  /** Whether Admin stands over the tab, as the router stands it (`admin-route.ts`). */
+  admin?: boolean;
 }
 
 /**
@@ -288,7 +290,7 @@ function mount(
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
       room: held.room,
-      adminView: ADMIN_AWAY,
+      adminView: held.admin === true ? { ...ADMIN_AWAY, open: true } : ADMIN_AWAY,
     });
     return held.history
       ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
@@ -3905,3 +3907,12 @@ it.effect(
       ]);
     }),
 );
+
+test("an agent's page under Admin is off screen, so main hears no agent shown while Admin stands over it", () => {
+  const tab = mount({ shown: true });
+  act(() => tab.control().agentView.onOpen("agent-under-admin"));
+  assert.equal(tab.shownAgents.at(-1), "agent-under-admin");
+
+  tab.stand({ admin: true });
+  assert.equal(tab.shownAgents.at(-1), null);
+});
