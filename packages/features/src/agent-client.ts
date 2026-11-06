@@ -234,12 +234,6 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED,
 } satisfies NamedRefusals;
 
-/** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
-const MEMORY_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
-} satisfies NamedRefusals;
-
 /** The refusals a call that names one row can answer with. */
 const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
