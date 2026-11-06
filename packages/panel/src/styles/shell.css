@@ -654,18 +654,6 @@
   display: none;
 }
 
-/* Note that Back and Forward still stand at the drawer's top right where
-   they are drawn (an installed web app's, `HistoryButtons`), on the head's
-   own row now that no strip holds them above it, so the head ends short of
-   their two buttons rather than running its press and its name under them. */
-:where(:root)[data-ui-room="narrow"]
-  .desktop-shell[data-sidebar-collapsed]
-  .desktop-sidebar
-  > .title-bar-controls[data-edge="column"]
-  ~ :is(.sidebar-workspace, .sidebar-identity) {
-  margin-inline-end: calc(2 * var(--ui-control-height) + var(--ui-space-8));
-}
-
 /* A finger swiping the drawer in or out (`@repo/ui`'s `use-drawer-swipe.ts`)
    holds it at the share open the swipe writes on the shell, standing over
    the dimmed window as it does open, with its transition off, so it stays
