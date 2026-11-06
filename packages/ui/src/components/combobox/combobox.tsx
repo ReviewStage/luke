@@ -1,4 +1,4 @@
-import type { ComponentPropsWithRef, ReactNode, Ref } from "react";
+import type { ComponentPropsWithRef, ReactNode, Ref, RefObject } from "react";
 import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
@@ -23,6 +23,12 @@ import { OneLine } from "../one-line/one-line.js";
 import { SCROLL_FADE, type ScrollFade, scrollFadeMarks } from "../scroll-area/scroll-area.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
+import {
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "../virtual-rows/virtual-rows.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
 /**
@@ -64,7 +70,11 @@ import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
  * are typed in an editor of its own rather than a field this control owns:
  * the caller reads the keys, steers the active option, and places the list,
  * which draws the options as above, a note where none stands, and keeps
- * every press from taking the caret out of the editor. With no field at all,
+ * every press from taking the caret out of the editor. A list draws only the
+ * options near its view, each group a run of `VirtualRows` in the list's own
+ * scroller, so a picker of thousands of repositories lays out a screenful;
+ * the active option is always drawn, brought in where the keys take it past
+ * the drawn ones, since the field names it to a reader by its id. With no field at all,
  * as a list too short to search, the list takes the keys itself (`steer`):
  * it holds the focus and names the active option as a field would.
  *
@@ -86,6 +96,9 @@ export const COMBOBOX_LIST_HEIGHT = {
 } as const;
 
 export type ComboboxListHeight = (typeof COMBOBOX_LIST_HEIGHT)[keyof typeof COMBOBOX_LIST_HEIGHT];
+
+/** How tall an option is taken to be before it is drawn, in pixels: a menu row's height (`--ui-menu-row-height`), which each option is measured at once drawn. */
+const OPTION_ESTIMATE_PX = 32;
 
 /** How wide the column an option's lead stands in is: a task's key's, or a pair of overlapping faces', as a commit's author and co-author lead a choice of who authors it. */
 export const COMBOBOX_LEAD = {
@@ -242,12 +255,15 @@ export function ComboboxOptionItem({
 /** One option's row: a press chooses it and keeps the caret in the field, a pointer moving over it makes it active. */
 function OptionRow({
   id,
+  place,
   option,
   active,
   onActive,
   onChoose,
 }: {
   id: string;
+  /** Where it stands in its group's run, which measures it and tells a reader its place. */
+  place: VirtualRowPlace;
   option: ComboboxOption;
   active: boolean;
   onActive: () => void;
@@ -255,6 +271,7 @@ function OptionRow({
 }): React.JSX.Element {
   const row = (
     <ComboboxOptionItem
+      {...place}
       id={id}
       option={option}
       aria-selected={active}
@@ -359,6 +376,17 @@ export function ComboboxList({
   const listId = id ?? minted;
   const list = useRef<HTMLDivElement>(null);
   useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => list.current, []);
+  // The box every group's run stands in, whose resizing moves where each run after the first stands.
+  const runsBox = useRef<HTMLDivElement>(null);
+  // Each group's run, by the group's place in the list, held while the list stands.
+  const runs = useRef<RefObject<VirtualRowsHandle | null>[]>([]);
+  const runOf = (group: number): RefObject<VirtualRowsHandle | null> => {
+    const held = runs.current[group];
+    if (held !== undefined) return held;
+    const made: RefObject<VirtualRowsHandle | null> = { current: null };
+    runs.current[group] = made;
+    return made;
+  };
   const options = groups.flatMap((group) => group.options);
   // Note that the empty line is said as it appears, because a line drawn into a list is not itself a live region.
   useAnnounce(ANNOUNCE.POLITE, options.length === 0 ? (empty ?? "") : "");
@@ -384,7 +412,12 @@ export function ComboboxList({
     }
     const box = list.current;
     const row = at < 0 ? null : document.getElementById(comboboxOptionId(listId, at));
-    if (box === null || row === null) return;
+    if (box === null || at < 0) return;
+    // Note that an option the keys took past those drawn is brought in by its run, which draws it, and is kept in view as it draws.
+    if (row === null) {
+      bringIn(at);
+      return;
+    }
     // Note that the row is brought clear of a faded edge too, which the list's scroll padding is as deep as.
     const clear = getComputedStyle(box);
     const top = row.offsetTop - (Number.parseFloat(clear.scrollPaddingTop) || 0);
@@ -399,11 +432,18 @@ export function ComboboxList({
 
   const marks = scrollFadeMarks(fade);
   let offset = 0;
-  const runs = groups.map((group) => {
+  const placed = groups.map((group) => {
     const start = offset;
     offset += group.options.length;
     return { group, start };
   });
+  // Brings in the option at `index` across every group, by its group's run.
+  const bringIn = (index: number) => {
+    const run = placed.findLastIndex(({ start }) => start <= index);
+    const entry = placed[run];
+    const option = entry?.group.options[index - (entry?.start ?? 0)];
+    if (option !== undefined) runOf(run).current?.bringIn(option.id);
+  };
 
   return (
     // Note that a press anywhere on the list keeps the caret where the keys are read.
@@ -420,38 +460,56 @@ export function ComboboxList({
       onKeyDown={steer?.onKeyDown}
       onMouseDown={(event) => event.preventDefault()}
     >
-      {runs.map(({ group, start }) => {
-        const rows = group.options.map((option, index) => (
-          <OptionRow
-            key={option.id}
-            id={comboboxOptionId(listId, start + index)}
-            option={option}
-            active={start + index === at}
-            onActive={() => {
-              pointed.current = true;
-              onActiveChange(start + index);
-            }}
-            onChoose={() => choose(start + index)}
-          />
-        ));
-        if (group.label === undefined) return rows;
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
-          <div key={start} role="group" aria-label={group.label}>
-            {headed ? (
-              <Text
-                as={TEXT_ELEMENT.DIV}
-                variant={TEXT_VARIANT.GROUP}
-                className={cn("ui-combobox-heading", COMBOBOX_HEADING)}
-                aria-hidden="true"
-              >
-                <ReplayWords unmasked={group.replayUnmasked}>{group.label}</ReplayWords>
-              </Text>
-            ) : null}
-            {rows}
-          </div>
-        );
-      })}
+      <div ref={runsBox}>
+        {placed.map(({ group, start }, run) => {
+          const rows = (
+            <VirtualRows
+              key={start}
+              scroller={list}
+              shiftedBy={runsBox}
+              keys={group.options.map((option) => option.id)}
+              estimate={OPTION_ESTIMATE_PX}
+              anchor={VIRTUAL_ROWS_ANCHOR.START}
+              options
+              handle={runOf(run)}
+            >
+              {(index, place) => {
+                const option = group.options[index];
+                return option === undefined ? null : (
+                  <OptionRow
+                    id={comboboxOptionId(listId, start + index)}
+                    place={place}
+                    option={option}
+                    active={start + index === at}
+                    onActive={() => {
+                      pointed.current = true;
+                      onActiveChange(start + index);
+                    }}
+                    onChoose={() => choose(start + index)}
+                  />
+                );
+              }}
+            </VirtualRows>
+          );
+          if (group.label === undefined) return rows;
+          return (
+            // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
+            <div key={start} role="group" aria-label={group.label}>
+              {headed ? (
+                <Text
+                  as={TEXT_ELEMENT.DIV}
+                  variant={TEXT_VARIANT.GROUP}
+                  className={cn("ui-combobox-heading", COMBOBOX_HEADING)}
+                  aria-hidden="true"
+                >
+                  <ReplayWords unmasked={group.replayUnmasked}>{group.label}</ReplayWords>
+                </Text>
+              ) : null}
+              {rows}
+            </div>
+          );
+        })}
+      </div>
       {options.length === 0 && empty !== undefined ? (
         <p className={cn("ui-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
       ) : null}

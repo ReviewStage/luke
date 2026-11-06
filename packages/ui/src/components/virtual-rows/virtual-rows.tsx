@@ -65,7 +65,11 @@ import { motionRows } from "../list-motion/list-motion.js";
  * rows left undrawn are not there to be counted. Where the rows are list
  * items of the caller's own (`listItems`), as a `ListRow` is, the run is a
  * `<ul>` that wraps none of them, and each row wears its place
- * (`VirtualRowPlace`) on its own `<li>`. A run whose rows move as a list's do
+ * (`VirtualRowPlace`) on its own `<li>`. Where the rows are the options of
+ * the caller's own listbox (`options`), which owns options and their groups
+ * alone, the run is a block of no role of its own, wrapping none of them,
+ * and each option wears its place, so a reader hears the options as the
+ * listbox's and each one's place among them. A run whose rows move as a list's do
  * wears what `ListMotion` reads (`moves`), each row being a mover. A run is
  * named to a reader as a list is (`aria-label`), and a run whose rows are
  * dragged hears the press on its block and says it keeps an order a row is
@@ -265,6 +269,7 @@ export function VirtualRows({
   overscan = DEFAULT_OVERSCAN,
   anchor = VIRTUAL_ROWS_ANCHOR.END,
   listItems = false,
+  options = false,
   moves = false,
   holdsFocus = false,
   shiftedBy,
@@ -291,6 +296,8 @@ export function VirtualRows({
   anchor?: VirtualRowsAnchor;
   /** Whether each row is a list item of the caller's own, wearing the place it is handed, in a run that is a `<ul>` wrapping none. */
   listItems?: boolean;
+  /** Whether each row is an option of the caller's own listbox, wearing the place it is handed, in a run of no role of its own that wraps none. */
+  options?: boolean;
   /** Whether the rows move as a list's do (`ListMotion`), each a mover. */
   moves?: boolean;
   /** Whether a row holding the keyboard stays drawn wherever the run is scrolled, as a list the keyboard walks keeps it. */
@@ -307,7 +314,7 @@ export function VirtualRows({
   onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
   /** Says the run keeps an order of its own that a row dragged into it is dropped at a place in (`use-row-drag.ts`). */
   "data-row-drop-rows"?: "" | undefined;
-  /** Draws the row at an index, which wears `place` where its rows are list items of the caller's own. */
+  /** Draws the row at an index, which wears `place` where its rows are list items or options of the caller's own. */
   children: (index: number, place: VirtualRowPlace) => ReactNode;
 }): ReactNode {
   const block = useRef<HTMLElement | null>(null);
@@ -456,7 +463,7 @@ export function VirtualRows({
   const last = items.at(-1);
   const before = first === undefined ? 0 : first.start - margin;
   const after = last === undefined ? 0 : virtualizer.getTotalSize() - (last.end - margin);
-  const own = listItems ? "ui-virtual-rows ui-virtual-items" : "ui-virtual-rows";
+  const own = listItems || options ? "ui-virtual-rows ui-virtual-items" : "ui-virtual-rows";
   const run = {
     ref: holdBlock,
     className: className === undefined ? own : `${own} ${className}`,
@@ -493,6 +500,15 @@ export function VirtualRows({
           <Fragment key={item.key}>{children(item.index, placeOf(item))}</Fragment>
         ))}
       </ul>
+    );
+  }
+  if (options) {
+    return (
+      <div {...run}>
+        {items.map((item) => (
+          <Fragment key={item.key}>{children(item.index, placeOf(item))}</Fragment>
+        ))}
+      </div>
     );
   }
   return (

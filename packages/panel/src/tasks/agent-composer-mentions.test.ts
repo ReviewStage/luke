@@ -469,6 +469,13 @@ function listed(container: HTMLElement): string[] {
   );
 }
 
+/** How many rows the menu's one group lists, as a reader hears it, drawn near the view or not. */
+function listedCount(container: HTMLElement): number {
+  return Number(
+    container.querySelector(".mention-menu [role=option]")?.getAttribute("aria-setsize"),
+  );
+}
+
 test("an @ typed in the box on a plan's page offers the plan's sections, and the row chosen is drawn as its chip and sent as its link", async () => {
   const { container, sent } = await box(planPage([]));
 
@@ -1608,13 +1615,14 @@ test("files found by a word typed on are those the longer word finds, and the wo
   typeInComposer(container, "See @files:invite-");
   await settle();
   const typed = listed(container);
+  const typedCount = listedCount(container);
   typeInComposer(container, "5");
   await settle();
   const typedOn = listed(container);
   eraseInComposer(container, 1);
   await settle();
 
-  assert.equal(typed.length, 50);
+  assert.equal(typedCount, 50);
   assert.deepEqual(
     [...typedOn].sort(),
     ["05", "15", "25", "35", "45", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59"].map(
@@ -1635,7 +1643,7 @@ test("typing @files: narrows the list to the repository's paths, listing up to f
 
   assert.equal(wide?.[1].length, 4);
   assert.equal(crumb(container), "Files and folders");
-  assert.equal(listed(container).length, 50);
+  assert.equal(listedCount(container), 50);
   assert.ok(listed(container).every((name) => name.startsWith("invite-")));
 });
 
@@ -1650,7 +1658,7 @@ test("→ on a folder walks into it, its first row the folder and the rest what 
   highlightRow(container, "apps", "web/");
   pressInComposer(container, "ArrowRight");
   await settle();
-  const inWeb = [crumb(container), listed(container).slice(0, 3), listed(container).length];
+  const inWeb = [crumb(container), listed(container).slice(0, 3), listedCount(container)];
   const keys = footKeys(container);
   pressInComposer(container, "Backspace");
   await settle();
