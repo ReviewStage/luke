@@ -1570,13 +1570,19 @@ test("a new agent's Integrations row says a refused read of the owner's connecti
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  const alert = page.querySelector("[role=alert]");
-  assert.match(alert?.textContent ?? "", /Your connected integrations could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(
+      page.querySelector("[role=alert]")?.textContent ?? "",
+      /Your connected integrations could not be read\./u,
+    ),
+  );
   assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
 
   act(() => button("Retry").click());
   await settle();
-  assert.match(page.textContent ?? "", /Every connected integration is on\./u);
+  await vi.waitFor(() =>
+    assert.match(page.textContent ?? "", /Every connected integration is on\./u),
+  );
   assert.equal(
     (serversChip() ?? assert.fail("the servers chip stands")).querySelectorAll(".ui-provider-mark")
       .length,
@@ -3499,7 +3505,7 @@ test("where the workspace has no Sentry installed, a Sentry trigger offers Insta
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
   await settle();
 
-  assert.match(page.textContent ?? "", /Sentry isn't installed/u);
+  await vi.waitFor(() => assert.match(page.textContent ?? "", /Sentry isn't installed/u));
   assert.equal(page.querySelector("button[aria-label^='Event: ']") === null, true);
   assert.equal(page.querySelector("input[aria-label='Projects']") === null, true);
   act(() => button("Install Sentry").click());
@@ -3513,11 +3519,13 @@ test("a Sentry read that fails says so above a saved trigger's rows, which stay 
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
   await settle();
 
-  assert.match(page.textContent ?? "", /The workspace's Sentry could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(page.textContent ?? "", /The workspace's Sentry could not be read\./u),
+  );
   assert.ok(page.querySelector("input[aria-label='Projects']"), "the saved trigger's rows stand");
   act(() => button("Retry").click());
   await settle();
-  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  await vi.waitFor(() => assert.doesNotMatch(page.textContent ?? "", /could not be read/u));
   assert.ok(page.querySelector("input[aria-label='Projects']"));
 });
 

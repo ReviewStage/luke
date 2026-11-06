@@ -139,7 +139,7 @@ test("each expired server stands in a toast of its own until its Reconnect has i
   standing = { ...standing, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.CONNECTED };
   act(() => integrations.lay());
   await settle();
-  assert.deepEqual(said(), ["Linear's sign-in expired"]);
+  await vi.waitFor(() => assert.deepEqual(said(), ["Linear's sign-in expired"]));
 });
 
 test("a reconnect that could not begin says so in the server's toast, with Retry", async () => {

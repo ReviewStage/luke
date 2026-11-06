@@ -936,7 +936,7 @@ test("a member of a workspace whose GitHub reaches no repository is told which o
   const buttons = await openChip();
   await settle();
 
-  assert.equal(githubWay(), "Ask Dean or Charles to choose repositories");
+  await vi.waitFor(() => assert.equal(githubWay(), "Ask Dean or Charles to choose repositories"));
   assert.equal(
     buttons.some((button) => button.textContent === "Choose repositories"),
     false,

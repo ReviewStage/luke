@@ -20,7 +20,6 @@ import {
   type IntegrationStatus,
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppStateSnapshot } from "@repo/host/app-state";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -29,9 +28,9 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { actMutation } from "./act-mutations.js";
+import { integrationsQuery, integrationsRetryMutation } from "./live-reads.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import { appStateQuery } from "./use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
 
 /**
  * integration-statuses.ts -- where every one of the account's integrations stands, as every surface that draws one reads it.
@@ -229,8 +228,9 @@ export function useIntegrationStatuses(): IntegrationStatuses {
   const { mutateAsync: cancelIntegration } = useMutation(actMutation(ACT_KIND.INTEGRATIONS_CANCEL));
   const registry = useContext(RegistryContext);
   const owner = useQuery({ ...appStateQuery, select: selectOwner }).data ?? null;
-  const held = useHostRead(LIVE_READ.INTEGRATIONS, owner ?? undefined);
-  const answer = held.rows;
+  const held = useQuery(integrationsQuery(owner ?? undefined));
+  const { mutateAsync: retryIntegrations } = useMutation(integrationsRetryMutation());
+  const answer = held.data;
   const shared = sharedOf(owner);
   const { signIns } = useAtomValue(shared.book);
   const ledger = useAtomValue(shared.ledger);
@@ -400,8 +400,13 @@ export function useIntegrationStatuses(): IntegrationStatuses {
         ),
     canAdd: (provider) => addable.includes(provider),
     signInOf: (server) => signIns.get(server),
-    readFailed: held.status === HOST_READ_STATUS.FAILED,
-    read: async () => held.retry(),
+    readFailed: held.isError,
+    // Note that a Try again the port refuses settles as one that landed, since the read's own failure is what the surface draws.
+    read: () =>
+      retryIntegrations().then(
+        () => undefined,
+        () => undefined,
+      ),
     signInBegun,
     cancelSignIn,
   };

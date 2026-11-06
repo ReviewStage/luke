@@ -39,10 +39,9 @@ import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement, Fragment, type ReactNode } from "react";
+import { act, createElement, Fragment, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import {
   type AnyAct,
@@ -72,6 +71,7 @@ import {
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -1838,12 +1838,11 @@ test("the task's pull requests are a kind of their own, narrowed to by their row
 });
 
 /** The node drawn on a plan's page in a workspace whose members the window reads. */
-function amongMembers(node: ReactNode): ReactNode {
-  return createElement(MemberDirectory, {
-    workspace: { id: "workspace-1", memberCount: MEMBERS.length },
-    readerId: READER_ID,
-    children: node,
-  });
+function amongMembers(node: ReactElement): ReactElement {
+  return withPeopleRead(
+    { workspace: { id: "workspace-1", memberCount: MEMBERS.length }, readerId: READER_ID },
+    node,
+  );
 }
 
 /** The box drawn on a plan's page among the workspace's members, every message it sends written down. */
@@ -1858,6 +1857,7 @@ async function memberBox() {
     taskPage(),
   );
   await settle();
+  await peopleRead();
   return { container, sent };
 }
 
@@ -1931,6 +1931,7 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
     taskPage(),
   );
   await settle();
+  await peopleRead();
 
   const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip);

@@ -1,5 +1,4 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
 import {
   cursorInstallUrl,
@@ -52,9 +51,9 @@ import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { appStateQuery, selectAccount } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -463,7 +462,9 @@ function ConnectSection({
 /** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
   const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
-  const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
+  const read = useQuery(mcpClientsQuery(accountId));
+  const retry = useMutation(mcpClientsRetryMutation());
+  const rows = read.data;
   // The agents revoked while the page shows, which stand saying so after the read no longer lists them.
   const [revoked, setRevoked] = useState<ReadonlyMap<string, McpClient>>(new Map());
   // The agents the first read listed, so one allowed while the page shows is told apart as just connected.
@@ -472,10 +473,13 @@ export function McpClientsSections(): React.JSX.Element {
     setKnown(new Set(rows.clients.map((client) => client.clientId)));
   }
   if (rows === undefined) {
-    return status === HOST_READ_STATUS.FAILED ? (
+    return read.isError ? (
       <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
         <SettingsLine>
-          <ErrorState failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)} onRetry={retry}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.MCP_CLIENTS_READ)}
+            onRetry={() => retry.mutate()}
+          >
             {PAGE_LINE.READ_FAILED}
           </ErrorState>
         </SettingsLine>

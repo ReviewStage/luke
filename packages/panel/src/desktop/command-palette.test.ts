@@ -2251,8 +2251,12 @@ test("People says the members are being read until they answer, and a refused re
 
   await act(async () => reads.deliverMembers({ [ACME.id]: { failed: true } }));
   await settle();
-  const alert = document.querySelector("[cmdk-list] [role=alert]");
-  assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(
+      document.querySelector("[cmdk-list] [role=alert]")?.textContent ?? "",
+      /The workspace's members could not be read\./u,
+    ),
+  );
   assert.doesNotMatch(document.body.textContent ?? "", /No results match/u);
 
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -2261,10 +2265,10 @@ test("People says the members are being read until they answer, and a refused re
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
   await settle();
-  assert.equal(emptyLine(), "Reading the workspace's members");
+  await vi.waitFor(() => assert.equal(emptyLine(), "Reading the workspace's members"));
   await act(async () => reads.deliverMembers({ [ACME.id]: { rows: { members: [member] } } }));
   await settle();
-  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]));
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {

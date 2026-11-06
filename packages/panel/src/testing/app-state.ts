@@ -89,8 +89,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, useContext } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { vi } from "vitest";
+import type { IntegrationServer } from "../live-reads.js";
 import { APP_SLICE } from "../use-app-state.js";
-import type { IntegrationServer } from "../use-host-read.js";
 import {
   fakeActPort,
   fakeActPortCalls,
