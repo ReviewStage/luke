@@ -141,6 +141,21 @@ test("a reader scrolled up to an earlier line is left there when a new line come
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+test("a reader scrolled up near the newest line is not taken to it when the lines shrink for a moment and grow back", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  readerScroll(box, 150);
+  // Long after the reader's wheel, the lines shrink 80px, and the browser pulls the scroll up to their new end before the window reports either.
+  layout.height = 220;
+  box.scrollTop = 120;
+  act(() => relayout());
+  lateScroll(box, 120, 2000);
+  layout.writes.splice(0);
+  layout.height = 300;
+  act(() => relayout());
+  assert.deepEqual(layout.writes, [], "the log stays off its newest line");
+});
+
 test("a reader scrolled up to an earlier line is left there when the page around the log is hidden and shown again", () => {
   const { box, layout } = mount(["one", "two"]);
   scroll(box, 200);

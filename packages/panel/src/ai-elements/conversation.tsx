@@ -232,7 +232,12 @@ export function Conversation({
   // Inbox is while another page stands: it reads as empty and scrolled to
   // its top, which says nothing of where the reader stands, so it is left
   // as it was, or a reader scrolled up would be taken to the end once it
-  // is shown again.
+  // is shown again. And note that a log that reaches its end only because
+  // its lines shrank under the reader, the browser pulling the scroll up to
+  // their new end, is not put back on its newest line, because the lines
+  // may grow back a moment later, as they do around a dialog closing, and
+  // following would then carry a reader who was just short of the end all
+  // the way down to it.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
@@ -242,7 +247,7 @@ export function Conversation({
           toEnd(element);
           return;
         }
-        if (!followsNewest(element)) {
+        if (!followsNewest(element) || element.scrollTop < lastTop.current) {
           setAtBottom(false);
           return;
         }
@@ -351,7 +356,10 @@ export function Conversation({
         return;
       }
       lastTop.current = element.scrollTop;
-      following.current = followsNewest(element) || (following.current && down);
+      // A scroll up to the end that the reader did not ask for is the lines shrinking under them, which leaves them off it, as the observer does.
+      following.current = following.current
+        ? followsNewest(element) || down
+        : followsNewest(element) && (down || asked);
       setAtBottom(following.current);
       const first = observed.current?.first;
       if (first !== null && first !== undefined) {
