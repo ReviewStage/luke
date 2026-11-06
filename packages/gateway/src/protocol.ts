@@ -476,25 +476,6 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
   /** One plan's or agent's held inbox read again at once, as Try again asks; never answered. */
   AGENTS_INBOX_RETRY: "agents.inboxRetry",
-  /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
-  /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
-  AGENTS_INBOX_CLOSE: "agents.inboxClose",
-  /** A held close let go by its key, sent to the service or taken back as its Undo asks; whether it was still held. */
-  AGENTS_INBOX_CLOSE_RELEASE: "agents.inboxCloseRelease",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
-  /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */
-  AGENTS_INBOX_START: "agents.inboxStart",
-  /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
-  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
-  /** One item's reminder set for the account for an instant, or canceled, whether it is read standing as it was; its read state, or why there is no answer. */
-  // Note that setting a reminder keeps Snooze's id, because a write queued offline is kept on disk by its method's id, and one under an id no host answers is dropped.
-  AGENTS_INBOX_REMIND: "agents.inboxSnooze",
-  /** Where one item the account may read stands, its agent, task, and workspace, as a link by its id alone is opened; or why there is no answer. */
-  AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
-  /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
-  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /**
    * Where every one of the account's integrations stands, held for a window
    * from now until it is let go, followed on the service's live read with
@@ -554,10 +535,6 @@ export const GATEWAY_METHOD = {
   AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
   /** The account's preferences row, which the host holds for the session, read again at once, as Try again asks; never answered. */
   AGENTS_PREFERENCES_RETRY: "agents.preferencesRetry",
-  /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
-  /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  AGENTS_PICTURE: "agents.picture",
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
   AGENTS_PART: "agents.part",
   /**
