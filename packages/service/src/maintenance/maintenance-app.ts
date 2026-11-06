@@ -52,13 +52,9 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 const FIREWALL_RECORD_KEEP_MS = CODER.SANDBOX_MAX_LIFETIME_MS + 60 * 60 * 1_000;
 
 /**
- * The maintenance group: the scheduled sweep's one entry, called by Vercel's
- * cron on the cadence `vercel.json` fixes. The logic lives in
- * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
- * seams and the database queries behind them, each answering an Effect over
- * the group's own `SqlClient.SqlClient`. An automation's run reaches its
- * agent's session through `routedSessions` acting for the automation's
- * owner, never the bearer the cron called with.
+ * The scheduled sweep handed the deployment's real seams. An automation's run
+ * reaches its agent's session through `routedSessions` acting for the
+ * automation's owner, never the bearer the cron called with.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
