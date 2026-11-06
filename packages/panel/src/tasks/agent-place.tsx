@@ -25,7 +25,7 @@ import { GLYPH } from "@repo/ui/icons";
 import type { ReactNode } from "react";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { machineName, useThisMac } from "../machine-name.js";
-import { useRunOnMac } from "./run-on-mac.js";
+import { type RunOnMacRead, useRunOnMac } from "./run-on-mac.js";
 import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 
 /**
@@ -43,7 +43,7 @@ import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
  * under a rule the Mac its `run_on_mac` runs shell commands on, the task's
  * assignee's or else its starter's, "Your Mac" for the reader's own, its
  * glyph wearing a dot for how it stands: online, offline, or off in this
- * Mac's Settings (`run-on-mac.ts`), read only while the card shows.
+ * Mac's Settings (`run-on-mac.ts`), which a reader hears after "Cloud".
  *
  * While a device has not beaten lately, asleep or with the app closed,
  * judged from how long ago the service says it last beat, the label adds
@@ -79,39 +79,68 @@ const SHARED_NOTE = {
   DEVICE: "This agent runs on this device. Set when it was started.",
 } as const;
 
+/** Whose Mac the agent's `run_on_mac` runs on and how it stands, as words: "run_on_mac · Your Mac" and "Online". */
+function runOnMacWords(
+  read: RunOnMacRead,
+  readerId: string | undefined,
+): { readonly mac: string; readonly stands: string } | undefined {
+  const { standing, reason } = read;
+  if (standing === undefined) return undefined;
+  const owner = actorName(personActor(standing.owner, undefined, readerId), { possessive: true });
+  return {
+    mac: `${AGENT_TOOL.RUN_ON_MAC} · ${owner} Mac`,
+    stands: reason === undefined ? RUNS_ON_WORDS.ONLINE : RUN_ON_MAC_REASON_WORDS[reason],
+  };
+}
+
 /**
- * Whose Mac the agent's `run_on_mac` runs on, a row under a rule in the
- * card drawn as the Runs on menu draws a device: the Mac's glyph wearing
- * its standing's dot, green while it listens and gray while it is offline
- * or off in Settings, and the words "run_on_mac · Your Mac". Note that the
- * Mac is named by its owner, since any of their Macs that listens runs the
- * commands. Nothing while it is read, or for an agent offered none.
+ * A cloud agent's chip, whose card names under a rule the Mac its
+ * `run_on_mac` runs shell commands on, drawn as the Runs on menu draws a
+ * device: the Mac's glyph wearing its standing's dot, green while it
+ * listens and gray while it is offline or off in Settings, beside
+ * "run_on_mac · Your Mac". The chip takes no focus, so a reader hears the
+ * same after "Cloud". Note that the Mac is named by its owner, since any of
+ * their Macs that listens runs the commands; nothing is said while it is
+ * read, or for an agent offered none.
  */
-function RunOnMacRow({
+function CloudChip({
   agentId,
   readerId,
+  narrow,
 }: {
   agentId: string;
   readerId: string | undefined;
-}): React.JSX.Element | null {
-  const { standing, reason } = useRunOnMac(agentId, (userId) => userId === readerId);
-  if (standing === undefined) return null;
-  const owner = actorName(personActor(standing.owner, undefined, readerId), { possessive: true });
+  narrow: boolean;
+}): React.JSX.Element {
+  const read = useRunOnMac(agentId, (userId) => userId === readerId);
+  const words = runOnMacWords(read, readerId);
   return (
-    <>
-      <HoverCardRule />
-      <HoverCardRow
-        glyph={
-          <StatusGlyph
-            tone={reason === undefined ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
-            label={reason === undefined ? RUNS_ON_WORDS.ONLINE : RUN_ON_MAC_REASON_WORDS[reason]}
-          >
-            <DeviceGlyph device={undefined} />
-          </StatusGlyph>
-        }
-        label={`${AGENT_TOOL.RUN_ON_MAC} · ${owner} Mac`}
-      />
-    </>
+    <PlaceChip
+      glyph={<GLYPH.CLOUD aria-hidden="true" />}
+      words={RUNS_ON_WORDS.CLOUD}
+      sub={undefined}
+      note={SHARED_NOTE.CLOUD}
+      said={words === undefined ? undefined : `, ${words.mac}, ${words.stands}`}
+      more={
+        words === undefined ? undefined : (
+          <>
+            <HoverCardRule />
+            <HoverCardRow
+              glyph={
+                <StatusGlyph
+                  tone={read.reason === undefined ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
+                  label={words.stands}
+                >
+                  <DeviceGlyph device={undefined} />
+                </StatusGlyph>
+              }
+              label={words.mac}
+            />
+          </>
+        )
+      }
+      narrow={narrow}
+    />
   );
 }
 
@@ -127,16 +156,7 @@ export function AgentPlace({
   narrow?: boolean;
 }): React.JSX.Element | null {
   if (agent.machine !== AGENT_MACHINE.DEVICE) {
-    return (
-      <PlaceChip
-        glyph={<GLYPH.CLOUD aria-hidden="true" />}
-        words={RUNS_ON_WORDS.CLOUD}
-        sub={undefined}
-        note={SHARED_NOTE.CLOUD}
-        more={<RunOnMacRow agentId={agent.id} readerId={readerId} />}
-        narrow={narrow}
-      />
-    );
+    return <CloudChip agentId={agent.id} readerId={readerId} narrow={narrow} />;
   }
   if (agent.mac === undefined) return null;
   return <MacChip mac={agent.mac} narrow={narrow} />;
@@ -148,6 +168,7 @@ function PlaceChip({
   words,
   sub,
   note,
+  said,
   more,
   quiet = true,
   narrow,
@@ -156,6 +177,8 @@ function PlaceChip({
   words: string;
   sub: string | undefined;
   note: string;
+  /** What a reader hears after the words, which the card says to the eye; none where it says nothing more. */
+  said?: string | undefined;
   /** What the card lists after its note, where it lists anything. */
   more?: ReactNode;
   quiet?: boolean;
@@ -176,6 +199,7 @@ function PlaceChip({
         {glyph}
         <VisuallyHidden>{RUNS_ON}</VisuallyHidden>
         <ChipName>{words}</ChipName>
+        {said === undefined ? null : <VisuallyHidden>{said}</VisuallyHidden>}
       </StaticChip>
     </Tooltip>
   );

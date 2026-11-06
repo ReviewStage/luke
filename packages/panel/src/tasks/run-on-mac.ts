@@ -7,9 +7,9 @@ import { workspaceToolsQuery } from "../live-reads.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 
 /**
- * run-on-mac.ts -- whose Mac an agent's `run_on_mac` runs on and how it stands, as the card its Runs on chip hangs reads it.
+ * run-on-mac.ts -- whose Mac an agent's `run_on_mac` runs on and how it stands, as its Runs on chip and card read it.
  *
- * The host holds the service's answer while the card shows
+ * The host holds the service's answer while the chip shows
  * (`LIVE_READ.WORKSPACE_TOOLS`), asking as it is first held and again
  * whenever a window comes forward, which is how the developer comes back
  * from Settings or from opening the app on their Mac; each answer stands

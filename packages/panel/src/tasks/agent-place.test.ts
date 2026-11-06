@@ -139,11 +139,13 @@ async function runOnMacRowOf(runOnMac: RunOnMacStanding): Promise<readonly (stri
   ];
 }
 
-test("a cloud agent's card names the reader's own Mac its run_on_mac runs on, online", async () => {
-  assert.deepEqual(
-    await runOnMacRowOf({ on: true, owner: { userId: READER, name: "Ada Lovelace" } }),
-    ["run_on_mac · Your Mac", "Online"],
+test("a cloud agent's chip says to a reader, and its card shows, the reader's own Mac its run_on_mac runs on, online", async () => {
+  const runOnMac = { on: true, owner: { userId: READER, name: "Ada Lovelace" } } as const;
+  assert.equal(
+    await placeOf({}, undefined, runOnMac),
+    "Runs on: Cloud, run_on_mac · Your Mac, Online",
   );
+  assert.deepEqual(await runOnMacRowOf(runOnMac), ["run_on_mac · Your Mac", "Online"]);
 });
 
 test("a cloud agent's card names a teammate's Mac, offline where none of theirs listens", async () => {
