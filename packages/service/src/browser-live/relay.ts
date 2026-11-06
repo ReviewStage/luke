@@ -486,16 +486,24 @@ function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<vo
   });
 }
 
-/** The tab read again under the member's reach: its driver published, and whether it still stands; a store that could not say counts as standing. */
-function checkTab(view: LiveView): Effect.Effect<boolean> {
+/** The tab read again under the member's reach: its driver published, and whether it still stands; none where the store could not say. */
+function readStanding(view: LiveView): Effect.Effect<Option.Option<boolean>> {
   return Effect.gen(function* () {
     const { ask, deps } = view;
     const found = yield* Effect.result(deps.readTab(ask.userId, ask.place, ask.tabId));
-    if (Result.isFailure(found)) return true;
-    if (Option.isNone(found.success)) return false;
+    if (Result.isFailure(found)) return Option.none();
+    if (Option.isNone(found.success)) return Option.some(false);
     yield* publishDriver(view, found.success.value);
-    return true;
+    return Option.some(true);
   });
+}
+
+/** The tab read again, as `readStanding`; a store that could not say counts as standing. */
+function checkTab(view: LiveView): Effect.Effect<boolean> {
+  return Effect.map(
+    readStanding(view),
+    Option.getOrElse(() => true),
+  );
 }
 
 /**
@@ -518,15 +526,23 @@ function tabTopics(view: LiveView): readonly SyncTopic[] {
  * Ends as gone once the tab no longer stands for the member. The watch is
  * opened before the first read, so a write that commits while it runs still
  * wakes the next; after it, the tab is read again only when Sync wakes the
- * watch, or every `TAB_CHECK_EVERY` where Sync cannot.
+ * watch, or every `TAB_CHECK_EVERY` where Sync cannot or the last read
+ * failed.
  */
 function watchTab(view: LiveView): Effect.Effect<LiveEnd> {
   return Effect.scoped(
     Effect.gen(function* () {
       const sync = yield* Sync;
       const watch = yield* sync.watch(tabTopics(view), BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY);
-      while (yield* checkTab(view)) yield* watch.next;
-      return BROWSER_LIVE_CLOSE_REASON.GONE;
+      while (true) {
+        const standing = yield* readStanding(view);
+        if (Option.isSome(standing) && !standing.value) return BROWSER_LIVE_CLOSE_REASON.GONE;
+        // Note that a read the store could not answer is tried again on the clock, because the write
+        // that woke it may be the last, and a member who lost the tab must not keep watching it.
+        yield* Option.isSome(standing)
+          ? watch.next
+          : Effect.sleep(BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY);
+      }
     }),
   );
 }

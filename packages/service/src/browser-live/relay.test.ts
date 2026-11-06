@@ -863,18 +863,38 @@ it.effect("a tab its agent closed, or its browser destroyed, closes the socket a
     const listedPanel = yield* scriptedViewer;
     const store = world(listed.browser);
     const sync = heardSync();
+    let storeDown = false;
+    let failedReads = 0;
+    const deps: BrowserLiveDependencies = {
+      ...store.deps,
+      readTab: (...asked) =>
+        storeDown
+          ? Effect.andThen(
+              Effect.sync(() => {
+                failedReads += 1;
+              }),
+              Effect.fail("store down"),
+            )
+          : store.deps.readTab(...asked),
+    };
     const { fiber } = yield* started(
       listed.peer,
       listed.commands,
       Effect.scoped(
-        relayBrowserTab(listedPanel.viewer, ASK, reachedTab(undefined), store.deps).pipe(
+        relayBrowserTab(listedPanel.viewer, ASK, reachedTab(undefined), deps).pipe(
           Effect.provideService(Sync, sync.shape),
         ),
       ),
     );
     store.close();
-    // The close is heard on the tab's task, with no clock moved.
+    // The close is heard on the tab's task, but the read it wakes finds the store down, so it is
+    // read again on the clock, with no second write to wake it.
+    storeDown = true;
     yield* sync.write([TOPIC.TASK, TASK]);
+    yield* until(() => failedReads > 0);
+    yield* settle;
+    storeDown = false;
+    yield* TestClock.adjust(BROWSER_LIVE_BOUNDS.TAB_CHECK_EVERY);
     yield* Fiber.join(fiber);
     assert.deepEqual(listedPanel.closed, [BROWSER_LIVE_CLOSE_CODE[BROWSER_LIVE_CLOSE_REASON.GONE]]);
 
