@@ -164,16 +164,24 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
       }
     });
 
+  /** Waits until the standing is no longer `from`: a refusal or a call taken heard since. */
+  const movedFrom = (from: unknown) =>
+    SubscriptionRef.changes(standing).pipe(
+      Stream.filter((now) => now !== from),
+      Stream.runHead,
+    );
+
   /**
    * Waits until the quiet spell standing now has passed: one wait until the
-   * instant it ends, made again only where a refusal heard meanwhile moved
-   * that instant later.
+   * instant it ends, worked out again only where a refusal heard meanwhile
+   * moved that instant later, or a call taken ended the spell at once.
    */
   const quietPassed = Effect.gen(function* () {
     for (;;) {
-      const left = (yield* SubscriptionRef.get(standing)).until - (yield* Clock.currentTimeMillis);
+      const now = yield* SubscriptionRef.get(standing);
+      const left = now.until - (yield* Clock.currentTimeMillis);
       if (left <= 0) return true;
-      yield* Effect.sleep(Duration.millis(left));
+      yield* Effect.raceFirst(Effect.sleep(Duration.millis(left)), Effect.asVoid(movedFrom(now)));
     }
   });
 

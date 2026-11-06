@@ -417,11 +417,12 @@ it.effect(
 );
 
 it.effect(
-  "an account switched between beats ends the follow, and the next names the new account",
+  "an account switched ends the follow and stops the commands it ran, and the next names the new account",
   () =>
     Effect.gen(function* () {
-      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const spawner = scriptedSpawner(() => ({ exitCode: 0, after: "1 minute" }));
       const service = scriptedService();
+      service.queue(COMMAND, NOW);
       const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true, account: ACCOUNT };
       const { composer, moved } = yield* subject(service, spawner, gate);
 
@@ -429,9 +430,11 @@ it.effect(
         Effect.gen(function* () {
           yield* composer.lifetime;
           yield* settled;
+          assert.equal(spawner.spawned[0]?.ended, "running");
           gate.account = "user-other";
           yield* moved;
           yield* settled;
+          assert.notEqual(spawner.spawned[0]?.ended, "running", "the first account's command");
         }),
       );
 

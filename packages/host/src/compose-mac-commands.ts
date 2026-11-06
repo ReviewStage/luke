@@ -363,7 +363,7 @@ export function composeMacCommands(
         // A claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
         if ("failure" in answer) return;
         const { command: granted } = answer;
-        if (!(yield* gateOpen)) {
+        if (!(yield* gateOpen) || dependencies.accountId() !== userId) {
           yield* asked(client.settle(granted.id, SWITCHED_OFF));
           return;
         }
@@ -422,20 +422,26 @@ export function composeMacCommands(
      * One turn of the loop: the commands followed until the gate leaves the
      * account, the read asked again after a pause, or as soon as the service
      * answers again, where it did not answer it or signed the session out;
-     * with the gate shut, every command still running stopped (its process
-     * group killed as its scope closes), and a wait for the gate to open.
+     * with the gate shut, or open for another account than the commands
+     * running were claimed for, every command still running stopped (its
+     * process group killed as its scope closes); with it shut, a wait for it
+     * to open.
      * Every turn begins by letting go of the asks of any account but the one
      * signed in, since a follow ends as the account changes.
      */
+    /** The account the commands in the running set were claimed for, none before the first follow. */
+    let runningFor: string | undefined;
+
     const turn = (running: FiberSet.FiberSet) =>
       Effect.gen(function* () {
         yield* withdrawOtherAccounts;
         // The account the follow starts for, which every read names, so one under another's session is refused as signed out.
         const userId = yield* SubscriptionRef.get(gate);
-        if (userId === undefined) {
+        if (userId !== runningFor) {
           yield* FiberSet.clear(running);
-          return yield* Effect.asVoid(opened);
+          runningFor = userId;
         }
+        if (userId === undefined) return yield* Effect.asVoid(opened);
         const sealed = yield* seal(userId, false);
         if ("failure" in sealed) {
           return yield* Effect.raceFirst(waitOrRegained(LIVE_RESTART), Effect.asVoid(left(userId)));
