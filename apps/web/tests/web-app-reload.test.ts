@@ -40,6 +40,10 @@ test("a plan's link reloaded on a Mac by an account that chose the Mac app is no
 
   assert.ok(app !== undefined, "the host stands");
   // The plan drawn comes well after a hand-off would have, which asks the service once.
-  await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
+  // Note that the panel's cold first render in jsdom takes about 1.3 s of CPU, past waitFor's 1 s default.
+  await vi.waitFor(
+    () => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")),
+    5_000,
+  );
   assert.deepEqual(opened, []);
 });

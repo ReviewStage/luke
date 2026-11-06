@@ -45,7 +45,11 @@ test("a plan's link opened on a Mac by an account that chose the Mac app is hand
   assert.match(opened[0] ?? "", new RegExp(`/task/${LISTED_TASK.id}$`, "u"));
   // The visitor comes back to the tab, which is still drawn and asks the app nothing more.
   window.dispatchEvent(new Event("focus"));
-  await vi.waitFor(() => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")));
+  // Note that the panel's cold first render in jsdom takes about 1.3 s of CPU, past waitFor's 1 s default.
+  await vi.waitFor(
+    () => assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u")),
+    5_000,
+  );
   assert.equal(opened.length, 1);
   assert.equal(root.querySelector("section.ui-auth-card"), null, "no sign-in is drawn");
 });
