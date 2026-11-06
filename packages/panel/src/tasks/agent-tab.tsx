@@ -73,7 +73,7 @@ import {
   useAnnounce,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
-import { AlarmClockCheckIcon, ICON_SIZE } from "@repo/ui/icons";
+import { AlarmClockCheckIcon, ICON_SIZE, RotateCcwIcon } from "@repo/ui/icons";
 import { skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
@@ -147,6 +147,7 @@ import {
   delegates,
   type EndLineParts,
   endLineOffersContinue,
+  endLineOffersTryAgain,
   endLineParts,
   endLineReason,
   finishedReplyLead,
@@ -169,6 +170,7 @@ import {
   type SentLine,
   type StartingLaunch,
   slackLineOf,
+  TRY_AGAIN_LABEL,
   type TurnStretch,
   teammateStarter,
   threadLineOf,
@@ -3353,13 +3355,17 @@ function AgentTabBody({
   // On a pilot task only its pilot continues, so a coding agent there offers no Continue anywhere.
   const continues = offersContinue(control.mode, agent);
   // The failed end line holds the press, Continue again once another agent continued this one.
-  const pressed = endLineOffersContinue({
+  const ending = {
     status: agent.status,
     endReason: endLineReason(transcript.failure, starter),
     failure: transcript.failure,
     continued: continued.length > 0,
     boxClosed: composer.closed !== undefined,
-  });
+  };
+  const pressed = endLineOffersContinue(ending);
+  // Where a message carries the agent on, the row offers it as a line of the developer's own, unless the box is a pilot's or an archived task's note.
+  const triesAgain =
+    endLineOffersTryAgain(ending) && reportsTo === undefined && control.onUnarchive === undefined;
   // How the messages are named moves only when the agent's place or the messages read do, not with each page.
   const readIds = useKept(
     messages.map((message) => message.id),
@@ -3426,6 +3432,14 @@ function AgentTabBody({
               offers={continues}
               label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
+          ) : triesAgain ? (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<RotateCcwIcon aria-hidden="true" />}
+              onClick={() => composer.sendWords(RETRY_LINE)}
+            >
+              {TRY_AGAIN_LABEL}
+            </Button>
           ) : undefined
         }
         continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}

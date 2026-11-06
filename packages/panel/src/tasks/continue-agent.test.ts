@@ -46,6 +46,7 @@ import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import {
   continuedByIds,
   endLineOffersContinue,
+  endLineOffersTryAgain,
   endLineParts,
   endLineReason,
   messageFailureWords,
@@ -529,6 +530,51 @@ test("a failed end line's row ends on Continue where only a new agent goes on, a
     const settled = { ...failed, status, boxClosed: false };
     assert.equal(endLineOffersContinue({ ...settled, continued: true }), false, status);
   }
+});
+
+test("a failed end line's row ends on Try again where a message carries the agent on, and not where Continue, a key, or a choice is the way on", () => {
+  const ending = (failure: AgentFailure | undefined, starter?: string) => ({
+    status: AGENT_STATUS.FAILED,
+    endReason: endLineReason(failure, starter),
+    failure,
+    continued: false,
+    boxClosed: false,
+  });
+
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.SANDBOX)), true);
+  assert.equal(endLineOffersTryAgain(ending(undefined)), true);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.SESSION_ENDED)), false);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.PROVIDER_KEY)), false);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.PROVIDER_KEY, "Ada")), false);
+  assert.equal(endLineOffersTryAgain(ending(AGENT_FAILURE.FAST_ON_OWN_KEY)), false);
+  assert.equal(endLineOffersTryAgain({ ...ending(AGENT_FAILURE.SANDBOX), continued: true }), false);
+  assert.equal(endLineOffersTryAgain({ ...ending(AGENT_FAILURE.SANDBOX), boxClosed: true }), false);
+  assert.equal(
+    endLineOffersTryAgain({ ...ending(AGENT_FAILURE.SANDBOX), status: AGENT_STATUS.CANCELED }),
+    false,
+  );
+});
+
+test("a turn failed on its sandbox ends on Try again, which sends the agent the line in place of Continue", async () => {
+  const sent: string[] = [];
+  const tab = await drawnTab({
+    status: AGENT_STATUS.FAILED,
+    failure: AGENT_FAILURE.SANDBOX,
+    onMessage: (text) => {
+      sent.push(text);
+      return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+    },
+  });
+  const line = tab.endLine() ?? assert.fail("the turn ends on its line");
+  assert.equal(tab.buttons(tab.container).length, 0, "no Continue beside it");
+  const press =
+    [...line.querySelectorAll("button")].find((each) => each.textContent === "Try again") ??
+    assert.fail("the line offers Try again");
+
+  act(() => press.click());
+  await settle();
+
+  assert.deepEqual(sent, ["Try again"]);
 });
 
 test("a message to an ended agent says to continue it in a new one, while a Start refused alike still says to start one", () => {
