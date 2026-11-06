@@ -15,15 +15,16 @@
  * repository cloned through the token at the firewall for the clone alone,
  * so nothing on the drive carries a credential, the dependencies installed
  * with the package manager the checkout's lockfile names, and the sandbox
- * deleted, which stops it and lets the drive go. It is filled once and never
- * refreshed: each agent fetches its own branch onto its fork and installs
- * again there, which fills in only what changed. A fill that failed deletes
- * its sandbox and the drive, so it leaves no base drive, and agents clone as
- * they would without one.
+ * stopped, which lets the drive go, and then deleted, since a stopped sandbox
+ * still holds its name. It is filled once and never refreshed: each agent
+ * fetches its own branch onto its fork and installs again there, which fills
+ * in only what changed. A fill that failed stops its sandbox, deletes the
+ * drive, and deletes the sandbox, so it leaves no base drive, and agents
+ * clone as they would without one.
  */
 
 import { createHash } from "node:crypto";
-import { Duration, Effect, Option, Schedule } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { CODER } from "./coder-host/bounds.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import {
@@ -55,13 +56,6 @@ const CONFLICT_STATUS = 409;
 
 /** How much of the end of a failed install's error output the log is told. */
 const INSTALL_ERROR_TAIL_CHARS = 500;
-
-/**
- * How a failed fill's drive delete is tried again: Vercel refuses to delete
- * a drive still mounted, and the sandbox deleted just before lets it go a
- * moment after.
- */
-const DRIVE_DELETE_RETRY = { schedule: Schedule.spaced(Duration.seconds(2)), times: 5 } as const;
 
 /**
  * The dependencies installed in the checkout: with pnpm where its lockfile
@@ -112,10 +106,11 @@ const installDependencies = Effect.fn("web/installBaseDriveDependencies")(functi
  * drive created, a sandbox opened from the image's snapshot with it mounted
  * at the workspace, the default branch cloned whole onto it through the
  * token at the firewall for the clone alone, its dependencies installed, and
- * the sandbox deleted. A sandbox name another launch took first is that
- * launch's fill, and this one does nothing. A fill that failed or outlasted
- * `FILL_TIMEOUT` deletes its sandbox and then the drive. `open` is the
- * sandbox as the clone reaches it, over the caller's runner.
+ * the sandbox stopped and deleted. A sandbox name another launch took first
+ * is that launch's fill, and this one does nothing. A fill that failed or
+ * outlasted `FILL_TIMEOUT` stops its sandbox, deletes the drive, and deletes
+ * the sandbox; one whose sandbox was never created deletes the drive. `open`
+ * is the sandbox as the clone reaches it, over the caller's runner.
  */
 export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   api: VercelSandboxApi,
@@ -127,10 +122,6 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   const name = baseDriveName(of);
   if ((yield* api.getDrive(name)) !== undefined) return;
   yield* api.getOrCreateDrive(name);
-  const deleted = Effect.andThen(
-    api.deleteSandbox(name),
-    Effect.retry(api.deleteDrive(name), DRIVE_DELETE_RETRY),
-  );
   // Note that a name another launch took first is that launch's fill, whose drive this one leaves be.
   const created = yield* api
     .create({
@@ -146,6 +137,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       },
       env: {},
       mounts: { [BASE_DRIVE.MOUNT_PATH]: name },
+      persistent: false,
     })
     .pipe(
       Effect.map(Option.some),
@@ -153,11 +145,13 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
         (failure) => failure.status === CONFLICT_STATUS,
         () => Effect.succeed(Option.none<ListedSandbox>()),
       ),
-      Effect.tapError(() => Effect.ignore(deleted)),
+      Effect.tapError(() => Effect.ignore(api.deleteDrive(name))),
     );
   if (Option.isNone(created)) return;
+  const running = created.value.currentSessionId;
+  // Note that the stop goes first, because Vercel refuses to delete a drive still mounted.
+  const stopped = running === undefined ? Effect.void : api.stopSession(running);
   yield* Effect.gen(function* () {
-    const running = created.value.currentSessionId;
     if (running === undefined) return yield* new SandboxUnavailable({});
     const sandbox = open(running);
     yield* cloneRepository(
@@ -171,6 +165,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       { access: credential.access },
     );
     yield* installDependencies(sandbox);
+    yield* stopped;
     yield* api.deleteSandbox(name);
     yield* Effect.logInfo(`the base drive ${name} is filled`);
   }).pipe(
@@ -178,6 +173,12 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
       duration: BASE_DRIVE.FILL_TIMEOUT,
       orElse: () => Effect.fail(new SandboxUnavailable({ detail: "the fill timed out" })),
     }),
-    Effect.tapError(() => Effect.ignore(deleted)),
+    Effect.tapError(() =>
+      Effect.forEach(
+        [stopped, api.deleteDrive(name), api.deleteSandbox(name)],
+        (step) => Effect.ignore(step),
+        { discard: true },
+      ),
+    ),
   );
 });

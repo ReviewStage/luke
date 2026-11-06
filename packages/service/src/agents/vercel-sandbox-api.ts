@@ -299,6 +299,8 @@ interface SandboxCreate {
   readonly env: Readonly<Record<string, string>>;
   /** The drives mounted read-write, each by its name at the absolute path it is keyed by. */
   readonly mounts?: Readonly<Record<string, string>>;
+  /** Whether its filesystem is restored at its next session, and snapshotted at each stop for that; so where unsaid. */
+  readonly persistent?: boolean;
 }
 
 /** A drive as a lookup names it: its name, and the sandbox it is mounted read-write in, where one holds it. */
@@ -399,7 +401,7 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     policy: NetworkPolicy,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** Opens a persistent sandbox from the snapshot named, on the open internet; answers it with the session it runs. */
+  /** Opens a sandbox from the snapshot named, persistent unless it says not, on the open internet; answers it with the session it runs. */
   readonly create: (ask: SandboxCreate) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /** The sandbox of that name, as it stands, without resuming it; none where there is no such sandbox. */
   readonly getNamed: (name: string) => Effect.Effect<ListedSandbox | undefined, SandboxUnavailable>;
@@ -1210,7 +1212,7 @@ export function vercelSandboxApi(
               ports: [],
               source: { type: "snapshot", snapshotId: ask.snapshotId },
               name: ask.name,
-              persistent: true,
+              persistent: ask.persistent ?? true,
               tags: ask.tags,
               timeout: ask.timeoutMs,
               resources: { vcpus: ask.vcpus },

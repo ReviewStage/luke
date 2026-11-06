@@ -242,7 +242,7 @@ export function runnerSandboxApi() {
     if (method === "POST" && path === "/api/v3/sandboxes") {
       const asked = await body();
       assert.equal(asked.projectId, PROJECT);
-      assert.equal(asked.persistent, true);
+      assert.equal(typeof asked.persistent, "boolean");
       // As Vercel answers a create from a snapshot it no longer holds (the SDK's `isSnapshotNotFoundError`).
       if (goneSnapshots.has(asked.source.snapshotId)) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
