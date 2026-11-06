@@ -2,10 +2,12 @@
  * workspace-slack-bot.ts -- a workspace's own Slack bot read, connected, and disconnected, and the reader's own notifications from it (`slack-bot-wire.ts`).
  *
  * Each declares a workspace or installation not found, and the writes a
- * role that does not allow them; a default repository named, for the
- * workspace or a channel, also refuses one the workspace's GitHub does not
- * reach or GitHub not answering
- * (`packages/service/src/slack/slack-bot-procedures.ts`).
+ * role that does not allow them
+ * (`packages/service/src/slack/slack-bot-procedures.ts`). Note that a
+ * default repository named, for the workspace or a channel, may also be
+ * refused as one the workspace's GitHub does not reach or GitHub not
+ * answering; neither is declared, so the workspace client reads both as no
+ * answer, as it always has.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -69,14 +71,7 @@ export const workspaceSlackBotContract = {
     .input(exactInput(workspaceSlackBotNotificationsRequestSchema))
     .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
   repository: declaredProcedure
-    .errors(
-      refuses(
-        HOSTED_API_ERROR.NOT_FOUND,
-        HOSTED_API_ERROR.NOT_PERMITTED,
-        HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-        HOSTED_API_ERROR.GITHUB_UNANSWERED,
-      ),
-    )
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
@@ -87,14 +82,7 @@ export const workspaceSlackBotContract = {
     .input(exactInput(workspaceSlackBotRepositoryRequestSchema))
     .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
   channel: declaredProcedure
-    .errors(
-      refuses(
-        HOSTED_API_ERROR.NOT_FOUND,
-        HOSTED_API_ERROR.NOT_PERMITTED,
-        HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-        HOSTED_API_ERROR.GITHUB_UNANSWERED,
-      ),
-    )
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({

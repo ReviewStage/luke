@@ -106,7 +106,7 @@ it.effect("connects GitHub by answering the install address, and names each refu
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { workspaceId: ACME.id });
     assert.deepEqual(member, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
     assert.deepEqual(stranger, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
-    assert.partialDeepStrictEqual(down, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(down, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
   }),
 );
 
@@ -361,7 +361,7 @@ it.effect(
       const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
       assert.deepEqual(yield* both(notPermitted.layer), [refused, refused]);
       assert.deepEqual(yield* both(notFound.layer), [outside, outside]);
-      assert.partialDeepStrictEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
+      assert.deepEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
     }),
 );
 
@@ -436,7 +436,7 @@ it.effect("an account that changes during the hand-off sends nothing under the n
 
     const removed = yield* Effect.provide(switched.removeMember(ACME.id, GRACE.userId), api.layer);
 
-    assert.partialDeepStrictEqual(removed, {
+    assert.deepEqual(removed, {
       ok: false,
       failure: WORKSPACE_CALL_FAILURE.UNANSWERED,
     });
@@ -456,7 +456,7 @@ it.effect("a hand-off that leaves no session sends nothing and answers unanswere
 
     const left = yield* Effect.provide(client(withdrawn).leave(ACME.id), api.layer);
 
-    assert.partialDeepStrictEqual(left, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(left, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
     assert.equal(api.requests().length, 0);
   }),
 );

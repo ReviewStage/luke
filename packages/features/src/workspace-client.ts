@@ -126,8 +126,9 @@ function failedCall<Answered extends object>(answered: Answered): answered is Fa
 
 /**
  * A procedure's answer (`hostedCall`) as a result: its output picked, or
- * how it failed, with the fields its refusal carries or the facts beneath
- * it where it reached no answer. The result's failure is the call's own, so
+ * why it failed, as the result shipped: its failure alone, the facts beneath
+ * an unanswered call and a refusal's fields left out. The result's failure
+ * is the call's own, so
  * a method answering a workspace result holds each to the workspace's words.
  */
 function resultOf<Answered extends object, Picked>(
@@ -140,7 +141,7 @@ function resultOf<Answered extends object, Picked>(
 > {
   return Effect.map(called, (answered) => {
     // SAFETY: an answer that carries a failure is how the call failed, and every other one is the procedure's output.
-    if (failedCall(answered)) return { ...answered, ok: false } as const;
+    if (failedCall(answered)) return { ok: false, failure: answered.failure } as const;
     return { ok: true, answer: pick(answered as Exclude<Answered, Failed<Answered>>) } as const;
   });
 }

@@ -112,14 +112,7 @@ export const githubContract = {
     .input(EffectSchema.Struct({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceIdSchema }))
     .output(EffectSchema.flip(workspaceTokenRepositoriesAnswerSchema)),
   setTokenRepository: declaredProcedure
-    .errors(
-      refuses(
-        HOSTED_API_ERROR.NOT_FOUND,
-        HOSTED_API_ERROR.NOT_PERMITTED,
-        HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-        HOSTED_API_ERROR.GITHUB_UNANSWERED,
-      ),
-    )
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(TOKEN_REPOSITORY_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES }))
     .input(exactInput(workspaceTokenRepositoryRequestSchema))
