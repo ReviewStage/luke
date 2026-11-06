@@ -89,7 +89,8 @@ export const SNAPSHOT_GONE_STATUS = 410;
 /**
  * The code Vercel's body names a snapshot gone by. Note that Vercel answers
  * 410 for a call to a stopped sandbox too (`sandbox_stopped`), which a resume
- * mends, so the status alone does not say the snapshot is gone.
+ * mends, and that a body that could not be read names no code, so only a 410
+ * that names this code says the snapshot is gone.
  */
 const SNAPSHOT_GONE_CODE = "snapshot_not_found";
 
@@ -196,7 +197,7 @@ export function snapshotGone(failure: { readonly _tag: string }): boolean {
   return (
     failure instanceof SandboxUnavailable &&
     failure.status === SNAPSHOT_GONE_STATUS &&
-    (failure.code === undefined || failure.code === SNAPSHOT_GONE_CODE)
+    failure.code === SNAPSHOT_GONE_CODE
   );
 }
 

@@ -296,7 +296,11 @@ it.effect(
 it.effect("a resume whose snapshot is gone is given up on at once, saying so", () =>
   Effect.gen(function* () {
     const peer = yield* fakeCdpPeer();
-    const { service } = browserOver(peer, { status: "stopped", resumeUnavailable: 410 });
+    const { service } = browserOver(peer, {
+      status: "stopped",
+      resumeUnavailable: 410,
+      resumeCode: "snapshot_not_found",
+    });
 
     // Note that the clock never moves, so a resume tried again would never answer.
     const unreachable = yield* Effect.flip(service.ensure(SESSION));
