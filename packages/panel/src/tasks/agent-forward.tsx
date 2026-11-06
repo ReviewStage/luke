@@ -77,6 +77,9 @@ const WORDS = {
 /** The agents whose forwarding the developer turned off in this window, which none is forwarded again on its own. */
 const declined = new Set<string>();
 
+/** The turn each agent was last forwarded on its own in, by agent, so a forward the host let go as its sandbox stopped is not taken again in the same turn. */
+const forwardedInTurn = new Map<string, string | null>();
+
 const selectForwardsPorts = (state: AppStateSnapshot): boolean =>
   selectAppSettingsView(state)?.forwardPorts ?? APP_SETTING_DEFAULTS.forwardPorts;
 
@@ -126,20 +129,24 @@ function useForwarding(agent: Pick<AgentSummary, "id" | "machine">): {
 /**
  * Forwards the agent on its own while its tab is shown and it is at work,
  * where the setting is on, no agent is forwarded, and the developer did not
- * turn this one off; then says so once, as its first port reaches the Mac.
+ * turn this one off, at most once a turn; then says so once, as its first
+ * port reaches the Mac.
  */
 export function useAutoForward(
-  agent: Pick<AgentSummary, "id" | "machine" | "status" | "archivedAt">,
+  agent: Pick<AgentSummary, "id" | "machine" | "status" | "archivedAt" | "turnId">,
   shown: boolean,
 ): void {
   const { offered, forwarding, answer } = useForwarding(agent);
   const wanted = useQuery({ ...appStateQuery, select: selectForwardsPorts }).data === true;
   const free = forwarding === null;
   const working = agentStillWriting(agent.status) && agent.archivedAt === undefined;
+  const { id, turnId } = agent;
   useEffect(() => {
-    if (!shown || !offered || !wanted || !free || !working || declined.has(agent.id)) return;
-    void pressAct(ACT_KIND.PORT_FORWARD_SET, { agentId: agent.id, on: true });
-  }, [shown, offered, wanted, free, working, agent.id]);
+    if (!shown || !offered || !wanted || !free || !working || declined.has(id)) return;
+    if (forwardedInTurn.has(id) && forwardedInTurn.get(id) === turnId) return;
+    forwardedInTurn.set(id, turnId);
+    void pressAct(ACT_KIND.PORT_FORWARD_SET, { agentId: id, on: true });
+  }, [shown, offered, wanted, free, working, id, turnId]);
 
   // Note that the toast answers the first port reaching the Mac, not each read, so a forward that stands says nothing more.
   const toast = useToast();

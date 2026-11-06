@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_MACHINE, AGENT_STATUS } from "@repo/features/agent-wire";
+import { AGENT_STATUS } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -15,14 +15,15 @@ import { useAutoForward } from "./agent-forward.js";
 /**
  * A cloud agent at work whose tab is open is forwarded on its own only while
  * no agent is, so the agent forwarded first keeps its ports and a browser
- * tab open on one never starts showing another agent's app. Synthetic ids.
+ * tab open on one never starts showing another agent's app; and once a
+ * turn, so one the host let go as its sandbox stopped is not taken again
+ * while it still reads as at work. Synthetic ids.
  */
 
 const AGENT = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  machine: AGENT_MACHINE.VERCEL,
   status: AGENT_STATUS.RUNNING,
-  archivedAt: undefined,
+  turnId: "5b0e2c1a-7d3f-4e6a-9c8b-2a1f0e3d4c5b",
 } as const;
 const OTHER_AGENT_ID = "1d2f3a4b-5c6d-4c6b-9e0a-8b3c7a1e2f4d";
 
@@ -38,13 +39,14 @@ function Shown(): null {
   return null;
 }
 
+/** Lets the Query client's batched notices reach the hook, which it sends on the next task. */
 async function settle(): Promise<void> {
   await act(async () => {
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 
-test("the open tab's agent is forwarded on its own only once no other agent is", async () => {
+test("the open tab's agent is forwarded on its own once no other agent is, once a turn", async () => {
   handState(
     {},
     {
@@ -68,4 +70,15 @@ test("the open tab's agent is forwarded on its own only once no other agent is",
   // The first agent's forwarding ended: the open tab's agent takes the ports.
   act(() => writeAppState(stateWith({}, { portForwarding: null })));
   await vi.waitFor(() => assert.deepEqual(sets, [{ agentId: AGENT.id, on: true }]));
+
+  // The host let it go as its sandbox stopped, in the same turn: it is not taken again.
+  act(() =>
+    writeAppState(
+      stateWith({}, { portForwarding: { agentId: AGENT.id, on: true, running: true, ports: [] } }),
+    ),
+  );
+  await settle();
+  act(() => writeAppState(stateWith({}, { portForwarding: null })));
+  await settle();
+  assert.deepEqual(sets, [{ agentId: AGENT.id, on: true }]);
 });

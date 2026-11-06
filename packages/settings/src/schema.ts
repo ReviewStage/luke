@@ -204,8 +204,9 @@ export const APP_SETTING_SCHEMA = {
   forwardPorts: toggleSetting({
     field: "forwardPorts",
     id: APP_SETTING_ID.FORWARD_PORTS,
-    label: "Forward cloud agents' ports to this Mac",
-    detail: "A dev server an agent starts in its sandbox opens at localhost here.",
+    label: "Forward cloud agents' ports automatically",
+    detail:
+      "A dev server an agent starts in its sandbox opens at localhost on this Mac. A forward already on stands until it is stopped from its ports chip.",
     default: true,
     page: SETTINGS_PAGE.THIS_MAC,
     order: 3,
