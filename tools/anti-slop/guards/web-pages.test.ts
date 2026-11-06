@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cardProblems,
   framedPageProblems,
   headProblems,
   textSizeProblems,
@@ -37,6 +38,27 @@ describe("the site's pages", () => {
     expect(unfurlProblems(app, landing)).toEqual([
       "app.html: og:image is /other.png, not /card.png",
     ]);
+  });
+
+  it("name a card that tells X something else, or whose title opens lowercase without the site's name", () => {
+    const card = [
+      '<meta property="og:title" content="Vespin: An inbox" />',
+      '<meta property="og:description" content="For agents." />',
+      '<meta property="og:image" content="/card.png" />',
+      '<meta property="og:image:alt" content="The logo." />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      '<meta name="twitter:title" content="Vespin: An inbox" />',
+      '<meta name="twitter:description" content="For agents." />',
+      '<meta name="twitter:image" content="/card.png" />',
+      '<meta name="twitter:image:alt" content="The logo." />',
+    ].join("\n");
+    expect(cardProblems("ok.html", card)).toEqual([]);
+    expect(cardProblems("lower.html", card.replaceAll("An inbox", "an inbox"))).toEqual([
+      'lower.html: og:title reads "an inbox" once iMessage drops the site\'s name',
+    ]);
+    expect(
+      cardProblems("bare.html", card.replace(/<meta name="twitter:image" [^>]*>/u, "")),
+    ).toEqual(["bare.html: twitter:image is missing, not its og:image"]);
   });
 
   it("name a framed page whose style its policy no longer admits, or that loads a script", () => {

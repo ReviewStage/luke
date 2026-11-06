@@ -11,7 +11,8 @@ import { type RepositoryGuard, readJson, readText, record } from "./guard.ts";
  * site serves, so no page ships a blank tab; the web app installs from a
  * manifest whose icons are the sizes they claim; a pasted Vespin link unfurls
  * as the landing page's card under Vespin's name, since an unfurler reads it
- * signed out; the page the app frames carries its one style by the digest
+ * signed out; every page's card says the same to X as to everyone else, and
+ * its title still reads as one once iMessage drops the site's name from it; the page the app frames carries its one style by the digest
  * its policy admits and loads nothing; and every Tailwind entry takes
  * `@repo/ui`'s theme (`packages/ui/AGENTS.md`), without which the buttons'
  * utilities compile to nothing; and the panel's root stops a phone's text
@@ -70,6 +71,38 @@ export function headProblems(page: string, html: string): readonly string[] {
   const found = icons.map(({ rel, href }) => `${rel} ${href}`).join(", ");
   if (found !== expected) problems.push(`${page}: links icons ${found || "none"}, not ${expected}`);
   if (!THEME_COLOR.test(html)) problems.push(`${page}: names no theme-color`);
+  return problems;
+}
+
+/** The Open Graph tags X reads under its own names, and only under them, to draw a large card. */
+const TWITTER_TWINS = [
+  ["og:title", "twitter:title"],
+  ["og:description", "twitter:description"],
+  ["og:image", "twitter:image"],
+  ["og:image:alt", "twitter:image:alt"],
+] as const;
+
+/** A site name at a title's start and the separator after it, which iMessage drops from the card. */
+const LEADING_SITE_NAME = /^Vespin\s*[:|\-–—]\s*/u;
+
+/**
+ * Where a page's card tells X something else than its Open Graph tags, or
+ * its title opens on a lowercase word once iMessage drops "Vespin: " from it.
+ */
+export function cardProblems(page: string, html: string): readonly string[] {
+  const tags = metaOf(html);
+  const title = tags.get("og:title");
+  if (title === undefined) return [];
+  const problems: string[] = [];
+  if (tags.get("twitter:card") !== "summary_large_image")
+    problems.push(`${page}: twitter:card is not summary_large_image`);
+  for (const [og, twitter] of TWITTER_TWINS) {
+    if (tags.get(twitter) !== tags.get(og))
+      problems.push(`${page}: ${twitter} is ${tags.get(twitter) ?? "missing"}, not its ${og}`);
+  }
+  const rest = title.replace(LEADING_SITE_NAME, "");
+  if (rest !== title && rest[0] !== rest[0]?.toUpperCase())
+    problems.push(`${page}: og:title reads "${rest}" once iMessage drops the site's name`);
   return problems;
 }
 
@@ -240,6 +273,7 @@ async function webPageProblems(root: string): Promise<readonly string[]> {
   const served = (href: string): string => path.join(root, PUBLIC, href);
   const problems = [
     ...pages.flatMap((page) => headProblems(`${WEB}/${page}`, readText(root, `${WEB}/${page}`))),
+    ...pages.flatMap((page) => cardProblems(`${WEB}/${page}`, readText(root, `${WEB}/${page}`))),
     ...ICONS.filter(({ href }) => !existsSync(served(href))).map(
       ({ href }) => `${PUBLIC}${href}: is not there`,
     ),
@@ -258,6 +292,6 @@ async function webPageProblems(root: string): Promise<readonly string[]> {
 
 export const webPagesGuard: RepositoryGuard = {
   holds:
-    "the site's pages carry their icons, theme color, card and policy, and every Tailwind entry takes @repo/ui's theme, and the panel's root stops a phone's text autosizing",
+    "the site's pages carry their icons, theme color, card, X's copy of it, and policy, and every Tailwind entry takes @repo/ui's theme, and the panel's root stops a phone's text autosizing",
   problems: webPageProblems,
 };
