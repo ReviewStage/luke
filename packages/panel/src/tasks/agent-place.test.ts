@@ -125,7 +125,7 @@ test("an agent in the cloud says Cloud, whatever the beats say", async () => {
   assert.equal(await placeOf({}, undefined), "Runs on: Cloud");
 });
 
-/** The `run_on_mac` row the cloud chip's card ends with, once rested on: its words and what its dot says. */
+/** The `run_on_mac` row the cloud chip's card ends with, once rested on: whose its person chip names and what its dot says. */
 async function runOnMacRowOf(runOnMac: RunOnMacStanding): Promise<readonly (string | null)[]> {
   await placeOf({}, undefined, runOnMac);
   restOn(document.querySelector(".ui-chip") ?? assert.fail("the chip stands"));
@@ -134,8 +134,8 @@ async function runOnMacRowOf(runOnMac: RunOnMacStanding): Promise<readonly (stri
     [...document.querySelectorAll(".ui-hover-card-row")].at(-1) ??
     assert.fail("the card names a Mac");
   return [
-    row.querySelector(".ui-hover-card-row-label")?.textContent ?? null,
-    row.querySelector('[role="img"]')?.getAttribute("aria-label") ?? null,
+    row.querySelector("[data-actor-ref] .ui-inline-ref-label")?.textContent ?? null,
+    row.querySelector('.ui-status-glyph[role="img"]')?.getAttribute("aria-label") ?? null,
   ];
 }
 
@@ -143,9 +143,9 @@ test("a cloud agent's chip says to a reader, and its card shows, the reader's ow
   const runOnMac = { on: true, owner: { userId: READER, name: "Ada Lovelace" } } as const;
   assert.equal(
     await placeOf({}, undefined, runOnMac),
-    "Runs on: Cloud, run_on_mac · Your Mac, Online",
+    "Runs on: Cloud, run_on_mac on your Mac, Online",
   );
-  assert.deepEqual(await runOnMacRowOf(runOnMac), ["run_on_mac · Your Mac", "Online"]);
+  assert.deepEqual(await runOnMacRowOf(runOnMac), ["You", "Online"]);
 });
 
 test("a cloud agent's card names a teammate's Mac, offline where none of theirs listens", async () => {
@@ -155,6 +155,6 @@ test("a cloud agent's card names a teammate's Mac, offline where none of theirs 
       reason: RUN_ON_MAC_OFF.MAC_AWAY,
       owner: { userId: "user-charles", name: "Charles Pan" },
     }),
-    ["run_on_mac · Charles Pan’s Mac", "Offline"],
+    ["Charles Pan", "Offline"],
   );
 });
