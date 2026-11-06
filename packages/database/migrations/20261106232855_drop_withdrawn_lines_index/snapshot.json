@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "1cbbc8fc-d0e6-4e36-ab97-59b0b2da4c57",
-  "prevIds": ["02da8a68-27f4-4b36-b43a-6a6b67a57aa8"],
+  "id": "81c1d055-f2ba-4349-b77a-5dccfe8c5b92",
+  "prevIds": ["2fa813ce-2179-41c4-a737-81e9f17dff27", "6d3a2c70-1d7e-4cff-a044-9d5f907e3b0b"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -529,12 +529,6 @@
     {
       "isRlsEnabled": false,
       "name": "task_section_entry",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "token_pull_request_poll",
       "entityType": "tables",
       "schema": "public"
     },
@@ -9109,7 +9103,7 @@
       "table": "sandbox_firewall"
     },
     {
-      "type": "text",
+      "type": "uuid",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -11378,110 +11372,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "task_section_entry"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "pull_request",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'{}'",
-      "generated": null,
-      "identity": null,
-      "name": "etags",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "last_review_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "last_comment_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "head_sha",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "check_conclusion",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "next_poll_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "token_pull_request_poll"
     },
     {
       "type": "text",
@@ -14167,6 +14057,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sandbox_firewall_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sandbox_firewall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "updated_at",
           "isExpression": false,
           "asc": true,
@@ -14939,34 +14850,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "task_section_entry"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "next_poll_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "agent_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "token_pull_request_poll_due",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "token_pull_request_poll"
     },
     {
       "nameExplicit": true,
@@ -16644,6 +16527,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "sandbox_firewall_agent_id_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sandbox_firewall"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["conversation_id"],
       "schemaTo": "public",
       "tableTo": "conversations",
@@ -17187,19 +17083,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "task_section_entry"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["agent_id"],
-      "schemaTo": "public",
-      "tableTo": "agent",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "token_pull_request_poll_agent_id_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "token_pull_request_poll"
     },
     {
       "nameExplicit": false,
@@ -17976,14 +17859,6 @@
       "name": "task_section_pkey",
       "schema": "public",
       "table": "task_section",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["agent_id"],
-      "nameExplicit": false,
-      "name": "token_pull_request_poll_pkey",
-      "schema": "public",
-      "table": "token_pull_request_poll",
       "entityType": "pks"
     },
     {
