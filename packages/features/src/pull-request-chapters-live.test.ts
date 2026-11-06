@@ -83,5 +83,5 @@ it.each([
     { failure: "unavailable" },
   ],
 ])("a pull request whose newest claim is %s is drawn as the read answers it", (_, rows, answer) => {
-  expect(pullRequestChaptersOfLive(rows, 7, true)).toEqual(answer);
+  expect(pullRequestChaptersOfLive(rows, 7, { generatable: true })).toEqual(answer);
 });

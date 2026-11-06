@@ -369,7 +369,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a read before any Generate answers no chapters, and whether the reader can generate them, asking GitHub for no pull request: not where they saved no API key, since Vespin's own key tells no chapters",
+    "a read before any Generate answers no chapters, and what the reader's Generate would run on, Haiku on their Anthropic key where they saved both, asking GitHub for no pull request: nothing where they saved no API key, since Vespin's own key tells no chapters",
     () =>
       Effect.gen(function* () {
         const { owner, github, ask } = yield* standing();
@@ -377,6 +377,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           pullRequest: {
             number: NUMBER,
             generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
@@ -384,6 +385,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         const keyless = yield* standing({ keys: [] });
         const read = chaptersOf(yield* keyless.ask(keyless.owner, { number: NUMBER }));
         assert.equal(read.pullRequest?.generatable, false);
+        assert.equal(read.pullRequest?.runsOn, undefined);
       }),
   );
 
@@ -401,7 +403,12 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           chapters: [{ kind: CHAPTER_KIND.STORY, ...TOLD.chapters[0] }],
         };
         assert.deepEqual(generated, {
-          pullRequest: { number: NUMBER, generatable: true, chapters: ready },
+          pullRequest: {
+            number: NUMBER,
+            generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
+            chapters: ready,
+          },
         });
         assert.deepEqual(chaptersOf(yield* ask(teammate, { number: NUMBER })), generated);
         assert.deepEqual(
@@ -483,6 +490,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
           pullRequest: {
             number: NUMBER,
             generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: CHAPTERS_MODEL.HAIKU },
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
@@ -542,12 +550,16 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a Generate by a member who saved only an OpenAI key runs on OpenAI's model of Haiku's tier, and the chapters name it",
+    "a member who saved only an OpenAI key is told their Generate runs on OpenAI's model of Haiku's tier on that key, it does, and the chapters name it",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* standing({ keys: [PROVIDER_KEY_PROVIDER.OPENAI] });
         const read = chaptersOf(yield* ask(owner, { number: NUMBER }));
         assert.equal(read.pullRequest?.generatable, true);
+        assert.deepEqual(read.pullRequest?.runsOn, {
+          provider: MODEL_PROVIDER.OPENAI,
+          model: "gpt-6-luna",
+        });
         const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
         const chapters = answer.pullRequest?.chapters;
         assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);

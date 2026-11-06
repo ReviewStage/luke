@@ -1,5 +1,4 @@
 import type { AgentChangedFile } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL, CHAPTERS_MODEL_LABEL } from "@repo/features/chapters-model-choice";
 import { formatCount } from "@repo/features/number-format";
 import {
   type Chapter,
@@ -9,7 +8,10 @@ import {
   type LineRef,
   threadInChapter,
 } from "@repo/features/pull-request-chapters";
-import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@repo/features/pull-request-chapters-wire";
+import {
+  type ChaptersRunsOn,
+  PULL_REQUEST_CHAPTERS_FAILURE_KIND,
+} from "@repo/features/pull-request-chapters-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@repo/settings/shortcuts";
@@ -87,6 +89,7 @@ import {
   type FileReveal,
   type LineComments,
 } from "./agent-changes-tab.js";
+import { API_KEY_WORDS } from "./agent-model.js";
 import { Section } from "./agent-pull-request-tab.js";
 import { typingInto } from "./changes-list.js";
 import { CHANGES_WORDS } from "./changes-model.js";
@@ -124,7 +127,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * chunk of its own, loaded the first time it is shown, as Settings is. Nothing makes them but a press of
  * Generate chapters, which answers once the generation lands, minutes later
  * at most; until then the view stands as a ring timed from the press.
- * Every Generate runs on Haiku, which the button names.
+ * Every Generate runs on Haiku's tier, on the member's own API key: the
+ * button names the model the read says it would run on, Haiku 5.5 or
+ * OpenAI's model of its tier, and the line over it the key it spends.
  * Chapters someone else is making stand the same way, until their
  * generation lands. A generation that failed says why with a
  * Retry; a member who saved no API key, which chapters run on, is told to
@@ -184,8 +189,16 @@ const CHAPTERS_WORDS = {
   READING: "Reading chapters",
   FAILED: "The chapters could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  NONE: "No chapters yet.",
-  GENERATE: `Generate chapters (${CHAPTERS_MODEL_LABEL[CHAPTERS_MODEL.HAIKU]})`,
+  /** That no chapters stand yet, and whose key a Generate would spend where the read says. */
+  none: (runsOn: ChaptersRunsOn | undefined) =>
+    runsOn === undefined
+      ? "No chapters yet."
+      : `No chapters yet. Generating them runs on your ${API_KEY_WORDS[runsOn.provider]}.`,
+  /** The Generate, naming the model it would run on where the read says. */
+  generate: (runsOn: ChaptersRunsOn | undefined) =>
+    runsOn === undefined
+      ? "Generate chapters"
+      : `Generate chapters (${chaptersModelLabel(runsOn.model)})`,
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
@@ -993,12 +1006,12 @@ function chaptersState(
         <EmptyState
           icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
           action={{
-            label: CHAPTERS_WORDS.GENERATE,
+            label: CHAPTERS_WORDS.generate(state.runsOn),
             look: EMPTY_STATE_ACTION_LOOK.PRIMARY,
             onClick: read.generate,
           }}
         >
-          {CHAPTERS_WORDS.NONE}
+          {CHAPTERS_WORDS.none(state.runsOn)}
         </EmptyState>
       ) : (
         <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>

@@ -161,7 +161,7 @@ const PAYER_WORDS = {
 } as const satisfies Record<Exclude<AgentPayer, typeof AGENT_PAYER.API_KEY>, string>;
 
 /** The member's own API key, named by the provider it is for. */
-const API_KEY_WORDS = {
+export const API_KEY_WORDS = {
   [MODEL_PROVIDER.ANTHROPIC]: "Anthropic API key",
   [MODEL_PROVIDER.OPENAI]: "OpenAI API key",
 } as const satisfies Record<ModelProvider, string>;
