@@ -534,9 +534,6 @@ const SHARED_FAILURE_NOTE = {
   [AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [AGENT_CALL_FAILURE.AGENT_NOT_READY]: "The agent is still starting. Try again in a moment.",
   [AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
-  // Said where the service could not wait on the image past its answer.
-  [AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING]:
-    "The agent's image is taking too long to prepare. Try again in a few minutes.",
   [AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE]: "This agent cannot be reached from here yet.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT]:
     "The plan paying for this agent is signed out. Its starter signs in again in Settings.",
@@ -686,7 +683,6 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.AGENT_RETIRED:
     case AGENT_CALL_FAILURE.DEVICE_REMOVED:
     case AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
@@ -1217,7 +1213,6 @@ function startFailureWords(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
@@ -1342,7 +1337,6 @@ export function messageFailureWords(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case AGENT_CALL_FAILURE.NOT_PERMITTED:
-    case AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING:
     case AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE:
     case AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT:
     case AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:

@@ -8,6 +8,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "agent-image": "tsx scripts/agent-image.ts",
     "auth:seed": "tsx server/seed-clients.ts",
     "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-server && tsx scripts/prerender.ts && pnpm --filter @repo/agent-runner build && tsx scripts/bundle-functions.ts",
     "db:migrate": "tsx server/db/migrate.ts",

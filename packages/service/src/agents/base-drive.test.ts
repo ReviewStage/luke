@@ -13,7 +13,7 @@ import type { RepositorySandbox } from "./repository-shell.js";
 import { composePolicy, type FirewallEntry, type FirewallSlot } from "./sandbox-firewall.js";
 import { type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
-const IMAGE = "snap_fixture_image";
+const IMAGE = "agent-image:fixture";
 const TOKEN = "ghs_fixtureBaseDriveToken";
 const RELAY: BaseDriveOf = {
   workspaceId: "workspace-relay",
@@ -79,7 +79,7 @@ it.effect(
       assert.deepEqual([...fake.drives], [name]);
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);
-      assert.equal(sandbox.snapshotId, IMAGE);
+      assert.equal(sandbox.image, IMAGE);
       assert.deepEqual(sandbox.mounts, {
         [BASE_DRIVE.MOUNT_PATH]: { drive: name, mode: "read-write" },
       });

@@ -103,7 +103,7 @@ const installDependencies = Effect.fn("web/installBaseDriveDependencies")(functi
 
 /**
  * The workspace's repository's base drive filled, where it has none: the
- * drive created, a sandbox opened from the image's snapshot with it mounted
+ * drive created, a sandbox opened from the agents' image with it mounted
  * at the workspace, the default branch cloned whole onto it through the
  * token at the firewall for the clone alone, its dependencies installed, and
  * the sandbox stopped and deleted. A sandbox name another launch took first
@@ -115,7 +115,7 @@ const installDependencies = Effect.fn("web/installBaseDriveDependencies")(functi
 export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   api: VercelSandboxApi,
   of: BaseDriveOf,
-  imageSnapshotId: string,
+  image: string,
   credential: RepositorySnapshotCredential,
   open: (running: string) => RepositorySandbox,
 ) {
@@ -126,7 +126,7 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   const created = yield* api
     .create({
       name,
-      snapshotId: imageSnapshotId,
+      from: { image },
       tags: {},
       timeoutMs: Duration.toMillis(BASE_DRIVE.FILL_TIMEOUT),
       vcpus: CODER.SANDBOX_VCPUS,

@@ -1,7 +1,8 @@
 /**
  * pins.ts -- what a coding agent's sandbox pins of Claude Code and Codex: their versions and where the image puts them, read by the image, the sessions, and the protocol generator alike.
  *
- * The image (`@repo/service`'s `agent-runtime/sandbox-image.ts`) installs
+ * The image (`apps/web/agent-image/Dockerfile`, which
+ * `tools/anti-slop/guards/agent-pins.ts` holds to these) installs
  * exactly these, the sessions (`claude-code-sessions.ts`,
  * `codex-sessions.ts`) point the runner at the paths, the runner bundles
  * the same Agent SDK (this package's `package.json`), and Codex's
@@ -15,7 +16,7 @@
  * it as it stands.
  */
 
-/** The unprivileged user the harness runs as, which the image creates. */
+/** The unprivileged user the harness runs as, which a sandbox makes as the Sandbox SDK makes a user (`vercel-machine.ts`). */
 export const AGENT_USER = "agent";
 
 /**
@@ -49,10 +50,9 @@ export const PLAYWRIGHT_PIN = {
 /**
  * Our own browser in an agent's sandbox, as its start (`@repo/service`'s
  * `browser/sandbox-browser.ts`) runs it: Chromium's DevTools port and the X
- * display Xvfb draws it on. Each is started in a session of its own, so the
- * runner's reader of the sandbox's processes (`processes.ts`) tells the
- * browser's processes from the agent's by the command line of their
- * session's leader, and a wait after the agent opened its browser can still
+ * display Xvfb draws it on. It runs as the sandbox's default user, so the
+ * runner's reader of the sandbox's processes (`processes.ts`) never counts
+ * it as the agent's, and a wait after the agent opened its browser can still
  * stop the sandbox, whose stop keeps the browser's profile on its disk.
  */
 export const SANDBOX_BROWSER_PIN = {
@@ -78,7 +78,7 @@ export const SANDBOX_TOOLS_DIRECTORY = "/opt/agent";
 /** Where a sandbox made before the rename holds our tools, read through `SANDBOX_TOOLS_DIRECTORY`'s link and never written. */
 export const SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME = "/opt/luke";
 
-/** Where each launch installs the runner's bundle: a directory the image makes root-owned, so no Terminal's shell, the default user's, can swap what runs as `agent`. */
+/** Where the image keeps the runner's bundle, built into it with the image (`apps/web/agent-image/Dockerfile`). */
 export const RUNNER_DIRECTORY = `${SANDBOX_TOOLS_DIRECTORY}/agent-runner`;
 
 /**

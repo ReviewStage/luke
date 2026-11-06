@@ -66,7 +66,6 @@ import {
   openGithubUser,
 } from "../../testing/github-app-fake.js";
 import { PLAN_AGENT_WRITERS, writesToAgent } from "../agent-reach.js";
-import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -2218,40 +2217,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.deepEqual(heard(eve), []);
             assert.ok(heard(codex).length > 0, "Codex runs it");
           }
-        }),
-    );
-
-    it.effect(
-      "a Start whose harness's image is still being prepared is refused by name, leaving no agent, so the same Start later starts it",
-      () =>
-        Effect.gen(function* () {
-          const { owner, workspaceId } = yield* openStarter(true);
-          const { eve, claudeCode, native } = runtimes();
-          claudeCode.answers.open = EVE_SEND_OUTCOME.FAILED;
-          claudeCode.answers.status = IMAGE_PREPARING_STATUS;
-          const layers = Layer.mergeAll(
-            githubReaching(INSTALLATIONS).layer,
-            CATALOG,
-            environment(),
-            native,
-          );
-          const ask = startIn(workspaceId, "anthropic/claude-opus-5.5");
-
-          const preparing = yield* Effect.result(
-            startAgent(routedSessions(owner), owner, ask).pipe(Effect.provide(layers)),
-          );
-          assert.ok(Result.isFailure(preparing) && "error" in preparing.failure);
-          assert.equal(preparing.failure.error, HOSTED_REFUSAL.AGENT_IMAGE_PREPARING.error);
-          assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
-
-          yield* TestClock.adjust("1 minute");
-          claudeCode.answers.open = EVE_SEND_OUTCOME.ACCEPTED;
-          const started = yield* startAgent(routedSessions(owner), owner, ask).pipe(
-            Effect.provide(layers),
-          );
-          assert.equal(started.created, true);
-          assert.deepEqual(heard(claudeCode), ["open", "open"]);
-          assert.deepEqual(eve.calls, []);
         }),
     );
   },

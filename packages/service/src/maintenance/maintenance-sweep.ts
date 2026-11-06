@@ -1,7 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { causeKind } from "@repo/runtime/effect";
 import { Cause, Clock, Data, Effect, type Redacted } from "effect";
-import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
 import type { RepositorySnapshotSweepOutcome } from "../agents/repository-snapshot.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
@@ -41,8 +40,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * bound is deleted, the automations whose schedule is due are fired, a picture pasted into a
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
- * for what their agents are told of, and the native agents' image template
- * is moved on and the templates of older images deleted, the hosts' pairings
+ * for what their agents are told of, the hosts' pairings
  * whose code lapsed are deleted with the address each kept, the sync log's
  * rows older than its keep are pruned, the firewall records of sandbox
  * sessions that ended long since are dropped, and the ChatGPT plan token a
@@ -85,8 +83,6 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
-  /** Moves the native agents' image template on, building it where it is missing, and deletes older images' templates. */
-  sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
   /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
@@ -147,8 +143,6 @@ interface MaintenanceSweepAnswer {
   purgedPictures: Swept<number>;
   /** What the poll of the token agents' pull requests did. */
   tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
-  /** What the sweep over the native agents' image templates did. */
-  imageTemplates: Swept<TemplateSweepOutcome>;
   /** What the sweep over the repository snapshots did. */
   repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
@@ -215,7 +209,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       "sweepTokenPullRequests",
       sweeps.sweepTokenPullRequests(now),
     ),
-    imageTemplates: yield* isolated("sweepImageTemplates", sweeps.sweepImageTemplates(now)),
     repositorySnapshots: yield* isolated(
       "sweepRepositorySnapshots",
       sweeps.sweepRepositorySnapshots(now),

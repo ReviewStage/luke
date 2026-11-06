@@ -23,10 +23,10 @@ import {
 import { composePolicy, type FirewallEntry, type FirewallSlot } from "./sandbox-firewall.js";
 import { type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
-const IMAGE = "snap_fixture_image";
+const IMAGE = "agent-image:fixture";
 const TOKEN = "ghs_fixtureRepositorySnapshotToken";
 const RELAY: RepositorySnapshotOf = {
-  imageSnapshotId: IMAGE,
+  image: IMAGE,
   workspaceId: "workspace-relay",
   fullName: "Acme/Relay",
   defaultBranch: "trunk",
@@ -90,8 +90,10 @@ it.effect(
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);
       assert.equal(sandbox.name, repositorySnapshotName(RELAY));
-      assert.equal(sandbox.snapshotId, IMAGE);
+      assert.equal(sandbox.image, IMAGE);
       assert.equal(sandbox.status, "stopped");
+      // The agent's user was made before the clone, so a sandbox opened from the snapshot holds it.
+      assert.ok(fake.runs.some((run) => run.args.join(" ") === "-m -s /bin/bash agent"));
       const clone = fake.runs.find((run) =>
         Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.URL),
       );
@@ -188,7 +190,7 @@ it.effect(
       // A build whose function ended between its create and its snapshot, as Vercel then holds it.
       yield* api.create({
         name: repositorySnapshotName(RELAY),
-        snapshotId: IMAGE,
+        from: { image: IMAGE },
         tags: {},
         timeoutMs: 60_000,
         vcpus: 4,
@@ -243,7 +245,7 @@ it.effect(
 
       const others: readonly RepositorySnapshotOf[] = [
         { ...RELAY, workspaceId: "workspace-other" },
-        { ...RELAY, imageSnapshotId: "snap_next_image" },
+        { ...RELAY, image: "agent-image:next" },
         { ...RELAY, defaultBranch: "main" },
       ];
       const reads = yield* Effect.forEach(others, (of) => readRepositorySnapshot(api, of));
@@ -275,7 +277,7 @@ it.effect(
       yield* built(api, fresh);
       yield* api.create({
         name: repositorySnapshotName({ ...RELAY, workspaceId: "workspace-left" }),
-        snapshotId: IMAGE,
+        from: { image: IMAGE },
         tags: {},
         timeoutMs: 60_000,
         vcpus: 4,

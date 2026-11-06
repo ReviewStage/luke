@@ -102,7 +102,7 @@ function vercel(
           const body = JSON.parse(await new Response(init.body).text());
           const args: readonly string[] = body.args;
           asked.push({ method, url: parsed, args });
-          // Every command is `setpriv <drop> -- sh -c <script> sh <tmux args>`; the list is the one with none.
+          // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
           const scriptAt = args.indexOf("-c") + 1;
           const tmuxArgs = args.slice(scriptAt + 2);
           if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));

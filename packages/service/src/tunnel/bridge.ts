@@ -9,8 +9,6 @@
  * JSON line each way. A PTY is not binary-safe, so a channel's bytes cross
  * base64-encoded, and a line is JSON, which holds no raw line break; the
  * PTY may still turn a written `\n` into `\r\n`, which each reader drops.
- * It runs with every capability dropped (`sandbox-capabilities.ts`), since
- * what it reaches is the agent's, which nothing vouches for.
  *
  * The port bridge opens a TCP connection to the port on the sandbox's
  * loopback for each channel opened, closes the connection when its channel
@@ -19,7 +17,6 @@
  */
 
 import { TUNNEL_KIND, type TunnelKind } from "@repo/features/sandbox-tunnel-wire";
-import { WITHOUT_CAPABILITIES } from "../agents/sandbox-capabilities.js";
 import type { CommandAsk } from "../agents/vercel-sandbox-api.js";
 
 /** A bridge a tunnel asks for: its kind, and the argument that kind takes. */
@@ -92,17 +89,10 @@ process.stdin.on("end", () => {
 say({ bridge: "ready" });
 `;
 
-/** The bridge a tunnel asks for, as the PTY's start frame runs it: Node with no capabilities, its source inline. */
+/** The bridge a tunnel asks for, as the PTY's start frame runs it: Node, its source inline. */
 export function tunnelBridge(bridge: TunnelBridge): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "node",
-      "--no-warnings",
-      "-e",
-      PORT_BRIDGE_SOURCE,
-      String(bridge.port),
-    ],
+    command: "node",
+    args: ["--no-warnings", "-e", PORT_BRIDGE_SOURCE, String(bridge.port)],
   };
 }

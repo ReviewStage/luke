@@ -1263,39 +1263,33 @@ it.effect(
     }),
 );
 
-/** Our browser, which the agent opened earlier in the turn: Xvfb and Chromium each leading a session of their own, a renderer in Chromium's. */
+/** Our browser, which the agent opened earlier in the turn, as the sandbox's default user: Xvfb and Chromium, and a renderer of Chromium's. */
 const AGENT_BROWSER: readonly FakeProcess[] = [
-  { pid: 300, parent: 1, emptied: true, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
+  { pid: 300, parent: 1, agents: false, argv: ["Xvfb", ":77", "-screen", "0", "1280x800x24"] },
   {
     pid: 310,
     parent: 1,
-    emptied: true,
+    agents: false,
     argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9333", "about:blank"],
   },
-  {
-    pid: 311,
-    parent: 310,
-    emptied: true,
-    session: 310,
-    argv: ["/usr/local/chromium/chrome", "--type=renderer"],
-  },
+  { pid: 311, parent: 310, agents: false, argv: ["/usr/local/chromium/chrome", "--type=renderer"] },
 ];
 
 /** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, and our browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
   ...AGENT_BROWSER,
-  { pid: 1, parent: 0, emptied: false },
-  { pid: RUNNER_PID, parent: 1, emptied: true },
-  { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: true },
+  { pid: 1, parent: 0, agents: false },
+  { pid: RUNNER_PID, parent: 1, agents: true },
+  { pid: RUNNER_PID + 1, parent: RUNNER_PID, agents: true },
 ];
 /** A dev server the agent started, detached from its shell onto the sandbox's init. */
-const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, emptied: true };
+const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, agents: true };
 
-/** A Chromium of the agent's own, leading its session on another port. */
+/** A Chromium of the agent's own, on another port. */
 const AGENT_CHROMIUM: FakeProcess = {
   pid: 4444,
   parent: 1,
-  emptied: true,
+  agents: true,
   argv: ["/usr/local/chromium/chrome", "--remote-debugging-port=9222", "--headless"],
 };
 

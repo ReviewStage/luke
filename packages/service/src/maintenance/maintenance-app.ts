@@ -12,7 +12,6 @@ import { sweepAgentQueues } from "../agents/coder-host/agent-queue.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { SessionsForAccount } from "../automations/automation-runs.js";
@@ -121,8 +120,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
         environment.providerKeyEncryptionKeys,
         new Date(now),
       ).pipe(Effect.provideContext(startContext)),
-    // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
-    sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
     // A repository no agent starts on any more keeps no snapshot past its age.
     sweepRepositorySnapshots: () =>
       sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),

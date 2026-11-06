@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@repo/credentials": "workspace:*",
-    "@repo/service": "workspace:*",
     "@repo/wire": "workspace:*",
     "@vercel/sandbox": "catalog:"
   },

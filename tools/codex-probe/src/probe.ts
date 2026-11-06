@@ -1,9 +1,8 @@
 /**
- * probe.ts -- the live run: a Vercel Sandbox from today's image plus the pinned Codex, `codex app-server` as `agent` on the ChatGPT plan, the turns that exercise it, the restart on a refreshed token, and every seat the token must not be read from.
+ * probe.ts -- the live run: a Vercel Sandbox on Node plus the pinned Codex, `codex app-server` as `agent` on the ChatGPT plan, the turns that exercise it, the restart on a refreshed token, and every seat the token must not be read from.
  *
  * The run opens its own sandbox from the linked Vercel project (the SDK
- * reads `.vercel/project.json` and the CLI's sign-in), prepares it with the
- * same `prepareImage` every Vespin agent's snapshot is made with, installs the
+ * reads `.vercel/project.json` and the CLI's sign-in), installs the
  * pinned Codex root-owned and creates `agent`, and deletes the sandbox at the
  * end whatever happened. The access token stands at the sandbox's firewall
  * alone, swapped for a random placeholder Codex is handed in its place, as a
@@ -13,7 +12,6 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { prepareImage } from "@repo/service/agents/agent-runtime/sandbox-image";
 import { isRecord, isWireString, type WireValue } from "@repo/wire";
 import { type NetworkPolicy, Sandbox } from "@vercel/sandbox";
 import {
@@ -163,23 +161,6 @@ async function must(
   if (done.exitCode !== 0)
     throw new Error(`${step} failed (${done.exitCode}): ${done.stderr.slice(-600)}`);
   return done;
-}
-
-/** The session `prepareImage` takes: eve's, of which it and the code tooling call three methods. */
-type EveSession = Parameters<typeof prepareImage>[0];
-
-/** The adapter `prepareImage` is handed: eve's session surface over the SDK's sandbox, the three calls it makes. */
-function eveSessionOver(sandbox: Sandbox): EveSession {
-  const resolvePath = (path: string) => (path.startsWith("/") ? path : `/vercel/sandbox/${path}`);
-  const session: Pick<EveSession, "run" | "writeTextFile" | "resolvePath"> = {
-    resolvePath,
-    run: async (options: { command: string }) => bash(sandbox, options.command),
-    writeTextFile: async (options: { path: string; content: string }) =>
-      sandbox.writeFiles([{ path: resolvePath(options.path), content: options.content }]),
-  };
-  // SAFETY: `prepareImage` and the code tooling it installs call only `run`, `writeTextFile` and
-  // `resolvePath` (eve 0.74.0's `installCodeTooling` and `toolingPaths`), which this object implements.
-  return session as EveSession;
 }
 
 /** The app-server started as `agent` with the placeholder in its environment alone. */
@@ -336,8 +317,6 @@ async function prepare(
   sandbox: Sandbox,
   options: ProbeOptions,
 ): Promise<{ defaultUser: string; defaultGroup: string }> {
-  options.say("Preparing today's image (prepareImage); this takes several minutes.");
-  await prepareImage(eveSessionOver(sandbox));
   const who = await must("id", bash(sandbox, "id -un; id -gn"));
   const [defaultUser = "vercel-sandbox", defaultGroup = defaultUser] = who.stdout
     .trim()

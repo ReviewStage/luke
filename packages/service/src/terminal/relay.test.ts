@@ -292,7 +292,7 @@ it.effect(
 
       const [start, resize] = texts(pty.sent);
       assert.equal(start.type, "start");
-      assert.equal(start.command, "setpriv", "the shell attaches with every capability dropped");
+      assert.equal(start.command, "sh", "the shell attaches through tmux's script");
       assert.ok(
         start.args.includes(`=terminal-${SHELL}`),
         "the start names the shell's session exactly",

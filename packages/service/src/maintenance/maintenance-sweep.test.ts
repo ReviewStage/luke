@@ -67,7 +67,6 @@ interface Recorded {
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
-  imageTemplates: number[];
   repositorySnapshots: number[];
   hostPairings: number[];
   syncLog: number[];
@@ -91,7 +90,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     automated: [],
     pictures: [],
     tokenPullRequests: [],
-    imageTemplates: [],
     repositorySnapshots: [],
     hostPairings: [],
     syncLog: [],
@@ -172,11 +170,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.tokenPullRequests.push(now);
         return { polled: 2, told: 1 };
       }),
-    sweepImageTemplates: (now) =>
-      Effect.sync(() => {
-        recorded.imageTemplates.push(now);
-        return { current: "ready" as const, deleted: 1 };
-      }),
     sweepRepositorySnapshots: (now) =>
       Effect.sync(() => {
         recorded.repositorySnapshots.push(now);
@@ -237,7 +230,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
       repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
@@ -272,7 +264,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
       repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
@@ -294,7 +285,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       tokenPullRequests: [],
-      imageTemplates: [],
       repositorySnapshots: [],
       hostPairings: [],
       syncLog: [],
@@ -320,7 +310,6 @@ it.effect(
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
-      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.deepEqual(answer.body.repositorySnapshots, { listed: 3, deleted: 1 });
       assert.equal(answer.body.syncLog, 5);
       assert.equal(answer.body.staleFirewalls, 7);
@@ -342,7 +331,6 @@ it.effect(
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
-        imageTemplates: [instant],
         repositorySnapshots: [instant],
         hostPairings: [instant],
         syncLog: [instant],
@@ -377,8 +365,6 @@ it.effect(
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
-      assert.equal(recorded.imageTemplates.length, 1);
       assert.equal(recorded.repositorySnapshots.length, 1);
       assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);

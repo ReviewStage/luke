@@ -16,8 +16,7 @@
  * reports, and a relaunch resumes.
  *
  * `open` reads the harness's credential and answers; past the answer (`after-response.ts`) it opens
- * the agent's place with its repository checked out, waiting while the
- * machine's image is prepared, writes the skills its member installed into
+ * the agent's place with its repository checked out, writes the skills its member installed into
  * the app beside it (`native-skills.ts`), and launches the runner. A launch that
  * fails there is the agent's failed turn. The place, the launch, and every
  * write to the runner's stdin go through the agent's machine
@@ -150,11 +149,6 @@ import {
   SERVER_HANDOFF_PATH,
 } from "../../events/server-events.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
-import {
-  AgentSandboxImage,
-  IMAGE_PREPARING_STATUS,
-  ImagePreparing,
-} from "../agent-sandbox-image.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
@@ -181,7 +175,6 @@ import {
   type RunnerMark,
 } from "../machine/agent-machine.js";
 import { deploymentLifecycle } from "../machine/agent-machines.js";
-import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import {
@@ -201,24 +194,19 @@ import {
   sessionEnding,
 } from "../vercel-sandbox-api.js";
 import { BEARER_PREFIX, runnerTokenDigest } from "../workspace-mcp/bearer.js";
+import type { AgentImage } from "./agent-image.js";
 import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
-import type { RunnerBundle } from "./runner-bundle.js";
 import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHECKOUT, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { coderTurnMessage, readNativeTurnHanded, recordNativeTurnHanded } from "./turn-message.js";
 
-/** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the image, the runner's bundle, and the deployment's key ring. */
-export type RunnerServices =
-  | CheckoutServices
-  | AgentMachine
-  | AgentSandboxImage
-  | RunnerBundle
-  | HostedEnvironment;
+/** What the sessions reach: the store, GitHub, Vercel, the agent's machine, the agents' image, and the deployment's key ring. */
+export type RunnerServices = CheckoutServices | AgentMachine | AgentImage | HostedEnvironment;
 
 /** What every harness's sessions are composed with. */
 export interface RunnerSessionsOptions {
@@ -644,8 +632,7 @@ function failedStatus(failure: { readonly _tag: string }): number {
       ? FAILED_STATUS.UNAVAILABLE
       : FAILED_STATUS.REFUSED;
   }
-  if (failure._tag === "RunnerBundleMissing") return FAILED_STATUS.REFUSED;
-  if (failure instanceof ImagePreparing) return IMAGE_PREPARING_STATUS;
+  if (failure._tag === "AgentImageMissing") return FAILED_STATUS.REFUSED;
   return failure instanceof SandboxUnavailable
     ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
     : FAILED_STATUS.UNAVAILABLE;
@@ -690,11 +677,9 @@ function kindOf(failure: { readonly _tag: string }): string {
 /**
  * Whether a failure is a named outcome the developer is told as such, which
  * is logged and never reported: the account's plan or key refused, its
- * device removed or away, the repository its workspace no longer reaches,
- * or the image still being prepared, which a Start is made again for.
+ * device removed or away, or the repository its workspace no longer reaches.
  */
 function namedOutcome(failure: { readonly _tag: string }): boolean {
-  if (failure instanceof ImagePreparing) return true;
   if (failure instanceof CheckoutRefused) return failure.reason === CODER_REFUSAL.NOT_REACHABLE;
   return (
     failure instanceof LaunchRefused &&
@@ -1008,18 +993,15 @@ export const runnerSessions = <
      * A failure as the log says it and the caller reads it, in its own words
      * (`failureWords`): said once as an error, since the caller refuses what
      * was asked, and reported where no named refusal explains it
-     * (`agentFailureSaid`); an image still being prepared, which the caller
-     * asks again for, is a warning.
+     * (`agentFailureSaid`).
      */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
       Effect.as(
-        failure instanceof ImagePreparing
-          ? Effect.logWarning(`A ${harness.name} ${call} waits on its image being prepared`)
-          : agentFailureSaid(
-              `A ${harness.name} ${call} failed: ${keptFailureWords(failureWords(failure))}`,
-              kindOf(failure),
-              !namedOutcome(failure),
-            ),
+        agentFailureSaid(
+          `A ${harness.name} ${call} failed: ${keptFailureWords(failureWords(failure))}`,
+          kindOf(failure),
+          !namedOutcome(failure),
+        ),
         {
           outcome: EVE_SEND_OUTCOME.FAILED,
           status: failedStatus(failure),
@@ -1072,7 +1054,6 @@ export const runnerSessions = <
       layout: MachineLayout,
       first: RunnerMessage | undefined,
       credential: HarnessLaunch,
-      waitOnImage: boolean,
       queuedFirst?: OpenedLine,
       sandboxOpened: Effect.Effect<void> = Effect.void,
     ) =>
@@ -1084,7 +1065,6 @@ export const runnerSessions = <
             target,
             agent,
             harness: harness.name,
-            waitOnImage,
             beside: Effect.map(nativeSkills(target, agent, harness.skillRoots), (skills) =>
               nativeSkillFiles(skills, layout.skillsUpload),
             ),
@@ -1322,10 +1302,10 @@ export const runnerSessions = <
           // the session goes on in a fresh one, a clean checkout of the repository under the
           // session's tag. The harness's own session files went with the old filesystem, so none is
           // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
-          // that fails (the image still preparing, a clone refused) leaves the session standing
+          // that fails (a clone refused, say) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent), false);
+          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent));
           yield* machine
             .discard(found.value)
             .pipe(
@@ -1516,14 +1496,7 @@ export const runnerSessions = <
         if (!layout.linesRead) return false;
         const resumed = yield* machine.resume(found.value);
         if (resumed === PLACE_RESUME.GONE) {
-          yield* openedPlace(
-            agent,
-            sessionId,
-            layout,
-            undefined,
-            yield* harness.launch(agent),
-            false,
-          );
+          yield* openedPlace(agent, sessionId, layout, undefined, yield* harness.launch(agent));
           yield* Effect.ignore(machine.discard(found.value));
           return true;
         }
@@ -1661,38 +1634,12 @@ export const runnerSessions = <
         const layout = yield* machine.layout(agent);
         const sent = messageLine(message, layout);
         const queues = layout.linesRead && sent.files.length === 0 && answersFirst;
-        const handed = yield* (
-          queues
-            ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
-            : Effect.map(
-                holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                Option.some,
-              )
-        ).pipe(
-          Effect.catchIf(
-            (failure) => failure instanceof ImagePreparing && answersFirst,
-            () =>
-              Effect.as(
-                afterResponse(
-                  `A ${harness.name} relaunch`,
-                  Effect.flatMap(AgentSandboxImage, (image) => Effect.ignore(image.prepared)).pipe(
-                    Effect.andThen(
-                      Effect.retry(
-                        holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                        IMAGE_READY,
-                      ),
-                    ),
-                    Effect.catch(launchFailed(agent, sessionId)),
-                  ),
-                ),
-                Option.some({
-                  outcome: EVE_SEND_OUTCOME.ACCEPTED,
-                  sessionId,
-                  deliveryId: sent.line.uuid,
-                } as const),
-              ),
-          ),
-        );
+        const handed = yield* queues
+          ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
+          : Effect.map(
+              holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
+              Option.some,
+            );
         if (Option.isSome(handed)) return handed.value;
         // A session another agent's place stands for has ended for this one, as `sendHolding`
         // answers it. Note that no place at all is no answer yet, because a Start's launch still
@@ -1759,16 +1706,7 @@ export const runnerSessions = <
                   agent,
                   sessionId,
                   (sandboxOpened) =>
-                    openedPlace(
-                      agent,
-                      sessionId,
-                      layout,
-                      first,
-                      credential,
-                      true,
-                      opened,
-                      sandboxOpened,
-                    ),
+                    openedPlace(agent, sessionId, layout, first, credential, opened, sandboxOpened),
                   withdrawn,
                 ),
               ).pipe(Effect.onError(() => withdrawn));
@@ -1786,13 +1724,6 @@ export const runnerSessions = <
           );
         }),
 
-      // A relaunch on a fresh sandbox that finds the image still being prepared takes the message
-      // all the same, and waits on the image's build once the answer has left. Note that the wait
-      // holds no runner lease, because a message sent meanwhile waits on the lease no longer than
-      // its own deadline; the lease is taken once the build ended and the message sent afresh, so
-      // a sandbox a message sent meanwhile relaunched is written to rather than opened twice, and
-      // let go again for another wait where the relaunch finds the image's snapshot gone. A
-      // caller with no after-response door is answered that the image is being prepared.
       // A message to a runner that reads its lines never waits behind another call's lease, as a
       // Start's launch holds it while its sandbox comes up: it is queued at once, read by the runner
       // that call leaves running, and handed on past the answer where none does (`deliverWaiting`).

@@ -54,8 +54,8 @@ export const CODER = {
   SANDBOX_KEEP_ALIVE_EVERY: Duration.minutes(10),
   /**
    * The sandbox's vCPUs, each with 2 GB of memory, where its repository asks
-   * for no more (`SANDBOX_VCPUS_BY_REPOSITORY`); also the size the image's
-   * template and a repository snapshot are built at, since Vercel opens a
+   * for no more (`SANDBOX_VCPUS_BY_REPOSITORY`); also the size a repository
+   * snapshot is built at, since Vercel opens a
    * snapshot at whatever size the create asks. Two, because provisioned
    * memory and active CPU are most of the sandboxes' bill and both scale
    * with vCPUs, so a repository whose own checks need more asks for it
