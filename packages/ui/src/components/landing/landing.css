@@ -261,8 +261,7 @@
     padding-bottom: 0;
   }
 
-  .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"])
-    :is(.ui-landing-window, .ui-landing-pane) {
+  .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
     margin-bottom: -48px;
   }
 
@@ -458,78 +457,6 @@
     background: var(--ui-color-border-strong);
   }
 
-  /* A pane cut out of the window: one column of the app on the window's
-     frame, standing in the window's place only on a phone's page. Its
-     screen is laid out at least 440px wide (`landing-devices.tsx`'s
-     `SCREEN.PANE`) and scaled down to the room, as a window's is, so the
-     column reads as the app's own, a little smaller, in a box of fixed
-     proportions: 440px wide by the height its scene's whole story needs,
-     and never taller than that. So it never changes height as its story
-     plays, and what runs past its foot is cut, as a window's is. */
-  .ui-landing-pane {
-    /* The height its story needs, in the screen's own pixels. */
-    --ui-landing-pane-tall: 600;
-    display: none;
-    box-sizing: border-box;
-    /* off-scale: 440px, the pane's least width */
-    aspect-ratio: 440 / var(--ui-landing-pane-tall);
-    max-height: calc(var(--ui-landing-pane-tall) * 1px);
-    overflow: hidden;
-    border: 1px solid var(--ui-color-border-strong);
-    border-radius: var(--ui-display-window-radius);
-    background: var(--ui-color-sidebar);
-  }
-
-  .ui-landing-stage[data-scene="inbox"] .ui-landing-pane {
-    --ui-landing-pane-tall: 580;
-  }
-
-  .ui-landing-pane-fit {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .ui-landing-pane-screen {
-    position: relative;
-    width: var(--ui-landing-pane-width, 440px);
-    height: calc(100% / var(--ui-landing-fit, 1));
-    transform: scale(var(--ui-landing-fit, 1));
-    transform-origin: 0 0;
-    color: var(--ui-color-text);
-  }
-
-  .ui-landing-pane .ui-landing-desktop {
-    box-sizing: border-box;
-    display: grid;
-    padding: 0 8px 8px;
-  }
-
-  /* A call keeps to its one line in a pane, as the panel's does on a phone:
-     its verb whole, then the agent it named, then what it said, cut short. */
-  .ui-landing-pane .ui-landing-call-words {
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .ui-landing-pane .ui-landing-call-words > * {
-    min-width: 0;
-  }
-
-  .ui-landing-pane .ui-landing-call-words > .ui-landing-call-verb {
-    flex: none;
-  }
-
-  /* Note that what it said gives way long before the agent's name does,
-     and fades where it is cut, as a settings row's name does: the fade
-     stands in padding, so words that fit end before it, whole. */
-  .ui-landing-pane .ui-landing-call-words > .ui-landing-call-subject {
-    flex-shrink: 1000;
-    padding-inline-end: var(--ui-label-fade);
-    overflow: hidden;
-    mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
-  }
-
   .ui-landing-phone {
     position: relative;
     box-sizing: border-box;
@@ -629,15 +556,10 @@
     padding-left: 152px;
   }
 
-  /* The last column's bar ends short of the side panel's toggle over it,
-     which a pane cut out of the window leaves behind. */
+  /* The last column's bar ends short of the side panel's toggle over it. */
   .ui-landing-inbox-thread > :first-child,
   .ui-landing-automation-bar {
     padding-right: 36px;
-  }
-
-  .ui-landing-pane .ui-landing-inbox-thread > :first-child {
-    padding-right: 0;
   }
 
   /* A composer's one field, inset as the panel's is. */
@@ -732,7 +654,6 @@
   /* The sheet the columns' content stands on, under their bars; the side
      panel's is the well. */
   .ui-landing-inbox::before,
-  .ui-landing-pane .ui-landing-inbox-thread::before,
   .ui-landing-agent-log::before,
   .ui-landing-automation::before,
   .ui-landing-side::before {
@@ -1074,11 +995,10 @@
   }
 
   /* Under 640px of room the page keeps to one column: the ball under the
-     words, and each stage under its heading. A whole window scaled to that
-     room draws its words too small to read, so a stage shows the one pane
-     that tells its story instead, at nearly the app's size: the Inbox its
-     thread, and the task its agent's log. The devices keep both, the phone
-     nearer the window, since their story is that there are two. */
+     words, each stage under its heading, and the phone nearer the window. A
+     window scaled to the column draws its words too small to read, so a
+     stage that holds one alone draws it larger than its room instead, the
+     whole desktop app as it is, cut by the stage's edge and foot. */
   /* off-scale: 640px, a phone's landing */
   @container (width < 640px) {
     .ui-landing-lost {
@@ -1143,15 +1063,9 @@
       padding: 28px 5%;
     }
 
-    .ui-landing-crop > .ui-landing-window {
-      display: none;
-    }
-
-    .ui-landing-pane {
-      display: block;
-    }
-
-    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-pane {
+    .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
+      /* off-scale: 576px, the 1280px window at 0.45 */
+      width: 576px;
       margin-bottom: -24px;
     }
 

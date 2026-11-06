@@ -89,7 +89,7 @@ import {
   MEMBER,
   SidePanelToggle,
 } from "./landing-desktop.js";
-import { LandingPane, LandingPhone, LandingWindow } from "./landing-devices.js";
+import { LandingPhone, LandingWindow } from "./landing-devices.js";
 import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
 
 /**
@@ -103,9 +103,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * with it, the plan's sub-tasks beside it; an automation's page fires a run;
  * the phone holds the same Inbox; and Settings › Agents connects Claude on
  * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
- * runs only while it is on screen (`landing-story.ts`). A page too narrow to
- * read a whole window crops the Inbox to its open thread and the task to its
- * agent's log.
+ * runs only while it is on screen (`landing-story.ts`).
  */
 
 /** How long each scene holds a step, in milliseconds. */
@@ -161,27 +159,6 @@ function DesktopWindow({
         {children}
       </div>
     </LandingWindow>
-  );
-}
-
-/**
- * One pane of the Mac app's window, cut out at true size: the desktop's
- * surface holding `children`, the column on show. A scene draws it after its
- * window, which the narrow page hides in its favor.
- */
-function DesktopPane({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}): React.JSX.Element {
-  return (
-    <LandingPane label={label}>
-      <div className="ui-landing-desktop" {...DESKTOP_SURFACE}>
-        {children}
-      </div>
-    </LandingPane>
   );
 }
 
@@ -478,34 +455,9 @@ function QuestionThread({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The Inbox's last column at `step`: the empty choice, then the question's thread once opened. */
-function ThreadColumn({ step }: { step: number }): React.JSX.Element {
-  const open = step >= 2;
-  return (
-    <section className="ui-landing-inbox-thread">
-      <Toolbar
-        start={TOOLBAR_INSET.COLUMN}
-        title={open ? <ThreadPath /> : undefined}
-        actions={open ? <MoreButton thing="thread" onClick={still} /> : undefined}
-      />
-      <div className="ui-landing-sheet-end">
-        {open ? (
-          <QuestionThread step={step} />
-        ) : (
-          <div className="ui-landing-empty">
-            <GlyphSlot size={ICON_SIZE.LARGE}>
-              <InboxIcon />
-            </GlyphSlot>
-            <Text tone={TEXT_TONE.MUTED}>Choose an item</Text>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 /** The Inbox's page at `step`: the list, a question arriving, opened, answered in the draft under it, and sent. */
 function InboxPage({ step }: { step: number }): React.JSX.Element {
+  const open = step >= 2;
   return (
     <div className="ui-landing-app">
       <DesktopSidebar place={DESKTOP_PLACE.INBOX} />
@@ -536,30 +488,38 @@ function InboxPage({ step }: { step: number }): React.JSX.Element {
             </div>
           </div>
         </nav>
-        <ThreadColumn step={step} />
+        <section className="ui-landing-inbox-thread">
+          <Toolbar
+            start={TOOLBAR_INSET.COLUMN}
+            title={open ? <ThreadPath /> : undefined}
+            actions={open ? <MoreButton thing="thread" onClick={still} /> : undefined}
+          />
+          <div className="ui-landing-sheet-end">
+            {open ? (
+              <QuestionThread step={step} />
+            ) : (
+              <div className="ui-landing-empty">
+                <GlyphSlot size={ICON_SIZE.LARGE}>
+                  <InboxIcon />
+                </GlyphSlot>
+                <Text tone={TEXT_TONE.MUTED}>Choose an item</Text>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
       <SidePanelToggle />
     </div>
   );
 }
 
-const INBOX_LABEL = "The Inbox, where an agent's question is answered";
-
-/**
- * Note that the cropped thread opens on the question, because the list it
- * would arrive in is cut away: its story is the pick, the note, and the send.
- */
 function InboxScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.INBOX);
-  const at = Math.min(step, 5);
   return (
-    <div ref={ref} className="ui-landing-scene ui-landing-crop">
-      <DesktopWindow label={INBOX_LABEL}>
-        <InboxPage step={at} />
+    <div ref={ref} className="ui-landing-scene">
+      <DesktopWindow label="The Inbox, where an agent's question is answered">
+        <InboxPage step={Math.min(step, 5)} />
       </DesktopWindow>
-      <DesktopPane label={INBOX_LABEL}>
-        <ThreadColumn step={Math.max(at, 2)} />
-      </DesktopPane>
     </div>
   );
 }
@@ -833,31 +793,24 @@ function PlanPanel({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The agent's column at `step`: its tabs over its log and its foot. */
-function AgentColumn({ step }: { step: number }): React.JSX.Element {
-  return (
-    <section className="ui-landing-agent-log">
-      <Toolbar
-        start={TOOLBAR_INSET.COLUMN}
-        look={TOOLBAR_LOOK.TABS}
-        title={<TaskTabs step={step} />}
-        actions={<MoreButton thing="agent" onClick={still} />}
-      />
-      <div className="ui-landing-sheet-start ui-landing-log-sheet">
-        <AgentLog step={step} />
-        <AgentFoot step={step} />
-      </div>
-    </section>
-  );
-}
-
 /** The task's page at `step`: its tabs, the agent's log over its foot, and the plan beside it. */
 function TaskPage({ step }: { step: number }): React.JSX.Element {
   return (
     <div className="ui-landing-app">
       <DesktopSidebar place={DESKTOP_PLACE.TASK} openTask="invites" />
       <div className="ui-landing-main ui-landing-task">
-        <AgentColumn step={step} />
+        <section className="ui-landing-agent-log">
+          <Toolbar
+            start={TOOLBAR_INSET.COLUMN}
+            look={TOOLBAR_LOOK.TABS}
+            title={<TaskTabs step={step} />}
+            actions={<MoreButton thing="agent" onClick={still} />}
+          />
+          <div className="ui-landing-sheet-start ui-landing-log-sheet">
+            <AgentLog step={step} />
+            <AgentFoot step={step} />
+          </div>
+        </section>
         <PlanPanel step={step} />
       </div>
       <SidePanelToggle />
@@ -865,20 +818,13 @@ function TaskPage({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-const AGENTS_LABEL = "A task's agent starting another agent, and the two trading messages";
-
-/** Note that the cropped column is the agent's log, where the hand-off and the messages are told. */
 function AgentsScene(): React.JSX.Element {
   const [ref, step] = useStory(7, BEAT.AGENTS);
-  const at = Math.min(step, 5);
   return (
-    <div ref={ref} className="ui-landing-scene ui-landing-crop">
-      <DesktopWindow label={AGENTS_LABEL}>
-        <TaskPage step={at} />
+    <div ref={ref} className="ui-landing-scene">
+      <DesktopWindow label="A task's agent starting another agent, and the two trading messages">
+        <TaskPage step={Math.min(step, 5)} />
       </DesktopWindow>
-      <DesktopPane label={AGENTS_LABEL}>
-        <AgentColumn step={at} />
-      </DesktopPane>
     </div>
   );
 }
