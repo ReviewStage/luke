@@ -312,7 +312,7 @@ function standingOf(tab: PanelTab, tasks: TasksControl): Stop | undefined {
   const { mainTabs, sidePanel, personView } = tasks;
   const column = mainTabs.tab;
   return shownStop({
-    over: tab === PANEL_TAB.SETTINGS || tasks.history.open,
+    over: tab === PANEL_TAB.SETTINGS || tasks.adminView.open || tasks.history.open,
     inbox: tasks.inboxView.open,
     agentId: tasks.agentView.agentId,
     person:

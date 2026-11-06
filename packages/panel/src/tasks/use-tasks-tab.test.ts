@@ -213,6 +213,8 @@ function mount(
   const agentActs: PortActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
+  /** Each time the tab opened Admin through its own door. */
+  const adminOpens: string[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
@@ -318,7 +320,11 @@ function mount(
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
       room: held.room,
-      adminView: held.admin === true ? { ...ADMIN_AWAY, open: true } : ADMIN_AWAY,
+      adminView: {
+        ...ADMIN_AWAY,
+        open: held.admin === true,
+        onOpen: () => adminOpens.push("admin"),
+      },
     });
     return held.history
       ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
@@ -342,6 +348,7 @@ function mount(
     told,
     agentActs,
     shownAgents,
+    adminOpens,
     payloads,
     /** Every Settings link the tab followed, in order. */
     links,
@@ -3955,4 +3962,21 @@ test("an agent's page under Admin is off screen, so main hears no agent shown wh
 
   tab.stand({ admin: true });
   assert.equal(tab.shownAgents.at(-1), null);
+});
+
+test("Admin opened while a page holds unsaved work waits on the leave question, and opens once it is answered", () => {
+  const tab = mount({ shown: true });
+  const asked: (() => void)[] = [];
+  act(() => void tab.control().leaveGuard.stand((leave) => asked.push(leave)));
+  act(() => tab.control().adminView.onOpen());
+  assert.deepEqual(tab.adminOpens, [], "Admin waits on the question");
+
+  act(() => asked[0]?.());
+  assert.deepEqual(tab.adminOpens, ["admin"]);
+});
+
+test("New task over Home under Admin opens its dialog, since Home's composer is not on screen", () => {
+  const tab = mount({ shown: true, admin: true });
+  act(() => tab.control().onNewTask());
+  assert.equal(tab.control().newTask.open, true);
 });

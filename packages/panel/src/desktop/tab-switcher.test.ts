@@ -207,6 +207,22 @@ test("arriving on a task is one screen, the tabs that arrive with it taking it i
   assert.deepEqual(told, { shown: [], places: ["inbox"] });
 });
 
+test("a place under Admin is no screen standing, so ⌃Tab from Admin does not pass over it to the screen before", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  await window.draw(onTask(NOTES, told));
+  press();
+  await window.draw(onTask(NOTES, told, { inboxView: inboxOpen() }));
+  press();
+  const underAdmin = onTask(NOTES, told, { inboxView: inboxOpen() });
+  await window.draw({ ...underAdmin, adminView: { ...underAdmin.adminView, open: true } });
+
+  tab();
+  letGo();
+  assert.deepEqual(told.shown, [], "the task before the Inbox is not gone to");
+});
+
 test("a screen picked restores both its panes, the task opened once", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();

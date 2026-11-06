@@ -2928,7 +2928,12 @@ export function useTasksTab(input: {
   // that the tab need not be shown, because every New task press brings it
   // forward first.
   const newTask = () => {
-    const atHome = page === TASKS_PAGE.HOME && standIn === undefined && historyFor === undefined;
+    // Note that Home under Admin is no Home on screen, so its composer is no New task there (`admin-route.ts`).
+    const atHome =
+      page === TASKS_PAGE.HOME &&
+      standIn === undefined &&
+      historyFor === undefined &&
+      !input.adminView.open;
     if (atHome && signedIn && newTaskAsk === undefined) setHomeNewTasks((n) => n + 1);
     else newTaskWith(undefined);
   };
@@ -3854,7 +3859,7 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
     },
     // The Admin place is the router's, which draws it in the task's place (`admin-route.ts`).
-    adminView: input.adminView,
+    adminView: { ...input.adminView, onOpen: guard(input.adminView.onOpen) },
     // The Automations page stands over the task's place as the Inbox does, each giving way to the others.
     automationsView: {
       open: standIn?.kind === STAND_IN.AUTOMATIONS,
