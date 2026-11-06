@@ -97,6 +97,8 @@ export interface PlaceDeclaration {
   readonly stillThere: (params: PlaceParams, search: URLSearchParams, there: PlaceThere) => boolean;
   /** Whether it stands over the plan's place beside the sidebar, the window's state staying as it was under it, its workspace its address's. */
   readonly overThePlan: boolean;
+  /** Whether Back and Forward pass over a step of it once another workspace is listed than the one its address names, as a place over the plan that the listed workspace's work fills. */
+  readonly listedOnly: boolean;
   /** What its step is called as the window stands on it. */
   readonly title: (
     tasks: StepTitleTasks,
@@ -169,6 +171,7 @@ export const ROUTED_PLACE = {
       params.page === undefined || settingsPageRouteStands(params.page, access),
     stillThere: () => true,
     overThePlan: false,
+    listedOnly: false,
     title: () => ({ label: "Settings" }),
     named: () => undefined,
     links: ({ tasks, at, listed, under }) => {
@@ -190,6 +193,7 @@ export const ROUTED_PLACE = {
     gate: (_params, access) => adminRouteStands(access),
     stillThere: () => true,
     overThePlan: false,
+    listedOnly: false,
     // Note that Admin's step is named as the place the window's state holds under it, as it was while Admin stood in for that place.
     title: (_tasks, under) => under(),
     named: () => undefined,
@@ -212,6 +216,7 @@ export const ROUTED_PLACE = {
     gate: workspaceGate,
     stillThere: () => true,
     overThePlan: true,
+    listedOnly: true,
     title: (tasks, under) => (tasks.boardView.open ? { label: "Tasks" } : under()),
     named: () => undefined,
     links: ({ tasks, listed, under }) =>
@@ -226,6 +231,7 @@ export const ROUTED_PLACE = {
     gate: workspaceGate,
     stillThere: () => true,
     overThePlan: true,
+    listedOnly: true,
     title: (tasks, under) =>
       tasks.personView.userId === undefined
         ? under()
@@ -250,6 +256,7 @@ export const ROUTED_PLACE = {
     stillThere: (params, _search, there) =>
       params.automationId === undefined || there.automationStands(params.automationId),
     overThePlan: true,
+    listedOnly: true,
     title: (tasks, under) => (tasks.automationsView.open ? { label: "Automations" } : under()),
     named: () => undefined,
     links: ({ tasks, listed, under }) => {
@@ -282,6 +289,7 @@ export const ROUTED_PLACE = {
     stillThere: (_params, _search, there) =>
       there.historyTask === undefined || there.taskStands(there.historyTask),
     overThePlan: false,
+    listedOnly: false,
     // Note that a history whose task is not yet bound for is named as the place under it, as it stands until its task opens.
     title: (tasks, under) => {
       if (tasks.boundFor === undefined) return under();
@@ -303,9 +311,12 @@ export const ROUTED_PLACE = {
   },
   AGENT: {
     routes: ["/places/$workspace/agent/$agentId"],
+    // Note that its route draws the page under any address, as it always has, so this gate is Back and Forward's alone.
     gate: workspaceGate,
     stillThere: () => true,
     overThePlan: true,
+    // Note that an agent's page is reached under whichever workspace it opened in, as it always was.
+    listedOnly: false,
     title: (tasks, under) => (tasks.agentView.agentId === undefined ? under() : { label: "Agent" }),
     named: () => undefined,
     links: ({ tasks, at, listed, under }) => {
@@ -324,6 +335,7 @@ export const ROUTED_PLACE = {
       return narrowed === undefined || there.taskStands(narrowed);
     },
     overThePlan: true,
+    listedOnly: true,
     title: (tasks, under) => {
       if (!tasks.inboxView.open) return under();
       const { chosen } = tasks.inboxView;
@@ -390,8 +402,9 @@ export function placeParamsOf(matches: readonly RouteMatchSeen[]): PlaceParams {
 /**
  * Whether Back and Forward may go to a step at what `matches` name: a place
  * the window's state says always may; a routed place only where its gate
- * lets the window stand, what it names is still there, and, over the plan,
- * the workspace its address names is the one listed, as it was.
+ * lets the window stand, what it names is still there, and, where the
+ * place is the listed workspace's alone, the workspace its address names is
+ * the one listed, as it was.
  */
 export function routedStepStands(
   matches: readonly RouteMatchSeen[],
@@ -403,7 +416,7 @@ export function routedStepStands(
   if (place === undefined) return true;
   const params = placeParamsOf(matches);
   if (!place.gate(params, access) || !place.stillThere(params, search, there)) return false;
-  return !place.overThePlan || params.workspace === undefined || there.listed(params.workspace);
+  return !place.listedOnly || params.workspace === undefined || there.listed(params.workspace);
 }
 
 /** The location the router's history stands on, redrawn as it moves. */

@@ -79,7 +79,6 @@ test.each([
 test.each<readonly [string, string, Partial<PlaceThere>]>([
   ["a Board of a workspace no longer listed", "/acme/tasks", { listed: () => false }],
   ["a person's page of a workspace no longer listed", "/acme/person/u", { listed: () => false }],
-  ["an agent's page of a workspace no longer listed", "/acme/agent/a", { listed: () => false }],
   [
     "a deleted automation's page",
     "/acme/automation/automation-1",
@@ -137,4 +136,8 @@ test("each place over the plan names its step for itself, and Admin's as the pla
     detail: "Version history",
   });
   assert.deepEqual(titled({}, "ADMIN"), { label: "Home" });
+});
+
+test("Back still reaches an agent's page once another workspace is listed than the one its address names", () => {
+  assert.equal(stepStands("/acme/agent/a", ACCESS, { ...THERE, listed: () => false }), true);
 });

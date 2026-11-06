@@ -1484,6 +1484,9 @@ export function useTasksTab(input: {
   // Whether the window's Inbox shows one column, as it measures itself.
   const [inboxSingle, setInboxSingle] = useState(false);
   const agentView = input.agentView.agentId === undefined ? undefined : input.agentView;
+  // The agent whose page stands as the window was last drawn, which an answer landing late reads.
+  const agentNow = useRef(input.agentView.agentId);
+  agentNow.current = input.agentView.agentId;
   // A door into a place of the window's state leaves the Inbox or an agent's page standing in the task's place, as the router stands it when pressed.
   // Note that every routed place is left by the history's one leave (`onLeaveRouted`), which each route's `onClose` is.
   const overPlanNow = useRef({ over: false, leave: input.agentView.onClose });
@@ -3038,7 +3041,8 @@ export function useTasksTab(input: {
         // Note that what stood before the press comes back only where the developer went nowhere since.
         if (navigations.current === pressedAt) {
           setUnknownWorkspace((now) => now || unknownBefore);
-          if (agentBefore !== undefined) {
+          // Note that the page comes back only where no agent's page stands now, as one opened since stays.
+          if (agentBefore !== undefined && agentNow.current === undefined) {
             input.agentView.onOpen(agentBefore.agentId, agentBefore.workspace);
           }
           if (inboxBefore !== undefined) {
@@ -3381,8 +3385,6 @@ export function useTasksTab(input: {
     const listed = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
     const workspace = standing ?? home ?? listed;
     if (workspace === undefined) return;
-    // Note that the page is a navigation of its own, so a start's refusal answering late opens nothing over it.
-    navigations.current += 1;
     setUnknownWorkspace(false);
     input.agentView.onOpen(agentId, workspace);
   };
