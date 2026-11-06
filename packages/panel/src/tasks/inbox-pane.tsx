@@ -25,8 +25,6 @@ import {
   Badge,
   Breadcrumbs,
   BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
   CARD_LOOK,
   CARD_PADDING,
   Card,
@@ -35,6 +33,7 @@ import {
   ErrorState,
   Fill,
   GAP,
+  IconButton,
   INLINE_REF_LOOK,
   InlineRef,
   LAYOUT_ELEMENT,
@@ -62,6 +61,7 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { isWireString } from "@repo/wire";
@@ -1278,10 +1278,12 @@ function InboxItemMenu({
 }
 
 /**
- * The open question's Resolve, at its card's top end, as the item's ⋯
- * offers it: labeled, wearing Resolve's own mark rather than Close's ×, and
- * resolving at once with Undo (`inbox-close.tsx`), so Send only ever sends
- * an answer. A note to the agent beside it goes as a reply.
+ * The open question's ×, at its card's top end: Resolve, as the item's ⋯
+ * offers it, resolving at once with Undo (`inbox-close.tsx`), so Send only
+ * ever sends an answer. Note that it wears ×, not Resolve's circle-check,
+ * because on the card it turns down the very question it sits on, which
+ * reads clearest as ×, and it takes no room from the options; its name and
+ * tooltip say Resolve.
  */
 function QuestionResolve({
   item,
@@ -1292,14 +1294,14 @@ function QuestionResolve({
 }): React.JSX.Element | null {
   const resolve = resolveAction([item], resolver);
   return resolve === undefined ? null : (
-    <Button
-      variant={BUTTON_VARIANT.QUIET}
-      size={BUTTON_SIZE.COMPACT}
-      icon={resolve.icon}
-      onClick={resolve.onSelect}
-    >
-      {resolve.label}
-    </Button>
+    <Tooltip label={resolve.label}>
+      <IconButton
+        icon={<GLYPH.CLOSE />}
+        label={resolve.label}
+        size={BUTTON_SIZE.COMPACT}
+        onClick={resolve.onSelect}
+      />
+    </Tooltip>
   );
 }
 

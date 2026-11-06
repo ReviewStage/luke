@@ -186,16 +186,15 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve, naming E, beside
   );
 });
 
-test("an open question's card offers a labeled Resolve, which resolves the item at once, asking nothing and sending no reply beside it, and Send only ever sends an answer", async () => {
+test("an open question's card offers its × named Resolve, which resolves the item at once, asking nothing and sending no reply beside it, and Send only ever sends an answer", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const closes = takenCloses();
   const sent = heldMessages(writtenOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000093"));
   const pane = itemPane(page);
   const resolve =
-    [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
-      (button) => button.textContent === "Resolve",
-    ) ?? assert.fail("the open question's card offers Resolve");
+    pane.querySelector<HTMLButtonElement>('[data-inbox-draft-ask] button[aria-label="Resolve"]') ??
+    assert.fail("the open question's card offers its × named Resolve");
 
   typeInComposer(pane, "Hold off until the backfill lands");
   await settle();
