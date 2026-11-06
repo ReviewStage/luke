@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { MAC_COMMAND_NOT_CLAIMED } from "@repo/features";
+import { MAC_COMMAND_CALL_FAILURE, MAC_COMMAND_NOT_CLAIMED } from "@repo/features";
 import {
   LIVE_POLL_URL,
   LIVE_SIGNED_OUT,
@@ -128,12 +128,12 @@ function scriptedService(
     claim: (id) =>
       Effect.andThen(
         options.duringClaim ?? Effect.void,
-        Effect.sync((): MacCommand | typeof MAC_COMMAND_NOT_CLAIMED | undefined => {
+        Effect.sync(() => {
           claims.push(id);
           // A claim lost on its way, as a network fault loses one, reaches nothing.
           if (unanswered > 0) {
             unanswered -= 1;
-            return undefined;
+            return { failure: MAC_COMMAND_CALL_FAILURE.UNANSWERED };
           }
           const at = waiting.findIndex((command) => command.id === id);
           if (at < 0) return MAC_COMMAND_NOT_CLAIMED;
@@ -141,18 +141,18 @@ function scriptedService(
           version += 1;
           if (claimed === undefined) return MAC_COMMAND_NOT_CLAIMED;
           const { queuedAt: _queuedAt, ...command } = claimed;
-          return command;
+          return { command };
         }),
       ),
     listening: (kinds) =>
       Effect.sync(() => {
         beats.push(kinds);
-        return true;
+        return { listening: true } as const;
       }),
     settle: (id, result) =>
       Effect.sync(() => {
         settledResults.set(id, result);
-        return true;
+        return { settled: true } as const;
       }),
   };
   return {

@@ -100,8 +100,9 @@ function cloudStateOf(
  * Where a refusal leaves a cloud tab: a stopped sandbox's bar, the wait for
  * an agent that has not opened its sandbox, or the bar that asks again for a
  * shell or agent not found, a sandbox that did not answer, or one whose
- * saved files are gone, saying which; nothing for an agent archived or
- * retired, whose tab closes, as its Changes tab does.
+ * saved files are gone, saying which; the service unreached for no answer;
+ * nothing for an agent archived or retired, whose tab closes, as its
+ * Changes tab does.
  */
 function refusedState(refused: TerminalRefusal): TerminalState | undefined {
   switch (refused) {
@@ -115,6 +116,8 @@ function refusedState(refused: TerminalRefusal): TerminalState | undefined {
       return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SANDBOX };
     case TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE:
       return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SNAPSHOT_GONE };
+    case TERMINAL_REFUSAL.UNANSWERED:
+      return SERVICE_UNREACHED;
     case TERMINAL_REFUSAL.GONE:
       return undefined;
   }
@@ -157,7 +160,7 @@ function cloudLink(
     agentId,
     open: async () => {
       const made = await askAct(ACT_KIND.TERMINAL_CREATE, { agentId });
-      if ("refused" in made) return { state: refusedOrGone(made.refused, onGone) };
+      if ("failure" in made) return { state: refusedOrGone(made.failure, onGone) };
       holdShellId(registry, agentId, shell, made.terminal.id);
       return { terminalId: made.terminal.id };
     },
@@ -170,7 +173,7 @@ function cloudLink(
     ended: (session) => session.replace(),
     resume: async () => {
       const resumed = await askAct(ACT_KIND.TERMINAL_RESUME, { agentId });
-      return "refused" in resumed ? refusedOrGone(resumed.refused, onGone) : undefined;
+      return "failure" in resumed ? refusedOrGone(resumed.failure, onGone) : undefined;
     },
     close: (terminalId) => tellAct(ACT_KIND.TERMINAL_KILL, { agentId, terminalId }),
   };
