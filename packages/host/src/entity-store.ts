@@ -21,8 +21,10 @@
  * keeps none. It names the account it was kept for and a hash of the row
  * shapes it was kept at, so a file of another account, of another build's
  * shapes, or one that will not open, is deleted and read as none, and every
- * read reads whole. A store saves what moved at most every `SAVE_EVERY`, and
- * once more as it closes; a sign-out forgets it, which deletes the file. Rows
+ * read reads whole. A store saves lists that moved at most every
+ * `SAVE_EVERY`, the writes waiting for the service within `QUEUE_LOOK_EVERY`
+ * of their moving, and both once more as it closes; a sign-out forgets it,
+ * which deletes the file. Rows
  * kept where none of them moved but where they stand (`keepUnmoved`), as the
  * task list's sync id moving alone, are written only beside the next save of
  * something that moved, and as the store closes. Note that a file left
@@ -52,7 +54,17 @@ import {
 } from "@repo/features/workspace-live";
 import { workspaceSchema } from "@repo/features/workspace-wire";
 import type { QueuedEntry } from "@repo/sync";
-import { Duration, Effect, Path, Result, Schedule, Schema, type Scope, Semaphore } from "effect";
+import {
+  Clock,
+  Duration,
+  Effect,
+  Path,
+  Result,
+  Schedule,
+  Schema,
+  type Scope,
+  Semaphore,
+} from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
@@ -61,8 +73,17 @@ import type { SecretCipher } from "./settings-store.js";
 /** The sealed file, beside the settings file in the state root. */
 export const ENTITY_STORE_FILE_NAME = "entities.sealed";
 
-/** How often, at most, a store writes what moved. */
-const SAVE_EVERY = Duration.seconds(2);
+/**
+ * How often, at most, a store writes lists that moved. Note that it is long,
+ * because each write seals the whole file again and the task list moves
+ * about once a second while agents work, and that a crash between two saves
+ * costs only a launch drawing the lists a little older until the service
+ * answers.
+ */
+const SAVE_EVERY = Duration.seconds(30);
+
+/** How often a store looks whether the writes waiting for the service moved, which it writes at once, since they are what a crash would lose. */
+const QUEUE_LOOK_EVERY = Duration.seconds(2);
 
 /** The reads whose rows are kept on disk, and the only ones: a read not named here stays in memory. */
 export const KEPT_READ = {
@@ -284,16 +305,19 @@ export function openEntityStore(
     let savedQueue = JSON.stringify(queue);
     let forgotten = false;
     const lock = yield* Semaphore.make(1);
+    let savedAt = yield* Clock.currentTimeMillis;
     const save = (closing: boolean) =>
       lock.withPermits(1)(
-        Effect.suspend(() => {
+        Effect.flatMap(Clock.currentTimeMillis, (now) => {
           const waiting = queued();
           const waitingText = JSON.stringify(waiting);
-          const moved = dirty || waitingText !== savedQueue;
+          const listsDue = dirty && (closing || now - savedAt >= Duration.toMillis(SAVE_EVERY));
+          const moved = listsDue || waitingText !== savedQueue;
           if (!(moved || (closing && unmoved)) || forgotten) return Effect.void;
           dirty = false;
           unmoved = false;
           savedQueue = waitingText;
+          savedAt = now;
           return encodeKept({ hash, accountId, reads, queue: waiting }).pipe(
             Effect.map((plain) => Base64.encode(cipher.encrypt(plain))),
             Effect.flatMap((sealed) =>
@@ -307,7 +331,7 @@ export function openEntityStore(
           );
         }),
       );
-    yield* Effect.forkScoped(Effect.repeat(save(false), Schedule.spaced(SAVE_EVERY)));
+    yield* Effect.forkScoped(Effect.repeat(save(false), Schedule.spaced(QUEUE_LOOK_EVERY)));
     yield* Effect.addFinalizer(() => save(true));
     /** `read`'s rows laid among those kept, the workspaces' leaving with them every read kept per workspace of one they no longer name. */
     const laid = <Read extends KeptRead>(kept: Read, rows: KeptRows[Read]) => {

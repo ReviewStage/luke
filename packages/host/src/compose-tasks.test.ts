@@ -1626,12 +1626,12 @@ it.effect(
       const { call, listed } = yield* Scope.provide(quit)(subject(service, { entities }));
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      yield* TestClock.adjust("2 seconds");
+      yield* TestClock.adjust("30 seconds");
       const first = yield* keptAt;
 
       // The service answers past the id it answered last, nothing having moved since.
       yield* listed();
-      yield* TestClock.adjust("2 seconds");
+      yield* TestClock.adjust("30 seconds");
       const meanwhile = yield* keptAt;
       yield* Scope.close(quit, Exit.void);
 
