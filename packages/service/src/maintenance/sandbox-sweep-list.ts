@@ -30,7 +30,7 @@ const BUDGETED_STOP = {
 
 type BudgetedStop = (typeof BUDGETED_STOP)[keyof typeof BUDGETED_STOP];
 
-/** A count of stops taken, shared by the sandboxes one sweep reads at once. */
+/** The stops a sweep may still take, shared by the sandboxes it reads at once. */
 export interface StopBudget {
   remaining: number;
 }

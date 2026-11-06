@@ -63,7 +63,7 @@ export function useWordsDatePicker(): ((opening: DatePickerOpening) => void) | u
  * A room laid over the words drawn in `children`, the date picker their
  * chips open hanging in it, and the opener of that picker handed to them
  * (`useWordsDatePicker`). Its box is the room's own, so whatever it stands
- * in, a plan's body or the Comments tab, the picker is placed from it.
+ * in, a plan's body or its comments list, the picker is placed from it.
  */
 export function WordsDatePickerRoom({ children }: { children: ReactNode }): React.JSX.Element {
   const room = useRef<HTMLDivElement>(null);

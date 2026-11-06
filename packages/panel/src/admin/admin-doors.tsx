@@ -39,10 +39,10 @@ export class AdminReadRefused extends Error {
 }
 
 /**
- * The service's admin reads and its one write, each under the signal its
- * screen aborts it with. A read answers its procedure's answer, or rejects;
- * a rejection that is no `AdminReadRefused` is the screen's own failure.
- * The write answers whether it landed and never rejects.
+ * The service's admin reads and its one write. A read runs under the signal
+ * its query is canceled with, and answers its procedure's answer, or
+ * rejects; a rejection that is no `AdminReadRefused` is the screen's own
+ * failure. The write answers whether it landed and never rejects.
  */
 export interface AdminReads {
   readonly metrics: (query: AdminWindowedQuery, signal: AbortSignal) => Promise<AdminMetrics>;
@@ -62,7 +62,7 @@ export interface AdminReads {
     query: AdminWorkspaceQuery,
     signal: AbortSignal,
   ) => Promise<AdminWorkspaceDetail>;
-  readonly favorite: (id: string, favorite: boolean, signal: AbortSignal) => Promise<boolean>;
+  readonly favorite: (id: string, favorite: boolean) => Promise<boolean>;
 }
 
 /** What a screen draws in its place where the gate refused it, in the mount's own words. */

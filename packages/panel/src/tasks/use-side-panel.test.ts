@@ -6,11 +6,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
-  DRAWN_KINDS,
   drawsChanges,
   drawsTerminal,
   type OpenTask,
-  SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   type SidePanelControl,
   useSidePanel,
@@ -76,15 +74,6 @@ function launch(stood: Stood) {
   };
 }
 
-test("a first launch leaves the panel shut though its plan holds a tab, and its toggle shows it", () => {
-  const panel = launch({ task: TASK, taskAgents: [] });
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS]);
-  assert.equal(panel.control().open, false);
-
-  act(() => panel.control().onToggle());
-  assert.equal(panel.control().open, true);
-});
-
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
@@ -103,7 +92,7 @@ test("an agent's Changes tab opens on its plan, stands chosen across a launch, a
   // Another task, its agents unread, never draws it, nor shows it chosen.
   second.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.deepEqual(second.control().changes, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(second.control().tab, undefined);
 });
 
 test("a record kept before tasks had their name holds each task's choices under plans and its pins' task under plan, and a launch still opens on both", () => {
@@ -132,16 +121,17 @@ test("a record kept before tasks had their name holds each task's choices under 
 
 test("a Changes tab closed stays closed across a launch, and closing the chosen one chooses the tab viewed before it", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
-  act(() => first.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => first.control().onChoose({ terminal: AGENT }));
   act(() => first.control().onChoose({ changes: AGENT }));
   act(() => first.control().onClose({ changes: AGENT }));
   assert.deepEqual(first.control().changes, []);
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.deepEqual(first.control().tab, { terminal: AGENT });
   first.quit();
 
+  // Note that a Terminal tab is kept across no launch, so nothing stands to choose.
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(second.control().changes, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(second.control().tab, undefined);
 });
 
 test("an agent's Terminal tab opens once at the strip's end and chosen, stands only on its agent's plan, and is kept across no launch", () => {
@@ -155,22 +145,22 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   // Another task never draws it, its agents read or not.
   first.render({ task: OTHER_TASK, taskAgents: undefined });
   assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "terminal" in tab));
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(first.control().tab, undefined);
   first.render({ task: OTHER_TASK, taskAgents: [] });
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(first.control().tab, undefined);
 
-  // Back on its task it stands as it was; closed, the tab viewed before it is chosen.
+  // Back on its task it stands as it was; closed, no tab stands.
   first.render({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(first.control().tab, { terminal: AGENT });
   act(() => first.control().onClose({ terminal: AGENT }));
   assert.deepEqual(first.control().terminals, []);
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(first.control().tab, undefined);
   act(() => first.control().onChoose({ terminal: OTHER_AGENT }));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   assert.deepEqual(second.control().terminals, []);
-  assert.equal(second.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(second.control().tab, undefined);
 });
 
 test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name", () => {
@@ -267,7 +257,6 @@ test("a file named alone, as ⌘K finds it, shows the tab it has as it stands, a
     return control;
   };
   act(() => now().onOpenFile({ path: shown, startLine: 3, endLine: 5 }));
-  act(() => now().onChoose(SIDE_PANEL_TAB.COMMENTS));
 
   act(() => now().onOpenFile({ path: shown }));
   assert.deepEqual(now().tab, { file: shown });
@@ -290,7 +279,7 @@ test("the agent whose Terminal tab was shown last on a plan is the plan's own, w
   assert.equal(panel.control().lastTerminal, undefined);
   act(() => panel.control().onChoose({ terminal: AGENT }));
   act(() => panel.control().onChoose({ terminal: OTHER_AGENT }));
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel.control().onChoose({ changes: AGENT }));
   assert.equal(panel.control().lastTerminal, OTHER_AGENT);
   panel.render({ task: OTHER_TASK, taskAgents: [] });
   assert.equal(panel.control().lastTerminal, undefined);
@@ -302,10 +291,6 @@ test('closing the last tab shuts the panel and leaves full screen, and the toggl
   act(() => panel.control().onToggleFullScreen());
   assert.equal(panel.control().fullScreen, true);
 
-  for (const tab of DRAWN_KINDS) act(() => panel.control().onClose(tab));
-  assert.equal(panel.control().open, true, "a tab still stands, so the panel does");
-  assert.deepEqual(panel.control().strip, [{ changes: AGENT }]);
-
   act(() => panel.control().onClose({ changes: AGENT }));
   assert.equal(panel.control().open, false);
   assert.equal(panel.control().fullScreen, false);
@@ -313,35 +298,35 @@ test('closing the last tab shuts the panel and leaves full screen, and the toggl
   act(() => panel.control().onToggle());
   assert.equal(panel.control().open, false, "never shown with nothing in it");
   assert.equal(panel.control().toggleAsked, true, 'the "+" is asked for at the toggle');
-  assert.deepEqual(panel.control().closedTabs, DRAWN_KINDS);
 
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel.control().onChoose({ changes: AGENT }));
   assert.equal(panel.control().open, true);
   assert.equal(panel.control().fullScreen, false, "shown again beside the document");
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.deepEqual(panel.control().tab, { changes: AGENT });
   assert.equal(panel.control().toggleAsked, false);
 });
 
 test("a new stop starts with the panel shut, whatever its strip holds, unless a tab was asked for there, as a pin or a link opens one, and a plan whose strip holds no tab draws none", () => {
-  const panel = launch({ task: TASK, taskAgents: [] });
-  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  const panel = launch({ task: TASK, taskAgents: [AGENT] });
+  // Note that the agent works on both tasks, so its Terminal tab stands on each.
+  act(() => panel.control().onChoose({ terminal: AGENT }));
   assert.equal(panel.control().open, true);
 
-  panel.render({ task: OTHER_TASK, taskAgents: [] });
-  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.COMMENTS]);
+  panel.render({ task: OTHER_TASK, taskAgents: [AGENT] });
+  assert.deepEqual(panel.control().strip, [{ terminal: AGENT }]);
   assert.equal(
     panel.control().open,
     false,
     "another task starts shut though its strip holds a tab",
   );
-  panel.render({ task: TASK, taskAgents: [] });
+  panel.render({ task: TASK, taskAgents: [AGENT] });
   assert.equal(panel.control().open, false, "and coming back does not open it");
 
-  act(() => panel.control().onShow(OTHER_TASK, SIDE_PANEL_TAB.COMMENTS));
-  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  act(() => panel.control().onShow(OTHER_TASK, { terminal: AGENT }));
+  panel.render({ task: OTHER_TASK, taskAgents: [AGENT] });
   assert.equal(panel.control().open, true, "a tab asked for on the stop arrived at stands");
-  panel.render({ task: TASK, taskAgents: [] });
-  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  panel.render({ task: TASK, taskAgents: [AGENT] });
+  panel.render({ task: OTHER_TASK, taskAgents: [AGENT] });
   assert.equal(panel.control().open, false, "once only");
 
   panel.render({ task: BARE_TASK, taskAgents: [], bare: true });
@@ -406,7 +391,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   };
 
   render(false);
-  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onChoose({ changes: AGENT }));
 
   render(true);
@@ -422,20 +406,18 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 test("a panel kept open launches shown only where the task's strip holds a tab, whatever tab was chosen, and never empty", () => {
   // Note that the tab chosen as the window quit is kept nowhere here, as a Terminal's is not.
   const kept = { open: true, tabs: ["comments"], width: 400, pins: [] };
-  const opened = { opened: ["comments"], closed: [], recent: ["comments"], order: ["comments"] };
   window.localStorage.setItem("app.sidePanel", JSON.stringify({ ...kept, tasks: {} }));
   const bare = launch({ task: TASK, taskAgents: [], bare: true });
   assert.deepEqual(bare.control().strip, []);
   assert.equal(bare.control().open, false, "with nothing to draw it stands hidden, not empty");
   bare.quit();
 
-  window.localStorage.setItem(
-    "app.sidePanel",
-    JSON.stringify({ ...kept, tasks: { [TASK]: opened } }),
-  );
-  const held = launch({ task: TASK, taskAgents: [] });
+  const first = launch({ task: TASK, taskAgents: [AGENT] });
+  act(() => first.control().onChoose({ changes: AGENT }));
+  first.quit();
+  const held = launch({ task: TASK, taskAgents: [AGENT] });
   assert.equal(held.control().open, true, "a tab the strip holds shows it");
-  assert.equal(held.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.deepEqual(held.control().tab, { changes: AGENT });
 });
 
 test("a record kept while the Call and Code stood in the panel reads with their tabs let go from the strip, and the Call's pin let go too", () => {
@@ -453,10 +435,10 @@ test("a record kept while the Call and Code stood in the panel reads with their 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.COMMENTS],
+    [],
     "neither the Call, Code, nor the Board stands in the strip",
   );
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
+  assert.equal(panel.control().tab, undefined);
   assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");
 });
 
@@ -479,16 +461,16 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   let room: ShellRoom = SHELL_ROOM.NARROW;
   let control: SidePanelControl | undefined;
   function Probe({ at }: { at: ShellRoom }) {
-    control = useSidePanel(undefined, usedTask(TASK), [], [], [], [], at);
+    control = useSidePanel(undefined, usedTask(TASK), [AGENT], [], [], [AGENT], at);
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const render = () => act(() => root.render(createElement(Probe, { at: room })));
   const now = () => control ?? assert.fail("the panel is held");
-  // The panel opens shown on the plan once toggled, a first launch leaving it shut, which the narrow room holds full screen.
+  // The panel opens on a tab chosen, which the narrow room holds full screen.
   render();
-  act(() => now().onToggle());
+  act(() => now().onChoose({ changes: AGENT }));
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, true, true]);
 
   // Back, a column's tab shown, and a pin opened step out of full screen this way.
@@ -504,7 +486,7 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
 test("the Inbox with nothing chosen has no task, so the panel left open shows over it in no room, neither full screen on a phone nor empty beside it", () => {
   let control: SidePanelControl | undefined;
   function Probe({ at, task }: { at: ShellRoom; task: OpenTask }) {
-    control = useSidePanel(undefined, task, [], [], [], [], at);
+    control = useSidePanel(undefined, task, [AGENT], [], [], [AGENT], at);
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -512,9 +494,9 @@ test("the Inbox with nothing chosen has no task, so the panel left open shows ov
   const now = () => control ?? assert.fail("the panel is held");
   const render = (at: ShellRoom, task: OpenTask) =>
     act(() => root.render(createElement(Probe, { at, task })));
-  // The panel stands open on a plan once toggled, and is kept open for the next launch.
+  // The panel stands open on a plan once a tab is chosen, and is kept open for the next launch.
   render(SHELL_ROOM.NARROW, usedTask(TASK));
-  act(() => now().onToggle());
+  act(() => now().onChoose({ changes: AGENT }));
   assert.equal(now().open, true);
   assert.equal(JSON.parse(window.localStorage.getItem("app.sidePanel") ?? "{}").open, true);
 
@@ -635,18 +617,13 @@ test("a preview kept stands as a tab of its own, so the next link opens beside i
   assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
 });
 
-test("a link to a tab standing as one of its own only chooses it, and a fixed kind opens as chosen, never as a preview", () => {
+test("a link to a tab standing as one of its own only chooses it, the preview standing", () => {
   const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
   act(() => panel.control().onChoose({ changes: AGENT }));
   act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
   act(() => panel.control().onPreview({ changes: AGENT }));
   assert.deepEqual(panel.control().tab, { changes: AGENT });
   assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT }, "the preview still stands");
-
-  act(() => panel.control().onPreview(SIDE_PANEL_TAB.COMMENTS));
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.COMMENTS);
-  assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
-  assert.equal(panel.control().changes.length, 2);
 });
 
 test("a preview closed lets its preview go, so the same tab opened again by a chosen door stands as a tab of its own", () => {

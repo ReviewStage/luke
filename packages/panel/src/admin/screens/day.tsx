@@ -8,7 +8,6 @@ import {
   DAY_ACCOUNT_COUNT,
   type DayAccountCount,
 } from "@repo/features/admin-overview-vocabulary";
-import { ADMIN_READ } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
 import { formatDayHeading } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
@@ -19,8 +18,10 @@ import {
   type DataTableColumn,
 } from "@repo/ui";
 import { partialDayKey } from "@repo/ui/daily-series";
+import { useQuery } from "@tanstack/react-query";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminDayQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { activityFeatureLabel } from "../charts/activity-chart.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
@@ -30,7 +31,6 @@ import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, dayReadQuery } from "../routing.js";
-import { useAdminRead } from "../use-admin-read.js";
 
 const DAY_ERROR = readFailedWords("this day");
 
@@ -291,20 +291,16 @@ export function DayScreen({
 }): React.JSX.Element {
   const { reads, gate } = useAdminDoors();
   const query = dayReadQuery(day, hideAdmins);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.DAY, query: query },
-    (signal) => reads.day(query, signal),
-    DAY_ERROR,
-    { keeps: (shown) => shown.day === day },
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminDayQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const back: AdminWayBack = { tab: ADMIN_TAB.DASHBOARD, onBack };
   const controls = (
     <AdminViewOptions hideAdmins={hideAdmins} onHideAdminsChange={onHideAdminsChange} />
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

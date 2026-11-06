@@ -52,6 +52,7 @@ import {
   type HostDoneAnswerView,
   type PullRequestPart,
   type PullRequestPartParams,
+  type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type {
   HostPairingApproveView,
@@ -84,6 +85,7 @@ export interface AgentProceduresDependencies {
     hostsPresenceUnfollow(): Effect.Effect<void>;
     hostsPresenceRefresh(): Effect.Effect<void>;
     hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
+    hostsThisMacSet(asked: ThisMacHostSetParams): Effect.Effect<HostDoneAnswerView>;
     hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
     hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
     hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
@@ -295,6 +297,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.hostsRemove(input.id);
     }),
+    [AGENT_ACT_KIND.HOSTS_THIS_MAC_SET]: actPort[AGENT_ACT_KIND.HOSTS_THIS_MAC_SET].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.hostsThisMacSet(input);
+      },
+    ),
     [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actPort[AGENT_ACT_KIND.HOSTS_PAIRING_READ].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

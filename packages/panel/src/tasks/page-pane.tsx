@@ -147,7 +147,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * the frame it drew, only while it asked, and only while the window holds a
  * press of the developer's, as it takes a link. The bar's last toggle, the
  * side panel's own glyph as a File tab's tree has it, opens the page's
- * comments pane on its right, listed as the plan's Comments tab lists the
+ * comments pane on its right, listed as the plan's comments list lists the
  * plan's (`PageComments`); it slides in and out as the tree does, is
  * dragged wider or narrower by its left edge, one width for every page,
  * and shut by a drag past its least width. The bar's comment controls stand

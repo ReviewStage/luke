@@ -6,7 +6,9 @@ import { planAttachmentAddress } from "@repo/features/plan-attachment-link";
 import type { Task } from "@repo/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -14,11 +16,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
+import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn

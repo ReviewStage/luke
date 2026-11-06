@@ -445,12 +445,13 @@ function rowHint(row: MenuRow): React.ReactNode {
 
 /**
  * The matching rows as the list's options, a run under each heading, the
- * one chosen checked; the rest keep no check room, so their hints end at the
+ * one chosen checked, or each one on where picks turn rows on and off; the rest keep no check room, so their hints end at the
  * row's edge.
  */
 function optionGroups(
   rows: readonly MenuRow[],
   value: string | undefined,
+  checked: ReadonlySet<string> | undefined,
   query: string,
   unmasked: boolean,
 ): ComboboxGroup[] {
@@ -470,7 +471,10 @@ function optionGroups(
       replayMasked: row.replayMasked,
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
-      current: value === undefined ? undefined : row.id === value,
+      current:
+        value === undefined && checked === undefined
+          ? undefined
+          : row.id === value || checked?.has(row.id) === true,
       card: row.card,
     })),
   }));
@@ -669,6 +673,8 @@ export function SearchableMenu(
     rows: readonly MenuRow[];
     /** The id of the row chosen now, drawn checked; none while nothing is. */
     value: string | undefined;
+    /** The rows on now, each drawn checked, where a pick turns a row on or off rather than choosing one, as a filter's values or a pull request's labels. */
+    checked?: ReadonlySet<string> | undefined;
     /** Said in the list's place while there is nothing to list: reading, a failure, an empty catalog. */
     note?: React.ReactNode;
     /** Said when a query matches nothing. */
@@ -1049,7 +1055,7 @@ export function SearchableMenu(
       ref={list}
       id={listId}
       label={props.label}
-      groups={optionGroups(matches, value, answered ? "" : query, unmasked)}
+      groups={optionGroups(matches, value, props.checked, answered ? "" : query, unmasked)}
       active={at}
       onActiveChange={(index) => aim(() => hoverRow(index))}
       onChoose={(index) => {

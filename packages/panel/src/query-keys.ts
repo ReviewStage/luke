@@ -21,4 +21,6 @@ export const QUERY_ROOT = {
   INVITATION_OFFER: "invitation-offer",
   /** The web app's consent page: the client and account an OAuth authorization asks about. */
   CONSENT_REQUEST: "consent-request",
+  /** The admin screens' reads and writes (`admin/admin-queries.ts`), each next keyed by its procedure. */
+  ADMIN: "admin",
 } as const;

@@ -28,6 +28,7 @@ import type { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountSourceSeam } from "../account-source.js";
+import type { ListenOnLoopback } from "../compose-port-forwards.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
@@ -110,6 +111,17 @@ export class SettingsChangedElsewhere extends Context.Service<
  */
 export class TerminalSocket extends Context.Service<TerminalSocket, OpenTerminalSocket>()(
   "@repo/host/TerminalSocket",
+) {}
+
+/**
+ * A listener on this machine's `127.0.0.1`, which a forwarded cloud port is
+ * reached at. It arrives rather than being built here, because the
+ * desktop's listens over `node:net` (`@repo/host/node`), and a host that
+ * imported it could not load in a browser, which forwards nothing. Only the
+ * port forwards concern asks for it.
+ */
+export class LoopbackListener extends Context.Service<LoopbackListener, ListenOnLoopback>()(
+  "@repo/host/LoopbackListener",
 ) {}
 
 /**
@@ -262,6 +274,12 @@ export interface ThisMacHostSeam {
   ) => Effect.Effect<Result.Result<void, string>, never, ChildProcessSpawner.ChildProcessSpawner>;
   /** The host stopped and kept from starting at the next login, its files kept. */
   readonly stop: Effect.Effect<
+    Result.Result<void, string>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
+  /** The install's own `vespin-host uninstall` run: the host leaves the account and is removed from this Mac, its LaunchAgent, agents' folders, state and releases with it. */
+  readonly uninstall: Effect.Effect<
     Result.Result<void, string>,
     never,
     ChildProcessSpawner.ChildProcessSpawner

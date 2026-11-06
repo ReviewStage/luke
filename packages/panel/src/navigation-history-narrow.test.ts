@@ -3,11 +3,12 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { memoryHistory } from "@repo/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test } from "vitest";
@@ -32,7 +33,7 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { deliveryOf, handState, stateWith } from "./testing/app-state.js";
+import { deliveryOf, handState, registryWith, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
@@ -324,7 +325,9 @@ function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  act(() =>
+    root.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Probe))),
+  );
   return {
     history: () => history ?? assert.fail("the window's history stands"),
     /** The Tasks tab as the shell presses it. */

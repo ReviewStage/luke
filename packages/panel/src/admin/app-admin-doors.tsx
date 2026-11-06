@@ -4,9 +4,9 @@
  * The window acts through its act port alone, so each read is `admin.read`
  * on it, which the host asks of the service under the account's session
  * (`@repo/features/admin-client`), and the star is `admin.favorite`. The
- * port carries no signal, so a read the screen stopped waiting on runs to
- * its end, and the read hook drops its answer (`use-admin-read.ts`), as it
- * drops any read it aborted. The app is signed in before it
+ * port carries no signal, so a read whose query was canceled runs to its
+ * end, and Query drops its answer (`admin-queries.ts`), as it drops any
+ * read it canceled. The app is signed in before it
  * draws, so nothing is held at the gate up front, and a refusal stands in
  * the page as the app's centered failure rather than a sign-in card. The app
  * keeps its places in its own history, whose step for each view has an app

@@ -662,8 +662,9 @@ main() {
   fi
   remove_other_releases
 
-  printf '\nConnected. This box gets ready in Vespin, then you can pick it under a task'"'"'s Runs on.\n'
-  printf 'To upgrade later, run the same command again.\n'
+  # Note that nothing says how to upgrade, because the host updates itself to each release.
+  printf '\n'
+  ok "Ready. Pick it under a task's Runs on in Vespin."
   printf 'To remove it: %s uninstall\n' "$TYPED_LINK"
   # Note that a systemd service does not keep a WSL distro up: WSL stops it about
   # 15 seconds after its last window closes, unless instanceIdleTimeout is -1.

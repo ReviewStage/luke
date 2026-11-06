@@ -1,4 +1,5 @@
 import type { AdminMetricsWindow } from "@repo/features/admin-wire";
+import { useAdminSignOut } from "@repo/panel/admin/admin-queries";
 import type { ViewerAccount } from "@repo/panel/admin/chrome/page-header";
 import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
 import {
@@ -16,7 +17,7 @@ import {
 } from "@repo/panel/admin/routing";
 import { AccountScreen } from "@repo/panel/admin/screens/account";
 import { CostScreen } from "@repo/panel/admin/screens/cost";
-import { DashboardScreen, useMetricsRead } from "@repo/panel/admin/screens/dashboard";
+import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
 import { DayScreen } from "@repo/panel/admin/screens/day";
 import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
 import { UsersScreen } from "@repo/panel/admin/screens/users";
@@ -95,33 +96,27 @@ function AdminDashboardPage(): React.JSX.Element {
     });
   };
 
-  // The dashboard's read waits while another view is open; coming back re-runs
-  // it, which refreshes the numbers while the last answer stands dimmed the
-  // way any refetch does.
-  const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === ADMIN_TAB.DASHBOARD);
-  const withdrawSession = metrics.withdraw;
   // Note that Better Auth answers a refused sign-out as a result rather than a
   // throw, so the refusal is thrown here: the session still stands, and
-  // nothing past this may say it is gone.
-  const signOut = useCallback(
-    () =>
-      withdrawSession(async () => {
-        const { error } = await authClient.signOut();
-        if (error) throw new Error("The sign-out was refused.");
-        SIGN_IN_CHOSEN.write(false);
-      }),
-    [withdrawSession],
-  );
+  // nothing past this may say it is gone. Each screen withdraws its reads
+  // around it (`useAdminSignOut`).
+  const signOut = useCallback(async () => {
+    const { error } = await authClient.signOut();
+    if (error) throw new Error("The sign-out was refused.");
+    SIGN_IN_CHOSEN.write(false);
+  }, []);
+  const withdraw = useAdminSignOut(signOut);
 
   // Sign out in the sidebar's foot leaves whichever view stood for the sign-in
   // card. Note that the view is unmounted rather than told, because that drops
   // its read with it: an answer that left carrying the old cookie cannot then
   // put the page back up behind the sign-out.
   const [loggedOut, setLoggedOut] = useState(false);
+  const withdrawSession = withdraw.mutateAsync;
   const signOutAndLeave = useCallback(async () => {
-    await signOut();
+    await withdrawSession();
     setLoggedOut(true);
-  }, [signOut]);
+  }, [withdrawSession]);
 
   const viewer: ViewerAccount | undefined = account
     ? { name: account.name, email: account.email, image: account.image ?? undefined }
@@ -251,7 +246,6 @@ function AdminDashboardPage(): React.JSX.Element {
 
   return (
     <DashboardScreen
-      read={metrics}
       hideAdmins={hideAdmins}
       onHideAdminsChange={changeHideAdmins}
       windowDays={windowDays}

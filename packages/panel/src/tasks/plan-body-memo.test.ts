@@ -2,14 +2,20 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { readExperiments } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import type { PlanEditDoor } from "./use-plan-editing.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * plan-body-memo.test.ts -- a section's byline moves its edit time on with

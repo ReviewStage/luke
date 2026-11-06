@@ -88,11 +88,12 @@ export interface SettingsStep {
 }
 
 /**
- * The line under the title of the pages that connect agents, each naming
- * the one a reader may have meant: Integrations holds what the account's own
- * agents use, the product's MCP lets outside agents use the account, and
- * CLI is the `vespin` command an agent with a shell runs, so a reader who
- * landed on one looking for another is sent across. No other page has one.
+ * The line under the title of the pages that connect something, each
+ * naming the one a reader may have meant: Integrations holds what the
+ * account's own agents use, the product's MCP lets outside agents use the
+ * account, CLI is the `vespin` command an agent with a shell runs, so a
+ * reader who landed on one looking for another is sent across, and Hosts
+ * says what a host is and where it is picked. No other page has one.
  */
 function pageDescription(view: SettingsView): ReactNode {
   switch (view) {
@@ -120,6 +121,13 @@ function pageDescription(view: SettingsView): ReactNode {
             {PRODUCT_NAME.toLowerCase()}
           </Text>{" "}
           command.
+        </ReplayUnmask>
+      );
+    case SETTINGS_VIEW.HOSTS:
+      return (
+        <ReplayUnmask>
+          Macs and Linux servers of yours that run your agents instead of the cloud. Pick one under
+          a task's Runs on.
         </ReplayUnmask>
       );
     default:

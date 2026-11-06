@@ -106,6 +106,7 @@ import {
   type ProviderKeysAnswerView,
   type PullRequestPartParams,
   providerKeysAnswerViewSchema,
+  type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
 import {
@@ -170,6 +171,10 @@ import {
   mcpClientsViewSchema,
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
+import {
+  type PortForwardingAnswer,
+  portForwardingAnswerSchema,
+} from "@repo/features/port-forward-acts";
 import {
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
@@ -738,6 +743,8 @@ export interface HostOperator {
   onDevicePresenceChanged(listener: (held: AppDevicePresences) => void): () => void;
   /** One of the account's hosts removed; done, or why not. */
   hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
+  /** Run agents on this Mac turned on or off; done, or why not. Only the desktop's host answers it. */
+  hostsThisMacSet(asked: ThisMacHostSetParams): Effect.Effect<HostDoneAnswerView>;
   /** A box's pending pairing read by the code its link named; the box, or why not. */
   hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
   /** A box's pending pairing approved by its code; the host it made, or why not. */
@@ -1015,6 +1022,13 @@ export interface HostOperator {
   onBrowserLiveMessage(listener: (message: BrowserLiveMessageEvent) => void): () => void;
   /** A live view's socket closed, with its code, by its connection. */
   onBrowserLiveClosed(listener: (closed: BrowserLiveClosedEvent) => void): () => void;
+  /** How an agent's forwarding to this Mac's localhost stands; nothing where the host refused. */
+  portForwardRead(params: { agentId: string }): Effect.Effect<PortForwardingAnswer | undefined>;
+  /** An agent's forwarding turned on or off, answering how it then stands; nothing where the host refused. */
+  portForwardSet(params: {
+    agentId: string;
+    on: boolean;
+  }): Effect.Effect<PortForwardingAnswer | undefined>;
 }
 
 /**
@@ -1987,6 +2001,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.HOSTS_REMOVE, { id }),
         answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
       ),
+    hostsThisMacSet: (asked) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_THIS_MAC_SET, { ...asked }),
+        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
+      ),
     hostsPairingRead: (code) =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_PAIRING_READ, { code }),
@@ -2744,6 +2763,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.BROWSER_LIVE_CLOSED,
         (payload) => Result.getOrUndefined(readEither(browserLiveClosedEventSchema)(payload)),
         listener,
+      ),
+    portForwardRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PORT_FORWARDS_READ, { agentId: params.agentId }),
+        answerOf(portForwardingAnswerSchema, undefined),
+      ),
+    portForwardSet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: params.agentId, on: params.on }),
+        answerOf(portForwardingAnswerSchema, undefined),
       ),
     onSessionReplayChanged: (listener) =>
       on(

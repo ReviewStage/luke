@@ -12,7 +12,6 @@ import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
-import { useNewWorkspaceDialog } from "./new-workspace-dialog.js";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
@@ -29,7 +28,7 @@ import { WorkspaceTile } from "./workspace-tile.js";
  * drops the menu of every workspace the account is a member of from its left
  * edge, each by its tile with who shares it under its name, the listed one
  * checked and the workspace's card hung beside it while the pointer rests on it, then New workspace, which
- * asks a name and lists the workspace made, and Workspace settings, which
+ * opens its cards over the window (`new-workspace-steps.tsx`), and Workspace settings, which
  * opens Settings on the listed workspace's page, where its members and its
  * GitHub are managed. Nothing else stands in the menu. The head stands
  * whenever an account is signed in and its workspaces are read, its first
@@ -38,11 +37,7 @@ import { WorkspaceTile } from "./workspace-tile.js";
  */
 
 /** The menu's items: every workspace by its tile, with who shares it under its name as the head says it, the listed one checked; then New workspace and Workspace settings. */
-export function workspaceMenuGroups(
-  listed: Workspace,
-  tasks: TasksControl,
-  onNew: () => void,
-): MenuAction[][] {
+export function workspaceMenuGroups(listed: Workspace, tasks: TasksControl): MenuAction[][] {
   const first = tasks.workspaces[0]?.id;
   const choices = tasks.workspaces.map(
     (workspace): MenuAction => ({
@@ -63,7 +58,7 @@ export function workspaceMenuGroups(
   return [
     choices,
     [
-      { label: "New workspace", icon: <PlusIcon />, onSelect: onNew },
+      { label: "New workspace", icon: <PlusIcon />, onSelect: tasks.newWorkspace.onOpen },
       { label: "Workspace settings", icon: <GearIcon />, onSelect: tasks.onOpenWorkspaceSettings },
     ],
   ];
@@ -90,10 +85,6 @@ export function WorkspaceSwitcher({
   /** Whether the sidebar is in sight, so the menu closes with it folding away. */
   inSight: boolean;
 }): React.JSX.Element | null {
-  const naming = useNewWorkspaceDialog(tasks.onCreateWorkspace, {
-    signedIn: tasks.signedIn,
-    surfaceOpen: tasks.shown && inSight,
-  });
   const menu = useMenu(tasks.shown && inSight);
   const listed = tasks.workspace;
   if (listed === undefined) return null;
@@ -120,11 +111,10 @@ export function WorkspaceSwitcher({
           label="Workspaces"
           replayUnmasked
           menu={menu.drawn}
-          groups={workspaceMenuGroups(listed, tasks, naming.ask)}
+          groups={workspaceMenuGroups(listed, tasks)}
           onClose={menu.close}
         />
       )}
-      {naming.dialog}
     </div>
   );
 }

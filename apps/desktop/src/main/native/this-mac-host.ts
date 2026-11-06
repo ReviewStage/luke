@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import { DEVICE_ARCH } from "@repo/features/device-agent-wire";
 import { DARWIN_HOST } from "@repo/host/daemon";
 import { ThisMacHost, type ThisMacHostSeam } from "@repo/host/effect";
@@ -95,6 +97,9 @@ const ran = (command: string, args: readonly string[], within: Duration.Duration
 
 const launchctl = (args: readonly string[]) => ran("launchctl", args, ANSWER_WITHIN.LAUNCHD);
 
+/** The install's own command, by the link the install script makes under the home (`HOST_COMMAND`). */
+const INSTALL_COMMAND = ".local/bin/vespin-host";
+
 /** The account install as This Mac's host, for the user the app runs as. */
 function thisMacHost(): ThisMacHostSeam {
   const agent = `gui/${process.getuid?.() ?? 0}/${LABEL}`;
@@ -121,6 +126,13 @@ function thisMacHost(): ThisMacHostSeam {
       return (yield* loaded)
         ? Result.fail(`launchd still holds ${LABEL}`)
         : Result.succeed<void>(undefined);
+    }),
+    // Note that its input is no terminal, so it asks nothing, and that a Mac enrolled whose install never landed has no command and nothing to uninstall.
+    uninstall: Effect.suspend(() => {
+      const command = path.join(os.homedir(), INSTALL_COMMAND);
+      return existsSync(command)
+        ? ran(command, ["uninstall"], ANSWER_WITHIN.INSTALL)
+        : Effect.succeed(Result.succeed<void>(undefined));
     }),
   };
 }

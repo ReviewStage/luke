@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import type { Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -9,10 +11,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
+import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope } from "./plan-comments.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * plan-slash-menu.test.ts -- the `/` menu in the plan's open text: opened by

@@ -456,7 +456,7 @@ function thread(input: {
  * The comment threads on the fixture's plan, oldest first, as the host
  * holds them: one on a whole block, one its coding agent
  * started, one answered by a member and by the app, and one resolved, which
- * only the Comments tab lists. The open ones stand in the plan's first
+ * only the plan's comments list shows. The open ones stand in the plan's first
  * sections, so the window's first screen of it shows their marks.
  */
 const FIXTURE_THREADS: readonly PlanCommentThread[] = [
