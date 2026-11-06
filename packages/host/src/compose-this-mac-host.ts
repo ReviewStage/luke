@@ -167,32 +167,13 @@ export function composeThisMacHost(
       Effect.map(host.machine, (machine) => machine.machineId),
     );
 
-    /** Whose the record's device was last found to be: the account signed in then, the device, and whether the service lists it among that account's hosts. */
-    const ownership = MutableRef.make<
-      | { readonly userId: string | undefined; readonly deviceId: string; readonly owned: boolean }
-      | undefined
-    >(undefined);
-
-    /** Whether the record's device was last found to be another account's than the one signed in; not where it was not asked yet. */
-    const knownOthers = (record: HostDevice) => {
-      const found = MutableRef.get(ownership);
-      return (
-        found !== undefined &&
-        found.userId === dependencies.accountId() &&
-        found.deviceId === record.deviceId &&
-        !found.owned
-      );
-    };
-
-    /** This Mac as the windows draw it: which machine it is, the device its record names, where it was enrolled with this app's service, whether it runs agents for the account signed in, and how many agents' folders its host made. */
+    /** This Mac as the windows draw it: which machine it is, the device its record names, where it was enrolled with this app's service, whether it stands unrefused, and how many agents' folders its host made. */
     const read = Effect.map(
       Effect.all([ownServiceRecord, machineId, ownedAgents(host.stateRoot)]),
       ([record, id, folders]): AppThisMacHost => ({
         ...(Option.isSome(record) ? { deviceId: record.value.deviceId } : undefined),
         ...(id === undefined ? undefined : { machineId: id }),
-        // Note that a record reads as on until the service is found to list it as another account's, since asking it on every pass would cost a call each time.
-        enrolled:
-          Option.isSome(record) && record.value.refused !== true && !knownOthers(record.value),
+        enrolled: Option.isSome(record) && record.value.refused !== true,
         agentFolders: folders.length,
       }),
     );
@@ -212,17 +193,13 @@ export function composeThisMacHost(
       kernel.emit(GATEWAY_EVENT.THIS_MAC_HOST_CHANGED, carried(held));
     });
 
-    /** Whether the record's device is the account's, as the service lists its hosts, kept for the windows' read. */
+    /** Whether the record's device is the account's, as the service lists its hosts. */
     const accountOwns = (record: HostDevice) =>
-      Effect.flatMap(dependencies.hostListed(record.deviceId), (listed) => {
-        if (Option.isNone(listed)) return Effect.fail("read the account's hosts");
-        MutableRef.set(ownership, {
-          userId: dependencies.accountId(),
-          deviceId: record.deviceId,
-          owned: listed.value,
-        });
-        return Effect.succeed(listed.value);
-      });
+      Effect.flatMap(dependencies.hostListed(record.deviceId), (listed) =>
+        Option.isSome(listed)
+          ? Effect.succeed(listed.value)
+          : Effect.fail("read the account's hosts"),
+      );
 
     /**
      * The Mac enrolled under the device id given, or one minted, on the

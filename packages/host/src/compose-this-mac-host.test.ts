@@ -372,23 +372,24 @@ it.effect(
     ),
 );
 
-it.effect("another account's standing host on this Mac is neither turned off nor taken as on", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
-      const stateRoot = yield* recorded(record);
-      const mac = yield* thisMac(stateRoot, { loaded: true });
-      yield* until(() => mac.held() !== undefined);
+it.effect(
+  "another account's standing host on this Mac is neither turned off nor turned on over",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const record = { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE };
+        const stateRoot = yield* recorded(record);
+        const mac = yield* thisMac(stateRoot, { loaded: true });
+        yield* until(() => mac.held() !== undefined);
 
-      assert.deepEqual(yield* mac.turn(false), { failure: "unanswered" });
-      assert.deepEqual(yield* mac.turn(true), { failure: "unanswered" });
-      yield* nudged(Duration.seconds(10));
+        assert.deepEqual(yield* mac.turn(false), { failure: "unanswered" });
+        assert.deepEqual(yield* mac.turn(true), { failure: "unanswered" });
+        yield* nudged(Duration.seconds(10));
 
-      assert.equal(mac.asked.length, 0, "nothing of the other account's host is touched");
-      assert.equal(mac.held()?.enrolled, false);
-      assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
-    }).pipe(Effect.provide(FILES)),
-  ),
+        assert.equal(mac.asked.length, 0, "nothing of the other account's host is touched");
+        assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
+      }).pipe(Effect.provide(FILES)),
+    ),
 );
 
 it.effect(
