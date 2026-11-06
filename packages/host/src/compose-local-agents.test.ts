@@ -530,7 +530,7 @@ it.effect(
             }),
         });
         yield* until(() => claims.length === 1);
-        yield* TestClock.adjust(Duration.seconds(1));
+        yield* TestClock.adjust(Duration.seconds(2));
         yield* until(() => spawned.some((each) => each.program === RUNNER));
         yield* TestClock.adjust(Duration.seconds(1));
         yield* until(() => settled.some((each) => each.id === LINE_ID));

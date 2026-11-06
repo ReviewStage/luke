@@ -216,8 +216,6 @@ const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
 const BEAT_DEADLINE = Duration.seconds(5);
 /** How a held read the service did not answer is asked again. */
 const REREAD = Duration.seconds(2);
-/** How a line's claim the service did not answer is asked again, well inside its own claim window. */
-const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's process group has to end after SIGTERM before the group is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
 /** How long making an agent's repository may take, a first clone of a large one or a wait on another launch's clone included, before its launch is given up. */
@@ -1079,18 +1077,17 @@ export function composeLocalAgents(
          */
         const claimTokens = new Map<string, string>();
 
-        /** One line claimed by its id under its token, asked again a few times where unanswered; refused, or nothing where never answered. */
+        /**
+         * One line claimed by its id under its token, asked once; refused, or
+         * nothing where unanswered. Note that an unanswered claim keeps its
+         * token, so `linesFollowed` asks it again before its next read rather
+         * than this holding `claiming` through repeats of its own.
+         */
         const claimedLine = (id: string) =>
           Effect.gen(function* () {
             const token = claimTokens.get(id) ?? kernel.createId();
             claimTokens.set(id, token);
-            const answer = yield* asked(client.claimLine(deviceId, id, token)).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced(CLAIM_RETRY.every),
-                times: CLAIM_RETRY.times,
-                until: (answered) => answered !== undefined,
-              }),
-            );
+            const answer = yield* asked(client.claimLine(deviceId, id, token));
             if (answer !== undefined) claimTokens.delete(id);
             return answer;
           });
@@ -1121,8 +1118,9 @@ export function composeLocalAgents(
          * The lines read and claimed in the service's order, each handed to
          * its agent's mailbox. A claim never answered ends the batch there,
          * so a later line of the same agent is never delivered before it, and
-         * is asked again under its token before the next read, since the
-         * service lists no line once claimed and the claim may have landed.
+         * is asked again under its token after `REREAD`, before the next read,
+         * since the service lists no line once claimed and the claim may have
+         * landed.
          */
         const linesFollowed = Effect.forever(
           Effect.gen(function* () {
@@ -1133,7 +1131,7 @@ export function composeLocalAgents(
             const lines = yield* asked(client.lines(deviceId));
             if (lines === undefined) return yield* Effect.sleep(REREAD);
             for (const line of lines) {
-              if (!(yield* lineTaken(line.id))) return;
+              if (!(yield* lineTaken(line.id))) return yield* Effect.sleep(REREAD);
             }
           }),
         );
