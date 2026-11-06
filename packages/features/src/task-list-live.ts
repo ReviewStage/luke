@@ -29,9 +29,10 @@ import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { readMarkOf } from "./read-mark.js";
 import { countedNumber } from "./service-wire.js";
+import { standingFailures } from "./task-agents-model.js";
 import {
-  type ListedPullRequest,
   DESCRIPTION_ACTOR,
+  type ListedPullRequest,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
   type TaskAgentPin,
@@ -339,7 +340,8 @@ interface AgentGroup {
  * named first, then the rest, newest started first within each; each pull
  * request once by its page, those still open first, newest agent's first
  * within a rank; the latest settled activity of every agent, archived
- * or not; and how many failed.
+ * or not; and how many failed with no agent started since
+ * (`standingFailures`).
  */
 function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
   const { agents: rows, pullRequests } = group;
@@ -352,7 +354,7 @@ function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
   return {
     total: newest.length,
     working: working.length,
-    failed: newest.filter(({ line }) => line.status === AGENT_STATUS.FAILED).length,
+    failed: standingFailures(newest.map(({ row, line }) => ({ createdAt: row.createdAt, line }))),
     ...(rows.length === 0 ? undefined : { activityAt: Math.max(...rows.map(activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)

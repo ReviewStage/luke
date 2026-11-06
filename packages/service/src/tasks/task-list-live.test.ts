@@ -435,6 +435,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           failure: TURN_FAILURE.SESSION_ENDED,
         });
         yield* lineOf(orphaned, 1, "Try again.", null, 60_000);
+        // The newest agent's failure, which alone the row counts, since every other failed before an agent was started after it.
+        const latest = yield* openAgent(owner, { taskId: plan.id }, 30_000);
+        yield* turnOf(latest, TURN_STATUS.FAILED, 20_000, { settled: true });
 
         // A settled plan the owner pinned, and an agent with no plan, pinned and archived.
         // An agent started blank, long past the starting grace: it reads completed, not failed.
@@ -555,7 +558,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual(
           [agents?.total, agents?.working, agents?.failed, agents?.pullRequestTotal],
-          [7, 2, 3, 1],
+          [8, 2, 1, 1],
         );
         assert.equal(agents?.pullRequests[0]?.queued, true, "a queued pull request says so");
         assert.equal(agents?.pullRequests[0]?.author, "octo-dev", "it names who opened it");

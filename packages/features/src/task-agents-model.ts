@@ -1,5 +1,5 @@
-import { PULL_REQUEST_STATE } from "./agent-wire.js";
-import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
+import { AGENT_STATUS, PULL_REQUEST_STATE } from "./agent-wire.js";
+import type { TaskAgentLine, TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
 
 /**
  * task-agents-model.ts -- how a task's coding agents stand, in the one status its row wears.
@@ -9,6 +9,8 @@ import type { TaskAgentsSummary, TaskPullRequestLine } from "./task-wire.js";
  * first; then one at work; then the pull request that matters most, an
  * open or draft one before a merged one, and a merged one before a closed
  * one. A task whose agents finished with nothing published wears none.
+ * An agent's failure stops being the task's once another agent is started
+ * on it after the failure, as a newer CI run decides a commit's check.
  *
  * Note that a question waiting on the reader is no status here, because the
  * Tasks page's badge and the sidebar's Inbox count already say how many wait.
@@ -49,6 +51,22 @@ function markedPullRequest(
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+/**
+ * How many of a task's unarchived agents failed with no agent started on the
+ * task since, each failing when its last turn settled, or as it started where
+ * it ran none. Note that this is how the held and live reads both count
+ * `TaskAgentsSummary.failed`, so the two agree.
+ */
+export function standingFailures(
+  agents: readonly { readonly createdAt: number; readonly line: TaskAgentLine }[],
+): number {
+  const latestStart = Math.max(...agents.map((agent) => agent.createdAt));
+  return agents.filter(
+    ({ createdAt, line }) =>
+      line.status === AGENT_STATUS.FAILED && (line.at ?? createdAt) >= latestStart,
+  ).length;
 }
 
 /** The one status a task's row wears for what its agents are doing and what they published. */
