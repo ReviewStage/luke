@@ -305,6 +305,10 @@ it.effect(
       yield* focus.raise;
       yield* settled;
       assert.equal(settles(), 2, "a sign-in settled is settled no more");
+
+      live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "pending")] });
+      yield* after(Duration.millis(500));
+      assert.equal(settles(), 3, "a sign-in begun again on the same row is settled as drawn");
       yield* call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW);
     }),
 );
