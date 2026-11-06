@@ -680,6 +680,8 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case AGENT_CALL_FAILURE.UNANSWERED:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.QUOTA_EXHAUSTED:
+    case AGENT_CALL_FAILURE.UPSTREAM_ERROR:
     case AGENT_CALL_FAILURE.NO_REPOSITORY:
     case AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
@@ -1201,9 +1203,11 @@ function startFailureWords(failure: AgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This task no longer exists.";
-    // Note that only a dictated clip is refused for want of an OpenAI key, so a Start never hears it.
+    // Note that only a dictated clip is refused for want of an OpenAI key, and only a ChatGPT sign-in braked or given no code, so a Start never hears them.
     case AGENT_CALL_FAILURE.UNANSWERED:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.QUOTA_EXHAUSTED:
+    case AGENT_CALL_FAILURE.UPSTREAM_ERROR:
       return "The agent could not be started.";
     case AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
@@ -1316,11 +1320,13 @@ export function messageFailureWords(failure: AgentCallFailure): string {
   switch (failure) {
     case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    // A message names no repository, no model, and no clip, so none of these refusals is its own.
+    // A message names no repository, no model, no clip, and no sign-in, so none of these refusals is its own.
     case AGENT_CALL_FAILURE.NO_REPOSITORY:
     case AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED:
     case AGENT_CALL_FAILURE.INVALID_CHOICE:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.QUOTA_EXHAUSTED:
+    case AGENT_CALL_FAILURE.UPSTREAM_ERROR:
       return `${MESSAGE_NOT_SENT} Try again.`;
     // A message is refused by a device only while it is away, in the words a Start on it is.
     case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
