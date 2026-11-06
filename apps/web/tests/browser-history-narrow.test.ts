@@ -2,7 +2,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { RUN_PROFILE } from "@repo/host/app-state";
-import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { act } from "react";
 import { afterEach, vi } from "vitest";
@@ -46,7 +45,6 @@ it.effect(
       );
       openAt("/app");
       installPanelDoors(RUN_PROFILE.TASKS);
-      yield* appStateFirstRead;
       yield* Effect.promise(async () => {
         await drawPanel();
         assert.equal(await panelPushed(), false);

@@ -776,7 +776,7 @@ function buttonNamed(within: ParentNode, words: string): HTMLButtonElement {
   return found ?? assert.fail(`a button named ${words}`);
 }
 
-test("Discard after a send that stopped part way deletes the threads it posted already, so the review leaves nothing behind", async () => {
+test("Discard after a send that stopped part way deletes the threads it posted already, so the review leaves nothing behind, and keeps one the service would not delete for the next Discard", async () => {
   const starts: DescriptionCommentStart[] = [];
   const acted: [string, unknown][] = [];
   const control: DescriptionCommentsControl = {
@@ -806,7 +806,8 @@ test("Discard after a send that stopped part way deletes the threads it posted a
     },
     act: async (threadId, action) => {
       acted.push([threadId, action]);
-      return true;
+      // Note that the service refuses the first deletion and takes the next.
+      return acted.length > 1;
     },
   };
   const { press } = holdOnElement(control, "Per week?");
@@ -830,7 +831,27 @@ test("Discard after a send that stopped part way deletes the threads it posted a
     assert.fail("Discard asks first");
   await act(async () => buttonNamed(question, "Discard review").click());
 
+  await act(async () => undefined);
   assert.deepEqual(acted, [
     [starts[0]?.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD }],
   ]);
+  assert.ok(
+    document.querySelector('button[aria-label="Review, 1 pending comment"]'),
+    "the thread the service would not delete stays in the review",
+  );
+
+  await act(async () => buttonNamed(panel, "Discard").click());
+  await act(async () =>
+    buttonNamed(
+      document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail(),
+      "Discard review",
+    ).click(),
+  );
+  await act(async () => undefined);
+  assert.equal(acted.length, 2, "the next Discard tries it again");
+  assert.equal(
+    document.querySelector('button[aria-label^="Review, "]'),
+    null,
+    "and lets it go once it is deleted",
+  );
 });

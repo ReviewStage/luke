@@ -3260,10 +3260,11 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
 });
 
 test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", async () => {
+  // The bridge is handed first, since each tree's subscription reads the bridge standing as it mounts.
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const places = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(places);
   act(() => places.render(withQueryClient(createElement(OffersPlaces))));
-  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   paletteOverTask()(DOCUMENT_TASK);
   // The document arrives a few microtasks after the window first draws.
   await settle();

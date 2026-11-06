@@ -11,7 +11,6 @@ import type {
   TasksWorkspaceSlackBotAnswer,
   TasksWorkspaceSlackBotNotificationsParams,
 } from "@repo/features/tasks-view";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -19,7 +18,6 @@ import {
   type HeldRows,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppAccountPreferences, type AppHostReads, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -223,7 +221,7 @@ export function slackNotificationsWritten(
   AccountPreferencesPoolRow,
   PreferencesChange,
   TasksWorkspaceSlackBotNotificationsParams,
-  WireValue
+  TasksWorkspaceSlackBotAnswer
 > {
   return {
     kind: ACCOUNT_PREFERENCES,
@@ -231,9 +229,7 @@ export function slackNotificationsWritten(
     change: (write) => () => ({ slackNotifications: write.notifications }),
     send: (write) =>
       Effect.map(send(write), (answer) =>
-        "slackBot" in answer
-          ? { answer: carried<TasksWorkspaceSlackBotAnswer>(answer), txid: answer.slackBot.txid }
-          : { refused: carried<TasksWorkspaceSlackBotAnswer>(answer) },
+        "slackBot" in answer ? { answer, txid: answer.slackBot.txid } : { refused: answer },
       ),
   };
 }

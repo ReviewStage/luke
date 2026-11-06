@@ -25,7 +25,7 @@ import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { updateActsContract } from "./updates.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
-import { workspaceActsContract } from "./workspaces.js";
+import { WORKSPACE_ACTS, workspaceActsContract } from "./workspaces.js";
 
 /**
  * index.ts -- the oRPC contract of the acts a window's act port answers, keyed by act kind.
@@ -98,6 +98,7 @@ export {
 } from "./pushes.js";
 export { SETTINGS_ACTS, type SettingUpdatePayload } from "./settings.js";
 export { CONTACT_MAILTO } from "./window-surface.js";
+export { WORKSPACE_ACTS } from "./workspaces.js";
 
 /** Every act declared once (`declared-act.ts`), one domain's spread each, in alphabetical order: what the host's composers answer directly. */
 export const HOST_ACTS = {
@@ -110,6 +111,7 @@ export const HOST_ACTS = {
   ...INSTALLED_SKILL_ACTS,
   ...INTEGRATION_ACTS,
   ...SETTINGS_ACTS,
+  ...WORKSPACE_ACTS,
 };
 
 /** Every domain's procedures, one spread each, in alphabetical order. */

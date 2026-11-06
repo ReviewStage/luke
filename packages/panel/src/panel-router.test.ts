@@ -14,7 +14,7 @@ import { describe, expect } from "vitest";
 import { createPanelRouter, type PanelRouter } from "./panel-router.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { stateWith } from "./testing/app-state.js";
-import { appStateFirstRead } from "./use-app-state.js";
+import { readAppState } from "./testing/copy-feedback.js";
 
 type PanelRouteId = RouteIds<PanelRouter["routeTree"]>;
 
@@ -325,7 +325,7 @@ describe("the panel's route tree", () => {
           onAppState: () => () => undefined,
         });
 
-        expect(yield* appStateFirstRead).toEqual(state);
+        expect(yield* Effect.promise(readAppState)).toEqual(state);
       }),
   );
 });
