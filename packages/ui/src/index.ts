@@ -46,6 +46,7 @@ export * from "./components/confirm-dialog/confirm-dialog.js";
 export * from "./components/copy-button/copy-button.js";
 export * from "./components/copy-field/copy-field.js";
 export * from "./components/corner-count/corner-count.js";
+export * from "./components/count-figure/count-figure.js";
 export * from "./components/detail-page/detail-page.js";
 export * from "./components/dialog/dialog.js";
 export * from "./components/dialog/dialog-actions.js";
