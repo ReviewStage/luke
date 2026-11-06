@@ -169,9 +169,8 @@ export interface ResumedPlace {
 /**
  * A running place's firewall, the account whose agent it is named beside
  * it: the whole policy written from the sources given and the swaps of the
- * launch kept for it; a launch's swaps kept ahead of its first write; or
- * that launch deleted ahead of a stop, the policy left as it stands (`../sandbox-firewall.ts`). A machine with no
- * firewall of ours does nothing.
+ * launch kept for it; or a launch's swaps kept ahead of its first write
+ * (`../sandbox-firewall.ts`). A machine with no firewall of ours does nothing.
  */
 interface MachineFirewall {
   readonly write: (
@@ -184,16 +183,13 @@ interface MachineFirewall {
     userId: string,
     launch: FirewallLaunch,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  readonly clear: (
-    place: MachinePlace,
-  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
 }
 
 /** Whether the service renews a runner's credential while its launch stands. */
 export const CREDENTIAL_RENEWAL = {
   /** Fixed for its launch: a Mac hands it to the runner, and a sandbox holds it at its firewall. */
   FIXED: "fixed",
-  /** Renewed by the service: a Mac hands nothing, its runner asking our token route for each, and a sandbox holds it at its firewall, which the sweep renews. */
+  /** Renewed by the service: a Mac hands nothing, its runner asking our token route for each, and a sandbox holds it at its firewall as it holds a fixed one. */
   RENEWED: "renewed",
 } as const;
 

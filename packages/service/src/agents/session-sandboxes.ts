@@ -42,7 +42,6 @@ import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } 
 import { afterResponse } from "../http/after-response.js";
 import { agentDriveName } from "./agent-drive.js";
 import { discardedOrLogged } from "./device-discard.js";
-import { sandboxFirewall } from "./sandbox-firewall.js";
 import { keepAliveExtension } from "./sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
@@ -81,12 +80,9 @@ export interface SessionSandboxesService {
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /**
    * Stops every running sandbox tagged with the session, keeping its
-   * filesystem for a later resume; answers how many were stopped. The launch kept for its firewall goes first
-   * (`sandbox-firewall.ts`).
+   * filesystem for a later resume; answers how many were stopped.
    */
-  readonly stopFor: (
-    sessionId: string,
-  ) => Effect.Effect<number, SandboxUnavailable, DatabaseServices>;
+  readonly stopFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
 }
 
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
@@ -131,9 +127,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-          // The kept launch goes first, as ahead of every other stop, so no renewal writes to it again.
           const session = { name: sandbox.name, sessionId: running };
-          yield* sandboxFirewall(api).clear(session);
           yield* Effect.flatMap(api.session(session), (held) => held.stop());
           stopped += 1;
         }

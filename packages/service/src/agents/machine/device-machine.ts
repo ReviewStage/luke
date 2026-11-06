@@ -490,7 +490,6 @@ function deviceMachineOver(
     firewall: {
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
-      clear: () => Effect.void,
     },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.

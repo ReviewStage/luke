@@ -45,7 +45,6 @@ interface Recorded {
   hostPairings: number[];
   syncLog: number[];
   staleFirewalls: number[];
-  codexPlanSwaps: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -64,7 +63,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     hostPairings: [],
     syncLog: [],
     staleFirewalls: [],
-    codexPlanSwaps: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -141,11 +139,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.staleFirewalls.push(now);
         return 7;
       }),
-    renewCodexPlanSwaps: (now) =>
-      Effect.sync(() => {
-        recorded.codexPlanSwaps.push(now);
-        return { renewed: 2, failed: 0 };
-      }),
     ...overrides,
   };
   return { options, recorded };
@@ -180,7 +173,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
-      codexPlanSwaps: [],
     });
   }),
 );
@@ -210,7 +202,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
-      codexPlanSwaps: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -227,7 +218,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
-      codexPlanSwaps: [],
     });
   }),
 );
@@ -247,7 +237,6 @@ it.effect(
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       assert.equal(answer.body.syncLog, 5);
       assert.equal(answer.body.staleFirewalls, 7);
-      assert.deepEqual(answer.body.codexPlanSwaps, { renewed: 2, failed: 0 });
       const [instant] = recorded.purged;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -265,7 +254,6 @@ it.effect(
         hostPairings: [instant],
         syncLog: [instant],
         staleFirewalls: [instant],
-        codexPlanSwaps: [instant],
       });
     }),
 );
@@ -298,7 +286,6 @@ it.effect(
       assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);
       assert.equal(recorded.staleFirewalls.length, 1);
-      assert.equal(recorded.codexPlanSwaps.length, 1);
       assert.equal(recorded.pictures.length, 1);
     }),
 );

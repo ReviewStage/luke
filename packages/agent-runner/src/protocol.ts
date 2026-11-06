@@ -11,11 +11,10 @@
  * The config says which harness the launch runs: Claude Code (P05), or Codex
  * through `codex app-server` (P20). Secrets never travel in argv or on
  * stdin: the runner's bearer and the harness's credential are in its
- * environment. Codex's ChatGPT access token is never handed in at all: on a
- * host the runner's token command (`codex-token.ts`) asks the service for
- * each over HTTPS, and in the cloud's sandbox it answers the launch's
- * placeholder (`RUNNER_ENV.CODEX_TOKEN`), the token set in its place at the
- * sandbox's firewall, so no line carries one, on a Mac's queue
+ * environment. Codex's ChatGPT access token is never handed in at all: the
+ * runner asks the service for each over HTTPS (`codex-token.ts`), on a host
+ * through its token command and in the cloud's sandbox as it signs
+ * app-server in, so no line carries one, on a Mac's queue
  * (`@repo/features/device-agent-wire`) or anywhere else.
  */
 
@@ -38,11 +37,11 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * stands in its place for an agent the account's key pays for. In a sandbox
  * either is a placeholder minted for the launch, which the sandbox's firewall
  * swaps for the real one on Anthropic's API, so neither enters the sandbox;
- * on a host it is the credential itself. Codex's token is never in it: on a
- * host app-server asks the service for it through the runner's token command,
- * and in the cloud's sandbox the command answers a placeholder held here
- * (`CODEX_TOKEN`), as an OpenAI API key is one there too, each swapped for the
- * real value at the sandbox's firewall.
+ * on a host it is the credential itself. Codex's token is never in it: the
+ * runner asks the service for it, on a host through its token command and in
+ * the cloud's sandbox as it signs app-server in (`codex-token.ts`). An OpenAI
+ * API key in the sandbox is a placeholder, swapped for the real one at the
+ * sandbox's firewall, as Anthropic's are.
  */
 export const RUNNER_ENV = {
   BEARER: "APP_RUNNER_TOKEN",
@@ -61,21 +60,14 @@ export const RUNNER_ENV = {
    */
   OPENAI_API_KEY: "OPENAI_API_KEY",
   /**
-   * What Codex's token command answers in the cloud's sandbox, in place of
-   * asking the service: the placeholder minted for the launch, which the
-   * sandbox's firewall swaps for the plan's access token on OpenAI's API.
-   * Unset on a host, whose token command asks the service for the token.
-   */
-  CODEX_TOKEN: "APP_CODEX_TOKEN",
-  /**
-   * Which backend a Codex launch on the plan sends its requests to
+   * Which backend a host's Codex launch on the plan sends its requests to
    * (`CODEX_PLAN_BACKEND`): set where the plan was connected through Codex's
    * own device-code login, whose token only Codex's ChatGPT backend accepts,
    * and unset for OpenAI's API, where a third-party sign-in's token goes.
    */
   CODEX_PLAN_BACKEND: "APP_CODEX_PLAN_BACKEND",
   /**
-   * The ChatGPT workspace a device-code plan pays from, which Codex's
+   * The ChatGPT workspace a host's device-code plan pays from, which Codex's
    * ChatGPT backend reads from the account header of each request; unset
    * where the plan's ID token named none. A workspace id is no secret.
    */
@@ -89,7 +81,7 @@ export const RUNNER_ENV = {
 } as const;
 
 /**
- * The backends a Codex launch on the plan sends its requests to, as its
+ * The backends a host's Codex launch on the plan sends its requests to, as its
  * starter names one in `RUNNER_ENV.CODEX_PLAN_BACKEND`: OpenAI's API, for a
  * token a third-party sign-in was issued, or Codex's ChatGPT backend, for
  * one Codex's own device-code login was issued.
@@ -201,15 +193,23 @@ export const INPUT_LINE = {
 } as const;
 
 /**
- * The argument that starts the runner's bundle as Codex's token command rather
- * than as a launch: `node <bundle> codex-token <tokenUrl>`, which prints the
- * plan's access token the service answers, or in the cloud's sandbox the
- * launch's placeholder (`RUNNER_ENV.CODEX_TOKEN`), and nothing else, on stdout.
+ * The argument that starts the runner's bundle as a host's Codex token command
+ * rather than as a launch: `node <bundle> codex-token <tokenUrl>`, which prints
+ * the plan's access token the service answers, and nothing else, on stdout.
  */
 export const CODEX_TOKEN_COMMAND = "codex-token";
 
-/** What the service's token route answers a runner: the plan's access token, good for at least the route's margin. */
-export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });
+/**
+ * What the service's token route answers a runner: the plan's access token,
+ * good for at least the route's margin, and the ChatGPT workspace it pays
+ * from, which the route names for every runner in the cloud's sandbox, as
+ * Codex's sign-in on host-supplied tokens takes it, and for one on a host
+ * where the plan named one.
+ */
+export const RunnerTokenAnswerSchema = Schema.Struct({
+  accessToken: Schema.String,
+  chatgptAccountId: Schema.optionalKey(Schema.String),
+});
 export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
 
 /**

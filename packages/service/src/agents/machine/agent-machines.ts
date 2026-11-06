@@ -40,7 +40,6 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
       write: (place, userId, sources) => of(place.machine).firewall.write(place, userId, sources),
       keepLaunch: (place, userId, launch) =>
         of(place.machine).firewall.keepLaunch(place, userId, launch),
-      clear: (place) => of(place.machine).firewall.clear(place),
     },
     stop: (place) => of(place.machine).stop(place),
     discard: (found) => of(found.machine).discard(found),

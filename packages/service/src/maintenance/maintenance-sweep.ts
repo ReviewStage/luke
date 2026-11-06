@@ -12,7 +12,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "../http/http.js";
-import type { CodexPlanSweepOutcome } from "./codex-plan-sweep.js";
 import type { DeviceLeaseSweepOutcome } from "./device-lease-sweep.js";
 import type { DeviceWarmSweepOutcome } from "./device-warm-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
@@ -57,8 +56,6 @@ interface MaintenanceSweeps {
   pruneSyncLog: (now: number) => SweepRead<number>;
   /** Drops the firewall records of the sandbox sessions past the longest a session runs, answering how many went. */
   purgeStaleFirewalls: (now: number) => SweepRead<number>;
-  /** Renews the ChatGPT plan token behind the Codex agents' standing swaps at their sandboxes' firewalls, a window's worth. */
-  renewCodexPlanSwaps: (now: number) => SweepRead<CodexPlanSweepOutcome>;
 }
 
 /**
@@ -102,7 +99,6 @@ interface MaintenanceSweepAnswer {
   syncLog: Swept<number>;
   /** Firewall records of sandbox sessions long ended, dropped. */
   staleFirewalls: Swept<number>;
-  codexPlanSwaps: Swept<CodexPlanSweepOutcome>;
 }
 
 /** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
@@ -158,7 +154,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),
     staleFirewalls: yield* isolated("purgeStaleFirewalls", sweeps.purgeStaleFirewalls(now)),
-    codexPlanSwaps: yield* isolated("renewCodexPlanSwaps", sweeps.renewCodexPlanSwaps(now)),
   };
 });
 

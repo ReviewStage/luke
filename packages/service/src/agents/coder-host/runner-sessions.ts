@@ -258,8 +258,8 @@ export interface HarnessLaunch {
     readonly env: Readonly<Record<string, string>>;
     readonly kind: LaunchSwapKind;
     readonly entry: FirewallEntry;
-    /** The real credential, digested into the fingerprint so a warm runner on a changed key relaunches; none where the service renews the swap itself. */
-    readonly fingerprint?: Redacted.Redacted;
+    /** The real credential, digested into the fingerprint so a warm runner on a changed key relaunches. */
+    readonly fingerprint: Redacted.Redacted;
   };
 }
 
@@ -533,8 +533,7 @@ function launchFingerprint(
       : [
           {
             slot: held.kind,
-            credential:
-              held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
+            credential: Redacted.value(held.fingerprint),
           },
         ]),
     ...declared.filter(isHeld).map((each) => ({
@@ -2322,9 +2321,7 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
     return RUNNER_ENDED.HELD;
   }
-  // The launch kept for the place goes ahead of the stop, so no renewal writes to it again; its
-  // credentials stay on its firewall until the stop.
-  yield* machine.firewall.clear(running);
+  // Its credentials stay on its firewall until the stop.
   yield* machine.stop(running);
   return RUNNER_ENDED.STOPPED;
 });
