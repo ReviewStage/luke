@@ -725,7 +725,6 @@
   --spacing-list-held: max(100%, var(--ui-list-held-height, 0px));
   /* off-scale: centers a line of words on the inline tile's 14px */
   --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
-  --spacing-workspace-shared-glyph: 11px; /* off-scale: a people glyph at a caption's x-height */
   --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
   --spacing-corner-badge: var(
     --ui-space-16
@@ -737,8 +736,6 @@
     10,
     28px
   ); /* off-scale: ten icon buttons, edge to edge */
-  --text-section-size: var(--ui-type-section-size);
-  --tracking-workspace-head: -0.005em; /* off-scale: the sidebar head's name, a hair tighter */
   /* An actor's mark (`@repo/panel`'s `actor-ref.tsx`): the opaque tile a
      member who left, and a pile's count, stand on, a step of ink over the
      ground, so the face a square overlaps never shows through it; the ground
