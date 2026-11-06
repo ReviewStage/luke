@@ -23,9 +23,8 @@
  * whichever lands last is right; a GitHub credential minted twice is two
  * tokens of the same reach. Note that this holds only while the sources
  * stand still between a writer's read and its send: a writer that read the
- * launch before a relaunch kept its own, or before a clear let it go, may
- * land after them and send what
- * it read until the session's next write; and a clone's token
+ * launch before a relaunch kept its own may land after it and send what it
+ * read until the session's next write; and a clone's token
  * stands only in its own writes, so another writer landing during a clone
  * takes it off, though the clone goes on under the agent's own credential
  * that writer carries, minted afresh, which reaches every repository the
