@@ -1101,6 +1101,8 @@ function subject(
       call,
       /** The composer's declared acts, each handed its input as the port reads it. */
       acts: composer.acts,
+      /** The composer's row writes that may wait, as a relaunch lays its queue back by. */
+      queueable: composer.queueable,
       flushHeldCloses: composer.flushHeldCloses,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
@@ -3559,6 +3561,58 @@ it.effect(
         }),
         { held: false },
       );
+    }),
+);
+
+it.effect(
+  "an inbox write queued on disk by an older build under its Gateway method's name is laid back and sent on relaunch, a reminder under Snooze's",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { asked, queueable } = yield* subject({ pool });
+      // Note that the names are spelled here, not read from the composer, because they are what a disk written before this build holds.
+      const waiting = [
+        {
+          name: "agents.inboxAnswer",
+          key: "k-1",
+          input: {
+            itemId: ITEM.id,
+            revision: 2,
+            reply: INBOX_REPLY.ACKNOWLEDGED,
+            clientKey: "a-1",
+          },
+        },
+        {
+          name: "agents.inboxClose",
+          key: "k-2",
+          input: { itemId: ITEM.id, revision: 2, clientKey: "c-1" },
+        },
+        { name: "agents.inboxReadState", key: "k-3", input: { itemId: ITEM.id, unread: true } },
+        { name: "agents.inboxSnooze", key: "k-4", input: { itemId: ITEM.id, until: 5_000 } },
+        {
+          name: "agents.inboxReadAll",
+          key: "k-5",
+          input: { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] },
+        },
+      ];
+
+      yield* pool.requeue(waiting, queueable);
+      yield* pool.resend;
+
+      assert.deepEqual(
+        asked.filter(
+          (each) =>
+            each.startsWith("answer:") || each.startsWith("close:") || each.startsWith("inbox-"),
+        ),
+        [
+          `answer:${ITEM.id}:2:${INBOX_REPLY.ACKNOWLEDGED}:a-1`,
+          `close:${ITEM.id}:2:c-1`,
+          `inbox-unread:${ITEM.id}`,
+          `inbox-remind:${ITEM.id}:5000`,
+          `inbox-read-all:${WORKSPACE_ID}`,
+        ],
+      );
+      assert.deepEqual(pool.queued(), []);
     }),
 );
 
