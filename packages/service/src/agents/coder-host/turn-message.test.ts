@@ -25,7 +25,7 @@ import { handedAfterCompaction, type TurnHanded, taskWithLead } from "./turn-con
 import { coderTurnMessage } from "./turn-message.js";
 
 /**
- * turn-message.test.ts -- the message a coding agent's turn opens with: the call's words let go after a spoken turn, and its task handed again once another writer saved the plan.
+ * turn-message.test.ts -- the message a coding agent's turn opens with: the call's words let go after a spoken turn, and its task handed again once another writer saved the description.
  *
  * Over the real migrations on PGlite, an agent on a task, admitted as the
  * MCP door admits it, its turns written through the store writer as a
@@ -33,7 +33,7 @@ import { coderTurnMessage } from "./turn-message.js";
  * no longer hold, as after a compaction that kept only that, and the next
  * says nothing of them; and a typed turn hands the task once after the
  * agent's first turn, then only where someone other than the agent saved
- * the plan after its previous turn started, never on its first turn or for
+ * the description after its previous turn started, never on its first turn or for
  * its own notes. Synthetic accounts, tasks, and words throughout.
  */
 
@@ -124,7 +124,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
   );
 
   it.effect(
-    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the plan after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its starter turned Plans off",
+    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the description after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its starter turned Plans off",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent;
@@ -148,7 +148,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
             (message) => {
               handed = message.handed;
               const text = message.text ?? "";
-              // Note that the task is read as handed by its lead, since with Plans off it is handed without its document.
+              // Note that the task is read as handed by its lead, since with Descriptions off it is handed without its document.
               return text.includes(taskWithLead("")) ? text : undefined;
             },
           );
@@ -163,7 +163,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
             (answer) => answer.status,
           );
 
-        // Our notes before the agent's first turn: that turn opens on the plan as its first message.
+        // Our notes before the agent's first turn: that turn opens on the description as its first message.
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Context", "Invites go by email.")]);
         assert.equal(yield* typedAt(firstTurn), undefined);
@@ -182,7 +182,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         assert.equal(yield* typedAt(nextTurn), undefined);
 
         // Our notes while that turn ran, and the agent's after them in the same section, which
-        // leave the agent the section's last writer: the next typed turn is handed the plan all the same.
+        // leave the agent the section's last writer: the next typed turn is handed the description all the same.
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Approach", "- A withdrawn invite never grants access.")]);
         yield* TestClock.adjust("1 minute");
@@ -194,7 +194,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
         assert.ok(!changed.includes("## This turn is spoken"), changed);
 
-        // With Plans off a save hands nothing, and the plan is never what a turn reads.
+        // With Descriptions off a save hands nothing, and the description is never what a turn reads.
         yield* writeAccountPreferences(userId, {
           experiments: { [EXPERIMENT.DESCRIPTIONS]: false },
         });
@@ -202,7 +202,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
         assert.equal(yield* typedAt(nextTurn), undefined);
 
-        // A turn runs after that save, and Plans goes back on: the next turn is handed the plan it was not.
+        // A turn runs after that save, and Descriptions goes back on: the next turn is handed the description it was not.
         yield* TestClock.adjust("1 minute");
         yield* ranTurn(admitted, nextTurn, yield* Clock.currentTimeMillis);
         yield* TestClock.adjust("1 minute");

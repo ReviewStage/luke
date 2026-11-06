@@ -51,13 +51,13 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
- * agent-doors.test.ts -- the doors a coding agent's plan, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
+ * agent-doors.test.ts -- the doors a coding agent's description, picture, comment, and pull request tools run through, as its harness's MCP server calls them.
  *
  * Each call runs as the agent's conversation, admitted as the MCP door
  * admits a runner's bearer, over the real migrations on PGlite: notes are
- * taken into the plan of a task of the agent's workspace together or not at
+ * taken into the description of a task of the agent's workspace together or not at
  * all, named by its id, and refused for no task or one of another
- * workspace; a picture of another workspace's plan is not looked at; a
+ * workspace; a picture of another workspace's description is not looked at; a
  * comment is written under the agent on a task of its workspace, and
  * refused elsewhere; and an agent in no repository opens no pull request.
  * Synthetic accounts, tasks, and words throughout.
@@ -86,11 +86,11 @@ const ON_CLAUDE_CODE = {
   payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 } as const;
 
-/** The member's Plans turned on or off, which their agents' plan tools stand on. */
+/** The member's Descriptions turned on or off, which their agents' description tools stand on. */
 const descriptionsFor = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
-/** An agent of the member's on the task named, with the brief given, its member's Plans on. */
+/** An agent of the member's on the task named, with the brief given, its member's Descriptions on. */
 const agentOn = (
   userId: string,
   taskId: string,
@@ -110,7 +110,7 @@ const agentOn = (
     (started) => Option.getOrThrow(started).agent,
   );
 
-/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Plans on. */
+/** An agent of the member's in the workspace on no task and no repository, handed the prompt given, its member's Descriptions on. */
 const tasklessAgentOn = (userId: string, workspaceId: string) =>
   Effect.map(
     Effect.andThen(
@@ -140,7 +140,7 @@ const openAgent = (brief?: AgentBriefText) =>
     return { userId, agent, admitted: admittedOf(agent) };
   });
 
-/** A thread the member started on the task's plan, over words of its own. */
+/** A thread the member started on the task's description, over words of its own. */
 const openThread = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     yield* saveDescriptionText(userId, taskId, DESCRIPTION_TEXT);
@@ -164,7 +164,7 @@ const openThread = (userId: string, taskId: string) =>
 
 it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   it.effect(
-    "an agent handed a prompt on a task takes notes on its plan, as New task starts every agent",
+    "an agent handed a prompt on a task takes notes on its description, as New task starts every agent",
     () =>
       Effect.gen(function* () {
         const brief = { descriptionSnapshot: null, prompt: "Let invites expire." } as const;
@@ -190,7 +190,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes are taken into its plan together or not at all, a miss answering the plan as it stands to retry from, and read back in the plan",
+    "an agent's notes are taken into its description together or not at all, a miss answering the description as it stands to retry from, and read back in the description",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent();
@@ -209,7 +209,10 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           admitted,
           unparsedWire({
             taskId: agent.taskId,
-            notes: [...notes, { kind: "replace", find: "a phrase the plan never held", text: "x" }],
+            notes: [
+              ...notes,
+              { kind: "replace", find: "a phrase the description never held", text: "x" },
+            ],
           }),
           0,
           noSandbox,
@@ -218,7 +221,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         assert.deepEqual(missed, {
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: DESCRIPTION_EDIT_REFUSAL.CONFLICT,
-          missed: "replace a phrase the plan never held",
+          missed: "replace a phrase the description never held",
           current: before.text,
         });
         const untouched = Option.getOrThrow(yield* readTask(userId, agent.taskId));
@@ -257,7 +260,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent takes notes on another task of its workspace by its id, the plan naming the agent as its tab names it even once the task moves to another workspace",
+    "an agent takes notes on another task of its workspace by its id, the description naming the agent as its tab names it even once the task moves to another workspace",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent();
@@ -283,7 +286,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Plans off, are refused and save nothing, as is its look at a plan's picture",
+    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its member turned Descriptions off, are refused and save nothing, as is its look at a description's picture",
     () =>
       Effect.gen(function* () {
         const { userId, admitted } = yield* openAgent();
@@ -340,7 +343,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent looks at a picture of another task's plan of its workspace, and one of a task of another workspace its member is also in is refused",
+    "an agent looks at a picture of another task's description of its workspace, and one of a task of another workspace its member is also in is refused",
     () =>
       Effect.gen(function* () {
         const { userId, admitted } = yield* openAgent();

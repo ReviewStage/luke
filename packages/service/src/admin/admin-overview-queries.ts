@@ -1,5 +1,5 @@
 /**
- * admin-overview-queries.ts -- the Overview's reads of tasks, plan revisions,
+ * admin-overview-queries.ts -- the Overview's reads of tasks, description revisions,
  * coding agents, pull requests, the inbox, and automations.
  *
  * Every read counts rows or reads a timestamp, a status, or an id; none names

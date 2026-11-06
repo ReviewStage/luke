@@ -374,7 +374,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 });
 
 it.layer(getTestDB())("an agent started on a task", (it) => {
-  /** A Start on the task, handed the plan, under a fresh key. */
+  /** A Start on the task, handed the description, under a fresh key. */
   const taskAsk = (taskId: string): StartAsk => ({
     taskId,
     prompt: undefined,

@@ -50,18 +50,18 @@ import {
 } from "./comment-ask.js";
 
 /**
- * description-comments-procedures.ts -- a plan's comment threads for the desktop: read them as they change, start one, and answer, edit, resolve, reopen, or delete one.
+ * description-comments-procedures.ts -- a description's comment threads for the desktop: read them as they change, start one, and answer, edit, resolve, reopen, or delete one.
  *
- * `GET /api/plans/{id}/comments` reads every thread of the plan, held while
+ * `GET /api/plans/{id}/comments` reads every thread of the description, held while
  * nothing moved since the cursor `after` names (`http/held-read.ts`), as the
  * Inbox is read, and woken by Sync on the plan's topic, so a window
  * hears a teammate's or an agent's comment the moment it lands; `POST`
- * starts a thread with its first comment, anchored to words of the plan's
+ * starts a thread with its first comment, anchored to words of the description's
  * text (`@repo/database/models/description-comments`).
  * `POST /api/plans/{id}/comments/{thread}` is one thing done to a thread,
  * answered with the thread as it now stands. Every member of the plan's
  * workspace reads and writes every thread; a plan the account does not reach,
- * or an archived one for a write, answers as not found, and a thread the plan
+ * or an archived one for a write, answers as not found, and a thread the description
  * does not hold as not found too. A member's comment reaches the agents in
  * its thread, each the thread handed to it (`mentionsHandedOver`): every
  * agent a comment was handed to before and every one that answered in it,
@@ -69,7 +69,7 @@ import {
  * joins it.
  *
  * A page of the task is commented on through the same doors: the read names
- * the page to read its threads in the plan's place, and a start names the
+ * the page to read its threads in the description's place, and a start names the
  * page and the version it is on. The agent that showed the page's newest
  * version, its writer, is in every thread on the page from the start, so a
  * comment reaches whoever revises the page; one in a thread that cannot
@@ -89,9 +89,9 @@ export interface DescriptionCommentsProcedureSeams {
 }
 
 /**
- * The plan's threads as they stand, held while its cursor is still the
+ * The description's threads as they stand, held while its cursor is still the
  * reader's; nothing where the account reaches no such plan. The hold is
- * woken by a write to the plan's threads or their entries, or to the task,
+ * woken by a write to the description's threads or their entries, or to the task,
  * all on the task's topic, and by a change to what admits the reader to the
  * task, their membership and GitHub reach, on their own topic.
  */
@@ -214,7 +214,7 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The writer of the page a thread is on: the agent that showed its newest
- * version, or the app where it showed it; none for a thread on the plan, or
+ * version, or the app where it showed it; none for a thread on the description, or
  * a page shown before who showed it was kept.
  */
 const pageWriterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -260,7 +260,7 @@ function agentsIn(
 
 /**
  * Whom a member's comment hands its thread to: the one rule of who a comment
- * wakes, for the plan's threads and the pages' alike, which is that a thread
+ * wakes, for the description's threads and the pages' alike, which is that a thread
  * reaches the agents in it (`agentsIn`), and each agent its words mention
  * with `@` joins it. One already in the thread that cannot take it, an
  * archived one say, is said back as not sent; a mention of one that cannot
@@ -512,7 +512,7 @@ const reviewHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly threads: readonly DescriptionCommentThread[];
   }[] = [];
   for (const { to, owed, threads: theirs } of asked.values()) {
-    // Note that a review's threads stand on one page, which Plans does not gate.
+    // Note that a review's threads stand on one page, which Descriptions does not gate.
     const agent = yield* askableAgent(userId, taskId, to, thread).pipe(
       Effect.catch(() => Effect.succeed(undefined)),
     );
@@ -638,7 +638,7 @@ const reviewAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** The plan comments resource: its held read, a start, and one thing done to a thread, each to a signed-in member. */
+/** The description comments resource: its held read, a start, and one thing done to a thread, each to a signed-in member. */
 export function descriptionCommentsProcedures(seams: DescriptionCommentsProcedureSeams) {
   const member = hosted.descriptionComments.use(accountMiddleware(seams.resolveUserId));
   return {

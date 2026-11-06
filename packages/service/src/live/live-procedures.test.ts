@@ -429,7 +429,7 @@ const askTask = (options: {
   readonly forUser?: string;
   readonly taskId?: string;
   readonly path?: string;
-  /** The page of the task a comments read names; the plan's own threads where left out. */
+  /** The page of the task a comments read names; the description's own threads where left out. */
   readonly page?: string;
   readonly poll?: boolean;
   /** The digest the reader last saw, which holds the poll until the rows move past it. */
@@ -624,7 +624,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         assert.equal(own.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(taskHistoryLiveAnswerSchema)(own.body);
         assert.equal(answer.url, LIVE_POLL_URL);
-        assert.deepEqual(answer.queries.revisions.rows, [], "the plan is not saved yet");
+        assert.deepEqual(answer.queries.revisions.rows, [], "the description is not saved yet");
         assert.deepEqual(
           yield* askTask({
             bearer: eli,
@@ -683,7 +683,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
   );
 
   it.effect(
-    "a task's comments, its plan's own or one page's, are answered polled for an account that reaches the task, and not found for one that does not",
+    "a task's comments, its description's own or one page's, are answered polled for an account that reaches the task, and not found for one that does not",
     () =>
       Effect.gen(function* () {
         const dana = yield* openUser;
@@ -716,8 +716,12 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         const onPage = yield* askTask({ bearer: dana, taskId: started.id, path, page: shown.id });
         assert.equal(onPage.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(threadsOf(onPage.body)?.length, 1);
-        const onPlan = yield* askTask({ bearer: dana, taskId: started.id, path });
-        assert.deepEqual(threadsOf(onPlan.body), [], "the page's thread is not the plan's");
+        const onDescription = yield* askTask({ bearer: dana, taskId: started.id, path });
+        assert.deepEqual(
+          threadsOf(onDescription.body),
+          [],
+          "the page's thread is not the description's",
+        );
         assert.deepEqual(
           yield* askTask({ bearer: eli, taskId: started.id, path, page: shown.id }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },

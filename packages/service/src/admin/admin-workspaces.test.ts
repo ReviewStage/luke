@@ -200,7 +200,7 @@ const insertWorkspace = (
 /** The numbers the tasks below take, each its own whatever its workspace. */
 let taskNumbers = 0;
 
-/** A task in the workspace, its name and plan words no admin read may carry; answers its id. */
+/** A task in the workspace, its name and description words no admin read may carry; answers its id. */
 const insertTask = (organizationId: string, userId: string, createdAt: Date) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -212,7 +212,7 @@ const insertTask = (organizationId: string, userId: string, createdAt: Date) =>
       userId,
       number: taskNumbers,
       name: "Secret launch plan",
-      document: "Confidential plan text.",
+      document: "Confidential description text.",
       createdAt,
       updatedAt: createdAt,
     });
@@ -226,7 +226,7 @@ const insertRevision = (taskId: string, userId: string, at: Date) =>
       seq: 1,
       actor: DESCRIPTION_ACTOR.DEVELOPER,
       userId,
-      document: "Confidential plan text, revised.",
+      document: "Confidential description text, revised.",
       changes: 1,
       startedAt: at,
       at,
@@ -338,7 +338,7 @@ const seedWorld = Effect.gen(function* () {
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.PENDING, daysAgo(-3));
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.PENDING, daysAgo(2));
 
-  // Only a plan revised this week, on a task from long ago.
+  // Only a description revised this week, on a task from long ago.
   const feldspar = yield* insertWorkspace("Feldspar", ["linus", "grace"]);
   const oldTask = yield* insertTask(feldspar, "linus", daysAgo(50));
   yield* insertRevision(oldTask, "linus", daysAgo(3));

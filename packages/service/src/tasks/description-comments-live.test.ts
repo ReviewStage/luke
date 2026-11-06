@@ -42,7 +42,7 @@ import {
  * real migrations on PGlite: the statements run as Realtime runs them,
  * their rows decoded and joined as the desktop does, beside
  * `readDescriptionCommentThreads`, the held read a surface read them with. The two
- * agree for the plan's own threads and for a page's, as threads are
+ * agree for the description's own threads and for a page's, as threads are
  * started, answered by a member and an agent, sent to the app, edited,
  * resolved, reopened, and deleted, files among them, and for an account
  * that does not reach the task.
@@ -94,7 +94,7 @@ const liveThreadsOf = (reader: string, subject: TaskCommentsSubject) =>
 
 it.layer(getTestDB())("a task's comments followed live", (it) => {
   it.effect(
-    "answers what readDescriptionCommentThreads answers for a plan and for a page as threads are started, replied to, resolved, edited and deleted, files among them, and nothing to a stranger",
+    "answers what readDescriptionCommentThreads answers for a description and for a page as threads are started, replied to, resolved, edited and deleted, files among them, and nothing to a stranger",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount("Dean Stratakos");
@@ -156,7 +156,7 @@ it.layer(getTestDB())("a task's comments followed live", (it) => {
             ],
           }),
         );
-        // Note that these start in the millisecond the plan's thread did, so the threads are ordered by their ids.
+        // Note that these start in the millisecond the description's thread did, so the threads are ordered by their ids.
         const onElement = threadOf(
           yield* startDescriptionCommentThread(member(teammate), taskId, {
             clientKey: randomUUID(),

@@ -12,7 +12,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wir
 import { ACTION_RESULT_STATUS, type WireRecord, type WireValue } from "@repo/wire";
 
 /**
- * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their plans, the comments on them, its agents' transcripts, and the threads they and its members posted.
+ * demo-world.ts -- the acme world the demo seed writes, as data: its people, its workspace, its tasks and their descriptions, the comments on them, its agents' transcripts, and the threads they and its members posted.
  *
  * The world is the changelog screenshots' (`.claude/skills/changelog-screenshots/WORLD.md`):
  * acme builds Relay, and Dean Stratakos owns its workspace beside seven
@@ -158,19 +158,19 @@ export const DEMO_HOST = {
 
 /* ----- The tasks ----- */
 
-/** A comment of a plan's thread after its first: who wrote it, and what. */
+/** A comment of a description's thread after its first: who wrote it, and what. */
 export interface DemoCommentReply {
   readonly by: DemoPerson;
   readonly words: string;
 }
 
 /**
- * One plan's comment thread: on which words of the plan, what its first
+ * One description's comment thread: on which words of the description, what its first
  * comment said, who answered, and who resolved it, where it stands
  * resolved. The replies follow a minute apart.
  */
 export interface DemoCommentWords {
-  /** The plan's words the thread is on, which must stand in its text once. */
+  /** The description's words the thread is on, which must stand in its text once. */
   readonly quote: string;
   readonly words: string;
   readonly replies: readonly DemoCommentReply[];
@@ -178,12 +178,12 @@ export interface DemoCommentWords {
   readonly resolved?: { readonly by: DemoPerson; readonly ago: number };
 }
 
-/** A comment thread a member started on a plan. */
+/** A comment thread a member started on a description. */
 export interface DemoComment extends DemoCommentWords {
   readonly by: DemoPerson;
 }
 
-/** One task of acme's: who made it, where it stands, the task it is a child of, its plan, and the comments on it. */
+/** One task of acme's: who made it, where it stands, the task it is a child of, its description, and the comments on it. */
 export interface DemoTask {
   readonly id: string;
   readonly name: string;
@@ -193,23 +193,23 @@ export interface DemoTask {
   readonly priority: TaskPriority;
   /** The task it is a child of, which comes before it; none for a task at the top. */
   readonly parent?: DemoTask;
-  /** How long before the seed's start it was made, and its plan last saved. */
+  /** How long before the seed's start it was made, and its description last saved. */
   readonly createdAgo: number;
   readonly savedAgo: number;
   /** How long before the seed's start it was moved to its status, for one that is done or canceled; it stands to do until then. */
   readonly settledAgo?: number;
-  readonly plan: string;
+  readonly description: string;
   readonly comments: readonly DemoComment[];
 }
 
-/** A plan's text from its sections, each under its heading, in the order given. */
+/** A description's text from its sections, each under its heading, in the order given. */
 function descriptionText(sections: Readonly<Record<string, string>>): string {
   return `${Object.entries(sections)
     .map(([heading, text]) => `## ${heading}\n\n${text}`)
     .join("\n\n")}\n`;
 }
 
-const INVITATIONS_PLAN = descriptionText({
+const INVITATIONS_DESCRIPTION = descriptionText({
   Context:
     "Only an admin can add someone to a workspace, by creating their account by hand. " +
     "Members wait on an admin to bring a teammate in, and support gets a ticket a day asking for it.",
@@ -261,7 +261,7 @@ const INVITATIONS_PLAN = descriptionText({
     "- The sender or any admin may withdraw an invite (Dean, in the Inbox).",
 });
 
-const BILLING_PLAN = descriptionText({
+const BILLING_DESCRIPTION = descriptionText({
   Context:
     "Every workspace pays a flat $12 a seat. Teams that run thousands of webhook " +
     "deliveries a day pay the same as teams that run ten, and the largest three " +
@@ -288,7 +288,7 @@ const BILLING_PLAN = descriptionText({
     "- What does a workspace on the old flat plan see on Settings › Billing before its renewal?",
 });
 
-const WEBHOOKS_PLAN = descriptionText({
+const WEBHOOKS_DESCRIPTION = descriptionText({
   Context:
     "A webhook delivery that fails is dropped. Customers whose endpoint blips for a minute " +
     "lose every event in that minute, and ask support to replay them by hand.",
@@ -304,7 +304,7 @@ const WEBHOOKS_PLAN = descriptionText({
     "- When an endpoint never answers, then the delivery is dead after its fifth.",
 });
 
-const ONBOARDING_PLAN = descriptionText({
+const ONBOARDING_DESCRIPTION = descriptionText({
   Context:
     "Half of new workspaces never send a webhook. The ones that do finish three steps in their " +
     "first hour: they invite a teammate, add an endpoint, and send a test event.",
@@ -317,7 +317,7 @@ const ONBOARDING_PLAN = descriptionText({
   "Open questions": "- Should an admin be able to hide it for the whole workspace?",
 });
 
-const AUDIT_PLAN = descriptionText({
+const AUDIT_DESCRIPTION = descriptionText({
   Context:
     "Two enterprise customers ask for an export of who changed what in their workspace, " +
     "for their own compliance reviews.",
@@ -325,7 +325,7 @@ const AUDIT_PLAN = descriptionText({
   "Not doing": "- A streaming export to a customer's own bucket: no one has asked for it yet.",
 });
 
-const DARK_MODE_PLAN = descriptionText({
+const DARK_MODE_DESCRIPTION = descriptionText({
   Context: "The dashboard is light only, and support hears about it every week.",
   Goal: "- The dashboard follows the system's appearance, with a manual override in **Settings › Profile**.",
   Approach:
@@ -333,13 +333,13 @@ const DARK_MODE_PLAN = descriptionText({
     "- Check every chart against both palettes before it ships.",
 });
 
-const SSO_PLAN = descriptionText({
+const SSO_DESCRIPTION = descriptionText({
   Context: "One prospect asked for SSO with Okta, then signed with Google sign-in instead.",
   Goal: "- Sign in to a workspace through its own Okta.",
   "Not doing": "- SCIM provisioning.",
 });
 
-const USAGE_EVENTS_PLAN = descriptionText({
+const USAGE_EVENTS_DESCRIPTION = descriptionText({
   Problem:
     "Nothing counts what a workspace uses. The delivery log holds every delivery, but it is " +
     "pruned after 30 days and is not keyed for billing.",
@@ -352,7 +352,7 @@ const USAGE_EVENTS_PLAN = descriptionText({
     "- Test events do not count (Dana, in the Inbox).",
 });
 
-const ROLLUP_PLAN = descriptionText({
+const ROLLUP_DESCRIPTION = descriptionText({
   Problem:
     "Summing `usage_events` on every request is too slow for **Settings › Billing** and for Stripe's daily report.",
   "Acceptance criteria":
@@ -363,7 +363,7 @@ const ROLLUP_PLAN = descriptionText({
   "Open questions": "- How far back should the backfill go?",
 });
 
-const STRIPE_PLAN = descriptionText({
+const STRIPE_DESCRIPTION = descriptionText({
   Problem: "Stripe invoices only the usage it is told about, and today it is told nothing.",
   "Acceptance criteria":
     "- Each day's total per workspace is reported to the subscription's metered price once.\n" +
@@ -374,7 +374,7 @@ const STRIPE_PLAN = descriptionText({
     "- Does a workspace on the old flat plan get a metered price at all, or stay flat until renewal?",
 });
 
-const BILLING_PAGE_PLAN = descriptionText({
+const BILLING_PAGE_DESCRIPTION = descriptionText({
   Problem: "An admin cannot see what their workspace used until the invoice arrives.",
   "Acceptance criteria":
     "- **Settings › Billing** shows this month's deliveries by day and the projected invoice.\n" +
@@ -383,7 +383,7 @@ const BILLING_PAGE_PLAN = descriptionText({
   "Open questions": "- Show the projection to every member, or to admins alone?",
 });
 
-const VERIFY_POSTMARK_PLAN = descriptionText({
+const VERIFY_POSTMARK_DESCRIPTION = descriptionText({
   Problem:
     "Postmark sends from `acme.relay.dev` alone. Mail from `acme.dev` lands in spam, so invite " +
     "emails cannot ship until the domain is verified.",
@@ -394,7 +394,7 @@ const VERIFY_POSTMARK_PLAN = descriptionText({
     "- The Return-Path is `pm-bounces.acme.dev`, where Handle Postmark bounces reads them.",
 });
 
-const INVITE_EMAILS_PLAN = descriptionText({
+const INVITE_EMAILS_DESCRIPTION = descriptionText({
   Problem: "`POST /invites` writes the invite email to the console. Invitees get nothing.",
   "Acceptance criteria":
     "- The invite email sends through Postmark's `invites` stream, from the React Email template " +
@@ -406,7 +406,7 @@ const INVITE_EMAILS_PLAN = descriptionText({
     "- Who does it come from: Relay, or the inviter via Relay?",
 });
 
-const RESEND_PLAN = descriptionText({
+const RESEND_DESCRIPTION = descriptionText({
   Problem:
     "An expired invite can only be withdrawn and sent again, which mails a second link and " +
     "leaves the first row behind.",
@@ -416,7 +416,7 @@ const RESEND_PLAN = descriptionText({
   "Open questions": "- Should Resend be limited to a few times a day per invite?",
 });
 
-const BOUNCES_PLAN = descriptionText({
+const BOUNCES_DESCRIPTION = descriptionText({
   Problem:
     "An invite to a mistyped address bounces silently, and the inviter waits for someone who never got it.",
   "Acceptance criteria":
@@ -425,7 +425,7 @@ const BOUNCES_PLAN = descriptionText({
   Decisions: "- Hard bounces alone; Postmark retries soft ones itself.",
 });
 
-const ROTATE_PLAN = descriptionText({
+const ROTATE_DESCRIPTION = descriptionText({
   Problem:
     "An endpoint's signing secret is set once, as the endpoint is made. A customer who leaks it " +
     "has to delete the endpoint and lose its delivery history.",
@@ -439,14 +439,14 @@ const ROTATE_PLAN = descriptionText({
   "Open questions": "- Should rotating from the API come with this, or after?",
 });
 
-const RETRY_429_PLAN = descriptionText({
+const RETRY_429_DESCRIPTION = descriptionText({
   Problem: "Postmark answers 429 past 50 sends a second, and the mailer drops the email.",
   "Acceptance criteria":
     "- A 429 is retried up to 5 times, waiting as long as its `Retry-After` says.\n" +
     "- A send still refused after that is logged with its message id.",
 });
 
-const INVOICE_PDF_PLAN = descriptionText({
+const INVOICE_PDF_DESCRIPTION = descriptionText({
   Problem:
     "The invoice PDF is Stripe's default: no logo, no usage breakdown, and acme's old legal name.",
   "Acceptance criteria":
@@ -456,7 +456,7 @@ const INVOICE_PDF_PLAN = descriptionText({
     "- Render our own PDF, or style Stripe's through its invoice template settings?",
 });
 
-const CHART_CRASH_PLAN = descriptionText({
+const CHART_CRASH_DESCRIPTION = descriptionText({
   Problem:
     'Opening the dashboard of a workspace made today throws "RangeError: Invalid array length", ' +
     "and the whole page goes blank. Three support tickets since yesterday.",
@@ -465,14 +465,14 @@ const CHART_CRASH_PLAN = descriptionText({
     "- A test opens the chart over a range of zero days.",
 });
 
-const EMPTY_STATE_PLAN = descriptionText({
+const EMPTY_STATE_DESCRIPTION = descriptionText({
   Problem: "A workspace with its owner alone shows an empty table on **Settings › Members**.",
   "Acceptance criteria":
     '- An owner alone sees "Invite your team" with the invite button.\n' +
     "- The table returns as soon as anyone joins.",
 });
 
-const EXPIRE_PLAN = descriptionText({
+const EXPIRE_DESCRIPTION = descriptionText({
   Problem: "Invite links never expire, so one forwarded months later still joins the workspace.",
   "Acceptance criteria":
     '- A link opened after its expiry reads "This invite has expired" and grants nothing.\n' +
@@ -490,7 +490,7 @@ export const DEMO_INVITATIONS_TASK: DemoTask = {
   priority: TASK_PRIORITY.HIGH,
   createdAgo: 2 * DAY,
   savedAgo: 4 * MINUTE,
-  plan: INVITATIONS_PLAN,
+  description: INVITATIONS_DESCRIPTION,
   comments: [
     {
       by: DANA,
@@ -526,7 +526,7 @@ export const DEMO_BILLING_TASK: DemoTask = {
   priority: TASK_PRIORITY.HIGH,
   createdAgo: 4 * DAY,
   savedAgo: 26 * MINUTE,
-  plan: BILLING_PLAN,
+  description: BILLING_DESCRIPTION,
   comments: [
     {
       by: DEMO_DEAN,
@@ -556,7 +556,7 @@ export const DEMO_WEBHOOKS_TASK: DemoTask = {
   createdAgo: 3 * DAY,
   savedAgo: 2 * HOUR,
   settledAgo: 4 * HOUR + 30 * MINUTE,
-  plan: WEBHOOKS_PLAN,
+  description: WEBHOOKS_DESCRIPTION,
   comments: [
     {
       by: PRIYA,
@@ -585,7 +585,7 @@ export const DEMO_ONBOARDING_TASK: DemoTask = {
   priority: TASK_PRIORITY.MEDIUM,
   createdAgo: 2 * DAY,
   savedAgo: 5 * HOUR,
-  plan: ONBOARDING_PLAN,
+  description: ONBOARDING_DESCRIPTION,
   comments: [
     {
       by: THEO,
@@ -606,7 +606,7 @@ const AUDIT_TASK: DemoTask = {
   priority: TASK_PRIORITY.LOW,
   createdAgo: 6 * DAY,
   savedAgo: 26 * HOUR,
-  plan: AUDIT_PLAN,
+  description: AUDIT_DESCRIPTION,
   comments: [],
 };
 
@@ -619,7 +619,7 @@ const DARK_MODE_TASK: DemoTask = {
   priority: TASK_PRIORITY.LOW,
   createdAgo: 12 * DAY,
   savedAgo: 4 * DAY,
-  plan: DARK_MODE_PLAN,
+  description: DARK_MODE_DESCRIPTION,
   comments: [],
 };
 
@@ -633,7 +633,7 @@ const SSO_TASK: DemoTask = {
   createdAgo: 30 * DAY,
   savedAgo: 20 * DAY,
   settledAgo: 18 * DAY,
-  plan: SSO_PLAN,
+  description: SSO_DESCRIPTION,
   comments: [],
 };
 
@@ -649,7 +649,7 @@ const USAGE_EVENTS_TASK: DemoTask = {
   createdAgo: 3 * DAY + HOUR + 56 * MINUTE,
   savedAgo: 2 * DAY + 8 * HOUR,
   settledAgo: 2 * DAY + 6 * HOUR,
-  plan: USAGE_EVENTS_PLAN,
+  description: USAGE_EVENTS_DESCRIPTION,
   comments: [],
 };
 
@@ -663,7 +663,7 @@ const DEMO_ROLLUP_TASK: DemoTask = {
   parent: DEMO_BILLING_TASK,
   createdAgo: 3 * DAY + HOUR + 55 * MINUTE,
   savedAgo: 1 * DAY + 22 * HOUR,
-  plan: ROLLUP_PLAN,
+  description: ROLLUP_DESCRIPTION,
   comments: [],
 };
 
@@ -677,7 +677,7 @@ const STRIPE_TASK: DemoTask = {
   parent: DEMO_BILLING_TASK,
   createdAgo: 3 * DAY + HOUR + 54 * MINUTE,
   savedAgo: 3 * DAY + HOUR + 54 * MINUTE,
-  plan: STRIPE_PLAN,
+  description: STRIPE_DESCRIPTION,
   comments: [],
 };
 
@@ -691,7 +691,7 @@ const BILLING_PAGE_TASK: DemoTask = {
   parent: DEMO_BILLING_TASK,
   createdAgo: 3 * DAY + HOUR + 53 * MINUTE,
   savedAgo: 2 * DAY + 2 * HOUR,
-  plan: BILLING_PAGE_PLAN,
+  description: BILLING_PAGE_DESCRIPTION,
   comments: [],
 };
 
@@ -704,14 +704,14 @@ const VERIFY_POSTMARK_TASK: DemoTask = {
   priority: TASK_PRIORITY.URGENT,
   createdAgo: 3 * DAY + 6 * HOUR,
   savedAgo: 1 * DAY + 4 * HOUR,
-  plan: VERIFY_POSTMARK_PLAN,
+  description: VERIFY_POSTMARK_DESCRIPTION,
   comments: [
     {
       by: NOOR,
       quote: "Return-Path records",
       words:
         "Use `pm-bounces.acme.dev` for the Return-Path, so Handle Postmark bounces reads every bounce from one place.",
-      replies: [{ by: DANA, words: "Done: the CNAME is in, and the plan says so." }],
+      replies: [{ by: DANA, words: "Done: the CNAME is in, and the description says so." }],
       ago: 2 * DAY + 3 * HOUR,
       resolved: { by: NOOR, ago: 1 * DAY + 4 * HOUR },
     },
@@ -727,7 +727,7 @@ const INVITE_EMAILS_TASK: DemoTask = {
   priority: TASK_PRIORITY.HIGH,
   createdAgo: 1 * DAY + 23 * HOUR,
   savedAgo: 1 * DAY + 20 * HOUR,
-  plan: INVITE_EMAILS_PLAN,
+  description: INVITE_EMAILS_DESCRIPTION,
   comments: [],
 };
 
@@ -740,7 +740,7 @@ const RESEND_TASK: DemoTask = {
   priority: TASK_PRIORITY.MEDIUM,
   createdAgo: 30 * MINUTE,
   savedAgo: 28 * MINUTE,
-  plan: RESEND_PLAN,
+  description: RESEND_DESCRIPTION,
   comments: [],
 };
 
@@ -753,7 +753,7 @@ const BOUNCES_TASK: DemoTask = {
   priority: TASK_PRIORITY.MEDIUM,
   createdAgo: 1 * DAY + 18 * HOUR,
   savedAgo: 1 * DAY + 17 * HOUR,
-  plan: BOUNCES_PLAN,
+  description: BOUNCES_DESCRIPTION,
   comments: [],
 };
 
@@ -766,7 +766,7 @@ const ROTATE_TASK: DemoTask = {
   priority: TASK_PRIORITY.HIGH,
   createdAgo: 8 * DAY,
   savedAgo: 1 * DAY + 2 * HOUR,
-  plan: ROTATE_PLAN,
+  description: ROTATE_DESCRIPTION,
   comments: [
     {
       by: THEO,
@@ -789,7 +789,7 @@ const RETRY_429_TASK: DemoTask = {
   createdAgo: 10 * DAY,
   savedAgo: 9 * DAY,
   settledAgo: 7 * DAY,
-  plan: RETRY_429_PLAN,
+  description: RETRY_429_DESCRIPTION,
   comments: [],
 };
 
@@ -802,7 +802,7 @@ const INVOICE_PDF_TASK: DemoTask = {
   priority: TASK_PRIORITY.LOW,
   createdAgo: 13 * DAY,
   savedAgo: 13 * DAY,
-  plan: INVOICE_PDF_PLAN,
+  description: INVOICE_PDF_DESCRIPTION,
   comments: [],
 };
 
@@ -815,7 +815,7 @@ const CHART_CRASH_TASK: DemoTask = {
   priority: TASK_PRIORITY.URGENT,
   createdAgo: 5 * HOUR,
   savedAgo: 2 * HOUR + 20 * MINUTE,
-  plan: CHART_CRASH_PLAN,
+  description: CHART_CRASH_DESCRIPTION,
   comments: [
     {
       by: LUIS,
@@ -837,7 +837,7 @@ const EMPTY_STATE_TASK: DemoTask = {
   createdAgo: 14 * DAY,
   savedAgo: 12 * DAY,
   settledAgo: 11 * DAY,
-  plan: EMPTY_STATE_PLAN,
+  description: EMPTY_STATE_DESCRIPTION,
   comments: [
     {
       by: DEMO_DEAN,
@@ -861,7 +861,7 @@ const EXPIRE_TASK: DemoTask = {
   priority: TASK_PRIORITY.NONE,
   createdAgo: 2 * HOUR + 40 * MINUTE,
   savedAgo: 2 * HOUR + 38 * MINUTE,
-  plan: EXPIRE_PLAN,
+  description: EXPIRE_DESCRIPTION,
   comments: [],
 };
 
@@ -988,7 +988,7 @@ export interface DemoTurn {
 /**
  * One finished coding agent: the task it worked on, its kind, who started
  * it, on what, its turns, oldest first, and the comment threads it started
- * on its task's plan. An agent another started with `start_agent` names
+ * on its task's description. An agent another started with `start_agent` names
  * its starter alone in that agent's steps (`DemoCall`'s `starts`), its
  * first line sent by it.
  */
@@ -1091,7 +1091,7 @@ const CHECKLIST_PLACEMENT_POST: DemoPost = {
 const CHECKLIST_HIDE_POST: DemoPost = {
   key: "checklist-hide",
   title: "Who may hide the checklist for the whole workspace?",
-  body: "Each member can already dismiss it for themselves. Theo's comment on the plan asks for one switch that hides it for everyone, which design partners asked for.",
+  body: "Each member can already dismiss it for themselves. Theo's comment on the description asks for one switch that hides it for everyone, which design partners asked for.",
   ask: {
     type: INBOX_ASK.DECIDE,
     options: [
@@ -1131,7 +1131,7 @@ const REPLAY_DEAD_POST: DemoPost = {
 const WITHDRAW_POST: DemoPost = {
   key: "withdraw-invite",
   title: "Who may withdraw a pending invite?",
-  body: "The plan leaves this open. `withdrawInvite` in `src/members/invite.ts` checks one rule, and the members list shows Withdraw to whoever it allows.",
+  body: "The description leaves this open. `withdrawInvite` in `src/members/invite.ts` checks one rule, and the members list shows Withdraw to whoever it allows.",
   ask: {
     type: INBOX_ASK.DECIDE,
     options: [
@@ -1147,7 +1147,7 @@ const WITHDRAW_POST: DemoPost = {
 const LINK_EXPIRY_POST: DemoPost = {
   key: "link-expiry",
   title: "Should invite links last 7 days or 14?",
-  body: "The plan assumes 7 days, and `INVITE_TTL_MS` says so for now. An invite sent on a Friday to someone away the next week runs out before they see it; a Resend action on a pending invite would cover that without a longer link.",
+  body: "The description assumes 7 days, and `INVITE_TTL_MS` says so for now. An invite sent on a Friday to someone away the next week runs out before they see it; a Resend action on a pending invite would cover that without a longer link.",
   ask: {
     type: INBOX_ASK.DECIDE,
     options: [
@@ -1224,7 +1224,7 @@ const USAGE_BREAKDOWN_POST: DemoPost = {
 const ALLOWANCE_POST: DemoPost = {
   key: "allowance-rollover",
   title: "Does an unused allowance roll over?",
-  body: "The plan's open question. A workspace that sends 40,000 deliveries on a 50,000 allowance either carries 10,000 into next month or starts again at zero. Rollover is kinder, but makes the projected invoice harder to read.",
+  body: "The description's open question. A workspace that sends 40,000 deliveries on a 50,000 allowance either carries 10,000 into next month or starts again at zero. Rollover is kinder, but makes the projected invoice harder to read.",
   ask: {
     type: INBOX_ASK.DECIDE,
     options: [
@@ -1264,7 +1264,7 @@ const USAGE_PROGRESS_POST: DemoPost = {
     "- **Report usage to Stripe**: not started. It needs the preview's test keys first (the other thread), then the rollup.",
     "- **Usage on Settings › Billing**: not started. Maya has the designs; it starts after the rollup.",
     "",
-    "Noor asked that every Stripe write check `billing.metered` per workspace, so the design partners go first. It is in the plan's Decisions. At this pace the four land in about a week, and Legal's 30 days' notice starts when Dana sends the email.",
+    "Noor asked that every Stripe write check `billing.metered` per workspace, so the design partners go first. It is in the description's Decisions. At this pace the four land in about a week, and Legal's 30 days' notice starts when Dana sends the email.",
   ].join("\n"),
   ask: undefined,
   addressee: DEMO_DEAN,
@@ -1414,7 +1414,7 @@ const HOTFIX_POST: DemoPost = {
 
 /* ----- The agents' transcripts ----- */
 
-/** Dean's agent on Teammate invitations, which built the invites and asked him what the plan left open. */
+/** Dean's agent on Teammate invitations, which built the invites and asked him what the description left open. */
 export const DEMO_INVITATIONS_AGENT: DemoAgent = {
   key: "demo-agent-invitations",
   task: DEMO_INVITATIONS_TASK,
@@ -1425,7 +1425,7 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 1),
       from: DEMO_DEAN,
-      line: "Build the invites as the plan says: the pending membership, `POST /invites`, and the accept link. Ask me about anything the plan leaves open.",
+      line: "Build the invites as the description says: the pending membership, `POST /invites`, and the accept link. Ask me about anything the description leaves open.",
       startedAgo: 3 * HOUR,
       ranFor: 19 * MINUTE,
       steps: [
@@ -1464,14 +1464,14 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
           },
         },
         {
-          text: "The plan leaves two things open. Asking who may withdraw.",
+          text: "The description leaves two things open. Asking who may withdraw.",
           call: { posts: WITHDRAW_POST },
         },
         { text: "And how long a link lasts.", call: { posts: LINK_EXPIRY_POST } },
         { text: "The preview can't send mail yet.", call: { posts: POSTMARK_TOKEN_POST } },
         { text: "The email's copy is a placeholder.", call: { posts: INVITE_EMAIL_COPY_POST } },
         {
-          text: "The invites work end to end: a pending membership, `POST /invites` mailing a one-time link, and `/invites/:token` turning it active. Two things the plan leaves open are in your Inbox: who may withdraw an invite, and how long a link lasts. I assumed 7 days until you say otherwise.",
+          text: "The invites work end to end: a pending membership, `POST /invites` mailing a one-time link, and `/invites/:token` turning it active. Two things the description leaves open are in your Inbox: who may withdraw an invite, and how long a link lasts. I assumed 7 days until you say otherwise.",
         },
       ],
       tokens: { input: 182_400, output: 14_900, cached: 151_000 },
@@ -1517,7 +1517,7 @@ export const DEMO_INVITATIONS_AGENT: DemoAgent = {
           },
         },
         {
-          text: "Writing the answer into the plan's assumptions.",
+          text: "Writing the answer into the description's assumptions.",
           call: {
             name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
@@ -1554,7 +1554,7 @@ export const DEMO_WEBHOOKS_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 3),
       from: DEMO_DEAN,
-      line: "Retry failed webhook deliveries as the plan says, with replay for the dead ones.",
+      line: "Retry failed webhook deliveries as the description says, with replay for the dead ones.",
       startedAgo: 5 * HOUR,
       ranFor: 24 * MINUTE,
       steps: [
@@ -1634,7 +1634,7 @@ export const DEMO_ONBOARDING_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 4),
       from: DEMO_DEAN,
-      line: "Build the onboarding checklist from the plan. Keep it to what the workspace already stores.",
+      line: "Build the onboarding checklist from the description. Keep it to what the workspace already stores.",
       startedAgo: 6 * HOUR,
       ranFor: 16 * MINUTE,
       steps: [
@@ -1683,7 +1683,7 @@ const METER_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 5),
       from: DEMO_DEAN,
-      line: "Record one `usage_events` row per webhook delivery, keyed by workspace, as Record usage events per workspace's plan says. Ask Dana anything about billing.",
+      line: "Record one `usage_events` row per webhook delivery, keyed by workspace, as Record usage events per workspace's description says. Ask Dana anything about billing.",
       startedAgo: 3 * DAY + HOUR + 52 * MINUTE,
       ranFor: 22 * MINUTE,
       steps: [
@@ -1792,7 +1792,7 @@ const ROLLUP_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 7),
       from: DEMO_DEAN,
-      line: "Roll `usage_events` up into one `usage_daily` row per workspace per day, as Daily usage rollup's plan says, with a backfill. Ask Jordan where a day ends.",
+      line: "Roll `usage_events` up into one `usage_daily` row per workspace per day, as Daily usage rollup's description says, with a backfill. Ask Jordan where a day ends.",
       startedAgo: 2 * DAY + 3 * HOUR + 57 * MINUTE,
       ranFor: 26 * MINUTE,
       steps: [
@@ -1879,12 +1879,12 @@ const DEMO_PILOT_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 8),
       from: DEMO_DEAN,
-      line: "Roll out Usage-based billing: break it into sub-tasks, start an agent on each one that's ready, and ask me whatever the plan leaves open.",
+      line: "Roll out Usage-based billing: break it into sub-tasks, start an agent on each one that's ready, and ask me whatever the description leaves open.",
       startedAgo: 3 * DAY + 2 * HOUR,
       ranFor: 14 * MINUTE,
       steps: [
         {
-          text: "Reading the plan.",
+          text: "Reading the description.",
           call: {
             name: AGENT_TOOL.READ_TASK,
             input: { taskId: DEMO_BILLING_TASK.id },
@@ -1938,7 +1938,7 @@ const DEMO_PILOT_AGENT: DemoAgent = {
         },
         { text: "Telling you how it's split.", call: { posts: USAGE_BREAKDOWN_POST } },
         {
-          text: "The plan doesn't say whether an unused allowance rolls over.",
+          text: "The description doesn't say whether an unused allowance rolls over.",
           call: { posts: ALLOWANCE_POST },
         },
         {
@@ -1955,7 +1955,7 @@ const DEMO_PILOT_AGENT: DemoAgent = {
       ranFor: 6 * MINUTE,
       steps: [
         {
-          text: "Writing your rollover answer into the plan.",
+          text: "Writing your rollover answer into the description.",
           call: {
             name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
@@ -2027,7 +2027,7 @@ const ROTATION_AGENT: DemoAgent = {
     {
       id: demoId(DEMO_ID_KIND.TURN, 11),
       from: DEMO_DEAN,
-      line: "Build secret rotation for webhook endpoints from the plan. Priya owns the task, so put the questions to her.",
+      line: "Build secret rotation for webhook endpoints from the description. Priya owns the task, so put the questions to her.",
       startedAgo: 2 * DAY + 2 * HOUR,
       ranFor: 31 * MINUTE,
       steps: [
@@ -2130,7 +2130,7 @@ const ROTATION_AGENT: DemoAgent = {
           },
         },
         {
-          text: "Writing Priya's answer into the plan.",
+          text: "Writing Priya's answer into the description.",
           call: {
             name: AGENT_TOOL.EDIT_DESCRIPTION,
             input: {
@@ -2283,7 +2283,10 @@ export const DEMO_THREADS: readonly DemoThread[] = [
       text: "An allowance is per month. Dana agrees.",
       ago: 2 * DAY + 4 * HOUR + 10 * MINUTE,
     },
-    followUp: { text: "Written into the plan's Decisions.", ago: 2 * DAY + 3 * HOUR + 58 * MINUTE },
+    followUp: {
+      text: "Written into the description's Decisions.",
+      ago: 2 * DAY + 3 * HOUR + 58 * MINUTE,
+    },
     replies: [],
   },
   {
@@ -2441,7 +2444,7 @@ export const DEMO_THREADS: readonly DemoThread[] = [
     answer: {
       by: DEMO_DEAN,
       choices: ["The sender or any admin"],
-      text: "As Dana said on the plan.",
+      text: "As Dana said on the description.",
       ago: 45 * MINUTE,
     },
     followUp: {

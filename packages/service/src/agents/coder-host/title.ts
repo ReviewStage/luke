@@ -34,8 +34,8 @@ import { CURSOR_START } from "./transcript.js";
  * stands yet. It is named from what the developer first said to
  * it, what they said last where that is another message, and what it last
  * answered where it has, each cut to an excerpt, as a conversation is
- * named from its opening rather than from the plan it was started under:
- * an agent started from the plan said the plan first, so the plan is what
+ * named from its opening rather than from the description it was started under:
+ * an agent started from the description said the description first, so the description is what
  * names it, and one started on a prompt of its own is named for that prompt.
  * An agent started from another is named from the brief and the note it
  * was handed, never from the other agent's transcript replayed between

@@ -1,8 +1,8 @@
 /**
- * descriptions-on.ts -- whether an agent's starter has Plans on, which decides what of a task's plan and its comments the agent is offered, handed, and told.
+ * descriptions-on.ts -- whether an agent's starter has Descriptions on, which decides what of a task's description and its comments the agent is offered, handed, and told.
  *
  * Read once where an agent's tools, instructions, and context are built, and
- * again at each plan tool's door, as Memory is (`memory-tools.ts`'s
+ * again at each description tool's door, as Memory is (`memory-tools.ts`'s
  * `memoryOnFor`). It stands in a module of its own, beside nothing else, so
  * the start, the turn's context, and the doors all reach it without reaching
  * each other.
@@ -16,11 +16,11 @@ import { Effect } from "effect";
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
- * Whether the member has Plans on (`EXPERIMENT.DESCRIPTIONS`), for an agent they
+ * Whether the member has Descriptions on (`EXPERIMENT.DESCRIPTIONS`), for an agent they
  * started of the kind given or for their own calls: what decides whether an
- * agent is offered `edit_description` and `look_at_picture`, handed its task's plan
- * and the plan's comments, and told of either. A pilot plans through
- * `read_task` and `edit_description`, so one counts Plans as on for as long as its
+ * agent is offered `edit_description` and `look_at_picture`, handed its task's description
+ * and the description's comments, and told of either. A pilot plans through
+ * `read_task` and `edit_description`, so one counts Descriptions as on for as long as its
  * starter has Pilot on. Where it cannot be read, it is off, logged for the
  * operator.
  */

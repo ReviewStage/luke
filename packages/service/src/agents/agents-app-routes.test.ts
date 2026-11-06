@@ -337,7 +337,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
+    "a Start with no choice runs on the account's default, snapshots the description as Copy would, and opens the session through its harness acting for the developer with the snapshot first, named by the line it stands as",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, ask } = yield* openTask();
@@ -383,7 +383,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
+    "a task's start naming an agent makes the task with an empty description and starts the agent on it with the prompt, opening its session through its harness acting for the developer, reaching the repository on GitHub once for both, and answers the task in progress",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, installation, github, ask } = yield* openTask();
@@ -876,7 +876,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a plan's agents and inbox are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    "a plan's agents and inbox are read without its description's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();

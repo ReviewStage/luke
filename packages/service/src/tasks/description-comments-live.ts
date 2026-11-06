@@ -17,7 +17,7 @@ import { and, eq, isNull, type SQL } from "drizzle-orm";
 import { Option } from "effect";
 
 /**
- * description-comments-live.ts -- one subject of a task's comments, its plan's own threads or one page's on every version, written for Neon Realtime, so a surface showing them holds them as they are written rather than reading them again on every change of the task.
+ * description-comments-live.ts -- one subject of a task's comments, its description's own threads or one page's on every version, written for Neon Realtime, so a surface showing them holds them as they are written rather than reading them again on every change of the task.
  *
  * The statements read what `readDescriptionCommentThreads` reads for one subject:
  * the threads, their entries with each member's name as their account
@@ -37,13 +37,13 @@ export interface TaskCommentsLiveStatements {
   readonly files: LiveStatement;
 }
 
-/** Which of the task's threads a read follows: the plan's own where it names no page, or the page's it names. */
+/** Which of the task's threads a read follows: the description's own where it names no page, or the page's it names. */
 export interface TaskCommentsSubject {
   readonly taskId: string;
   readonly pageId?: string;
 }
 
-/** The subject's threads, on a task the account reaches: the plan's own where it names no page, the page's on every version otherwise. */
+/** The subject's threads, on a task the account reaches: the description's own where it names no page, the page's on every version otherwise. */
 function onSubject(userId: string, { taskId, pageId }: TaskCommentsSubject): SQL | undefined {
   return and(
     eq(descriptionCommentThread.taskId, taskId),

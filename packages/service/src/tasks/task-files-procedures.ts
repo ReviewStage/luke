@@ -15,9 +15,9 @@
  * (`@repo/database/models/task-pages`), and `…/versions/{version}/frame`
  * a browser's frame of it, sent on to the sandbox's own site
  * (`../pages/page-frame.ts`). `POST /api/plans/{id}/attachments`
- * keeps one picture on the plan, pasted, dropped, or chosen into its text by
+ * keeps one picture on the description, pasted, dropped, or chosen into its text by
  * any member of its workspace, and answers the id the text then names it by
- * (201), or refuses in band where the plan holds its bound of pictures
+ * (201), or refuses in band where the description holds its bound of pictures
  * (200). Its bytes are served by `tasks-app.ts`, which answers bytes rather
  * than JSON.
  *

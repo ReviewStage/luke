@@ -422,7 +422,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
   );
 });
 
-/** The developer's plan, which an agent's first turn opens on. */
+/** The developer's description, which an agent's first turn opens on. */
 const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
 /** Another agent's message as `message_agent` steers one in: its words, which are no task of the developer's. */
@@ -531,7 +531,7 @@ const journaledAgent = Effect.gen(function* () {
         at: 0,
       });
     });
-  /** The agent's first turn: the developer's plan, read and answered. */
+  /** The agent's first turn: the developer's description, read and answered. */
   const firstTurn = Effect.gen(function* () {
     const turnId = randomUUID();
     yield* opened(turnId, yield* line("developer"));

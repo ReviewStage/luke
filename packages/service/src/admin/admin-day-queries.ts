@@ -53,7 +53,7 @@ const DayBoundSchema = Schema.Struct({
  * them together, the account id breaking ties so equally busy accounts keep
  * one order across refreshes. An account is listed only when it took a
  * meaningful action that day, and every such action is itself one of the
- * rows counted here (a task, the developer's own plan revision, an agent),
+ * rows counted here (a task, the developer's own description revision, an agent),
  * so the window count over the groups, taken before the bound cuts them, is
  * the day's active developers.
  */

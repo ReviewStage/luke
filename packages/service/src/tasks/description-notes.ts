@@ -35,23 +35,23 @@ import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 
 /**
- * description-notes.ts -- the plan's one write: take an agent's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
+ * description-notes.ts -- the description's one write: take an agent's notes, the developer's edit of the text, or their restore of a revision, into a description and read back what was saved.
  *
- * A plan is one Markdown text (`@repo/features/description-document`). Its caller
+ * A description is one Markdown text (`@repo/features/description-document`). Its caller
  * is a coding agent's `edit_description` (`coder-host/description-edit.ts`), whose model
  * answers with
  * notes (`@repo/features/description-notes`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
  * the text, its headings among it. They are taken in order over the text as
- * it stands under the plan's lock, and taken whole or not at all: a note that
+ * it stands under the description's lock, and taken whole or not at all: a note that
  * names a phrase or a heading the text does not hold exactly once, the
  * developer having rewritten it meanwhile among the reasons, answers as a
  * conflict with the text as it stands and nothing saved, so a restructure
- * never lands half; a text past the plan's bound is refused before anything
+ * never lands half; a text past the description's bound is refused before anything
  * is written. Every save names its writer, the
  * notetaker on its call, a coding agent, or the developer, and a save that
  * changed the text is kept as a revision under that writer
- * (`description-revisions.ts`), in the same transaction, so the plan and its history
+ * (`description-revisions.ts`), in the same transaction, so the description and its history
  * never disagree. A coding agent's save that took any note is also written
  * into the task's journal with the notes as taken, which is what the brain
  * is told of what each agent changed. Who last changed each section,
@@ -59,11 +59,11 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * wrote, is read back off those revisions. The developer's edit is the
  * same save with their text in place of notes, laid over what the text holds
  * now where we wrote meanwhile, or answered as a conflict with nothing
- * saved (`@repo/features/description-edit`). Their restore of one of the plan's
+ * saved (`@repo/features/description-edit`). Their restore of one of the description's
  * revisions is the same save with the revision's text, kept as a revision of
  * the developer's that names the one it brought back.
  *
- * Note that the notes are the plan's content and nothing else. Which account
+ * Note that the notes are the description's content and nothing else. Which account
  * they land as is the binding the service built from the authenticated
  * session, never a field the model supplies. The task is the one the
  * service opened, or, for a coding agent, the one its call names, which the
@@ -99,9 +99,9 @@ export const DESCRIPTION_SAVE_STATUS = {
 
 /** Why notes, an edit, or a restore saved nothing. */
 export const DESCRIPTION_SAVE_REFUSAL = {
-  TOO_LONG: "Not saved: the plan is longer than a plan may be.",
+  TOO_LONG: "Not saved: the description is longer than a description may be.",
   NO_TASK: "Not saved: this task no longer exists.",
-  NO_REVISION: "Not saved: this plan has no such revision.",
+  NO_REVISION: "Not saved: this description has no such revision.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -112,7 +112,7 @@ export type DescriptionSaveResult =
       readonly document: DescriptionDocument;
       /** Epoch milliseconds of the save. */
       readonly savedAt: number;
-      /** Whether the notes changed the plan's words, which is when the save is a revision of its writer's. */
+      /** Whether the notes changed the description's words, which is when the save is a revision of its writer's. */
       readonly moved: boolean;
       /** The save that last changed each section, this one among them. */
       readonly sectionEdits: readonly DescriptionSectionEdit[];
@@ -146,7 +146,7 @@ const TOO_LONG_RESULT: DescriptionNotSaved = {
   reason: DESCRIPTION_SAVE_REFUSAL.TOO_LONG,
 };
 
-/** What a change made of the plan's text under its lock: the text to save, how many changes it made, the agents' journal where it moved, and where the developer's editor reported its comment anchors. */
+/** What a change made of the description's text under its lock: the text to save, how many changes it made, the agents' journal where it moved, and where the developer's editor reported its comment anchors. */
 interface TextTaken {
   readonly text: string;
   readonly changes: number;
@@ -154,13 +154,13 @@ interface TextTaken {
   readonly anchors?: ReportedAnchors;
 }
 
-/** One save under the task's lock, answered: the plan as saved with what the change took, or why nothing was saved. */
+/** One save under the task's lock, answered: the description as saved with what the change took, or why nothing was saved. */
 type LockedSave<T> =
   | {
       readonly status: typeof DESCRIPTION_SAVE_STATUS.SAVED;
       readonly task: Task;
       readonly taken: T;
-      /** Whether the change moved the plan's words, which is when the save is a revision. */
+      /** Whether the change moved the description's words, which is when the save is a revision. */
       readonly moved: boolean;
       /** The transaction the revision was written in, where the save is one, which a reader following the history waits for. */
       readonly txid: string | undefined;
@@ -171,21 +171,21 @@ type LockedSave<T> =
 interface DescriptionConflict {
   readonly status: typeof DESCRIPTION_SAVE_STATUS.CONFLICT;
   readonly current: string;
-  /** Who wrote the text the edit met (`conflictWriter`); none for a plan nobody has written. */
+  /** Who wrote the text the edit met (`conflictWriter`); none for a description nobody has written. */
   readonly by?: DescriptionLastEdit;
 }
 
 /**
- * The plan read under its row's lock, the change taken into its text, read
- * under the same lock where it reads more of the plan, and saved, all in one
- * transaction. A text past the plan's bound is refused. A
+ * The description read under its row's lock, the change taken into its text, read
+ * under the same lock where it reads more of the description, and saved, all in one
+ * transaction. A text past the description's bound is refused. A
  * change that moved the text is kept as a revision under its writer, which
  * names the writer as the last of each section it moved; one that moved
  * nothing saves the text as it stood. Every comment thread's anchor is
  * carried over the change in the same transaction, or set where the
  * developer's editor reported it, so a thread never stands on words the text
  * no longer holds there (`@repo/database/models/description-comments`). A change
- * that refuses the plan as it found it answers its refusal, and nothing is
+ * that refuses the description as it found it answers its refusal, and nothing is
  * saved.
  */
 function savedUnderLock<T extends TextTaken, F>(
@@ -270,7 +270,7 @@ const NOTETAKER: DescriptionWriter = { actor: DESCRIPTION_ACTOR.NOTETAKER };
 /** The developer, as the writer of every edit the window sends. */
 const DEVELOPER: DescriptionWriter = { actor: DESCRIPTION_ACTOR.DEVELOPER };
 
-/** Notes already read under the notes' schema, taken into the plan the service bound, kept as a revision under their writer, the notetaker where none is named. */
+/** Notes already read under the notes' schema, taken into the description the service bound, kept as a revision under their writer, the notetaker where none is named. */
 export function saveNotes(
   binding: DescriptionDocumentBinding,
   notes: readonly DescriptionNote[],
@@ -316,7 +316,7 @@ export function saveNotes(
   return reachedStore(saved);
 }
 
-/** What the developer's edit answers: the plan as saved, the text as it stands where the edit conflicts with it, or why nothing was saved. */
+/** What the developer's edit answers: the description as saved, the text as it stands where the edit conflicts with it, or why nothing was saved. */
 export type DescriptionEditSaveResult =
   | {
       readonly status: typeof DESCRIPTION_SAVE_STATUS.SAVED;
@@ -330,8 +330,8 @@ export type DescriptionEditSaveResult =
 /**
  * Who wrote the text a developer's edit met: whoever last changed a section
  * both the edit and the text since its base changed, the newest of them,
- * as the plan read under the save's lock names each section's writer; the
- * plan's last edit where no such section names one, as where the edit
+ * as the description read under the save's lock names each section's writer; the
+ * description's last edit where no such section names one, as where the edit
  * cleared the text or the sections were renamed meanwhile.
  */
 function conflictWriter(
@@ -377,7 +377,7 @@ function takeDocumentEdit(
 }
 
 /**
- * The developer's own edit of the plan's whole text, taken into the plan the
+ * The developer's own edit of the description's whole text, taken into the description the
  * service bound under its lock and kept as a revision of theirs: set where
  * the text still holds the edit's base, the developer's change laid over it
  * where another writer wrote meanwhile, and a conflict naming that writer,
@@ -401,7 +401,7 @@ export function saveDeveloperEdit(
   return reachedStore(saved);
 }
 
-/** A restore answered: the plan as it now stands saved, or why it was not. */
+/** A restore answered: the description as it now stands saved, or why it was not. */
 export type TaskRestoreResult =
   | {
       readonly status: typeof DESCRIPTION_SAVE_STATUS.SAVED;
@@ -412,11 +412,11 @@ export type TaskRestoreResult =
   | DescriptionNotSaved;
 
 /**
- * The developer's restore of one of the plan's revisions: the plan's text put
+ * The developer's restore of one of the description's revisions: the description's text put
  * back as the revision held it, through the same locked save as notes, and
  * kept as a revision of the developer's naming the one it restored, so the
  * text it replaced stays in the history to restore in turn. A revision that
- * holds what the plan holds now saves nothing new and answers the plan as it
+ * holds what the description holds now saves nothing new and answers the description as it
  * stands. Note that a restore's changes are counted by the sections it
  * changes.
  */

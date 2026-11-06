@@ -8,7 +8,7 @@
  * `MEMBER_MCP_TOOL` has a row, and a tool added without one does not build;
  * each row names the procedures, by their declarations in the contract
  * itself, that together do what the tool does, a read a write needs among
- * them, such as the plan a comment is anchored in. A procedure may answer in
+ * them, such as the description a comment is anchored in. A procedure may answer in
  * other words and shapes than its tool, and may take several calls where the
  * tool takes one, but no tool may do what no procedure reaches. Where a
  * procedure the tool needs does not exist, it is added to the contract

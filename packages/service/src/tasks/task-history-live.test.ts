@@ -19,7 +19,7 @@ import { restoreRevision, saveNotes } from "./description-notes.js";
 import { taskHistoryLiveStatements } from "./task-history-live.js";
 
 /**
- * A task's newest page of plan history as Realtime would deliver it, over
+ * A task's newest page of description history as Realtime would deliver it, over
  * the real migrations on PGlite: the statement run as Realtime runs it, its
  * rows decoded and ordered as the desktop does, beside `listRevisions`, the
  * held read the version history read it with. The two agree as the notetaker, a

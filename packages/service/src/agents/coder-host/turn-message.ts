@@ -76,13 +76,13 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  * The agent's task as the turn's message hands it (`turn-context.ts`), read
  * as the member whose turn this is, and what the session has handed of it
  * once this turn is (`taskKey`), or nothing for an agent on no task or one
- * whose task is gone. The task is handed where a revision of the plan
+ * whose task is gone. The task is handed where a revision of the description
  * another writer made was saved after the agent's previous turn started,
  * so a save made while that turn ran, which none of its steps may have
  * read, is handed too; or where the rest of it is not what the session
- * last handed; never on a first turn, whose first message the plan, or the
- * prompt beside it, already is. Where the agent's starter has Plans off, no
- * save of the plan hands it, and it is handed without the plan
+ * last handed; never on a first turn, whose first message the description, or the
+ * prompt beside it, already is. Where the agent's starter has Descriptions off, no
+ * save of the description hands it, and it is handed without the description
  * (`standingContext`). A read that fails is logged and
  * hands nothing.
  */
@@ -100,7 +100,7 @@ const taskOf = (
     const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
-        // Note that the plan's threads are neither read nor handed where its starter has Plans off.
+        // Note that the description's threads are neither read nor handed where its starter has Descriptions off.
         descriptionsOn
           ? readDescriptionCommentThreads(admitted.caller, taskId)
           : Effect.succeedNone,
@@ -120,7 +120,7 @@ const taskOf = (
         since,
         agent.id,
       );
-    // Note that Plans gone off leaves the words handed as they were but the plan, so it hands nothing again, and keeps the key Plans going back on is told apart by.
+    // Note that Descriptions gone off leaves the words handed as they were but the description, so it hands nothing again, and keeps the key Descriptions going back on is told apart by.
     const unchanged =
       key === handed.task || (!descriptionsOn && taskKey(stored.value, threads) === handed.task);
     if (!saved && (opening || unchanged)) {

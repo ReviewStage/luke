@@ -3,9 +3,9 @@ import { task } from "@repo/database/schemas/task";
 import { eq, sql } from "drizzle-orm";
 
 /**
- * description-documents.ts -- a stored plan's text and its revisions, as a test sets them.
+ * description-documents.ts -- a stored description's text and its revisions, as a test sets them.
  *
- * A plan starts as one empty document (`docs/TASKS.md`); a test that needs
+ * A description starts as one empty document (`docs/TASKS.md`); a test that needs
  * words writes the text, or a revision of the text, straight onto the rows.
  */
 
@@ -25,13 +25,13 @@ export const INVITATIONS_TEXT = [
   "",
 ].join("\n");
 
-/** Makes the plan one document holding `text`. */
+/** Makes the description one document holding `text`. */
 export function makeDocumentTask(taskId: string, text: string) {
   return Database.use((db) => db.update(task).set({ document: text }).where(eq(task.id, taskId)));
 }
 
 /**
- * Makes the plan one document holding `text`, saved a minute after it
+ * Makes the description one document holding `text`, saved a minute after it
  * started and before its history began, so its first save records the text
  * as the revision it changed (`earlier`) and its sections read as no one's.
  */

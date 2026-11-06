@@ -194,7 +194,7 @@ function agentTaskOf(
   );
 }
 
-/** Takes one `edit_description` call's notes into the plan of the task it names, given how many notes the turn has taken already, its pictures read through the sandbox door given. */
+/** Takes one `edit_description` call's notes into the description of the task it names, given how many notes the turn has taken already, its pictures read through the sandbox door given. */
 export function runAgentEditDescription(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -204,7 +204,7 @@ export function runAgentEditDescription(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return descriptionEditRejected(found.failure);
-    // Note that no agent whose starter has Plans off is listed the tool; a harness may call it anyway, and this refuses it.
+    // Note that no agent whose starter has Descriptions off is listed the tool; a harness may call it anyway, and this refuses it.
     if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
       return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.OFF);
     }
@@ -214,7 +214,7 @@ export function runAgentEditDescription(
     const task = yield* agentTaskOf(admitted, found.success, taskId);
     if (Option.isNone(task)) return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.NO_TASK);
     const agentId = found.success.id;
-    // The plan is written as the member whose turn this is, whoever started the agent.
+    // The description is written as the member whose turn this is, whoever started the agent.
     const binding = { userId: admitted.caller, taskId };
     return yield* recordDescriptionEdit(binding, { agentId }, input, takenInTurn, sandbox);
   }).pipe(
@@ -225,7 +225,7 @@ export function runAgentEditDescription(
   );
 }
 
-/** Runs one `look_at_picture` call: one of the pictures of the plan its address names, in the agent's workspace, read as the member whose turn this is. */
+/** Runs one `look_at_picture` call: one of the pictures of the description its address names, in the agent's workspace, read as the member whose turn this is. */
 export function runAgentLookAtPicture(
   admitted: AdmittedConversation,
   input: UnparsedWireValue,
@@ -241,7 +241,7 @@ export function runAgentLookAtPicture(
     if (Option.isNone(yield* agentTaskOf(admitted, found.success, taskId))) {
       return pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE);
     }
-    // The plan is read as the member whose turn this is, as `editDescription` writes it.
+    // The description is read as the member whose turn this is, as `editDescription` writes it.
     return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),
@@ -271,10 +271,10 @@ export function runAgentOpenPullRequest(
 }
 
 /**
- * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the plan of
+ * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the description of
  * the task it names, or one of its pages, in the agent's workspace, as the
- * member whose turn it is, written under the agent; the plan's threads only
- * where the agent's starter has Plans on (`descriptionsOnFor`).
+ * member whose turn it is, written under the agent; the description's threads only
+ * where the agent's starter has Descriptions on (`descriptionsOnFor`).
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
@@ -289,13 +289,13 @@ export function runAgentComment(
     const task = yield* agentTaskOf(admitted, found.success, taskId);
     if (Option.isNone(task)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
     const agentId = found.success.id;
-    // The comments are read and written as the member whose turn this is, as `editDescription` writes the plan.
+    // The comments are read and written as the member whose turn this is, as `editDescription` writes the description.
     const writer = {
       actor: DESCRIPTION_COMMENT_ACTOR.AGENT,
       userId: admitted.caller,
       agentId,
     } as const;
-    // A page's threads stand whatever the starter's Plans; the plan's are left out while it is off.
+    // A page's threads stand whatever the starter's Descriptions setting; the description's are left out while it is off.
     const descriptionsOn = yield* descriptionsOnFor(found.success.userId, found.success.kind);
     return yield* runCommentTool(name, { taskId, writer, descriptionsOn }, input);
   }).pipe(

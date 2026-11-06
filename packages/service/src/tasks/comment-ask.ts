@@ -20,13 +20,13 @@ import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
- * comment-ask.ts -- a plan's comment thread sent to one of the task's agents: the words it is handed over in, and the hand-over.
+ * comment-ask.ts -- a description's comment thread sent to one of the task's agents: the words it is handed over in, and the hand-over.
  *
  * A member's comment hands its thread over to each agent in it, one an `@`
  * of the comment's adds among them (`description-comments-procedures.ts`'s
- * `handedTo`), as the request: who wrote what in it, the words of the plan
+ * `handedTo`), as the request: who wrote what in it, the words of the description
  * it is on, and what the agent is to do with it, which is to read the thread
- * and the plan and answer in the thread, and nothing more of what it
+ * and the description and answer in the thread, and nothing more of what it
  * discusses. The agent hears it as a message from the member who sent it,
  * through the one steer path every message to an agent takes
  * (`coder-host/steer.ts`), for the member the request resolved to, never as
@@ -36,7 +36,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * that mentions none hands nothing to anyone, an `@` of the app's own name
  * among it, and an agent's own reply never does. The line keeps beside
  * the text what a window draws it by, the member's words, what the thread is
- * on, and the plan or page, so a transcript shows the comment rather than
+ * on, and the description or page, so a transcript shows the comment rather than
  * the words the model is handed.
  *
  * A thread on one of the task's pages is handed over the same way, the
@@ -51,15 +51,15 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 /** How long a comment of the thread may run in the words it is handed over in, so a long thread stays a message. */
 const COMMENT_CHARS = 2_000;
 
-/** What an ask is handed over with: the plan by its task's id and name, the thread, and who sent it. */
+/** What an ask is handed over with: the description by its task's id and name, the thread, and who sent it. */
 export interface CommentAsk {
-  /** The task whose plan the thread is on, which the agent's reply names. */
+  /** The task whose description the thread is on, which the agent's reply names. */
   readonly taskId: string;
   readonly taskName: string;
   readonly thread: DescriptionCommentThread;
   /** The member who sent it, by the name the service holds. */
   readonly sender: string;
-  /** The page a page's thread is on, by its newest version's title and number; none for a thread on the plan. */
+  /** The page a page's thread is on, by its newest version's title and number; none for a thread on the description. */
   readonly page?: { readonly title: string; readonly newestVersion: number };
 }
 
@@ -81,11 +81,11 @@ function oneComment(words: string): string {
   return flat.length > COMMENT_CHARS ? `${flat.slice(0, COMMENT_CHARS)}…` : flat;
 }
 
-/** What a thread on the plan is on, as the words handed over say it. */
+/** What a thread on the description is on, as the words handed over say it. */
 function descriptionPlace(thread: DescriptionCommentThread): string {
   const where = thread.section === "" ? "" : ` (section "${thread.section}")`;
   return thread.anchor === undefined
-    ? `On words since deleted from the plan: "${thread.quote}"${where}`
+    ? `On words since deleted from the description: "${thread.quote}"${where}`
     : `On: "${thread.quote}"${where}`;
 }
 
@@ -117,9 +117,9 @@ export function commentAskMessage(ask: CommentAsk): string {
   const comments = commentLines(thread);
   const reply = `answer in this thread with \`${DESCRIPTION_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}"`;
   const only = "Answer what the thread asks; do not act on anything else it discusses.";
-  // Note that the thread is handed over as its quoted words and its comments alone, never the plan or its section, which an agent handed the plan already holds.
+  // Note that the thread is handed over as its quoted words and its comments alone, never the description or its section, which an agent handed the description already holds.
   if (thread.page === undefined || page === undefined) {
-    const lead = `${ask.sender} sent you a comment thread on the plan "${ask.taskName}" to answer (thread ${thread.id}).`;
+    const lead = `${ask.sender} sent you a comment thread on the description of "${ask.taskName}" to answer (thread ${thread.id}).`;
     return [
       lead,
       descriptionPlace(thread),
@@ -165,9 +165,9 @@ export function reviewAskMessage(ask: ReviewAsk): string {
 
 /**
  * The agent an ask names, where it is the plan's own and stands, and, for a
- * thread on the plan rather than a page, where its starter has Plans on
- * (`descriptions-on.ts`), since an agent with Plans off is told nothing of the
- * plan's comments; nothing otherwise, which no ask is written for.
+ * thread on the description rather than a page, where its starter has Descriptions on
+ * (`descriptions-on.ts`), since an agent with Descriptions off is told nothing of the
+ * description's comments; nothing otherwise, which no ask is written for.
  */
 export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,

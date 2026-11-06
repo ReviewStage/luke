@@ -32,7 +32,7 @@ const PARTS = ["plan", "pages", "code"] as const;
 
 type Part = (typeof PARTS)[number];
 
-/** The parts a held read answers: the plan and the pages; no desktop reads the code again. */
+/** The parts a held read answers: the description and the pages; no desktop reads the code again. */
 const HELD_PARTS = ["plan", "pages"] as const;
 
 /** A new account, as the store holds one. */
@@ -80,7 +80,7 @@ function movedHeld(before: HeldRecord, after: HeldRecord): readonly Part[] {
   return HELD_PARTS.filter((part) => JSON.stringify(before[part]) !== JSON.stringify(after[part]));
 }
 
-/** The moves a held reading makes for the live ones expected: the plan's and the pages'. */
+/** The moves a held reading makes for the live ones expected: the description's and the pages'. */
 function heldOf(expected: readonly Part[]): readonly Part[] {
   return expected.filter((part) => part !== "code");
 }
@@ -157,7 +157,7 @@ it.layer(getTestDB())("a task's record followed live", (it) => {
   );
 
   it.effect(
-    "the plan moves for a teammate as anyone saves its text, at the instant the open document reads as its last save, and not as it is renamed; a stranger reads none",
+    "the description moves for a teammate as anyone saves its text, at the instant the open document reads as its last save, and not as it is renamed; a stranger reads none",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;

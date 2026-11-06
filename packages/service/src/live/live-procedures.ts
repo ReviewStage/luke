@@ -26,12 +26,12 @@
  * something of the reader's moves; or whole, with that sync id, to a reader
  * that names none, is too far behind, or whose admission to the rows moved.
  *
- * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
+ * `GET /api/live/task-record?id=` answers one task's description, pages, and calls
  * the same way, one statement a part that marks where it stands
  * (`task-record-live.ts`), after the task is read as the account, so one it
  * does not reach is not found, as its own read answers, woken by a write
  * that names the task (`taskRecordLive`), as its pages and its history are.
- * `GET /api/live/task-comments?id=` answers its plan's own comment threads,
+ * `GET /api/live/task-comments?id=` answers its description's own comment threads,
  * or with `&page=` one page's on every version, as three statements, the
  * threads, their entries, and the files their comments carry
  * (`description-comments-live.ts`), the same way and woken the same way

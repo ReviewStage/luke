@@ -1,16 +1,16 @@
 /**
  * admin-overview.ts -- what the Overview measures of the product as it is
- * today: tasks, plans, coding agents, pull requests, the inbox, and
+ * today: tasks, descriptions, coding agents, pull requests, the inbox, and
  * automations, shaped from the rows the queries read.
  *
  * Everything here is an aggregate or a per-account count of rows the service already
- * keeps for its own operation. No title, plan text, prompt, message, workspace
+ * keeps for its own operation. No title, description text, prompt, message, workspace
  * name, or repository name is read, so none can reach the answer. The queries
  * live in `admin-overview-queries.ts`; this module is the pure fold, so the
  * part with off-by-one risk in a day window is tested without a database.
  *
  * A *meaningful action* is one of three things an account does: creates a
- * task, writes a plan revision as the developer, or starts a coding agent. An
+ * task, writes a description revision as the developer, or starts a coding agent. An
  * *active developer* is an account with at least one in the
  * run being counted. `meaningfulActions` in the queries module is the one
  * definition every read here that says "active" counts through.

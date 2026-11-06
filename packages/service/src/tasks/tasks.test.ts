@@ -36,8 +36,8 @@ import {
 
 /**
  * The named tasks and their one document, through the store's public
- * functions and `saveNotes`, the plan's one write, against a real dialect.
- * Every plan is one Markdown text: each note lands in the section under the
+ * functions and `saveNotes`, the description's one write, against a real dialect.
+ * Every description is one Markdown text: each note lands in the section under the
  * heading it names and nowhere else, and what is saved is the text the window
  * and the brain both read (`readTask`). Nothing but the binding the
  * service built names the account and the task, so no note can move a save
@@ -60,7 +60,7 @@ const INVITATIONS_CONTEXT =
 
 const INVITATIONS_HARD_PART = "- A withdrawn invite's link never grants access.";
 
-/** Notes that write an invitations draft into a plan: its context, a hard part, an open question, and an assumption. */
+/** Notes that write an invitations draft into a description: its context, a hard part, an open question, and an assumption. */
 const INVITATIONS_NOTES: readonly DescriptionNote[] = [
   added("Context", INVITATIONS_CONTEXT),
   added("Hard parts", INVITATIONS_HARD_PART),
@@ -71,7 +71,7 @@ const INVITATIONS_NOTES: readonly DescriptionNote[] = [
 const EMPTY_STATE_CONTEXT =
   "Developers opening the Plans tab for the first time see an empty list that says nothing about how to start.";
 
-/** Notes that write a small copy change into a plan: its context and its goal. */
+/** Notes that write a small copy change into a description: its context and its goal. */
 const EMPTY_STATE_NOTES: readonly DescriptionNote[] = [
   added("Context", EMPTY_STATE_CONTEXT),
   added("Goal", 'The empty list reads "No plans yet. Start one with New plan."'),

@@ -12,33 +12,33 @@ import { logStoreFailure } from "../http/store-failure.js";
 import type { DescriptionDocumentBinding } from "./description-notes.js";
 
 /**
- * picture-look.ts -- `look_at_picture`, a model's eyes on one of the plan's pictures: the picture its text names, handed back as an image.
+ * picture-look.ts -- `look_at_picture`, a model's eyes on one of the description's pictures: the picture its text names, handed back as an image.
  *
- * A picture stands in a plan's text as `![alt](<address> "caption")`
+ * A picture stands in a description's text as `![alt](<address> "caption")`
  * (`@repo/features/description-attachment-link`), so every model that reads the
- * plan, the planning model's turn and a coding agent's brief alike, already
+ * description, the planning model's turn and a coding agent's brief alike, already
  * reads what each picture shows in its alt text and caption. Most never need
  * more, and a picture is a large cost in a model's context, so the picture
- * itself is not sent with the plan: the model names one by its address when
+ * itself is not sent with the description: the model names one by its address when
  * the words are not enough.
  *
  * The picture is read as the account the turn runs as, through the plan's
- * membership gate (`readDescriptionAttachment`), and only under the plan the call
- * is bound to: an address of another plan, or of a picture that plan does
+ * membership gate (`readDescriptionAttachment`), and only under the description the call
+ * is bound to: an address of another description, or of a picture that description does
  * not hold, is refused alike. A coding agent's door binds a call to the
  * plan its address names (`lookedTaskOf`), once that plan stands in the
  * agent's own workspace (`../agents/coder-host/agent-doors.ts`), so an
- * agent sees a picture in any plan of its workspace, its own task's or
+ * agent sees a picture in any description of its workspace, its own task's or
  * another's, and one on no task sees one too.
  *
- * A plan may hold a video an agent recorded, which no model is handed in any
+ * A description may hold a video an agent recorded, which no model is handed in any
  * form: a look at one is refused, pointing the model at its alt text and
  * caption, and the MCP door hands on a look only of an image's type,
  * turning any other into that refusal (`lookNamedOnly`), so a video could
  * not reach a model even were it answered, as an image nor as its base64
  * spelled out.
  *
- * The result and its view name a picture and nothing of a plan, so a
+ * The result and its view name a picture and nothing of a description, so a
  * look at any other picture we keep answers in the same words.
  */
 
@@ -49,13 +49,13 @@ const PICTURE_LOOK = {
 
 /** Why a call shows nothing, in words the model can act on. */
 export const PICTURE_LOOK_REFUSAL = {
-  UNREADABLE: "Not looked: name the picture by its address, copied from the plan's text.",
-  ELSEWHERE: "Not looked: that address is not a picture in a plan of your workspace.",
-  NO_PICTURE: "Not looked: that plan holds no such picture.",
+  UNREADABLE: "Not looked: name the picture by its address, copied from the description's text.",
+  ELSEWHERE: "Not looked: that address is not a picture in a description of your workspace.",
+  NO_PICTURE: "Not looked: that description holds no such picture.",
   VIDEO:
-    "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the plan's text say what it shows.",
+    "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the description's text say what it shows.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
-  OFF: "Not looked: your developer has Plans off, so no plan's picture is shown.",
+  OFF: "Not looked: your developer has Descriptions off, so no description's picture is shown.",
 } as const;
 
 export const PICTURE_LOOK_STATUS = {
@@ -75,7 +75,7 @@ export type PictureLookResult =
 const LOOK_INPUT = Schema.Struct({
   address: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(PICTURE_LOOK.MAX_ADDRESS_CHARS)),
-    `The picture's address exactly as the plan's text writes it, inside its ![alt](address): ${LINK_ORIGIN}/<workspace>/plan/<plan>/files/<picture>.`,
+    `The picture's address exactly as the description's text writes it, inside its ![alt](address): ${LINK_ORIGIN}/<workspace>/plan/<plan>/files/<picture>.`,
   ),
 });
 
@@ -85,9 +85,9 @@ const readInput = readEither(LOOK_INPUT);
 export const LOOK_AT_PICTURE_TOOL = {
   name: AGENT_TOOL.LOOK_AT_PICTURE,
   description:
-    "See one of the pictures in a plan of your workspace, your own task's or another's, such as a " +
-    "screenshot or a mockup, by the address its plan's text writes it at. Every picture " +
-    'is written in the plan as ![alt text](address "caption"), and its alt text and caption ' +
+    "See one of the pictures in a description of your workspace, your own task's or another's, such as a " +
+    "screenshot or a mockup, by the address its description's text writes it at. Every picture " +
+    'is written in the description as ![alt text](address "caption"), and its alt text and caption ' +
     "already say what it shows: look only when they do not tell you enough for what you are " +
     "doing. Answers the picture, or `not-looked` and why.",
   inputSchema: LOOK_INPUT,
@@ -122,21 +122,21 @@ function looked(picture: Picture): PictureLookResult {
 
 /**
  * One call of `look_at_picture`: the picture the address names, where it is
- * an image of the plan the call is bound to that the account reads;
+ * an image of the description the call is bound to that the account reads;
  * `not-looked` and why otherwise, a video among them.
  */
 export function runLookAtPicture(
-  plan: DescriptionDocumentBinding,
+  description: DescriptionDocumentBinding,
   input: UnparsedWireValue,
 ): Effect.Effect<PictureLookResult, never, DatabaseServices> {
   const read = readInput(input);
   if (Result.isFailure(read))
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE));
   const named = descriptionAttachmentOf(read.success.address.trim());
-  if (named === undefined || named.taskId !== plan.taskId) {
+  if (named === undefined || named.taskId !== description.taskId) {
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
   }
-  return readDescriptionAttachment(plan.userId, plan.taskId, named.attachmentId).pipe(
+  return readDescriptionAttachment(description.userId, description.taskId, named.attachmentId).pipe(
     Effect.map((picture) =>
       Option.isNone(picture)
         ? pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE)

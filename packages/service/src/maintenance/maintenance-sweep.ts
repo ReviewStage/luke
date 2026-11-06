@@ -45,7 +45,7 @@ interface MaintenanceSweeps {
   purgeWithdrawnLines: (now: number) => SweepRead<number>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
-  /** Deletes the plans' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
+  /** Deletes the descriptions' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
@@ -91,7 +91,7 @@ interface MaintenanceSweepAnswer {
   /** Withdrawn lines no turn took in time, deleted. */
   withdrawnLines: Swept<number>;
   automations: Swept<AutomationSweepOutcome>;
-  /** Pictures pasted into plans that no save named, deleted. */
+  /** Pictures pasted into descriptions that no save named, deleted. */
   purgedPictures: Swept<number>;
   tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */

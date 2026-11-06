@@ -26,17 +26,17 @@ import {
 } from "./description-notes.js";
 
 /**
- * A plan's history, through the plan's one write and the store's reads:
- * every save that changes the plan is kept under its writer, the same
- * writer's saves in a row are one revision, a plan from before history keeps
- * what it held as its first revision, and the plan names its newest
+ * A description's history, through the description's one write and the store's reads:
+ * every save that changes the description is kept under its writer, the same
+ * writer's saves in a row are one revision, a description from before history keeps
+ * what it held as its first revision, and the description names its newest
  * revision's writer as its last edit. Synthetic accounts and tasks throughout.
  */
 
 const AGENT_MODEL = "anthropic/claude-opus-5.5";
 const NOTETAKER: DescriptionWriter = { actor: DESCRIPTION_ACTOR.NOTETAKER };
 
-/** Notes that write a draft into a plan, each in a section of its own. */
+/** Notes that write a draft into a description, each in a section of its own. */
 const DRAFT_NOTES: readonly DescriptionNote[] = [
   added("Context", "A member cannot bring a teammate in without an admin."),
   added("Hard parts", "- A withdrawn invite's link never grants access."),
@@ -81,7 +81,7 @@ const startAgent = (userId: string, taskId: string) =>
     (started) => Option.getOrThrow(started).agent.id,
   );
 
-/** The newest page of the plan's history, which holds every revision a test here writes. */
+/** The newest page of the description's history, which holds every revision a test here writes. */
 const revisionsOf = (userId: string, taskId: string) =>
   Effect.map(listRevisions(userId, taskId), (page) => page.revisions);
 
@@ -95,28 +95,30 @@ function shapeOf(revisions: readonly DescriptionRevisionLine[]) {
   }));
 }
 
-it.layer(getTestDB())("a plan's history", (it) => {
-  it.effect("every save that changes the plan is a revision under the writer who made it", () =>
-    Effect.gen(function* () {
-      const { userId, taskId } = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
-      const agentId = yield* startAgent(userId, taskId);
-      yield* saveNotes(
-        { userId, taskId },
-        [added("Open questions", "- Who may withdraw an invite?")],
-        { actor: DESCRIPTION_ACTOR.AGENT, agentId },
-      );
+it.layer(getTestDB())("a description's history", (it) => {
+  it.effect(
+    "every save that changes the description is a revision under the writer who made it",
+    () =>
+      Effect.gen(function* () {
+        const { userId, taskId } = yield* openTask;
+        yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
+        const agentId = yield* startAgent(userId, taskId);
+        yield* saveNotes(
+          { userId, taskId },
+          [added("Open questions", "- Who may withdraw an invite?")],
+          { actor: DESCRIPTION_ACTOR.AGENT, agentId },
+        );
 
-      assert.deepEqual(shapeOf(yield* revisionsOf(userId, taskId)), [
-        { seq: 2, actor: DESCRIPTION_ACTOR.AGENT, label: AGENT_TITLE, changes: 1 },
-        {
-          seq: 1,
-          actor: DESCRIPTION_ACTOR.NOTETAKER,
-          label: undefined,
-          changes: DRAFT_NOTES.length,
-        },
-      ]);
-    }),
+        assert.deepEqual(shapeOf(yield* revisionsOf(userId, taskId)), [
+          { seq: 2, actor: DESCRIPTION_ACTOR.AGENT, label: AGENT_TITLE, changes: 1 },
+          {
+            seq: 1,
+            actor: DESCRIPTION_ACTOR.NOTETAKER,
+            label: undefined,
+            changes: DRAFT_NOTES.length,
+          },
+        ]);
+      }),
   );
 
   it.effect("a member of the plan's workspace reads the history a teammate wrote", () =>
@@ -201,7 +203,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
 
         const again = yield* restoreRevision({ userId, taskId }, 1);
         assert.ok("txid" in again);
-        assert.equal(again.txid, undefined, "the plan already held the revision's text");
+        assert.equal(again.txid, undefined, "the description already held the revision's text");
       }),
   );
 
@@ -270,7 +272,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
   );
 
   it.effect(
-    "a coding agent's edit names the agent, on the plan's last edit and on the sections it changed, so the window can find it",
+    "a coding agent's edit names the agent, on the description's last edit and on the sections it changed, so the window can find it",
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;
