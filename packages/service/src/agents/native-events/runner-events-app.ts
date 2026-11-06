@@ -16,6 +16,7 @@ import {
 } from "@repo/database/models/native-projection-store";
 import { setPlanStatus } from "@repo/database/models/provider-key-store";
 import { acceptRunnerLine } from "@repo/database/models/runner-line-store";
+import { renewTurnLease } from "@repo/database/models/turn-lease";
 import {
   type ConversationTarget,
   type SettledAgentTurn,
@@ -115,7 +116,9 @@ import { redactKeepingPlanCodes } from "./runner-moments.js";
  * whose sandbox is stopped instead. A batch with no events is the runner's
  * heartbeat (`@repo/agent-runner`'s `RUNNER_HEARTBEAT`), posted while its
  * harness says nothing, as it may for an hour while a background command
- * runs; it applies nothing but that.
+ * runs; it applies nothing but that and the lease every post short of the
+ * launch's end pushes on, which the turns it runs are read as lost by once
+ * it runs out (`@repo/database/models/turn-lease`).
  *
  * The route also keeps what
  * the newest model call read on the agent's row for its context ring, the
@@ -615,6 +618,9 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
     const ends = runnerEndsOf(batch, held.sequence);
+    // Any post short of the launch's end, a heartbeat among them, pushes on the open turns' lease
+    // (`turn-lease.ts`), so a runner gone quiet is read as lost once it runs out.
+    if (ends.length === 0) yield* renewTurnLease(applying.target.conversationId, now);
     // Only the batch's last IDLE is told, and none where the launch ended in the same batch.
     const idle =
       ends.length === 0
@@ -650,8 +656,8 @@ function eventCountOf(parsed: unknown): number | undefined {
 /**
  * A runner's batch refused for good, logged by its status, size, and event
  * count, never its body. Note that it is logged here because the runner
- * ends on such a refusal (`packages/agent-runner/src/events.ts`), and its turn falls
- * to the sweep, which can say only that the runner went.
+ * ends on such a refusal (`packages/agent-runner/src/events.ts`), and its turn's
+ * lease then runs out, whose settle can say only that the runner went.
  */
 const batchRefused = (
   ids: { readonly agentId: string; readonly conversationId: string },

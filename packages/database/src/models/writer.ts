@@ -91,6 +91,7 @@ import {
   waitingOutDispatchClaim,
 } from "./dispatch-claim.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
+import { leaseFrom } from "./turn-lease.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -886,6 +887,7 @@ const insertStartedTurn = SqlSchema.void({
         status: TURN_STATUS.RUNNING,
         queuedAt: row.startedAt,
         startedAt: row.startedAt,
+        leaseUntil: leaseFrom(row.startedAt),
       }),
     ),
 });
@@ -917,6 +919,7 @@ const insertQueuedTurn = SqlSchema.void({
         promptHash: row.promptHash,
         toolSetHash: row.toolSetHash,
         queuedAt: row.queuedAt,
+        leaseUntil: leaseFrom(row.queuedAt),
       }),
     ),
 });
@@ -927,7 +930,11 @@ const startTurn = SqlSchema.void({
     Database.use((db) =>
       db
         .update(turns)
-        .set({ status: TURN_STATUS.RUNNING, startedAt: row.startedAt })
+        .set({
+          status: TURN_STATUS.RUNNING,
+          startedAt: row.startedAt,
+          leaseUntil: leaseFrom(row.startedAt),
+        })
         .where(eq(turns.id, row.turnId)),
     ),
 });

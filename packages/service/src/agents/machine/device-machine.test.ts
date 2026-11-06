@@ -35,7 +35,6 @@ import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { DEVICE_LAYOUT, expectTopicsFire, getTestDB } from "@repo/database/testing";
 import { AGENT_FAILURE } from "@repo/features/agent-wire";
 import {
-  DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_LAUNCH_STEP,
   DEVICE_LAUNCH_UNSTARTED,
@@ -50,7 +49,6 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Fiber, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { sweepDeviceLeases } from "../../maintenance/device-lease-sweep.js";
 import {
   GITHUB_FIXTURE_BOT,
   githubReaching,
@@ -66,6 +64,7 @@ import {
   cloneAgentRepository,
   finishCheckoutWith,
 } from "../coder-host/checkout.js";
+import { settleLapsedRunner } from "../coder-host/lapsed-runner.js";
 import {
   agentFailureOf,
   hostLostOf,
@@ -551,7 +550,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     );
 
     it.effect(
-      "a Mac quiet past its lease loses its open run once: the launch settled, the bearer let go, the turn ended naming the Mac, and a stop queued; a Mac that beat within it keeps its run",
+      "a Mac quiet past its lease loses its open run at the agent's next touch: the launch settled, the bearer let go, and the turn ended naming the Mac, with no stop queued; a Mac that beat within it keeps its run",
       () =>
         Effect.gen(function* () {
           const lapsed = yield* openLocalAgent();
@@ -575,12 +574,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           }
           yield* TestClock.adjust("6 minutes");
           yield* beatDevice(kept.userId, kept.deviceId);
-          const sweep = Effect.flatMap(Clock.currentTimeMillis, (now) =>
-            sweepDeviceLeases(writer, { now }),
-          );
-
-          yield* sweep;
-          yield* sweep;
+          for (const { agent } of [lapsed, kept]) yield* settleLapsedRunner(agent);
           const turns = yield* latestTurnsOfReached([
             lapsed.agent.conversationId,
             kept.agent.conversationId,
@@ -609,11 +603,9 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             Option.some([true, null]),
           );
           assert.deepEqual(
-            (yield* deviceAgentLinesWaiting(lapsed.userId, lapsed.deviceId)).map(
-              (line) => line.kind,
-            ),
-            [DEVICE_AGENT_LINE_KIND.STOP],
-            "one stop, however many sweeps run",
+            yield* deviceAgentLinesWaiting(lapsed.userId, lapsed.deviceId),
+            [],
+            "the Mac's own beat ends a run it holds no longer once it is back",
           );
           assert.equal(turns.get(kept.agent.conversationId)?.status, TURN_STATUS.QUEUED);
           assert.deepEqual(
@@ -622,76 +614,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
               (standing) => standing.settled,
             ),
             Option.some(false),
-          );
-        }),
-    );
-
-    it.effect(
-      "a Mac quiet past its lease before its runner opened a turn fails the turn its message waits on, naming the Mac",
-      () =>
-        Effect.gen(function* () {
-          const opened = yield* openLocalAgent();
-          const { userId, deviceId, agent } = opened;
-          const launch = yield* launched(opened);
-          // The Mac took the launch and went quiet while preparing it, before its runner posted anything.
-          yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
-          const writer = yield* storeWriter({ tools: {} });
-          yield* TestClock.adjust("6 minutes");
-
-          yield* sweepDeviceLeases(writer, { now: yield* Clock.currentTimeMillis });
-
-          const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
-            agent.conversationId,
-          );
-          assert.equal(turn?.status, TURN_STATUS.FAILED);
-          assert.equal(
-            turn?.failureDetail,
-            "Studio went away during this turn. Send a message to carry on once it's back.",
-          );
-        }),
-    );
-
-    it.effect(
-      "an older launch a newer one replaced is settled alone, so no stop lands after the newer launch once its Mac is back",
-      () =>
-        Effect.gen(function* () {
-          const writer = yield* storeWriter({ tools: {} });
-          const sweepAt = (limit?: number) =>
-            Effect.flatMap(Clock.currentTimeMillis, (now) =>
-              sweepDeviceLeases(writer, { now, limit }),
-            );
-          const opened = yield* openLocalAgent();
-          const older = yield* launched(opened);
-          const newer = yield* launched(opened);
-          yield* claimedDeviceAgentLine(opened.userId, opened.deviceId, older.handle.command);
-          yield* claimedDeviceAgentLine(opened.userId, opened.deviceId, newer.handle.command);
-          const settledNow = (handle: { readonly command: string }) =>
-            Effect.map(deviceAgentLineStanding(opened.userId, handle.command), (standing) =>
-              Option.exists(standing, (each) => each.settled),
-            );
-          yield* TestClock.adjust("6 minutes");
-
-          // The sweep takes the oldest lapsed launch first, so one at a time reaches the older
-          // launch before the newer, whatever other tests left lapsed ahead of it.
-          for (let swept = 0; !(yield* settledNow(older.handle)); swept += 1) {
-            assert.ok(swept < 50, "the older launch is taken within a few sweeps");
-            yield* sweepAt(1);
-          }
-          yield* beatDevice(opened.userId, opened.deviceId);
-          yield* sweepAt();
-
-          assert.deepEqual(
-            yield* Effect.forEach([older, newer], ({ handle }) =>
-              Effect.map(deviceAgentLineStanding(opened.userId, handle.command), (standing) =>
-                Option.map(standing, (each) => each.settled),
-              ),
-            ),
-            [Option.some(true), Option.some(false)],
-          );
-          assert.deepEqual(
-            yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId),
-            [],
-            "nothing would end the newer runner",
           );
         }),
     );

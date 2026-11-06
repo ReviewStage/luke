@@ -226,6 +226,7 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
           queuedAt: latest.queuedAt,
           startedAt: latest.startedAt,
           settledAt: latest.settledAt,
+          leaseUntil: latest.leaseUntil,
           awaitingLineAt: awaitingLineAtIn(agentTable.conversationId),
           lastSettledAt: lastSettledAtIn(agentTable.conversationId),
         },

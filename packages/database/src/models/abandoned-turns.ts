@@ -1,8 +1,7 @@
 import { RUN_EVENT, RUN_STATUS, TURN_FAILURE } from "@repo/features/turn-run";
-import { reportUnexpected } from "@repo/runtime/effect";
 import { sessionKey } from "@repo/runtime/vocabulary";
 import { TURN_STATUS } from "@repo/wire";
-import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -12,53 +11,26 @@ import { dropNativeProjectionTurns } from "./native-projection-store.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
- * The sweep over turns whose end was never heard. A turn moves to running
- * when eve's start reaches the relay and settles when its end does; a run
- * whose end the relay never saw — eve's workflow lost, a hook that failed
- * on the boundary and was never retried, a deployment gone between the two
- * — leaves its row running and its journal open for good, and every reader
- * of the turn shows a run still going. The sweep settles such a turn as
- * failed for abandonment once it has run past the bound, through the same
- * write the relay's own end takes, so its journal is finished and its
- * unanswered parts are settled exactly as a failed turn's are. Relay state
- * is irrelevant here: eve emitted no end the relay saw, and an end eve does
- * emit later finds the row terminal and is repeated, not written. A coding
- * agent's turn whose session eve says it no longer runs is settled on the
- * same write at once, failed for its session's end rather than abandoned
- * (`settleEndedSessionTurn`), whether eve said so refusing a message or
- * announcing the session's end (`settleEndedSession`), since eve's word is
- * final where the sweep's bound is only a guess. A turn a Stop was asked of is settled sooner, and
- * as canceled: eve confirms a cancel within seconds by ending the turn, so
- * a Stop still unconfirmed past its bound is one whose session is gone, as
- * a session that died in a deploy is, and the turn ends as the Stop asked
- * rather than standing running until the abandonment bound.
+ * abandoned-turns.ts -- the turns whose end is not coming, settled through the write the runner's own end takes.
+ *
+ * A turn moves to running when its runner opens it and settles when its
+ * runner's end lands; a runner gone without its end (its sandbox stopped, its
+ * Mac asleep or gone, a post refused for good) leaves the row running and its
+ * journal open. Nothing sweeps for that: the turn's lease
+ * (`./turn-lease.ts`) runs out once the runner stops posting, every reader
+ * takes it as lost from then, and the next touch of the agent reads the
+ * lapsed turns here (`lapsedTurnIds`) and settles them failed as a runner
+ * lost (`settleRunnerLostTurns`), or canceled where a Stop was asked of them.
+ * A coding agent's turn whose session the runtime says no longer runs is
+ * settled on the same write at once, failed for its session's end
+ * (`settleEndedSessionTurn`, `settleEndedSession`). Each settle goes through
+ * the store writer's own end, so its journal is finished and its unanswered
+ * parts settled exactly as a failed turn's are, and an end that lands later
+ * finds the row terminal and is repeated, not written.
  */
 
-export const TURN_ABANDON = {
-  /**
-   * How long a turn may stand running before the sweep settles it. Far past
-   * any deadline a turn runs under: eve's own step retries end well inside
-   * the hour, so a row still running this long is one whose end is not
-   * coming.
-   */
-  AFTER_MS: 60 * 60 * 1000,
-  /**
-   * How long a coding agent's turn may stand running before the sweep
-   * settles it. A coding agent's one turn is its whole run, which outlives
-   * any one sandbox session because eve resumes a stopped sandbox from its
-   * snapshot, so an hour would fail an agent still at work and leave its
-   * Stop with nothing to stop; a day and an hour's grace past it is a run
-   * whose end is not coming.
-   */
-  AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
-  /**
-   * How long a turn may stand running after a Stop was asked of it before
-   * the sweep settles it as canceled. eve's own cancel ends the turn within
-   * seconds, so a Stop still unconfirmed this long found no session to
-   * stop, whatever eve answered it.
-   */
-  CANCEL_AFTER_MS: 5 * 60 * 1000,
-  /** The most turns one sweep settles; the rest wait for the next minute. */
+export const LOST_TURNS = {
+  /** The most turns one read of an ended session takes; reads go on until none is left. */
   LIMIT: 50,
 } as const;
 
@@ -86,43 +58,23 @@ const ABANDONED_TURN_COLUMNS = {
 /** A turn joined to the conversation it stands in. */
 const TURN_CONVERSATION = eq(conversations.id, turns.conversationId);
 
-/** The running turns started before the instant of their conversation's kind, or whose Stop was asked before its own instant, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
-const abandonedTurns = SqlSchema.findAll({
-  Request: Schema.Struct({
-    startedBefore: Schema.Date,
-    codingAgentStartedBefore: Schema.Date,
-    cancelRequestedBefore: Schema.Date,
-    limit: Schema.Int,
-  }),
-  Result: AbandonedTurnRowSchema,
+/** The ids of the conversation's turns still queued or running whose lease ran out before the instant, oldest first. */
+const findLapsedTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, before: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
   execute: (request) =>
     Database.use((db) =>
       db
-        .select(ABANDONED_TURN_COLUMNS)
+        .select({ id: turns.id })
         .from(turns)
-        .innerJoin(conversations, TURN_CONVERSATION)
         .where(
           and(
-            eq(turns.status, TURN_STATUS.RUNNING),
-            isNull(conversations.deletedAt),
-            or(
-              and(
-                ne(conversations.kind, CONVERSATION_KIND.AGENT),
-                lt(turns.startedAt, request.startedBefore),
-              ),
-              and(
-                eq(conversations.kind, CONVERSATION_KIND.AGENT),
-                lt(turns.startedAt, request.codingAgentStartedBefore),
-              ),
-              and(
-                isNotNull(turns.cancelRequestedAt),
-                lt(turns.cancelRequestedAt, request.cancelRequestedBefore),
-              ),
-            ),
+            eq(turns.conversationId, request.conversationId),
+            inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+            lt(turns.leaseUntil, request.before),
           ),
         )
-        .orderBy(asc(turns.startedAt), asc(turns.id))
-        .limit(request.limit),
+        .orderBy(asc(turns.queuedAt), asc(turns.id)),
     ),
 });
 
@@ -163,7 +115,7 @@ type LostTurnEnd =
   | { readonly status: typeof RUN_STATUS.CANCELED }
   | {
       readonly status: typeof RUN_STATUS.FAILED;
-      readonly failure: typeof TURN_FAILURE.ABANDONED | typeof TURN_FAILURE.SESSION_ENDED;
+      readonly failure: typeof TURN_FAILURE.SESSION_ENDED;
       readonly failureDetail?: string;
     }
   | {
@@ -233,74 +185,15 @@ const settledLost = (
     return written.success === STORE_WRITE_EFFECT.WRITTEN;
   });
 
-export interface AbandonedTurnSweepStore {
-  readonly writer: Pick<StoreWriter, "consume">;
-}
-
-export interface AbandonedTurnSweepOptions {
-  readonly now: number;
-  /** The most turns the sweep settles; `TURN_ABANDON.LIMIT` otherwise. */
-  readonly limit?: number | undefined;
-}
-
-/**
- * One line, and one report, for a turn the sweep settled failed for
- * abandonment, with how long it ran: an end that never came is no outcome a
- * member asked for, so it is an issue as well as a line.
- */
-function abandonedSaid(turn: LostTurn, startedAt: Date | null, now: number) {
-  const ranMs = startedAt === null ? undefined : now - startedAt.getTime();
-  const ids = { conversationId: turn.conversationId, turnId: turn.id };
-  return Effect.logError(`a turn ran past its bound with no end heard and was settled abandoned`, {
-    ranMs,
-  }).pipe(
-    Effect.andThen(
-      reportUnexpected(TURN_FAILURE.ABANDONED, { ...ids, failure: TURN_FAILURE.ABANDONED, ranMs }),
-    ),
-    Effect.annotateLogs({ ...ids, failure: TURN_FAILURE.ABANDONED }),
+/** The ids of the conversation's turns still queued or running whose lease ran out before `now`, oldest first: the turns whose runner is lost, for a settle of just those (`settleRunnerLostTurns`'s `only`). */
+export function lapsedTurnIds(
+  conversationId: string,
+  now: number,
+): Effect.Effect<readonly string[], QueryError | Schema.SchemaError, DatabaseServices> {
+  return Effect.map(findLapsedTurns({ conversationId, before: new Date(now) }), (rows) =>
+    rows.map((row) => row.id),
   );
 }
-
-/**
- * Settles every running turn whose Stop went unconfirmed past its bound as
- * canceled, and every other one started more than its kind's bound ago as
- * failed for abandonment, each of those logged and reported; answers how many
- * it settled. The turn a native
- * agent's projection holds is dropped with it, as a lost runner's is, so a
- * runner still posting opens a turn of its own rather than having every
- * event refused as one for a turn already ended.
- */
-export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandonedTurns")(function* (
-  store: AbandonedTurnSweepStore,
-  options: AbandonedTurnSweepOptions,
-): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
-  const turns = yield* abandonedTurns({
-    startedBefore: new Date(options.now - TURN_ABANDON.AFTER_MS),
-    codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.AGENT_AFTER_MS),
-    cancelRequestedBefore: new Date(options.now - TURN_ABANDON.CANCEL_AFTER_MS),
-    limit: options.limit ?? TURN_ABANDON.LIMIT,
-  });
-  let settled = 0;
-  const cancelRequestedBefore = options.now - TURN_ABANDON.CANCEL_AFTER_MS;
-  for (const { cancelRequestedAt, startedAt, ...turn } of turns) {
-    // Note that a Stop past its bound wins over abandonment, because the turn ends as the developer asked.
-    const canceled =
-      cancelRequestedAt !== null && cancelRequestedAt.getTime() < cancelRequestedBefore;
-    const written = yield* settledLost(
-      store.writer,
-      turn,
-      canceled
-        ? { status: RUN_STATUS.CANCELED }
-        : { status: RUN_STATUS.FAILED, failure: TURN_FAILURE.ABANDONED },
-      options.now,
-    );
-    if (!written) continue;
-    settled += 1;
-    if (!canceled) yield* abandonedSaid(turn, startedAt, options.now);
-    yield* dropNativeProjectionTurns(turn.conversationId, [turn.id]);
-  }
-  return settled;
-});
 
 /**
  * Settles the coding agent's turn named as failed because its session ended
@@ -328,7 +221,7 @@ export interface EndedSessionOptions {
   readonly now: number;
   /** Why eve said the session failed, redacted and bounded, kept on each turn failed for it; nothing for a session that only expired. */
   readonly failureDetail?: string | undefined;
-  /** The most turns one read takes; `TURN_ABANDON.LIMIT` otherwise. Reads go on until none is left. */
+  /** The most turns one read takes; `LOST_TURNS.LIMIT` otherwise. Reads go on until none is left. */
   readonly limit?: number | undefined;
 }
 
@@ -354,7 +247,7 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
   runtimeSessionId: string,
   options: EndedSessionOptions,
 ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
-  const limit = options.limit ?? TURN_ABANDON.LIMIT;
+  const limit = options.limit ?? LOST_TURNS.LIMIT;
   let settled = 0;
   const read = new Set<string>();
   for (;;) {
