@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { Database } from "@repo/database/core/query";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import { saveProviderKey } from "@repo/database/models/provider-key-store";
+import { user } from "@repo/database/schemas/auth";
 import { openHostedStoreTestDatabase } from "@repo/database/testing";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
@@ -10,8 +12,10 @@ import {
 } from "@repo/features/provider-key-wire";
 import { jsonResponse } from "@repo/wire/testing";
 import { generateText, type LanguageModel } from "ai";
+import { eq } from "drizzle-orm";
 import { Effect, Redacted, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
+import { USER_ROLE } from "../../admin/admin-access.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { ownKeyOf } from "./account-keys.js";
 import { productionSummaryModel } from "./replay-summary.js";
@@ -82,8 +86,14 @@ function provider(answers: readonly Response[]) {
   return { fetch, keys, asked };
 }
 
-async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string>>) {
+async function accountWithKeys(
+  saved: Partial<Record<ProviderKeyProvider, string>>,
+  role: string = USER_ROLE.USER,
+) {
   const userId = await database.createUser();
+  await database.run(
+    Database.use((db) => db.update(user).set({ role }).where(eq(user.id, userId))),
+  );
   const ring = parseKeyRing(Redacted.make(RING.HELD));
   if (Result.isFailure(ring)) return assert.fail("not a ring");
   for (const [named, key] of Object.entries(saved)) {
@@ -182,13 +192,20 @@ test("a call beside an account's agents, such as chapters or a replay's summary,
   assert.equal(await ownKey(both, PROVIDER_KEY_PROVIDER.ANTHROPIC, null), undefined);
 });
 
-test("on a Preview, a call beside an account's agents spends the Preview's stand-in key where no key of the account's opens, and the account's own wherever one does", async () => {
-  const both = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
-  });
-  const openAiOnly = await accountWithKeys({ [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI });
-  const none = await accountWithKeys({});
+test("on a Preview, a call beside an admin's agents spends the Preview's stand-in key where no key of the account's opens, and the account's own wherever one does, and a member's never spends it", async () => {
+  const both = await accountWithKeys(
+    {
+      [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+      [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
+    },
+    USER_ROLE.ADMIN,
+  );
+  const openAiOnly = await accountWithKeys(
+    { [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI },
+    USER_ROLE.ADMIN,
+  );
+  const none = await accountWithKeys({}, USER_ROLE.ADMIN);
+  const member = await accountWithKeys({});
   const standIns = {
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "sk-ant-preview-stand-in-1111",
     [PROVIDER_KEY_PROVIDER.OPENAI]: "sk-proj-preview-stand-in-1111",
@@ -211,6 +228,10 @@ test("on a Preview, a call beside an account's agents spends the Preview's stand
       [PROVIDER_KEY_PROVIDER.OPENAI]: standIns[PROVIDER_KEY_PROVIDER.OPENAI],
     }),
     { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: standIns[PROVIDER_KEY_PROVIDER.OPENAI] },
+  );
+  assert.equal(
+    await ownKey(member, PROVIDER_KEY_PROVIDER.ANTHROPIC, RING.HELD, standIns),
+    undefined,
   );
 });
 

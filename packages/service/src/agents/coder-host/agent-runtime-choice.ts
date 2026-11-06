@@ -23,8 +23,9 @@
  * (`AgentCredentialMissing`, which names the provider), and connects one in
  * Settings › Agents. A brand-new account starts no coding agent until it
  * connects a subscription or saves an API key. On a Preview, the Preview's
- * stand-in key for the provider stands in for an API key the account has
- * not saved or the Preview cannot open (`accounts/own-api-key.ts`).
+ * stand-in key for the provider stands in, for an admin of ours alone, for an
+ * API key the account has not saved or the Preview cannot open
+ * (`accounts/own-api-key.ts`).
  *
  * The choice is written on the agent as it is made and never changes: a
  * plan that later runs out or is disconnected pauses the agent, and never
@@ -70,6 +71,7 @@ import {
   PROVIDER_KEY_STATUS,
 } from "@repo/features/provider-key-wire";
 import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "effect";
+import { previewKeysOf } from "../../accounts/own-api-key.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { type AccountFastOffer, providerModelOf } from "../../providers/model-catalog.js";
@@ -192,17 +194,25 @@ const onPlanOf = (provider: string): AgentRuntimeChoice =>
 /**
  * Whether an API key pays for the account's agents on the provider's
  * harness: its own, saved among `rows`, or on a Preview, the Preview's
- * stand-in for the provider, which its launch spends where its own is
- * missing or unreadable (`accounts/own-api-key.ts`).
+ * stand-in for the provider where the account is an admin of ours, which its
+ * launch spends where its own is missing or unreadable
+ * (`accounts/own-api-key.ts`).
  */
-function keepsApiKey(
+const keepsApiKey = (
+  userId: string,
   provider: ModelProvider,
   rows: AccountKeyRows,
   environment: HostedEnvironmentValues | undefined,
-): boolean {
-  if (environment?.previewApiKeys[provider] !== undefined) return true;
-  return rows.some((row) => row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === provider);
-}
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> => {
+  if (rows.some((row) => row.kind === PROVIDER_KEY_KIND.API_KEY && row.provider === provider)) {
+    return Effect.succeed(true);
+  }
+  if (environment === undefined) return Effect.succeed(false);
+  return Effect.map(
+    previewKeysOf(userId, environment),
+    (standIns) => standIns[provider] !== undefined,
+  );
+};
 
 /** The provider of a model the catalog offers; every model a Start accepted has one, so none is a defect. */
 const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
@@ -223,12 +233,12 @@ const providerRuntimeChoice = Effect.fnUntraced(function* (
   userId: string,
   provider: ModelProvider,
   rows: AccountKeyRows,
-): Effect.fn.Return<AgentRuntimeChoice, AgentCredentialMissing> {
+): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
   const environment = yield* deploymentEnvironment;
   const plan = keptPlan(userId, provider, environment?.providerKeyEncryptionKeys, rows);
   if (plan?.forAgents === true) return onPlanOf(provider);
   // Our key pays for no coding agent, so an account with no API key of the provider's is refused by name.
-  if (!keepsApiKey(provider, rows, environment))
+  if (!(yield* keepsApiKey(userId, provider, rows, environment)))
     return yield* Effect.fail(new AgentCredentialMissing({ provider }));
   return provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : ON_CODEX_API_KEY;
 });
@@ -400,7 +410,8 @@ export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(functi
   if (routing.payer !== AGENT_PAYER.API_KEY) return undefined;
   const provider = yield* providerOfModel(agent.model);
   const rows = yield* keyRowsOf(agent.userId, undefined);
-  return keepsApiKey(provider, rows, yield* deploymentEnvironment) ? undefined : provider;
+  const environment = yield* deploymentEnvironment;
+  return (yield* keepsApiKey(agent.userId, provider, rows, environment)) ? undefined : provider;
 });
 
 /**
