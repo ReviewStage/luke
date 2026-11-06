@@ -10,7 +10,11 @@
  * the tab's Sentry first (`web-sentry.ts`), where the build carries a DSN,
  * stands the runtime on its reporter, as the desktop's main stands its own,
  * and reports through it a tab that could draw nothing, as the desktop's
- * window root does.
+ * window root does. The panel draws under the tab's router
+ * (`@repo/panel/panel-router`), over the router's history of the tab
+ * (`createBrowserHistory`), so the address bar and the browser's Back and
+ * Forward follow the panel's own, and its routes are handed the window's
+ * Query client, as the desktop's window draws it.
  *
  * Until the panel draws, the tab shows the loading frame app.html stands in
  * the root element, which the root's first render replaces; where the frame
@@ -25,22 +29,20 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { LinkPlatform } from "@repo/features/link-open";
 import type { DuplicateGatewayMethod, HostTag } from "@repo/host/effect";
-import { App } from "@repo/panel/app";
 import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
 import { installShownFailureReporter } from "@repo/panel/failure-report";
-import { installWindowHistory } from "@repo/panel/navigation-history";
-import { QueryProvider } from "@repo/panel/query-client";
+import { createPanelRouter } from "@repo/panel/panel-router";
+import { QueryProvider, queryClient } from "@repo/panel/query-client";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { ErrorBoundary, ReloadState } from "@repo/ui/error-boundary";
-import type { HistoryAdapter } from "@repo/ui/history-adapter";
+import { createBrowserHistory, RouterProvider } from "@tanstack/react-router";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
 import { browserLinkPlatform } from "../link-platform";
-import { type BrowserHistory, browserHistory } from "./browser-history";
 import { withLoadLink } from "./load-link";
 import { browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
@@ -97,18 +99,6 @@ export interface WebApp {
   readonly close: () => Promise<void>;
 }
 
-/** Installs the tab's own history as the panel's, answering how to take it down and stop it following the browser. */
-function installTabHistory<State>(
-  install: (history: HistoryAdapter<State>) => () => void,
-  history: BrowserHistory<State>,
-): () => void {
-  const uninstall = install(history);
-  return () => {
-    uninstall();
-    history.dispose();
-  };
-}
-
 /**
  * Composes the host in the tab, installs its doors, and draws the panel into
  * the element given once its document has been read, in place of whatever
@@ -122,7 +112,9 @@ export async function mountWebApp(
 ): Promise<WebApp | undefined> {
   // The address the tab loaded at, and whether it came there fresh, read before the panel's history writes its own steps into it.
   const loadedAt = location.href;
-  const loadedFresh = browserLoadedFresh();
+  // The panel's back and forward are the browser's own, each step in the tab's address, through the router's history of the tab.
+  const tabHistory = createBrowserHistory();
+  const loadedFresh = browserLoadedFresh(tabHistory.location);
   const linkPlatform = options.linkPlatform ?? browserLinkPlatform();
   // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
   const sentry = startWebSentry(options.sentry ?? webSentryBuild());
@@ -138,20 +130,18 @@ export async function mountWebApp(
     Layer.provideMerge(composeWeb({ httpClient, fork, linkPlatform }), sentry.errorReporting),
   );
   // What the tab installed, taken down again in the reverse order as it closes.
-  const installed: (() => void)[] = [];
+  const installed: (() => void)[] = [() => tabHistory.destroy()];
   const uninstall = () => {
     for (const undo of installed.splice(0).reverse()) undo();
   };
   try {
     const web = await runtime.runPromise(WebHostTag);
     // The address the tab was opened at is said once, as the link it is.
-    installed.push(installAppBridge(withLoadLink(web.bridge)));
+    installed.push(installAppBridge(withLoadLink(web.bridge, tabHistory)));
     installed.push(installActPort(web.actPort, web.actPortClient));
     installed.push(installAppPlatform(web.platform));
     // Every failure the panel shows is reported through the tab's Sentry.
     installed.push(installShownFailureReporter(sentry.reportShownFailure));
-    // The panel's back and forward are the browser's own, each step in the tab's address.
-    installed.push(installTabHistory(installWindowHistory, browserHistory()));
     await runtime.runPromise(appStateFirstRead);
   } catch (error) {
     console.error(
@@ -167,13 +157,14 @@ export async function mountWebApp(
     return undefined;
   }
   liftLoadingFrame(rootElement);
+  const router = createPanelRouter(tabHistory, queryClient);
   const root = createRoot(rootElement, { onCaughtError: reportCaught });
   root.render(
     <ErrorBoundary failure={TAB_FAILED} onReload={reloadTab}>
       <RegistryContext.Provider value={rendererRegistry}>
         <QueryProvider>
           <WebAppearance />
-          <App />
+          <RouterProvider router={router} />
         </QueryProvider>
       </RegistryContext.Provider>
     </ErrorBoundary>,

@@ -7,14 +7,15 @@
  * link (`navigation-history.ts`'s `NO_LINK_ADDRESS`), so a link written
  * before the router stood reads the same through it. The routes draw
  * nothing of their own and nothing navigates through them yet: the root
- * draws `App`, and the window's history is still the one its root installs
- * through `installWindowHistory`. A place's leaf is an index route under the
+ * draws `App`, whose back and forward write each step into the router's
+ * history (`navigation-history.ts`). A place's leaf is an index route under the
  * path it shares with the places beneath it, so `/task/<id>` and
  * `/task/<id>/version/<n>` are both a route of their own.
  */
 
+import type { QueryClient } from "@tanstack/react-query";
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   type RouterHistory,
@@ -44,7 +45,12 @@ function writeSearch(search: Record<string, unknown>): string {
   return written === "" ? "" : `?${written}`;
 }
 
-const rootRoute = createRootRoute({ component: App });
+/** What every route reads from the router's `context`: the window's one TanStack Query client (`query-client.tsx`). */
+interface PanelRouterContext {
+  readonly queryClient: QueryClient;
+}
+
+const rootRoute = createRootRouteWithContext<PanelRouterContext>()({ component: App });
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, path: "/app" });
 
@@ -218,11 +224,12 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-/** The panel's router over `history`: a window's own, which its root makes, one per window. */
-export function createPanelRouter(history: RouterHistory) {
+/** The panel's router over `history`, a window's own, which its root makes, one per window, its routes handed the window's `queryClient`. */
+export function createPanelRouter(history: RouterHistory, queryClient: QueryClient) {
   return createRouter({
     routeTree,
     history,
+    context: { queryClient },
     parseSearch: readSearch,
     stringifySearch: writeSearch,
   });

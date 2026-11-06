@@ -47,7 +47,6 @@ import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { timeRuntime } from "@repo/ui";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -58,11 +57,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { type ActHandle, KEPT, type Kept } from "../act.js";
-import {
-  installWindowHistory,
-  useWindowHistory,
-  type WindowHistoryLists,
-} from "../navigation-history.js";
+import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
   PANEL_SPAN,
@@ -91,6 +86,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
@@ -217,7 +213,6 @@ function mount(
   let windowHistory: WindowHistoryLists | undefined;
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
-    installWindowHistory(memoryHistory());
   }
   /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
   function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
@@ -303,7 +298,7 @@ function mount(
   roots.push(root);
   // A fresh registry reads the document handed here, its plans among it, rather than one an earlier test handed.
   act(() => {
-    root.render(onRegistry(registry ?? AtomRegistryModule.make(), surface));
+    root.render(windowRouter().provide(onRegistry(registry ?? AtomRegistryModule.make(), surface)));
   });
   return {
     told,

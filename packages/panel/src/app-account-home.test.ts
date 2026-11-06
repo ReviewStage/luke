@@ -6,7 +6,6 @@ import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,11 +16,11 @@ import { runAppCommand } from "./app-commands.js";
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/desktop-settings.js";
-import { installWindowHistory } from "./navigation-history.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, signedInAs } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { windowRouter } from "./testing/window-router.js";
 
 /**
  * app-account-home.test.ts -- an account leaving the window takes its place
@@ -55,7 +54,6 @@ beforeEach(() => {
   listeners = new Set();
   window.localStorage.clear();
   fakeAppPlatform({ ...QUIET_PANEL, applySessionReplay: () => undefined });
-  installWindowHistory(memoryHistory());
   const quiet = Object.fromEntries([
     ...Object.keys(PUSH_METHOD).map((method) => [method, () => () => undefined]),
     ...bridgeEntries().map(([method, entry]) => [
@@ -112,7 +110,9 @@ test("signed out from Settings, a fresh account that finishes setup lands on Hom
     JSON.stringify({ "account-grace": { audience: "me", at: 3 } }),
   );
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(App))));
+  act(() =>
+    root?.render(windowRouter().provide(onRegistry(AtomRegistry.make(), createElement(App)))),
+  );
   await settle();
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
   await settle();
