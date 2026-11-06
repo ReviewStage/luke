@@ -17,7 +17,6 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
-import type { PlanEditRequest } from "@repo/features/plan-edit";
 import { planMarkdown } from "@repo/features/plan-markdown";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@repo/features/task-section-wire";
@@ -48,7 +47,6 @@ import {
   TASK_CALL_FAILURE,
   TASK_PARENT_FAILURE,
   TASKS_READ,
-  type TasksEditAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
 import { managesWorkspace } from "@repo/features/workspace-role";
@@ -108,16 +106,23 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  mutationOptions,
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
-  type ActHandle,
+  askAct,
   askKept,
   firstRefusal,
   KEPT,
   type Kept,
   notKept,
+  sendAct,
   unreachedAs,
 } from "../act.js";
 import { actMutation, pressMutation } from "../act-mutations.js";
@@ -131,6 +136,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
+import type { RenameShape } from "../rename-write.js";
 import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
@@ -162,6 +168,7 @@ import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
 import type { SectionReveal } from "./plan-body.js";
+import { type PlanEditMutation, planEditMutation } from "./plan-edit-mutation.js";
 import type { RevisionSource } from "./plan-history-model.js";
 import type { RepositoryChooser } from "./repository-chip.js";
 import type { FixturePlace } from "./tasks-fixture.js";
@@ -671,8 +678,8 @@ export interface TasksControl {
   region: DocumentRegion;
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
-  /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
-  edit: (taskId: string, request: PlanEditRequest) => Promise<TasksEditAnswer>;
+  /** The writes to a plan's document, as each place writing them holds its own mutation (`planEditMutation`): saved, a conflict with the text as it stands now, or why not. */
+  planEdit: (taskId: string) => PlanEditMutation;
   /** The task's column's tabs: its agents' and its draft's, and which is shown. */
   mainTabs: MainTabsControl;
   /** The side panel beside the open task's column: shown or not, its tab, and its width. */
@@ -879,12 +886,8 @@ export interface TasksControl {
   onLeaveTask: () => void;
   /** Goes to Home from wherever the tab stands: the open task left, and whatever page stands in its place put away. */
   onGoHome: () => void;
-  /**
-   * Renames a task to a name already trimmed and changed, drawn under it at
-   * once and under its old name again if the service refuses; answers
-   * whether it was renamed.
-   */
-  onRenameTask: (taskId: string, name: string) => Promise<boolean>;
+  /** The options a surface renaming a task holds its own mutation over (`taskRenameMutation`). */
+  renameTask: TaskRenameMutation;
   /**
    * Draws a name being typed for a task everywhere the task is named, before
    * any of it is saved, or none, which draws its saved name again.
@@ -1184,6 +1187,48 @@ const BLOCK_REMOVED_NOTE = "Relation removed";
 /** What ⌘Z's toast calls a task's rename it takes back or puts back. */
 const TASK_RENAMED_NOTE = "Task renamed";
 
+/** A task's rename as a mutation asks it: the task, and the name already trimmed and changed. */
+interface TaskRenameAsk {
+  readonly taskId: string;
+  readonly name: string;
+}
+
+/**
+ * A task's rename as each surface renaming one holds it, a mutation of its
+ * own over these options: sent through `send`, drawn under the new name at
+ * once, and under its old name again by the host where the service refuses,
+ * answering whether it was renamed. A rename the service kept is ⌘Z's to
+ * take back, through `doors`; none where nothing is drawn to take back.
+ */
+export function taskRenameMutation(
+  send: (asked: TaskRenameAsk) => Promise<boolean>,
+  doors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
+) {
+  return mutationOptions({
+    mutationKey: [ROW_WRITE.TASK_RENAME.kind],
+    mutationFn: send,
+    onMutate: (asked) =>
+      doors === undefined
+        ? undefined
+        : pressRows(ROW_WRITE.TASK_RENAME, doors, [
+            { id: asked.taskId, after: { name: asked.name } },
+          ]),
+    onSuccess: (renamed, _asked, pressed) => {
+      if (renamed) pressed?.keep(TASK_RENAMED_NOTE);
+    },
+  });
+}
+
+/** A task's rename as a surface holds it (`taskRenameMutation`). */
+export type TaskRenameMutation = ReturnType<typeof taskRenameMutation>;
+
+/** How a task's rename is asked and read back, its refusal the answer that it was not renamed. */
+export const TASK_RENAME_SHAPE: RenameShape<boolean, TaskRenameAsk> = {
+  ask: (taskId, name) => ({ taskId, name }),
+  asked: ({ taskId, name }) => ({ subjectId: taskId, name }),
+  refused: (renamed) => !renamed,
+};
+
 /** What ⌘Z's toast calls a task's pin it takes back or puts back, by what was asked. */
 const TASK_MARKED_NOTES = {
   [TASK_MARK.PIN]: "Task pinned",
@@ -1305,7 +1350,6 @@ function readInboxItemHome(
 }
 
 export function useTasksTab(input: {
-  acts: Pick<ActHandle, "act">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
   tasks: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
@@ -1345,9 +1389,12 @@ export function useTasksTab(input: {
   const { guard } = leaveGuard;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation, and
   // none invalidates a query, since what each changes comes back through app state.
-  const { act } = input.acts;
   const queryClient = useQueryClient();
   const { mutateAsync: sendSelect } = useMutation(actMutation(ACT_KIND.TASKS_SELECT));
+  const { mutateAsync: sendGitHubConnect } = useMutation(actMutation(ACT_KIND.GITHUB_CONNECT));
+  const { mutateAsync: sendGitHubDisconnect } = useMutation(
+    actMutation(ACT_KIND.GITHUB_DISCONNECT),
+  );
   const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.TASKS_CLOSE));
   const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.TASKS_DELETE));
   const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
@@ -1365,7 +1412,6 @@ export function useTasksTab(input: {
   const { mutateAsync: sendParent } = useMutation(actMutation(ACT_KIND.TASKS_SET_PARENT));
   const { mutateAsync: sendRelation } = useMutation(actMutation(ACT_KIND.TASKS_CHANGE_RELATION));
   const { mutateAsync: sendMove } = useMutation(actMutation(ACT_KIND.TASKS_MOVE));
-  const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
   const { mutateAsync: sendRestore } = useMutation(actMutation(ACT_KIND.TASKS_RESTORE));
   const { mutateAsync: sendTaskStart } = useMutation(actMutation(ACT_KIND.TASKS_START));
   // Note that which agent is shown is told, quiet whatever comes back, since no person pressed for it.
@@ -1563,7 +1609,6 @@ export function useTasksTab(input: {
   );
   // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
   const agents = useAgents({
-    acts: input.acts,
     taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
@@ -2094,17 +2139,11 @@ export function useTasksTab(input: {
     send: sendStandingRow,
   };
 
-  // A fixture's tasks are renamed nowhere, as they are read from nowhere. A
-  // rename the service kept is ⌘Z's to take back.
-  const renameTask = async (taskId: string, name: string): Promise<boolean> => {
-    if (fixture !== undefined) return false;
-    const pressed = pressRows(ROW_WRITE.TASK_RENAME, renameDoors, [
-      { id: taskId, after: { name } },
-    ]);
-    const renamed = await sendTaskRename({ taskId, name }).catch(() => false);
-    if (renamed) pressed.keep(TASK_RENAMED_NOTE);
-    return renamed;
-  };
+  // A fixture's tasks are renamed nowhere, as they are read from nowhere.
+  const renameTask =
+    fixture === undefined
+      ? taskRenameMutation((asked) => sendAct(ROW_WRITE.TASK_RENAME.kind, asked), renameDoors)
+      : taskRenameMutation(() => Promise.resolve(false), undefined);
 
   // The open task as it stands when a move is answered, which may be
   // another than the one open when it was pressed.
@@ -2455,7 +2494,8 @@ export function useTasksTab(input: {
     kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    return act(kind).then(
+    const send = kind === ACT_KIND.GITHUB_CONNECT ? sendGitHubConnect : sendGitHubDisconnect;
+    return send().then(
       () => true,
       (refused: Error) => {
         toast({
@@ -2636,15 +2676,12 @@ export function useTasksTab(input: {
   };
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
-  const edit = useCallback(
-    (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
-      if (fixture !== undefined) {
-        return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-      }
-      return sendEdit({ taskId, edit: request });
-    },
-    [fixture, sendEdit],
-  );
+  const planEdit = (taskId: string) =>
+    planEditMutation(taskId, (request) =>
+      fixture === undefined
+        ? sendAct(ACT_KIND.TASKS_EDIT, { taskId, edit: request })
+        : Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
   // opened first; the ask is counted so each press opens it again.
@@ -2664,10 +2701,10 @@ export function useTasksTab(input: {
   // A fixture's task reads its staged history through the same acts, and holds it on its staged document (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
-      readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
+      readPage: (taskId, before) => askAct(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
       restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
-    [act, sendRestore],
+    [sendRestore],
   );
   const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.
@@ -3779,7 +3816,7 @@ export function useTasksTab(input: {
     listRead: tasks.listStatus === TASKS_READ.READY,
     region,
     copy: { onPress: pressCopy },
-    edit,
+    planEdit,
     mainTabs: { ...mainTabs, onClose: closeColumnTab },
     sidePanel: { ...sidePanel, onClose: closeSidePanelTab, onToggle: toggleSidePanel },
     unreadTabs,
@@ -4029,7 +4066,7 @@ export function useTasksTab(input: {
     },
     onLeaveTask: guard(() => leaveTask()),
     onGoHome: guard(goHome),
-    onRenameTask: renameTask,
+    renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
     onSettleTasks: settleTasks,

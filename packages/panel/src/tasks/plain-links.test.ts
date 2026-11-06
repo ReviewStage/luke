@@ -26,6 +26,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { PlanBody } from "./plan-body.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -173,7 +174,9 @@ test("the plan's editor draws a plain link as every place does, whole", async ()
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      edit: planEditMutation(TASK.id, () =>
+        Promise.reject(new Error("Nothing is saved in this test.")),
+      ),
       sectionLinks: SECTION_LINKS,
     }),
   );
@@ -192,7 +195,9 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      edit: planEditMutation(TASK.id, () =>
+        Promise.reject(new Error("Nothing is saved in this test.")),
+      ),
       sectionLinks: SECTION_LINKS,
     }),
   );

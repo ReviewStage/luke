@@ -2621,6 +2621,14 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
 
   await pressAction(tab, "Convert to draft");
 
+  // Note that the refusal lands through the change's mutation, so the note is read once drawn.
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-write-note") !== null,
+      true,
+      "the tab says why the change was not made",
+    ),
+  );
   const note =
     tab.querySelector<HTMLElement>(".pull-request-write-note") ??
     assert.fail("the tab says why the change was not made");
@@ -2664,6 +2672,14 @@ test("a change refused for a repository out of the workspace's reach says where 
 
   await pressAction(tab, "Convert to draft");
 
+  // Note that the refusal lands through the change's mutation, so the note is read once drawn.
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.querySelector(".pull-request-write-note") !== null,
+      true,
+      "the tab says why the change was not made",
+    ),
+  );
   const note =
     tab.querySelector<HTMLElement>(".pull-request-write-note") ??
     assert.fail("the tab says why the change was not made");
@@ -4206,11 +4222,14 @@ test("the pill is named by the words it draws, so a change out reads as the scre
   const answer = Promise.withResolvers<void>();
   changeHeld = answer.promise;
   await pressAction(tab, "Close pull request");
-  assert.match(pill().textContent ?? "", /…$/u, "the pill says its change is out");
+  // Note that the change is out once its mutation says so, which it hands React a moment later.
+  await vi.waitFor(() =>
+    assert.match(pill().textContent ?? "", /…$/u, "the pill says its change is out"),
+  );
   assert.equal(pill().getAttribute("aria-label"), `Pull request ${pill().textContent}`);
 
   answer.resolve();
-  await settle();
+  await vi.waitFor(() => assert.doesNotMatch(pill().textContent ?? "", /…$/u));
   assert.equal(pill().getAttribute("aria-label"), `Pull request ${pill().textContent}`);
 });
 
@@ -4520,6 +4539,10 @@ test("Files changed draws each review thread under its line, its comments throug
   );
   assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
   await minimize();
+  // Note that the setting's write lands a moment after the press, and the chip with it.
+  await vi.waitFor(() =>
+    assert.equal(note.querySelector(".diff-thread-chip-row > summary") !== null, true),
+  );
   const chip =
     note.querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("a chip stands");
@@ -4622,7 +4645,9 @@ test("the pointer resting on a review thread in Files changed lights the lines i
       (each) => each.getAttribute("aria-label") === "Minimize inline comments",
     ) ?? assert.fail("the diff settings offer Minimize inline comments");
   act(() => minimize.click());
-  await settle();
+  await vi.waitFor(() =>
+    assert.equal(note.querySelector(".diff-thread-chip-row > summary") !== null, true),
+  );
   const chip =
     note.querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
     assert.fail("the threads are minimized");

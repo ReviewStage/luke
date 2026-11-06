@@ -29,6 +29,7 @@ import { EXPERIMENT } from "@repo/settings";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import {
+  mutationOptions,
   type QueryClient,
   useIsMutating,
   useMutation,
@@ -37,7 +38,13 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
-import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
+import {
+  type ActedResult,
+  type AgentActAnswer,
+  askAct,
+  sendAct,
+  unreachedAs,
+} from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import {
   DRAFT_PLACE,
@@ -49,6 +56,7 @@ import {
 } from "../composer-drafts.js";
 import type { ShownFailure } from "../failure-report.js";
 import { modelsRetryMutation } from "../live-reads.js";
+import type { RenameShape } from "../rename-write.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -105,6 +113,27 @@ type StartFailure = Failure & { readonly cause?: unknown };
 
 /** An agent's act that never answered, settled as unanswered with the error beneath. */
 const agentUnreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
+
+/** An agent's rename as a mutation asks it: the agent, and the title already trimmed and changed. */
+interface AgentRenameAsk {
+  readonly agentId: string;
+  readonly title: string;
+}
+
+/** An agent's rename as each surface renaming one holds it, a mutation of its own sent through `send`; the service's refusal is its answer's failure. */
+export function agentRenameMutation(send: (asked: AgentRenameAsk) => Promise<AgentActAnswer>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.AGENTS_RENAME], mutationFn: send });
+}
+
+/** An agent's rename as a surface holds it. */
+type AgentRenameMutation = ReturnType<typeof agentRenameMutation>;
+
+/** How an agent's rename is asked and read back, its refusal its answer's failure. */
+export const AGENT_RENAME_SHAPE = {
+  ask: (agentId: string, title: string): AgentRenameAsk => ({ agentId, title }),
+  asked: ({ agentId, title }: AgentRenameAsk) => ({ subjectId: agentId, name: title }),
+  refused: (answer: AgentActAnswer) => "failure" in answer,
+} satisfies RenameShape<AgentActAnswer, AgentRenameAsk>;
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -388,8 +417,8 @@ export interface AgentsControl {
   onOpenApiKeys: (provider: ModelProvider | undefined) => void;
   /** Whether an archive asked here is still out, the agent it took coming back should the service refuse it. */
   archiving: boolean;
-  /** Renames one agent, drawn at once by the host; answers whether the rename took. */
-  onRename: (agentId: string, title: string) => Promise<boolean>;
+  /** The rename a surface renaming an agent holds its own mutation over, drawn at once by the host, with how its refusal is asked, read back, and said. */
+  rename: RenameShape<AgentActAnswer, AgentRenameAsk> & { readonly options: AgentRenameMutation };
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
    * back, drawn at once by the host, and offering Undo in a toast, which ⌘Z
@@ -686,7 +715,6 @@ export interface ModelsRead {
 }
 
 export function useAgents(input: {
-  acts: Pick<ActHandle, "act">;
   /** The open task, or none. */
   taskId: string | undefined;
   /**
@@ -734,7 +762,6 @@ export function useAgents(input: {
 }): AgentsControl {
   const { taskId, agentId, repository } = input;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
-  const { act } = input.acts;
   const queryClient = useQueryClient();
   const { mutateAsync: sendStart, isPending: starting } = useMutation(
     actMutation(ACT_KIND.AGENTS_START),
@@ -747,7 +774,6 @@ export function useAgents(input: {
   const { mutateAsync: sendAddRepository } = useMutation(
     actMutation(ACT_KIND.AGENTS_ADD_REPOSITORY),
   );
-  const { mutateAsync: sendRename } = useMutation(actMutation(ACT_KIND.AGENTS_RENAME));
   const { mutateAsync: sendArchive } = useMutation(actMutation(ROW_WRITE.AGENT_ARCHIVE.kind));
   const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.AGENTS_DELETE));
   const { mutateAsync: sendChapters } = useMutation(actMutation(ACT_KIND.CHAPTERS_GENERATE));
@@ -1381,24 +1407,20 @@ export function useAgents(input: {
 
   // A rename's field closes as the edit ends, and the host draws the new name at once, so a second
   // rename may be out before the first answers; only the newest one's refusal is said, in a toast,
-  // as the name it replaced comes back.
-  const renames = useRef(new Map<string, number>());
-  const onRename = async (agentId: string, title: string): Promise<boolean> => {
-    const rename = (renames.current.get(agentId) ?? 0) + 1;
-    renames.current.set(agentId, rename);
-    const answer: AgentActAnswer = await sendRename({
-      agentId,
-      title,
-    }).catch(agentUnreached);
-    if (!("failure" in answer)) return true;
-    if (renames.current.get(agentId) === rename) {
+  // as the name it replaced comes back, which the call's own `onSettled` keeps to.
+  const rename = {
+    ...AGENT_RENAME_SHAPE,
+    options: agentRenameMutation((asked) => sendAct(ACT_KIND.AGENTS_RENAME, asked)),
+    onRefused: (
+      answer: AgentActAnswer | undefined,
+      error: Error | null,
+      { subjectId }: { readonly subjectId: string },
+    ) =>
       failed(RENAME_FAILED, {
         surface: FAILURE_SURFACE.AGENT_RENAME,
-        cause: answer,
-        about: { agentId },
-      });
-    }
-    return false;
+        cause: answer ?? error,
+        about: { agentId: subjectId },
+      }),
   };
 
   // The agents the list draws as they stand at each call, and the archive's
@@ -1545,8 +1567,8 @@ export function useAgents(input: {
   const steadyContinueAgent = useSteadyDoor(continueAgent);
 
   const readInboxImage = useCallback<InboxImageReader>(
-    (params) => act(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
-    [act],
+    (params) => askAct(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
+    [],
   );
 
   // Handed back steady, so a part drawn from the agents holds while they do (`memo`).
@@ -1598,7 +1620,7 @@ export function useAgents(input: {
     me: input.me,
     onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
     archiving,
-    onRename,
+    rename,
     onArchive,
     onDelete,
     readAgent,

@@ -21,7 +21,7 @@ import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { ACT_KIND } from "@repo/host/acts";
 import { Effect, Schema } from "effect";
 import { act } from "react";
-import { beforeAll, test } from "vitest";
+import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { sideBundles } from "../bundle-loader.js";
 import { planEditor } from "../plan-editor/index.js";
@@ -592,6 +592,12 @@ test("Enter anywhere in a form of several fields, in its number field or its tex
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
   assert.equal(footWords(pane), "", "a field filled lets the line go");
+  // Note that the repository's paths land through a query, so Enter is pressed once the @ list holds them.
+  const listed = () =>
+    [...pane.querySelectorAll(".mention-menu .ui-combobox-option-label")].map(
+      (name) => name.textContent,
+    );
+  await vi.waitFor(() => assert.deepEqual(listed(), ["rollout-store.ts"]));
   pressInComposer(field("Reason"), "Enter");
   await settle();
   assert.deepEqual(sent, [], "the first Enter picks the mention");

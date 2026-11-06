@@ -28,7 +28,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ActHandle } from "../act.js";
 import { type FakeActPort, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handHostReads, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -89,6 +88,7 @@ const SENT_ON_MUTATIONS: readonly AnyKind[] = [
   ACT_KIND.AGENTS_PAGE,
   ACT_KIND.AGENTS_MESSAGES,
   ACT_KIND.AGENTS_CHANGES,
+  ACT_KIND.AGENTS_INBOX_ATTACHMENT,
 ];
 
 const roots: Root[] = [];
@@ -144,11 +144,6 @@ function mount(
     const [held, setHeld] = useState(initial);
     restand = setHeld;
     control = useAgents({
-      acts: {
-        // SAFETY: the test scripts each kind's answer in that kind's own shape, whichever side carries it.
-        act: ((kind: AnyKind, ...[payload]: WireBoundaryInput[]): Promise<WireBoundaryInput> =>
-          scripted(kind, payload)) as ActHandle["act"],
-      },
       taskId: held.taskId,
       agentId: held.agentId,
       repository: held.repository,

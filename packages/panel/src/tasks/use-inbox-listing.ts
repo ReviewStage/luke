@@ -4,7 +4,6 @@ import type { AppInboxTaskHolding } from "@repo/host/app-state";
 import { useMinute } from "@repo/ui";
 import { searchTokens } from "@repo/ui/search-tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useAct } from "../act.js";
 import { afterPaint } from "../after-paint.js";
 import { useInboxViewChoices } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
@@ -165,7 +164,6 @@ function useChoiceFirst(
  */
 export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
   const view = tasks.inboxView;
-  const { act } = useAct();
   const choices = useInboxViewChoices();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
@@ -217,7 +215,6 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
     [chosenAgentId, liveAgents],
   );
   const agents = useAgents({
-    acts: { act },
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenTask?.repository ?? null,
@@ -406,7 +403,6 @@ export function useInboxListing(tasks: TasksControl, narrowedTask?: string) {
   };
   return {
     view,
-    act,
     choices,
     openAutomation,
     read,

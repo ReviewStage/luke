@@ -453,10 +453,12 @@ test("the screen left is taken as a still of the work area for its card, drawn a
   tab();
   tab();
   assert.equal(cards()[0]?.querySelector("img"), null, "no still yet, so the glyph stands");
-  await act(async () => {
-    answer(STILL);
-    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
-  });
+  // Note that the mutation sends the capture a moment after the cards show, so the test answers it once it is sent.
+  await vi.waitFor(() => assert.equal(taken.length, 1));
+  act(() => answer(STILL));
+  await vi.waitFor(() =>
+    assert.equal(cards()[0]?.querySelector("img")?.getAttribute("src") === STILL, true),
+  );
 
   assert.deepEqual(taken, [{ x: 240, y: 0, width: 1040, height: 800 }]);
   const preview = cards()[0]?.querySelector(".ui-tab-card-preview");

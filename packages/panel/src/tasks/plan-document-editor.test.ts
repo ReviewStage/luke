@@ -34,7 +34,7 @@ import {
 } from "../plan-editor/contract.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -43,7 +43,8 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { PlanBody } from "./plan-body.js";
-import { usePlanEditDoor, usePlanWordsUnsaved } from "./use-plan-editing.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
+import { usePlanWordsUnsaved } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -151,7 +152,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   // Note that the saves a plan left as it went answer before its atoms go.
-  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  await settledWrites();
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   mounted.length = 0;
@@ -264,7 +265,7 @@ function mount(
       ),
     );
   const render = (task: Task, door: typeof onEdit = onEdit) =>
-    draw(createElement(PlanBody, { task, onEdit: door, onRename }));
+    draw(createElement(PlanBody, { task, edit: planEditMutation(task.id, door), onRename }));
   /** The plan as a task's page draws it, saving through `edit` by the task's id. */
   const renderPage = (task: Task, edit: TaskEdit) =>
     draw(createElement(TaskPage, { task, edit, onRename }));
@@ -289,8 +290,11 @@ function TaskPage({
   edit: TaskEdit;
   onRename: (name: string) => Promise<boolean>;
 }): ReactElement {
-  const onEdit = usePlanEditDoor(task.id, edit);
-  return createElement(PlanBody, { task, onEdit, onRename });
+  return createElement(PlanBody, {
+    task,
+    edit: planEditMutation(task.id, (request) => edit(task.id, request)),
+    onRename,
+  });
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {
@@ -957,7 +961,7 @@ test("words a plan was left with stay unsaved work while their save is out, and 
   assert.equal(unsavedWords(container), false);
 });
 
-test("a plan left twice while its first save is out stays unsaved work until both saves answer", async () => {
+test("a plan left twice while its first save is out stays unsaved work until both saves answer, the second sent once the first answers", async () => {
   const answers: ((saved: TasksEditAnswer) => void)[] = [];
   const { container, render } = mount();
   const other = { ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
@@ -975,15 +979,18 @@ test("a plan left twice while its first save is out stays unsaved work until bot
   };
   await editAndLeave(`${BODY}Mine.\n`);
   await editAndLeave(`${BODY}Mine again.\n`);
-  assert.equal(answers.length, 2, "both saves are out");
+  // Note that a plan's writes run one at a time, in order, so the newer waits its turn behind the first.
+  await vi.waitFor(() => assert.equal(answers.length, 1, "the first save is out"));
+  assert.equal(unsavedWords(container), true);
 
   answers[0]?.({ saved: true });
-  await settle();
+  await vi.waitFor(() =>
+    assert.equal(answers.length, 2, "the newer save goes once the first answers"),
+  );
   assert.equal(unsavedWords(container), true, "the newer save is still out");
 
   answers[1]?.({ saved: true });
-  await settle();
-  assert.equal(unsavedWords(container), false);
+  await vi.waitFor(() => assert.equal(unsavedWords(container), false));
 });
 
 test("a title typed in is unsaved work until its rename answers", async () => {
