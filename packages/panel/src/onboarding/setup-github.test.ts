@@ -21,8 +21,8 @@ import { GitHubSetup } from "./setup-github.js";
 /**
  * Setup's GitHub step drawn again, as Back draws it, over a workspace that
  * reaches its repositories through a route: that route's card stands
- * checked, the App's naming the owners reached. And the token's picker, which adds several repositories in one
- * open menu. Synthetic throughout.
+ * checked, the App's naming the owners reached. And the token's picker,
+ * which adds several repositories in one open menu. Synthetic throughout.
  */
 
 const WORKSPACE = "workspace-acme";
@@ -176,6 +176,7 @@ test("the token's picker adds several repositories in one open menu, checking ea
   // The host hands a window opened again the token repositories as they stand now.
   act(() => reads.deliverTokenRepositories({ [WORKSPACE]: { rows: added } }));
   await settle();
+  const namedAfterBack = chip().textContent;
   act(() => chip().click());
   await settle();
   act(() => option("tools").click());
@@ -186,6 +187,7 @@ test("the token's picker adds several repositories in one open menu, checking ea
   await settle();
 
   assert.equal(named, "tools, notes");
+  assert.equal(namedAfterBack, "tools, notes");
   assert.equal(radio("Personal access token").getAttribute("aria-checked"), "true");
   assert.equal(chip().textContent, "Add repositories");
 });
