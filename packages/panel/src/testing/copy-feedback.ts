@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createContext, createElement, type ReactElement, type ReactNode, useContext } from "react";
 import { afterEach, beforeEach } from "vitest";
+import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
 /**
@@ -66,7 +67,8 @@ function TestAppStateSubscription(): ReactElement {
 /**
  * `element` on the test's Query client, with the document's one subscription
  * (`AppStateSubscription`) writing each reading of the registry it stands
- * under into that client, as the window's root does: for a test drawing
+ * under into that client, and the live reads' (`LiveReadSubscription`)
+ * keeping them current and followed, as the window's root does: for a test drawing
  * under the registry React provides when none is given.
  */
 export function withQueryClient(element: ReactNode): ReactElement {
@@ -74,6 +76,7 @@ export function withQueryClient(element: ReactNode): ReactElement {
     QueryClientProvider,
     { client: testQueryClient },
     createElement(TestAppStateSubscription),
+    createElement(LiveReadSubscription),
     createElement(OnTestClient.Provider, { value: true }, element),
   );
 }

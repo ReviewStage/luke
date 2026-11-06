@@ -37,6 +37,7 @@ import { useAgentDefault, useOfferedModels } from "../account-choices.js";
 import { actMutation } from "../act-mutations.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
+import { modelsRetryMutation } from "../live-reads.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
   choiceModelId,
@@ -65,7 +66,6 @@ import {
 } from "../tasks/agent-model.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
 import { SettingMarks } from "./marks.js";
 import { PickerRow } from "./picker-row.js";
@@ -397,15 +397,11 @@ function AgentsSection({
   );
   const drawn = useAgentDefault();
   const offered = useOfferedModels(signedIn);
-  const models = offered.rows?.models;
-  const modelsFailed = offered.status === HOST_READ_STATUS.FAILED;
-  // Whether the catalog's Retry is out, which the menu says while it is.
-  const [modelsRetrying, setModelsRetrying] = useState(false);
-  const retryModels = offered.retry;
-  const onRetryModels = useCallback(() => {
-    setModelsRetrying(true);
-    retryModels().then(() => setModelsRetrying(false));
-  }, [retryModels]);
+  const models = offered.data?.models;
+  const modelsFailed = offered.isError;
+  // Note that the catalog's Retry is out while its mutation is pending, which the menu says while it is.
+  const { mutate: retryModels, isPending: modelsRetrying } = useMutation(modelsRetryMutation());
+  const onRetryModels = useCallback(() => retryModels(), [retryModels]);
 
   const write = useCallback(
     (next: ModelChoice): Promise<ActionResult> =>
@@ -430,7 +426,7 @@ function AgentsSection({
           onRetryModels={onRetryModels}
           onChange={write}
         />
-      ) : drawn.status === HOST_READ_STATUS.FAILED ? (
+      ) : drawn.failed ? (
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.AGENT_DEFAULTS_READ)}

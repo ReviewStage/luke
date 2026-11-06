@@ -52,9 +52,10 @@ async function draw(ids: readonly string[]): Promise<HTMLElement> {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(registry, createElement(Standings, { ids }))));
-  await act(async () => {
-    for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
-  });
+  // Note that the read lands once it reaches the beats' query, until when every device reads checking.
+  await vi.waitFor(() =>
+    assert.equal(container.textContent?.includes(DEVICE_STANDING.CHECKING), false),
+  );
   return container;
 }
 

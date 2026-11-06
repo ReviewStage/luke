@@ -1512,7 +1512,7 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
   const { mutateAsync: sendWorkspaceSlackBotNotifications } = useMutation(
     actMutation(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS),
   );
-  const on = useAccountPreferences().rows?.slackNotifications;
+  const on = useAccountPreferences().data?.slackNotifications;
   if (on === undefined) return null;
   return (
     <SwitchRow

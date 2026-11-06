@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { rendererRegistry } from "../renderer-runtime.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { AccountSection } from "./account-section.js";
 
@@ -41,11 +41,13 @@ function drawn(element: React.ReactElement): HTMLElement {
 /** The face leading Profile's account row for `account`. */
 function profileFace(account: SignedIn): Element | null {
   return drawn(
-    createElement(AccountSection, {
-      account,
-      onSignOut: () => Promise.resolve(),
-      onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-    }),
+    withQueryClient(
+      createElement(AccountSection, {
+        account,
+        onSignOut: () => Promise.resolve(),
+        onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      }),
+    ),
   ).querySelector(".actor-mark");
 }
 
