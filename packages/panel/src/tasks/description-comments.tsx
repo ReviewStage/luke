@@ -64,8 +64,6 @@ import {
   LineButton,
   MENU_SURFACE_FLOW,
   MenuSurface,
-  MoreButton,
-  moreLabel,
   PaneBar,
   POPOVER_SIDE,
   RectFloat,
@@ -88,7 +86,6 @@ import {
   Tooltip,
   TrashIcon,
   useConfirmDialog,
-  useMenu,
   useMinute,
   usePressAway,
   VisuallyHidden,
@@ -155,7 +152,7 @@ import {
   type DescriptionEditorModule,
   type EditorSpan,
 } from "../description-editor/contract.js";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import type { MenuAction } from "../desktop/action-menu.js";
 import { enterSubmitKey } from "../enter-sends.js";
 import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
@@ -167,6 +164,7 @@ import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
+import { CommentMenu } from "./comment-menu.js";
 import { ComposerField } from "./composer-field.js";
 import { CommentFiles } from "./description-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./description-document-editor.js";
@@ -845,27 +843,6 @@ function CommentEntry({
         )}
       </WrittenComment>
     </div>
-  );
-}
-
-/** A comment's ⋯ and the menu it drops, its writer's acts on it; nothing where it offers none, rather than a ⋯ opening an empty menu. */
-function CommentMenu({ groups }: { groups: readonly MenuAction[][] }): React.JSX.Element | null {
-  const menu = useMenu(true);
-  const trigger = menu.trigger();
-  if (groups.length === 0) return null;
-  return (
-    <>
-      <MoreButton thing={COMMENT_WORDS.THING} size={BUTTON_SIZE.COMPACT} {...trigger} />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          replayUnmasked
-          label={moreLabel(COMMENT_WORDS.THING)}
-          menu={menu.drawn}
-          groups={groups}
-          onClose={menu.close}
-        />
-      )}
-    </>
   );
 }
 
@@ -3712,6 +3689,8 @@ export function PageCommentLayer({
                 open={heldOpen === path}
                 stands={pinStands(box)}
                 onOpen={() => {
+                  // Note that an edit standing open holds its card, so no pin takes its place until it is saved or canceled.
+                  if (review.editing) return;
                   onOpen(undefined);
                   setHeldOpen(heldOpen === path ? undefined : path);
                 }}
@@ -3732,6 +3711,7 @@ export function PageCommentLayer({
             doors={doors}
             open={threads.some((thread) => open?.includes(thread.id) === true)}
             onOpen={() => {
+              if (review?.editing === true) return;
               setHeldOpen(undefined);
               onOpen(
                 threads.some((thread) => open?.includes(thread.id) === true)
@@ -3779,7 +3759,10 @@ export function PageCommentLayer({
           )
         }
         side={POPOVER_SIDE.BELOW}
-        onPressAway={() => setHeldOpen(undefined)}
+        // Note that an edit standing open in the card holds it, so its words are never lost to a stray press.
+        onPressAway={() => {
+          if (review?.editing !== true) setHeldOpen(undefined);
+        }}
         holds={keepsPageCardOpen}
       >
         {review === undefined ? null : (

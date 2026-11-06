@@ -6,12 +6,15 @@
  * query, as text (`macCommandKindsQuery`); an older Mac's read names none,
  * which is `shell` alone. A Mac that follows its commands live
  * (`contract/live.ts`) claims each it hears of by its id, and says it
- * listens, naming its kinds as the held read does. The outputs are the wire schemas flipped, so oRPC's output check encodes the
+ * listens, naming its kinds as the held read does. A result or a claim
+ * for a command the account does not hold, claimed or waiting, is refused
+ * as not found; the read and the presence refuse only as any procedure
+ * may. The outputs are the wire schemas flipped, so oRPC's output check encodes the
  * handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   macCommandClaimAnswerSchema,
@@ -22,7 +25,8 @@ import {
   macCommandsAnswerSchema,
 } from "../mac-command-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 
 /** The held read's input: the kinds its Mac runs, where it names any, as the query spells them. */
 const waitingInput = EffectSchema.Struct({ kinds: EffectSchema.optionalKey(EffectSchema.String) });
@@ -39,21 +43,23 @@ const CLAIM_BODY_BYTES = 1_024;
 const RESULT_BODY_BYTES = 256 * 1_024;
 
 export const macCommandsContract = {
-  waiting: hostedProcedure
+  waiting: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.MAC_COMMANDS }))
     .input(waitingInput)
     .output(EffectSchema.flip(macCommandsAnswerSchema)),
-  settle: hostedProcedure
+  settle: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(bodyCap(RESULT_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.MAC_COMMANDS }))
     .input(exactInput(macCommandSettleRequestSchema))
     .output(EffectSchema.flip(macCommandSettledAnswerSchema)),
-  claim: hostedProcedure
+  claim: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(bodyCap(CLAIM_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.MAC_COMMAND_CLAIM }))
     .input(exactInput(macCommandClaimRequestSchema))
     .output(EffectSchema.flip(macCommandClaimAnswerSchema)),
-  listening: hostedProcedure
+  listening: declaredProcedure
     .meta(bodyCap(CLAIM_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.MAC_COMMANDS_LISTENING }))
     .input(exactInput(listeningInput))

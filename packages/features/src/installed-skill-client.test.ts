@@ -73,9 +73,9 @@ it.effect("each call goes to its own path under the account's bearer", () =>
     const removed = yield* Effect.provide(ask.remove(SKILL_ID), api.layer);
     const read = yield* Effect.provide(ask.read(SKILL_ID), api.layer);
 
-    assert.deepEqual(installed, { ok: true, answer: { skills: [SUMMARY] } });
-    assert.deepEqual(removed, { ok: true, answer: { id: SKILL_ID } });
-    assert.deepEqual(read, { ok: true, answer: CONTENT });
+    assert.deepEqual(installed, { skills: [SUMMARY] });
+    assert.deepEqual(removed, { id: SKILL_ID });
+    assert.deepEqual(read, CONTENT);
     assert.deepEqual(new Set(api.credentials()), new Set(["token-1"]));
   }),
 );
@@ -111,10 +111,10 @@ it.effect(
       const unnamed = yield* Effect.provide(ask.preview(WORKSPACE_ID, "anything"), api.layer);
 
       assert.deepEqual(refused, {
-        ok: false,
         failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
         skillName: "leaky",
       });
-      assert.deepEqual(unnamed, { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED });
+      assert.ok("failure" in unnamed);
+      assert.equal(unnamed.failure, INSTALLED_SKILL_CALL_FAILURE.UNANSWERED);
     }),
 );

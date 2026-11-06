@@ -17,6 +17,12 @@
  * status or a provider this build does not know hides none of the others,
  * so that read's schema is the lenient one below, and its client reads
  * each account and failure in turn.
+ *
+ * The reads of every provider and of GitHub refuse only as any procedure
+ * may, a connector this deployment lacks or Vercel Connect out of reach
+ * among it as unavailable (`packages/service/src/integrations/`); each call
+ * about one account also refuses a provider or account it does not know as
+ * not found.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -31,7 +37,8 @@ import {
   integrationToolsAnswerSchema,
 } from "../integration-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 
 /** The most a rename's body may carry, in bytes: one label, well past its own bound. */
 const RENAME_BODY_BYTES = 2_048;
@@ -102,21 +109,23 @@ const renameInput = EffectSchema.Struct({
 
 /** A provider's POST, its input read in parts: the path's provider, the query, and a body where it takes one. */
 function providerPost(action: string) {
-  return hostedProcedure.meta(
-    openapi({ method: HTTP_METHOD.POST, path: providerPath(action), inputStructure: "detailed" }),
-  );
+  return declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
+    .meta(
+      openapi({ method: HTTP_METHOD.POST, path: providerPath(action), inputStructure: "detailed" }),
+    );
 }
 
 export const integrationsContract = {
-  statuses: hostedProcedure
+  statuses: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS }))
     .output(EffectSchema.flip(integrationStatusesReadSchema)),
-  settle: hostedProcedure
+  settle: declaredProcedure
     .meta(
       openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE }),
     )
     .output(EffectSchema.flip(integrationStatusesReadSchema)),
-  github: hostedProcedure
+  github: declaredProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_GITHUB }),
     )
@@ -124,7 +133,8 @@ export const integrationsContract = {
   connect: providerPost("connect")
     .input(accountInput)
     .output(EffectSchema.flip(integrationConnectAnswerSchema)),
-  tools: hostedProcedure
+  tools: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: providerPath("tools") }))
     .input(toolsInput)
     .output(EffectSchema.flip(integrationToolsAnswerSchema)),

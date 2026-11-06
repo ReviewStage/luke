@@ -3,9 +3,6 @@ import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
   CONFIRM_LOSS,
   Comment,
   ConfirmDialog,
@@ -18,15 +15,16 @@ import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
+import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
-import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
+import { CommentMenu } from "./comment-menu.js";
 import { useNamer } from "./pull-request-people.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
 
 /**
- * pending-comments.tsx -- the member's own pending review comments, which nobody else sees until they submit the review, drawn as GitHub draws them: on their lines in Files changed, each marked Pending, with Edit and Delete.
+ * pending-comments.tsx -- the member's own pending review comments, which nobody else sees until they submit the review, drawn as GitHub draws them: on their lines in Files changed, each marked Pending, with Edit and Delete in its ⋯.
  *
  * The conversation's read carries them beside the review they hold
  * pending, read on their own token (`pendingReview.drafts`). Each is drawn
@@ -36,9 +34,10 @@ import { ReplyForm, type ReplyFormWords } from "./reply-form.js";
  * as that thread's last comment, and one that starts a thread as a thread
  * of its own, keyed by the comment's own id, which no thread's page is. A
  * comment drawn so is told apart by that key (`PendingCommentsProvider`),
- * and draws itself Pending, in the member's own name, with Edit, which
- * opens its words in place, and Delete, which asks first, since it cannot
- * be undone. Each is one change on GitHub as the member
+ * and draws itself Pending, in the member's own name, with a ⋯ where every
+ * comment wears one (`CommentMenu`): beside a reply's name, and at the head
+ * of the card a thread it starts stands in. Its Edit opens its words in
+ * place, and its Delete asks first, since it cannot be undone. Each is one change on GitHub as the member
  * (`PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT`, `DELETE_REVIEW_COMMENT`),
  * which the service holds to their own pending review on this pull
  * request; GitHub's refusal stands under the comment in its words, and the
@@ -159,102 +158,140 @@ export function PendingWords(): React.JSX.Element {
   );
 }
 
+/** A pending comment's acts, as whatever draws it places them: its ⋯, at the end of the head that names it, and its body, its words or the field editing them. */
+export interface PendingActs {
+  /** Its ⋯ with Edit and Delete; nothing outside a tab that writes, or while its words are edited. */
+  readonly menu: ReactNode;
+  /** Its words, or the field over them while Edit is open; GitHub's refusal under them; and Delete's question. */
+  readonly body: (words: ReactNode) => ReactNode;
+}
+
 /**
- * One of the member's pending comments: its head, marked Pending, then its
- * words, or the field over them while Edit is open, Esc keeping what
- * was written for the next Edit and Cancel keeping nothing; then Edit and Delete, Delete asking first; GitHub's refusal of
- * either under them. Outside a tab that writes, it is drawn without them.
+ * The acts on one of the member's pending comments, none where `draft` is
+ * none: a ⋯, as every comment's (`CommentMenu`), with Edit, which opens its
+ * words in place, Esc keeping what was written for the next Edit and Cancel
+ * keeping nothing, and Delete, which asks first, since GitHub keeps no
+ * pending comment it deletes. Outside a tab that writes, it offers neither.
  */
-export function PendingComment({
-  draft,
-  head,
-  words,
-  marked = true,
-}: {
-  draft: PendingReviewComment;
-  /** Whether it wears its own Pending mark; not where the card it starts already wears one in its head. */
-  marked?: boolean;
-  /** Who wrote it and when, as every comment's head names them (`Comment`); none where the card it stands in names them beside it. */
-  head?: { readonly person: GitHubPerson; readonly at: number; readonly now: number } | undefined;
-  /** Its words as every comment's are drawn. */
-  words: ReactNode;
-}): React.JSX.Element {
+export function usePendingActs(
+  draft: PendingReviewComment | undefined,
+  /** Opens the card the comment stands in, folded or not, so what Edit or Delete opens is in view. */
+  onAct?: (() => void) | undefined,
+): PendingActs {
   const writing = useThreadWriting();
   const writes = usePullRequestWrites(writing?.agentId ?? "", writing?.onWritten ?? noop);
   const [editing, setEditing] = useState(false);
   const surfaceOpen = useContext(PendingSurfaceContext);
   const deleting = useConfirmDialog(
-    { subject: true, surfaceOpen },
-    writes.confirmAct({ action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: draft.id }),
+    { subject: draft !== undefined, surfaceOpen },
+    writes.confirmAct({
+      action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT,
+      commentId: draft?.id ?? "",
+    }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_COMMENT_DELETE),
   );
   const out = writes.pending;
-  const name = useNamer();
-  const body = (
-    <div className="flex min-w-0 flex-col gap-item-gap">
-      {editing && writing !== undefined ? (
-        <ReplyForm
-          words={EDIT_WORDS}
-          start={writing.edits.of(draft.id) ?? draft.body}
-          busy={out !== undefined}
-          sending={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
-          // Note that words written back to the comment's own are no edit, so none are held.
-          onWrite={(next) => writing.edits.keep(draft.id, next === draft.body ? undefined : next)}
-          onSend={(body) =>
-            writes.write(
-              { action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT, commentId: draft.id, body },
-              () => {
-                writing.edits.keep(draft.id, undefined);
-                setEditing(false);
+  const groups: MenuAction[][] =
+    draft === undefined || writing === undefined || editing || out !== undefined
+      ? []
+      : [
+          [
+            {
+              label: PENDING_WORDS.EDIT,
+              icon: <GLYPH.RENAME />,
+              onSelect: () => {
+                onAct?.();
+                setEditing(true);
               },
-            )
-          }
-          onLeave={() => setEditing(false)}
-          onDiscard={() => {
-            writing.edits.keep(draft.id, undefined);
-            setEditing(false);
-          }}
+            },
+          ],
+          [
+            {
+              label: PENDING_WORDS.DELETE,
+              icon: <GLYPH.DELETE />,
+              danger: true,
+              onSelect: () => {
+                onAct?.();
+                deleting.ask();
+              },
+            },
+          ],
+        ];
+  const body = (words: ReactNode): ReactNode =>
+    draft === undefined ? (
+      words
+    ) : (
+      <div className="flex min-w-0 flex-col gap-item-gap">
+        {editing && writing !== undefined ? (
+          <ReplyForm
+            words={EDIT_WORDS}
+            start={writing.edits.of(draft.id) ?? draft.body}
+            busy={out !== undefined}
+            sending={out === PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT}
+            // Note that words written back to the comment's own are no edit, so none are held.
+            onWrite={(next) => writing.edits.keep(draft.id, next === draft.body ? undefined : next)}
+            onSend={(next) =>
+              writes.write(
+                {
+                  action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT,
+                  commentId: draft.id,
+                  body: next,
+                },
+                () => {
+                  writing.edits.keep(draft.id, undefined);
+                  setEditing(false);
+                },
+              )
+            }
+            onLeave={() => setEditing(false)}
+            onDiscard={() => {
+              writing.edits.keep(draft.id, undefined);
+              setEditing(false);
+            }}
+          />
+        ) : (
+          words
+        )}
+        <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
+        <ConfirmDialog
+          open
+          confirm={deleting}
+          question={DELETE_QUESTION}
+          restoreTo={nextRowOrHead}
         />
-      ) : (
-        words
-      )}
-      {writing === undefined || editing ? null : (
-        <div className={`pull-request-thread-actions-row items-center ${ACTS_AT_END_CLASS}`}>
-          <Button
-            size={BUTTON_SIZE.COMPACT}
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<GLYPH.RENAME />}
-            disabled={out !== undefined}
-            onClick={() => setEditing(true)}
-          >
-            {PENDING_WORDS.EDIT}
-          </Button>
-          <Button
-            size={BUTTON_SIZE.COMPACT}
-            variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<GLYPH.DELETE />}
-            disabled={out !== undefined}
-            onClick={deleting.ask}
-          >
-            {PENDING_WORDS.DELETE}
-          </Button>
-        </div>
-      )}
-      <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
-      <ConfirmDialog open confirm={deleting} question={DELETE_QUESTION} restoreTo={nextRowOrHead} />
-    </div>
-  );
-  if (head === undefined) return body;
-  const writer = name(head.person);
+      </div>
+    );
+  return { menu: <CommentMenu groups={groups} />, body };
+}
+
+/** One of the member's pending comments as the Review panel lists it, a comment of its own: its head, marked Pending, with its ⋯, then its body (`usePendingActs`). */
+export function PendingComment({
+  draft,
+  head,
+  words,
+}: {
+  draft: PendingReviewComment;
+  /** Who wrote it and when, as every comment's head names them (`Comment`). */
+  head: { readonly person: GitHubPerson; readonly at: number; readonly now: number };
+  /** Its words as every comment's are drawn. */
+  words: ReactNode;
+}): React.JSX.Element {
+  const acts = usePendingActs(draft);
+  const writer = useNamer()(head.person);
   return (
     <Comment
       author={commentAuthor(writer)}
       nameRef={<ActorRef actor={writer} nameOnly />}
       at={head.at}
       now={head.now}
-      trailing={marked ? <PendingWords /> : undefined}
+      trailing={
+        <>
+          <PendingWords />
+          {acts.menu}
+        </>
+      }
     >
-      {body}
+      {acts.body(words)}
     </Comment>
   );
 }

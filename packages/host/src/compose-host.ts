@@ -579,11 +579,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       gateway: service.gateway,
       // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
       acts: {
+        ...account.acts,
         ...agents.acts,
+        ...settings.acts,
         ...thisMacHost.acts,
         ...automations.acts,
         ...installedSkills.acts,
         ...integrations.acts,
+        ...tasks.acts,
       },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),

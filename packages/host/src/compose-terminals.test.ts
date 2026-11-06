@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { accountBearer, type CallCredential, TERMINAL_UNANSWERED } from "@repo/features";
+import { accountBearer, type CallCredential } from "@repo/features";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_REFUSAL,
@@ -75,14 +75,14 @@ function scriptedService() {
     create: (agentId, title) =>
       Effect.sync(() => {
         asked.push(`create:${agentId}:${title ?? ""}`);
-        return { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED };
+        return { failure: TERMINAL_REFUSAL.SANDBOX_STOPPED };
       }),
     rename: (agentId, terminalId, title) =>
       Effect.sync(() => {
         asked.push(`rename:${agentId}:${terminalId}:${title}`);
         return { sandbox: SANDBOX_STATE.RUNNING, terminals: [{ ...SHELL, title }] };
       }),
-    kill: () => Effect.succeed(TERMINAL_UNANSWERED),
+    kill: () => Effect.succeed({ failure: TERMINAL_REFUSAL.UNANSWERED }),
     resume: () => Effect.succeed({ sandbox: SANDBOX_STATE.RUNNING }),
   };
   return { client, asked };
@@ -213,7 +213,7 @@ it.effect(
       const resumed = yield* call(GATEWAY_METHOD.TERMINALS_RESUME, { agentId: AGENT_ID });
 
       assert.deepEqual(listed, { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] });
-      assert.deepEqual(created, { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED });
+      assert.deepEqual(created, { failure: TERMINAL_REFUSAL.SANDBOX_STOPPED });
       assert.deepEqual(renamed, {
         sandbox: SANDBOX_STATE.RUNNING,
         terminals: [{ ...SHELL, title: "tests" }],

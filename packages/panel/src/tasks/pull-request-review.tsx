@@ -15,12 +15,17 @@ import {
 } from "@repo/ui";
 import { CONFIRM_STAGE } from "@repo/ui/confirm-state";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import { overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
-import { REVIEW_PANEL_WORDS, ReviewPress, type ReviewWords } from "./review-panel.js";
+import {
+  type PendingItem,
+  REVIEW_PANEL_WORDS,
+  ReviewPress,
+  type ReviewWords,
+} from "./review-panel.js";
 
 /**
  * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the Review press at the end of its tabs' row and the panel it opens (`review-panel.tsx`), as stage-cli's review panel.
@@ -93,13 +98,13 @@ function placeholderOf(event: ReviewEvent): string {
 export function PullRequestReview({
   writes,
   pending,
-  pendingList,
+  pendingItems,
 }: {
   writes: PullRequestWrites;
   /** The member's own pending review, which the panel publishes or discards. */
   pending: PendingReview;
   /** Its comments as the panel lists them, under the line counting them; none lists none. */
-  pendingList?: ReactNode;
+  pendingItems?: readonly PendingItem[] | undefined;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>(REVIEW_EVENT.COMMENT);
@@ -121,7 +126,7 @@ export function PullRequestReview({
         onOpen={setOpen}
         draft={{ body, setBody, over: overCommentBound(body) }}
         sending={sending}
-        pendingList={pendingList}
+        pending={pendingItems}
         choices={
           <ReplayUnmask>
             <ChoiceList<ReviewEvent>

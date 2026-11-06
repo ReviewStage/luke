@@ -1,6 +1,11 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
-import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
+import type {
+  AgentAttachment,
+  AgentSummary,
+  ListedAgent,
+  TasklessAgent,
+} from "@repo/features/agent-wire";
 import { descriptionMarkdown } from "@repo/features/description-markdown";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
@@ -233,6 +238,7 @@ import {
   useSidePanel,
 } from "./use-side-panel.js";
 import { useEndTerminalTab } from "./use-terminal-session.js";
+import { listedAgentIn } from "./use-workspace-agents.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -3564,29 +3570,36 @@ export function useTasksTab(input: {
     );
   };
 
+  // An agent's place opened by the agent as the list or the service has it: on its page where it is on no task, else on its task, or its page where it is archived there.
+  const openFoundAgent = (agent: AgentSummary, place: AgentPlace) => {
+    if (agent.planId === null) openOnAgentPage(place);
+    else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
+      openArchived(place);
+    else showOnTask(agent.planId, place);
+  };
+
   /**
    * An agent's place opened on its task where it has one, else on its page.
    * Note that a link names the task only where it was written under it, so
    * one naming none finds the task by the agent: at once where the agent is
-   * the open task's or one on no task the window lists, else by reading the
-   * agent, which opens nothing where the window moved on before it answered.
+   * the open task's or one the list followed live carries, else by reading
+   * the agent, which opens nothing where the window moved on before it
+   * answered.
    */
   const openAgentPlace = (place: AgentPlace) => {
     const open = tasks.activeTaskId;
+    const listed = listedAgentIn(tasks, place.agentId);
     if (place.planId !== undefined) openOnTask(place.planId, place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
       openOnTask(open, place);
-    else if (tasklessAgents?.some((agent) => agent.id === place.agentId)) openOnAgentPage(place);
+    else if (listed !== undefined) openFoundAgent(listed, place);
     else {
       const mine = navigations.current;
       readAgentById(queryClient, place.agentId).then((agent) => {
         if (navigations.current !== mine) return;
         // Note that an agent not read may yet be on a task, so its page stands alone, its own read saying whether it is there, and no tab of a panel it may not hold opens.
         if (agent === undefined) standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-        else if (agent.planId === null) openOnAgentPage(place);
-        else if (agent.archivedAt !== undefined && TRANSCRIPT_PLACES.has(place.kind))
-          openArchived(place);
-        else showOnTask(agent.planId, place);
+        else openFoundAgent(agent, place);
       });
     }
   };
@@ -3651,18 +3664,18 @@ export function useTasksTab(input: {
   /**
    * An Inbox item opened by its task, which a link under its agent leaves
    * the reader to find by the agent, as an agent's place is found
-   * (`openAgentPlace`): at once where the agent is the open task's or one on
-   * no task the window lists, else by reading the agent, which opens nothing
-   * where the window moved on before it answered.
+   * (`openAgentPlace`): at once where the agent is the open task's or one
+   * the list followed live carries, else by reading the agent, which opens
+   * nothing where the window moved on before it answered.
    */
   const openInboxItem = (workspace: string, place: InboxItemPlace) => {
     const open = tasks.activeTaskId;
+    const listed = "agentId" in place ? listedAgentIn(tasks, place.agentId) : undefined;
     if ("planId" in place) openInboxItemOn(workspace, place, place.planId);
     else if (!("agentId" in place)) openInboxItemById(place);
     else if (open !== undefined && agents.agentIds?.includes(place.agentId))
       openInboxItemOn(workspace, place, open);
-    else if (tasklessAgents?.some((agent) => agent.id === place.agentId))
-      openInboxItemOn(workspace, place, null);
+    else if (listed !== undefined) openInboxItemOn(workspace, place, listed.planId);
     else {
       const mine = navigations.current;
       readAgentById(queryClient, place.agentId).then((agent) => {

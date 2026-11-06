@@ -964,7 +964,7 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox wears the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
+test("on a phone the bar's Inbox and the task's sidebar row wear the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
   // Note that main lists the three questions it counts, as its read of the account does.
   const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
@@ -984,6 +984,19 @@ test("on a phone the bar's Inbox wears the count of what needs the reader, named
   const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
+  const taskRow = [...page.querySelectorAll<HTMLElement>("aside.desktop-sidebar li")].findLast(
+    (row) => row.textContent?.includes(DOCUMENT_NAME),
+  );
+  // Note that the row's end leaves its press's words while the row holds the keyboard, so the count is heard whether it stands or not.
+  const shown = taskRow ?? assert.fail("the task's sidebar row stands");
+  const keyed = shown.cloneNode(true);
+  assert.ok(keyed instanceof HTMLElement);
+  for (const end of keyed.querySelectorAll(".ui-list-row-meta")) end.remove();
+  assert.deepEqual(
+    [shown, keyed].map((row) => spokenName(row).match(/3 need you/gu)),
+    [["3 need you"], ["3 need you"]],
+    "the task's row is heard with its count once, its end shown or not",
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1145,6 +1158,8 @@ test("while the Automations pages are still loading their frame stands the list 
 test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands, and on a phone its list stands headed as it will be, by the way out and its title", async () => {
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
+  // The history's chunk is held on its way for the whole case, so its frame stands by construction rather than by timing.
+  routed().router.routesById["/version-history"].lazy(() => Promise.withResolvers<never>().promise);
   handState({});
   const page = mount(false, { history });
   // The router goes to the history, whose frame stands while its chunk is read.

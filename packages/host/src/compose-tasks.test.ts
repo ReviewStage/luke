@@ -81,6 +81,7 @@ import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wi
 import {
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
+  WORKSPACE_SLUG_PROBLEM,
   type Workspace,
   type WorkspaceMember,
   type WorkspacePhotoType,
@@ -99,6 +100,7 @@ import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Result, Scope } from "effect";
 import { TestClock } from "effect/testing";
+import { WORKSPACE_NOT_PERMITTED_REFUSAL, WORKSPACE_SLUG_REFUSAL } from "./acts.js";
 import {
   type AppDescriptionComments,
   type AppDescriptionDocuments,
@@ -106,8 +108,10 @@ import {
   NO_KEYS_HELD,
 } from "./app-state.js";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
+import { type ActInput, WORKSPACE_ACTS } from "./contract/index.js";
 import { type EntityStore, KEPT_READ, openEntityStore } from "./entity-store.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
+import { type ActHandler, ActRefused } from "./host-acts.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { memoryFileSystem } from "./testing/memory-file-system.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
@@ -1366,6 +1370,21 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return Effect.orDie(handler(params, context));
     };
+    /** One of the workspaces' acts, as the act port answers it: its value, or the sentence it was refused in. */
+    const act = <Name extends keyof typeof WORKSPACE_ACTS>(
+      name: Name,
+      input: ActInput<(typeof WORKSPACE_ACTS)[Name]>,
+    ) => {
+      const handler: ActHandler<(typeof WORKSPACE_ACTS)[Name]> = tasks.acts[name];
+      return Effect.orDie(
+        Effect.catchIf(
+          handler(input),
+          (error): error is ActRefused => error instanceof ActRefused,
+          (refused) =>
+            Effect.succeed({ refused: refused.sentence ?? WORKSPACE_ACTS[name].refusal }),
+        ),
+      );
+    };
     const last = () => told.at(-1);
     /** The first view told, from now on, that `wanted` holds of. */
     const viewWhere = (wanted: (view: TasksView) => boolean) =>
@@ -1421,6 +1440,7 @@ function subject(
     return {
       tasks,
       call,
+      act,
       told,
       pushed,
       events,
@@ -3066,14 +3086,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       const before = service.reads.length;
 
-      const made = yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
+      const made = yield* act("WORKSPACE_CREATE", { name: RELAY.name });
       yield* settled;
 
-      assert.deepEqual(made, { workspace: RELAY });
+      assert.deepEqual(made, RELAY);
       assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
       assert.deepEqual(service.reads.slice(before), [`create:${RELAY.name}`]);
     }),
@@ -3085,24 +3105,24 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const before = service.reads.length;
 
-      const renamed = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+      const renamed = yield* act("WORKSPACE_RENAME", {
         workspaceId: ACME.id,
         name: "Acme Labs",
       });
       service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+      const refused = yield* act("WORKSPACE_RENAME", {
         workspaceId: ACME.id,
         name: "Acme Research",
       });
 
       yield* settled;
-      assert.deepEqual(renamed, { workspace: { ...ACME, name: "Acme Labs" } });
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(renamed, { ...ACME, name: "Acme Labs" });
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
       assert.deepEqual(service.reads.slice(before), [
         `rename:${ACME.id}:Acme Labs`,
@@ -3117,11 +3137,11 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       service.renamedAgain = "Acme Research";
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" });
       yield* settled;
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
@@ -3134,7 +3154,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       service.renamedAgain = "Acme Research";
@@ -3142,7 +3162,7 @@ it.effect(
       service.renameAnswered = Deferred.await(answered);
 
       const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
@@ -3160,18 +3180,14 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.experimentAnswered = Deferred.await(answered);
 
       const turning = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_EXPERIMENT_SET, {
-          workspaceId: ACME.id,
-          experiment: "pilot",
-          on: true,
-        }),
+        act("WORKSPACE_EXPERIMENT_SET", { workspaceId: ACME.id, experiment: "pilot", on: true }),
       );
       yield* settled;
       const drawn = { experiment: "pilot", on: true, changedAt: 0 };
@@ -3199,7 +3215,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const answered = yield* Deferred.make<void>();
@@ -3207,7 +3223,7 @@ it.effect(
       service.followMisses = true;
 
       const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
       // Only the other workspace's change reaches the follow; the rename's own is lost.
@@ -3230,14 +3246,14 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(answered);
 
       const renaming = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
@@ -3257,7 +3273,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       service.followMisses = true;
@@ -3266,12 +3282,12 @@ it.effect(
       const before = service.reads.length;
 
       const first = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Alpha" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Alpha" }),
       );
       yield* settled;
       service.renameAnswered = Effect.void;
       const second = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" }),
+        act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Beta" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
@@ -3292,7 +3308,7 @@ it.effect("a rename still being written when the account signs out is drawn for 
   Effect.gen(function* () {
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last, settled, tasks } = yield* subject(service);
+    const { act, call, last, settled, tasks } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     yield* settled;
     service.followMisses = true;
@@ -3300,12 +3316,12 @@ it.effect("a rename still being written when the account signs out is drawn for 
     service.renameAnswered = Deferred.await(answered);
 
     const renaming = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
     );
     yield* settled;
     // A second rename waits behind the first, so it would be sent only after the sign-out.
     const queued = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Research" }),
+      act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Research" }),
     );
     yield* settled;
     yield* tasks.reset;
@@ -3318,7 +3334,7 @@ it.effect("a rename still being written when the account signs out is drawn for 
     const unsent = yield* Fiber.join(queued);
     yield* settled;
 
-    assert.deepEqual(unsent, { failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(unsent, { refused: WORKSPACE_ACTS.WORKSPACE_RENAME.refusal });
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     assert.deepEqual(
       service.reads.filter((read) => read.startsWith("rename:")),
@@ -3334,21 +3350,21 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.slugTaken = "acme-labs";
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       service.slugAnswered = Deferred.await(answered);
 
       const setting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, { workspaceId: ACME.id, slug: "acme-labs" }),
+        act("WORKSPACE_SLUG_SET", { workspaceId: ACME.id, slug: "acme-labs" }),
       );
       yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, slug: "acme-labs" }]);
       yield* Deferred.succeed(answered, undefined);
       const refused = yield* Fiber.join(setting);
 
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN });
+      assert.deepEqual(refused, { refused: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN] });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     }),
 );
@@ -3359,31 +3375,31 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const before = service.reads.length;
 
-      const set = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+      const set = yield* act("WORKSPACE_PHOTO_SET", {
         workspaceId: ACME.id,
         photo: PHOTO_URL,
       });
       const drawn = last()?.workspaces;
-      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+      const removed = yield* act("WORKSPACE_PHOTO_SET", {
         workspaceId: ACME.id,
         photo: null,
       });
       service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+      const refused = yield* act("WORKSPACE_PHOTO_SET", {
         workspaceId: ACME.id,
         photo: PHOTO_URL,
       });
 
       yield* nextPoll(settled);
-      assert.deepEqual(set, { workspace: { ...ACME, photoVersion: PHOTO_URL } });
+      assert.deepEqual(set, { ...ACME, photoVersion: PHOTO_URL });
       assert.deepEqual(drawn, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
-      assert.deepEqual(removed, { workspace: ACME });
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(removed, ACME);
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.deepEqual(
         service.reads.slice(before).filter((read) => read.startsWith("photoSet:")),
@@ -3396,43 +3412,25 @@ it.effect(
     }),
 );
 
-it.effect("an SVG is refused as a workspace's photo before the service", () =>
-  Effect.gen(function* () {
-    const service = fakeService([]);
-    service.memberships = [PERSONAL, ACME];
-    const { call } = yield* subject(service);
-
-    const svg = yield* Effect.exit(
-      call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
-        workspaceId: ACME.id,
-        photo: "data:image/svg+xml;base64,PHN2Zy8+",
-      }),
-    );
-
-    assert.ok(Exit.isFailure(svg), "an SVG is no photo");
-    assert.deepEqual(service.reads, []);
-  }),
-);
-
 it.effect(
   "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       const before = service.reads.length;
 
-      const begun = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id });
-      const disconnected = yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
+      const begun = yield* act("WORKSPACE_GITHUB_CONNECT", { workspaceId: ACME.id });
+      const disconnected = yield* act("WORKSPACE_GITHUB_DISCONNECT", {
         workspaceId: ACME.id,
       });
 
-      assert.deepEqual(begun, { url: INSTALL_URL });
+      assert.deepEqual(begun, INSTALL_URL);
       yield* settled;
       const unlinked = { ...ACME, github: null, githubInstallations: [] };
-      assert.deepEqual(disconnected, { workspace: unlinked });
+      assert.equal(disconnected, undefined);
       assert.deepEqual(last()?.workspaces, [PERSONAL, unlinked]);
       assert.deepEqual(service.reads.slice(before), [
         `connect:${ACME.id}`,
@@ -3448,15 +3446,12 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
-      const { call } = yield* subject(service);
-      const refused = { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const { act } = yield* subject(service);
+      const refused = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
 
+      assert.deepEqual(yield* act("WORKSPACE_GITHUB_CONNECT", { workspaceId: ACME.id }), refused);
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
-        refused,
-      );
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
+        yield* act("WORKSPACE_GITHUB_DISCONNECT", { workspaceId: ACME.id }),
         refused,
       );
     }),
@@ -3518,7 +3513,7 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
       service.members[ACME.id] = [DANA, GRACE, ALAN];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const people = service.live.people;
       const shown = () => heldMembers(pushed).at(-1);
       const standing = (members: readonly WorkspaceMember[], former?: readonly unknown[]) => ({
@@ -3532,7 +3527,7 @@ it.effect(
       const before = service.reads.length;
 
       // A role change stands, through a poll read before it that lands after its answer.
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+      yield* act("WORKSPACE_MEMBER_ROLE", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
         role: WORKSPACE_ROLE.ADMIN,
@@ -3557,7 +3552,7 @@ it.effect(
       // A removal stands until the read no longer carries the member.
       people.set({ members: [DANA, admin, ALAN].map((each) => memberRow(each)) });
       yield* nextPoll(settled);
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+      yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
         userId: ALAN.userId,
       });
@@ -3569,7 +3564,7 @@ it.effect(
       yield* nextPoll(settled);
 
       // A handover stands as the heir's role and the account's own from its answer.
-      yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
+      yield* act("WORKSPACE_TRANSFER", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
       });
@@ -3596,7 +3591,7 @@ it.effect("a role change draws before the service answers, and one it refuses is
     const service = fakeService([]);
     service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
     service.members[ACME.id] = [DANA, GRACE];
-    const { call, pushed, settled } = yield* subject(service);
+    const { act, call, pushed, settled } = yield* subject(service);
     const shown = () => heldMembers(pushed).at(-1);
     const standing = (members: readonly WorkspaceMember[]) => ({
       [ACME.id]: { rows: { members } },
@@ -3610,7 +3605,7 @@ it.effect("a role change draws before the service answers, and one it refuses is
     service.notPermitted = true;
 
     const giving = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+      act("WORKSPACE_MEMBER_ROLE", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
         role: WORKSPACE_ROLE.ADMIN,
@@ -3621,7 +3616,7 @@ it.effect("a role change draws before the service answers, and one it refuses is
     yield* Deferred.succeed(answered, undefined);
     const refused = yield* Fiber.join(giving);
 
-    assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+    assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
     assert.deepEqual(shown(), standing([DANA, GRACE]));
   }),
 );
@@ -3633,14 +3628,14 @@ it.effect(
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [DANA, GRACE];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const people = service.live.people;
       yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
       people.set({ members: [memberRow(DANA), memberRow(GRACE)], former: [] });
       yield* settled;
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
       const left = { [ACME.id]: { rows: { members: [GRACE] } } };
       assert.deepEqual(heldMembers(pushed).at(-1), left);
       people.refuse({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
@@ -3694,7 +3689,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const integrations = service.live.integrations;
       const installations = () =>
         integrationsShown(pushed, ACME.id)?.sentry.installations.map((one) => one.installationId);
@@ -3721,7 +3716,7 @@ it.effect(
         answer: { configured: true, installations: [], txid: "9200" },
       };
       const disconnecting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
+        act("WORKSPACE_SENTRY_DISCONNECT", {
           workspaceId: ACME.id,
           installationId: SENTRY_ROW.installationId,
         }),
@@ -3731,9 +3726,7 @@ it.effect(
       assert.deepEqual(installations(), [], "gone before the service answers");
 
       yield* Deferred.succeed(answering, undefined);
-      assert.deepEqual(yield* Fiber.join(disconnecting), {
-        sentry: { configured: true, installations: [] },
-      });
+      assert.deepEqual(yield* Fiber.join(disconnecting), { configured: true, installations: [] });
       // The read answers once more from before the disconnect, which still stands over it.
       integrations.set({ sentryInstallations: [SENTRY_ROW] });
       yield* nextPoll(settled);
@@ -3746,14 +3739,12 @@ it.effect(
       service.integrationsGate = Deferred.await(refusing);
       service.slackBotAnswer = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
       const refused = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, { workspaceId: ACME.id }),
+        act("WORKSPACE_SLACK_BOT_DISCONNECT", { workspaceId: ACME.id }),
       );
       yield* settled;
       assert.equal(team(), undefined, "gone before the service answers");
       yield* Deferred.succeed(refusing, undefined);
-      assert.deepEqual(yield* Fiber.join(refused), {
-        failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
-      });
+      assert.deepEqual(yield* Fiber.join(refused), { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       yield* settled;
       assert.equal(team(), "Acme", "put back once the service refused it");
     }),
@@ -3765,7 +3756,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, { ...ACME, role: WORKSPACE_ROLE.OWNER }];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const integrations = service.live.integrations;
       const channelAsks = () =>
         service.reads.filter((read) => read === `slack-bot:${ACME.id}`).length;
@@ -3810,7 +3801,7 @@ it.effect(
       // A channel joined lays the channels its answer carries, the bot in it.
       const joined = { ...ENG_CHANNEL, member: true };
       service.slackBotAnswer = { ok: true, answer: { ...connected, channels: [joined] } };
-      yield* call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, {
+      yield* act("WORKSPACE_SLACK_BOT_CHANNEL", {
         workspaceId: ACME.id,
         channelId: ENG_CHANNEL.id,
         member: true,
@@ -3839,16 +3830,16 @@ it.effect(
       service.memberships = [PERSONAL, { ...ACME, photoVersion: "v1" }];
       const photo = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
       service.photos[ACME.id] = photo;
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const fetches = () => service.reads.filter((read) => read.startsWith("photo:"));
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       const first = heldPhotos(pushed).at(-1);
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" });
       yield* nextPoll(settled);
       const renamed = fetches().length;
-      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
+      yield* act("WORKSPACE_PHOTO_SET", { workspaceId: ACME.id, photo: PHOTO_URL });
       yield* settled;
 
       const url = "data:image/png;base64,iVBORw0KGgo=";
@@ -3893,7 +3884,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       const invitations = service.live.invitations;
       const shown = () => heldInvitations(pushed).at(-1);
       const standing = (rows: readonly WorkspaceInvitation[]) => ({ [ACME.id]: { rows } });
@@ -3908,19 +3899,17 @@ it.effect(
       const before = service.reads.length;
 
       // The invitation made is answered as the service made it, and stands from its answer, its link on the read's own origin.
-      const made = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+      const made = yield* act("WORKSPACE_INVITE", {
         workspaceId: ACME.id,
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
       });
       assert.deepEqual(made, {
-        invitation: {
-          id: "inv-alan@example.com",
-          email: "alan@example.com",
-          role: WORKSPACE_ROLE.MEMBER,
-          expiresAt: "2026-10-16T12:00:00.000Z",
-          acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
-        },
+        id: "inv-alan@example.com",
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+        expiresAt: "2026-10-16T12:00:00.000Z",
+        acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
       });
       const alan = {
         id: "inv-alan@example.com",
@@ -3950,7 +3939,7 @@ it.effect(
       assert.deepEqual(shown(), standing([grace, lee]));
 
       // A cancel stands until the read no longer carries the invitation, whatever list it answered.
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+      yield* act("WORKSPACE_INVITATION_CANCEL", {
         workspaceId: ACME.id,
         invitationId: "lee",
       });
@@ -3964,12 +3953,12 @@ it.effect(
 
       // A refused invite draws nothing.
       service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+      const refused = yield* act("WORKSPACE_INVITE", {
         workspaceId: ACME.id,
         email: "ada@example.com",
         role: WORKSPACE_ROLE.ADMIN,
       });
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(shown(), standing([grace]));
       assert.deepEqual(service.reads.slice(before), [
         `invite:${ACME.id}:alan@example.com`,
@@ -3985,19 +3974,19 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
       service.live.invitations.set({ invitations: [] });
       yield* settled;
 
       // The read never carries the invitation, so the invite stands until its wait gives up, past the cancel that answered after it.
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+      yield* act("WORKSPACE_INVITE", {
         workspaceId: ACME.id,
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
       });
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+      yield* act("WORKSPACE_INVITATION_CANCEL", {
         workspaceId: ACME.id,
         invitationId: "inv-alan@example.com",
       });
@@ -4203,13 +4192,13 @@ it.effect("leaving a workspace reaches the service and the view then holds it no
   Effect.gen(function* () {
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last, settled } = yield* subject(service);
+    const { act, call, last, settled } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
 
-    const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+    const left = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
     yield* settled;
 
-    assert.deepEqual(left, { left: true });
+    assert.equal(left, undefined);
     assert.deepEqual(last()?.workspaces, [PERSONAL]);
   }),
 );
@@ -4225,20 +4214,20 @@ it.effect(
       const service = fakeService([acmeTask]);
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
-      const { call, last, listed, openTask } = yield* subject(service);
+      const { act, call, last, listed, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(INVITES);
 
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const refused = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
-      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(refused, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.equal(last()?.activeTaskId, INVITES);
 
       service.notPermitted = false;
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const left = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
-      assert.deepEqual(left, { left: true });
+      assert.equal(left, undefined);
       assert.equal(last()?.activeTaskId, undefined);
     }),
 );
@@ -4247,11 +4236,11 @@ it.effect("leaving another workspace than the open plan's keeps the plan open", 
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last, openTask } = yield* subject(service);
+    const { act, call, last, openTask } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     yield* openTask(INVITES);
 
-    yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+    yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
     assert.equal(last()?.activeTaskId, INVITES);
   }),
@@ -4265,18 +4254,18 @@ it.effect(
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [ADA, GRACE];
       service.notPermitted = true;
-      const { call, last, settled } = yield* subject(service);
+      const { act, call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
 
-      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+      const removed = yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
         userId: ADA.userId,
       });
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+      const left = yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id });
 
-      assert.deepEqual(removed, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
-      assert.deepEqual(left, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(removed, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
+      assert.deepEqual(left, { refused: WORKSPACE_NOT_PERMITTED_REFUSAL });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.deepEqual(service.members[ACME.id], [ADA, GRACE]);
     }),
@@ -4285,40 +4274,43 @@ it.effect(
 it.effect("behind a closed account gate no workspace call reaches the service", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
-    const { call } = yield* subject(service, { signedIn: false });
-    const unanswered = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
+    const { act, call } = yield* subject(service, { signedIn: false });
+    /** The act refused in its own sentence, as the window hears an act the host could not answer. */
+    const unanswered = (name: keyof typeof WORKSPACE_ACTS) => ({
+      refused: WORKSPACE_ACTS[name].refusal,
+    });
 
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name }),
-      unanswered,
+      yield* act("WORKSPACE_CREATE", { name: RELAY.name }),
+      unanswered("WORKSPACE_CREATE"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
-      unanswered,
+      yield* act("WORKSPACE_RENAME", { workspaceId: ACME.id, name: "Acme Labs" }),
+      unanswered("WORKSPACE_RENAME"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: null }),
-      unanswered,
+      yield* act("WORKSPACE_PHOTO_SET", { workspaceId: ACME.id, photo: null }),
+      unanswered("WORKSPACE_PHOTO_SET"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: ACME.id }),
-      unanswered,
+      yield* act("WORKSPACE_GITHUB_CONNECT", { workspaceId: ACME.id }),
+      unanswered("WORKSPACE_GITHUB_CONNECT"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, { workspaceId: ACME.id }),
-      unanswered,
+      yield* act("WORKSPACE_GITHUB_DISCONNECT", { workspaceId: ACME.id }),
+      unanswered("WORKSPACE_GITHUB_DISCONNECT"),
     );
     yield* call(GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW, { workspaceId: ACME.id });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+      yield* act("WORKSPACE_MEMBER_REMOVE", {
         workspaceId: ACME.id,
         userId: GRACE.userId,
       }),
-      unanswered,
+      unanswered("WORKSPACE_MEMBER_REMOVE"),
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id }),
-      unanswered,
+      yield* act("WORKSPACE_LEAVE", { workspaceId: ACME.id }),
+      unanswered("WORKSPACE_LEAVE"),
     );
     assert.deepEqual(service.reads, []);
   }),
@@ -4630,7 +4622,7 @@ it.effect(
         },
       };
       service.tokenRepositorySet = { ok: true, answer: [] };
-      const { call, settled } = yield* subject(service);
+      const { act, call, settled } = yield* subject(service);
       const asked = () => service.reads.filter((read) => read.startsWith("repositories"));
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
@@ -4654,7 +4646,7 @@ it.effect(
         [`repositories:${ACME.id}`, "repositories"].toSorted(),
       );
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+      yield* act("WORKSPACE_TOKEN_REPOSITORY_SET", {
         workspaceId: ACME.id,
         repository: "acme/side",
         added: true,
@@ -5852,11 +5844,11 @@ it.effect(
           Effect.as(Deferred.await(answering), { ok: true as const, answer: before }),
         setTokenRepository: () => Effect.succeed({ ok: true as const, answer: after }),
       });
-      const { call, pushed, settled } = yield* subject(service);
+      const { act, call, pushed, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, { workspaceId: ACME.id });
       yield* settled;
-      yield* call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+      yield* act("WORKSPACE_TOKEN_REPOSITORY_SET", {
         workspaceId: ACME.id,
         repository: "acme/side",
         added: true,

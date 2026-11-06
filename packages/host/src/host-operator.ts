@@ -1,6 +1,4 @@
-import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
-import { WORKSPACE_CALL_FAILURE } from "@repo/features";
-import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import {
   ADMIN_UNANSWERED,
   type AdminFavoriteParams,
@@ -92,33 +90,8 @@ import {
   type TasksTreeAnswer,
   type TasksTreeParams,
   type TasksView,
-  type TasksWorkspaceAnswer,
-  type TasksWorkspaceCreateParams,
-  type TasksWorkspaceExperimentSetParams,
-  type TasksWorkspaceGitHubConnectAnswer,
-  type TasksWorkspaceInvitationAnswer,
-  type TasksWorkspaceInvitationCancelParams,
-  type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceInviteParams,
-  type TasksWorkspaceLeaveAnswer,
-  type TasksWorkspaceLeaveParams,
-  type TasksWorkspaceMemberRemoveParams,
-  type TasksWorkspaceMemberRoleParams,
-  type TasksWorkspaceMembersAnswer,
   type TasksWorkspaceParams,
-  type TasksWorkspacePhotoSetParams,
-  type TasksWorkspaceRenameParams,
-  type TasksWorkspaceSentryAnswer,
-  type TasksWorkspaceSentryDisconnectParams,
-  type TasksWorkspaceSlackBotAnswer,
-  type TasksWorkspaceSlackBotChannelParams,
-  type TasksWorkspaceSlackBotNotificationsParams,
-  type TasksWorkspaceSlackBotRepositoryParams,
-  type TasksWorkspaceSlugSetParams,
-  type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
-  type TasksWorkspaceTokenRepositorySetParams,
-  type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
@@ -140,15 +113,6 @@ import {
   tasksSkillsAnswerSchema,
   tasksStartAnswerSchema,
   tasksTreeAnswerSchema,
-  tasksWorkspaceAnswerSchema,
-  tasksWorkspaceGitHubConnectAnswerSchema,
-  tasksWorkspaceInvitationAnswerSchema,
-  tasksWorkspaceInvitationsAnswerSchema,
-  tasksWorkspaceLeaveAnswerSchema,
-  tasksWorkspaceMembersAnswerSchema,
-  tasksWorkspaceSentryAnswerSchema,
-  tasksWorkspaceSlackBotAnswerSchema,
-  tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspacePeopleFollow,
 } from "@repo/features/tasks-view";
 import {
@@ -162,23 +126,15 @@ import {
   terminalStateEventSchema,
   terminalsActAnswerSchema,
 } from "@repo/features/terminal-view";
-import { isSignInFailure } from "@repo/features/words";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayCallResult,
   type GatewayClient,
-  type GatewayMethod,
   gatewayEventReader,
 } from "@repo/gateway";
-import type {
-  AppSettingField,
-  AppSettingValue,
-  Experiment,
-  SettingsResetScope,
-} from "@repo/settings";
-import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
+import type { AppSettings } from "@repo/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -189,7 +145,7 @@ import {
   type WireRecord,
 } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
@@ -267,33 +223,7 @@ export interface HostOperator {
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   /** Which machine This Mac is and the device its host's record names, held by the host for the session, whole, each time it moves; never on a platform with no This Mac. */
   onThisMacHostChanged(listener: (held: AppThisMacHosts) => void): () => void;
-  updateSetting<Field extends AppSettingField>(
-    field: Field,
-    value: AppSettingValue<Field>,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  /** One group returned to its defaults, but for the fields `kept`, which the asking page does not draw. */
-  resetSettings(
-    scope: SettingsResetScope,
-    kept: readonly AppSettingField[],
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  /** One experiment turned on or off for the signed-in account, on the service. */
-  setExperiment(
-    experiment: Experiment,
-    on: boolean,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  /** The account a sign-in settled on, or the key of why it ended without landing. */
-  beginSignIn(provider: AccountProvider): Effect.Effect<SignInAnswer>;
-  /** The sign-in taken again over the session that stands: whether a new session landed. */
-  signInAgain(provider: AccountProvider): Effect.Effect<boolean>;
-  cancelSignIn(): Effect.Effect<void>;
-  signOut(): Effect.Effect<AccountSnapshot>;
-  deleteAccount(): Effect.Effect<AccountSnapshot>;
-  /** The member's grant of support access granted for seven days, or revoked: when it then runs out, or null. */
-  supportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -446,52 +376,6 @@ export interface HostOperator {
   adminRead(params: AdminReadParams): Effect.Effect<AdminReadAnswer>;
   /** The admin dashboard's star set or taken back on one account; whether it landed. */
   adminFavorite(params: AdminFavoriteParams): Effect.Effect<boolean>;
-  /** A workspace made under a name, owned by the account; the workspace, or why none was. */
-  workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
-  workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's photo set or removed by an owner or admin; the workspace with its photo's new version or none, or why it was not. */
-  workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** One experiment turned on or off for everyone in a workspace by an owner or admin; the workspace with its choice, or why it was not. */
-  workspaceExperimentSet(
-    params: TasksWorkspaceExperimentSetParams,
-  ): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's slug changed by its owner; the workspace under its new slug, or why it was not. */
-  workspaceSlugSet(params: TasksWorkspaceSlugSetParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
-  workspaceGitHubConnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
-  workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-  /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
-  workspaceSentryInstall(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-  /** One of a workspace's Sentry installations disconnected, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands, or why it is not. */
-  workspaceSentryDisconnect(
-    params: TasksWorkspaceSentryDisconnectParams,
-  ): Effect.Effect<TasksWorkspaceSentryAnswer>;
-  /** A workspace's Slack bot connected; the bot as it then stands, or why it is not. */
-  workspaceSlackBotConnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** A workspace's Slack bot disconnected; the bot as it then stands, or why it is not. */
-  workspaceSlackBotDisconnect(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** The reader's own Slack notifications turned on or off; the bot as it then stands, or why it is not. */
-  workspaceSlackBotNotifications(
-    params: TasksWorkspaceSlackBotNotificationsParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** The workspace's default repository for Slack starts named or cleared; the bot as it then stands, or why it is not. */
-  workspaceSlackBotRepository(
-    params: TasksWorkspaceSlackBotRepositoryParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-  /** One channel's bot membership or default repository changed; the bot as it then stands, or why it is not. */
-  workspaceSlackBotChannel(
-    params: TasksWorkspaceSlackBotChannelParams,
-  ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
   /** One workspace's own integrations held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceIntegrationsChanged`. */
   workspaceIntegrationsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
   /** One workspace's integrations let go by the windows. */
@@ -540,32 +424,6 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** Every workspace's token repositories the host holds for the windows, whole, each time any of them moves. */
   onTokenRepositoriesChanged(listener: (held: AppTokenRepositories) => void): () => void;
-  /** A repository added to a workspace on the account's own GitHub token, or removed from it; the workspace's token repositories as they then stand, or why nothing changed. */
-  workspaceTokenRepositorySet(
-    params: TasksWorkspaceTokenRepositorySetParams,
-  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
-  /** One member removed from a workspace; the members who remain, or why none was removed. */
-  workspaceMemberRemove(
-    params: TasksWorkspaceMemberRemoveParams,
-  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** Another member of a workspace made an admin or an admin a member by the owner; the members as they then stand, or why no role changed. */
-  workspaceMemberRole(
-    params: TasksWorkspaceMemberRoleParams,
-  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** A workspace handed by its owner to one of its admins, the owner becoming an admin; the members as they then stand, or why it was not handed over. */
-  workspaceTransfer(
-    params: TasksWorkspaceTransferParams,
-  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-  /** One workspace left; or why it was not. */
-  workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
-  /** An invitation made; it with its accept link, or why none was. */
-  workspaceInvite(
-    params: TasksWorkspaceInviteParams,
-  ): Effect.Effect<TasksWorkspaceInvitationAnswer>;
-  /** A pending invitation canceled; those still pending, or why it was not. */
-  workspaceInvitationCancel(
-    params: TasksWorkspaceInvitationCancelParams,
-  ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** The models a coding agent may run on as the account is offered them, and its devices, held for the windows from now until let go, asked again as a window comes forward, as the provider keys move, and every `MODEL_CATALOG_TTL`; what they hold is heard through `onModelsChanged`. */
   agentModelsFollow(): Effect.Effect<void>;
   /** The models let go by the windows. */
@@ -796,27 +654,12 @@ function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
 }
 
 /**
- * The host refused a call, or answered a shape its method does not document:
- * a defect of this build, worded by the router as the kind's refusal. Note
- * that only the shape is reported to Sentry, because a refusal is the host's
- * own answer, and a handler that died behind one was reported where it died
- * (`gatewayHost`).
- */
-function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Effect<never> {
-  if (answer.ok) return Effect.die(new Error(`${method} answered a shape this client cannot read`));
-  const refusal = new Error(`${method} was refused: ${answer.error.message}`);
-  return Effect.die(Object.assign(refusal, { [ErrorReporter.ignore]: true }));
-}
-
-/**
  * The host's answers are the same structured-clone payloads the windows
  * already receive over the bridge, carried through the protocol as JSON. The
  * readers below check the field the client itself decides on and hand the
  * rest on to the act, whose own answer guard is checked in the router and
  * again in the window that asked.
  */
-const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
-
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
 }
@@ -855,43 +698,14 @@ const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
-  const settingsResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SettingsUpdateResult> =>
-    Effect.flatMap(result, (answer) => {
-      const parsed = answered<SettingsUpdateResult>(record(answer));
-      return parsed?.settings !== undefined ? Effect.succeed(parsed) : unanswered(method, answer);
-    });
-
-  const accountResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<AccountSnapshot> =>
-    Effect.flatMap(result, (answer) => {
-      const account = answered<AccountSnapshot>(record(answer)?.account);
-      return account ? Effect.succeed(account) : unanswered(method, answer);
-    });
-
   const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
     Effect.asVoid(result);
 
   const on = gatewayEventReader(client);
 
-  const wireReporter = (reporter: string) => ({ reporter });
-
   /** A repository list's scope as the gateway carries it: its workspace, or nothing for every one. */
   const repositoryScope = (params: TasksRepositoriesParams) =>
     params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId };
-
-  /**
-   * A setting's value as the method's own field, or no field for a cleared
-   * one. The envelope is JSON, and its encoder refuses a record holding
-   * `undefined` rather than dropping the key, so a clear carried as a value
-   * would never leave this process.
-   */
-  const wireValue = <Value>(value: Value | undefined) =>
-    value !== undefined ? { value: carried(value) } : undefined;
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -957,68 +771,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AppSettings>(record(answer)?.settings)),
       ),
-    updateSetting: (field, value, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_UPDATE,
-        client.call(GATEWAY_METHOD.SETTINGS_UPDATE, {
-          field,
-          ...wireValue(value),
-          ...wireReporter(reporter),
-        }),
-      ),
-    resetSettings: (scope, kept, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_RESET,
-        client.call(GATEWAY_METHOD.SETTINGS_RESET, {
-          scope,
-          kept: [...kept],
-          ...wireReporter(reporter),
-        }),
-      ),
-    setExperiment: (experiment, on, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.EXPERIMENTS_SET,
-        client.call(GATEWAY_METHOD.EXPERIMENTS_SET, {
-          experiment,
-          on,
-          ...wireReporter(reporter),
-        }),
-      ),
     accountSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
-    beginSignIn: (provider) =>
-      Effect.flatMap(
-        client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
-        (answer): Effect.Effect<SignInAnswer> => {
-          const failure = record(answer)?.failure;
-          if (isSignInFailure(failure)) return Effect.succeed({ failure });
-          return Effect.map(
-            accountResult(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, Effect.succeed(answer)),
-            (account) => ({ account }),
-          );
-        },
-      ),
-    signInAgain: (provider) =>
-      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider }), (answer) => {
-        const signedIn = record(answer)?.signedIn;
-        return isWireBoolean(signedIn)
-          ? Effect.succeed(signedIn)
-          : unanswered(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, answer);
-      }),
-    cancelSignIn: () => fire(client.call(GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN)),
-    signOut: () =>
-      accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
-    deleteAccount: () =>
-      accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
-    supportAccess: (grant) =>
-      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, { grant }), (answer) => {
-        const until = record(answer)?.supportAccessUntil;
-        return until === null || isWireNumber(until)
-          ? Effect.succeed({ supportAccessUntil: until })
-          : unanswered(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, answer);
-      }),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
@@ -1316,104 +1072,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.ADMIN_FAVORITE, { id: params.id, favorite: params.favorite }),
         (answer) => answer.ok && answer.result === true,
       ),
-    workspaceCreate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceRename: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_RENAME, {
-          workspaceId: params.workspaceId,
-          name: params.name,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceExperimentSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_EXPERIMENT_SET, {
-          workspaceId: params.workspaceId,
-          experiment: params.experiment,
-          on: params.on,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlugSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, {
-          workspaceId: params.workspaceId,
-          slug: params.slug,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspacePhotoSet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
-          workspaceId: params.workspaceId,
-          photo: params.photo,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceGitHubConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceGitHubDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSentryInstall: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceGitHubConnectAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSentryDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
-          workspaceId: params.workspaceId,
-          installationId: params.installationId,
-        }),
-        answerOf(tasksWorkspaceSentryAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotConnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotDisconnect: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT, {
-          workspaceId: params.workspaceId,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotNotifications: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS, {
-          workspaceId: params.workspaceId,
-          notifications: params.notifications,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotRepository: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY, {
-          workspaceId: params.workspaceId,
-          repository: params.repository,
-        }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceSlackBotChannel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL, { ...params }),
-        answerOf(tasksWorkspaceSlackBotAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
     workspaceIntegrationsFollow: (params) =>
       fire(
         client.call(GATEWAY_METHOD.WORKSPACES_INTEGRATIONS_FOLLOW, {
@@ -1539,62 +1197,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held repositories are the host's own, handed over in this process, so they are passed on as built, as the held people are.
         (payload) => (isRecord(payload) ? answered<AppTokenRepositories>(payload) : undefined),
         listener,
-      ),
-    workspaceTokenRepositorySet: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
-          workspaceId: params.workspaceId,
-          repository: params.repository,
-          added: params.added,
-        }),
-        answerOf(tasksWorkspaceTokenRepositoriesAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceMemberRemove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
-          workspaceId: params.workspaceId,
-          userId: params.userId,
-        }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceMemberRole: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
-          workspaceId: params.workspaceId,
-          userId: params.userId,
-          role: params.role,
-        }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceTransfer: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
-          workspaceId: params.workspaceId,
-          userId: params.userId,
-        }),
-        answerOf(tasksWorkspaceMembersAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceLeave: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceLeaveAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceInvite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITE, {
-          workspaceId: params.workspaceId,
-          email: params.email,
-          role: params.role,
-        }),
-        answerOf(tasksWorkspaceInvitationAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceInvitationCancel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
-          workspaceId: params.workspaceId,
-          invitationId: params.invitationId,
-        }),
-        answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     tasksSetRepository: (params) =>
       Effect.map(
