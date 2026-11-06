@@ -1,9 +1,4 @@
-import {
-  CONNECTION_HEALTH,
-  type ConnectionHealth,
-  connectionHealth,
-  type IntegrationTool,
-} from "@repo/features/integration-health";
+import { connectionHealth } from "@repo/features/integration-health";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -19,7 +14,6 @@ import {
   ErrorState,
   GAP,
   ListMotion,
-  RevealArea,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SKELETON_CONTROL,
   SearchField,
@@ -35,14 +29,14 @@ import {
 } from "@repo/ui";
 import {
   namedServers,
-  type ServerRow,
+  type ServerGroup,
+  searchServers,
   serverGroups,
   serverRows,
 } from "@repo/ui/agent-servers-model";
-import { matchIntegration, shownTools } from "@repo/ui/integration-search";
 import { searchTokens } from "@repo/ui/search-tokens";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { unreadShown } from "../failure-report.js";
 import { IntegrationRow } from "../integration-row.js";
@@ -61,8 +55,8 @@ import { useAnnounceShown } from "../use-announce-shown.js";
  * a provider where the account holds none, under Connected or Not connected as the MCP popover
  * sections its servers (`@repo/ui/agent-servers-model`), each section
  * in the order of the providers' names: its mark and name, and under it where its connection
- * stands once that needs saying — connected with the count of its server's
- * tools, a sign-in under way, or one expired. A sign-in begun waits on the
+ * stands once that needs saying — connected, a sign-in under way, or one
+ * expired. A sign-in begun waits on the
  * browser with Reopen and Cancel, and one that failed or never finished
  * says so with Try again (`integration-sign-in.ts`). A row that connects or
  * disconnects glides from one section into the other (`ListMotion`), and
@@ -92,26 +86,16 @@ import { useAnnounceShown } from "../use-announce-shown.js";
  * offer the account has no row, as its agents are never handed it. Every
  * line is fixed by the build, but for the one-line reason a provider's
  * server gave, which the service passes on only where it carries no
- * credential, and its tools' names and descriptions, which its server gave.
+ * credential. Agents are handed a connected integration's every tool, so the
+ * page lists none: it says only whether the connection works.
  *
- * A connected row whose server answered with its tools opens in place onto
- * them, drawn as the MCP popover draws a server's page
- * (`../integration-tool-list.tsx`): alphabetical, one line each, badged only
- * by its server's own annotations, and beside the list the page of the tool
- * it holds, drawn as the popover draws a tool's page: the first at first,
- * then whichever a press or the arrows move to. The list is one stop for
- * Tab, whose arrows, Home, and End move through the tools; Return or Right
- * hands the focus to the tool's page, whose arrows scroll it, and Escape or
- * Left hands it back.
- *
- * The page has a search of its own above its rows, for the integrations and
- * their tools, apart from Settings' search in the sidebar, which finds pages
- * and rows: it finds what the MCP popover's search finds, by the same words
- * (`../integration-search.ts`). Command-F lands in it while the page shows,
- * and Escape clears it, then lets go of the caret. While a query stands, the
- * page keeps only the rows it found, in their sections, and a row with a
- * tool it found opens by itself onto just those, the words marked and the
- * count of them on its line; a query that finds nothing says so. Settings'
+ * The page has a search of its own above its rows, for the integrations,
+ * apart from Settings' search in the sidebar, which finds pages and rows: it
+ * finds what the MCP popover's search finds, by the same words
+ * (`@repo/ui/agent-servers-model`'s `searchServers`). Command-F lands in it
+ * while the page shows, and Escape clears it, then lets go of the caret.
+ * While a query stands, the page keeps only the rows it found, in their
+ * sections, the words marked; a query that finds nothing says so. Settings'
  * own search hands its query down when one of its results opens a row here
  * (`../desktop/desktop-settings.tsx`).
  *
@@ -132,7 +116,7 @@ export interface IntegrationsFilter {
 const FILTER_INPUT_ID = "integrations-filter-input";
 
 /** What the page's search field asks for. */
-const FILTER_PLACEHOLDER = "Search integrations and tools";
+const FILTER_PLACEHOLDER = "Search integrations";
 
 const PAGE_LINE = {
   SIGNED_OUT: SIGNED_OUT_WORDS,
@@ -203,54 +187,9 @@ function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Elem
   );
 }
 
-/** One account the page draws, and the tools a search found among its server's. */
-interface FoundRow {
-  readonly row: ServerRow;
-  readonly health: ConnectionHealth;
-  readonly all: readonly IntegrationTool[];
-  /** The tools the search found, else every one. */
-  readonly shown: readonly IntegrationTool[];
-  /** The search found some of its tools, so the row opens onto them by itself. */
-  readonly toolsFound: boolean;
-}
-
-/**
- * A provider's row as a query finds it (`../integration-search.ts`), or
- * nothing where it finds neither the integration nor any of its tools:
- * opened onto the tools it found, else onto every one.
- */
-function foundRow(
-  row: ServerRow,
-  health: ConnectionHealth,
-  tokens: readonly string[],
-): FoundRow | undefined {
-  const all = health.kind === CONNECTION_HEALTH.WORKING ? health.tools : [];
-  // An account's label finds its row too, so "personal" finds Notion · Personal.
-  const labeled =
-    row.account !== undefined && tokens.every((token) => row.name.toLowerCase().includes(token));
-  const match =
-    matchIntegration(row.provider, all, tokens) ??
-    (labeled ? { named: true, tools: [] } : undefined);
-  if (match === undefined) return undefined;
-  return {
-    row,
-    health,
-    all,
-    shown: shownTools(match, all),
-    toolsFound: match.tools.length > 0,
-  };
-}
-
-/** A set with `server` turned: taken out where it stood, put in where it did not. */
-function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
-  const next = new Set(set);
-  if (!next.delete(server)) next.add(server);
-  return next;
-}
-
 /** What stands where the search finds nothing, said politely as it lands and as the query changes. */
 function NoMatchNote({ query }: { query: string }): React.JSX.Element {
-  const words = `No integrations or tools match “${query.trim()}”`;
+  const words = `No integrations match “${query.trim()}”`;
   useAnnounceShown(ANNOUNCE.POLITE, words);
   // Note that the note quotes the query, so it stays masked in a screen recording.
   return (
@@ -282,22 +221,18 @@ function samePlaces(one: SectionPlaces, other: SectionPlaces): boolean {
  * The page's sections, which move (`ListMotion`): a row that connects or
  * disconnects glides from the section it stood in to the other, followed
  * by its connection, and the sections and rows it moved glide with it.
- * Note that only a change in where the rows stand plays here, because a row
- * opening onto its tools is the row's own `Reveal`, whose area this is
- * (`own`, since the page's outer area would leave the rows between it and
- * the tools to this root), so the rows under it glide down with its edge.
  */
 function MovingSections({
   found,
   children,
 }: {
-  found: readonly { readonly heading: string | undefined; readonly rows: readonly FoundRow[] }[];
+  found: readonly ServerGroup[];
   children: React.ReactNode;
 }): React.JSX.Element {
   const moving = useRef<HTMLElement | null>(null);
   const places: SectionPlaces = found.map((group) => [
     group.heading,
-    group.rows.map((each) => each.row.connection),
+    group.rows.map((row) => row.connection),
   ]);
   const [placed, setPlaced] = useState(() => ({ places, change: {} }));
   // Note that the placing follows the rows as they render, React's way of keeping what an earlier render drew, so the commit that moves a row is the one that plays.
@@ -308,11 +243,9 @@ function MovingSections({
   }
   return (
     <ListMotion root={moving} change={change}>
-      <RevealArea root={moving} own>
-        <Stack gap={GAP.PAGE} moves ref={moving}>
-          {children}
-        </Stack>
-      </RevealArea>
+      <Stack gap={GAP.PAGE} moves ref={moving}>
+        {children}
+      </Stack>
     </ListMotion>
   );
 }
@@ -322,9 +255,7 @@ function MovingSections({
  * row is drawn whole at once, under the page's search; a read that failed
  * draws them all, offering nothing, and says so above them, with the way to
  * read again. A provider read as unavailable is not offered to the account
- * and has no row. Note that a row opened or closed while nothing is searched
- * keeps that through a search, and one turned during a search is turned
- * against how the search opened it, forgotten when the search changes.
+ * and has no row.
  */
 function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
@@ -335,17 +266,7 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
       standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
     }).map((server) => server.connection),
   );
-  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
-  const [turnedInSearch, setTurnedInSearch] = useState<{
-    readonly query: string;
-    readonly providers: ReadonlySet<string>;
-  }>({ query: "", providers: new Set() });
   const { query } = filter;
-
-  // A turn belongs to the search it was made in: a query that changes, even back to an earlier one, starts afresh.
-  useEffect(() => {
-    setTurnedInSearch({ query, providers: new Set() });
-  }, [query]);
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) {
@@ -361,37 +282,16 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   // Note that the rows stand in the order of their names within each
   // section, so no provider is pinned above the rest by the order its value
   // set happens to list it in.
-  const groups = serverGroups(
-    serverRows({
-      statusOf: statuses.statusOf,
-      healthOf,
-      signInOf: statuses.signInOf,
-      accountsOf: statuses.accountsOf,
-      readFailed: statuses.readFailed,
-      disabled: [],
-    }).toSorted((one, other) => one.name.localeCompare(other.name, "en")),
-  );
+  const rows = serverRows({
+    statusOf: statuses.statusOf,
+    healthOf,
+    signInOf: statuses.signInOf,
+    accountsOf: statuses.accountsOf,
+    readFailed: statuses.readFailed,
+    disabled: [],
+  }).toSorted((one, other) => one.name.localeCompare(other.name, "en"));
   const tokens = searchTokens(query);
-  const found = groups
-    .map((group) => ({
-      heading: group.heading,
-      rows: group.rows.flatMap((row) => {
-        const kept = foundRow(row, healthOf(row.connection), tokens);
-        return kept === undefined ? [] : [kept];
-      }),
-    }))
-    .filter((group) => group.rows.length > 0);
-  // A turn made under an older query is forgotten with it.
-  const turnedNow: ReadonlySet<string> =
-    turnedInSearch.query === query ? turnedInSearch.providers : new Set();
-  const expanded = (found: FoundRow) =>
-    tokens.length === 0
-      ? opened.has(found.row.connection)
-      : found.toolsFound !== turnedNow.has(found.row.connection);
-  const toggle = (server: string) =>
-    tokens.length === 0
-      ? setOpened((now) => turned(now, server))
-      : setTurnedInSearch({ query, providers: turned(turnedNow, server) });
+  const found = serverGroups(searchServers(rows, query));
   return (
     <MovingSections found={found}>
       {statuses.readFailed ? (
@@ -406,26 +306,19 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
           </SettingsLine>
         </SettingsSection>
       ) : null}
-      {groups.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
-      {groups.length > 0 && found.length === 0 ? <NoMatchNote query={query} /> : null}
+      {rows.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
+      {rows.length > 0 && found.length === 0 ? <NoMatchNote query={query} /> : null}
       {found.map((group) => (
         <SettingsSection key={group.heading ?? "unread"} title={group.heading}>
-          {group.rows.map((found) => (
+          {group.rows.map((row) => (
             <IntegrationRow
-              key={found.row.connection}
-              row={found.row}
-              status={statuses.statusOf(found.row.connection)}
-              health={found.health}
+              key={row.connection}
+              row={row}
+              status={statuses.statusOf(row.connection)}
+              health={healthOf(row.connection)}
               statuses={statuses}
-              tools={{
-                shown: found.shown,
-                all: found.all,
-                found: found.toolsFound,
-                expanded: expanded(found),
-                onToggle: () => toggle(found.row.connection),
-                tokens,
-              }}
-              onRetryTools={() => retry(found.row.connection)}
+              tokens={tokens}
+              onRetryTools={() => retry(row.connection)}
             />
           ))}
         </SettingsSection>

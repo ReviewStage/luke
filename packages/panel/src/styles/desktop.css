@@ -937,38 +937,6 @@ body,
   color: var(--integration-ink-sentry);
 }
 
-/* A tool's page reached from its server's list leads its head with the way
-   back, folded to its glyph (`integration-tool-list.tsx`). */
-.integration-tool-detail-head:has(.ui-button) {
-  --ui-fold: folded;
-  padding-left: var(--ui-item-gap);
-}
-
-/* What a tool does, rendered as markdown: its emphasis, headings, and code
-   in the full ink, its headings at the words' own size. */
-.integration-tool-description-whole :is(strong, .ui-markdown-heading, code) {
-  color: var(--ui-color-text);
-}
-
-.integration-tool-description-whole .ui-markdown-heading {
-  margin-top: 0.9em;
-  font-size: 1em;
-}
-
-/* off-scale: 440px, where a tool parameter's name and values fit side by side */
-@container (width >= 440px) {
-  .integration-tool-parameter {
-    display: grid;
-    grid-template-columns: minmax(150px, 34%) 1fr;
-    column-gap: var(--ui-block-gap);
-  }
-
-  .integration-tool-parameter-required {
-    flex-basis: 100%;
-    margin-left: 0;
-  }
-}
-
 /* Inbox ---------------------------------------------------------------------- */
 
 /* Split beside the item, the list's bar ends at the item's edge rather than

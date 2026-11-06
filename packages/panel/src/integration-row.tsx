@@ -1,9 +1,4 @@
-import {
-  CONNECTION_HEALTH,
-  type ConnectionHealth,
-  type IntegrationTool,
-  toolsCount,
-} from "@repo/features/integration-health";
+import { CONNECTION_HEALTH, type ConnectionHealth } from "@repo/features/integration-health";
 import {
   SIGN_IN,
   SIGN_IN_ACTION,
@@ -11,13 +6,11 @@ import {
   signInLine,
 } from "@repo/features/integration-sign-in";
 import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
-import { byName } from "@repo/features/integration-tool-model";
 import type { IntegrationStatusView } from "@repo/features/integration-view";
 import {
   INTEGRATION_ACCOUNTS_MAX,
   INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
-  INTEGRATION_PROVIDER,
   INTEGRATION_PURPOSE,
   INTEGRATION_STATUS,
   type IntegrationProvider,
@@ -33,9 +26,6 @@ import {
   Button,
   CONFIRM_LOSS,
   ConfirmDialog,
-  DisclosureChevron,
-  DisclosureScope,
-  type DisclosureState,
   GAP,
   INLINE_EDIT_LOOK,
   InlineEdit,
@@ -43,9 +33,6 @@ import {
   motionKey,
   ProviderMark,
   RetryButton,
-  Reveal,
-  revealArea,
-  ScrollArea,
   SETTINGS_ROW_CONTROLS,
   SETTINGS_ROW_STATE,
   SettingsRowMark,
@@ -60,10 +47,9 @@ import {
 import type { ServerRow } from "@repo/ui/agent-servers-model";
 import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { ActResult, ActVariables } from "./act.js";
 import { sendAct } from "./act.js";
 import { actMutation } from "./act-mutations.js";
@@ -72,7 +58,6 @@ import { confirmFailure, refusedShown } from "./failure-report.js";
 import { type GitHubConnectControl, useGitHubConnection } from "./github-connect.js";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "./integration-grant.js";
 import type { IntegrationStatuses } from "./integration-statuses.js";
-import { IntegrationToolDetail, IntegrationToolList, keepInView } from "./integration-tool-list.js";
 import { Highlighted } from "./search-field.js";
 import { MenuRow } from "./settings/menu-row.js";
 
@@ -82,16 +67,14 @@ import { MenuRow } from "./settings/menu-row.js";
  * The row leads with the provider's mark, names the provider and, beside
  * it, the account where one is told apart (`serverAccountName`: "Notion ·
  * Acme"), and under it says where the connection stands once that needs
- * saying: connected with the count of its server's tools, a sign-in the
- * browser is waited on with Reopen and Cancel, one that failed or never
+ * saying: connected, a sign-in the browser is waited on with Reopen and
+ * Cancel, one that failed or never
  * finished with Try again, or one expired with Reconnect. A row with nothing
  * of that to say and not connected says instead what the provider gives
  * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. A
  * connected or expired account's ⋯ keeps Reconnect (but where Reconnect is
  * the row's button), Disconnect (asked first), and, where the provider
- * allows, Add another account and Rename. A surface that hands it the server's
- * tools (`tools`) lets the row open onto them in place; one that hands none
- * says their count alone. Settings › Integrations' own words
+ * allows, Add another account and Rename. Settings › Integrations' own words
  * (`settings/integrations-page.tsx`) say the rest of how a row behaves.
  */
 
@@ -148,10 +131,7 @@ function saidOf(said: string | undefined): Pick<RowLine, "said"> {
 function connectedLine(health: ConnectionHealth): RowLine {
   switch (health.kind) {
     case CONNECTION_HEALTH.WORKING:
-      return {
-        text: `${ROW_LINE.CONNECTED} · ${toolsCount(health.tools.length)}`,
-        state: LINE_STATE.CONNECTED,
-      };
+      return { text: ROW_LINE.CONNECTED, state: LINE_STATE.CONNECTED };
     case CONNECTION_HEALTH.BROKEN:
       return { text: health.problem, state: LINE_STATE.ATTENTION, ...saidOf(health.said) };
     case CONNECTION_HEALTH.CHECKING:
@@ -232,174 +212,8 @@ function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   );
 }
 
-/** How a row's tools are drawn: which of them, whether they show, and the search that chose them. */
-interface RowTools {
-  /** The tools the row opens onto: every one, or those the search found. */
-  readonly shown: readonly IntegrationTool[];
-  /** Every tool its server answered with; the row opens onto none when none. */
-  readonly all: readonly IntegrationTool[];
-  /** The search found some of its tools, which are those shown. */
-  readonly found: boolean;
-  readonly expanded: boolean;
-  readonly onToggle: () => void;
-  /** The words searched, marked where they landed. */
-  readonly tokens: readonly string[];
-}
-
 /** The words a row marks where no search stands. */
 const NO_TOKENS: readonly string[] = [];
-
-/** The body a row's tools hand the fold their chevron reads, which the row's `Reveal` unrolls instead. */
-const NO_BODY = (): void => undefined;
-
-/** The fold state the tools' chevron turns by: open while they show, with the press the row's own. */
-function toolsFold(tools: RowTools): DisclosureState {
-  return {
-    open: tools.expanded,
-    drawn: tools.expanded,
-    leaving: false,
-    toggle: tools.onToggle,
-    body: NO_BODY,
-  };
-}
-
-/**
- * A connected row's line once its server answered with tools: Connected,
- * and the count of them as the press that opens the row onto them, its
- * chevron turning while they unroll.
- */
-function ToolsLine({
-  name,
-  panelId,
-  tools,
-}: {
-  name: string;
-  panelId: string;
-  tools: RowTools;
-}): React.JSX.Element {
-  // Note that the name starts with the words the press shows, so a voice command that says them finds it.
-  const shown = tools.found
-    ? `${tools.shown.length} of ${toolsCount(tools.all.length)} match`
-    : toolsCount(tools.all.length);
-  return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} wrap>
-      {`${ROW_LINE.CONNECTED} · `}
-      <TextButton
-        aria-label={`${shown}, ${tools.expanded ? "hide" : "show"} ${name} tools`}
-        aria-expanded={tools.expanded}
-        aria-controls={tools.expanded ? panelId : undefined}
-        onClick={tools.onToggle}
-      >
-        {shown}
-        <DisclosureScope state={toolsFold(tools)}>
-          <DisclosureChevron />
-        </DisclosureScope>
-      </TextButton>
-    </SettingsRowStateLine>
-  );
-}
-
-/** A row's tools, opened in place under it: the list, and beside it the page of the tool it holds. */
-function RowToolsPanel({
-  id,
-  name,
-  provider,
-  tools,
-}: {
-  id: string;
-  name: string;
-  provider: IntegrationProvider;
-  tools: RowTools;
-}): React.JSX.Element {
-  // Note that a catalog integration's tools are named and described by the provider, which a screen recording shows; Executor's are the apps a member set up, which stay masked.
-  const toolWordsShown = provider !== INTEGRATION_PROVIDER.EXECUTOR;
-  // Note that the row's name is the provider's own unless an account's label rides it.
-  const serverReplayMasked = name !== INTEGRATION_NAME[provider];
-  const shown = byName(tools.shown);
-  const [held, setHeld] = useState<string | undefined>(undefined);
-  const rows = useRef(new Map<string, HTMLElement>());
-  const body = useRef<HTMLDivElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  const run = useRef<VirtualRowsHandle>(null);
-  // A tool the search no longer finds hands its place to the first that it does.
-  const current = shown.find((tool) => tool.name === held) ?? shown[0];
-
-  const hold = (tool: IntegrationTool | undefined) => {
-    if (tool === undefined) return;
-    setHeld(tool.name);
-    const row = rows.current.get(tool.name);
-    row?.focus({ preventScroll: true });
-    keepInView(list.current, row?.closest("li") ?? null);
-  };
-
-  // The list's own arrows move the focus (`List`), and the tool held follows it, as a press on a row holds it.
-  const onRowFocus = (event: React.FocusEvent) => {
-    const stepped = [...rows.current].some(([, row]) => row === event.relatedTarget);
-    const landed = [...rows.current].find(([, row]) => row === event.target);
-    if (!stepped || landed === undefined) return;
-    setHeld(landed[0]);
-    keepInView(list.current, landed[1].closest("li"));
-  };
-
-  const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
-    if (event.key !== "Enter" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    setHeld(tool.name);
-    body.current?.focus();
-  };
-
-  const onBodyKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Escape" && event.key !== "ArrowLeft") return;
-    // Note that Escape stops here, because it hands the focus back to the list rather than leaving Settings.
-    event.preventDefault();
-    event.stopPropagation();
-    if (current === undefined) return;
-    const row = rows.current.get(current.name);
-    // Note that the tool held may have been scrolled out of the rows drawn, so it is brought in first.
-    if (row !== undefined) row.focus({ preventScroll: true });
-    else run.current?.bringIn(current.name, () => rows.current.get(current.name)?.focus());
-  };
-
-  return (
-    <div id={id} className="integration-tools-panel">
-      <div className="integration-tools-split">
-        <ScrollArea ref={list}>
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
-          <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
-            <IntegrationToolList
-              scroller={list}
-              handle={run}
-              server={name}
-              toolWordsShown={toolWordsShown}
-              tools={shown}
-              tokens={tools.tokens}
-              current={current?.name}
-              onOpen={hold}
-              onKeyDown={onRowKey}
-              rowRef={(tool, button) => {
-                if (button === null) rows.current.delete(tool.name);
-                else rows.current.set(tool.name, button);
-              }}
-            />
-          </div>
-        </ScrollArea>
-        {current !== undefined ? (
-          // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
-          <IntegrationToolDetail
-            key={current.name}
-            server={name}
-            serverReplayMasked={serverReplayMasked}
-            toolWordsShown={toolWordsShown}
-            tool={current}
-            tokens={tools.tokens}
-            bodyRef={body}
-            onBodyKeyDown={onBodyKey}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Disconnects one account: a Connect grant at the service, and GitHub by
@@ -436,7 +250,7 @@ export function IntegrationRow({
   status,
   health,
   statuses,
-  tools,
+  tokens = NO_TOKENS,
   onRetryTools,
 }: {
   row: ServerRow;
@@ -445,16 +259,14 @@ export function IntegrationRow({
   /** How a connected account's server answered when asked for its tools. */
   health: ConnectionHealth;
   statuses: IntegrationStatuses;
-  /** The server's tools the row opens onto in place; a surface that hands none says their count alone. */
-  tools?: RowTools | undefined;
+  /** The words a search asks for, marked where they landed in the row's name. */
+  tokens?: readonly string[];
   /** Asks the account's server for its tools again, offered where the read failed. */
   onRetryTools: () => void;
 }): React.JSX.Element {
-  const panelId = useId();
   const { mutateAsync: sendIntegrationsRename } = useMutation(
     actMutation(ACT_KIND.INTEGRATIONS_RENAME),
   );
-  const tokens = tools?.tokens ?? NO_TOKENS;
   const { provider, connection, name, account, accountName } = row;
   const { cancelSignIn } = statuses;
   const grant = useIntegrationGrant(statuses);
@@ -579,7 +391,7 @@ export function IntegrationRow({
     : [];
   return (
     // Note that a row is followed by its connection, because one that connects or disconnects leaves one section for the other and glides across rather than leaving one and arriving in the other.
-    <Stack gap={GAP.NONE} {...motionKey(connection)} {...revealArea()}>
+    <Stack gap={GAP.NONE} {...motionKey(connection)}>
       <MenuRow
         thing={name}
         actions={actions}
@@ -613,9 +425,7 @@ export function IntegrationRow({
               </InlineEdit>
             ),
           description:
-            connected && tools !== undefined && tools.all.length > 0 ? (
-              <ToolsLine name={name} panelId={panelId} tools={tools} />
-            ) : line === undefined ? (
+            line === undefined ? (
               connected ? null : (
                 INTEGRATION_PURPOSE[provider]
               )
@@ -660,11 +470,6 @@ export function IntegrationRow({
           ),
         }}
       />
-      {tools === undefined ? null : (
-        <Reveal shown={connected && tools.expanded && tools.shown.length > 0}>
-          <RowToolsPanel id={panelId} name={name} provider={provider} tools={tools} />
-        </Reveal>
-      )}
       <ConfirmDialog
         open
         confirm={disconnect}
