@@ -19,12 +19,13 @@ import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
+  useMenu,
   VisuallyHidden,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
-import { memo, useRef, useState } from "react";
+import { memo, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -51,9 +52,8 @@ import {
   type MainTabsControl,
 } from "../tasks/use-main-tabs.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import type { MenuAction } from "./action-menu.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
-import { PlaceMore } from "./phone-head.js";
 import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
@@ -83,15 +83,15 @@ import { TabStrip } from "./tab-strip.js";
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
  * right-click (`strip-tabs.tsx`). An agent's own actions, its one menu
  * (`agent-actions.tsx`), stand on its tab's right-click after the tab's
- * keeping, and the chosen agent's in the bar's ⋯, drawn into the slot
- * the bar keeps for it, so the ⋯ acts on what is under the bar.
+ * keeping, with what its transcript hands up while it is shown; no ⋯
+ * stands on the bar.
  *
  * The task's details, its Overview (its head and its plan document, which
  * the task's page draws, `desktop-tasks.tsx`), are no tab among the agents:
  * the task's name in the topbar opens them across the page, in place of the column's
  * bar and the side panel, with the way back to the agents in their own card,
- * so no tab ever stands with none chosen. The task's ⋯ stands in the topbar whatever the
- * column shows.
+ * so no tab ever stands with none chosen. The task's menu is its name's right-click in the
+ * topbar, whatever the column shows.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -142,9 +142,6 @@ const NEW_AGENT_STARTING = "Starting…";
 /** The row that opens the task's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
 
-/** The slot a bar keeps for a tab's ⋯ portaled in from it. */
-const TAB_ACTIONS_SLOT = "toolbar-tab-actions flex min-w-control flex-none items-center";
-
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
 
@@ -158,7 +155,6 @@ function RenamableTab({
   doors,
   rename,
   field,
-  slot,
   onShown,
 }: {
   look: TabLook;
@@ -167,8 +163,6 @@ function RenamableTab({
   rename: InlineRename | undefined;
   /** What the field is called for a reader and how long a name it takes; a task's where absent. */
   field?: { label: string; maxLength: number } | undefined;
-  /** The toolbar's slot the chosen tab's ⋯ stands in. */
-  slot?: HTMLElement | null | undefined;
   /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
@@ -195,7 +189,6 @@ function RenamableTab({
       doors={rename === undefined ? doors : { ...doors, onRename: rename.begin }}
       editor={editor}
       tabRef={tab}
-      slot={slot}
       onShown={onShown}
     />
   );
@@ -217,7 +210,6 @@ export function AgentMenuTab({
   keys,
   terminals,
   onOpenBrowser,
-  slot,
   onShown,
 }: {
   agent: AgentSummary;
@@ -230,8 +222,6 @@ export function AgentMenuTab({
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** Opens a new tab of the agent's cloud browser in the side panel, by the agent; a phone's alone (`useAgentActions`). */
   onOpenBrowser?: ((agentId: string) => void) | undefined;
-  /** The toolbar's slot the chosen agent's ⋯ stands in; none where the toolbar keeps none. */
-  slot: HTMLElement | null | undefined;
   /** Hears the tab while it is the one shown, for a phone's header (`DoorsTab`). */
   onShown: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
@@ -268,7 +258,6 @@ export function AgentMenuTab({
         doors={whole}
         rename={actions.rename}
         field={{ label: "Agent name", maxLength: AGENT_BOUNDS.MAX_TITLE_CHARS }}
-        slot={slot}
         onShown={onShown}
       />
       {actions.dialog}
@@ -532,13 +521,18 @@ function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Ele
 /** What the task's name in its topbar opens, and the place the details' way back leads to. */
 export const DETAILS_WORDS = { HINT: "Task details", PLACE: "agents" } as const;
 
+/** What the task's menu is named, which a right-click on its name opens. */
+const TASK_MENU_LABEL = "Task actions";
+
 /**
  * The task's topbar, across the task's page over its column and its side
  * panel: the task's status mark and name, the two one press, hanging the
  * task's card, that opens the
  * task's details across the page and, pressed again, goes back to the agents
- * (`details`), as a channel's name opens its details; then the task's ⋯, its
- * own menu (`planMenu`), standing whichever the page shows, and `actions`. The window's side panel toggle
+ * (`details`), as a channel's name opens its details, and whose right-click
+ * is the task's own menu (`planMenu`), whichever the page shows; then
+ * `actions`. No ⋯ stands on the bar, as none stands on the tab rows under
+ * it: every menu there is a right-click. The window's side panel toggle
  * stands at its end (`desktop-shell.tsx`).
  */
 export function TaskTopbar({
@@ -558,47 +552,49 @@ export function TaskTopbar({
   shown: boolean;
   actions?: React.ReactNode;
 }): React.JSX.Element {
+  const menu = useMenu(shown);
   const look =
     task === undefined
       ? undefined
       : tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name });
   return (
-    <Toolbar
-      // Note that the status mark stands inside the name's press, as a task's chip wears it, where the name opens the details.
-      lead={details === undefined ? look?.icon : undefined}
-      title={task?.name}
-      titlePress={
-        details === undefined || task === undefined
-          ? undefined
-          : {
-              open: details.shown,
-              label: DETAILS_WORDS.HINT,
-              icon: look?.icon,
-              // The task's card, as its sidebar row and its chips hang it.
-              card: tabCard({
-                kind: TAB_KIND.PLAN,
-                taskId: task.id,
-                name: task.name,
-                status: task.status,
-              }),
-              onPress: details.onToggle,
-            }
-      }
-      measure
-      actions={
-        <>
-          {task === undefined || planMenu === undefined ? null : (
-            <PlaceMore
-              thing={task.name}
-              shown={shown}
-              groups={() => planMenu.groups()}
-              ends={() => planMenu}
-            />
-          )}
-          {actions}
-        </>
-      }
-    />
+    <>
+      <Toolbar
+        // Note that the status mark stands inside the name's press, as a task's chip wears it, where the name opens the details.
+        lead={details === undefined ? look?.icon : undefined}
+        title={task?.name}
+        titleMenu={task === undefined || planMenu === undefined ? undefined : menu.contextMenu()}
+        titlePress={
+          details === undefined || task === undefined
+            ? undefined
+            : {
+                open: details.shown,
+                label: DETAILS_WORDS.HINT,
+                icon: look?.icon,
+                // The task's card, as its sidebar row and its chips hang it.
+                card: tabCard({
+                  kind: TAB_KIND.PLAN,
+                  taskId: task.id,
+                  name: task.name,
+                  status: task.status,
+                }),
+                onPress: details.onToggle,
+              }
+        }
+        measure
+        actions={actions}
+      />
+      {menu.drawn === undefined || planMenu === undefined ? null : (
+        <ActionMenu
+          label={TASK_MENU_LABEL}
+          menu={menu.drawn}
+          subject={planMenu.subject}
+          footer={planMenu.footer}
+          groups={planMenu.groups()}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -621,10 +617,8 @@ export function MainTabBars({
   shown,
   onOpenTerminal,
   onOpenBrowser,
-  slots,
   onShown,
   waiting,
-  actions,
 }: {
   /** The task the column is, whose strip's looks the switcher keeps. */
   task: Pick<TaskSummary, "id">;
@@ -646,19 +640,13 @@ export function MainTabBars({
   onOpenTerminal?: ((agentId: string) => void) | undefined;
   /** Opens a new tab of an agent's cloud browser in the side panel, by the agent; a phone's alone, whose ⋯ offers it beside Show terminal. */
   onOpenBrowser?: ((agentId: string) => void) | undefined;
-  /** Whether the bar keeps a slot for the chosen agent's ⋯; none on a phone, whose header offers what it would. */
-  slots: boolean;
-  /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the agent's ⋯ would (`task-pane-switcher.tsx`); none where the toolbar draws the ⋯. */
+  /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the tab's right-click would (`task-pane-switcher.tsx`); none wider than a phone. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
   /** The threads waiting on the developer, by the agent that posted them (`waitingByAgent`), which each agent's tab counts. */
   waiting?: ReadonlyMap<string, readonly unknown[]> | undefined;
-  /** What the bar draws after the chosen agent's ⋯. */
-  actions?: React.ReactNode;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const failed = useFailedAgents();
-  // The slot the bar keeps for the chosen agent's ⋯, portaled in from its tab (`strip-tabs.tsx`'s `DoorsTab`).
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
   // The agents' and the draft's tabs in the column's order, which the
   // developer's moves and their opening set (`use-main-tabs.ts`).
   const strip = inTaskOrder(
@@ -725,7 +713,6 @@ export function MainTabBars({
                   key={tabKey(entry.tab)}
                   look={entry.look}
                   doors={doorsOf(entry)}
-                  slot={slots ? slot : null}
                   onShown={onShown}
                 />
               ) : (
@@ -739,7 +726,6 @@ export function MainTabBars({
                   keys={keys}
                   terminals={{ onOpenTerminal }}
                   onOpenBrowser={onOpenBrowser}
-                  slot={slots ? slot : null}
                   onShown={onShown}
                 />
               ),
@@ -766,13 +752,6 @@ export function MainTabBars({
             onAnswered={main.onNewTabAnswered}
           />
         </MainTabsRow>
-      }
-      actions={
-        <>
-          {/* The chosen agent's ⋯, portaled in from its tab, so it acts on what is under the bar. */}
-          <span ref={setSlot} className={TAB_ACTIONS_SLOT} />
-          {actions}
-        </>
       }
     />
   );

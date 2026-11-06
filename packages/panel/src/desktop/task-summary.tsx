@@ -30,7 +30,7 @@ import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { Schema } from "effect";
-import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
+import { ChevronsLeftIcon, ChevronsRightIcon } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -80,9 +80,8 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * which headings are folded is one choice for every task's summary, kept
  * on this Mac.
  *
- * A plan with nothing yet to list draws no summary at all, rail, card, or
- * toolbar button, rather than one saying so; it stands once the plan holds
- * its first row.
+ * A plan with nothing yet to list draws no summary at all, rail or card,
+ * rather than one saying so; it stands once the plan holds its first row.
  *
  * It is drawn expanded or collapsed wherever the column has room for its
  * rail. Expanded and
@@ -98,8 +97,8 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * place, with its own chevron back on the spot the rail's stood. The card
  * goes on that chevron, on Escape, on a row chosen, or on a press anywhere
  * outside it, which still lands where it was pressed. A column too narrow to
- * spare the rail's room draws no rail at all: the toolbar's button, which
- * hangs the same card, is its one way in. Whether it is pinned
+ * spare the rail's room draws no summary at all, the side panel's tabs and
+ * the agents' strip holding what it would list. Whether it is pinned
  * is the window's preference, kept in the renderer's storage as the
  * sidebar's fold is, and a fixture run keeps none.
  *
@@ -134,7 +133,7 @@ const SUMMARY_WIDE = 1040;
  * The least width of the task's column, in CSS pixels, at which the summary
  * stands as a rail rather than not at all. Note that below it the rail's
  * 56px and the document's page insets either side, 80, would leave the words
- * under 344px, and the toolbar's button hangs the same card the rail does.
+ * under 344px.
  */
 const SUMMARY_RAILED = 480;
 
@@ -149,7 +148,6 @@ export type SummaryMode = (typeof SUMMARY_MODE)[keyof typeof SUMMARY_MODE];
 
 /** What hung the card, which takes the focus back when Escape or its chevron takes the card down. */
 const CARD_FROM = {
-  TOOLBAR: "toolbar",
   RAIL: "rail",
 } as const;
 
@@ -219,15 +217,15 @@ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
 /** How the summary stands now, whether its card hangs, and the presses that change either. */
 export interface SummaryLayout {
   mode: SummaryMode;
-  /** Whether the summary lists anything, without which neither it nor the toolbar's button is drawn. */
+  /** Whether the summary lists anything, without which it is not drawn. */
   holds: boolean;
-  /** Whether the column has room for the summary pinned, which is what the toolbar's button turns. */
+  /** Whether the column has room for the summary pinned, which is what the rail's chevron turns. */
   wide: boolean;
   /** What hung the card, while it hangs. */
   card: CardFrom | undefined;
-  /** The toolbar's button: the card while it hangs, else the pin where the summary fits, else the card. */
+  /** The pinned summary's chevron, which collapses it to its rail. */
   onToggle: () => void;
-  /** The rail's chevron, which does what the toolbar's button does. */
+  /** The rail's chevron: the card while it hangs, else the pin where the summary fits, else the card. */
   onExpand: () => void;
   onDismiss: () => void;
 }
@@ -287,7 +285,7 @@ export function useSummaryLayout(
     holds,
     wide,
     card,
-    onToggle: () => expand(CARD_FROM.TOOLBAR),
+    onToggle: pin.onToggle,
     onExpand: () => expand(CARD_FROM.RAIL),
     onDismiss,
   };
@@ -300,36 +298,6 @@ function cardControl(layout: SummaryLayout, cardId: string) {
     "aria-expanded": layout.card !== undefined,
     "aria-controls": layout.card === undefined ? undefined : cardId,
   };
-}
-
-/**
- * The toolbar's button, after the ⋯ menu, drawn on while the summary is
- * expanded, pinned or hung, and not drawn while the summary holds nothing.
- * While the card hangs, or where the summary does not fit, it hangs the
- * card over the rail or takes it down; otherwise it pins the summary or
- * collapses it to its rail, and says which it is.
- */
-export function SummaryButton({
-  layout,
-  cardId,
-}: {
-  layout: SummaryLayout;
-  cardId: string;
-}): React.JSX.Element | null {
-  if (!layout.holds) return null;
-  const pins = layout.wide && layout.card === undefined;
-  const label = pins ? "Toggle pinned summary" : "Toggle summary";
-  const state = pins
-    ? { pressed: layout.mode === SUMMARY_MODE.COLUMN }
-    : cardControl(layout, cardId);
-  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
-  return (
-    <span className="summary-toggle contents" data-summary-opener={CARD_FROM.TOOLBAR}>
-      <Tooltip label={label}>
-        <IconButton icon={<ListIcon />} label={label} {...state} onClick={layout.onToggle} />
-      </Tooltip>
-    </span>
-  );
 }
 
 /** A row of the summary: its "+" row, and the card it hangs where the rest of the window hangs one for the same thing. */
@@ -460,7 +428,7 @@ function summarySections(
   return sectionsOf(entries, tasks.agents);
 }
 
-/** Whether the plan's summary lists anything, which is whether it and its toolbar button are drawn at all. */
+/** Whether the plan's summary lists anything, which is whether it is drawn at all. */
 export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolean {
   return sectionsOf(summaryRows(tasks, inbox).rows, tasks.agents).length > 0;
 }
@@ -725,7 +693,7 @@ function SummaryCard({
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
-    // The toolbar's opener is a box around its button, which takes the focus back.
+    // The opener is a box around its button, which takes the focus back.
     (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
   // A press on a control that hangs the card, or on what the card opened, is that control's to answer.
@@ -796,9 +764,8 @@ function SummaryCard({
 /**
  * The summary's own chevron at its top right, the one control of the column
  * and the rail, so a press on it keeps the focus as the summary turns. On
- * the rail it expands the summary as the toolbar's button does; pinned it
- * collapses the summary to the rail as that button does, kept as its press
- * is, drawn while the pointer or the keys are on the summary, on the very
+ * the rail it pins the summary where it fits, or hangs it as a card; pinned it
+ * collapses the summary to the rail, kept as the pin is, drawn while the pointer or the keys are on the summary, on the very
  * spot of the rail's own, so the pointer that pinned it collapses it again
  * without moving.
  */

@@ -21,6 +21,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { openTaskMenu, taskName } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { TASK_PANE, taskPaneOf } from "./task-pane-switcher.js";
@@ -360,12 +361,12 @@ test("on a phone, which has no ⌘F to press, Overview's ⋯ Find opens the find
   assert.equal(document.activeElement, field);
 });
 
-test("a wide window keeps the panel's strip and the column's toolbar beside an agent, the task's ⋯ the topbar's, and draws no row of a phone's", () => {
+test("a wide window keeps the panel's strip and the column's toolbar beside an agent, the task's name in the topbar, and draws no row of a phone's", () => {
   const page = mount(SHELL_ROOM.WIDE, true, SIDE_PANEL_TAB.COMMENTS, false, true);
   assert.equal(page.container.querySelector(".task-head"), null);
   assert.ok(page.container.querySelector(".side-panel-tabs"), "the panel keeps its strip");
-  assert.ok(page.labeled(`${TASK.name} actions`), "the topbar keeps the task's ⋯");
-  assert.equal(page.labeled("Task actions"), false, "the column's toolbar draws none");
+  assert.equal(taskName(page.container).textContent, TASK.name, "the topbar names the task");
+  assert.equal(page.labeled("Task actions"), false, "no bar draws a ⋯");
 });
 
 test("on a phone a task still read, or one that cannot be, is headed by its way back alone, as the task's own head will lead", () => {
@@ -420,11 +421,7 @@ test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offe
 
 /** Chooses Rename from Overview's ⋯ in a wide window's column. */
 function chooseOverviewRename(container: HTMLElement): void {
-  const more = container.querySelector<HTMLButtonElement>(
-    '.task-topbar button[aria-label$=" actions"]',
-  );
-  assert.ok(more, "the topbar holds the task's ⋯");
-  act(() => more.click());
+  openTaskMenu(container);
   const rename = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
     (each) => itemWords(each) === "Rename",
   );

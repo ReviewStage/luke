@@ -1233,7 +1233,6 @@ function PanelTabs({
   cloudBrowsers,
   offers,
   held,
-  actionsSlot,
   handed,
   onOpenAgent,
   shownAgent,
@@ -1273,9 +1272,7 @@ function PanelTabs({
   offers: readonly AddEntry[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
-  /** The bar's slot the chosen tab's ⋯ stands in. */
-  actionsSlot: HTMLElement | null;
-  /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
+  /** What the chosen tab's body hands its right-click, under the tab it was drawn for (`useHandedTabActions`). */
   handed: HandedTabActions | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
@@ -1406,14 +1403,12 @@ function PanelTabs({
             entry.look.selected && wiring !== undefined
               ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
               : entry.look;
-          const slot = activity === undefined ? actionsSlot : null;
           const onShown = activity?.onShown;
           return entry.agent === undefined || transcriptDoors === undefined ? (
             <DoorsTab
               key={tabKey(entry.tab)}
               look={look}
               doors={doorsOf(entry, at)}
-              slot={slot}
               onShown={onShown}
             />
           ) : (
@@ -1426,7 +1421,6 @@ function PanelTabs({
               shown={shown}
               keys={keys}
               terminals={{ onOpenTerminal: transcriptDoors.onOpenTerminal }}
-              slot={slot}
               onShown={onShown}
             />
           );
@@ -2461,13 +2455,11 @@ export function SidePanel({
       ? { listed: ownListed, onListed: setOwnListed, onShown: setOwnShown }
       : undefined;
   const activity = taskActivity ?? ownActivity;
-  // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
-  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // Where a phone's Activity lists the tabs, drawn there from the strip, which holds how each tab looks.
   const [activitySlot, setActivitySlot] = useState<HTMLElement | null>(null);
   const switched = activity !== undefined && panel.fullScreenOnly;
   const listing = switched && activity.listed === true;
-  // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
+  // What the chosen tab's body offers on its right-click beyond what the strip does, let go only by the tab that handed it.
   const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
   const handTabActions = useCallback((tab: SidePanelTab, actions: TabActionGroups | undefined) => {
     setHanded((was) =>
@@ -2774,7 +2766,6 @@ export function SidePanel({
           offers={offers}
           held={drawnTranscripts}
           wiring={wiring}
-          actionsSlot={actionsSlot}
           handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
@@ -2789,12 +2780,6 @@ export function SidePanel({
                 }
               : undefined
           }
-        />
-      }
-      actions={
-        <span
-          ref={setActionsSlot}
-          className="toolbar-tab-actions flex min-w-control flex-none items-center"
         />
       }
     >
@@ -2889,7 +2874,7 @@ export function SidePanelSkeleton({
   panel: SidePanelControl;
 }): React.JSX.Element {
   return (
-    <PanelFrame {...drawing} panel={panel} label="Panel" tabs={null} actions={null}>
+    <PanelFrame {...drawing} panel={panel} label="Panel" tabs={null}>
       {null}
     </PanelFrame>
   );
@@ -2997,7 +2982,6 @@ function PanelFrame({
   edge,
   label,
   tabs,
-  actions,
   banner,
   switched = false,
   head,
@@ -3007,10 +2991,8 @@ function PanelFrame({
   panel: Pick<SidePanelControl, "width" | "fullScreen" | "fullScreenOnly" | "onToggleFullScreen">;
   /** What the pane is called to a reader. */
   label: string;
-  /** The row's tabs, which take what the row leaves beside the actions and the full-screen button. */
+  /** The row's tabs, which take what the row leaves beside the full-screen button. */
   tabs: React.ReactNode;
-  /** The chosen tab's own actions, its ⋯, before the full-screen button. */
-  actions: React.ReactNode;
   /** Drawn under the row while the panel fills the window and covers what draws it otherwise. */
   banner?: React.ReactNode;
   /** Whether a phone's header stands for the bar, which is then not drawn (`task-pane-switcher.tsx`). */
@@ -3053,7 +3035,6 @@ function PanelFrame({
             document order, so the controls follow it. */}
         <div className="side-panel-bar">
           {tabs}
-          {actions}
           {panel.fullScreenOnly ? null : (
             <FullScreenToggle
               fullScreen={panel.fullScreen}

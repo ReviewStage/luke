@@ -75,6 +75,7 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { openTaskMenu } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -1716,10 +1717,8 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
-  // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
-  const more = host.querySelector<HTMLButtonElement>('.task-topbar button[aria-label$=" actions"]');
-  assert.ok(more, "the topbar's ⋯ is drawn");
-  act(() => more.click());
+  // The task's menu is its name's right-click in the topbar; Mark done is the details' status chip's there, and a row's.
+  openTaskMenu(host);
   assert.equal(deleteKeys, "⌘⌫");
   assert.equal(itemChord("Permanently delete"), deleteKeys);
   assert.equal(doneKeys, null);

@@ -127,7 +127,6 @@ import {
 } from "./task-pane-switcher.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import {
-  SummaryButton,
   type SummaryLayout,
   type SummaryPin,
   SummarySkeleton,
@@ -1331,10 +1330,8 @@ function PlanDocument({
                             shown={tasks.shown}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
                             onOpenBrowser={phone ? openBrowser : undefined}
-                            slots={!phone}
                             onShown={phone ? setShownAgentTab : undefined}
                             waiting={waitingOf}
-                            actions={<SummaryButton layout={summaryLayout} cardId={summaryCard} />}
                           />
                         </div>
                         {/* The plan's banner is the whole plan's, so it stands over every
