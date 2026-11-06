@@ -14,11 +14,11 @@ import * as FileSystem from "effect/FileSystem";
  * own files: one that is absolute, holds `..`, names git's own folder (the
  * worktree's link to the shared clone, whose config git runs commands
  * from), or resolves outside the mirror through a link the checkout holds,
- * is refused and nothing is written or deleted. A file is written beside
- * its place and renamed in, so a dev server watching the mirror never reads
- * half of one. The match compares the mirror's own set by git's rules,
- * symlinks left out as the bridge leaves them out of its manifest, so a
- * link the worktree checked out stays as it is. A file's name, bytes, and
+ * is refused and nothing is written or deleted. A file is written in a
+ * fresh folder beside its place and renamed in, so a dev server watching
+ * the mirror never reads half of one. The match compares the mirror's own
+ * set by git's rules, symlinks left out as the bridge leaves them out of
+ * its manifest, so a link the worktree checked out stays as it is. A file's name, bytes, and
  * hash are the agent's and are never logged.
  */
 
@@ -28,8 +28,8 @@ const MODE_BITS = {
   [MIRROR_FILE_MODE.EXECUTABLE]: 0o755,
 } as const satisfies Readonly<Record<MirrorFileMode, number>>;
 
-/** What a file's temporary copy beside its place is named after it. */
-const TEMPORARY_SUFFIX = ".mirroring";
+/** What the fresh folder a file is written in beside its place is named from. */
+const TEMPORARY_PREFIX = ".mirroring-";
 
 /** How many of the mirror's files are read at once while a manifest is matched. */
 const READ_CONCURRENCY = 8;
@@ -73,11 +73,21 @@ export const mirrorWritten = (root: string, file: FileFrame) =>
     const path = yield* Path.Path;
     const target = yield* mirrorTarget(root, file.path);
     if (Option.isNone(target)) return false;
-    const temporary = `${target.value}${TEMPORARY_SUFFIX}`;
-    yield* fileSystem.makeDirectory(path.dirname(target.value), { recursive: true });
-    yield* fileSystem.writeFile(temporary, file.bytes);
-    yield* fileSystem.chmod(temporary, MODE_BITS[file.mode]);
-    yield* fileSystem.rename(temporary, target.value);
+    const folder = path.dirname(target.value);
+    yield* fileSystem.makeDirectory(folder, { recursive: true });
+    // Note that the copy is written in a folder made fresh for it, because a name of our own beside the target could be a link the checkout holds.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const fresh = yield* fileSystem.makeTempDirectoryScoped({
+          directory: folder,
+          prefix: TEMPORARY_PREFIX,
+        });
+        const temporary = path.join(fresh, path.basename(target.value));
+        yield* fileSystem.writeFile(temporary, file.bytes);
+        yield* fileSystem.chmod(temporary, MODE_BITS[file.mode]);
+        yield* fileSystem.rename(temporary, target.value);
+      }),
+    );
     return true;
   });
 

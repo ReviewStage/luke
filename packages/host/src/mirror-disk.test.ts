@@ -37,9 +37,11 @@ describe("mirror-disk", () => {
       ]) {
         assert.equal(yield* mirrorWritten(root, { path: refused, mode, bytes }), false, refused);
       }
-      assert.deepEqual(yield* fileSystem.readDirectory(outside), []);
-
+      // Note that a link the checkout holds beside the target is never written through.
+      yield* fileSystem.makeDirectory(path.join(root, "bin"));
+      yield* fileSystem.symlink(path.join(outside, "x"), path.join(root, "bin", "run.mirroring"));
       assert.equal(yield* mirrorWritten(root, { path: "bin/run", mode, bytes }), true);
+      assert.deepEqual(yield* fileSystem.readDirectory(outside), []);
       const written = path.join(root, "bin", "run");
       assert.equal(yield* fileSystem.readFileString(written), "hello");
       assert.equal((yield* fileSystem.stat(written)).mode & 0o777, 0o755);
