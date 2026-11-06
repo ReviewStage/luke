@@ -1747,15 +1747,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes.length, 1);
         assert.equal(expired.deleted, false);
         // The relaunch runs on the build's end, not on a tick; the later message's then waits its
-        // turn at the lease, which it polls.
+        // turn at the lease, which it polls. Note that the relaunch is joined by its end before the
+        // clock moves, because its launch's upload is gzipped off the event loop and so ends in real
+        // time rather than within a count of turns.
         yield* Deferred.succeed(built, undefined);
-        yield* turnsPass;
+        yield* Fiber.join(relaunching);
         assert.equal(api.sandboxes.length, 2);
-        yield* across(
-          Effect.all([Fiber.join(relaunching), Fiber.join(laterRelaunch)]),
-          CODER.RUNNER_LEASE.POLL,
-          3,
-        );
+        yield* across(Fiber.join(laterRelaunch), CODER.RUNNER_LEASE.POLL, 3);
         assert.equal(expired.deleted, true);
         assert.equal(api.sandboxes.length, 2);
         assert.equal(api.sandboxes.at(-1)?.status, "running");
