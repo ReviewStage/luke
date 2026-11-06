@@ -47,7 +47,7 @@ import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { GROUP_HEADING, GroupHeader } from "../group-header/group-header.js";
 import { INLINE_REF_LOOK, InlineRef } from "../inline-ref/inline-ref.js";
 import { LineRow } from "../line-button/line-button.js";
-import { ListMotion } from "../list-motion/list-motion.js";
+import { LIST_MOTION_WAY, ListMotion } from "../list-motion/list-motion.js";
 import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -1227,8 +1227,9 @@ const HERO_LISTED = 6;
 const HERO_SPACING = 9;
 
 /**
- * The hero's Inbox at `step`: the newest post arriving on top, each carried
- * down by the next until it runs off the panel's foot. Note that a post
+ * The hero's Inbox at `step`: the newest post unrolling on top, each carried
+ * down by the next, the foot of the one arriving and the rows under it one
+ * edge, until it runs off the panel's foot. Note that a post
  * stands as it arrived, unread and asking what it asks, because nothing on
  * screen reads or answers it, and a row that changed by itself would read as
  * the app acting at random. A post's place in the story is its age alone, so
@@ -1278,7 +1279,7 @@ export function LandingHeroScene(): React.JSX.Element {
               />
             </search>
             <div className="ui-landing-rows">
-              <ListMotion root={rows}>
+              <ListMotion root={rows} way={LIST_MOTION_WAY.UNROLL}>
                 <List label="Inbox items" moves>
                   {heroItems(step).map((item) => (
                     <InboxRow key={item.id} item={item} />
