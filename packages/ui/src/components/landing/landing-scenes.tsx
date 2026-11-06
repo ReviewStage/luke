@@ -1017,7 +1017,6 @@ function PhoneInbox(): React.JSX.Element {
     <div className="ui-landing-phone-app">
       <Toolbar
         look={TOOLBAR_LOOK.PHONE}
-        folded
         start={TOOLBAR_INSET.COLUMN}
         end={TOOLBAR_INSET.COLUMN}
         lead={<IconButton icon={<ComposeIcon />} label="New task" onClick={still} />}

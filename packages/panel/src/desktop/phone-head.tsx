@@ -110,8 +110,6 @@ export function phoneBar({
   return {
     look: TOOLBAR_LOOK.PHONE,
     place,
-    // A corner holds one control, so a way back is its glyph alone, named still.
-    folded: true,
     start: TOOLBAR_INSET.COLUMN,
     end: TOOLBAR_INSET.COLUMN,
     lead: start,
