@@ -13,14 +13,19 @@ import { PUSH_METHOD } from "@repo/host/contract";
 import { App } from "@repo/panel/app";
 import { installAppBridge } from "@repo/panel/app-bridge";
 import { installAppPlatform } from "@repo/panel/app-platform";
-import { installWindowHistory } from "@repo/panel/navigation-history";
+import { createPanelRouter } from "@repo/panel/panel-router";
 import { rendererRegistry } from "@repo/panel/renderer-runtime";
 import { loadTasksFixture } from "@repo/panel/tasks/tasks-fixture-loader";
 import { onRegistry } from "@repo/panel/testing/copy-feedback";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@repo/settings";
+import { QueryClient } from "@tanstack/react-query";
+import {
+  createBrowserHistory,
+  RouterContextProvider,
+  type RouterHistory,
+} from "@tanstack/react-router";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { browserHistory } from "../../src/app/browser-history";
 import { withLoadLink } from "../../src/app/load-link";
 import { webPlatform } from "../../src/app/web-platform";
 
@@ -30,11 +35,16 @@ declare global {
 
 const roots: Root[] = [];
 
-/** Takes down every panel drawn so far. */
+/** The tab's router history, made as the doors are installed, as the web root makes it. */
+let tabHistory: RouterHistory | undefined;
+
+/** Takes down every panel drawn so far, and stops the tab's history following the browser. */
 export function unmountPanels(): void {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
+  tabHistory?.destroy();
+  tabHistory = undefined;
   document.body.innerHTML = "";
 }
 
@@ -110,10 +120,11 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
  */
 export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  installAppBridge(withLoadLink(fixtureBridge(profile)));
+  tabHistory?.destroy();
+  tabHistory = createBrowserHistory();
+  installAppBridge(withLoadLink(fixtureBridge(profile), tabHistory));
   // Nothing counts a surface event here: no host stands behind the fixture.
   installAppPlatform(webPlatform({ recordSurfaceEvent: () => undefined }));
-  installWindowHistory(browserHistory());
 }
 
 /** The panel drawn in the tab once its state is read, as the web root draws it. */
@@ -124,7 +135,16 @@ export async function drawPanel() {
   document.body.append(element);
   const root = createRoot(element);
   roots.push(root);
-  await act(async () => root.render(onRegistry(rendererRegistry, createElement(App))));
+  assert.ok(tabHistory !== undefined, "the tab's doors are installed");
+  const router = createPanelRouter(tabHistory, new QueryClient());
+  await act(async () =>
+    root.render(
+      createElement(RouterContextProvider, {
+        router,
+        children: onRegistry(rendererRegistry, createElement(App)),
+      }),
+    ),
+  );
   await settle();
   const buttonOf = (label: string) =>
     [...element.querySelectorAll("button")].findLast(
