@@ -622,6 +622,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(bearerPlaceholder !== undefined && bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
+        // The fingerprint reads the token held at the firewall by its slot, never a placeholder, as warm runners
+        // launched before were recorded: the first 32 hex characters of the SHA-256 of
+        // {"env":[],"names":["linear"],"held":{"slot":"claude","credential":PLAN_TOKEN}}.
+        const record = Option.getOrThrow(yield* readAgentRunnerRecord(userId, opened.sessionId));
+        assert.equal(record.fingerprint, "780f5f77680c20a5ad5b4c255021deb7");
 
         const [config, first] = (yield* launchLines(command)) as [ClaudeCodeConfig, InputLine];
         assert.deepEqual(config, {
@@ -951,6 +956,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(env[RUNNER_ENV.API_KEY], API_KEY);
         assert.equal(env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.deepEqual(onKey.policies, []);
+        // Its fingerprint reads the key in its variable, as warm runners launched before were recorded: the first
+        // 32 hex characters of the SHA-256 of {"env":[["ANTHROPIC_API_KEY",API_KEY]],"names":["linear"]}.
+        assert.equal(launch.payload.fingerprint, "586cbee90aa20b9bb788adc7a378466c");
       }),
   );
 
@@ -1483,7 +1491,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch's end that left a message untaken keeps the sandbox up less the swap only its runner sent, and the launch that hands it on reads it on a swap of its own",
+    "a launch's end that left a message untaken keeps the sandbox up, and the launch that hands it on reads it on a swap of its own",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1508,17 +1516,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
         assert.equal(ended, RUNNER_ENDED.LINES_WAITING);
         assert.equal(api.sandboxes[0]?.status, "running");
-        assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
         const first = api.commands[0];
         assert.ok(first !== undefined);
-        // The ended runner's bearer is off the firewall until the launch that hands the line on sets its own.
         const firstBearer = launchBearer(api, first, SERVICE_HOST);
         assert.ok(firstBearer !== undefined);
-        const standing = api.policies.findLast((each) => each.session === first.sandboxSessionId);
-        assert.equal(
-          swappedBearer(standing?.policy, SERVICE_HOST, first.env[RUNNER_ENV.BEARER]),
-          undefined,
-        );
         first.exitCode = 0;
         const handed = yield* sessions.deliverWaiting(opened.sessionId, agent.conversationId);
 
@@ -2223,35 +2224,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
   it.effect(
-    "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const { userId, agent } = yield* openAgent;
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(api)),
-        );
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        api.failPolicy.remaining = 1;
-
-        yield* runnerTook(agent.id);
-        const ended = yield* Effect.result(
-          runnerEnded({
-            target: { userId, conversationId: agent.conversationId },
-            sessionId: opened.sessionId,
-            sequence: 5,
-          }).pipe(Effect.provide(api.layer)),
-        );
-
-        assert.ok(Result.isFailure(ended));
-        assert.equal(api.sandboxes[0]?.status, "running");
-      }),
-  );
-
-  it.effect(
-    "a launch's end leaves the sandbox up while a developer's Terminal holds it, every credential taken off its firewall",
+    "a launch's end leaves the sandbox up while a developer's Terminal holds it, its credentials still on its firewall",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2262,24 +2235,25 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
         const [command] = api.commands;
-        assert.ok(launchBearer(api, command, SERVICE_HOST) !== undefined);
+        const bearer = launchBearer(api, command, SERVICE_HOST);
+        assert.ok(bearer !== undefined);
 
         yield* runnerTook(agent.id);
         const ended = yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 5,
-        }).pipe(
-          // The events route's services, the deployment's key ring among them, which the withdraw seals its record under.
-          Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))),
-        );
+        }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
 
         assert.equal(ended, RUNNER_ENDED.HELD);
         assert.equal(api.sandboxes[0]?.status, "running");
         const standing = api.policies.findLast(
           (each) => each.session === command?.sandboxSessionId,
         );
-        assert.deepEqual(standing?.policy, { mode: "allow-all" });
+        assert.equal(
+          swappedBearer(standing?.policy, SERVICE_HOST, command?.env[RUNNER_ENV.BEARER]),
+          bearer,
+        );
       }),
   );
 
@@ -2692,6 +2666,73 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "messages after a launch whose clone failed make the checkout it left whole before its runner starts: cloned where it is missing, finished where it stands unfinished",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        // The fake runs no git, so the checkout holds what went through: its clone, then its identity.
+        const checkout = {
+          cloneRefused: true,
+          identityRefused: true,
+          cloned: false,
+          finished: false,
+        };
+        api.hooks.runExit = (args) => {
+          if (args[0] === "-d") return checkout.cloned ? 0 : 1;
+          if (args[0] === "config") return checkout.finished ? 0 : 1;
+          if (args.some((arg) => arg.includes("git clone"))) {
+            if (checkout.cloneRefused) return 1;
+            checkout.cloned = true;
+            return 0;
+          }
+          if (args.some((arg) => arg.includes("git config user.email"))) {
+            if (checkout.identityRefused) return 1;
+            checkout.finished = true;
+            return 0;
+          }
+          return 0;
+        };
+        const isIdentity = (run: { readonly args: readonly string[] }) =>
+          run.args.some((arg) => arg.includes("git config user.email"));
+        const kept = keptAfterResponse();
+        const opened = yield* sessions
+          .open(message(agent, "Fix the relay."))
+          .pipe(Effect.provide(kept.layer));
+        // The launch, then the base drive's fill, whose clone is refused too.
+        yield* kept.run;
+        yield* kept.run;
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.FAILED);
+        const own = sandboxOfAgent(api, agent)?.currentSessionId;
+        const failedRuns = api.runs.length;
+
+        // The clone goes through now, and the identity is refused.
+        checkout.cloneRefused = false;
+        yield* sessions
+          .send(opened.sessionId, message(agent, "Try again."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        const clonedRuns = api.runs.length;
+        checkout.identityRefused = false;
+        const sent = yield* sessions
+          .send(opened.sessionId, message(agent, "Try again."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const ownAfter = (from: number) =>
+          api.runs.slice(from).filter((run) => run.session === own);
+        assert.equal(ownAfter(failedRuns).filter(isClone).length, 1, "cloned once");
+        assert.equal(ownAfter(clonedRuns).filter(isClone).length, 0, "not cloned again");
+        assert.equal(ownAfter(clonedRuns).filter(isIdentity).length, 1, "finished");
+        assert.equal(api.commands.length, 1);
+        assert.equal(api.commands[0]?.sandboxSessionId, own);
+      }),
+  );
+
+  it.effect(
     "a Start on a repository with no base drive clones it whole onto a drive of its own, then fills the base drive past the answer apart from the launch",
     () =>
       Effect.gen(function* () {
@@ -2717,7 +2758,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [AGENT_DRIVE.MOUNT_PATH]: { drive: agentDriveName(opened.sessionId), mode: "read-write" },
         });
         assert.ok(api.runs.some((run) => run.session === own?.currentSessionId && isClone(run)));
-        assert.equal(api.driveForks.size, 0);
+        assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         const [base] = baseDrives(api);
         assert.ok(base !== undefined);
         assert.ok(api.sandboxes.some((each) => each.name === base && each.deleted));
@@ -2859,7 +2900,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* kept.run;
         const onBranch = yield* anotherAgent(userId, agent, "relay-fix");
 
-        yield* sessions.open(message(onBranch, "Go on.")).pipe(Effect.provide(kept.layer));
+        const opened = yield* sessions
+          .open(message(onBranch, "Go on."))
+          .pipe(Effect.provide(kept.layer));
         yield* kept.run;
         yield* kept.run;
 
@@ -2867,7 +2910,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(own?.image, IMAGE);
         const clone = api.runs.find((run) => run.session === own?.currentSessionId && isClone(run));
         assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
-        assert.equal(api.driveForks.size, 0);
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.driveForks.has(agentDriveName(opened.sessionId)), false);
         assert.equal(baseDrives(api).length, 1);
       }),
   );

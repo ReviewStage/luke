@@ -43,7 +43,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
-import { changesTab, isTerminalTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { changesTab, STRIP_TAB_KIND, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -1688,7 +1688,11 @@ test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal t
 
   assert.equal(offered, true, "⌘J is offered on the page");
   assert.deepEqual(
-    chosen.map((tab) => (isTerminalTab(tab) ? [tab.terminal, tab.title] : tab)),
+    chosen.map((tab) =>
+      typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TERMINAL
+        ? [tab.terminal, tab.title]
+        : tab,
+    ),
     [
       [AGENT_ID, "Cloud 1"],
       [AGENT_ID, "Cloud 1"],
