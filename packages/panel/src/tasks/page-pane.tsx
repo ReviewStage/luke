@@ -1019,6 +1019,7 @@ export function PagePane({
               <PageComments
                 control={comments.control}
                 doors={comments.doors}
+                review={reviewing}
                 open={commenting.open}
                 filter={commentsFilter}
                 onFilter={setCommentsFilter}

@@ -651,7 +651,7 @@ function buttonLabeled(within: ParentNode, label: string): HTMLButtonElement {
   );
 }
 
-test("a comment held in a review stands in the Review panel under its element's words, never in the comments column; Send review starts it held, then the summary naming it along, and a summary refused leaves the comment posted fixed, so Retry sends the summary alone and closes the panel", async () => {
+test("a comment held in a review stands in the Review panel under its element's words, never in the comments column; Send review starts it held, then the summary naming it along, and a summary refused leaves the comment posted fixed and the review offering Retry alone, never Discard, so Retry sends the summary alone and closes the panel", async () => {
   const starts: DescriptionCommentStart[] = [];
   // Note that the service refuses the summary the first time it is sent.
   let refusals = 1;
@@ -736,6 +736,13 @@ test("a comment held in a review stands in the Review panel under its element's 
     "the comment posted already is neither edited nor deleted",
   );
 
+  assert.equal(
+    [...panel.querySelectorAll("button")].some(
+      (button) => button.textContent?.trim() === "Discard",
+    ),
+    false,
+    "a review part of which is posted is finished by Retry, never discarded",
+  );
   await act(async () => buttonNamed(panel, "Retry").click());
   await vi.waitFor(() => assert.equal(starts.length, 3));
 
@@ -776,43 +783,75 @@ function buttonNamed(within: ParentNode, words: string): HTMLButtonElement {
   return found ?? assert.fail(`a button named ${words}`);
 }
 
-test("Discard after a send that stopped part way deletes the threads it posted already, so the review leaves nothing behind, and keeps one the service would not delete for the next Discard", async () => {
-  const starts: DescriptionCommentStart[] = [];
-  const acted: [string, unknown][] = [];
+test("a reply held in a review stands Pending as its thread's last comment, and Send review replies held, then sends the summary naming its thread along", async () => {
+  const path = "body > p:nth-of-type(1)";
+  const thread: DescriptionCommentThread = {
+    id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e71",
+    scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
+    quote: "Invites sent",
+    page: { id: FUNNEL.id, version: 3, element: path },
+    section: "",
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
+    entries: [
+      {
+        id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e72",
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u-theo", name: "Theo" } },
+        words: "Per week?",
+        at: 1,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+  };
+  const sent: Record<string, unknown>[] = [];
   const control: DescriptionCommentsControl = {
     planId: TASK,
-    threads: [],
+    threads: [thread],
     read: true,
     failed: false,
     onRetry: () => undefined,
     notes: new Map(),
     start: async (start) => {
-      starts.push(start);
-      // Note that the service takes the held comment and refuses the summary that sends the review.
-      if (start.words === "That's all.") return { note: "The service is unavailable." };
-      return {
-        thread: {
-          id: start.clientKey,
-          scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
-          quote: "Totals",
-          section: "",
-          status: DESCRIPTION_COMMENT_STATUS.OPEN,
-          entries: [],
-          createdAt: 1,
-          updatedAt: 1,
-          revision: 1,
-        },
-      };
+      sent.push({ start: start.words, along: "along" in start ? start.along : undefined });
+      return { thread: { ...thread, id: start.clientKey, entries: [] } };
     },
     act: async (threadId, action) => {
-      acted.push([threadId, action]);
-      // Note that the service refuses the first deletion and takes the next.
-      return acted.length > 1;
+      sent.push({ threadId, ...action });
+      return true;
     },
   };
-  const { press } = holdOnElement(control, "Per week?");
+  const { container, press } = mount(
+    FUNNEL,
+    readSource,
+    true,
+    { taskId: TASK },
+    { control, doors: { agents: undefined, me: "u-dean" } },
+  );
+  await press("Show comments");
+  const column = container.querySelector<HTMLElement>(".page-comments-column");
+  assert.ok(column, "the comments column stands");
+  const field = column.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]');
+  assert.ok(field, "the thread offers its reply");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      "Weekly, yes.",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonNamed(column, "Start a review").click());
+
+  const pending = column.querySelector("[data-pending]");
+  assert.ok(pending, "the reply stands in its thread, held");
+  assert.match(pending.textContent ?? "", /Pending.*Weekly, yes\./u);
+  assert.equal(sent.length, 0, "nothing is sent while the review is held");
+
   await press("Review, 1 pending comment");
-  const panel = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
+  const panel = document.querySelector<HTMLElement>('[role="dialog"]');
+  assert.ok(panel, "Review opens its panel");
+  assert.match(panel.querySelector("ol")?.textContent ?? "", /Invites sent.*Weekly, yes\./u);
   const summary = await vi.waitFor(
     () =>
       panel.querySelector<TiptapEditorHTMLElement>(
@@ -823,35 +862,18 @@ test("Discard after a send that stopped part way deletes the threads it posted a
     summary.commands.setContent("That's all.", { contentType: "markdown" });
   });
   await act(async () => buttonNamed(panel, "Send review").click());
-  await vi.waitFor(() => assert.match(panel.textContent ?? "", /could not be sent/u));
+  await vi.waitFor(() => assert.equal(sent.length, 2));
 
-  await act(async () => buttonNamed(panel, "Discard").click());
-  const question =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
-    assert.fail("Discard asks first");
-  await act(async () => buttonNamed(question, "Discard review").click());
-
-  await act(async () => undefined);
-  assert.deepEqual(acted, [
-    [starts[0]?.clientKey, { action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD }],
+  // The reply goes under the key it was held under, which the test reads back rather than chooses.
+  const heldKey = sent[0]?.clientKey;
+  assert.deepEqual(sent, [
+    {
+      threadId: thread.id,
+      action: DESCRIPTION_COMMENT_ACTION.REPLY,
+      clientKey: heldKey,
+      words: "Weekly, yes.",
+      held: true,
+    },
+    { start: "That's all.", along: [thread.id] },
   ]);
-  assert.ok(
-    document.querySelector('button[aria-label="Review, 1 pending comment"]'),
-    "the thread the service would not delete stays in the review",
-  );
-
-  await act(async () => buttonNamed(panel, "Discard").click());
-  await act(async () =>
-    buttonNamed(
-      document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail(),
-      "Discard review",
-    ).click(),
-  );
-  await act(async () => undefined);
-  assert.equal(acted.length, 2, "the next Discard tries it again");
-  assert.equal(
-    document.querySelector('button[aria-label^="Review, "]'),
-    null,
-    "and lets it go once it is deleted",
-  );
 });
