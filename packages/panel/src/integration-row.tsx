@@ -46,6 +46,7 @@ import {
   Reveal,
   revealArea,
   ScrollArea,
+  SETTINGS_ROW_CONTROLS,
   SETTINGS_ROW_STATE,
   SettingsRowMark,
   type SettingsRowState,
@@ -585,6 +586,8 @@ export function IntegrationRow({
         anchor={connection}
         {...(bySignIn ? { heading: ROW_LINE.GITHUB_SIGN_IN } : undefined)}
         row={{
+          // Note that every row of a provider ends in a short button, a ⋯, or both, so on a narrow page each keeps its end beside its name and lets its words wrap, rather than one row dropping its end below them.
+          controls: SETTINGS_ROW_CONTROLS.BESIDE,
           leading: (
             <SettingsRowMark>
               <ProviderMark provider={provider} />

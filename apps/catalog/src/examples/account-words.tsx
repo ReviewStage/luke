@@ -5,6 +5,7 @@ import {
   Button,
   MoreButton,
   ProviderMark,
+  SETTINGS_ROW_CONTROLS,
   SETTINGS_ROW_STATE,
   SettingsRow,
   SettingsRowMark,
@@ -17,7 +18,7 @@ import { CatalogSection } from "../section";
 /**
  * account-words.tsx -- an account's name beside its provider's: two accounts
  * at one provider, a lone named one, a long address cut short, an expired
- * one with Reconnect at its end, and a provider that names none, as Settings › Integrations draws
+ * one with Reconnect and its ⋯ kept beside its words, and a provider that names none, as Settings › Integrations draws
  * them, at a settings page's measure and narrower than 380px.
  */
 
@@ -73,6 +74,7 @@ function Rows(): React.JSX.Element {
         <SettingsRow
           key={row.key}
           label={row.name}
+          controls={SETTINGS_ROW_CONTROLS.BESIDE}
           adornment={
             row.account === undefined ? undefined : <AccountWords>{row.account}</AccountWords>
           }
@@ -93,13 +95,12 @@ function Rows(): React.JSX.Element {
             )
           }
         >
-          {() =>
-            row.expired ? (
-              <Button variant={BUTTON_VARIANT.OUTLINE}>Reconnect</Button>
-            ) : (
+          {() => (
+            <>
+              {row.expired ? <Button variant={BUTTON_VARIANT.OUTLINE}>Reconnect</Button> : null}
               <MoreButton thing={row.name} />
-            )
-          }
+            </>
+          )}
         </SettingsRow>
       ))}
     </SettingsSection>
