@@ -21,6 +21,8 @@ import {
   Deferred,
   Duration,
   Effect,
+  Exit,
+  Fiber,
   FiberMap,
   Option,
   Path,
@@ -50,7 +52,10 @@ import type { RunMode } from "./run-mode.js";
  * `~/.vespin/mirrors/<agentId>/repository`. The first ensure makes it a
  * worktree of this Mac's shared clone of the repository, detached at the
  * header's `base` (`MirrorPlatform`'s scripts), and answers as soon as the
- * worktree stands; while it has none, its tunnel asks the service to wake a
+ * worktree stands. Note that the default branch is had from GitHub beside
+ * the worktree's place while the tunnel opens, because the header waits on
+ * the sandbox waking, and from it the worktree fetches only what its base
+ * changes. While it has none, its tunnel asks the service to wake a
  * stopped sandbox to build it (`SANDBOX_TUNNEL.QUERY.WAKE`), and once it
  * stands it never asks again, so a stopped sandbox stays stopped and the
  * mirror waits for it. From then on the mirror holds one tunnel of the
@@ -152,9 +157,10 @@ export interface MirrorsDependencies {
 
 type MirrorMethods = PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.MIRRORS>;
 
-/** One mirror kept on this Mac: the folder its worktree stands in, once it does. */
+/** One mirror kept on this Mac: the folder its worktree stands in, once it does, and whether its prefetch has ended. */
 interface Mirror {
   readonly made: Deferred.Deferred<string, MirrorGone>;
+  readonly prefetched: Deferred.Deferred<boolean>;
 }
 
 /** The mirror tunnel's address for an agent, asking to wake a stopped sandbox where `wake` says so. */
@@ -227,7 +233,7 @@ export function composeMirrors(
       Effect.orElseSucceed(fileSystem.exists(path.join(worktreeOf(agentId), ".git")), () => false);
 
     /** The worktree made where none stands, detached at the header's `base`; the folder once it stands. */
-    const made = (agentId: string, base: string) =>
+    const made = (agentId: string, mirror: Mirror, base: string) =>
       Effect.gen(function* () {
         const worktree = worktreeOf(agentId);
         if (yield* worktreeStands(agentId)) return worktree;
@@ -235,7 +241,8 @@ export function composeMirrors(
         if (repository === undefined || repository === null) {
           return yield* Effect.fail(new MirrorDropped());
         }
-        const script = platform.worktreeScript({ repository, worktree, base });
+        const prefetched = yield* Deferred.await(mirror.prefetched);
+        const script = platform.worktreeScript({ repository, worktree, base, prefetched });
         const finished = yield* ran(script, SCRIPT_WITHIN.WORKTREE);
         if (Option.isNone(finished)) return yield* Effect.fail(new MirrorDropped());
         return worktree;
@@ -269,7 +276,7 @@ export function composeMirrors(
       Effect.gen(function* () {
         switch (message.type) {
           case MIRROR_FRAME.HEADER:
-            yield* Deferred.succeed(mirror.made, yield* made(agentId, message.base));
+            yield* Deferred.succeed(mirror.made, yield* made(agentId, mirror, message.base));
             return;
           case MIRROR_FRAME.MANIFEST:
             return yield* matched(agentId, socket, message.files);
@@ -336,22 +343,43 @@ export function composeMirrors(
         );
       });
 
-    /** The mirror kept in step, its tunnel opened again on `RECONNECT`, and `FIRST` after one that was in step, until its agent is gone. */
-    const kept = (agentId: string, mirror: Mirror) =>
-      Effect.retry(attempt(agentId, mirror), RECONNECT).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced(MIRROR_RECONNECT.FIRST),
-          until: (ended: TunnelEnding) => ended === TUNNEL_ENDING.GONE,
-        }),
-        Effect.andThen(removed(agentId)),
+    /** The default branch checked out beside the worktree's place where none stands, and whether that ended well, false however else it ends. */
+    const prefetched = (agentId: string, mirror: Mirror) =>
+      Effect.gen(function* () {
+        const repository = agentListed(agentId)?.repository;
+        if (repository === undefined || repository === null) return false;
+        if (yield* worktreeStands(agentId)) return false;
+        const script = platform.prefetchScript({ repository, worktree: worktreeOf(agentId) });
+        return Option.isSome(yield* ran(script, SCRIPT_WITHIN.WORKTREE));
+      }).pipe(
+        Effect.onExit((exit) =>
+          Deferred.succeed(mirror.prefetched, Exit.isSuccess(exit) && exit.value),
+        ),
       );
+
+    /** The mirror kept in step, its prefetch run beside its first tunnel, its tunnel opened again on `RECONNECT`, and `FIRST` after one that was in step, until its agent is gone. */
+    const kept = (agentId: string, mirror: Mirror) =>
+      Effect.gen(function* () {
+        const prefetch = yield* Effect.forkChild(prefetched(agentId, mirror));
+        yield* Effect.retry(attempt(agentId, mirror), RECONNECT).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced(MIRROR_RECONNECT.FIRST),
+            until: (ended: TunnelEnding) => ended === TUNNEL_ENDING.GONE,
+          }),
+        );
+        yield* Fiber.interrupt(prefetch);
+        yield* removed(agentId);
+      });
 
     /** The mirror kept for an agent, its tunnel's fiber started where none runs; made at once where its worktree already stands, whether or not the sandbox runs. */
     const started = (agentId: string) =>
       Effect.gen(function* () {
         const standing = mirrors.get(agentId);
         if (standing !== undefined) return standing;
-        const mirror: Mirror = { made: yield* Deferred.make<string, MirrorGone>() };
+        const mirror: Mirror = {
+          made: yield* Deferred.make<string, MirrorGone>(),
+          prefetched: yield* Deferred.make<boolean>(),
+        };
         mirrors.set(agentId, mirror);
         if (yield* worktreeStands(agentId))
           yield* Deferred.succeed(mirror.made, worktreeOf(agentId));

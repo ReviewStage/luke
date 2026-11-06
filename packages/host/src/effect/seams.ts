@@ -135,11 +135,18 @@ export class LoopbackListener extends Context.Service<LoopbackListener, ListenOn
 export interface MirrorPlatformSeam {
   /** The folder each mirror's own folder stands in, named by its agent's id: `~/.vespin/mirrors`. */
   readonly folder: string;
+  /** The script that checks the default branch out beside the mirror's worktree, while its tunnel opens, for the worktree script to start from. */
+  readonly prefetchScript: (input: {
+    readonly repository: string;
+    readonly worktree: string;
+  }) => string;
   /** The script that makes a mirror's worktree, detached at `base`, of the repository's shared clone. */
   readonly worktreeScript: (input: {
     readonly repository: string;
     readonly worktree: string;
     readonly base: string;
+    /** Whether the prefetch ended well, so the worktree it left beside the mirror's place is whole. */
+    readonly prefetched: boolean;
   }) => string;
   /** The script that prints the mirror's own files by git's rules, each path ended by a NUL. */
   readonly listScript: (worktree: string) => string;
