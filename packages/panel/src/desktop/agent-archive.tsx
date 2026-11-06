@@ -226,7 +226,8 @@ function ArchivedAgentRow({
 }): React.JSX.Element {
   const press = useArchivePress(agents);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
-  // The agent's menu over the doors a row has: an archived agent's Copy link, Unarchive, and Permanently delete.
+  // The agent's menu over the doors a row has: an archived agent's Copy link, Unarchive, and Permanently delete,
+  // and no Rename, since the row draws no name's field.
   const actions = useAgentActions(agent, agents, {
     label: subject.name,
     shown,
@@ -248,7 +249,12 @@ function ArchivedAgentRow({
           muted
           hint={{ Hint: RowHint, label: subject.name }}
           onPress={() => onOpen(agent.id)}
-          menu={rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown, true)}
+          menu={rowMenu(
+            ARCHIVED_THING,
+            agentMenuGroups({ ...rowDoors(actions.doors), onRename: undefined }),
+            shown,
+            true,
+          )}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={

@@ -86,7 +86,8 @@ function HistoryAgentRow({
   onPick: () => void;
 }) {
   const { row, endMark, card } = entry;
-  // The agent's menu over the doors a row has, as the sidebar's agent rows offer it.
+  // The agent's menu over the doors a row has, as the sidebar's agent rows offer it, but Rename,
+  // since the row draws no name's field; its tab and its sidebar row rename it.
   const actions = useAgentActions(agent, agents, {
     label: row.label,
     shown,
@@ -103,7 +104,12 @@ function HistoryAgentRow({
           meta={endMark}
           hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
           onPress={onPick}
-          menu={rowMenu(thing, agentMenuGroups(rowDoors(actions.doors)), shown, true)}
+          menu={rowMenu(
+            thing,
+            agentMenuGroups({ ...rowDoors(actions.doors), onRename: undefined }),
+            shown,
+            true,
+          )}
         />
       </RowHintOptions>
       {actions.dialog}
