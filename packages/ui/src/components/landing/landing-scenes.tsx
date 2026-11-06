@@ -120,8 +120,8 @@ export const LANDING_SCENE = {
 
 export type LandingScene = (typeof LANDING_SCENE)[keyof typeof LANDING_SCENE];
 
-/** The Mac app's own surface, which a window's screen is drawn at. */
-const DESKTOP_SURFACE = surfaceAttributes(PROFILE.DESKTOP, THEME.DARK);
+/** The Mac app's own surface, which a window's screen is drawn at: its light appearance, as the paper it stands on is. */
+const DESKTOP_SURFACE = surfaceAttributes(PROFILE.DESKTOP, THEME.LIGHT);
 
 /** An agent as a comment's writer: its name on the square of the harness it runs in. */
 function agentAuthor(name: string): CommentAuthor {

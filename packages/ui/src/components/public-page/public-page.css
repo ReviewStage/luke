@@ -29,10 +29,10 @@
     }
   }
 
-  /* A page's title, in the landing's display face at a feature's size,
+  /* A page's title, in the landing's heading face at a feature's size,
      stepping down as the landing's headings do on a phone. */
   .ui-public-page-title[data-style="page"] {
-    font-family: var(--ui-font-display);
+    font-family: var(--ui-display-landing-face, var(--ui-font-display));
     font-size: var(--ui-display-feature-size, var(--ui-type-title-size));
     font-weight: var(--ui-display-landing-weight, var(--ui-type-title-weight));
     line-height: var(--ui-display-feature-leading, var(--ui-type-title-leading));

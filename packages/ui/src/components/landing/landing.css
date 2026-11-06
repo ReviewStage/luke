@@ -1,4 +1,4 @@
-/* landing.css -- the landing (`landing-page.tsx`): its margin grid, the bar
+/* landing.css -- the landing (`landing-page.tsx`): its paper and hairlines, the bar
    that floats once the page scrolls, the hero beside the Inbox, each
    feature's stage, the devices, the screens the scenes lay out at the app's
    own sizes, the close, and the foot over the wordmark. The page queries its
@@ -18,13 +18,13 @@
     min-height: 100dvh;
     container-type: inline-size;
     overflow-x: clip;
-    background: var(--ui-color-ground);
+    background: var(--ui-display-paper);
     color: var(--ui-color-text);
     font-family: var(--ui-font-sans);
   }
 
-  /* The page's two insets: where the rails stand, and where words start
-     inside them. The rails stand at most 1280px apart, so a window wider
+  /* The page's two insets: where the content's edges stand, and where words
+     start inside them. The edges stand at most 1280px apart, so a window wider
      than that centers the frame, the room outside it its margin, and the
      bar's links, the hero, every section, and the foot keep to it. */
   .ui-landing-page > * {
@@ -38,71 +38,12 @@
     margin: 0;
   }
 
-  /* The margin grid: a hairline rail at each of the content's edges, the
-     page's length. */
-  .ui-landing-rails {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  .ui-landing-rails::before,
-  .ui-landing-rails::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--ui-color-border);
-  }
-
-  .ui-landing-rails::before {
-    left: var(--ui-landing-inset);
-  }
-
-  .ui-landing-rails::after {
-    right: var(--ui-landing-inset);
-  }
-
-  /* A rule across the page, a cross where it meets each rail. */
+  /* A hairline between the page's parts, kept to the words' width, so it
+     reads as a rule on the paper rather than a border round the page. */
   .ui-landing-rule {
-    position: relative;
     height: 1px;
-    background: var(--ui-color-border);
-  }
-
-  .ui-landing-rule > i {
-    position: absolute;
-    top: -5px;
-    width: 11px;
-    height: 11px;
-  }
-
-  .ui-landing-rule > i:first-child {
-    left: calc(var(--ui-landing-inset) - 5px);
-  }
-
-  .ui-landing-rule > i:last-child {
-    right: calc(var(--ui-landing-inset) - 5px);
-  }
-
-  .ui-landing-rule > i::before,
-  .ui-landing-rule > i::after {
-    content: "";
-    position: absolute;
-    background: var(--ui-color-text-muted);
-  }
-
-  .ui-landing-rule > i::before {
-    left: 5px;
-    width: 1px;
-    height: 11px;
-  }
-
-  .ui-landing-rule > i::after {
-    top: 5px;
-    width: 11px;
-    height: 1px;
+    margin-inline: var(--ui-landing-gutter);
+    background: var(--ui-display-paper-rule);
   }
 
   /* The bar: across the page at its top, then, once the page scrolls, a
@@ -139,9 +80,8 @@
     margin: 0 auto;
     padding: 0 var(--ui-landing-gutter);
     border: 1px solid transparent;
-    border-bottom-color: var(--ui-color-border);
     border-radius: 0;
-    background: var(--ui-color-ground);
+    background: var(--ui-display-paper);
     white-space: nowrap;
     transition-property:
       transform, left, right, max-width, height, padding, border-radius, border-color,
@@ -158,9 +98,9 @@
     max-width: 720px;
     height: 56px;
     padding: 0 6px 0 20px;
-    border-color: var(--ui-color-border-strong);
+    border-color: var(--ui-display-paper-rule);
     border-radius: var(--ui-display-bar-radius);
-    background: var(--ui-color-surface);
+    background: var(--ui-display-paper);
     transform: translateY(12px);
   }
 
@@ -176,7 +116,7 @@
     content: "";
     width: 1px;
     height: 18px;
-    background: var(--ui-color-border-strong);
+    background: var(--ui-display-paper-rule);
   }
 
   /* The hero: the one line and its calls to the left, the Inbox to the right. */
@@ -184,7 +124,7 @@
     position: relative;
     display: flex;
     align-items: center;
-    min-height: 660px;
+    min-height: 760px;
     overflow: hidden;
   }
 
@@ -196,7 +136,7 @@
   }
 
   .ui-landing-title {
-    font-family: var(--ui-font-display);
+    font-family: var(--ui-display-landing-face);
     font-size: var(--ui-display-landing-size);
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-landing-leading);
@@ -206,10 +146,11 @@
 
   .ui-landing-hero-lead,
   .ui-landing-lead {
-    max-width: 520px;
-    margin-top: 18px;
+    max-width: 460px;
+    margin-top: 20px;
     color: var(--ui-color-text-muted);
     font-size: var(--ui-display-lead-size);
+    font-weight: var(--ui-display-lead-weight);
     line-height: var(--ui-display-lead-leading);
   }
 
@@ -217,13 +158,13 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    margin-top: 32px;
+    gap: 16px;
+    margin-top: 40px;
   }
 
   .ui-landing-hero-art {
     position: absolute;
-    top: 40px;
+    top: 90px;
     right: calc(var(--ui-landing-inset) + 24px);
     width: 580px;
     height: 580px;
@@ -240,7 +181,7 @@
     width: 100%;
     aspect-ratio: 500 / 700;
     overflow: hidden;
-    border: 1px solid var(--ui-color-border-strong);
+    border: 1px solid var(--ui-display-paper-rule);
     border-radius: var(--ui-display-window-radius);
     background: var(--ui-color-sidebar);
   }
@@ -293,13 +234,27 @@
     position: relative;
   }
 
+  /* The heading stands on the left of the column and its sentence on the
+     right, their last lines on one baseline, over the stage. */
   .ui-landing-section-body {
-    padding: 104px var(--ui-landing-gutter) 96px;
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    align-items: end;
+    column-gap: 64px;
+    padding: 160px var(--ui-landing-gutter) 144px;
+  }
+
+  .ui-landing-section-body > .ui-landing-lead {
+    margin-top: 0;
+  }
+
+  .ui-landing-section-body > :is(.ui-landing-stage, .ui-landing-beside) {
+    grid-column: 1 / -1;
   }
 
   .ui-landing-section-title {
-    max-width: 680px;
-    font-family: var(--ui-font-display);
+    max-width: 600px;
+    font-family: var(--ui-display-landing-face);
     font-size: var(--ui-display-feature-size);
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-feature-leading);
@@ -307,16 +262,16 @@
     text-wrap: balance;
   }
 
-  /* A stage: a box of drifting dots holding the feature's screen, which
-     runs off its foot where the screen is a window. */
+  /* A stage: a plain plate a step deeper than the paper, no edge of its
+     own, holding the feature's screen, which runs off its foot where the
+     screen is a window. */
   .ui-landing-stage {
     position: relative;
-    margin-top: 40px;
-    padding: 48px 6%;
+    margin-top: 64px;
+    padding: 72px 8%;
     overflow: hidden;
-    border: 1px solid var(--ui-color-border);
-    border-radius: var(--ui-radius-14);
-    background: var(--ui-color-ground);
+    border-radius: var(--ui-radius-6);
+    background: var(--ui-display-paper-deep);
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
@@ -324,16 +279,17 @@
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-    margin-bottom: -48px;
+    margin-bottom: -72px;
   }
 
-  .ui-landing-field,
+  /* The foot's wordmark, pressed in a faint warm gray rather than the
+     accent, so the page spends its one accent almost nowhere. */
   .ui-landing-wordmark {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    color: var(--ui-color-accent);
+    color: var(--ui-display-paper-mark);
   }
 
   .ui-landing-scene {
@@ -346,8 +302,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
     align-items: center;
-    gap: 40px;
-    margin-top: 40px;
+    gap: 64px;
+    margin-top: 64px;
   }
 
   .ui-landing-beside > .ui-landing-stage {
@@ -356,7 +312,7 @@
 
   .ui-landing-facts > .ui-landing-fact {
     padding: 16px 0;
-    border-top: 1px solid var(--ui-color-border);
+    border-top: 1px solid var(--ui-display-paper-rule);
   }
 
   .ui-landing-fact > dt {
@@ -374,7 +330,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 32px;
-    padding: 96px var(--ui-landing-gutter) 64px;
+    padding: 160px var(--ui-landing-gutter) 128px;
   }
 
   .ui-landing-close .ui-landing-actions {
@@ -384,11 +340,11 @@
   /* Under a page's closing rule, as on every page but the landing, whose
      close stands between them, the links stand clear of it. */
   .ui-landing-rule + .ui-landing-foot > .ui-landing-foot-links {
-    padding-top: 40px;
+    padding-top: 48px;
   }
 
   .ui-landing-foot-links {
-    padding: 0 var(--ui-landing-gutter) 40px;
+    padding: 0 var(--ui-landing-gutter) 48px;
   }
 
   /* The foot's facts and links in one row parted by dots (`site-foot.tsx`).
@@ -443,11 +399,11 @@
   }
 
   /* The wordmark's foot keeps one shape at every width, so a phone draws
-     the word as densely as a desktop, only smaller. It stands between the
-     rails, as every section does, so the word never runs past them. */
+     the word as densely as a desktop, only smaller. It keeps to the
+     words' width, as every section does. */
   .ui-landing-foot-art {
     position: relative;
-    margin-inline: var(--ui-landing-inset);
+    margin-inline: var(--ui-landing-gutter);
     aspect-ratio: 24 / 5;
     overflow: hidden;
   }
@@ -530,7 +486,7 @@
     width: 100%;
     aspect-ratio: 16 / 10;
     overflow: hidden;
-    border: 1px solid var(--ui-color-border-strong);
+    border: 1px solid var(--ui-display-paper-rule);
     border-radius: var(--ui-display-window-radius);
     background: var(--ui-color-sidebar);
   }
@@ -1056,7 +1012,7 @@
 
   /* The devices: the Mac window, with the phone standing over its corner. */
   .ui-landing-stage[data-scene="devices"] {
-    height: 620px;
+    height: 660px;
     padding: 0;
   }
 
@@ -1136,6 +1092,15 @@
       padding: var(--ui-landing-hero-top) var(--ui-landing-gutter) 0;
     }
 
+    .ui-landing-section-body {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 120px var(--ui-landing-gutter) 112px;
+    }
+
+    .ui-landing-section-body > .ui-landing-lead {
+      margin-top: 20px;
+    }
+
     .ui-landing-hero-art {
       position: relative;
       top: auto;
@@ -1146,7 +1111,7 @@
         min(580px, 100cqw - 2 * var(--ui-landing-gutter), var(--ui-landing-art-screen))
       );
       max-width: 580px;
-      margin: var(--ui-landing-art-top) var(--ui-landing-gutter) 40px;
+      margin: var(--ui-landing-art-top) var(--ui-landing-gutter) 64px;
     }
   }
 
@@ -1204,7 +1169,7 @@
     }
 
     .ui-landing-section-body {
-      padding: 64px var(--ui-landing-gutter) 56px;
+      padding: 80px var(--ui-landing-gutter) 72px;
     }
 
     .ui-landing-section-title {
@@ -1212,12 +1177,12 @@
     }
 
     .ui-landing-stage {
-      margin-top: 28px;
-      padding: 28px 5%;
+      margin-top: 36px;
+      padding: 32px 6%;
     }
 
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-      margin-bottom: -24px;
+      margin-bottom: -32px;
     }
 
     .ui-landing-beside {
@@ -1259,7 +1224,7 @@
     .ui-landing-close {
       flex-direction: column;
       align-items: stretch;
-      padding: 72px var(--ui-landing-gutter) 48px;
+      padding: 96px var(--ui-landing-gutter) 72px;
     }
 
     /* The foot's facts keep their line, and its links stand in two columns

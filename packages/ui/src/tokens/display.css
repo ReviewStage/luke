@@ -15,17 +15,31 @@
   /* The landing's own scale, larger than a page's: its one line beside the
      ball, each feature's heading, and the sentence under either, each
      stepping down once on a phone. */
-  --ui-display-landing-size: 3.75rem;
-  --ui-display-landing-size-narrow: 2.375rem;
-  --ui-display-landing-leading: 1.03;
-  --ui-display-landing-weight: 700;
-  --ui-display-landing-tracking: -0.01em;
-  --ui-display-feature-size: 2.75rem;
-  --ui-display-feature-size-narrow: 1.875rem;
-  --ui-display-feature-leading: 1.06;
+  --ui-display-landing-size: 3.5rem;
+  --ui-display-landing-size-narrow: 2.25rem;
+  --ui-display-landing-leading: 1.08;
+  --ui-display-landing-weight: 400;
+  --ui-display-landing-tracking: -0.03em;
+  --ui-display-feature-size: 2.5rem;
+  --ui-display-feature-size-narrow: 1.75rem;
+  --ui-display-feature-leading: 1.12;
   --ui-display-lead-size: 1.125rem;
   --ui-display-lead-size-narrow: 1rem;
-  --ui-display-lead-leading: 1.55;
+  --ui-display-lead-leading: 1.6;
+  --ui-display-lead-weight: 400;
+  /* The landing's headings are set in the site's sans, light and close,
+     rather than the wordmark's face, so the page reads calm and plain. */
+  --ui-display-landing-face: var(--ui-font-sans);
+
+  /* The landing's paper: a warm off-white the page stands on, a step
+     deeper for the plate each screen rests on, the hairlines that rule it,
+     and the faint warm gray the foot's wordmark is pressed in. The dark
+     theme's are its own ground, well, and border, for the pages that keep
+     the dark frame. */
+  --ui-display-paper: #f7f4ee;
+  --ui-display-paper-deep: #efebe3;
+  --ui-display-paper-rule: #e3ddd2;
+  --ui-display-paper-mark: #cfc7ba;
 
   /* The landing's devices: a Mac window's corners, and a phone's outer
      corners and its screen's, which follow them inside the bezel. */
@@ -43,4 +57,11 @@
   --ui-display-wordmark-size: 1rem;
   --ui-display-wordmark-weight: 700;
   --ui-display-wordmark-tracking: -0.01em;
+}
+
+[data-ui-profile="web"][data-ui-theme="dark"] {
+  --ui-display-paper: var(--ui-color-ground);
+  --ui-display-paper-deep: var(--ui-color-well);
+  --ui-display-paper-rule: var(--ui-color-border);
+  --ui-display-paper-mark: var(--ui-color-chip-edge-strong);
 }
