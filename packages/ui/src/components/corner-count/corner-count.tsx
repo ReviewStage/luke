@@ -14,6 +14,21 @@ import type { ReactNode } from "react";
  * small glyph on a disc at its corner.
  */
 
+/** The inks a `CornerDot` takes, as its caller says what the dot means. */
+export const CORNER_DOT_TONE = {
+  /** A view's state, a list filtered: the accent's ink. */
+  ACCENT: "accent",
+  /** Something waits on the reader behind the press: the attention ink, as the Inbox's count is drawn. */
+  ATTENTION: "attention",
+} as const;
+
+export type CornerDotTone = (typeof CORNER_DOT_TONE)[keyof typeof CORNER_DOT_TONE];
+
+const CORNER_DOT_INK = {
+  [CORNER_DOT_TONE.ACCENT]: "bg-accent-ink",
+  [CORNER_DOT_TONE.ATTENTION]: "bg-attention",
+} as const satisfies Record<CornerDotTone, string>;
+
 /** `children`, a glyph, with `count` at its corner while it is more than none. */
 export function CornerCount({
   count,
@@ -39,18 +54,23 @@ export function CornerCount({
 /**
  * `children`, a press, with a dot over its top end corner while `shown`: a
  * view that leaves something out says so on the press that set it, so a
- * filtered list never passes for the whole of it. The dot is the accent's
+ * filtered list never passes for the whole of it; or, in the attention tone,
+ * that something waits on the reader behind the press, the Inbox's count
+ * while the sidebar that draws it is folded away. The accent's dot is its
  * ink rather than its fill, since the site's accent fill is too light to
  * hold a mark's 3:1 on its light page. It is a picture the caller says in
- * its press's description, so it is hidden from a reader here and takes no
- * pointer; the box says it stands in `data-dot`.
+ * its press's name or description, so it is hidden from a reader here and
+ * takes no pointer; the box says it stands in `data-dot`.
  */
 export function CornerDot({
   shown,
+  tone = CORNER_DOT_TONE.ACCENT,
   children,
 }: {
   /** Whether the dot is drawn. */
   shown: boolean;
+  /** The dot's ink: the accent's for a view's state, the attention's for what waits on the reader. */
+  tone?: CornerDotTone | undefined;
   /** The press the dot stands over. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -59,7 +79,7 @@ export function CornerDot({
       {children}
       {shown ? (
         <span
-          className="ui-corner-dot-mark pointer-events-none absolute top-ui-4 right-ui-4 size-corner-dot rounded-disc bg-accent-ink"
+          className={`ui-corner-dot-mark pointer-events-none absolute top-ui-4 right-ui-4 size-corner-dot rounded-disc ${CORNER_DOT_INK[tone]}`}
           aria-hidden="true"
         />
       ) : null}
