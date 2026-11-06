@@ -17,7 +17,12 @@ import {
 import { AGENT_DRIVE, agentDriveName } from "./agent-drive.js";
 import { CODER } from "./coder-host/bounds.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
-import { NAME_TAKEN, SandboxUnavailable, vercelSandboxApi } from "./vercel-sandbox-api.js";
+import {
+  NAME_TAKEN,
+  SANDBOX_CALL,
+  SandboxUnavailable,
+  vercelSandboxApi,
+} from "./vercel-sandbox-api.js";
 
 /**
  * A session's sandboxes stopped through `@vercel/sandbox`, as the deployment
@@ -149,11 +154,14 @@ it.effect(
         sandboxes.deleteFor(SESSION),
       ).pipe(Effect.provide(Layer.provide(sessionSandboxesLayer, fake.layer)));
 
-      const first = yield* Effect.result(deleteFor);
+      const first = yield* Effect.flip(deleteFor);
       const afterFirst = [...fake.drives];
       const next = yield* deleteFor;
 
-      assert.equal(first._tag, "Failure");
+      assert.deepEqual(
+        [first.call, first.status, first.code],
+        [SANDBOX_CALL.DRIVE_DELETE, 409, "drive_attached"],
+      );
       assert.equal(fake.sandboxes[0]?.deleted, true);
       assert.deepEqual(afterFirst, [drive]);
       assert.equal(next, 0);
