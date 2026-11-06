@@ -440,6 +440,7 @@ function disconnectAccount(
   );
 }
 
+/** One account's row at a provider, or a provider's where the account holds none there. */
 export function IntegrationRow({
   row,
   status,

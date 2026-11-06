@@ -3,6 +3,7 @@ import { byName } from "@repo/features/integration-tool-model";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER,
+  INTEGRATION_PURPOSE,
   type IntegrationProvider,
 } from "@repo/features/integration-wire";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
@@ -10,8 +11,9 @@ import { matchesTokens, searchTokens } from "./search-tokens.js";
 /**
  * integration-search.ts -- what a query finds among the integrations and their tools, in Settings › Integrations' filter and the MCP popover's search alike.
  *
- * An integration is found by its name and by what it is for, in the words
- * someone looking for it would type ("database" finds Neon and Supabase),
+ * An integration is found by its name, by the line its row says of what it
+ * gives agents, and by what it is for, in the words someone looking for it
+ * would type ("database" finds Neon and Supabase),
  * and its tools by their names, titles, and descriptions, a word naming the
  * integration counting toward each of its tools ("vercel logs"). Note that a
  * query its name alone answers ("vercel") finds the whole integration rather
@@ -66,9 +68,13 @@ export function shownTools(
   return match.tools.length > 0 ? match.tools : tools;
 }
 
-/** The lines an integration itself is found by: its name, and what it is for. */
+/** The lines an integration itself is found by: its name, what it is for, and the line its row says of what it gives agents. */
 export function integrationLines(provider: IntegrationProvider): readonly string[] {
-  return [INTEGRATION_NAME[provider], INTEGRATION_KEYWORDS[provider]];
+  return [
+    INTEGRATION_NAME[provider],
+    INTEGRATION_KEYWORDS[provider],
+    INTEGRATION_PURPOSE[provider],
+  ];
 }
 
 /** Whether a query finds the integration itself, by its name or what it is for. */
