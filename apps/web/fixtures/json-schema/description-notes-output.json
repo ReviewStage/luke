@@ -18,7 +18,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 1000,
-                "description": "The heading the point goes under, copied exactly from the plan's text, without its #s. A heading the text does not hold opens a new section at its end."
+                "description": "The heading the point goes under, copied exactly from the description's text, without its #s. A heading the text does not hold opens a new section at its end."
               },
               "text": {
                 "type": "string",
@@ -47,7 +47,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200000,
-                "description": "Text copied exactly from the plan's saved text, as much as names one place: a phrase, lines, or whole sections, headings and their #s included."
+                "description": "Text copied exactly from the description's saved text, as much as names one place: a phrase, lines, or whole sections, headings and their #s included."
               },
               "text": {
                 "type": "string",

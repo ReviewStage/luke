@@ -17,7 +17,7 @@ import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 
 /** Every tool we author or declare for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
-  // A look at one of the plan's pictures, the planning model's and a coding agent's.
+  // A look at one of the description's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",
@@ -70,9 +70,9 @@ export const AGENT_TOOL = {
   OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
-  // An interactive page shown in the plan's side panel, and a read of one by its id.
+  // An interactive page shown in the task's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
-  // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
+  // The description's comment threads, read and answered by the planning model and every coding agent on the task.
   READ_COMMENTS: DESCRIPTION_COMMENT_TOOL.READ,
   REPLY_TO_COMMENT: DESCRIPTION_COMMENT_TOOL.REPLY,
   UPDATE_COMMENT: DESCRIPTION_COMMENT_TOOL.UPDATE,

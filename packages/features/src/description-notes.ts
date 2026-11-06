@@ -8,18 +8,18 @@ import { DESCRIPTION_SECTION_BOUNDS, TASK_BOUNDS } from "./task-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
- * description-notes.ts -- the notes the app takes into a plan's text, and the agents' journal of them.
+ * description-notes.ts -- the notes the app takes into a description's text, and the agents' journal of them.
  *
- * A plan is one Markdown text that starts empty (`description-document.ts`,
+ * A description is one Markdown text that starts empty (`description-document.ts`,
  * `docs/TASKS.md`), its headings its sections.
  *
  * The app changes the text only by taking notes, of two kinds: a point added
  * under a heading, and text replaced, the one generic edit, which names any
- * text standing exactly once in the plan, headings and whole sections
+ * text standing exactly once in the description, headings and whole sections
  * among it, and an empty replacement deletes. So a heading is renamed, a
  * section split, merged, moved, or struck, and a point moved between
  * sections the way a person edits a doc. A batch of notes is taken whole or not at
- * all: a note naming text or a heading the plan does not hold exactly once
+ * all: a note naming text or a heading the description does not hold exactly once
  * refuses every note beside it, so a move can never strike text without
  * placing it. A note's words are
  * contained where they land only so far as keeps the rest of the text as it
@@ -65,7 +65,7 @@ function fenceCloses(line: string, fence: OpenFence): boolean {
  * One line outside a fence, with a backslash before whatever would open an
  * HTML block or underline the line above into a heading. Note that an ATX
  * heading is written as given, because a note may open a section, while a
- * setext heading is escaped, because the plan's sections are cut at `#`
+ * setext heading is escaped, because the description's sections are cut at `#`
  * headings alone and one drawn as a heading but read as none misleads both.
  */
 function escapedLine(line: string, afterText: boolean): string {
@@ -119,7 +119,7 @@ const MAX_NOTES = 40;
 /** The heading a point goes under, as a note names one: the notetaker's and a coding agent's alike. */
 export const descriptionNoteSectionSchema = describeWire(
   trimmedText(DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS),
-  "The heading the point goes under, copied exactly from the plan's text, without its #s. " +
+  "The heading the point goes under, copied exactly from the description's text, without its #s. " +
     "A heading the text does not hold opens a new section at its end.",
 );
 
@@ -137,7 +137,7 @@ const replaceNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
   find: describeWire(
     trimmedText(TASK_BOUNDS.MAX_BODY_CHARS),
-    "Text copied exactly from the plan's saved text, as much as names one place: a phrase, " +
+    "Text copied exactly from the description's saved text, as much as names one place: a phrase, " +
       "lines, or whole sections, headings and their #s included.",
   ),
   text: describeWire(
@@ -173,14 +173,14 @@ const journaledNoteSchema = EffectSchema.Union([
   removeNoteSchema,
 ]);
 
-/** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
+/** The most saves by coding agents a description keeps word of; older ones fall off the front. */
 const TASK_AGENT_EDITS_KEPT = 50;
 
 /** The most of a replaced text the journal keeps: the bound the deployment before this one reads a phrase under. */
 const JOURNAL_FIND_CHARS = 500;
 
 /**
- * One save a coding agent made on the plan: which agent, when, and the notes
+ * One save a coding agent made on the description: which agent, when, and the notes
  * as they were taken. The agent is named by its id alone, so whoever reads
  * the journal names it by what its row says now.
  */
@@ -198,7 +198,7 @@ export type DescriptionAgentEdit = typeof descriptionAgentEditSchema.Type;
  * Note that a deletion is kept as a strike rather than an empty
  * replacement, and the text cut, because the deployment before this one
  * reads a replacement only with words and a phrase only so long, and a
- * journal it cannot read is a plan it cannot open.
+ * journal it cannot read is a description it cannot open.
  */
 function journaledNote(note: DescriptionNote): DescriptionAgentEdit["notes"][number] {
   if (note.kind === NOTE_KIND.ADD) return note;
@@ -256,7 +256,7 @@ function spansOf(text: string, find: string): readonly Span[] {
 /**
  * The one place a phrase stands in a text, or nothing where it stands
  * nowhere or more than once, as a note's replacement and a comment an agent
- * starts on a plan's words (`member-mcp/tools.ts`) find it. Note that a
+ * starts on a description's words (`member-mcp/tools.ts`) find it. Note that a
  * phrase standing twice is never read as its first place, because a
  * correction landing on the wrong line is the edit a note must never make.
  */
@@ -382,7 +382,7 @@ function keepsAddresses(
   after: string,
   addressesIn: (text: string) => readonly string[],
 ): boolean {
-  // Note that every copy is counted, each alike, however many the plan holds.
+  // Note that every copy is counted, each alike, however many the description holds.
   const counted = (text: string) => {
     const counts = new Map<string, number>();
     for (const address of addressesIn(text)) counts.set(address, (counts.get(address) ?? 0) + 1);
@@ -413,7 +413,7 @@ function keepsMentions(before: string, after: string): boolean {
  * it corrects, but one that drops it, or leaves its address as a link that
  * draws no picture, is not taken; striking the
  * line a picture stands on is a retraction, and is. A picture of another
- * plan is kept as surely as one of this plan.
+ * description is kept as surely as one of this description.
  */
 function keepsPictures(before: string, after: string): boolean {
   return keepsAddresses(before, after, taskPicturesIn);

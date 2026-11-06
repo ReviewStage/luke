@@ -4,9 +4,9 @@ import { descriptionCommentAnchorsSchema } from "./description-comment-wire.js";
 import { descriptionLastEditSchema, TASK_BOUNDS, taskSchema, taskTxidSchema } from "./task-wire.js";
 
 /**
- * description-edit.ts -- the developer's own edit of a plan's text: what the window sends, what the service answers, and how the edit is taken into the text.
+ * description-edit.ts -- the developer's own edit of a description's text: what the window sends, what the service answers, and how the edit is taken into the text.
  *
- * A plan is one Markdown text (`description-document.ts`), and the developer edits
+ * A description is one Markdown text (`description-document.ts`), and the developer edits
  * it whole: the edit names the text the editor opened on (`base`), or the
  * developer's own last save since, and the text the developer wrote
  * (`value`). The app may write while the developer types, on a call, so the
@@ -25,8 +25,8 @@ import { descriptionLastEditSchema, TASK_BOUNDS, taskSchema, taskTxidSchema } fr
  */
 
 /**
- * A plan's text as an edit names it, kept exactly as written and held to the
- * plan's bound. A text the developer's change lays past the bound over the app's
+ * A description's text as an edit names it, kept exactly as written and held to the
+ * description's bound. A text the developer's change lays past the bound over the app's
  * is the save's to refuse as too long.
  */
 const DOCUMENT_TEXT = EffectSchema.String.check(
@@ -34,7 +34,7 @@ const DOCUMENT_TEXT = EffectSchema.String.check(
 );
 
 /**
- * The developer's edit of the plan's whole text (POST `/api/plans/{id}/edit`):
+ * The developer's edit of the description's whole text (POST `/api/plans/{id}/description`):
  * the text the editor opened on, or their own last save since, and the text
  * they wrote; and where the editor's comment anchors stand in that text,
  * from an editor that carries them (`description-comment-wire.ts`).
@@ -46,14 +46,14 @@ export const descriptionEditRequestSchema = EffectSchema.Struct({
 
 export type DescriptionEditRequest = typeof descriptionEditRequestSchema.Type;
 
-/** The plan's text as a conflict answers it. */
+/** The description's text as a conflict answers it. */
 export const descriptionEditValueSchema = DOCUMENT_TEXT;
 
 export type DescriptionEditValue = typeof descriptionEditValueSchema.Type;
 
 /**
  * A conflict as an edit answers it: the text as it stands now, and who last
- * wrote it, the plan's newest revision as its "Edited by" line reads it; a
+ * wrote it, the description's newest revision as its "Edited by" line reads it; a
  * service from before writers were answered names nobody.
  */
 export const descriptionEditConflictSchema = EffectSchema.Struct({
@@ -63,12 +63,12 @@ export const descriptionEditConflictSchema = EffectSchema.Struct({
 
 /** Why an edit saved nothing that is the developer's to change. */
 export const DESCRIPTION_EDIT_REFUSAL = {
-  /** The plan with the edit would be longer than a plan may be. */
+  /** The description with the edit would be longer than a description may be. */
   TOO_LONG: "too-long",
 } as const;
 
 /**
- * What an edit answers: the plan as saved, with the transaction it was saved
+ * What an edit answers: the description as saved, with the transaction it was saved
  * in where it moved the text, the text as it now stands and who wrote it
  * where the edit conflicts with it, or why it was refused. Note that a
  * service before the transaction answers none, and a released desktop's

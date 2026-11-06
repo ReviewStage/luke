@@ -110,9 +110,9 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_AGENT_PAGES: "/api/live/agent-pages",
   /** The run of an automation that started one coding agent under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its row inline, none for an agent no run started; or `not-found`. `agent-origin-live.ts` declares the answer. */
   LIVE_AGENT_ORIGIN: "/api/live/agent-origin",
-  /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
+  /** One task's newest page of description history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
-  /** One task's comments under `?id=`, its plan's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `description-comment-live.ts` declares the answer. */
+  /** One task's comments under `?id=`, its description's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `description-comment-live.ts` declares the answer. */
   LIVE_TASK_COMMENTS: "/api/live/task-comments",
   /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
@@ -465,12 +465,12 @@ export interface SkillsPlace {
   readonly repository?: string;
 }
 
-/** One plan's pictures, under which each is served as its bytes (`descriptionAttachmentPath`). */
+/** One description's pictures, under which each is served as its bytes (`descriptionAttachmentPath`). */
 function descriptionAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
 }
 
-/** One picture of one plan, as its bytes (GET). */
+/** One picture of one description, as its bytes (GET). */
 export function descriptionAttachmentPath(taskId: string, attachmentId: string): string {
   return `${descriptionAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
