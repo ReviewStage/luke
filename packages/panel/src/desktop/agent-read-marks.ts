@@ -1,6 +1,7 @@
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useAct } from "../act.js";
+import { useMutation } from "@tanstack/react-query";
+import { actMutation } from "../act-mutations.js";
 import { useMarkAgent, useReadMarks } from "../tasks/use-task-looks.js";
 
 /**
@@ -23,12 +24,12 @@ export interface AgentReadMarks {
 export function useAgentReadMarks(): AgentReadMarks {
   const reads = useReadMarks();
   const markAgent = useMarkAgent();
-  const { tell } = useAct();
+  const { mutate: markSeen } = useMutation(actMutation(ACT_KIND.AGENTS_SEEN));
   return {
     markedUnread: reads.markedUnread,
     mark: (agent, unread) => {
       markAgent(agent.id, unread);
-      if (!unread) tell(ACT_KIND.AGENTS_SEEN, { agentId: agent.id });
+      if (!unread) markSeen({ agentId: agent.id });
     },
   };
 }

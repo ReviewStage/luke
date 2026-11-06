@@ -203,7 +203,7 @@ test("the account's menu opens Keyboard shortcuts and the changelog, each closin
   await stateArrived();
   for (const label of ["Keyboard shortcuts", "Changelog"]) {
     act(() => button.click());
-    act(() => accountItem(label).click());
+    await act(async () => accountItem(label).click());
     assert.equal(accountMenu(), null);
   }
 
@@ -240,7 +240,7 @@ test("Contact us flies out its own menu beside the account's, which stands whole
   assert.equal(contact.getAttribute("aria-expanded"), "true");
 });
 
-test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", () => {
+test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", async () => {
   const button = mount(DEAN);
   act(() => button.click());
   for (const key of ["ArrowLeft", "Escape"]) {
@@ -257,7 +257,7 @@ test("Left or Escape closes Contact us's menu alone, and choosing in it closes b
   const email = [...(contactMenu()?.querySelectorAll("button") ?? [])].find(
     (item) => item.textContent === "Email",
   );
-  act(() => email?.click());
+  await act(async () => email?.click());
   assert.equal(accountMenu(), null);
   assert.equal(contactMenu(), null, "the submenu goes with the menu");
   assert.deepEqual(sent, [{ kind: ACT_KIND.CONTACT_EMAIL }]);

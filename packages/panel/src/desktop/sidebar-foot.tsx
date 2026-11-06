@@ -42,6 +42,7 @@ import {
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import {
   LifeBuoyIcon,
   LogOutIcon,
@@ -51,7 +52,7 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 import { useMemo } from "react";
-import { useAct } from "../act.js";
+import { pressMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -187,10 +188,10 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
 function SidebarBuild(): React.JSX.Element | null {
   const run = useAppSlice(APP_SLICE.RUN);
   const facts = useAppSlice(APP_SLICE.WINDOW);
-  const { press } = useAct();
+  const { mutate: showBuildLabel } = useMutation(pressMutation(ACT_KIND.WINDOW_SHOW_BUILD_LABEL));
   const copy = useCopyToast();
   if (run === undefined || run.packaged || run.fixtureMode) return null;
-  const show = (shown: boolean) => void press(ACT_KIND.WINDOW_SHOW_BUILD_LABEL, { shown });
+  const show = (shown: boolean) => showBuildLabel({ shown });
   if (facts?.buildLabelHidden === true) {
     return (
       <List label="Build" density={LIST_DENSITY.DENSE}>
@@ -331,16 +332,17 @@ export function useAccountMenuGroups(
   account: AccountSnapshot,
   onSignOut: () => Promise<void>,
 ): MenuEntry[][] {
-  const { press } = useAct();
+  const { mutate: openChangelog } = useMutation(pressMutation(ACT_KIND.UPDATE_OPEN_CHANGELOG));
+  const { mutate: sendEmail } = useMutation(pressMutation(ACT_KIND.CONTACT_EMAIL));
   const openPerson = useOpenPerson();
   const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
   const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
   return accountMenuGroups(account.status === ACCOUNT_STATUS.SIGNED_IN, desktopApp, {
     onProfile:
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
-    onOpenChangelog: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
+    onOpenChangelog: () => openChangelog(),
     onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
-    onEmail: () => press(ACT_KIND.CONTACT_EMAIL),
+    onEmail: () => sendEmail(),
     onSignOut: () => void signOutSayingFailure(onSignOut),
   });
 }
