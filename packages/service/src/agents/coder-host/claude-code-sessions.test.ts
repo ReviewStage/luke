@@ -1631,6 +1631,37 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect("a halt waits out a runner that exits within its bound rather than killing it", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent } = yield* openAgent;
+      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      const runner = api.commands[0];
+      assert.ok(runner !== undefined);
+      // A read that waits for the running command's exit is held until it exits or its reader gives up.
+      api.waits.hold = true;
+
+      const halting = yield* Effect.forkChild(
+        sessions.halt(opened.sessionId, agent.conversationId),
+      );
+      // The liveness read gives up on the running runner, which is then written its Stop.
+      yield* turnsPass;
+      yield* TestClock.adjust(CODER.RUNNER_EXIT_READ);
+      yield* turnsPass;
+      // The runner exits five seconds after its Stop, well within the halt's bound.
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* turnsPass;
+      api.exit(runner, 0);
+      const halted = yield* Fiber.join(halting);
+
+      assert.equal(halted, true);
+      assert.equal(runner.exitCode, 0);
+    }),
+  );
+
   it.effect("a sandbox opens on the short timeout", () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());

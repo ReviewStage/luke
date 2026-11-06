@@ -15,7 +15,7 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { gunzipSync } from "node:zlib";
 import { RUNNER_ENV, type RunnerConfig } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
@@ -104,22 +104,26 @@ export interface ReadCommand {
  * A read of a command, as Vercel answers it: a plain read answers no exit
  * until a read that waits (`wait=true`) has seen the command exit, and one
  * that waits records the exit it sees. A command still running holds a
- * waiting read until the reader gives up where `hold` is set, and answers it
- * at once with no exit otherwise, as a hold past the reader's wait ends.
+ * waiting read until the reader gives up where `hold` is set, or until the
+ * command exits where `exits` tells its exits, and answers it at once with
+ * no exit otherwise, as a hold past the reader's wait ends.
  */
 export async function commandRead(
   command: ReadCommand,
   url: URL,
   init: RequestInit,
   hold: boolean,
+  exits?: EventEmitter,
 ): Promise<Response> {
   const waits = url.searchParams.get("wait") === "true";
-  if (waits && command.exitCode !== null) command.recorded = true;
   if (waits && command.exitCode === null && hold) {
     assert.ok(init.signal, "a held read needs a reader that can give up");
-    await once(init.signal, "abort");
-    throw new Error("the reader gave up");
+    if (exits === undefined) await once(init.signal, "abort");
+    // Note that the wait rejects once the reader gives up, which the SDK reads as no answer.
+    else await once(exits, command.id, { signal: init.signal });
+    if (command.exitCode === null) throw new Error("the reader gave up");
   }
+  if (waits && command.exitCode !== null) command.recorded = true;
   const sessionId = /\/sessions\/([^/]+)\//u.exec(url.pathname)?.[1] ?? "";
   return Response.json(
     commandAnswered({
@@ -208,8 +212,14 @@ export function runnerSandboxApi() {
   const failPolicy = { remaining: 0 };
   /** How many network policy updates the API holds next, answering none until the caller gives up. */
   const holdPolicy = { remaining: 0 };
-  /** Whether a read that waits for a running command's exit is held until the reader gives up. */
+  /** Whether a read that waits for a running command's exit is held until the reader gives up or the command exits. */
   const waits = { hold: false };
+  const exits = new EventEmitter();
+  /** The command exits with the code given, unless it already ended, and a read held on it answers. */
+  const exit = (command: FakeCommand, code: number) => {
+    command.exitCode = command.exitCode ?? code;
+    exits.emit(command.id);
+  };
   /**
    * The call to a session at which its sandbox begins to stop, as a launch's
    * end or the sweep stops it a moment before a send reaches it, by the
@@ -558,7 +568,7 @@ export function runnerSandboxApi() {
       failCommandReads.remaining -= 1;
       return Response.json({ error: { code: "bad_request" } }, { status: 400 });
     }
-    return commandRead(command, parsed, init, waits.hold);
+    return commandRead(command, parsed, init, waits.hold, exits);
   };
   /** The network policy a command's session stood at as it started: the last one set for that session by then, none where none was. */
   const policyAtStart = (command: FakeCommand | undefined) =>
@@ -586,6 +596,7 @@ export function runnerSandboxApi() {
     failPolicy,
     holdPolicy,
     waits,
+    exit,
     stopsAt,
     snapshotting,
     hooks,
