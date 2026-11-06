@@ -41,7 +41,6 @@ interface Recorded {
   withdrawnLines: number[];
   automated: number[];
   pictures: number[];
-  hostPairings: number[];
   syncLog: number[];
   staleFirewalls: number[];
   codexPlanSwaps: number[];
@@ -59,7 +58,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     withdrawnLines: [],
     automated: [],
     pictures: [],
-    hostPairings: [],
     syncLog: [],
     staleFirewalls: [],
     codexPlanSwaps: [],
@@ -119,11 +117,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         return 4;
       }),
     sweepAgentQueues: () => Effect.succeed(0),
-    sweepHostPairings: (now) =>
-      Effect.sync(() => {
-        recorded.hostPairings.push(now);
-        return 3;
-      }),
     pruneSyncLog: (now) =>
       Effect.sync(() => {
         recorded.syncLog.push(now);
@@ -169,7 +162,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       withdrawnLines: [],
       automated: [],
       pictures: [],
-      hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
       codexPlanSwaps: [],
@@ -198,7 +190,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       withdrawnLines: [],
       automated: [],
       pictures: [],
-      hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
       codexPlanSwaps: [],
@@ -214,7 +205,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       withdrawnLines: [],
       automated: [],
       pictures: [],
-      hostPairings: [],
       syncLog: [],
       staleFirewalls: [],
       codexPlanSwaps: [],
@@ -250,7 +240,6 @@ it.effect(
         withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
-        hostPairings: [instant],
         syncLog: [instant],
         staleFirewalls: [instant],
         codexPlanSwaps: [instant],
@@ -283,7 +272,6 @@ it.effect(
       assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
-      assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.syncLog.length, 1);
       assert.equal(recorded.staleFirewalls.length, 1);
       assert.equal(recorded.codexPlanSwaps.length, 1);
