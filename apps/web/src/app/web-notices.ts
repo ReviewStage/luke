@@ -8,7 +8,9 @@
  * The badge is the installed app's own where it runs installed; elsewhere,
  * an uninstalled tab included, where a browser that names the app badge
  * draws nothing, it is a count before the tab's title, "(2) Inbox — Acme",
- * kept there as the panel names the tab again.
+ * kept there as the panel names the tab again. Either counts what waits on
+ * the account as the Inbox's Open lists it, every workspace's
+ * (`agent-notices.ts`'s `countedOf`).
  */
 
 import type { AgentNoticeDoorsSurface } from "@repo/host/agent-notices";

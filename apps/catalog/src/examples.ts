@@ -33,6 +33,7 @@ import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { COPY_BUTTONS_EXAMPLE } from "./examples/copy-buttons";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
+import { COUNT_FIGURES_EXAMPLE } from "./examples/count-figures";
 import { COUNT_PARTS_EXAMPLE } from "./examples/count-parts";
 import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
@@ -299,6 +300,7 @@ export const EXAMPLES: readonly Example[] = [
   GLYPH_SLOTS_EXAMPLE,
   ICONS_EXAMPLE,
   CORNER_COUNTS_EXAMPLE,
+  COUNT_FIGURES_EXAMPLE,
   RESIZE_EDGES_EXAMPLE,
   REVEALS_EXAMPLE,
   ZOOM_IMAGES_EXAMPLE,

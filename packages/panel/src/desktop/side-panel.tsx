@@ -36,6 +36,7 @@ import {
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
+  RowCount,
   RowHint,
   RowHintOptions,
   SCROLL_SIZE,
@@ -186,7 +187,7 @@ import {
 import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useFileTreeWidth } from "./folded-groups.js";
-import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
+import { AgentMenuTab } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming, pastRightEdge } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.js";
@@ -1171,27 +1172,27 @@ function stripTabs(input: {
     }),
     close: () => panel.onClose(tab),
   }));
-  // A cloud terminal tab is named by its terminal, wears its agent's glyph and name, and hangs its
-  // agent's card, saying under a rule whose sandbox its shell runs in.
+  // A cloud terminal tab is named by its terminal, wears the terminal glyph and its agent's name, and
+  // hangs its agent's card, saying under a rule whose sandbox its shell runs in.
   const terminalTabs = terminals.map((tab) => {
     const subject = agentSubject(agentsOf(tab.terminal), tab.terminal, held, false);
     return {
       tab,
       look: look(tab, {
-        ...tabLook({ kind: TAB_KIND.TERMINAL, agent: subject.agent, title: tab.title }),
+        ...tabLook({ kind: TAB_KIND.TERMINAL, title: tab.title }),
         detail: subject.name,
         card: hungCard({ kind: TAB_KIND.TERMINAL, subject, models }),
       }),
       close: () => panel.onClose(tab),
     };
   });
-  // A Local tab is named by its terminal, wears its agent's glyph and name, and hangs its agent's card.
+  // A Local tab is named by its terminal, wears the terminal glyph and its agent's name, and hangs its agent's card.
   const localTabs = locals.map((tab) => {
     const subject = agentSubject(agentsOf(tab.local), tab.local, held, false);
     return {
       tab,
       look: look(tab, {
-        ...tabLook({ kind: TAB_KIND.LOCAL, agent: subject.agent, title: tab.title }),
+        ...tabLook({ kind: TAB_KIND.LOCAL, title: tab.title }),
         detail: subject.name,
         card: hungCard({ kind: TAB_KIND.LOCAL, subject, models }),
       }),
@@ -1573,9 +1574,7 @@ export function ActivityList({
                           {entry.look.detailTone === undefined ? (
                             entry.look.detail
                           ) : (
-                            <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
-                              {entry.look.detail}
-                            </span>
+                            <RowCount value={entry.look.detail} tone={entry.look.detailTone} />
                           )}
                         </ReplayWords>
                       )

@@ -172,12 +172,12 @@ import { cardTitle } from "./tool-call-model.js";
  * show. The tile hangs the agent's tab's card while the pointer rests on
  * it (`agent-ref.tsx`), and leaves the press to its row, whose pane opens
  * the agent. An item that needs the developer's answer, an open one their
- * own agent asks (`needsReader`), wears the attention mark before its time
- * (`attention-mark.tsx`), filtered or not; a
- * teammate's open item waits on the teammate, whose face stands in that
- * place, and any member may still answer it; an answered one wears
- * neither. Apart from whether it waits, an item is unread where it changed
- * since the developer last read it, or they marked it so: the blue dot in
+ * own agent asks (`needsReader`), says Needs you to a reader, filtered or
+ * not, and draws no mark for it: the Open scope and the counts that lead
+ * there say it to the eye; a teammate's open item waits on the teammate,
+ * whose face stands before its time, and any member may still answer it.
+ * Apart from whether it waits, an item is unread where it changed since
+ * the developer last read it, or they marked it so: the blue dot in
  * a gutter before its tile, its title in the unread weight; opening it
  * reads it, and its row, its menu, U, and Mark all as read, which the
  * sidebar's Inbox row offers on a right-click, ⌘K, and a

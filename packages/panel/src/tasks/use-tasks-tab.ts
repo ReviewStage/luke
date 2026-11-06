@@ -15,6 +15,7 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
@@ -151,8 +152,13 @@ import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
+import { pressRows, ROW_WRITE, type RowDoors, type TaskRows } from "../undo-stack.js";
+import {
+  appStateIn,
+  appStateQuery,
+  selectAppSettingsView,
+  selectExperimentChoices,
+} from "../use-app-state.js";
 import type { VersionHistoryRoute } from "../version-history-route.js";
 import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
@@ -1191,7 +1197,7 @@ interface TaskRenameAsk {
  */
 export function taskRenameMutation(
   send: (asked: TaskRenameAsk) => Promise<boolean>,
-  doors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
+  doors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
 ) {
   return mutationOptions({
     mutationKey: [ROW_WRITE.TASK_RENAME.kind],
@@ -2295,20 +2301,23 @@ export function useTasksTab(input: {
   // mutation, which ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
   const drawnTasks = useRef(tasks);
   drawnTasks.current = tasks;
-  const drawnRows = () => drawnTasks.current;
-  const renameDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> = {
+  const drawnRows = (): TaskRows => ({
+    tasks: drawnTasks.current,
+    held: appStateIn(queryClient)?.[LIVE_READ.DESCRIPTION_DOCUMENT],
+  });
+  const renameDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_RENAME.kind> = {
     rows: drawnRows,
     send: sendTaskRename,
   };
-  const taskPinDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_PIN.kind> = {
+  const taskPinDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_PIN.kind> = {
     rows: drawnRows,
     send: sendTaskPin,
   };
-  const agentPinDoors: RowDoors<TasksView, typeof ROW_WRITE.AGENT_PIN.kind> = {
+  const agentPinDoors: RowDoors<TaskRows, typeof ROW_WRITE.AGENT_PIN.kind> = {
     rows: drawnRows,
     send: sendAgentPin,
   };
-  const standingDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_STANDING.kind> = {
+  const standingDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_STANDING.kind> = {
     rows: drawnRows,
     send: sendStandingRow,
   };

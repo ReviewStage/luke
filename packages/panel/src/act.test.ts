@@ -13,6 +13,7 @@ import { askAct, askActResult } from "./act.js";
 import { installActPortClient } from "./app-bridge.js";
 import { installShownFailureReporter, reportShownFailure } from "./failure-report.js";
 import { fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
+import { testQueryClientNow } from "./testing/copy-feedback.js";
 
 /**
  * The act door, against the port's own server: a refusal reaches the caller
@@ -113,7 +114,7 @@ it("a row reading an act's answer is told the fixed sentence for a transport fai
   const uninstall = installShownFailureReporter((report) => {
     kinds.push(report.kind);
     return undefined;
-  });
+  }, testQueryClientNow());
   const reasonFor = async (failure: Error) => {
     fakeActPort({ [ACT_KIND.GITHUB_TOKEN_REMOVE]: () => Promise.reject(failure) });
     const answer = await askActResult(

@@ -202,22 +202,23 @@ export function inboxCommentFiles(
 /** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
-  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
+  /** The open items that wait on the reader at `now` (`waitsOnReaderNow`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate and one the reader set a reminder on waits on nobody until it comes due. */
   readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` and `now` say which of what waits waits on the reader. */
 export function inboxBoard(
   items: readonly InboxItem[],
   readerId: string | undefined,
+  now: number,
 ): InboxBoardView {
   const open = items
     .filter((item) => item.status === INBOX_STATUS.OPEN)
     .toSorted((a, b) => a.postedAt - b.postedAt);
   return {
     open,
-    waiting: open.filter((item) => readersItem(item, readerId)),
+    waiting: open.filter((item) => waitsOnReaderNow(item, readerId, now)),
     settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),
@@ -927,12 +928,6 @@ export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
 }
 
-/** What an item's hover card reads of its thread: the agent's latest words, plain. */
-export function inboxCardWords(item: InboxItem): string {
-  const said = (item.thread ?? []).findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
-  return said === undefined ? "" : plainWords(said.text);
-}
-
 /**
  * The steps of an item's open to-do its row shows ticked, as its box
  * shows them (`shownTicks`): every one while Mark done is pressed in its
@@ -1524,8 +1519,8 @@ export function waitsOnReader(
 
 /**
  * Whether an open item main lists holds an ask open rather than being a
- * notice: what the Inbox's number and the Dock's badge count. One from a
- * service before it, which says nothing, counts as asking, as every item did.
+ * notice. One from a service before it, which says nothing, counts as
+ * asking, as every item did.
  */
 export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
   return item.asking !== false;
@@ -1534,6 +1529,20 @@ export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+}
+
+/**
+ * Whether an item waits on the reader at `now`: it needs them (`needsReader`)
+ * and holds no reminder still ahead (`remindsLater`), what Open lists for them
+ * and every count of what needs them counts, the sidebar's Inbox row's among
+ * them (`places-waiting.ts`'s `waitingThreads`).
+ */
+export function waitsOnReaderNow(
+  item: InboxItem,
+  readerId: string | undefined,
+  now: number,
+): boolean {
+  return needsReader(item, readerId) && !remindsLater(item, now);
 }
 
 /**
@@ -1692,6 +1701,11 @@ export function hasReminder(item: InboxItem): boolean {
   return item.remindAt !== undefined;
 }
 
+/** Whether the reader's reminder on the item is still ahead at `now`, which leaves it out of every count until it comes due. */
+function remindsLater(item: Pick<InboxItem, "remindAt">, now: number): boolean {
+  return item.remindAt !== undefined && item.remindAt > now;
+}
+
 /**
  * An item as it stands for the reader at `now`: put away while its reminder is
  * ahead, read or unread alike; and back where it has passed, as changed
@@ -1738,8 +1752,8 @@ export function isDone(item: InboxItem): boolean {
 
 /**
  * Whether a scope lists the item: Questions every question whose ask waits
- * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those with a reminder, a notice never; Open every
+ * on the reader (`threadNeedsReader`) but for those with a reminder, a
+ * notice never; Open every
  * thread the reader is not done with (`isDone`), one still open, one
  * answered since they last read it, or one closed without an answer that
  * they marked unread or that was written on since it closed, as a mail

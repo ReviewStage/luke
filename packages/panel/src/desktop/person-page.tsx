@@ -91,7 +91,12 @@ import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, listedRowSubject } from "../tasks/agent-ref.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
 import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
-import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
+import {
+  INBOX_HOLDER,
+  type InboxListed,
+  NEEDS_YOU,
+  waitsOnReaderNow,
+} from "../tasks/inbox-model.js";
 import { readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -759,12 +764,14 @@ function PersonColumn({
   const read = useWaitingItems(tasks);
   const drafts = useInboxRowDrafts();
   // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
+  // On the reader's own page it must also wait on them now as the sidebar's Inbox row counts it (`waitsOnReaderNow`), so one with a reminder still ahead is left out until it comes due.
   const waiting = read.items.filter(
     ({ holder, item }) =>
       (inboxWaitsOn(item)?.userId ??
         (holder.kind === INBOX_HOLDER.TASK
           ? agentStarter(holder.task, item.agentId)
-          : undefined)) === userId,
+          : undefined)) === userId &&
+      (!you || waitsOnReaderNow(item, tasks.me, now)),
   );
   const { inboxView } = tasks;
   const openItem = (listed: InboxListed) => inboxView.onOpenItem(choiceOf(listed));

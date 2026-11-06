@@ -5,9 +5,10 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
+import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   createElement,
@@ -227,12 +228,14 @@ export function placeOfMention(mention: DescriptionMention): LinkPlace {
  * the window lists no task for stays a number, which only the window opens,
  * finding the task on the service (`use-tasks-tab.ts`'s `openLink`).
  */
-function byListedTaskId(address: Address): Address {
+function byListedTaskId(address: Address, client: QueryClient): Address {
   if (address.kind !== ADDRESS.PLACE) return address;
   const { link } = address;
   const number = taskNumberOf(link.place);
   const taskId =
-    number === undefined ? undefined : numberedTaskIdNow({ workspace: link.workspace, number });
+    number === undefined
+      ? undefined
+      : numberedTaskIdNow(client)({ workspace: link.workspace, number });
   return taskId === undefined
     ? address
     : { ...address, link: { ...link, place: withTaskId(link.place, taskId) } };
@@ -308,9 +311,11 @@ export function useOpenLink(): (href: string) => void {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);
   const listed = useContext(ListedTasksContext);
+  const queryClient = useQueryClient();
   return useCallback(
-    (href: string) => openAddress(byListedTaskId(addressOf(href)), { openPlace, openHere, listed }),
-    [openPlace, openHere, listed],
+    (href: string) =>
+      openAddress(byListedTaskId(addressOf(href), queryClient), { openPlace, openHere, listed }),
+    [openPlace, openHere, listed, queryClient],
   );
 }
 

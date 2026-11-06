@@ -1,7 +1,6 @@
 import type { AgentPullRequest, AgentSummary } from "@repo/features/agent-wire";
 import type { CatalogModel, MacOffer } from "@repo/features/models-wire";
 import {
-  AttentionMark,
   GAP,
   Inline,
   LIST_ROW_META,
@@ -9,32 +8,31 @@ import {
   type ListRowMenu,
   RowHint,
   RowHintOptions,
-  VisuallyHidden,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import type { ReactNode, RefCallback } from "react";
 import type { AgentSubject } from "../tasks/agent-ref.js";
 import { useChangesPeople } from "../tasks/changes-people.js";
-import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
+import { WaitingCount } from "./task-row-parts.js";
 
 /**
- * agent-list-row.tsx -- one agent as a list of agents draws it, at the head of a task's description and on a person's page alike: its glyph wearing where it stands, its name, whether a thread of it waits on the developer, where it runs, its failed mark, and its pull request's chip.
+ * agent-list-row.tsx -- one agent as a list of agents draws it, at the head of a task's description and on a person's page alike: its glyph wearing where it stands, its name, how many of its threads wait on the developer, where it runs, its failed mark, and its pull request's chip.
  *
  * The row is a `ListRow` whose glyph is its tab's (`AgentGlyph`), which
  * gives way to the working mark while the agent works, and whose name is
  * masked in a screen recording. After the name, muted, stands what the
  * place says it is about (`about`), such as the task a person's agent
  * works on, or, on a line of its own under the name, what went wrong with
- * the row, such as a rename refused. At its end stand, in turn, the
- * attention mark where a thread of it waits on the developer, whose title
- * is the Inbox's to say, where it runs (`runs-on.tsx`), Cloud or the device, and its
+ * the row, such as a rename refused. At its end stand, in turn, how many
+ * of its threads wait on the developer, as the sidebar's Inbox row counts
+ * them (`WaitingCount`), whose titles are the Inbox's to say, where it runs (`runs-on.tsx`), Cloud or the device, and its
  * failed mark once its turn failed, the same at the head of a task's
  * description and on a person's page. Its pull
  * request, where it opened one, stands after them as a chip of GitHub's
@@ -55,7 +53,7 @@ export function AgentListRow({
   models,
   devices,
   pullRequest,
-  waits = false,
+  waits = 0,
   refused,
   about,
   editing = false,
@@ -78,8 +76,8 @@ export function AgentListRow({
   /** The member's devices, which give a device's platform (`RunsOnPlace`). */
   devices: readonly MacOffer[] | undefined;
   pullRequest: AgentPullRequest | undefined;
-  /** Whether a thread of it waits on the developer. */
-  waits?: boolean | undefined;
+  /** How many of its threads wait on the developer. */
+  waits?: number | undefined;
   /** What went wrong with the row, said on a line of its own under its name. */
   refused?: ReactNode;
   /** What the place says the agent is about, said after its name where nothing else is. */
@@ -119,12 +117,7 @@ export function AgentListRow({
         meta={
           editing ? null : (
             <Inline gap={GAP.ITEM} wrap={false}>
-              {!waits ? null : (
-                <>
-                  <AttentionMark />
-                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-                </>
-              )}
+              <WaitingCount count={waits} />
               <ReplayMask>
                 <RunsOnPlace agent={agent} devices={devices} />
                 {agentEndMark(agent, true)}
