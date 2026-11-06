@@ -436,7 +436,7 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
   );
 
   it.effect(
-    "a plan the retired third-party sign-in sealed, with or without its flow named, reads as not connected and is removed, and OpenAI is asked nothing",
+    "a plan the retired third-party sign-in sealed, with or without its flow named, reads as not connected and is removed, and OpenAI is asked nothing; a seal of a flow this release does not know reads as unreadable and is kept",
     () => {
       const server = fakeAuthorizationServer("refresh-0");
       return Effect.gen(function* () {
@@ -479,6 +479,13 @@ it.layer(getTestDB())("a ChatGPT plan's renewal and revocation", (it) => {
         assert.equal(yield* removeChatGptCredentials(owner, ring()), true);
         assert.equal(yield* rowOf(owner), undefined);
         assert.deepEqual(server.http.requests, []);
+
+        yield* sealRetired({ ...thirdParty, flow: "a_later_flow" });
+        assert.equal(
+          tokenOf(yield* refreshChatGptAccess(owner, ring())),
+          CHATGPT_ACCESS.UNREADABLE,
+        );
+        assert.ok(yield* rowOf(owner));
       }).pipe(Effect.provide(server.http.layer));
     },
   );
