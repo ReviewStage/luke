@@ -1,0 +1,94 @@
+import { inviteesOf } from "@repo/features/workspace-invitation-wire";
+import { EMAIL_CHIP_STATE, type EmailChip, EmailChipsField, GAP, Stack } from "@repo/ui";
+import { useState } from "react";
+import type { Example } from "../examples";
+import { CatalogSection } from "../section";
+
+/**
+ * email-chips.tsx -- the field of email addresses empty, holding an address
+ * in every state (to be sent, no address, on its way, sent, and refused),
+ * and unavailable, a long list of wrong ones among them.
+ */
+
+/** Every state an address stands in, as an invitation's run leaves them. */
+const EVERY_STATE: readonly EmailChip[] = [
+  {
+    id: "dana",
+    words: "Dana Ruiz",
+    typed: "Dana Ruiz <dana@acme.dev>",
+    state: EMAIL_CHIP_STATE.SENT,
+  },
+  { id: "theo", words: "theo@acme.dev", typed: "theo@acme.dev", state: EMAIL_CHIP_STATE.SENDING },
+  { id: "priya", words: "priya@acme.dev", typed: "priya@acme.dev", state: EMAIL_CHIP_STATE.DRAFT },
+  {
+    id: "sam",
+    words: "sam@gmail",
+    typed: "sam@gmail",
+    state: EMAIL_CHIP_STATE.BAD,
+    reason: "Not an email address",
+  },
+  {
+    id: "lee",
+    words: "lee@acme.dev",
+    typed: "lee@acme.dev",
+    state: EMAIL_CHIP_STATE.REFUSED,
+    reason: "Already a member",
+  },
+];
+
+/** A field the example holds the chips of, reading what is typed into addresses as the panel does. */
+function Held({
+  start,
+  disabled,
+}: {
+  start: readonly EmailChip[];
+  disabled?: boolean;
+}): React.JSX.Element {
+  const [typed, setTyped] = useState("");
+  const [chips, setChips] = useState(start);
+  return (
+    <EmailChipsField
+      chips={chips}
+      typed={typed}
+      onTyped={setTyped}
+      label="Invite by email"
+      placeholder="Type or paste emails, like dana@acme.dev"
+      disabled={disabled}
+      onAdd={(typed) =>
+        setChips((now) => [
+          ...now,
+          ...inviteesOf(typed)
+            .filter((one) => !now.some((chip) => chip.id === one.email))
+            .map((one) => ({
+              id: one.email,
+              words: one.name ?? one.email,
+              typed: one.typed,
+              state: one.invitable ? EMAIL_CHIP_STATE.DRAFT : EMAIL_CHIP_STATE.BAD,
+              reason: one.invitable ? undefined : "Not an email address",
+            })),
+        ])
+      }
+      onRemove={(id) => setChips((now) => now.filter((chip) => chip.id !== id))}
+    />
+  );
+}
+
+function EmailChips(): React.JSX.Element {
+  return (
+    <>
+      <CatalogSection id="email-chips" title="Empty, in every state, and unavailable">
+        <Stack gap={GAP.CONTROL}>
+          <Held start={[]} />
+          <Held start={EVERY_STATE} />
+          <Held start={EVERY_STATE.slice(0, 3)} disabled />
+        </Stack>
+      </CatalogSection>
+    </>
+  );
+}
+
+export const EMAIL_CHIPS_EXAMPLE: Example = {
+  id: "email-chips",
+  title: "Email chips",
+  Render: EmailChips,
+};

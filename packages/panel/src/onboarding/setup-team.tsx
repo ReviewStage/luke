@@ -1,7 +1,7 @@
-import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { WORKSPACE_BOUNDS } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  EmailChipsField,
   type FilePicker,
   FormField,
   GAP,
@@ -15,120 +15,171 @@ import {
 import type { ShownError } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useMutation } from "@tanstack/react-query";
-import { type Ref, useState } from "react";
+import { type Ref, useEffect, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { type Invitees, useInvitees, useSignedIn } from "../invitees.js";
 import { useWorkspacePhotoPick } from "../workspace-photo.js";
 
 /**
- * setup-team.tsx -- setup's team step: the team's workspace named, its photo picked, and the team invited, made at once on Create in the step's foot.
+ * setup-team.tsx -- setup's team step: the team's workspace named, its photo picked, and the team invited, made at once on Create in the step's foot, and changed there once it stands.
  *
  * The workspace is made first, then its photo set and each address invited
- * as a member. A photo or an invitation refused does not undo the
- * workspace: the step says what was refused, and goes on at Continue, since
- * both can be done again in Settings › Workspace.
+ * as a member, each chip ticking from on its way to sent as its invitation
+ * lands. A photo or an invitation refused does not undo the workspace: a
+ * refused address stays marked with why, and the step stays to say so
+ * rather than going on. Once the workspace stands, the step coming back
+ * holds it as it stands: its name and photo may be changed and more people
+ * invited, which Save writes, and with nothing changed the press goes on.
  */
-
-/** The addresses typed into the invite field, each once. */
-function addressesOf(words: string): readonly string[] {
-  return [...new Set(words.split(/[\s,;]+/u).filter((one) => one.includes("@")))];
-}
 
 /** What the team's fields draw from, in setup's team step and New workspace's card alike. */
 export interface TeamFields {
   readonly name: string;
   readonly onName: (name: string) => void;
-  readonly emails: string;
-  readonly onEmails: (emails: string) => void;
+  readonly invitees: Invitees;
   readonly photo: string | undefined;
   readonly picker: FilePicker;
   /** What was refused, said under the fields, while something was. */
   readonly refusal: string | undefined;
-  /** Enter in the name: makes the workspace. */
+  /** Enter in the name: the form's way on. */
   readonly create: () => void;
 }
 
-/** The team step's form as it stands, and the Create its step's foot presses. */
+/** The team step's form as it stands, and the press its step's foot draws. */
 export interface TeamFormState extends TeamFields {
-  /** Whether Create is out: the workspace, its photo, and its invitations going. */
+  /** Whether the press is out: the workspace, its photo, and its invitations going. */
   readonly busy: boolean;
-  /** Whether a name is typed and no photo is still being read, which Create needs. */
+  /** Whether a name is typed, no photo is still being read, and no address typed is wrong, which the press needs. */
   readonly ready: boolean;
+  /** The press's words: what it will do. */
+  readonly label: string;
+  /** The words the press says while it is out. */
+  readonly busyLabel: string;
+}
+
+/** The workspace the step made, by its id and, once the list holds it, its name. */
+export interface TeamMade {
+  readonly id: string;
+  readonly name: string | undefined;
+}
+
+/** The press's words for what it will write: a workspace made, one changed, or nothing but going on. */
+function pressWords(made: boolean, changed: boolean): string {
+  if (!made) return "Create";
+  return changed ? "Save" : "Continue";
 }
 
 /**
- * The team step's form. `onCreated` hears the workspace made, by its id, the
- * moment it is made, so a reload while its photo and invitations go out does
- * not make it again; `onDone` hears, once they have gone, what was refused.
- * Note that the form's state is held here rather than in `TeamForm`, because
- * Create stands in the step's foot, outside the form.
+ * The team step's form. `made` is the workspace the step made, if it has;
+ * `onCreated` hears the workspace made, by its id, the moment it is made,
+ * so a reload while its photo and invitations go out does not make it
+ * again; `onDone` hears, once every write has gone, what was refused, and
+ * is heard with nothing refused at once where nothing was changed. Note
+ * that the form's state is held here rather than in `TeamForm`, because the
+ * press stands in the step's foot, outside the form.
  */
 export function useTeamForm({
+  made,
   onCreated,
   onDone,
 }: {
+  made: TeamMade | undefined;
   onCreated: (workspaceId: string) => void;
   onDone: (refused: readonly string[]) => void;
 }): TeamFormState {
   const { mutateAsync: createWorkspace } = useMutation(actMutation(ACT_KIND.WORKSPACE_CREATE));
+  const { mutateAsync: renameWorkspace } = useMutation(actMutation(ACT_KIND.WORKSPACE_RENAME));
   const { mutateAsync: setWorkspacePhoto } = useMutation(actMutation(ACT_KIND.WORKSPACE_PHOTO_SET));
-  const { mutateAsync: invite } = useMutation(actMutation(ACT_KIND.WORKSPACE_INVITE));
-  const [name, setName] = useState("");
-  const [emails, setEmails] = useState("");
+  const signedIn = useSignedIn();
+  const [name, setName] = useState(made?.name ?? "");
+  const named = useRef(made?.name !== undefined);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const [setPhoto, setSetPhoto] = useState<string | undefined>(undefined);
+  const invitees = useInvitees(signedIn?.email);
   const { photo, reading, picker } = useWorkspacePhotoPick(setRefusal);
+  // Note that a workspace made before a reload is named once the list holds it, unless something was typed meanwhile.
+  useEffect(() => {
+    if (made?.name === undefined || named.current) return;
+    named.current = true;
+    setName(made.name);
+  }, [made?.name]);
   const trimmed = name.trim();
-  const ready = trimmed !== "" && !reading;
+  const renamed = made !== undefined && made.name !== undefined && trimmed !== made.name;
+  const newPhoto = photo !== undefined && photo !== setPhoto;
+  const changed = renamed || newPhoto || invitees.pending.length > 0;
+  const ready = trimmed !== "" && !reading && invitees.wrong === 0;
+
+  // Note that the photo and the invitations follow the name, and one refused leaves the rest standing.
+  const write = async (workspaceId: string, emails: readonly string[]) => {
+    const refused: string[] = [];
+    if (newPhoto) {
+      await setWorkspacePhoto({ workspaceId, photo }).then(
+        () => setSetPhoto(photo),
+        (why: Error) => refused.push(why.message),
+      );
+    }
+    refused.push(...(await invitees.send(workspaceId, emails)));
+    setBusy(false);
+    onDone(refused);
+  };
   const create = async () => {
     if (!ready || busy) return;
+    // Note that an address typed and never ended is read as the press lands, and one typed wrong holds the press back.
+    const { pending, wrong } = invitees.commit();
+    if (wrong > 0) return;
+    if (made !== undefined && !renamed && !newPhoto && pending.length === 0) {
+      onDone([]);
+      return;
+    }
     setBusy(true);
     setRefusal(undefined);
-    let workspaceId: string;
+    let workspaceId = made?.id;
     try {
-      workspaceId = (await createWorkspace({ name: trimmed })).id;
+      if (workspaceId === undefined) {
+        workspaceId = (await createWorkspace({ name: trimmed })).id;
+        onCreated(workspaceId);
+      } else if (renamed) {
+        await renameWorkspace({ workspaceId, name: trimmed });
+      }
     } catch (refused) {
       setBusy(false);
       setRefusal((refused as Error).message);
       return;
     }
-    onCreated(workspaceId);
-    // Note that the photo and the invitations follow the workspace made, and one refused leaves the rest standing.
-    const refused: string[] = [];
-    if (photo !== undefined) {
-      await setWorkspacePhoto({ workspaceId, photo }).catch((why: Error) =>
-        refused.push(why.message),
-      );
-    }
-    for (const email of addressesOf(emails)) {
-      await invite({
-        workspaceId,
-        email,
-        role: INVITATION_ROLE.MEMBER,
-      }).catch((why: Error) => refused.push(`${email}: ${why.message}`));
-    }
-    setBusy(false);
-    onDone(refused);
+    await write(workspaceId, pending);
   };
   return {
     name,
-    onName: setName,
-    emails,
-    onEmails: setEmails,
+    onName: (typed) => {
+      named.current = true;
+      setName(typed);
+    },
+    invitees,
     photo,
     picker,
     busy,
     refusal,
     ready,
+    label: pressWords(made !== undefined, changed),
+    busyLabel: made === undefined ? "Creating" : "Saving",
     create: () => void create(),
   };
 }
 
+/** How many addresses the press will invite, said under the field once there is one. */
+function inviteCount(invitees: Invitees): string | undefined {
+  const count = invitees.pending.length;
+  return count === 0 ? undefined : `${count} to invite`;
+}
+
 /**
  * The team's fields: the photo, the name, and who to invite, one field
- * apart, as setup's team step and New workspace both draw them. A card that
- * lands focus in the name hands its `nameRef`, one that says a refusal of
- * the name on its field hands `nameError`, and `disabled` stills every field
- * while the workspace is being made.
+ * apart, as setup's team step and New workspace both draw them, the
+ * addresses counted under their field. A card that lands focus in the name hands its
+ * `nameRef`, one that says a refusal of the name on its field hands
+ * `nameError`, and `disabled` stills every field while the workspace is
+ * being made.
  */
 export function TeamForm({
   form,
@@ -165,16 +216,21 @@ export function TeamForm({
           />
         )}
       </FormField>
-      <FormField label="Invite by email" optional>
+      <FormField label="Invite your team" optional description={inviteCount(form.invitees)}>
         {(control) => (
-          <TextField
-            field={control}
-            value={form.emails}
-            placeholder="dana@acme.dev, theo@acme.dev"
-            spellCheck={false}
-            disabled={disabled}
-            onChange={form.onEmails}
-          />
+          <ReplayMask>
+            <EmailChipsField
+              field={control}
+              chips={form.invitees.chips}
+              typed={form.invitees.typed}
+              onTyped={form.invitees.onTyped}
+              placeholder="Type or paste emails, like dana@acme.dev"
+              disabled={disabled}
+              onAdd={form.invitees.add}
+              onRemove={form.invitees.remove}
+              onSubmit={form.create}
+            />
+          </ReplayMask>
         )}
       </FormField>
       {form.refusal === undefined ? null : (

@@ -9,6 +9,9 @@ import {
   Button,
   CONSENT_ANSWER,
   ConsentCard,
+  EMAIL_CHIP_STATE,
+  type EmailChip,
+  EmailChipsField,
   FormField,
   MARK_PROVIDER,
   ProductMark,
@@ -50,6 +53,48 @@ function ProviderChoices(): React.JSX.Element {
     <>
       <ProviderButton provider={MARK_PROVIDER.GOOGLE} name="Google" onPress={() => undefined} />
       <ProviderButton provider={MARK_PROVIDER.GITHUB} name="GitHub" onPress={() => undefined} />
+    </>
+  );
+}
+
+/** Setup's team fields as the step draws them, an address typed wrong among those to invite. */
+function TeamFields(): React.JSX.Element {
+  const [name, setName] = useState("Acme");
+  const [typed, setTyped] = useState("");
+  const [chips, setChips] = useState<readonly EmailChip[]>([
+    {
+      id: "dana",
+      words: "Dana Ruiz",
+      typed: "Dana Ruiz <dana@acme.dev>",
+      state: EMAIL_CHIP_STATE.DRAFT,
+    },
+    { id: "theo", words: "theo@acme.dev", typed: "theo@acme.dev", state: EMAIL_CHIP_STATE.DRAFT },
+    {
+      id: "sam",
+      words: "sam@gmail",
+      typed: "sam@gmail",
+      state: EMAIL_CHIP_STATE.BAD,
+      reason: "Not an email address",
+    },
+  ]);
+  return (
+    <>
+      <FormField label="Name">
+        {(control) => <TextField field={control} value={name} onChange={setName} />}
+      </FormField>
+      <FormField label="Invite your team" optional>
+        {(control) => (
+          <EmailChipsField
+            field={control}
+            chips={chips}
+            typed={typed}
+            onTyped={setTyped}
+            placeholder="Type or paste emails, like dana@acme.dev"
+            onAdd={IGNORE}
+            onRemove={(id) => setChips((now) => now.filter((chip) => chip.id !== id))}
+          />
+        )}
+      </FormField>
     </>
   );
 }
@@ -225,7 +270,7 @@ function AuthPages(): React.JSX.Element {
                 />
               }
             >
-              <EmailForm />
+              <TeamFields />
             </AuthPage>
           </div>
         </div>

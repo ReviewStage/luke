@@ -2097,7 +2097,19 @@ test("an address the service would refuse is said under the field and nothing is
   assert.equal(addressField().getAttribute("aria-invalid"), "true");
   assert.deepEqual(invitedAddresses(), []);
 
-  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+  act(() =>
+    (
+      inviteDialog().querySelector<HTMLButtonElement>('[aria-label="Remove ada"]') ??
+      assert.fail("no Remove ada")
+    ).click(),
+  );
+  assert.equal(
+    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent ?? "",
+    "",
+    "lifting the wrong address takes back what the field said",
+  );
+  act(() => inviteAct().click());
+  await settle();
 
   assert.deepEqual(invitedAddresses(), ["alan@example.com"]);
 });
@@ -2124,14 +2136,19 @@ test("several addresses typed at once are invited in turn, each once", async () 
   );
 });
 
-test("an address refused partway stops the run there, saying why, and leaves it and those after it in the field", async () => {
+test("an address refused partway stops the run there, saying why, and leaves it and those after it in the field as chips", async () => {
   alreadyInvited = ["sam@example.com"];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com, sam@example.com, ada@example.com", WORKSPACE_ROLE.MEMBER);
 
   assert.deepEqual(invitedAddresses(), ["alan@example.com", "sam@example.com"]);
-  assert.equal(addressField().value, "sam@example.com, ada@example.com");
+  assert.deepEqual(
+    [...inviteDialog().querySelectorAll('[aria-label^="Remove "]')].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["Remove sam@example.com", "Remove ada@example.com"],
+  );
   assert.equal(
     inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
     ALREADY_INVITED_REFUSAL,

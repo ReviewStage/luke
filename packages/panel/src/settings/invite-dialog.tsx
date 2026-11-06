@@ -1,7 +1,6 @@
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   INVITATION_ROLE,
-  isInvitableEmail,
   type WorkspaceInvitation,
 } from "@repo/features/workspace-invitation-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -11,30 +10,31 @@ import {
   DIALOG_TONE,
   Dialog,
   DialogActions,
+  EmailChipsField,
   FormField,
   Stack,
-  TEXT_FIELD_AUTO_COMPLETE,
-  TEXT_FIELD_TYPE,
-  TextField,
   useConfirmDialog,
 } from "@repo/ui";
 import { ROLE_WORDS } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";
+import { useInvitees, useSignedIn } from "../invitees.js";
 import { replayMaskedError } from "./marks.js";
 
 /**
  * invite-dialog.tsx -- Members' Invite: the card that invites one address or several, as a member or, for the owner, an admin.
  *
- * The addresses are typed into one field, split at commas, semicolons, and
- * spaces, so a list pasted from anywhere lands whole. Each is checked as the
- * service reads it before any is sent, then each is invited in turn, one
- * act at a time; one refused stops the run there, the card saying why with
- * that address and those after it left in the field for another try, the
- * ones before it already invited and listed under the members. The role is
+ * The addresses are typed or pasted into one field of chips (`invitees.ts`),
+ * so a list pasted from anywhere lands whole, each checked as the service
+ * reads it as it lands, and Invite waits while one is wrong. Then each is
+ * invited in turn, one act at a time; one refused stops the run there, the
+ * card saying why with that address and those after it left in the field
+ * for another try, the ones before it already invited and listed under the
+ * members. The role is
  * the owner's to choose, since only the owner invites an admin; an admin's
  * card offers none and invites a member.
  */
@@ -42,25 +42,8 @@ import { replayMaskedError } from "./marks.js";
 /** The roles an invitation offers, in the order the bar draws them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
-/** What the field says where an address typed is none the service invites, which names none of them, since a refusal is reported. */
+/** What the field says where an address typed is none the service invites, each marked under the field with why. */
 const MALFORMED = "Enter only email addresses.";
-
-/** Where one typed address ends and the next begins. */
-const ADDRESS_BREAK = /[\s,;]+/;
-
-/** The distinct addresses typed, in the order typed. */
-function addressesOf(typed: string): string[] {
-  const seen = new Set<string>();
-  return typed
-    .split(ADDRESS_BREAK)
-    .filter((one) => one !== "")
-    .filter((one) => {
-      const key = one.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
 
 function refused(reason: string): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
@@ -83,10 +66,9 @@ export function useInviteDialog({
   owner: boolean;
 }): InviteAsk {
   const { act } = useAct();
-  const [typed, setTyped] = useState("");
+  const invitees = useInvitees(useSignedIn()?.email);
   const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
   const field = useRef<HTMLInputElement | null>(null);
-  const addresses = addressesOf(typed);
 
   // Note that a second press joins the run under way rather than starting
   // another, because it can land before the render that stills the act.
@@ -101,7 +83,8 @@ export function useInviteDialog({
   // Note that the run reads the addresses it was asked with, and leaves in
   // the field only those it did not invite, so a retry sends none twice.
   const sendAll = (): Promise<ActionResult> => {
-    if (!addresses.every(isInvitableEmail)) return Promise.resolve(refused(MALFORMED));
+    const { pending: addresses, wrong } = invitees.commit();
+    if (wrong > 0) return Promise.resolve(refused(MALFORMED));
     return addresses.reduce<Promise<ActionResult>>(
       (before, email, index) =>
         before.then((result) =>
@@ -115,7 +98,7 @@ export function useInviteDialog({
               }).then(
                 () => result,
                 (refusal: Error) => {
-                  setTyped(addresses.slice(index).join(", "));
+                  invitees.keep(addresses.slice(index));
                   return refused(refusal.message);
                 },
               ),
@@ -129,7 +112,7 @@ export function useInviteDialog({
     send,
     confirmFailure(FAILURE_SURFACE.WORKSPACE_INVITE),
   );
-  const form = useFormDialog(confirm, addresses.length > 0);
+  const form = useFormDialog(confirm, invitees.pending.length > 0 && invitees.wrong === 0);
   const dialog = (
     <Dialog
       open={form.open}
@@ -143,7 +126,7 @@ export function useInviteDialog({
       onDismiss={form.dismiss}
       // Note that the addresses are let go once the card has faded, so the words stay while it goes.
       onExited={() => {
-        setTyped("");
+        invitees.clear();
         setRole(INVITATION_ROLE.MEMBER);
       }}
       actions={
@@ -161,22 +144,28 @@ export function useInviteDialog({
       <Stack>
         <FormField label="Email addresses" error={replayMaskedError(form.refusal)}>
           {(control) => (
-            <TextField
-              ref={field}
-              field={control}
-              type={TEXT_FIELD_TYPE.EMAIL}
-              placeholder="name@example.com"
-              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-              spellCheck={false}
-              value={typed}
-              disabled={form.settling}
-              onEnter={form.submit}
-              onChange={(value) => {
-                setTyped(value);
-                // Note that a refusal alone holds the card up, so the question is asked again rather than cleared.
-                if (confirm.rejection !== undefined) confirm.ask();
-              }}
-            />
+            // Note that the addresses are a person's words drawn as chips, so they stay masked in a screen recording.
+            <ReplayMask>
+              <EmailChipsField
+                ref={field}
+                field={control}
+                chips={invitees.chips}
+                typed={invitees.typed}
+                onTyped={invitees.onTyped}
+                placeholder="name@example.com"
+                disabled={form.settling}
+                onSubmit={form.submit}
+                // Note that a refusal alone holds the card up, so a change to the addresses asks the question again rather than clearing it.
+                onAdd={(typed) => {
+                  invitees.add(typed);
+                  if (confirm.rejection !== undefined) confirm.ask();
+                }}
+                onRemove={(id) => {
+                  invitees.remove(id);
+                  if (confirm.rejection !== undefined) confirm.ask();
+                }}
+              />
+            </ReplayMask>
           )}
         </FormField>
         {owner ? (
@@ -195,7 +184,7 @@ export function useInviteDialog({
   );
   return {
     ask: () => {
-      setTyped("");
+      invitees.clear();
       setRole(INVITATION_ROLE.MEMBER);
       confirm.ask();
     },

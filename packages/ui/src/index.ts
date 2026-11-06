@@ -55,6 +55,7 @@ export * from "./components/drawer-swipe/use-drawer-swipe.js";
 export * from "./components/drop-slot/drop-slot.js";
 export * from "./components/editable-block/editable-block.js";
 export * from "./components/editable-heading/editable-heading.js";
+export * from "./components/email-chips-field/email-chips-field.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/error-line/error-line.js";
 export * from "./components/error-state/error-state.js";

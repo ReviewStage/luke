@@ -442,36 +442,61 @@ export function Chip(props: ChipProps): React.JSX.Element {
   );
 }
 
-/** A static chip's own options: its tone and whether it draws its mark alone, its look the toolbar's. */
-type StaticChipProps = Pick<ChipFace, "tone" | "iconOnly"> & {
+/** The looks a static chip comes in: a toolbar chip's, or a pill's, as a removable pill stands beside it. */
+type StaticChipLook = typeof CHIP_LOOK.TOOLBAR | typeof CHIP_LOOK.PILL;
+
+/** A static chip's own options: its look, the toolbar's where none is named, its tone, its size, and whether it draws its mark alone. */
+type StaticChipProps = Pick<ChipFace, "tone" | "iconOnly" | "size"> & {
+  look?: StaticChipLook | undefined;
   children: ReactNode;
 } & Omit<ComponentPropsWithRef<"span">, "style" | "className" | "children">;
 
-/** A static chip's box: a toolbar chip's at rest, washing under no pointer, since it takes no press. */
+/** A static chip's box, whatever its look, washing under no pointer, since it takes no press. */
 const STATIC_BOX =
-  "ui-chip group/chip m-0 inline-flex min-w-0 max-w-full items-center justify-center rounded-control border border-transparent bg-transparent text-body-foreground font-body font-label h-control text-label gap-icon-gap whitespace-nowrap cursor-default";
+  "ui-chip group/chip m-0 inline-flex min-w-0 max-w-full items-center justify-center border font-body whitespace-nowrap cursor-default";
+
+/** Each static look's face at rest: a toolbar chip's, or a pill's capsule inside its hairline. */
+const STATIC_FACE = {
+  [CHIP_LOOK.TOOLBAR]: "rounded-control border-transparent bg-transparent text-body-foreground",
+  [CHIP_LOOK.PILL]: "rounded-full border-chip-edge bg-chip text-foreground",
+} as const satisfies Record<StaticChipLook, string>;
 
 /**
  * A chip that only says: a toolbar chip's face taking no press, for a value
  * fixed where it stands, as where an agent runs stands in its message box
- * beside the chips that change things. Its hint (`Tooltip`) opens on a rest,
+ * beside the chips that change things; or a pill's, at the control's size or
+ * compact, for a thing named that can no longer be lifted, as an address
+ * already invited stands among the removable pills of those still to invite. Its hint (`Tooltip`) opens on a rest,
  * or under a finger on a tap, since it is no control of its own. Its mark
  * alone stands centered in a square, as a toolbar chip's does.
  */
 export function StaticChip({
+  look = CHIP_LOOK.TOOLBAR,
   tone,
+  size = CHIP_SIZE.CONTROL,
   iconOnly = false,
   children,
   ...span
 }: StaticChipProps): React.JSX.Element {
-  const look = CHIP_LOOK.TOOLBAR;
+  const compact = size === CHIP_SIZE.COMPACT;
+  // Note that a compact pill's room is a removable compact pill's, so one standing beside the other lines up.
+  const room = iconOnly
+    ? "flex-none w-control p-0"
+    : compact
+      ? "flex-initial px-chip-compact-inset"
+      : look === CHIP_LOOK.PILL
+        ? `flex-initial ${LOOK_INSET[CHIP_LOOK.PILL]}`
+        : "flex-initial px-chip-inset";
+  const box = compact
+    ? "h-chip-compact gap-chip-tight text-caption leading-caption font-tag"
+    : "h-control text-label gap-icon-gap font-label";
   return (
     <span
       {...span}
-      className={`${STATIC_BOX} ${iconOnly ? "flex-none w-control p-0" : "flex-initial px-chip-inset"}`}
-      {...faceAttributes({ look, tone, iconOnly })}
+      className={`${STATIC_BOX} ${STATIC_FACE[look]} ${box} ${room}`}
+      {...faceAttributes({ look, tone, size, iconOnly })}
     >
-      <span className={faceClasses({ look, iconOnly }, false)}>{children}</span>
+      <span className={faceClasses({ look, size, iconOnly }, false)}>{children}</span>
     </span>
   );
 }

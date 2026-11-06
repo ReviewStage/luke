@@ -86,6 +86,53 @@ export function isInvitableEmail(typed: string): boolean {
   return Option.isSome(readInvitedEmail(typed));
 }
 
+/** One address typed or pasted to invite: the address, the name written beside it, the words to put back to edit it, and whether the service invites it. */
+export interface TypedInvitee {
+  readonly email: string;
+  readonly name: string | undefined;
+  readonly typed: string;
+  readonly invitable: boolean;
+}
+
+/**
+ * Where one typed address ends and the next begins: a quoted or bare name
+ * before an address in angle brackets is kept whole, as an email's To line
+ * writes it, and anything else ends at a comma, a semicolon, or a space.
+ */
+const TYPED_ADDRESS = /"[^"]*"\s*<[^>]*>|[^\s,;<>"@]+(?:\s+[^\s,;<>"@]+)*\s*<[^>]*>|[^\s,;]+/gu;
+
+/** A name and the address it stands before, in angle brackets. */
+const NAMED_ADDRESS = /^"?(.*?)"?\s*<([^>]*)>$/u;
+
+/** A link's scheme pasted before an address. */
+const MAILTO = /^mailto:/iu;
+
+/**
+ * The distinct addresses in `text`, in the order typed, each with the name
+ * written beside it and whether the service invites it. Note that two
+ * spellings of one address differing only in case are one, because the
+ * service reads them as one.
+ */
+export function inviteesOf(text: string): readonly TypedInvitee[] {
+  const seen = new Set<string>();
+  const invitees: TypedInvitee[] = [];
+  for (const typed of text.match(TYPED_ADDRESS) ?? []) {
+    const named = NAMED_ADDRESS.exec(typed);
+    const email = (named?.[2] ?? typed).trim().replace(MAILTO, "");
+    const key = email.toLowerCase();
+    if (email === "" || seen.has(key)) continue;
+    seen.add(key);
+    const name = named?.[1]?.trim();
+    invitees.push({
+      email,
+      name: name === undefined || name === "" ? undefined : name,
+      typed: typed.trim(),
+      invitable: isInvitableEmail(email),
+    });
+  }
+  return invitees;
+}
+
 /**
  * One pending invitation as the Mac shows it: whom it is for, as what, until
  * when, and the accept link to copy, which only the invited address's

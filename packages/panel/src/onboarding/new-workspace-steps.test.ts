@@ -147,14 +147,15 @@ test("an invitation refused holds the first card on what was refused, and Contin
   });
   const container = mount([]);
   type(container, "Name", "Paperstar");
-  type(container, "Invite by email", "dana@paperstar.app");
+  type(container, "Invite your team", "dana@paperstar.app");
 
   await act(async () => button(container, "Create").click());
   await settle();
   const held = container.textContent ?? "";
+  const title = container.querySelector("h1")?.textContent;
   act(() => button(container, "Continue").click());
 
-  assert.match(held, /Workspace created/u);
+  assert.equal(title, "Your new workspace");
   assert.match(held, /dana@paperstar\.app: That address is already a member\./u);
   assert.equal(container.querySelector("h1")?.textContent, "Connect GitHub");
 });

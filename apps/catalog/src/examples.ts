@@ -44,6 +44,7 @@ import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
 import { DROP_SLOTS_EXAMPLE } from "./examples/drop-slots";
 import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
+import { EMAIL_CHIPS_EXAMPLE } from "./examples/email-chips";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_LINES_EXAMPLE } from "./examples/error-lines";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
@@ -210,6 +211,7 @@ export const EXAMPLES: readonly Example[] = [
   DISCLOSURES_EXAMPLE,
   DRAWER_SWIPES_EXAMPLE,
   DROP_SLOTS_EXAMPLE,
+  EMAIL_CHIPS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_LINES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
