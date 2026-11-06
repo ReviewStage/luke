@@ -341,13 +341,15 @@ export function composeMirrors(
         Effect.andThen(removed(agentId)),
       );
 
-    /** The mirror kept for an agent, its tunnel's fiber started where none runs. */
+    /** The mirror kept for an agent, its tunnel's fiber started where none runs; made at once where its worktree already stands, whether or not the sandbox runs. */
     const started = (agentId: string) =>
       Effect.gen(function* () {
         const standing = mirrors.get(agentId);
         if (standing !== undefined) return standing;
         const mirror: Mirror = { made: yield* Deferred.make<string, MirrorGone>() };
         mirrors.set(agentId, mirror);
+        if (yield* worktreeStands(agentId))
+          yield* Deferred.succeed(mirror.made, worktreeOf(agentId));
         yield* FiberMap.run(fibers, agentId, Effect.provideContext(kept(agentId, mirror), context));
         return mirror;
       });
@@ -382,7 +384,6 @@ export function composeMirrors(
             );
           }
           const mirror = yield* started(agentId);
-          if (yield* worktreeStands(agentId)) return { folder: worktreeOf(agentId) };
           const folder = yield* Effect.mapError(
             Deferred.await(mirror.made),
             () => new RefusedRefusal({ message: "the agent is gone" }),
