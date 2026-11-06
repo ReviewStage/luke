@@ -170,8 +170,9 @@ export function AgentThreads({
     [steps, chosen],
   );
   const counts = useMemo(() => inboxCounts(standing, me), [standing, me]);
-  // Note that the card's columns hold no item while it is off screen, so no way back of theirs takes the window's Back meanwhile.
-  const columns = useInboxColumns(shown ? chosen : undefined, {
+  // Note that the card's columns hold no item while it is off screen, so no way back of theirs takes the window's Back meanwhile,
+  // nor one the read no longer holds, so a narrow card stands its list, with its way back, rather than nothing.
+  const columns = useInboxColumns(shown ? listed?.item.id : undefined, {
     onClear: () => onChoose(undefined),
   });
   const choose = (each: InboxListed) => {
