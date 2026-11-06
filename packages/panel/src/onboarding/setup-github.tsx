@@ -35,7 +35,7 @@ import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
 import {
-  AddTokenRepository,
+  TokenRepositoryPicker,
   useTokenRepositories,
 } from "../settings/workspace-token-repositories.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
@@ -48,7 +48,7 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * The App is one trip to GitHub, which also links the member's GitHub
  * (the service keeps the install's user token). The token is made on
  * GitHub's own page and pasted here, then the repositories it may push to
- * are added. The token stands on its own, needing no GitHub account linked
+ * are picked, several at once, in a menu that checks each one added. The token stands on its own, needing no GitHub account linked
  * first. The step is done once the workspace
  * reaches a repository, which is read again whenever the window is focused,
  * so a trip finished in the browser lands on its own.
@@ -56,12 +56,6 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /** What setup says over GitHub's cards, which setup lets be skipped: agents work in the account's repositories. */
 export const GITHUB_PURPOSE = "Agents work in your repositories and open pull requests.";
-
-/** What the done line says each route reaches its repositories through. */
-const ROUTE_WORDS = {
-  [GITHUB_ACCESS.APP]: "through the GitHub App",
-  [GITHUB_ACCESS.TOKEN]: "through your token",
-} as const;
 
 /** A card's words under its choice, in the caption's muted ink. */
 function CardWords({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -72,10 +66,10 @@ function CardWords({ children }: { children: React.ReactNode }): React.JSX.Eleme
   );
 }
 
-/** How many repositories the workspace reaches, and through which route, as the done card says it. */
-function reachedWords(count: number, route: GitHubAccess): string {
+/** How many repositories the workspace reaches through the App, as its done card says it. */
+function reachedWords(count: number): string {
   const counted = count === 1 ? "1 repository" : `${count} repositories`;
-  return `${counted} ${ROUTE_WORDS[route]}`;
+  return `${counted} through the GitHub App`;
 }
 
 /**
@@ -121,7 +115,7 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   );
 }
 
-/** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to. */
+/** The token's card: a classic token made on GitHub and pasted here, then the repositories it may push to, picked several at once and changed for as long as the step stands. */
 function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
@@ -156,7 +150,7 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
     return (
       <>
         <span className="flex">
-          <AddTokenRepository
+          <TokenRepositoryPicker
             workspaceId={workspaceId}
             repositories={repositories}
             onRefused={setRefusal}
@@ -234,7 +228,7 @@ export function GitHubSetup({
   const done =
     reached > 0 ? (
       <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-        {reachedWords(reached, route)}
+        {reachedWords(reached)}
       </SettingsRowStateLine>
     ) : null;
   const options: readonly ChoiceOption<GitHubAccess>[] = [
@@ -247,8 +241,8 @@ export function GitHubSetup({
     {
       value: GITHUB_ACCESS.TOKEN,
       label: "Personal access token",
-      below:
-        route !== GITHUB_ACCESS.TOKEN ? null : (done ?? <TokenRoute workspaceId={workspaceId} />),
+      // Note that the token's card keeps its picker once a repository is reached, its chip naming them, so more are added or taken back in setup.
+      below: route !== GITHUB_ACCESS.TOKEN ? null : <TokenRoute workspaceId={workspaceId} />,
     },
   ];
   return (

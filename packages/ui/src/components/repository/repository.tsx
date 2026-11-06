@@ -167,7 +167,6 @@ export function repositoryMenuRow(repository: string, pictures: boolean, token =
       owner
     ),
     terms: [repository],
-    card: <RepositoryCard repository={repository} pictures={pictures} />,
     icon: <RepositoryPicture repository={repository} pictures={pictures} />,
   };
 }

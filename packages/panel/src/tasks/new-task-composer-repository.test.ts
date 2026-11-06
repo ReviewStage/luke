@@ -181,21 +181,6 @@ test("the repository chip hangs the repository's card while the pointer rests on
   assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "octo");
 });
 
-test("a repository's row in the picker hangs the same card", async () => {
-  const { container } = await mount(TOKEN_LISTING);
-  act(() => container.querySelector<HTMLButtonElement>(".ui-chip")?.click());
-  await settle();
-  restOn(
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
-      option.textContent?.includes("tools"),
-    ) ?? assert.fail("the picker lists the token repository"),
-  );
-  const card = document.querySelector("[data-repository-card]");
-
-  assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "tools");
-  assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "octo");
-});
-
 test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
   const chip =

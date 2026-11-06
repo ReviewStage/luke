@@ -10,17 +10,28 @@ import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/feature
 import { ACT_KIND } from "@repo/host/acts";
 import {
   ANNOUNCE,
+  AVATAR_SIZE,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
   CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   type MenuRow,
+  POPOVER_ALIGN,
+  POPOVER_WIDTH,
+  RepositoryPicture,
   repositoryMenuRow,
+  SearchableMenu,
   SettingsLine,
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { repositoryParts } from "@repo/ui/task-list-model";
+import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
@@ -57,6 +68,9 @@ import { GitHubOwnerRow, repositoryCount } from "./workspace-github-accounts.js"
 /** The words the rows and the menu say: labels and facts alone. */
 const WORDS = {
   ADD: "Add repository",
+  ADD_SEVERAL: "Add repositories",
+  MENU: "Repositories",
+  NOT_YOURS: "Added by a teammate",
   REMOVE: "Remove",
   REMOVING: "Removing",
   SEARCH: "Search repositories",
@@ -216,6 +230,162 @@ function AddRepositoryMenu({
         repositories.change(id, true).then(onRefused, () => undefined);
       }}
     />
+  );
+}
+
+/** How many repositories the picker's chip names before it counts the rest. */
+const CHIP_NAMED = 2;
+
+/** One repository the picker lists, by its whole name, with when it was last updated, which orders the list. */
+interface PickerRepository {
+  readonly fullName: string;
+  readonly updatedAt: number;
+}
+
+/**
+ * Every repository the picker lists: those the workspace already reaches on
+ * a token and those the reader's token may add, most recently updated first,
+ * so a row stays where it stood as it is added or removed; nothing while
+ * the workspace's repositories are unread.
+ */
+function pickerRepositories(
+  rows: GitHubRepositoriesAnswer | undefined,
+): readonly PickerRepository[] | undefined {
+  if (rows === undefined) return undefined;
+  const byName = new Map<string, PickerRepository>();
+  const onToken = rows.repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
+  for (const one of [...onToken, ...(rows.addable ?? [])]) {
+    byName.set(one.fullName.toLowerCase(), one);
+  }
+  return [...byName.values()].sort((one, other) => other.updatedAt - one.updatedAt);
+}
+
+/** The chip's words for the repositories picked, in the list's order: the first few by name, the rest counted. */
+function pickedWords(picked: readonly string[]): string {
+  const named = picked.slice(0, CHIP_NAMED).map((one) => repositoryParts(one).name);
+  const more = picked.length - CHIP_NAMED;
+  return more > 0 ? `${named.join(", ")} +${more}` : named.join(", ");
+}
+
+/**
+ * The token repositories as setup picks them: a field chip, as the new task
+ * dialog's repository chip is, naming what is picked, or Add repositories
+ * while nothing is, and under it the app's searched menu listing every
+ * repository the reader's token reaches, each added one checked. A press
+ * adds or removes its row and leaves the menu standing, so several are
+ * picked in one go, and its check turns at once, ahead of the service's
+ * answer, which a refusal turns back and says under the chip. Note that a
+ * removal here asks nothing, unlike Settings' Remove, because a check just
+ * set is taken back in the menu that set it; one a teammate added, which
+ * the reader may not remove, stands checked and says so.
+ */
+export function TokenRepositoryPicker({
+  workspaceId,
+  repositories,
+  onRefused,
+}: {
+  workspaceId: string;
+  repositories: TokenRepositories;
+  onRefused: (refusal: string | undefined) => void;
+}): React.JSX.Element {
+  const pictures = useRepositoryPictures();
+  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  const room = useRef<HTMLDivElement>(null);
+  const chip = useRef<HTMLButtonElement>(null);
+  // Note that a press's check is held here, keyed as no case spells the name, until the service answers it.
+  const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const listed = new Map(repositories.listed.map((one) => [one.fullName.toLowerCase(), one]));
+  const isOn = (fullName: string) =>
+    pending.get(fullName.toLowerCase()) ?? listed.has(fullName.toLowerCase());
+  const offered = pickerRepositories(list.rows);
+  const picked = (offered ?? []).map((one) => one.fullName).filter(isOn);
+  const rows: MenuRow[] = (offered ?? []).map((one) => {
+    const row = repositoryMenuRow(one.fullName, pictures);
+    const held = listed.get(one.fullName.toLowerCase());
+    return held !== undefined && !held.removable ? { ...row, disabled: WORDS.NOT_YOURS } : row;
+  });
+  const note =
+    offered === undefined
+      ? list.status === HOST_READ_STATUS.FAILED
+        ? WORDS.NOT_READ
+        : WORDS.READING
+      : rows.length === 0
+        ? WORDS.NONE
+        : undefined;
+  const settle = (key: string) =>
+    setPending((was) => {
+      const next = new Map(was);
+      next.delete(key);
+      return next;
+    });
+  const toggle = (fullName: string) => {
+    const key = fullName.toLowerCase();
+    const added = !isOn(fullName);
+    setPending((was) => new Map(was).set(key, added));
+    onRefused(undefined);
+    repositories.change(fullName, added).then(
+      (refusal) => {
+        settle(key);
+        onRefused(refusal);
+      },
+      () => settle(key),
+    );
+  };
+  const close = () => {
+    setOpen(false);
+    chip.current?.focus();
+  };
+  const first = picked[0];
+  return (
+    <div className="relative min-w-0" ref={room}>
+      <Chip
+        ref={chip}
+        look={CHIP_LOOK.FIELD}
+        chevron
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => {
+          if (!open && list.status === HOST_READ_STATUS.FAILED) list.retry();
+          setOpen(!open);
+        }}
+      >
+        {first === undefined ? (
+          <GLYPH.ADD />
+        ) : (
+          <RepositoryPicture repository={first} pictures={pictures} size={AVATAR_SIZE.GLYPH} />
+        )}
+        <ChipName>
+          {first === undefined ? WORDS.ADD_SEVERAL : <ReplayMask>{pickedWords(picked)}</ReplayMask>}
+        </ChipName>
+      </Chip>
+      {drawn.mounted ? (
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label={WORDS.MENU}
+          placeholder={WORDS.SEARCH}
+          // Note that every row names a repository and its owner, so each stays masked.
+          replayUnmasked
+          rows={rows.map((row) => ({ ...row, replayMasked: true }))}
+          value={undefined}
+          checked={new Set(picked)}
+          note={note}
+          noMatch={WORDS.NO_MATCH}
+          align={POPOVER_ALIGN.START}
+          width={POPOVER_WIDTH.NARROW}
+          onPick={toggle}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && room.current?.contains(left))) setOpen(false);
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
