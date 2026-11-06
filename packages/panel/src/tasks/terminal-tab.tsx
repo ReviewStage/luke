@@ -21,7 +21,6 @@ import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { AgentForward, useForwardEntry } from "./agent-forward.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { paneToggleAction, TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -40,15 +39,11 @@ import { WorkingTime } from "./working-time.js";
  *
  * The tab is the File tab's frame: a bar across its top, here naming the
  * agent whose sandbox it is (`AgentRef`, which hangs the agent's card and
- * opens its tab), "sandbox", and the connection in a word or two, with the
- * Forward chip that forwards its ports to this Mac (`agent-forward.tsx`)
- * before the shells toggle; then the
+ * opens its tab), "sandbox", and the connection in a word or two; then the
  * terminal's screen (`terminal/`), which fills the rest. A state with
  * something to do lays one slim bar over the screen with one text action
  * and its key, and the terminal prints a state with nothing to do as a dim
- * line at the end of its own scrollback (`terminal-model.ts`). A phone's
- * room draws no bar, so its header's ⋯ offers the shells, the agent, and
- * the Forward menu instead. The tab
+ * line at the end of its own scrollback (`terminal-model.ts`). The tab
  * connects only while it is shown (`use-terminal-session.ts`).
  *
  * The whole tab is left out of the screen recording, because the shell's
@@ -166,8 +161,6 @@ export function TerminalTab({
   const phone = usePhoneRoom();
   // Note that a phone has no title bar to carry "connecting…", so a state only that bar says is said in a bar over the screen.
   const bar = look.bar ?? (phone ? look.phoneBar : undefined);
-  // Note that the Forward chip stands in the bar a phone's room draws none of, so there it is a submenu of the ⋯.
-  const forward = useForwardEntry(subject.agent);
   useTabActions(
     phone
       ? [
@@ -180,7 +173,6 @@ export function TerminalTab({
               onSelect: onOpenAgent,
             },
           ],
-          ...(forward === undefined ? [] : [[forward]]),
         ]
       : undefined,
   );
@@ -207,12 +199,7 @@ export function TerminalTab({
               </span>
             </span>
           }
-          actions={
-            <>
-              <AgentForward agent={subject.agent} />
-              <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
-            </>
-          }
+          actions={<TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />}
         />
       )}
       <Fill flow={FILL_FLOW.ROW} clip className={TERMINAL_BODY_CLASS} {...room.body}>
