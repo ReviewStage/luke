@@ -47,8 +47,11 @@ const OPEN = agent("agent-open", "Invite flow");
 const CLOSED = agent("agent-closed", "Expiry job");
 const ARCHIVED = agent("agent-archived", "Old onboarding copy");
 
-/** The bar of a task holding the three agents, only `OPEN`'s tab open, ⌘T asking where `asked` says; every tab chosen and agent opened recorded. */
-async function mount(asked = false): Promise<{ chosen: MainTab[]; opened: string[] }> {
+/** The bar of a task holding the three agents, the tabs of `openAgents` open, `OPEN`'s alone unless named, ⌘T asking where `asked` says; every tab chosen and agent opened recorded. */
+async function mount(
+  asked = false,
+  openAgents: readonly string[] = [OPEN.id],
+): Promise<{ chosen: MainTab[]; opened: string[] }> {
   const chosen: MainTab[] = [];
   const opened: string[] = [];
   const base = tasksControl();
@@ -60,9 +63,9 @@ async function mount(asked = false): Promise<{ chosen: MainTab[]; opened: string
   });
   const main = {
     ...base.mainTabs,
-    tabs: [agentTab(OPEN.id)],
+    tabs: openAgents.map((id) => agentTab(id)),
     tab: agentTab(OPEN.id),
-    openAgents: [OPEN.id],
+    openAgents,
     onChoose: (tab: MainTab) => chosen.push(tab),
     newTabAsked: asked,
   };
@@ -136,4 +139,14 @@ test("History lists the closed and the archived agents but not one whose tab is 
     ) ?? assert.fail("the closed agent's row");
   await act(async () => closedRow.click());
   assert.deepEqual(opened, [CLOSED.id]);
+});
+
+test("History leaves out an archived agent whose tab is open, as it does a live one's", async () => {
+  await mount(false, [OPEN.id, ARCHIVED.id]);
+  await act(async () => button("Agent history").click());
+  const panel =
+    document.querySelector<HTMLElement>('[role="dialog"][aria-label="Agent history"]') ??
+    assert.fail("History hangs its panel");
+  assert.match(panel.textContent ?? "", /Expiry job/u);
+  assert.doesNotMatch(panel.textContent ?? "", /Old onboarding copy/u);
 });

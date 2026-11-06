@@ -125,8 +125,10 @@ function historyAgents(
 ): { closed: readonly AgentSummary[]; archived: readonly AgentSummary[] } {
   const open = main.openAgents ?? [];
   const listed = (each: AgentSummary) => matches(each, agents.models, query);
-  const closed = (agents.agents ?? []).filter((each) => !open.includes(each.id) && listed(each));
-  const archived = (agents.archived ?? []).filter(listed);
+  // An agent whose tab is open is in the bar already, an archived one's among them.
+  const inHistory = (each: AgentSummary) => !open.includes(each.id) && listed(each);
+  const closed = (agents.agents ?? []).filter(inHistory);
+  const archived = (agents.archived ?? []).filter(inHistory);
   return { closed: closed.toReversed(), archived: archived.toReversed() };
 }
 
