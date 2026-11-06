@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { AdminMetrics } from "@repo/features/admin-answer-wire";
 import { AccountScreen } from "@repo/panel/admin/screens/account";
 import { CostScreen } from "@repo/panel/admin/screens/cost";
 import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
@@ -7,7 +6,6 @@ import { DayScreen } from "@repo/panel/admin/screens/day";
 import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
 import { UsersScreen } from "@repo/panel/admin/screens/users";
 import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
-import type { AdminRead } from "@repo/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -29,8 +27,7 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 /** One screen as a maintainer reaches it, and the toolbar it should stand under. */
 interface Screen {
   readonly name: string;
-  /** The screen, handed whether its read is hanging, so the dashboard's own read can say so. */
-  readonly element: (hanging: boolean) => React.ReactElement;
+  readonly element: () => React.ReactElement;
   /** The words the toolbar heads the page with, its way back's first where it has one. */
   readonly heading: string;
   /** Words each of the toolbar's controls reads. */
@@ -41,8 +38,6 @@ const VIEW_OPTIONS = "View options";
 
 /** The range every windowed screen here reads, said after its title. */
 const RANGE = "Last 7 days";
-
-const NO_ANSWER = "The overview could not be read.";
 
 /** Every prop a screen asks of its shell that this file does not watch. */
 const SHELL = {
@@ -57,26 +52,10 @@ const SHELL = {
   frame: (content: React.JSX.Element) => content,
 } as const;
 
-/** The dashboard's read, which its shell holds, failed or still out. */
-function metricsRead(hanging: boolean): AdminRead<AdminMetrics> {
-  return hanging ? { status: "loading" } : { status: "error", detail: NO_ANSWER };
-}
-
 const SCREENS: readonly Screen[] = [
   {
     name: "Overview",
-    element: (hanging) =>
-      createElement(DashboardScreen, {
-        ...SHELL,
-        read: {
-          state: metricsRead(hanging),
-          refreshing: false,
-          reload: () => undefined,
-          withdraw: async () => undefined,
-          revise: () => undefined,
-        },
-        onOpenDay: () => undefined,
-      }),
+    element: () => createElement(DashboardScreen, { ...SHELL, onOpenDay: () => undefined }),
     heading: `Overview${RANGE}`,
     controls: [VIEW_OPTIONS],
   },
@@ -152,7 +131,7 @@ async function open(screen: Screen, status: number | undefined): Promise<HTMLEle
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);
-  await act(async () => root?.render(underWebAdminDoors(screen.element(status === undefined))));
+  await act(async () => root?.render(underWebAdminDoors(screen.element())));
   return page;
 }
 

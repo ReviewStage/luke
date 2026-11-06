@@ -7,7 +7,6 @@ import type {
 import {
   ADMIN_ATTENTION_AGENT_DAYS,
   ADMIN_ATTENTION_KIND,
-  ADMIN_READ,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
 } from "@repo/features/admin-wire";
@@ -38,8 +37,10 @@ import {
   TextLink,
 } from "@repo/ui";
 import { RATE_PLACES } from "@repo/ui/admin-format";
+import { useQuery } from "@tanstack/react-query";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminReliabilityQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import {
   BreakdownChart,
@@ -65,7 +66,6 @@ import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
 import { connectionWord, INSTALLATION_LABEL } from "../status-words.js";
-import { useAdminRead } from "../use-admin-read.js";
 
 /**
  * reliability.tsx -- the admin Reliability screen: how often the service's
@@ -583,12 +583,9 @@ export function ReliabilityScreen({
   const shownWindow = reliabilityWindow(windowDays);
   const { reads, gate } = useAdminDoors();
   const query = windowedReadQuery(hideAdmins, shownWindow);
-  const { state, refreshing, reload, withdraw } = useAdminRead(
-    { procedure: ADMIN_READ.RELIABILITY, query: query },
-    (signal) => reads.reliability(query, signal),
-    RELIABILITY_ERROR,
-  );
-  const signOut = () => void withdraw(onSignOut);
+  const read = useQuery({ ...adminReliabilityQuery(reads, query), enabled: !gate.heldAtGate() });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const controls = (
     <AdminViewOptions
       windowDays={shownWindow}
@@ -600,7 +597,7 @@ export function ReliabilityScreen({
   );
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

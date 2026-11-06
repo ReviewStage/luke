@@ -5,17 +5,19 @@ import type {
   AdminTrend,
 } from "@repo/features/admin-answer-wire";
 import { RETENTION_BASIS } from "@repo/features/admin-overview-vocabulary";
-import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
+import type { AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCount, formatPercent } from "@repo/features/number-format";
 import { formatDate } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@repo/ui/accounts-sort";
+import { useQuery } from "@tanstack/react-query";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
   AccountsTable,
   AccountsTableSkeleton,
 } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminMetricsQuery, useAdminSignOut } from "../admin-queries.js";
 import { adminReadView } from "../admin-read-view.js";
 import { ActivityChart, ActivityChartSkeleton } from "../charts/activity-chart.js";
 import { CHART_PAIR_WIDE, TrendMove } from "../charts/chart-frame.js";
@@ -41,7 +43,6 @@ import {
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
-import { type AdminReadHandle, useAdminRead } from "../use-admin-read.js";
 
 const METRICS_ERROR = readFailedWords("the overview");
 
@@ -266,29 +267,7 @@ function DashboardSections({
   );
 }
 
-/**
- * The overview's own read, held by the shell rather than by the screen below,
- * so the refusals it lands outlive the screen that asked.
- */
-export function useMetricsRead(
-  hideAdmins: boolean,
-  windowDays: AdminMetricsWindow,
-  enabled: boolean,
-): AdminReadHandle<AdminMetrics> {
-  const { reads } = useAdminDoors();
-  const query = windowedReadQuery(hideAdmins, windowDays);
-  return useAdminRead(
-    { procedure: ADMIN_READ.METRICS, query: query },
-    (signal) => reads.metrics(query, signal),
-    METRICS_ERROR,
-    {
-      enabled,
-    },
-  );
-}
-
 export function DashboardScreen({
-  read,
   hideAdmins,
   onHideAdminsChange,
   windowDays,
@@ -299,7 +278,6 @@ export function DashboardScreen({
   onOpenDay,
   frame,
 }: {
-  read: AdminReadHandle<AdminMetrics>;
   hideAdmins: boolean;
   onHideAdminsChange: (hide: boolean) => void;
   windowDays: AdminMetricsWindow;
@@ -311,9 +289,13 @@ export function DashboardScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  const { gate } = useAdminDoors();
-  const { state, refreshing, reload, withdraw } = read;
-  const signOut = () => void withdraw(onSignOut);
+  const { reads, gate } = useAdminDoors();
+  const read = useQuery({
+    ...adminMetricsQuery(reads, windowedReadQuery(hideAdmins, windowDays)),
+    enabled: !gate.heldAtGate(),
+  });
+  const withdraw = useAdminSignOut(onSignOut);
+  const signOut = () => withdraw.mutate();
   const controls = (
     <>
       <AdminViewOptions
@@ -332,7 +314,7 @@ export function DashboardScreen({
   };
 
   return adminReadView({
-    read: { state, refreshing, reload },
+    read,
     gate,
     email: account?.email,
     onSignOut: signOut,

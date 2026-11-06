@@ -5,10 +5,14 @@
  * docs' Testing guide makes one per test with `retry: false`, so no test
  * reads what another cached and a failed read shows at once. One client
  * stands for the whole test, so a surface drawn again keeps its cache.
+ * Query tells its observers on a timer of its own (`notifyManager`'s
+ * scheduler, a `setTimeout` of zero by default), which a test's `act` does
+ * not wait on, so here it tells them on a microtask instead, and an answer
+ * a test lets land is drawn by the `act` that let it.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, type ReactElement } from "react";
 import { afterEach, beforeEach } from "vitest";
@@ -17,6 +21,8 @@ import { afterEach, beforeEach } from "vitest";
 function freshQueryClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
+
+notifyManager.setScheduler(queueMicrotask);
 
 let testQueryClient = freshQueryClient();
 
