@@ -208,7 +208,7 @@ import { agentFirewallSources, CheckoutRefused, type CheckoutServices } from "./
 import { contextWindowOf } from "./context.js";
 import { nativeSkillFiles } from "./native-skills.js";
 import { restartReplayOf } from "./replay.js";
-import { REPLAY_FIT, replayBudgetBytes } from "./replay-summary.js";
+import { fileBlocksBytes, REPLAY_FIT } from "./replay-summary.js";
 import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
 import { type NativeSessions, RUNNER_CHECKOUT, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
@@ -368,6 +368,16 @@ interface RunnerMessage {
   readonly files: readonly SandboxFile[];
   readonly turn: EveHostTurn;
   readonly timeZone: string | undefined;
+}
+
+/** The bytes a line carries beside a replay ahead of it: the turn's words, the developer's, and each picture or document counted as a file (`fileBlocksBytes`). */
+function besideBytes(turnText: string | undefined, content: readonly ContentBlock[]): number {
+  const words = [
+    turnText ?? "",
+    ...content.flatMap((block) => (block.type === "text" ? [block.text] : [])),
+  ];
+  const files = content.filter((block) => block.type !== "text").length;
+  return new TextEncoder().encode(words.join("\n\n")).byteLength + fileBlocksBytes(files);
 }
 
 /** The message line as the runner takes it, the turn's own words ahead of the developer's, and what to keep once the runner took it. */
@@ -1027,15 +1037,18 @@ export const runnerSessions = <
         };
         const now = yield* Clock.currentTimeMillis;
         const turn = { kind: sent.turn, turnId: undefined };
-        const [opened, experiments, replay] = yield* Effect.all(
+        const [opened, experiments] = yield* Effect.all(
           [
             coderTurnMessage(admitted, agent, turn, handed, now),
             experimentsOnIn(agent.organizationId),
-            replayed ? restartReplay(agent) : Effect.succeed(undefined),
           ],
           { concurrency: "unbounded" },
         );
         const { content } = sent.line;
+        // Note that the replay is fitted beside what else the line carries, so the whole line fits the window.
+        const replay = replayed
+          ? yield* restartReplay(agent, besideBytes(opened.text, content))
+          : undefined;
         const words = [replay, opened.text].filter((part) => part !== undefined);
         const ahead: readonly ContentBlock[] =
           words.length === 0 ? [] : [{ type: "text", text: words.join("\n\n") }];
@@ -1048,20 +1061,17 @@ export const runnerSessions = <
 
     /**
      * The agent's own steps so far, as a session opened afresh on its
-     * conversation is handed them (`restartReplayOf`), bounded by its
-     * model's window less the instructions told where none was measured;
-     * nothing where its rows cannot be read, logged, so the session still
-     * opens on the turn's words.
+     * conversation is handed them (`restartReplayOf`), fitted to its model's
+     * window less the instructions told where none was measured and the
+     * bytes the rest of its line comes to; nothing where its rows cannot be
+     * read, logged, so the session still opens on the turn's words.
      */
-    const restartReplay = (agent: Agent) =>
-      restartReplayOf(
-        agent,
-        replayBudgetBytes(
-          contextWindowOf([], agent.model, agent.contextWindow ?? CONTEXT_WINDOW.LONG),
-          REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS,
-          0,
-        ),
-      ).pipe(
+    const restartReplay = (agent: Agent, beside: number) =>
+      restartReplayOf(agent, {
+        windowTokens: contextWindowOf([], agent.model, agent.contextWindow ?? CONTEXT_WINDOW.LONG),
+        instructionsTokens: REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS,
+        besideBytes: beside,
+      }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.orElseSucceed(() => undefined),
       );
@@ -1072,17 +1082,16 @@ export const runnerSessions = <
      * opened on (`native_handed`) are no longer the ones standing, since a
      * resumed Claude Code or Codex session keeps the instructions it opened
      * with until it compacts. Never while a turn runs, which goes on with what
-     * it has, the change caught by the next message after it; never for a
-     * session that resumes none, which opens fresh as it is; and never for one
-     * opened before its experiments were kept.
+     * it has, the change caught by the next message after it; and never for a
+     * session opened before its experiments were kept. Note that the experiments
+     * are kept only once a runner took the line that opened the fresh session
+     * (`openedLine`'s `taken`), so a restart whose launch failed stays pending,
+     * its harness's session already let go, and the next message opens it
+     * afresh with its replay again rather than with the turn's words alone.
      */
     const experimentsChanged = (agent: Agent, turnRunning: boolean) =>
       Effect.gen(function* () {
         if (turnRunning) return false;
-        const routing = yield* readAgentRouting(userId, agent.id);
-        if (Option.isNone(Option.flatMapNullishOr(routing, (read) => read.nativeSession))) {
-          return false;
-        }
         const opened = (yield* readNativeTurnHanded({
           userId,
           conversationId: agent.conversationId,
