@@ -1,11 +1,14 @@
 import {
   BUTTON_VARIANT,
+  Button,
   ButtonLink,
   COPY_FIELD_WIDTH,
   COPY_LOOK,
   CopyButton,
   CopyField,
-  DialogHead,
+  DIALOG_SIZE,
+  Dialog,
+  ErrorLine,
   GAP,
   Inline,
   NumberedStep,
@@ -16,14 +19,17 @@ import {
   Text,
   WaitingLine,
 } from "@repo/ui";
+import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * device-code-steps.tsx -- a code entered on another site, said as one
- * step of a flow: its head with back and close, three numbered steps (a
- * hint, a code to copy, a page to open beside a labeled Copy link), and the
- * wait on the other site under them. The catalog's copy act is the
+ * device-code-steps.tsx -- a code entered on another site, said as two
+ * numbered steps (a hint, then a code to copy over a page to open beside a
+ * labeled Copy link) and the wait on the other site under them, drawn alone and in
+ * a dialog with a line under its title and a close at its end, waiting or
+ * ended in a failure with Try again. The catalog's copy act is the
  * browser's own clipboard, and its presses go nowhere.
  */
 
@@ -31,60 +37,107 @@ const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.wri
 
 const VERIFICATION_URL = "https://example.com/device";
 
-const nothing = (): void => undefined;
+/** The refusal the failed dialog says. */
+const EXPIRED = {
+  words: "The code expired before it was entered. Try again.",
+  failure: CATALOG_FAILURE,
+};
+
+/** Where the dialog is opened at: waiting on the code, or ended in a failure. */
+const STANDING = {
+  WAITING: "waiting",
+  FAILED: "failed",
+} as const;
+
+type Standing = (typeof STANDING)[keyof typeof STANDING];
+
+/** The two steps, and the wait under them, as siblings so a dialog's card spaces them at its own gap. */
+function Steps(): React.JSX.Element {
+  return (
+    <>
+      <NumberedSteps>
+        <NumberedStep number={1} title="Turn on device codes in your account's security settings">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            If you don't see this option, ask your workspace admin to turn it on
+          </Text>
+        </NumberedStep>
+        <NumberedStep number={2} title="Sign in and enter the code:">
+          <CopyField
+            label="Code"
+            value="225Q-1343X"
+            what="code"
+            copy={copyToClipboard}
+            width={COPY_FIELD_WIDTH.HUG}
+          />
+          <Inline gap={GAP.CONTROL}>
+            <ButtonLink href={VERIFICATION_URL} variant={BUTTON_VARIANT.OUTLINE} external>
+              Verification page
+            </ButtonLink>
+            <CopyButton
+              look={COPY_LOOK.BUTTON}
+              text={VERIFICATION_URL}
+              what="link"
+              copy={copyToClipboard}
+            />
+          </Inline>
+        </NumberedStep>
+      </NumberedSteps>
+      <WaitingLine>Waiting for the other site</WaitingLine>
+    </>
+  );
+}
+
+/** The steps in a dialog, opened waiting or failed, put away by its close, Escape, or a press on the dimmed window. */
+function StepsDialog(): React.JSX.Element {
+  const [standing, setStanding] = useState<Standing | undefined>(undefined);
+  const close = () => setStanding(undefined);
+  return (
+    <>
+      <Inline gap={GAP.CONTROL}>
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setStanding(STANDING.WAITING)}>
+          Open waiting
+        </Button>
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setStanding(STANDING.FAILED)}>
+          Open failed
+        </Button>
+      </Inline>
+      <Dialog
+        open={standing !== undefined}
+        title="Connect a device"
+        subtitle="Use your own subscription for this provider's models"
+        closeLabel="Close"
+        size={DIALOG_SIZE.WIDE}
+        onDismiss={close}
+      >
+        {standing === STANDING.FAILED ? (
+          <Stack gap={GAP.CONTROL}>
+            <ErrorLine error={EXPIRED} />
+            <Inline>
+              <Button
+                variant={BUTTON_VARIANT.PRIMARY}
+                onClick={() => setStanding(STANDING.WAITING)}
+              >
+                Try again
+              </Button>
+            </Inline>
+          </Stack>
+        ) : (
+          <Steps />
+        )}
+      </Dialog>
+    </>
+  );
+}
 
 function DeviceCodeSteps(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="dialog-head" title="A step's head, with back and close">
-        <DialogHead
-          titleId="catalog-dialog-head"
-          title="Connect Codex"
-          subtitle="Use your own subscription for this provider's models"
-          backLabel="Back"
-          backTo="Codex"
-          closeLabel="Close"
-          onBack={nothing}
-          onClose={nothing}
-        />
+      <CatalogSection id="steps-dialog" title="In a dialog, with a line under its title and close">
+        <StepsDialog />
       </CatalogSection>
       <CatalogSection id="numbered-steps" title="Numbered steps, and the wait under them">
-        <Stack gap={GAP.SECTION}>
-          <NumberedSteps>
-            <NumberedStep
-              number={1}
-              title="Turn on device codes in your account's security settings"
-            >
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                If the switch is hidden, ask your workspace owner to turn it on
-              </Text>
-            </NumberedStep>
-            <NumberedStep number={2} title="Copy this code">
-              <CopyField
-                label="Code"
-                value="225Q-1343X"
-                what="code"
-                copy={copyToClipboard}
-                width={COPY_FIELD_WIDTH.FULL}
-              />
-            </NumberedStep>
-            <NumberedStep number={3} title="Sign in and enter the code">
-              <Inline gap={GAP.CONTROL}>
-                <ButtonLink href={VERIFICATION_URL} variant={BUTTON_VARIANT.OUTLINE} external>
-                  Verification page
-                </ButtonLink>
-                <CopyButton
-                  look={COPY_LOOK.BUTTON}
-                  text={VERIFICATION_URL}
-                  what="link"
-                  copy={copyToClipboard}
-                />
-              </Inline>
-            </NumberedStep>
-          </NumberedSteps>
-          <WaitingLine hint="Only continue if you started this sign-in here">
-            Waiting for the other site
-          </WaitingLine>
+        <Stack gap={GAP.BLOCK}>
+          <Steps />
         </Stack>
       </CatalogSection>
     </>
