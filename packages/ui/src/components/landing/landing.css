@@ -18,7 +18,7 @@
     min-height: 100dvh;
     container-type: inline-size;
     overflow-x: clip;
-    background: var(--ui-color-ground);
+    background: var(--ui-color-sidebar);
     color: var(--ui-color-text);
     font-family: var(--ui-font-sans);
   }
@@ -90,7 +90,7 @@
   .ui-landing-rule > i::after {
     content: "";
     position: absolute;
-    background: var(--ui-color-text-muted);
+    background: var(--ui-color-border-strong);
   }
 
   .ui-landing-rule > i::before {
@@ -141,7 +141,8 @@
     border: 1px solid transparent;
     border-bottom-color: var(--ui-color-border);
     border-radius: 0;
-    background: var(--ui-color-ground);
+    background: var(--ui-display-landing-bar);
+    backdrop-filter: blur(16px);
     white-space: nowrap;
     transition-property:
       transform, left, right, max-width, height, padding, border-radius, border-color,
@@ -160,7 +161,8 @@
     padding: 0 6px 0 20px;
     border-color: var(--ui-color-border-strong);
     border-radius: var(--ui-display-bar-radius);
-    background: var(--ui-color-surface);
+    background: var(--ui-color-float-solid);
+    box-shadow: var(--ui-display-landing-edge);
     transform: translateY(12px);
   }
 
@@ -184,8 +186,22 @@
     position: relative;
     display: flex;
     align-items: center;
-    min-height: 660px;
+    min-height: 700px;
     overflow: hidden;
+  }
+
+  /* The page's one glow: a faint light behind the hero's Inbox, centered
+     on where it stands, so the screen reads lifted off the ground. */
+  .ui-landing-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      ellipse 640px 520px at calc(100% - var(--ui-landing-inset) - 314px) 46%,
+      var(--ui-display-landing-glow),
+      transparent 70%
+    );
+    pointer-events: none;
   }
 
   .ui-landing-hero-words {
@@ -196,18 +212,18 @@
   }
 
   .ui-landing-title {
-    font-family: var(--ui-font-display);
-    font-size: var(--ui-display-landing-size);
-    font-weight: var(--ui-display-landing-weight);
-    line-height: var(--ui-display-landing-leading);
-    letter-spacing: var(--ui-display-landing-tracking);
+    font-family: var(--ui-display-landing-face);
+    font-size: var(--ui-display-landing-title-size);
+    font-weight: var(--ui-display-landing-title-weight);
+    line-height: var(--ui-display-landing-title-leading);
+    letter-spacing: var(--ui-display-landing-title-tracking);
     text-wrap: balance;
   }
 
   .ui-landing-hero-lead,
   .ui-landing-lead {
-    max-width: 520px;
-    margin-top: 18px;
+    max-width: 480px;
+    margin-top: 20px;
     color: var(--ui-color-text-muted);
     font-size: var(--ui-display-lead-size);
     line-height: var(--ui-display-lead-leading);
@@ -218,12 +234,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
-    margin-top: 32px;
+    margin-top: 40px;
   }
 
   .ui-landing-hero-art {
     position: absolute;
-    top: 40px;
+    top: 60px;
     right: calc(var(--ui-landing-inset) + 24px);
     width: 580px;
     height: 580px;
@@ -243,6 +259,7 @@
     border: 1px solid var(--ui-color-border-strong);
     border-radius: var(--ui-display-window-radius);
     background: var(--ui-color-sidebar);
+    box-shadow: var(--ui-display-landing-edge);
   }
 
   .ui-landing-panel-fit {
@@ -294,29 +311,31 @@
   }
 
   .ui-landing-section-body {
-    padding: 104px var(--ui-landing-gutter) 96px;
+    padding: 128px var(--ui-landing-gutter) 112px;
   }
 
   .ui-landing-section-title {
     max-width: 680px;
-    font-family: var(--ui-font-display);
-    font-size: var(--ui-display-feature-size);
-    font-weight: var(--ui-display-landing-weight);
+    font-family: var(--ui-display-landing-face);
+    font-size: var(--ui-display-landing-feature-size);
+    font-weight: var(--ui-display-landing-title-weight);
     line-height: var(--ui-display-feature-leading);
-    letter-spacing: var(--ui-display-landing-tracking);
+    letter-spacing: var(--ui-display-landing-feature-tracking);
     text-wrap: balance;
   }
 
-  /* A stage: a box of drifting dots holding the feature's screen, which
-     runs off its foot where the screen is a window. */
+  /* A stage: a panel a step above the ground, lit along its top edge,
+     holding the feature's screen, which runs off its foot where the screen
+     is a window. */
   .ui-landing-stage {
     position: relative;
-    margin-top: 40px;
-    padding: 48px 6%;
+    margin-top: 56px;
+    padding: 56px 6%;
     overflow: hidden;
     border: 1px solid var(--ui-color-border);
     border-radius: var(--ui-radius-14);
-    background: var(--ui-color-ground);
+    background: var(--ui-color-surface);
+    box-shadow: var(--ui-display-landing-edge);
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
@@ -324,16 +343,18 @@
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-    margin-bottom: -48px;
+    margin-bottom: -56px;
   }
 
-  .ui-landing-field,
+  /* The foot's wordmark in dots, in a gray a step past the rules rather
+     than the accent, so it closes the page quietly. */
   .ui-landing-wordmark {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    color: var(--ui-color-accent);
+    color: var(--ui-color-border-selected);
+    opacity: 0.22;
   }
 
   .ui-landing-scene {
@@ -374,7 +395,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 32px;
-    padding: 96px var(--ui-landing-gutter) 64px;
+    padding: 112px var(--ui-landing-gutter) 80px;
   }
 
   .ui-landing-close .ui-landing-actions {
@@ -533,6 +554,7 @@
     border: 1px solid var(--ui-color-border-strong);
     border-radius: var(--ui-display-window-radius);
     background: var(--ui-color-sidebar);
+    box-shadow: var(--ui-display-landing-screen-glow);
   }
 
   .ui-landing-window-fit,
@@ -582,7 +604,9 @@
     padding: 3.5cqw;
     border-radius: var(--ui-display-phone-radius);
     background: var(--ui-color-sidebar);
-    box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
+    box-shadow:
+      inset 0 0 0 1px var(--ui-color-border-strong),
+      var(--ui-display-landing-screen-glow);
   }
 
   .ui-landing-phone-fit {
@@ -1150,6 +1174,15 @@
 
     .ui-landing-hero-words {
       padding: var(--ui-landing-hero-top) var(--ui-landing-gutter) 0;
+    }
+
+    /* Stacked, the glow stands under the words, behind the Inbox. */
+    .ui-landing-hero::before {
+      background: radial-gradient(
+        ellipse 90% 50% at 50% 70%,
+        var(--ui-display-landing-glow),
+        transparent 70%
+      );
     }
 
     .ui-landing-hero-art {

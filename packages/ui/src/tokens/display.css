@@ -27,6 +27,30 @@
   --ui-display-lead-size-narrow: 1rem;
   --ui-display-lead-leading: 1.55;
 
+  /* The landing's own headings: the product's sans rather than the
+     wordmark's face, set heavy and tracked tight, so a line reads engineered
+     rather than drawn. The display face stays the wordmark's and the public
+     pages'. */
+  --ui-display-landing-face: var(--ui-font-sans);
+  --ui-display-landing-title-size: 4.25rem;
+  --ui-display-landing-title-leading: 1;
+  --ui-display-landing-title-weight: 600;
+  --ui-display-landing-title-tracking: -0.04em;
+  --ui-display-landing-feature-size: 3rem;
+  --ui-display-landing-feature-tracking: -0.035em;
+
+  /* The landing's depth: a hairline of light along a panel's top edge, the
+     soft glow round a product screen, and the one faint glow behind the
+     hero's Inbox. Each is the ink at a low share, so the near-black ground
+     reads as lit rather than tinted. */
+  --ui-display-landing-edge: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --ui-display-landing-screen-glow:
+    0 0 0 1px rgba(255, 255, 255, 0.03), 0 0 96px -24px rgba(255, 255, 255, 0.09);
+  --ui-display-landing-glow: rgba(255, 255, 255, 0.08);
+  /* The bar over the page: the near-black ground the page stands on, a
+     share see-through, so what scrolls under it blurs rather than shows. */
+  --ui-display-landing-bar: color-mix(in srgb, var(--ui-color-sidebar) 72%, transparent);
+
   /* The landing's devices: a Mac window's corners, and a phone's outer
      corners and its screen's, which follow them inside the bezel, as
      shares of the phone's width (`landing.css`'s devices). */
