@@ -72,6 +72,7 @@
  */
 
 import { type ReactNode, useRef } from "react";
+import { ChevronDownIcon } from "../../face/glyphs.js";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
 import { ReplayMask, ReplayWords } from "../../session-replay-marks.js";
 import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
@@ -79,7 +80,7 @@ import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/bre
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
 import { FILL_ELEMENT, Fill } from "../layout/layout.js";
 import { ONE_LINE_ELEMENT, OneLine } from "../one-line/one-line.js";
-import { wholeWordsHint } from "../tooltip/hint.js";
+import { Tooltip, wholeWordsHint } from "../tooltip/hint.js";
 import {
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
@@ -126,6 +127,10 @@ const DETAIL = "ui-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-mute
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
 const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
 
+/** A title that opens what it names: its words and a chevron in one press, filled on hover and while what it opens stands, the chevron turned. */
+const TITLE_PRESS =
+  "ui-toolbar-title-press -ml-ui-6 inline-flex max-w-full items-center gap-ui-6 rounded-control px-ui-6 hover:bg-fill-selected aria-expanded:bg-fill-selected [&[aria-expanded=true]>svg]:rotate-180";
+
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {
   room: ":scope > .ui-toolbar-heading",
@@ -148,12 +153,22 @@ export interface ToolbarPickUp {
   readonly shown: boolean;
 }
 
+/** A title in words that opens what it names, as a channel's name opens its details: whether that stands open, its hint, and the press. */
+export interface ToolbarTitlePress {
+  readonly open: boolean;
+  /** What the press opens, its hint ("Task details"). */
+  readonly label: string;
+  readonly onPress: () => void;
+}
+
 /** What a workspace's bar holds, each slot drawn only where it says something. */
 export interface ToolbarProps {
   /** What stands first: a way back (`BackButton`) or a tab strip. */
   readonly lead?: ReactNode;
   /** The page's name, drawn as its heading on one line; a node that is more than words stands as given. */
   readonly title?: ReactNode;
+  /** Whether the title in words opens what it names (`ToolbarTitlePress`); read only where the title is words and there is no `trail`. */
+  readonly titlePress?: ToolbarTitlePress | undefined;
   /** Whether a title in words is the app's own (Settings, Tasks, Inbox), which a screen recording shows as it reads; one that names a task or a workspace stays masked, as every place of a trail and a picked-up name do. */
   readonly titleReplayUnmasked?: boolean | undefined;
   /** The places above the page, outermost first, which lead its heading as crumbs with the `title` last, or a document's `pickUp` name once it is shown; read only where the title is words or there is a `pickUp`. */
@@ -191,12 +206,34 @@ function said(node: ReactNode): boolean {
 function ToolbarTitle({
   title,
   unmasked,
+  press,
 }: {
   title: ReactNode;
   /** Whether a title in words shows in a screen recording (`titleReplayUnmasked`). */
   unmasked: boolean;
+  /** What a title in words opens, which makes it a press; none for words alone. */
+  press?: ToolbarTitlePress | undefined;
 }): React.JSX.Element {
   if (typeof title !== "string") return <>{title}</>;
+  if (press !== undefined) {
+    return (
+      <h1 className={`${TITLE} min-w-0`}>
+        <Tooltip label={press.label}>
+          <button
+            type="button"
+            className={TITLE_PRESS}
+            aria-expanded={press.open}
+            onClick={press.onPress}
+          >
+            <OneLine className="min-w-0" words={title}>
+              <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
+            </OneLine>
+            <ChevronDownIcon />
+          </button>
+        </Tooltip>
+      </h1>
+    );
+  }
   return (
     <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE} words={title}>
       <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
@@ -257,6 +294,7 @@ function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Eleme
 export function Toolbar({
   lead,
   title,
+  titlePress,
   titleReplayUnmasked = false,
   trail,
   pickUp,
@@ -296,7 +334,7 @@ export function Toolbar({
             <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
           </ReplayMask>
         ) : said(title) ? (
-          <ToolbarTitle title={title} unmasked={titleReplayUnmasked} />
+          <ToolbarTitle title={title} unmasked={titleReplayUnmasked} press={titlePress} />
         ) : pickUp !== undefined && pickUp.name !== "" ? (
           <ReplayMask>
             <ToolbarPickedUp pickUp={pickUp} />

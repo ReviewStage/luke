@@ -11,11 +11,13 @@ import {
   TOOLBAR_LOOK,
   Toolbar,
 } from "@repo/ui";
+import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * toolbars.tsx -- a workspace's bar with its title and actions; one led by a
+ * toolbars.tsx -- a workspace's bar with its title and actions; one whose
+ * title opens what it names, its chevron turned while that stands; one led by a
  * way back, a tag after its title; one led by a control at the column's own
  * edge; a narrow bar, whose title fades where cut rather than wrapping; a
  * bar told to fold, its controls' glyphs alone; a tab strip's bar in a narrow
@@ -34,11 +36,25 @@ function NewAutomation(): React.JSX.Element {
   );
 }
 
+/** A task's bar whose name opens its details, open while pressed. */
+function TitlePressBar(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <Toolbar
+      title="Teammate invitations"
+      titlePress={{ open, label: "Task details", onPress: () => setOpen((was) => !was) }}
+    />
+  );
+}
+
 function Toolbars(): React.JSX.Element {
   return (
     <>
       <CatalogSection id="toolbar-title" title="A title and actions">
         <Toolbar title="Automations" actions={<NewAutomation />} />
+      </CatalogSection>
+      <CatalogSection id="toolbar-title-press" title="A title that opens what it names">
+        <TitlePressBar />
       </CatalogSection>
       <CatalogSection id="toolbar-lead" title="Led by a way back, a tag after the title">
         <Toolbar
