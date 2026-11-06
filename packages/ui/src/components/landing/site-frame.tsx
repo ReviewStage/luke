@@ -61,6 +61,7 @@ export function SiteFrame({
   bar,
   barCall,
   footer,
+  plain = false,
   children,
 }: {
   /** The site's wordmark and links, laid across the bar; none draws no bar. */
@@ -69,13 +70,15 @@ export function SiteFrame({
   barCall?: ReactNode;
   /** The site's closing links and notices; none draws no foot. */
   footer?: ReactNode;
+  /** A frame with no rails and no wordmark under the foot's links, for a page that sets its own grounds. */
+  plain?: boolean;
   /** The page itself, its `main` among it. */
   children: ReactNode;
 }): React.JSX.Element {
   const floating = useFloating();
   return (
-    <div className="ui-landing-page">
-      <div className="ui-landing-rails" aria-hidden="true" />
+    <div className="ui-landing-page" data-plain={plain}>
+      {plain ? null : <div className="ui-landing-rails" aria-hidden="true" />}
       {bar === undefined || bar === null ? null : (
         <header className="ui-landing-bar" data-floating={floating}>
           <div className="ui-landing-bar-in">
@@ -88,9 +91,11 @@ export function SiteFrame({
       {footer === undefined || footer === null ? null : (
         <footer className="ui-landing-foot">
           <div className="ui-landing-foot-links">{footer}</div>
-          <div className="ui-landing-foot-art">
-            <LandingWordmark />
-          </div>
+          {plain ? null : (
+            <div className="ui-landing-foot-art">
+              <LandingWordmark />
+            </div>
+          )}
         </footer>
       )}
     </div>

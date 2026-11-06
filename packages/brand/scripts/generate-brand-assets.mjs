@@ -349,7 +349,7 @@ for (const [shape, { WIDTH, HEIGHT, FILL }] of Object.entries(BANNERS)) {
 }
 
 // Dotted banners: the same covers drawn in the landing's dots
-// (`@repo/ui`'s landing-field.tsx and mark-orb.tsx): small square dots on a
+// (`@repo/ui`'s landing-wordmark.tsx and mark-orb.tsx): small square dots on a
 // grid, each lit or not by an 8×8 ordered dither, so a cover reads as flat
 // inks on its ground and never as a gradient. A colorway with more than one
 // ink dithers between them as the landing's ball does, darkest to brightest,

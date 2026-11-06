@@ -12,20 +12,28 @@
   --ui-display-hero-weight: 600;
   --ui-display-hero-tracking: -0.02em;
 
-  /* The landing's own scale, larger than a page's: its one line beside the
-     ball, each feature's heading, and the sentence under either, each
-     stepping down once on a phone. */
-  --ui-display-landing-size: 3.75rem;
-  --ui-display-landing-size-narrow: 2.375rem;
-  --ui-display-landing-leading: 1.03;
-  --ui-display-landing-weight: 700;
-  --ui-display-landing-tracking: -0.01em;
+  /* The landing's own scale, larger than a page's and centered as a
+     product page's is: its one line over the Inbox, each feature's heading,
+     and the sentence under either, each stepping down once on a phone. They
+     are set in the sans, tight and semibold, rather than the display face. */
+  --ui-display-landing-size: 4.75rem;
+  --ui-display-landing-size-narrow: 2.75rem;
+  --ui-display-landing-leading: 1.04;
+  --ui-display-landing-weight: 600;
+  --ui-display-landing-tracking: -0.035em;
   --ui-display-feature-size: 2.75rem;
   --ui-display-feature-size-narrow: 1.875rem;
-  --ui-display-feature-leading: 1.06;
-  --ui-display-lead-size: 1.125rem;
-  --ui-display-lead-size-narrow: 1rem;
-  --ui-display-lead-leading: 1.55;
+  --ui-display-section-size: 3.5rem;
+  --ui-display-section-size-narrow: 2.25rem;
+  --ui-display-section-leading: 1.07;
+  --ui-display-lead-size: 1.3125rem;
+  --ui-display-lead-size-narrow: 1.0625rem;
+  --ui-display-lead-leading: 1.45;
+
+  /* The landing's stages: soft tiles with large corners, a step smaller on
+     a phone. */
+  --ui-display-stage-radius: 2rem;
+  --ui-display-stage-radius-narrow: 1.375rem;
 
   /* The landing's devices: a Mac window's corners, and a phone's outer
      corners and its screen's, which follow them inside the bezel. */

@@ -179,24 +179,46 @@
     background: var(--ui-color-border-strong);
   }
 
-  /* The hero: the one line and its calls to the left, the Inbox to the right. */
+  /* The landing's own frame is plain: no rails, its sections bands of the
+     ground in turn, so its bar spans the page on the ground with no rule
+     under it until it floats. */
+  .ui-landing-page[data-plain="true"]
+    .ui-landing-bar:not([data-floating="true"])
+    .ui-landing-bar-in {
+    border-bottom-color: transparent;
+  }
+
+  /* The hero: the one line, its sentence, and its calls centered over the
+     Inbox, which stands large under them as the page's centerpiece. */
   .ui-landing-hero {
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    min-height: 660px;
+    padding-top: 120px;
     overflow: hidden;
+    text-align: center;
   }
 
   .ui-landing-hero-words {
     position: relative;
     z-index: 1;
-    max-width: calc(600px + 2 * var(--ui-landing-margin));
-    padding: 0 var(--ui-landing-inset) 0 var(--ui-landing-gutter);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 1080px;
+    padding: 0 var(--ui-landing-gutter);
+  }
+
+  .ui-landing-title,
+  .ui-landing-section-title,
+  .ui-landing-hero-lead,
+  .ui-landing-lead {
+    text-wrap: balance;
   }
 
   .ui-landing-title {
-    font-family: var(--ui-font-display);
+    font-family: var(--ui-font-sans);
     font-size: var(--ui-display-landing-size);
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-landing-leading);
@@ -206,8 +228,9 @@
 
   .ui-landing-hero-lead,
   .ui-landing-lead {
-    max-width: 520px;
-    margin-top: 18px;
+    max-width: 640px;
+    margin-top: 20px;
+    margin-inline: auto;
     color: var(--ui-color-text-muted);
     font-size: var(--ui-display-lead-size);
     line-height: var(--ui-display-lead-leading);
@@ -217,22 +240,23 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    margin-top: 32px;
+    justify-content: center;
+    gap: 12px 24px;
+    margin-top: 36px;
   }
 
+  /* The hero's Inbox: one column of the app, large and centered under the
+     words, its foot fading out over its older asks rather than cut off. */
   .ui-landing-hero-art {
-    position: absolute;
-    top: 40px;
-    right: calc(var(--ui-landing-inset) + 24px);
-    width: 580px;
-    height: 580px;
+    position: relative;
+    width: min(640px, 100cqw - 2 * var(--ui-landing-gutter));
+    height: 700px;
+    margin-top: 80px;
+    mask-image: linear-gradient(to bottom, black 60%, transparent 98%);
   }
 
-  /* The hero's Inbox: one column of the app, its foot fading out over
-     its older asks rather than cut off. */
-  .ui-landing-hero-art {
-    mask-image: linear-gradient(to bottom, black 62%, transparent 96%);
+  .ui-landing-hero-art .ui-landing-panel {
+    box-shadow: 0 40px 80px var(--ui-color-shadow);
   }
 
   .ui-landing-panel {
@@ -288,35 +312,55 @@
       0 1px 2px var(--ui-color-shadow-soft);
   }
 
-  /* A feature: its heading and sentence over its stage. */
+  /* A feature: its heading and sentence centered over its stage, a band of
+     the page's ground or, every other one from the first, of the lifted
+     ground under it, each with a great deal of room above and below. */
   .ui-landing-section {
     position: relative;
+    text-align: center;
+  }
+
+  .ui-landing-section:nth-of-type(odd) {
+    background: var(--ui-color-sidebar);
   }
 
   .ui-landing-section-body {
-    padding: 104px var(--ui-landing-gutter) 96px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 160px var(--ui-landing-gutter);
+    box-sizing: border-box;
   }
 
   .ui-landing-section-title {
-    max-width: 680px;
-    font-family: var(--ui-font-display);
-    font-size: var(--ui-display-feature-size);
+    max-width: 960px;
+    margin-inline: auto;
+    font-family: var(--ui-font-sans);
+    font-size: var(--ui-display-section-size);
     font-weight: var(--ui-display-landing-weight);
-    line-height: var(--ui-display-feature-leading);
+    line-height: var(--ui-display-section-leading);
     letter-spacing: var(--ui-display-landing-tracking);
     text-wrap: balance;
   }
 
-  /* A stage: a box of drifting dots holding the feature's screen, which
-     runs off its foot where the screen is a window. */
+  /* A stage: a soft tile holding the feature's screen, the lifted ground on
+     the page's and the page's on the lifted, its screen running off its
+     foot where the screen is a window. */
   .ui-landing-stage {
     position: relative;
-    margin-top: 40px;
-    padding: 48px 6%;
+    margin-top: 64px;
+    padding: 72px 8%;
     overflow: hidden;
-    border: 1px solid var(--ui-color-border);
-    border-radius: var(--ui-radius-14);
+    border-radius: var(--ui-display-stage-radius);
+    background: var(--ui-color-sidebar);
+    text-align: start;
+  }
+
+  .ui-landing-section:nth-of-type(odd) .ui-landing-stage {
     background: var(--ui-color-ground);
+  }
+
+  .ui-landing-stage :is(.ui-landing-window, .ui-landing-phone) {
+    box-shadow: 0 30px 60px var(--ui-color-shadow);
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) {
@@ -324,10 +368,9 @@
   }
 
   .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-    margin-bottom: -48px;
+    margin-bottom: -72px;
   }
 
-  .ui-landing-field,
   .ui-landing-wordmark {
     position: absolute;
     inset: 0;
@@ -368,17 +411,31 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* The page's close and its foot over the wordmark. */
+  /* The page's close, centered, and its foot over the wordmark. */
   .ui-landing-close {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: 32px;
-    padding: 96px var(--ui-landing-gutter) 64px;
+    gap: 36px;
+    padding: 160px var(--ui-landing-gutter);
+    text-align: center;
   }
 
   .ui-landing-close .ui-landing-actions {
     margin-top: 0;
+  }
+
+  /* Under the landing's close, the foot's links stand on the ground under
+     a hairline, and the plain frame draws no wordmark under them. */
+  .ui-landing-page[data-plain="true"] .ui-landing-foot {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
+  .ui-landing-page[data-plain="true"] .ui-landing-foot-links {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding-block: 32px 48px;
+    box-sizing: border-box;
   }
 
   /* Under a page's closing rule, as on every page but the landing, whose
@@ -1108,45 +1165,25 @@
     background: transparent;
   }
 
-  /* Under the Pinned line (`docs/DESIGN.md`), the room beside the words is
-     narrower than the Inbox, so the hero stacks as a phone's does: the words,
-     then the Inbox under them, no wider than the column, no taller than it
-     stands beside the words, and no taller than a share of the screen, so a
-     phone held sideways keeps the words and the Inbox's top on its first
-     screen; the words' room above them gives way on a short screen too. The
-     small viewport is the one measured, so a browser's own bars never count.
-     A container query keeps no state, so the line has its enter width alone,
-     without the leave width a script would hold. */
+  /* Under the Pinned line (`docs/DESIGN.md`) the hero's Inbox gives way
+     on a short screen, no taller than a share of it, so a laptop's first
+     screen keeps the words and the Inbox's top; the small viewport is the
+     one measured, so a browser's own bars never count. */
   /* off-scale: 1120px, the Pinned line */
   @container (width < 1120px) {
     .ui-landing-hero {
-      /* off-scale: the Inbox's least size, and its share of the screen */
-      --ui-landing-art-least: 160px;
-      --ui-landing-art-screen: 58svh;
-      /* off-scale: the room above the words and above the Inbox, each a share of the screen */
-      --ui-landing-hero-top: min(96px, 8svh);
-      --ui-landing-art-top: min(24px, 2svh);
-
-      flex-direction: column;
-      align-items: stretch;
-      min-height: 0;
-    }
-
-    .ui-landing-hero-words {
-      padding: var(--ui-landing-hero-top) var(--ui-landing-gutter) 0;
+      padding-top: min(96px, 8svh);
     }
 
     .ui-landing-hero-art {
-      position: relative;
-      top: auto;
-      right: auto;
-      width: auto;
-      height: max(
-        var(--ui-landing-art-least),
-        min(580px, 100cqw - 2 * var(--ui-landing-gutter), var(--ui-landing-art-screen))
-      );
-      max-width: 580px;
-      margin: var(--ui-landing-art-top) var(--ui-landing-gutter) 40px;
+      /* off-scale: the Inbox's least size, and its share of the screen */
+      height: max(360px, min(700px, 72svh));
+      margin-top: min(64px, 5svh);
+    }
+
+    .ui-landing-section-body,
+    .ui-landing-close {
+      padding-block: 120px;
     }
   }
 
@@ -1176,13 +1213,7 @@
     }
 
     .ui-landing-hero {
-      flex-direction: column;
-      align-items: stretch;
-      min-height: 0;
-    }
-
-    .ui-landing-hero-words {
-      padding: 44px var(--ui-landing-gutter) 0;
+      padding-top: 56px;
     }
 
     .ui-landing-title {
@@ -1195,29 +1226,26 @@
     }
 
     .ui-landing-hero-art {
-      position: relative;
-      top: auto;
-      right: auto;
-      width: auto;
-      height: 340px;
-      margin: 24px var(--ui-landing-gutter);
+      height: 440px;
+      margin-top: 40px;
     }
 
     .ui-landing-section-body {
-      padding: 64px var(--ui-landing-gutter) 56px;
+      padding-block: 88px;
     }
 
     .ui-landing-section-title {
-      font-size: var(--ui-display-feature-size-narrow);
+      font-size: var(--ui-display-section-size-narrow);
     }
 
     .ui-landing-stage {
-      margin-top: 28px;
-      padding: 28px 5%;
+      margin-top: 36px;
+      padding: 32px 5%;
+      border-radius: var(--ui-display-stage-radius-narrow);
     }
 
     .ui-landing-stage:is([data-scene="inbox"], [data-scene="agents"]) .ui-landing-window {
-      margin-bottom: -24px;
+      margin-bottom: -32px;
     }
 
     .ui-landing-beside {
@@ -1257,9 +1285,7 @@
     }
 
     .ui-landing-close {
-      flex-direction: column;
-      align-items: stretch;
-      padding: 72px var(--ui-landing-gutter) 48px;
+      padding-block: 96px;
     }
 
     /* The foot's facts keep their line, and its links stand in two columns
