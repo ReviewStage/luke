@@ -10,7 +10,12 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  readingFiles,
+} from "../testing/app-bridge.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -134,6 +139,7 @@ async function page({ box = true }: { box?: boolean } = {}) {
     sent.push(text);
     return new Promise<AgentAgentAnswer>(ignore);
   };
+  fakeActPort({ ...fakeActPortCalls(), ...readingFiles(readFile) });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -146,8 +152,8 @@ async function page({ box = true }: { box?: boolean } = {}) {
           children: [
             createElement(FileTab, {
               key: "file",
+              place: { taskId: "task-1" },
               file: { path: "src/invite.ts", range: undefined, opened: 1 },
-              readFile,
               onRead: ignore,
             }),
             box ? createElement(Box, { key: "box", sender }) : null,

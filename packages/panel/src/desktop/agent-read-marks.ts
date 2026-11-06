@@ -1,7 +1,8 @@
 import type { TasklessAgent } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useAct } from "../act.js";
-import { markAgent, useReadMarks } from "../tasks/use-task-looks.js";
+import { useMutation } from "@tanstack/react-query";
+import { actMutation } from "../act-mutations.js";
+import { useMarkAgent, useReadMarks } from "../tasks/use-task-looks.js";
 
 /**
  * agent-read-marks.ts -- Mark as unread and Mark as read for an agent with no task, kept on the account as a task's marks are.
@@ -22,12 +23,13 @@ export interface AgentReadMarks {
 /** The marks by hand on agents, which every menu offering them Mark as unread or Mark as read writes through. */
 export function useAgentReadMarks(): AgentReadMarks {
   const reads = useReadMarks();
-  const { tell } = useAct();
+  const markAgent = useMarkAgent();
+  const { mutate: markSeen } = useMutation(actMutation(ACT_KIND.AGENTS_SEEN));
   return {
     markedUnread: reads.markedUnread,
     mark: (agent, unread) => {
       markAgent(agent.id, unread);
-      if (!unread) tell(ACT_KIND.AGENTS_SEEN, { agentId: agent.id });
+      if (!unread) markSeen({ agentId: agent.id });
     },
   };
 }

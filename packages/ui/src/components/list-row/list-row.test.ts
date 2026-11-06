@@ -757,7 +757,7 @@ test("an unavailable row refuses its press and takes no focus", () => {
   const pressed: string[] = [];
   const container = draw(
     createElement(List, {
-      label: "Plans",
+      label: "Tasks",
       children: createElement(ListRow, {
         title: "Ship the release",
         disabled: true,
@@ -903,7 +903,7 @@ test("a regular row's description says it is cut short once its words run past i
 });
 
 test("a row a run draws stands where the run places it, at the top level and nested alike", () => {
-  const keys = ["top", "nested"];
+  const keys = ["first", "nested", "last"];
   const scroller = createRef<HTMLDivElement>();
   const container = draw(
     createElement(
@@ -918,7 +918,7 @@ test("a row a run draws stands where the run places it, at the top level and nes
         children: (index: number, place) =>
           createElement(ListRow, {
             title: keys[index] ?? "",
-            depth: index,
+            depth: keys[index] === "nested" ? 1 : 0,
             onPress: ignore,
             place,
           }),
@@ -928,5 +928,7 @@ test("a row a run draws stands where the run places it, at the top level and nes
   const rows = [...container.querySelectorAll<HTMLElement>("li[data-row-key]")];
   expect(rows.map((row) => row.dataset.rowKey)).toEqual(keys);
   // Note that the run places each row out of the flow and writes its top itself, so a row the flow stands is drawn below its own place.
-  expect(rows.map((row) => row.style.position)).toEqual(["absolute", "absolute"]);
+  expect(rows.map((row) => row.style.position)).toEqual(["absolute", "absolute", "absolute"]);
+  // Note that jsdom lays nothing out, so each row is as tall as the run takes one to be (`estimate`), one under another.
+  expect(rows.map((row) => row.style.top)).toEqual(["0px", "40px", "80px"]);
 });

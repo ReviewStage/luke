@@ -20,6 +20,7 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@repo/ui/actor-model";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { agentRow, taskRowName } from "@repo/ui/task-list-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -120,6 +121,7 @@ export function SidebarAgent({
   repository,
   face = true,
   nest,
+  place,
   shown,
   onOpen,
   onPin,
@@ -141,6 +143,8 @@ export function SidebarAgent({
   face?: boolean;
   /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place?: VirtualRowPlace | undefined;
   /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
   onOpen: () => void;
@@ -161,7 +165,7 @@ export function SidebarAgent({
     row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
-  const place = useRowPlace();
+  const rowPlace = useRowPlace();
   const coarse = useCoarsePointer();
   const { act } = useAct();
   const reads = useAgentReadMarks();
@@ -232,6 +236,7 @@ export function SidebarAgent({
           ref={hold}
           motionKey={agent.id}
           nest={nest}
+          place={place}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
@@ -292,7 +297,7 @@ export function SidebarAgent({
           unread={isUnread}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={editing ? undefined : onOpen}
-          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown, true)}
+          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, rowPlace), shown, true)}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing || coarse ? null : <RowMarks marks={marks} />}

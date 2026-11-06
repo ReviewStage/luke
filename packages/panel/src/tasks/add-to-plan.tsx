@@ -16,12 +16,14 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
 import { keepPictureRead } from "@repo/ui/picture-cache";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
-import { unreachedAs, useAct } from "../act.js";
+import { unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -47,19 +49,19 @@ import { useTaskMentions } from "./task-mentions.js";
  */
 
 /** What the press is called. */
-const ADD_LABEL = "Add to plan";
+const ADD_LABEL = "Add to description";
 
 /** What each outcome says in the window's toast. */
 const ADD_WORDS = {
-  ADDING: "Adding to the plan…",
-  ADDED: "Added to the plan",
-  NOT_A_PICTURE: "This picture could not be added to the plan.",
-  VIDEO_TOO_LARGE: `This video is over ${String(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 1_000_000)} MB, too large to add to the plan from here.`,
-  TOO_MANY: "This plan already holds as many pictures as it can.",
-  TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
-  NOT_SAVED: "The plan could not be saved.",
-  UNDONE: "Taken out of the plan",
-  NOT_UNDONE: "The plan changed since, so the picture stays in it.",
+  ADDING: "Adding to the description…",
+  ADDED: "Added to the description",
+  NOT_A_PICTURE: "This picture could not be added to the description.",
+  VIDEO_TOO_LARGE: `This video is over ${String(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 1_000_000)} MB, too large to add to the description from here.`,
+  TOO_MANY: "This description already holds as many pictures as it can.",
+  TOO_MANY_VIDEOS: "This description already holds as many videos as it can.",
+  NOT_SAVED: "The description could not be saved.",
+  UNDONE: "Taken out of the description",
+  NOT_UNDONE: "The description changed since, so the picture stays in it.",
 } as const;
 
 /** How many times an edit is written again on the text as it stands before it gives up. */
@@ -126,9 +128,11 @@ async function edited(
  * account has Plans off.
  */
 export function useAddToPlan(): ViewerAction | undefined {
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const page = useTaskMentions();
-  const { act } = useAct();
+  const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
+  const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
   const toast = useToast();
   const working = useWorkingToast();
   return useMemo(() => {
@@ -138,7 +142,7 @@ export function useAddToPlan(): ViewerAction | undefined {
     }
     const { workspace } = page;
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
-      act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
+      sendEdit({ taskId: taskId, edit: { document: { base, value } } }).catch(
         unreachedAs(TASK_CALL_FAILURE.UNANSWERED),
       );
     const add = async (chip: FileChip) => {
@@ -158,7 +162,7 @@ export function useAddToPlan(): ViewerAction | undefined {
       const keeping = await keptUrlOf(chip);
       if ("refused" in keeping) return failed(keeping.refused, keeping.refused, true);
       const { url } = keeping;
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
+      const kept = await sendKeep({ planId: taskId, picture: url }).catch(
         unreachedAs(PICTURE_KEEP_FAILURE.UNANSWERED),
       );
       if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure], kept);
@@ -211,5 +215,5 @@ export function useAddToPlan(): ViewerAction | undefined {
       icon: <ImagePlusIcon aria-hidden="true" />,
       onPress: (chip: FileChip) => void add(chip),
     };
-  }, [plansOn, act, page, toast, working]);
+  }, [plansOn, sendEdit, sendKeep, page, toast, working]);
 }

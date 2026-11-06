@@ -77,7 +77,6 @@ function scriptedSandbox(state: SandboxState) {
         const running = state === SANDBOX_STATE.RUNNING;
         return { running, ports: running ? PORTS : [] };
       }),
-    startForwarding: () => Effect.die("the routes start no run command"),
     start: (sessionId, terminalId) =>
       Effect.sync(() => {
         asked.push({ what: "start", sessionId });

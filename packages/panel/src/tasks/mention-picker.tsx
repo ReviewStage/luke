@@ -111,7 +111,12 @@ import {
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
-import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
+import {
+  appStateDerivedAtom,
+  appStateQuery,
+  selectExperiment,
+  useAppSlice,
+} from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
@@ -246,7 +251,7 @@ const MENTION_GROUP = {
   AGENTS: "Agents",
   TASKS: "Tasks",
   PEOPLE: "People",
-  PLAN: "Plan",
+  PLAN: "Description",
   PAGES: "Pages",
   FILES: "Files and folders",
   THREADS: "Threads",
@@ -260,7 +265,7 @@ const MENTION_GROUP = {
 /** The kinds a list may be narrowed to, each but a server by its own word typed before a colon after the `@`. */
 const MENTION_FROM = {
   FILES: "files",
-  PLAN: "plan",
+  PLAN: "description",
   TASKS: "tasks",
   PAGES: "pages",
   AGENTS: "agents",
@@ -274,6 +279,9 @@ const MENTION_FROM = {
 } as const;
 
 type MentionFrom = (typeof MENTION_FROM)[keyof typeof MENTION_FROM];
+
+/** Words that narrow the list as a kind's own word does: `plan`, the description's word before it was renamed. */
+const MENTION_FROM_ALIAS: ReadonlyMap<string, MentionFrom> = new Map([["plan", MENTION_FROM.PLAN]]);
 
 /** The kind a list is narrowed to: one of the place's own, or one connected server by its connection, wearing its provider's mark. */
 type Narrow =
@@ -522,7 +530,9 @@ function scopeOf(
     };
   }
   const typed = /^([^\s:]+):/u.exec(query);
-  const word = typed?.[1]?.toLowerCase();
+  const typedWord = typed?.[1]?.toLowerCase();
+  const word =
+    typedWord === undefined ? undefined : (MENTION_FROM_ALIAS.get(typedWord) ?? typedWord);
   const kind = word === undefined ? undefined : kinds.find((each) => each.keyword === word);
   if (typed === null || kind === undefined) {
     return { kind: undefined, entry: "", typed: false, walked: [], term: query };
@@ -596,7 +606,7 @@ function taskRows(
     {
       mention: { kind: MENTION_KIND.TASK, taskId: taskId },
       name: taskName,
-      detail: "The whole plan",
+      detail: "The whole description",
       terms: key === undefined ? taskName : `${key} ${taskName}`,
       key,
     },
@@ -1782,7 +1792,8 @@ export function useMentionPicker({
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const taskRowsOffered = open
     ? workspaceTaskRows(plansOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];

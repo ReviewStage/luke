@@ -18,6 +18,7 @@ import {
   EXPERIMENT,
   type Experiment,
   type HostCapability,
+  NO_EXPERIMENTS,
 } from "@repo/settings";
 import {
   agentKeyLink,
@@ -33,9 +34,11 @@ import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { forgetPictures } from "@repo/ui/picture-cache";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { appBridge } from "./app-bridge.js";
 import {
   runAppCommand,
@@ -87,12 +90,13 @@ import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
   APP_SLICE,
-  experimentOnNow,
+  appStateQuery,
   SETTINGS_HELD,
-  useAdminAccess,
-  useAdminAccessPending,
+  selectAdminAccess,
+  selectAdminAccessPending,
+  selectExperiment,
+  selectExperimentChoices,
   useAppSlice,
-  useExperimentChoices,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
@@ -224,7 +228,14 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  const { act, press, tell, updateSetting } = useAct();
+  // Note that `act` stays for the tasks' reads (`useTasksTab`) and the reads below, which the act-port reads leaf moves.
+  const { act } = useAct();
+  const { mutateAsync: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
+  const { mutateAsync: sendSignOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
+  const { mutateAsync: sendDeleteAccount } = useMutation(actMutation(ACT_KIND.ACCOUNT_DELETE));
+  const { mutateAsync: requestMicrophoneAccess } = useMutation(
+    actMutation(ACT_KIND.MICROPHONE_REQUEST),
+  );
   // What main holds, each slice read on its own, so the window is drawn again
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
@@ -315,8 +326,10 @@ function AppWindow(): React.JSX.Element {
   // A pairing's link opens Settings › Hosts with its code, for the page to ask over itself; while
   // Bring your own host is off, which stands nowhere then, it lands on that experiment's row alone.
   const openHostConnect = useOpenHostConnect();
+  const queryClient = useQueryClient();
   const openAccountLink = useSteadyDoor(({ place }: AccountLink) => {
-    if (!experimentOnNow(EXPERIMENT.BRING_YOUR_OWN_HOST)) {
+    const state = queryClient.getQueryData(appStateQuery.queryKey);
+    if (state === undefined || !selectExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST)(state)) {
       openSettings({
         page: SETTINGS_VIEW.EXPERIMENTAL,
         section: SETTINGS_SECTION.BRING_YOUR_OWN_HOST,
@@ -360,18 +373,20 @@ function AppWindow(): React.JSX.Element {
   useAppCommand(APP_COMMAND.REDO, undo.redoes ? () => void redoLast() : undefined);
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(useAppSlice(ZOOM), (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
+  useWindowZoom(useAppSlice(ZOOM), (zoom) =>
+    updateSetting({ field: APP_SETTING_SCHEMA.zoom.field, value: zoom }),
+  );
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
   useWindowFullScreen(useAppSlice(FULL_SCREEN));
 
   const signOut = useCallback(async () => {
-    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-  }, [act]);
+    await sendSignOut();
+  }, [sendSignOut]);
   // The delete happens at the service before anything local moves,
   // so a failure resolves to why and the account is still standing.
   const deleteAccount = useCallback(async (): Promise<ActionResult> => {
     try {
-      await act(ACT_KIND.ACCOUNT_DELETE);
+      await sendDeleteAccount();
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     } catch {
       return {
@@ -379,7 +394,7 @@ function AppWindow(): React.JSX.Element {
         reason: "The account could not be deleted. Try again.",
       };
     }
-  }, [act]);
+  }, [sendDeleteAccount]);
 
   // The room the stage's width gives, on the desktop the window's: whether
   // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
@@ -387,7 +402,7 @@ function AppWindow(): React.JSX.Element {
   const stage = useStageRoom();
   const room = stage.room;
   const tasks = useTasksTab({
-    acts: { act, press, tell },
+    acts: { act },
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
@@ -433,7 +448,8 @@ function AppWindow(): React.JSX.Element {
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const experiments = useExperimentChoices();
+  const experiments =
+    useQuery({ ...appStateQuery, select: selectExperimentChoices }).data ?? NO_EXPERIMENTS;
   const shownView = shownSettingsView(
     settingsPlace.view,
     run?.capabilities ?? NO_CAPABILITIES,
@@ -459,8 +475,9 @@ function AppWindow(): React.JSX.Element {
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin
   // (`link-route.ts`).
-  const adminOn = useAdminAccess();
-  const adminPending = useAdminAccessPending();
+  const adminOn = useQuery({ ...appStateQuery, select: selectAdminAccess }).data === true;
+  const adminPending =
+    useQuery({ ...appStateQuery, select: selectAdminAccessPending }).data ?? true;
   // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
   const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
@@ -585,11 +602,11 @@ function AppWindow(): React.JSX.Element {
   // Note that the request is the one dictation makes, and answers once macOS has, which is how Allow knows to stop waiting; the answer also arrives as the microphone's status.
   const requestMicrophone = useCallback(
     () =>
-      act(ACT_KIND.MICROPHONE_REQUEST).then(
+      requestMicrophoneAccess().then(
         () => undefined,
         () => undefined,
       ),
-    [act],
+    [requestMicrophoneAccess],
   );
   const leftWorkspace = useSteadyDoor((workspaceId: string) => {
     tasks.onLeftWorkspace(workspaceId);
@@ -766,13 +783,6 @@ function AppWindow(): React.JSX.Element {
                             tasks={tasks}
                             links={copyLink}
                             doors={settingsDoors}
-                            readFiles={(taskId) =>
-                              act(ACT_KIND.TASKS_TREE, {
-                                planId: taskId,
-                                path: "",
-                                recursive: true,
-                              })
-                            }
                           />
                           {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
                           <ShellRoomContext.Provider value={room}>

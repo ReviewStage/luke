@@ -67,7 +67,7 @@ export interface DocumentEditor {
 const FAILURE_NOTE = {
   [TASK_CALL_FAILURE.UNANSWERED]: "Not saved: the service did not answer.",
   [TASK_CALL_FAILURE.NOT_FOUND]: "Not saved: this task no longer exists.",
-  [PLAN_EDIT_REFUSAL.TOO_LONG]: "Not saved: the plan is too long.",
+  [PLAN_EDIT_REFUSAL.TOO_LONG]: "Not saved: the description is too long.",
 } as const satisfies Record<TasksEditFailure, string>;
 
 /** Whether a text is past what a document may hold, which the service would refuse. */

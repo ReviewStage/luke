@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { type RowMove, useRowDrag } from "./use-row-drag.js";
+import { type RowMove, useRowDrag, useRunRowDrag } from "./use-row-drag.js";
 
 /**
  * use-row-drag.test.ts -- a row pressed and drawn far enough up or down its
@@ -29,15 +29,24 @@ afterEach(() => {
 /** How far the sidebar holding the list has scrolled, in CSS pixels, which moves every box up the screen. */
 let scrolled = 0;
 
-/** A list of `count` rows whose drag reports each move to `onMove`, laid out a row's height apart. */
-function drawn(count: number, onMove: RowMove): HTMLElement {
+/**
+ * A list of `count` rows whose drag reports each move to `onMove`, laid out
+ * a row's height apart; or, where `places` says each row's place among
+ * every row of a list drawing only some of them (`data-index`), those rows.
+ */
+function drawn(count: number, onMove: RowMove, places?: readonly number[]): HTMLElement {
   function List() {
-    const drag = useRowDrag(onMove);
+    const all = useRowDrag(places === undefined ? onMove : undefined);
+    const run = useRunRowDrag(places === undefined ? undefined : onMove);
     return createElement(
       "ul",
-      { onPointerDown: drag },
+      { onPointerDown: places === undefined ? all : run },
       Array.from({ length: count }, (_, at) =>
-        createElement("li", { key: at }, createElement("button", { type: "button" }, `Row ${at}`)),
+        createElement(
+          "li",
+          { key: at, "data-index": places?.[at] },
+          createElement("button", { type: "button" }, `Row ${at}`),
+        ),
       ),
     );
   }
@@ -144,6 +153,18 @@ test("a row let go off to the side lands its copy on the row's place on both axe
   act(() => finish?.());
   assert.equal(document.querySelector("[data-carried]"), null);
   assert.equal(list.querySelector("li")?.getAttribute("data-dragging"), null);
+});
+
+test("a row of a run that also draws the row holding the keyboard far above it lands at the place among every row of the row it passed", () => {
+  const moves: [number, number][] = [];
+  const list = drawn(5, (from, to) => moves.push([from, to]), [0, 50, 51, 52, 53]);
+  act(() => {
+    grip(list, 2).dispatchEvent(at("pointerdown", 70));
+    window.dispatchEvent(at("pointermove", 80));
+    window.dispatchEvent(at("pointermove", 102));
+    window.dispatchEvent(at("pointerup", 102));
+  });
+  assert.deepEqual(moves, [[51, 52]]);
 });
 
 test("a row dragged up past the top of the list lands first", () => {

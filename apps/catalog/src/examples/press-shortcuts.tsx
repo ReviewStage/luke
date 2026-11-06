@@ -34,7 +34,7 @@ import { CatalogSection } from "../section";
  * opens. Each says what it last did, since the catalog has nowhere to go.
  */
 
-const STEPS = ["Auth refactor · Code", "Auth refactor · Plan", "Inbox"] as const;
+const STEPS = ["Auth refactor · Code", "Auth refactor · Description", "Inbox"] as const;
 
 /** Back: a press takes a step, and a press held or a right-click lists the steps behind. */
 function HeldBack({ onDone }: { onDone: (what: string) => void }): React.JSX.Element {

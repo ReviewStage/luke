@@ -58,12 +58,15 @@
   }
 
   /* Only the desktop's window is dragged by its bar, and what stands on the
-     bar keeps its presses: the actions, and the buttons of a lead. */
+     bar keeps its presses: the actions, a title that opens what it names,
+     a title holding the page's menu, and the buttons of a lead. */
   [data-ui-profile="desktop"] .ui-toolbar {
     -webkit-app-region: drag;
   }
 
-  [data-ui-profile="desktop"] .ui-toolbar-actions {
+  [data-ui-profile="desktop"] .ui-toolbar-actions,
+  [data-ui-profile="desktop"] .ui-toolbar-title-press,
+  [data-ui-profile="desktop"] .ui-toolbar-title-menu {
     -webkit-app-region: no-drag;
   }
 
@@ -90,7 +93,8 @@
     gap: var(--ui-space-8);
   }
 
-  .ui-toolbar-heading:has(> .ui-toolbar-detail) > .ui-toolbar-title {
+  .ui-toolbar-heading:has(> .ui-toolbar-detail)
+    > :is(.ui-toolbar-title, .ui-toolbar-title-menu > .ui-toolbar-title) {
     min-width: 0;
   }
 
@@ -119,7 +123,9 @@
     align-items: last baseline;
   }
 
-  .ui-toolbar[data-look="phone"] > .ui-toolbar-heading > .ui-toolbar-title {
+  .ui-toolbar[data-look="phone"]
+    > .ui-toolbar-heading
+    > :is(.ui-toolbar-title, .ui-toolbar-title-menu > .ui-toolbar-title) {
     min-width: 0;
   }
 

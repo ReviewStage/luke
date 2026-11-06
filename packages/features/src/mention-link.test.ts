@@ -330,7 +330,7 @@ test("a bare address is named by what it says of the thing: a file's name and li
   );
   assert.equal(named(`https://github.com/${REPOSITORY}/tree/HEAD/apps/web/`), "web");
   assert.equal(named(encodeMention(ROLLOUT, PLACE)), "rollout");
-  assert.equal(named(encodeMention(TASK, PLACE)), "Plan");
+  assert.equal(named(encodeMention(TASK, PLACE)), "Description");
   assert.equal(
     named("https://linear.app/acme/issue/ACME-142/fix-the-thing"),
     "ACME-142/fix-the-thing",
@@ -901,7 +901,7 @@ test("words pasted whole that are an address of Vespin's own become its mention,
   });
   assert.deepEqual(pasted(encodeMention(TASK, PLACE).replace("https:", "vespin:")), {
     mention: TASK,
-    name: "Plan",
+    name: "Description",
   });
   assert.deepEqual(pasted(encodeMention(page, PLACE)), { mention: page, name: "Page" });
   assert.deepEqual(pasted(encodeMention(agent, PLACE)), { mention: agent, name: "Agent" });

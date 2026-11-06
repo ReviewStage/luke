@@ -317,7 +317,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
   roots.push(root);
   act(() =>
     root.render(
-      held.provide(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Probe))),
+      held.provide(onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), createElement(Probe))),
     ),
   );
   return {

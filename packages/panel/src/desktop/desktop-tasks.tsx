@@ -41,6 +41,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import { useQuery } from "@tanstack/react-query";
 import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -57,7 +58,12 @@ import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
-import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
+import {
+  PlanBody,
+  type PlanRoom,
+  type SectionLinks,
+  type TitleRename,
+} from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -81,7 +87,7 @@ import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -127,7 +133,6 @@ import {
 } from "./task-pane-switcher.js";
 import { useStandingDoor } from "./task-row-parts.js";
 import {
-  SummaryButton,
   type SummaryLayout,
   type SummaryPin,
   SummarySkeleton,
@@ -347,7 +352,9 @@ function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
   // While Plans is off there is no plan to copy, so the chord is an agent's alone.
   useAppCommand(
     APP_COMMAND.COPY_CONTENT,
-    useExperiment(EXPERIMENT.PLANS) ? copy.onPress : undefined,
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true
+      ? copy.onPress
+      : undefined,
   );
   return null;
 }
@@ -415,7 +422,8 @@ function PlanDocument({
     agents: tasks.agents,
   });
   // The task's comments are held from its open while it is shown, for its plan's margin and list, so its first ready frame marks them; none are read while Plans is off.
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const commentsTaskId = tasks.shown && plansOn ? tasks.activeTaskId : undefined;
   const comments = usePlanComments(
     useMemo(
@@ -947,11 +955,17 @@ function PlanDocument({
   // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
   // so another task's groups start folded rather than as this one's were left. Note that the
   // key is the head's alone, because two siblings under one key leave the old task's drawn.
-  const planHead = useMemo(
-    () => (
+  const planHead = useCallback(
+    (room: PlanRoom) => (
       <Fragment key={openedId}>
         {opened === undefined ? null : (
-          <PlanRelations task={opened} tasks={tasks} door={relations} onOpenTask={openTask} />
+          <PlanRelations
+            task={opened}
+            tasks={tasks}
+            door={relations}
+            room={room}
+            onOpenTask={openTask}
+          />
         )}
         {planAgents}
       </Fragment>
@@ -1142,6 +1156,7 @@ function PlanDocument({
         standing={standing}
         head={planHead}
         titleActions={!phone}
+        shown={overviewShown}
       />
     </Fill>
   );
@@ -1331,10 +1346,8 @@ function PlanDocument({
                             shown={tasks.shown}
                             onOpenTerminal={terminalDoors.onOpenTerminal}
                             onOpenBrowser={phone ? openBrowser : undefined}
-                            slots={!phone}
                             onShown={phone ? setShownAgentTab : undefined}
                             waiting={waitingOf}
-                            actions={<SummaryButton layout={summaryLayout} cardId={summaryCard} />}
                           />
                         </div>
                         {/* The plan's banner is the whole plan's, so it stands over every

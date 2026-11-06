@@ -35,7 +35,7 @@ import {
   tellingTranscripts,
   transcriptTold,
 } from "../testing/tasks-control.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   type AgentTranscriptControl,
   type TranscriptOlderReader,
@@ -118,7 +118,7 @@ function drawn(older?: TranscriptOlderReader) {
     return null;
   }
   function Window(props: { shown: boolean }) {
-    return useAppState() === undefined ? null : createElement(Probe, props);
+    return useAppSlice(APP_SLICE.RUN) === undefined ? null : createElement(Probe, props);
   }
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));

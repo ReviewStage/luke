@@ -32,7 +32,7 @@ import { HISTORY_READ } from "./use-plan-history.js";
 import { VersionView } from "./version-view.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain

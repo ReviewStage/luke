@@ -1,13 +1,14 @@
 import type { TaskSummary } from "@repo/features/task-wire";
 import { drawnTaskRows, type TaskRow, taskRow, taskRowName } from "@repo/ui/task-list-model";
 import { expect, test } from "vitest";
-import { movedBeside, nestsOf, siblingsAt, storedSlot } from "./nested-rows.js";
+import { listedSlot, movedBeside, nestsOf, siblingsAt, storedSlot } from "./nested-rows.js";
 
 /**
  * nested-rows.test.ts -- a section keeps its rows in an order of its own,
  * which nesting redraws, so a move goes among a row's siblings as drawn and
- * a drop lands at the top where it was let go; and each row is read at its
- * place among its siblings.
+ * a drop lands at the top where it was let go; each row is read at its
+ * place among its siblings; and a move counted among the rows drawn, one on
+ * its way out among them, lands among the rows still listed.
  */
 
 function task(name: string, parentTaskId?: string): TaskSummary {
@@ -55,4 +56,12 @@ test("a row let go between a child task and the next row at the top lands before
   expect(storedSlot(KEPT, DRAWN, at("Other"))).toBe(1);
   expect(storedSlot(KEPT, DRAWN, at("Child"))).toBe(1);
   expect(storedSlot(KEPT, DRAWN, DRAWN.length)).toBe(KEPT.length);
+});
+
+test("a row moved among the rows drawn lands among those listed, a row on its way out counting for none", () => {
+  // Drawn A, gone, B, C, the second leaving: listed A, B, C.
+  const drawn = [{ leaving: false }, { leaving: true }, { leaving: false }, { leaving: false }];
+  expect(listedSlot(drawn, 0, 3)).toBe(2);
+  expect(listedSlot(drawn, 3, 1)).toBe(1);
+  expect(listedSlot(drawn, 3, 0)).toBe(0);
 });

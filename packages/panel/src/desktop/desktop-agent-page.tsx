@@ -288,7 +288,7 @@ function AgentPageBar({
   const section = own
     ? moveToSectionEntry(tasks, { agent: true, id: agent.id }, listed.workspaceId, sectionDialogs)
     : undefined;
-  // Note that the page's own head already leads with the Slack crumb an agent started from Slack opens, so its ⋯ offers no Open in Slack beside it.
+  // Note that the page's own head already leads with the Slack crumb an agent started from Slack opens, so its menu offers no Open in Slack beside it.
   const groups = agentMenuGroups({
     chosen: true,
     ...actions.doors,
@@ -314,56 +314,67 @@ function AgentPageBar({
     ) : (
       label
     );
-  const more = (
+  // The agent's menu: a right-click on its name, or a phone's ⋯, which has no right-click to offer it on.
+  const drawnMenu =
+    menu.drawn === undefined ? null : (
+      <ActionMenu
+        label={moreLabel(ACTIONS_THING)}
+        menu={menu.drawn}
+        // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
+        groups={
+          phone === undefined
+            ? groups
+            : [
+                ...phoneFindGroups(),
+                ...groups,
+                ...(phone.onShowPanel === undefined
+                  ? []
+                  : [
+                      [
+                        {
+                          label: SHOW_PANEL,
+                          icon: <SidePanelIcon />,
+                          onSelect: phone.onShowPanel,
+                        },
+                      ],
+                    ]),
+              ]
+        }
+        onClose={menu.close}
+      />
+    );
+  const dialogs = (
     <>
-      <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={moreLabel(ACTIONS_THING)}
-          menu={menu.drawn}
-          // A phone's ⋯ also stands in for ⌘F, and for the panel's toggle it has no room for.
-          groups={
-            phone === undefined
-              ? groups
-              : [
-                  ...phoneFindGroups(),
-                  ...groups,
-                  ...(phone.onShowPanel === undefined
-                    ? []
-                    : [
-                        [
-                          {
-                            label: SHOW_PANEL,
-                            icon: <SidePanelIcon />,
-                            onSelect: phone.onShowPanel,
-                          },
-                        ],
-                      ]),
-                ]
-          }
-          onClose={menu.close}
-        />
-      )}
+      {drawnMenu}
       {actions.dialog}
       {sectionDialogs.dialog}
     </>
   );
   if (phone !== undefined) {
     return (
-      <PhoneHead place="agent" start={<PhoneBack back={phone.back} />} title={title} end={more} />
+      <PhoneHead
+        place="agent"
+        start={<PhoneBack back={phone.back} />}
+        title={title}
+        end={
+          <>
+            <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
+            {dialogs}
+          </>
+        }
+      />
     );
   }
   return (
-    <Toolbar
-      title={title}
-      trail={trail}
-      actions={
-        <>
-          {steps}
-          {more}
-        </>
-      }
-    />
+    <>
+      <Toolbar
+        title={title}
+        trail={trail}
+        titleMenu={{ contextMenu: menu.contextMenu(), keyMenu: menu.keyMenu }}
+        actions={steps}
+      />
+      {dialogs}
+    </>
   );
 }
 

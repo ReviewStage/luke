@@ -31,8 +31,9 @@ import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { repositoryParts } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useId, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation, pressMutation } from "../act-mutations.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -122,24 +123,29 @@ const NONE_LISTED: readonly WorkspaceTokenRepository[] = [];
  * listing none, because a workspace with none is a list read.
  */
 export function useTokenRepositories(workspaceId: string): TokenRepositories {
-  const { act, press } = useAct();
+  const { mutateAsync: changeTokenRepository } = useMutation(
+    actMutation(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET),
+  );
+  const { mutate: removeTokenRepository } = useMutation(
+    pressMutation(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET),
+  );
   const { rows, status, retry } = useHostRead(LIVE_READ.TOKEN_REPOSITORIES, workspaceId);
   const change = useCallback(
     (repository: string, added: boolean) =>
-      act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, { workspaceId, repository, added }).then(
+      changeTokenRepository({ workspaceId, repository, added }).then(
         () => undefined,
         (refused: Error) => refused.message,
       ),
-    [act, workspaceId],
+    [changeTokenRepository, workspaceId],
   );
   const remove = useCallback(
     (repository: string) =>
-      void press(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, {
+      removeTokenRepository({
         workspaceId,
         repository,
         added: false,
       }),
-    [press, workspaceId],
+    [removeTokenRepository, workspaceId],
   );
   return {
     read: TOKEN_REPOSITORIES_READ_OF[status],

@@ -35,8 +35,18 @@ import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
@@ -53,7 +63,7 @@ import { useCreator } from "../member-directory.js";
 import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -597,7 +607,8 @@ function useMentionChips(
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
-const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
+const NO_EDIT: PlanEditDoor = () =>
+  Promise.reject(new Error("This description cannot be edited here."));
 
 /** Where a title's draft goes when nothing else names the task: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
@@ -682,7 +693,7 @@ function savedOver(
 }
 
 /** What a toast says where a tick or a date written from the plan at rest was not saved. */
-const PLAN_NOT_SAVED = "The plan could not be saved.";
+const PLAN_NOT_SAVED = "The description could not be saved.";
 
 /** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
 const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
@@ -970,6 +981,12 @@ function PlanBodyColumn({
   );
 }
 
+/** Where the plan's head stands: the document's scroller, and its column, whose resizing moves what stands in it below what grew (`VirtualRows`' `shiftedBy`). */
+export interface PlanRoom {
+  readonly scroller: RefObject<HTMLElement | null>;
+  readonly column: RefObject<HTMLElement | null>;
+}
+
 /**
  * The open task's one rename door as its title reads it (`desktop-tasks.tsx`):
  * how many times Rename was asked for, each putting the caret in the title,
@@ -1017,6 +1034,7 @@ export const PlanBody = memo(function PlanBody({
   standing: taskStanding,
   head,
   titleActions = true,
+  shown = true,
 }: {
   task: Task;
   onShowHistory?: ShowHistory;
@@ -1036,14 +1054,17 @@ export const PlanBody = memo(function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
-  head?: React.ReactNode;
+  /** What the task's own page draws at the head of its text, under its byline, as its agents, in the room the document gives it; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
+  head?: ((room: PlanRoom) => React.ReactNode) | undefined;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
+  /** Whether the plan is the tab its column shows, rather than kept hidden behind another; shown unless said. */
+  shown?: boolean;
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
   // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented = useExperiment(EXPERIMENT.PLANS);
+  const documented =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
@@ -1074,6 +1095,7 @@ export const PlanBody = memo(function PlanBody({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const room = useMemo((): PlanRoom => ({ scroller, column: body }), []);
   // A link in the plan's words being edited opens, from its right-click, where the plan stands.
   const editedLinks = useEditedLinksHost();
   const bodyHost = useCallback(
@@ -1367,7 +1389,7 @@ export const PlanBody = memo(function PlanBody({
             comments={documented && commentsHere}
           />
           {documented ? <ChangedLine looks={looks} marks={marks} /> : null}
-          <Fragment key={HEAD_KEY}>{head}</Fragment>
+          <Fragment key={HEAD_KEY}>{head?.(room)}</Fragment>
           {!documented ? null : editing.editor === undefined ? (
             editable && views.length === 0 ? (
               <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
@@ -1395,6 +1417,7 @@ export const PlanBody = memo(function PlanBody({
             <PlanCommentLayer
               body={body}
               scroller={scroller}
+              shown={shown}
               unitClass={UNIT_CLASS}
               sections={drawnSections}
               text={task.document.body}

@@ -18,8 +18,9 @@ import {
  * order the caller puts before that choice stands through every press; a
  * press on a row opens it, unless its caller says it has nothing to open,
  * while a press on a control in its cells answers for that control alone; a
- * mark column's heading is read, not drawn; and no rows show the empty line
- * in place of the table. Synthetic runs.
+ * mark column's heading is read, not drawn; a long table draws only the rows
+ * near the view, telling a reader how many it holds; and no rows show the
+ * empty line in place of the table. Synthetic runs.
  */
 
 declare global {
@@ -214,6 +215,36 @@ test("a row its caller says has nothing to open does not open", () => {
   press(nightly?.querySelectorAll("td")[2]);
 
   expect(heard).toEqual(["open nightly"]);
+});
+
+test("a long table draws only the rows near the view, telling a reader how many it holds and where each stands", () => {
+  const many = Array.from({ length: 500 }, (_, at) => ({
+    id: `run-${at}`,
+    name: `Run ${at}`,
+    minutes: at,
+    pinned: false,
+  }));
+  const container = draw(
+    createElement(DataTable<Run>, {
+      label: "Runs",
+      columns: columns([]),
+      rows: many,
+      getRowId: (run) => run.id,
+      empty: "No runs yet.",
+    }),
+  );
+  const drawn = [...container.querySelectorAll("tbody tr[aria-rowindex]")];
+
+  expect(drawn.length).toBeGreaterThan(0);
+  expect(drawn.length).toBeLessThan(many.length);
+  expect(container.querySelector("table")?.getAttribute("aria-rowcount")).toBe("501");
+  // Note that the headings' row is the first a reader counts, so the body's first row is the second.
+  expect(
+    drawn.every(
+      (row) =>
+        row.getAttribute("aria-rowindex") === String(Number(row.getAttribute("data-index")) + 2),
+    ),
+  ).toBe(true);
 });
 
 test("no rows show the empty line in place of the table", () => {

@@ -141,7 +141,7 @@ function npmManifest(release: string): string {
   const manifest = {
     name: NPM_NAME,
     version: release,
-    description: `${PRODUCT_NAME} from your terminal: tasks, plans, and coding agents, for people and scripts`,
+    description: `${PRODUCT_NAME} from your terminal: tasks, their descriptions, and coding agents, for people and scripts`,
     license: "Apache-2.0",
     homepage: "https://vespin.dev",
     repository: {

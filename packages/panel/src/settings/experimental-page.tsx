@@ -11,8 +11,10 @@ import {
   Text,
   TextButton,
 } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { FlaskConicalIcon } from "lucide-react";
-import { askActResult, useAct } from "../act.js";
+import { askActResult } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { useOpenFeedback } from "../open-feedback.js";
 import { SwitchRow } from "./switch-row.js";
 
@@ -45,7 +47,7 @@ const SIGN_IN_NOTE = SIGNED_OUT_WORDS;
 
 /** One experiment's row: its switch, what turning it on brings, and the way to say how it went. */
 function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendExperimentSet } = useMutation(actMutation(ACT_KIND.EXPERIMENT_SET));
   const openFeedback = useOpenFeedback();
   return (
     <SwitchRow
@@ -61,9 +63,7 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
         </>
       }
       checked={on}
-      onChange={(next) =>
-        askActResult(act(ACT_KIND.EXPERIMENT_SET, { experiment: entry.key, on: next }))
-      }
+      onChange={(next) => askActResult(sendExperimentSet({ experiment: entry.key, on: next }))}
     />
   );
 }

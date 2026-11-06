@@ -11,6 +11,7 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 
 /**
  * A Settings link followed as the window follows it: Settings, then the
@@ -50,16 +51,18 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   roots.push(root);
   act(() =>
     root.render(
-      createElement(WorkspacePage, {
-        readerId: undefined,
-        control: {
-          workspaces: [ACME],
-          workspaceId: ACME.id,
-          listFailed: false,
-          onRetryList: () => undefined,
-          onLeft: () => undefined,
-        },
-      }),
+      withQueryClient(
+        createElement(WorkspacePage, {
+          readerId: undefined,
+          control: {
+            workspaces: [ACME],
+            workspaceId: ACME.id,
+            listFailed: false,
+            onRetryList: () => undefined,
+            onLeft: () => undefined,
+          },
+        }),
+      ),
     ),
   );
   const landed: Landing = { on: null };
@@ -125,7 +128,7 @@ test("a link's workspace stands on the Workspace page while Settings stays open,
   }
   const root = createRoot(document.createElement("div"));
   const draw = (listedId: string, settingsShown: boolean) =>
-    act(() => root.render(createElement(Probe, { listedId, settingsShown })));
+    act(() => root.render(withQueryClient(createElement(Probe, { listedId, settingsShown }))));
 
   draw("workspace-personal", true);
   act(() => shown?.link("workspace-acme"));

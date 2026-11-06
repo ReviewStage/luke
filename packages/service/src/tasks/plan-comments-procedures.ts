@@ -306,7 +306,7 @@ const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const unsent: PlanCommentAsked[] = [];
   const taking: { readonly to: PlanCommentAsked; readonly agent: CommentRecipient }[] = [];
   for (const { to, owed } of handedTo(thread, comment.words, writer)) {
-    const agent = yield* askableAgent(userId, taskId, to).pipe(
+    const agent = yield* askableAgent(userId, taskId, to, thread).pipe(
       Effect.catch(() => Effect.succeed(undefined)),
     );
     if (agent !== undefined) taking.push({ to, agent });
@@ -494,7 +494,8 @@ const reviewHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly threads: readonly PlanCommentThread[];
   }[] = [];
   for (const { to, owed, threads: theirs } of asked.values()) {
-    const agent = yield* askableAgent(userId, taskId, to).pipe(
+    // Note that a review's threads stand on one page, which Plans does not gate.
+    const agent = yield* askableAgent(userId, taskId, to, thread).pipe(
       Effect.catch(() => Effect.succeed(undefined)),
     );
     if (agent !== undefined) taking.push({ to, agent, threads: theirs });

@@ -8,9 +8,9 @@ import {
   type SettingsRowsInput,
 } from "@repo/settings";
 import { BUTTON_VARIANT, Button, SettingsRow, SettingsSection } from "@repo/ui";
-import { pressAct } from "../act.js";
+import { useMutation } from "@tanstack/react-query";
+import { pressMutation } from "../act-mutations.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { useBusyPress } from "./busy-press.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -41,7 +41,11 @@ function SupportAccessRow(): React.JSX.Element {
   const until = access?.supportAccessUntil;
   const granted = until !== undefined && until > Date.now();
   const impersonated = account?.status === ACCOUNT_STATUS.SIGNED_IN && account.impersonated;
-  const press = useBusyPress(() => pressAct(ACT_KIND.ACCOUNT_SUPPORT_ACCESS, { grant: !granted }));
+  const supportAccess = useMutation(pressMutation(ACT_KIND.ACCOUNT_SUPPORT_ACCESS));
+  const press = {
+    busy: supportAccess.isPending,
+    onPress: () => supportAccess.mutate({ grant: !granted }),
+  };
   return (
     <SettingsRow
       label="Support access"

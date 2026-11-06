@@ -22,7 +22,7 @@ import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { PlanBody, type SectionLinks } from "./plan-body.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * A task's sections' links on its own page: a mention of a section drawn as

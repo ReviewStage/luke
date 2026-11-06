@@ -75,7 +75,7 @@ function Harness({ groups }: { groups: readonly (readonly MenuEntry[])[] }): Rea
     menu.drawn === undefined
       ? null
       : createElement(Menu, {
-          label: "Plan actions",
+          label: "Task actions",
           menu: menu.drawn,
           groups,
           onClose: menu.close,
@@ -163,7 +163,7 @@ function button(name: string): HTMLButtonElement {
 }
 
 /** The menu named `label` standing open, if it is: drawn and not on its way out. */
-function openMenu(label = "Plan actions"): HTMLElement | null {
+function openMenu(label = "Task actions"): HTMLElement | null {
   return document.querySelector<HTMLElement>(
     `[role="menu"][aria-label="${label}"]:not([data-leaving])`,
   );
@@ -523,7 +523,7 @@ test("resting on one submenu's item after another's opens the second's submenu, 
 
 /** Where the menu of Group by over Order by stands, and Group by's submenu beside it, as `x`, `y`, width, and height. */
 const VIEW_LAYOUT = {
-  menu: { "Plan actions": [0, 0, 208, 72], "Group by": [212, 0, 208, 72] },
+  menu: { "Task actions": [0, 0, 208, 72], "Group by": [212, 0, 208, 72] },
   item: {
     "Group by": [4, 4, 200, 32],
     "Order by": [4, 36, 200, 32],
@@ -611,7 +611,7 @@ test("a value that stays, pressed in the second submenu the pointer opened once 
     const standing = (label: string) =>
       document.querySelector(`[role="menu"][aria-label="${label}"]:not([data-ending-style])`);
     expect(standing("Priority")).not.toBeNull();
-    expect(standing("Plan actions")).not.toBeNull();
+    expect(standing("Task actions")).not.toBeNull();
   } finally {
     exits.restore();
   }
@@ -758,7 +758,7 @@ function GroupBy({ chosen }: { chosen: string }): React.JSX.Element {
     menu.drawn === undefined
       ? null
       : createElement(Menu, {
-          label: "Plan actions",
+          label: "Task actions",
           menu: menu.drawn,
           groups: [[{ label: "Group by", items: [choice("Repository"), choice("None")] }]],
           onClose: menu.close,
@@ -809,7 +809,7 @@ test("the menu key or Shift-F10 on a row opens its menu under it on the first it
       menu.drawn === undefined
         ? null
         : createElement(Menu, {
-            label: "Plan actions",
+            label: "Task actions",
             menu: menu.drawn,
             groups: taskGroups([]),
             onClose: menu.close,
@@ -910,7 +910,7 @@ function HeldRow({ opened }: { opened: string[] }): React.JSX.Element {
     menu.drawn === undefined
       ? null
       : createElement(Menu, {
-          label: "Plan actions",
+          label: "Task actions",
           menu: menu.drawn,
           groups: taskGroups([]),
           onClose: menu.close,
@@ -1308,7 +1308,7 @@ test("in a phone's layout the menu rises as a sheet, a dialog named by the menu 
   const standing = sheet() ?? expect.fail("the sheet stands");
   expect(standing.getAttribute("aria-modal")).toBe("true");
   const name = document.getElementById(standing.getAttribute("aria-labelledby") ?? "");
-  expect(name?.textContent).toBe("Plan actions");
+  expect(name?.textContent).toBe("Task actions");
   expect(standing.contains(openMenu())).toBe(true);
   expect(focused()).toBe("Rename");
   key("ArrowDown");
@@ -1327,7 +1327,7 @@ test("in a sheet a submenu opens in its place with a way back, which lands on it
   expect(openMenu()).toBeNull();
   expect(openMenu("Order by")).not.toBeNull();
   expect(focused()).toBe("Last updated");
-  press(button("Plan actions"));
+  press(button("Task actions"));
   expect(openMenu("Order by")).toBeNull();
   expect(openMenu()).not.toBeNull();
   expect(focused()).toBe("Order by");
@@ -1347,7 +1347,7 @@ test("in a sheet a panel opens in its place with its field taking the keyboard, 
   expect(sheet()?.contains(serversPanel())).toBe(true);
   expect(openMenu()).toBeNull();
   expect(searching()).toBe(true);
-  press(button("Plan actions"));
+  press(button("Task actions"));
   expect(serversPanel()).toBeNull();
   expect(focused()).toBe("MCP servers");
 });

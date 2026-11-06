@@ -1265,7 +1265,7 @@ export function placeOfTaskTarget(
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.PLAN]: "Open the plan",
+  [TOOL_TARGET.PLAN]: "Open the description",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",

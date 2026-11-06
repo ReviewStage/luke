@@ -69,7 +69,9 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   FAKE_ANSWER,
+  type FakeActPort,
   fakeActPort,
+  fakeActPortCalls,
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
@@ -108,9 +110,9 @@ import {
 } from "./use-tasks-tab.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 // Note that each case starts with the document handing Plans on, whatever an earlier case handed.
-beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
+beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -181,11 +183,49 @@ interface Standing {
  * quiet, unless `press` hands the window's own press door, which goes out on
  * the act port the test installed.
  */
+/** The kinds the tab and its agents send on mutations rather than their `acts`. */
+const SENT_ON_MUTATIONS: readonly PortActKind[] = [
+  ACT_KIND.AGENTS_START,
+  ACT_KIND.AGENTS_STOP,
+  ACT_KIND.AGENTS_REWIND,
+  ACT_KIND.AGENTS_MESSAGE,
+  ACT_KIND.AGENTS_CHOOSE,
+  ACT_KIND.AGENTS_SERVERS,
+  ACT_KIND.AGENTS_ADD_REPOSITORY,
+  ACT_KIND.AGENTS_RENAME,
+  ACT_KIND.AGENTS_ARCHIVE,
+  ACT_KIND.AGENTS_DELETE,
+  ACT_KIND.CHAPTERS_GENERATE,
+  ACT_KIND.AGENTS_INBOX_ANSWER,
+  ACT_KIND.AGENTS_INBOX_MESSAGE,
+  ACT_KIND.AGENTS_INBOX_START,
+  ACT_KIND.TASKS_SELECT,
+  ACT_KIND.TASKS_CLOSE,
+  ACT_KIND.TASKS_DELETE,
+  ACT_KIND.TASKS_RENAME,
+  ACT_KIND.TASKS_PIN,
+  ACT_KIND.TASKS_PIN_REPOSITORY,
+  ACT_KIND.AGENTS_PIN,
+  ACT_KIND.TASKS_WRITE_SECTION,
+  ACT_KIND.TASKS_SET_STANDING,
+  ACT_KIND.WORKSPACE_CREATE,
+  ACT_KIND.WORKSPACE_PHOTO_SET,
+  ACT_KIND.WORKSPACE_INVITE,
+  ACT_KIND.TASKS_SET_REPOSITORY,
+  ACT_KIND.TASKS_BLOCK,
+  ACT_KIND.TASKS_SET_PARENT,
+  ACT_KIND.TASKS_CHANGE_RELATION,
+  ACT_KIND.TASKS_MOVE,
+  ACT_KIND.TASKS_EDIT,
+  ACT_KIND.TASKS_RESTORE,
+  ACT_KIND.TASKS_START,
+  ACT_KIND.TASKS_REFRESH,
+];
+
 function mount(
   initial: Partial<Standing> = {},
   answers: { [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>> } = {},
   registry?: AtomRegistry,
-  press?: ActHandle["press"],
 ) {
   const told: PortActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
@@ -248,6 +288,20 @@ function mount(
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
   }
+  // Note that the writes sent on mutations reach the act port, which answers them as the test's `acts` would.
+  fakeActPort({
+    ...fakeActPortCalls(),
+    // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
+    ...(Object.fromEntries(
+      SENT_ON_MUTATIONS.map((kind) => [kind, (payload: unknown) => portAnswer(kind, payload)]),
+    ) as Partial<FakeActPort>),
+    // The one told payload the tests read, parsed as the boundary would, and answered as an asked one is.
+    [ACT_KIND.AGENTS_SHOWN]: (payload) => {
+      const shown = Option.getOrUndefined(readShown(payload));
+      if (shown !== undefined) shownAgents.push(shown.agentId);
+      return portAnswer(ACT_KIND.AGENTS_SHOWN, payload);
+    },
+  });
   function Probe() {
     const [held, setHeld] = useState(standing);
     restand = setHeld;
@@ -257,24 +311,6 @@ function mount(
         // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
         act: (<Kind extends PortActKind>(kind: Kind, ...args: unknown[]) =>
           portAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: a pressed kind is recorded as an asked one is, the dispatch on the kind the one erasure.
-        press:
-          press ??
-          (((kind: PortActKind, ...args: unknown[]) =>
-            portAnswer(kind, ...args).then(
-              () => undefined,
-              () => undefined,
-            )) as ActHandle["press"]),
-        // A told port kind is answered as an asked one is, recorded there, its answer or refusal read by no one, as `tell` reads none.
-        // SAFETY: a told kind is recorded as an asked one is, the dispatch on the kind the one erasure.
-        tell: ((kind: PortActKind, ...args: unknown[]) => {
-          void portAnswer(kind, ...args).catch(() => undefined);
-          // The one told payload the tests read, parsed as the boundary would.
-          const shown = Option.getOrUndefined(readShown(args[0]));
-          if (kind === ACT_KIND.AGENTS_SHOWN && shown !== undefined) {
-            shownAgents.push(shown.agentId);
-          }
-        }) as ActHandle["tell"],
       },
       tasks: held.tasks,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
@@ -307,7 +343,7 @@ function mount(
   act(() => {
     root.render(
       windowRouter().provide(
-        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.PLANS)), surface),
+        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), surface),
       ),
     );
   });
@@ -570,7 +606,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     {},
     {
       settings: appSettingsWire(
-        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.PLANS) }),
+        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.DESCRIPTIONS) }),
       ),
     },
   );
@@ -582,7 +618,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -624,7 +660,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     { tab: { agent: AGENT_ID }, panel: false },
     "the task opens on its agent alone, no plan laid over it in a narrow room",
   );
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 /** A line of a file of the task's repository, as a place names it to open. */
@@ -699,7 +735,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("a task none of whose tabs was viewed shows its agents' last tab, keeps the tab chosen across a launch, and shows the tab viewed before its last agent's once that closes", async () => {
+test("a task none of whose tabs was viewed shows its agents' last tab, opens on its agents again across a launch though left on its details, and shows the tab viewed before its last agent's once that closes", async () => {
   const listed = withAgents([RUNNING_AGENT]);
   const tab = mount({ shown: true, tasks: listed });
   await settle();
@@ -719,7 +755,7 @@ test("a task none of whose tabs was viewed shows its agents' last tab, keeps the
   const launched = mount({ shown: true, tasks: listed });
   await settle();
   const again = () => launched.control().mainTabs;
-  assert.equal(again().tab, MAIN_TAB.OVERVIEW, "a launch opens the task on what it last showed");
+  assert.deepEqual(again().tab, agent, "a launch opens the task on its agents, its details let go");
 
   act(() => again().onChoose(agent));
   act(() => again().onClose(agent));
@@ -860,7 +896,7 @@ test("a column whose last agent is archived opens a new agent's draft in its pla
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, shown]);
 });
 
-test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
+test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -870,7 +906,8 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT);
+  // Note that a write reaches the act port a few steps after its press, as its mutation sends it.
+  await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT));
   assert.equal(tab.control().boundFor, TASK.id);
 
   tab.stand({ tasks: OPEN });
@@ -902,7 +939,7 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
   }
 });
 
-test("a task opened from a list or gone back to from the sidebar opens on the agent waiting on the developer, past the one at work, and a chip naming it on its details", () => {
+test("a task opened from a list, gone back to from the sidebar, or named by a chip opens on the agent waiting on the developer, past the one at work", () => {
   const WAITING = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   // The row names one agent at work and one resting, the resting one's thread waiting on the developer.
   const named = namingRow([AGENT_ID, WAITING], 2);
@@ -946,7 +983,11 @@ test("a task opened from a list or gone back to from the sidebar opens on the ag
   tab.stand({ tasks: elsewhere([waitingRow]) });
   act(() => tab.control().onShowMention({ kind: MENTION_KIND.TASK, taskId: TASK.id }));
   tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "from a chip, its details");
+  assert.deepEqual(
+    tab.control().mainTabs.tab,
+    { agent: WAITING },
+    "from a chip, the agent waiting",
+  );
 
   tab.stand({ tasks: elsewhere([waitingRow]) });
   act(() => tab.control().onResume(TASK.id));
@@ -1090,7 +1131,7 @@ test("a Vespin link naming a task by its number opens the task the service finds
   assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID, "43"]);
 });
 
-test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
+test("a Vespin link to another plan's section opens that plan and asks its page to show the section, each ask its own", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -1101,7 +1142,7 @@ test("a Vespin link to another plan's section opens that plan and asks its page 
   const first = tab.control().sectionReveal;
   act(() => tab.control().onShowMention(section));
 
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT);
+  await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT));
   assert.deepEqual(first, { taskId: OTHER_TASK_ID, reveal: { anchor: "rollout", ask: 1 } });
   assert.deepEqual(tab.control().sectionReveal, {
     taskId: OTHER_TASK_ID,
@@ -1251,7 +1292,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1280,7 +1321,7 @@ test("a Vespin link to a page of the task, as Open in browser lands on, opens th
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1588,7 +1629,7 @@ test("a task's Inbox door and its link narrow the Inbox to the task, an agent's 
   const tab = mount(
     { shown: true, tasks: TWO_WORKSPACES },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   const narrowed = inboxTaskNow();
@@ -1699,7 +1740,7 @@ test("a Vespin link whose slug names no workspace of the account's leaves the li
   assert.equal(tab.control().automationsView.open, true);
 });
 
-test("a Vespin link to a task's version opens its version history on that version, and one to the task opens its plan", async () => {
+test("a Vespin link to a task's version opens its version history on that version, and one to the task opens the task on its agents", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -1722,7 +1763,11 @@ test("a Vespin link to a task's version opens its version history on that versio
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "its plan, in its Overview");
+  assert.equal(
+    tab.control().mainTabs.tab,
+    undefined,
+    "the task waits on its agents, never its details",
+  );
 });
 
 test("a Vespin link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", async () => {
@@ -1766,7 +1811,7 @@ test("a task whose plan the host holds opens on its plan in its first frame agai
 
 test("a version history opened on a held task lists its versions in its first frame, with no page read", async () => {
   const versions = [revisionLine(2), revisionLine(1)];
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     [LIVE_READ.HISTORY]: { [TASK.id]: { rows: { revisions: versions } } },
   });
   const tab = mount({ shown: true, tasks: OPEN });
@@ -1882,7 +1927,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   fakeActs({
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
   const reads = handHostReads({});
   const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
@@ -1890,7 +1935,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   const tab = mount(
     { shown: true, tasks: OPEN },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
@@ -2517,7 +2562,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2595,11 +2640,13 @@ test("a plan moved lists the workspace it moved to while it is still open, and a
 
   const staying = tab.control().onMoveTask("billing", ACME.id);
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } });
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
   const late = tab.control().workspace?.id;
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   const moved = tab.control().onMoveTask("billing", ACME.id);
+  await vi.waitFor(() => assert.equal(answers.length, 2));
   answers[1]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2640,6 +2687,7 @@ test("a move pressed before the workspaces were read still lists the workspace i
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2657,6 +2705,7 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   const moved = tab.control().onMoveTask("billing", ACME.id);
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 
@@ -2664,7 +2713,7 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-test("a workspace left lists the account's own workspace, whichever was listed, and turns to the home page", () => {
+test("a workspace left lists the account's own workspace, whichever was listed, and turns to the home page", async () => {
   const own = { ...PERSONAL, personal: true as const };
   const tab = mount({
     shown: true,
@@ -2681,10 +2730,12 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   assert.equal(chosen, ACME.id);
   assert.equal(afterListed, PERSONAL.id);
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
-  assert.equal(
-    tab.told.includes(ACT_KIND.TASKS_CLOSE),
-    true,
-    "the open plan is left for the home page",
+  await vi.waitFor(() =>
+    assert.equal(
+      tab.told.includes(ACT_KIND.TASKS_CLOSE),
+      true,
+      "the open plan is left for the home page",
+    ),
   );
 });
 
@@ -2713,13 +2764,13 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
   // Note that the page profile's page is held on the open task's pages, as its fixture run's document lays it (`fixtureAppState`).
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE },
   });
   const page = mount(
     { ...run, profile: RUN_PROFILE.AGENT_PAGE },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -2795,19 +2846,20 @@ test("the Board and the Inbox stand in the plan's place in turn: opening one put
   assert.equal(tab.control().boardView.open, false);
 });
 
-test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", () => {
+test("Home from an open plan leaves it, and from Home only puts the page in its place away, asking the host nothing", async () => {
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_CLOSE]: () => Promise.resolve() },
   );
   act(() => tab.control().onGoHome());
-  assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE);
+  await vi.waitFor(() => assert.equal(tab.told.at(-1), ACT_KIND.TASKS_CLOSE));
   assert.equal(tab.control().boundFor, undefined);
 
   const home = mount({ shown: true, tasks: listRead([]) });
   act(() => home.control().inboxView.onOpen());
   const toldBefore = home.told.length;
   act(() => home.control().onGoHome());
+  await settle();
   assert.equal(home.control().inboxView.open, false);
   assert.equal(home.control().page, TASKS_PAGE.HOME);
   assert.deepEqual(home.told.slice(toldBefore), [], "the host is asked nothing");
@@ -3274,6 +3326,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
   assert.deepEqual(tab.control().starting?.choice, choice, "and on the model picked");
 
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
     await note;
   });
@@ -3308,6 +3361,7 @@ test("what the developer opened while New task's agent start was out, a page and
   act(() => tab.control().onNewTask());
 
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
     await note;
   });
@@ -3358,6 +3412,7 @@ test("New task's agent start refused after its page opened opens the card again 
 
   let refused: Failure | undefined;
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
     refused = await note;
   });
@@ -3404,6 +3459,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
   });
   assert.equal(tab.control().newTask.open, false);
   await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
     answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
     await note;
   });
@@ -3521,16 +3577,20 @@ test("a task with no agent opens on a new agent's draft, which closes once left 
   assert.equal(tab.control().agents.draft, undefined, "the empty draft left is let go");
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
 
-  // One left for another task is let go too, so coming back finds the details it was left from.
+  // Left for another task, the task opens on a new agent's draft again on coming back, its details let go.
   openDraft(tab);
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   await settle();
   tab.stand({ tasks: withAgents([]) });
   await settle();
-  assert.equal(tab.control().agents.draft, undefined, "the draft left with its task is let go");
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
+  const back = tab.control().agents.draft;
+  assert.ok(back, "coming back, a draft stands");
+  assert.deepEqual(column().tab, { draft: back.id }, "the task opens on it, not on its details");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { draft: back.id }], "one draft alone");
 
-  // And one left for another place, as Settings hides the tasks.
+  // And one left for another place, as Settings hides the tasks, from the details it was opened over.
+  act(() => column().onChoose(MAIN_TAB.OVERVIEW));
+  await settle();
   openDraft(tab);
   tab.stand({ shown: false });
   await settle();
@@ -3702,7 +3762,7 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
  */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   fakeActPort({});
-  return registryWith(experimentsOn(EXPERIMENT.PLANS), [
+  return registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), [
     [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
     [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
   ]);

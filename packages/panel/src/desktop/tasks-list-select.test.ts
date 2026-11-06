@@ -12,13 +12,11 @@ import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/task
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
-import type { PortActKind } from "@repo/host/contract";
 import { Option, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import type { ActHandle } from "../act.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -173,30 +171,32 @@ async function mountPage(): Promise<{
   hold: (tasks: readonly TaskSummary[], taskSections?: TaskSections) => void;
 }> {
   let restand: ((view: TasksView) => void) | undefined;
+  /** A status the service keeps, written down. */
+  const keepStanding = (payload: unknown) => {
+    const standing = Option.getOrUndefined(readStanding(payload));
+    if (standing !== undefined) asked.push([standing.taskId, standing.status]);
+    return Promise.resolve(true);
+  };
+  // Note that the status and section writes and deletes are sent on their mutations, which reach the act port, each answered as kept.
+  fakeActPort({
+    [ACT_KIND.TASKS_SET_STANDING]: keepStanding,
+    [ACT_KIND.TASKS_WRITE_SECTION]: (payload) => {
+      const places = Option.getOrUndefined(readPlaces(payload))?.writes ?? [];
+      for (const place of places) placed.push([place.taskId, place.sectionId]);
+      return Promise.resolve(true);
+    },
+    [ACT_KIND.TASKS_DELETE]: (payload) => {
+      const doomed = Option.getOrUndefined(readDelete(payload));
+      if (doomed !== undefined) deleted.push(doomed.taskId);
+      return Promise.resolve(doomed === undefined || !refusing.has(doomed.taskId));
+    },
+  });
   function Page() {
     const [view, setView] = useState(viewOf(TASKS));
     restand = setView;
     const control = useTasksTab({
       acts: {
-        // SAFETY: the kinds the test answers are the status and section writes and deletes, each answered as kept; every other kind is refused.
-        act: ((kind: PortActKind, payload: unknown) => {
-          if (kind === ACT_KIND.TASKS_DELETE) {
-            const doomed = Option.getOrUndefined(readDelete(payload));
-            if (doomed !== undefined) deleted.push(doomed.taskId);
-            return Promise.resolve(doomed === undefined || !refusing.has(doomed.taskId));
-          }
-          if (kind === ACT_KIND.TASKS_WRITE_SECTION) {
-            const places = Option.getOrUndefined(readPlaces(payload))?.writes ?? [];
-            for (const place of places) placed.push([place.taskId, place.sectionId]);
-            return Promise.resolve(true);
-          }
-          if (kind !== ACT_KIND.TASKS_SET_STANDING) return Promise.reject(new Error("unasked"));
-          const standing = Option.getOrUndefined(readStanding(payload));
-          if (standing !== undefined) asked.push([standing.taskId, standing.status]);
-          return Promise.resolve(true);
-        }) as ActHandle["act"],
-        press: () => Promise.resolve(),
-        tell: () => undefined,
+        act: () => Promise.reject(new Error("unasked")),
       },
       tasks: view,
       run: { fixtureMode: false, profile: RUN_PROFILE.IDLE },

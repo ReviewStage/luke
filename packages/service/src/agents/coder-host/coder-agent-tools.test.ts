@@ -1162,6 +1162,7 @@ function forwardedPng(attachmentId: string, bytes: Uint8Array) {
 test("start_agent on the plan with a note hands the agent the pictures images names, kept beside the caller's own conversation, as file parts of its first message", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
+  await turnPlans(caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const shown = pngOf(64, 1);
@@ -2083,6 +2084,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   const { workspaceId, elsewhere, plans: tasks, agents } = await openWorkspaces();
   // Bob's agent on Alice's task: the task it makes is Bob's, not the owner's of the task it works on.
   const bob = agents.teammates.userId;
+  await turnPlans(bob, true);
   const caller = await agentOn(bob, tasks.invitations);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
@@ -2206,6 +2208,19 @@ test("create_task makes a task in the caller's workspace for the member the agen
   );
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Old way"), []);
   assert.equal(eve.sent.length, 1, "a refused start starts nothing");
+
+  // With Plans off a plan given is not written, and a start with no prompt hands the brief in the plan's place.
+  await turnPlans(bob, false);
+  const planless = await call(
+    CODER_TOOL.CREATE_TASK,
+    { name: "Seat audit", brief: "Audit seat counts.", plan: "## Goal\n\nCount seats." },
+    "call-planless",
+  );
+  assert.ok(isRecord(planless.task) && isWireString(planless.task.id), JSON.stringify(planless));
+  assert.equal(Option.getOrThrow(await database.run(readTask(bob, planless.task.id))).text, "");
+  await call(CODER_TOOL.START_AGENT, { taskId: planless.task.id }, "call-planless-start");
+  const opening = sentWords(eve.sent[1]?.body);
+  assert.ok(opening.startsWith("Audit seat counts."), opening);
 });
 
 test("an agent whose starter has left the workspace makes no task in it", async () => {
@@ -3831,9 +3846,10 @@ test("a Codex agent on its Mac's own sign-in lists its GPT models alone with no 
   );
 });
 
-test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, and reads no task of another workspace", async () => {
+test("read_task reads a teammate's task of the caller's workspace with its plan as saved, cuts a long plan on a line, reads no plan once the caller's starter turned Plans off, and reads no task of another workspace", async () => {
   const { workspaceId, plans: taskIds, numbers, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
+  await turnPlans(caller.userId, true);
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), caller, eve.services);
   const plan = "# Billing\n\nCharge by seat.";
@@ -3861,6 +3877,12 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.ok(isRecord(cut.plan) && isWireString(cut.plan.text), JSON.stringify(cut).slice(0, 200));
   assert.equal(cut.plan.text, line.repeat(40).slice(0, -1));
   assert.equal(cut.plan.leftOutChars, long.length - (line.length * 40 - 1));
+
+  // With Plans off the task is read all the same, without its plan.
+  await turnPlans(caller.userId, false);
+  const planless = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
+  assert.equal(planless.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(planless));
+  assert.deepEqual([isRecord(planless.task), "plan" in planless], [true, false]);
 
   // A task started from a brief, its plan still untouched, is read with the developer's words.
   const briefed = await database.run(
@@ -4393,6 +4415,11 @@ test("create_automation and update_automation take a Sentry trigger once the wor
     rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE),
   );
 });
+
+/** Turns the Plans experiment on or off for a member, whose agents read and write no plan while it is off. */
+async function turnPlans(userId: string, on: boolean): Promise<void> {
+  await database.run(writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } }));
+}
 
 /** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
 async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {

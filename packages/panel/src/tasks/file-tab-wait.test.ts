@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { FindScope } from "../find-in-tab.js";
+import { fakeActPort, readingFiles } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { installScrollTo, wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
-import { FileTab, type ReadFileWindow } from "./file-tab.js";
+import { FileTab } from "./file-tab.js";
 
 /**
  * file-tab-wait.test.ts -- a File tab says it is reading its file until the
@@ -58,7 +60,7 @@ afterEach(() => {
 });
 
 /** The service, as the tab reads through it: the file's first line, then its whole text. */
-const read: ReadFileWindow = (request) => {
+const read = (request: TaskFileRequest): Promise<TasksFileAnswer> => {
   const place = { path: PATH, repository: "acme/relay", branch: "main" };
   const answer: TasksFileAnswer =
     request.raw === true
@@ -89,6 +91,7 @@ test("a File tab says it is reading the file until its lines are drawn, never st
     states.push({ reading: reading(), lines: wholeFileLines(document.body).length }),
   );
   observer.observe(document.body, { subtree: true, childList: true });
+  fakeActPort(readingFiles(read));
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
@@ -99,8 +102,8 @@ test("a File tab says it is reading the file until its lines are drawn, never st
           FindScope,
           { active: true, subject: { task: "task-1", tab: { file: PATH } } },
           createElement(FileTab, {
+            place: { taskId: "task-1" },
             file: { path: PATH, range: undefined, opened: 1 },
-            readFile: read,
             onRead: () => undefined,
           }),
         ),
