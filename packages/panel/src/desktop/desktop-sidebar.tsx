@@ -240,9 +240,6 @@ export function useSidebarEdge(
   });
 }
 
-/** The display a browser tab answers, as against an installed web app's own window, which draws no Back of its own. */
-const BROWSER_DISPLAY = "(display-mode: browser)";
-
 /**
  * Back and forward, at the right of the left column's title-bar row, level
  * with the traffic lights, the way Cursor and Codex keep them: in the
@@ -250,10 +247,9 @@ const BROWSER_DISPLAY = "(display-mode: browser)";
  * it when it folds, after the column's drag strip so they claim their
  * presses back from the window frame. A way with nothing along it is dimmed
  * rather than gone, so neither button moves. The chords are the shell's to
- * offer, since they answer while the column is folded too. A phone's
- * browser tab draws none, since its own Back and Forward walk the same
- * history (`navigation-history.ts`) and the drawer's head is short of room;
- * a phone's installed web app keeps them, having no browser around it.
+ * offer, since they answer while the column is folded too. A phone draws
+ * none: its places bar and each page's own Back are how it moves, and the
+ * drawer's head is short of room.
  */
 export function HistoryButtons({
   history,
@@ -262,7 +258,7 @@ export function HistoryButtons({
   history: NavigationHistory;
   room: ShellRoom;
 }): React.JSX.Element | null {
-  if (room === SHELL_ROOM.NARROW && window.matchMedia(BROWSER_DISPLAY).matches) return null;
+  if (room === SHELL_ROOM.NARROW) return null;
   return (
     <div className="title-bar-controls" data-edge="column">
       <HistoryButton
