@@ -224,11 +224,6 @@ function waitingOnAccount(
   };
 }
 
-/** Whether an item holds an ask open rather than being a notice; one a service before it says nothing of is counted as asking, as every item was. */
-function asking(item: { readonly asking?: boolean }): boolean {
-  return item.asking !== false;
-}
-
 /** An item's reminder as the window counts it: when it comes due, read or unread alike, since the service answers none once a change ended it; nothing where it has none. */
 function reminderOf(item: { readonly remindAt?: number | null }): {
   readonly remindAt?: number;
