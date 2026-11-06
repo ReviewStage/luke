@@ -2,16 +2,17 @@ import {
   AGENT_CALL_FAILURE,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   FILE_VIEWED_STATE,
   type FileViewedState,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@repo/features/pull-request-write-wire";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { pullRequestPartRetryMutation, pullRequestViewedQuery } from "../live-reads.js";
 import type { ViewedMarks } from "./changes-list.js";
 import { pullRequestAsked } from "./pull-request-number.js";
 import type { PullRequestSource } from "./pull-request-source.js";
@@ -23,7 +24,7 @@ import { noteOf, type WriteNote } from "./pull-request-writes.js";
  * The marks are GitHub's own, the ones its Viewed box sets, so they are read
  * and written by the service on the member's own GitHub sign-in and never on
  * our GitHub App (`pull-request-write-wire.ts`): the read, held by the host
- * while Files changed reads a pull request (`LIVE_READ.PULL_REQUEST_VIEWED`)
+ * while Files changed reads a pull request (`pullRequestViewedQuery`)
  * and asked again each time the changes are read anew, so the two describe
  * the same push, and as its head moves, and a mark or an unmark as one of the
  * pull request's changes (`AGENTS_PULL_REQUEST_ACTION`). A file marked
@@ -86,10 +87,10 @@ export function useViewedFiles(
   reading: number | undefined,
 ): ViewedFiles {
   const { number, write } = source;
-  const held = useHostRead(
-    LIVE_READ.PULL_REQUEST_VIEWED,
-    reading === undefined ? undefined : pullRequestAsked(agentId, number),
+  const held = useQuery(
+    pullRequestViewedQuery(reading === undefined ? undefined : pullRequestAsked(agentId, number)),
   );
+  const { mutate: retryViewed } = useMutation(pullRequestPartRetryMutation());
   const [states, setStates] = useState<ReadonlyMap<string, FileViewedState> | undefined>();
   const [pressed, setPressed] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
@@ -102,16 +103,17 @@ export function useViewedFiles(
   const sentAt = useRef(new Map<string, number>()).current;
 
   // The changes read landing anew asks the marks again, so the two describe the same push.
-  const { retry } = held;
   const readFor = useRef(reading);
   useEffect(() => {
     const was = readFor.current;
     readFor.current = reading;
-    if (was !== undefined && reading !== undefined && was !== reading) void retry();
-  }, [reading, retry]);
+    if (was !== undefined && reading !== undefined && was !== reading) {
+      retryViewed({ part: PULL_REQUEST_PART.VIEWED, ...pullRequestAsked(agentId, number) });
+    }
+  }, [reading, retryViewed, agentId, number]);
 
   const answer: AgentPullRequestViewedAnswerView | undefined =
-    held.rows ?? (held.status === HOST_READ_STATUS.FAILED ? UNANSWERED : undefined);
+    held.data ?? (held.isError ? UNANSWERED : undefined);
   useEffect(() => {
     if (answer === undefined) return;
     const asked = takenAt.current;

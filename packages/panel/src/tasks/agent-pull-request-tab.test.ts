@@ -2019,10 +2019,12 @@ test("each tab counts what Vespin holds of it: the conversation its comments, re
 
   checks.answer({ pullRequest: CHECKS });
   await settle();
-  assert.equal(
-    tabCount(tab, "Checks"),
-    "1",
-    "beside a failure, how many failed, read with the header",
+  await vi.waitFor(() =>
+    assert.equal(
+      tabCount(tab, "Checks"),
+      "1",
+      "beside a failure, how many failed, read with the header",
+    ),
   );
   await choose(tab, "Checks");
   assert.equal(checksGlyph(tab), "failing");
@@ -2144,8 +2146,9 @@ test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refre
   const tab = await draw(controlAnswering({ pullRequest: pullRequest.read }));
   assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh (off)"]);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
-  await settle();
-  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]),
+  );
 });
 
 test("the toolbar's ⋯ offers nothing for the pull request before any of it is held", async () => {
@@ -2157,7 +2160,9 @@ test("the toolbar's ⋯ offers nothing for the pull request before any of it is 
   assert.deepEqual(toolbarItems(tab), []);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
   await settle();
-  assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]),
+  );
 });
 
 test("a ⌘-click on the title opens the pull request on GitHub, and a plain one opens nothing", async () => {
@@ -2339,11 +2344,12 @@ test("the pill, the title, and the files' count stand from what Vespin holds bef
   conversation.answer({ pullRequest: CONVERSATION });
   await settle();
   assert.equal(section("Conversation").querySelectorAll(".pull-request-entry").length, 2);
-  assert.deepEqual(waiting(tab), ["Reading pull request", "Reading description"]);
+  await vi.waitFor(() =>
+    assert.deepEqual(waiting(tab), ["Reading pull request", "Reading description"]),
+  );
 
   pullRequest.answer({ pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } });
-  await settle();
-  assert.deepEqual(waiting(tab), []);
+  await vi.waitFor(() => assert.deepEqual(waiting(tab), []));
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
@@ -2356,7 +2362,7 @@ test("the pill, the title, and the files' count stand from what Vespin holds bef
   assert.deepEqual(waiting(tab), ["Reading checks"]);
   checks.answer({ pullRequest: CHECKS });
   await settle();
-  assert.deepEqual(waiting(tab), []);
+  await vi.waitFor(() => assert.deepEqual(waiting(tab), []));
   assert.deepEqual(words(section("Checks"), "li .ui-list-row-title"), [
     "lint, failed",
     "build, running",
@@ -3463,12 +3469,14 @@ test("its reviewers stand compactly, three faces and a count of the rest: where 
     },
   });
   await settle();
-  assert.deepEqual(faces(), [
-    "Charles Pan · Changes requested",
-    "alexr · Approved",
-    "priyan · Review requested",
-    "lint-app · Review requested",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(faces(), [
+      "Charles Pan · Changes requested",
+      "alexr · Approved",
+      "priyan · Review requested",
+      "lint-app · Review requested",
+    ]),
+  );
   assert.equal(
     tab.querySelector(".pull-request-header .actor-stack-more")?.textContent,
     "+1",
@@ -3643,7 +3651,8 @@ function pickerRow(words: string): HTMLElement {
 
 /** Picks the picker's row whose label begins with the words given. */
 async function pickRow(words: string): Promise<void> {
-  const row = pickerRow(words);
+  // Note that the rows stand once what the pickers offer reaches its query.
+  const row = await vi.waitFor(() => pickerRow(words));
   act(() => row.click());
   await settle();
 }
@@ -3686,12 +3695,14 @@ test("the reviewer picker lists the repository's teams then its people, the auth
 
   act(() => picker().click());
   await settle();
-  assert.deepEqual(pickerRows(), [
-    { label: "Platform", checked: true },
-    { label: "Design", checked: false },
-    { label: "charlespan", checked: true },
-    { label: "priyan", checked: false },
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(pickerRows(), [
+      { label: "Platform", checked: true },
+      { label: "Design", checked: false },
+      { label: "charlespan", checked: true },
+      { label: "priyan", checked: false },
+    ]),
+  );
   const priyan = pickerRow("priyan");
   assert.equal(
     priyan.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
@@ -3817,10 +3828,12 @@ test("the label picker lists the repository's labels, those on the pull request 
 
   act(() => picker.click());
   await settle();
-  assert.deepEqual(pickerRows(), [
-    { label: "bug", checked: true },
-    { label: "docs", checked: false },
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(pickerRows(), [
+      { label: "bug", checked: true },
+      { label: "docs", checked: false },
+    ]),
+  );
   await pickRow("bug");
   act(() => picker.click());
   await settle();
@@ -3936,9 +3949,11 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
     ).click(),
   );
   await settle();
-  const note =
-    document.querySelector<HTMLElement>(".ui-menu-note-row") ??
-    assert.fail("the picker says the repository could not be read in its list's place");
+  const note = await vi.waitFor(
+    () =>
+      document.querySelector<HTMLElement>(".ui-menu-note-row") ??
+      assert.fail("the picker says the repository could not be read in its list's place"),
+  );
   assert.deepEqual(pickerRows(), []);
   assert.match(note.textContent ?? "", /The repository could not be read\./u);
 
@@ -4372,7 +4387,7 @@ test("a pull request published as queued says Queued in the pill while its own r
     }),
   );
   await settle();
-  assert.equal(standing(tab), "Queued #2");
+  await vi.waitFor(() => assert.equal(standing(tab), "Queued #2"));
 });
 
 /** The title's field, opened by its pencil. */
@@ -6125,7 +6140,7 @@ test("with every file viewed, or none, the header counts the whole and hints not
     const tab = await draw(viewing(marked).control, PULL_REQUEST_VIEW.FILES);
     assert.equal(headerLines(tab), "+60 −7", `${marked.length} viewed`);
     assert.equal(tab.querySelector(".pull-request-lines")?.getAttribute("aria-owns"), null);
-    assert.equal(tabCount(tab, "Files changed"), files);
+    await vi.waitFor(() => assert.equal(tabCount(tab, "Files changed"), files));
     act(() => root?.unmount());
     root = undefined;
   }
@@ -6133,7 +6148,7 @@ test("with every file viewed, or none, the header counts the whole and hints not
 
 test("ticking the last file left counts the whole again, every file viewed", async () => {
   const tab = await draw(viewing(["a.ts", "b.ts"]).control, PULL_REQUEST_VIEW.FILES);
-  assert.equal(headerLines(tab), "+30 −0 left");
+  await vi.waitFor(() => assert.equal(headerLines(tab), "+30 −0 left"));
   act(() => viewedBoxOf("c.ts").click());
   await settle();
   assert.equal(headerLines(tab), "+60 −7");

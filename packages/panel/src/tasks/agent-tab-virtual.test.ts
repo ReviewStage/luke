@@ -627,5 +627,11 @@ test("the log draws while the agent's pull request is still read, and its dock l
       changedFiles: 1,
     },
   });
-  assert.ok(container.querySelector(".agent-published-dock"), "the dock lands over the box");
+  await vi.waitFor(() =>
+    assert.equal(
+      container.querySelector(".agent-published-dock") !== null,
+      true,
+      "the dock lands over the box",
+    ),
+  );
 });

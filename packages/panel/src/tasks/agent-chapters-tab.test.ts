@@ -576,7 +576,9 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
       .map((name) => name.replace(/[\d+−\s].*$/u, "")),
     ["Conversation", "Checks", "Chapters", "Files"],
   );
-  act(() => button(tab, "Generate chapters (Haiku 5.5)").click());
+  // Note that the button stands once the chapters' read, asked after the pull request's own, reaches its query.
+  const generate = await vi.waitFor(() => button(tab, "Generate chapters (Haiku 5.5)"));
+  act(() => generate.click());
   await settle();
   assert.match(tab.textContent ?? "", /Generating chapters/u);
 
@@ -867,12 +869,13 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   assert.match(elsewhere.textContent ?? "", /Generating chapters/u);
   // Another member's generation lands: the host's live read of the chapters moves, with no press here.
   act(() => moveChapters(answering(ready())));
-  await settle();
-  assert.deepEqual(railRows(elsewhere), [
-    "1. Read the expiry, High risk",
-    "2. Sweep what expired, Low risk",
-    "3. Other changes",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(railRows(elsewhere), [
+      "1. Read the expiry, High risk",
+      "2. Sweep what expired, Low risk",
+      "3. Other changes",
+    ]),
+  );
   act(() => root?.unmount());
 
   const unavailable = await draw(

@@ -398,6 +398,12 @@ async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   return lastDrawn();
 }
 
+/** Draws the tab as `drawTab` does, then waits for the member's marks to be read, which reach the view a notify tick after their read answers. */
+async function drawMarked(options: DrawOptions = {}): Promise<void> {
+  await drawTab(options);
+  await vi.waitFor(() => viewedBox(files[0]?.path ?? assert.fail("a file is changed")));
+}
+
 function lastDrawn(): DiffListProps {
   return drawn.at(-1) ?? assert.fail("the files are drawn");
 }
@@ -731,7 +737,7 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
     changed("b.ts", { status: CHANGED_FILE_STATUS.DELETED }),
   ];
   const { tree } = heldTree(false);
-  await drawTab({ tree });
+  await drawMarked({ tree });
 
   const strip =
     document.querySelector<HTMLElement>(".file-tree-strip .ui-mark-strip") ??
@@ -912,7 +918,7 @@ test("every key of Files changed's table answers inside the view", async () => {
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
-  await drawTab();
+  await drawMarked();
 
   const unanswered = FILES_CHANGED_KEYS.filter((key) => {
     // Each key is pressed with a file stood on, which Escape needs.
@@ -1626,7 +1632,7 @@ function viewedBox(path: string): HTMLInputElement {
 test("the member's viewed marks tick their files and fold them; a file changed since reads not viewed", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   assert.deepEqual(
     ["a.ts", "b.ts", "c.ts"].map((path) => viewedBox(path).checked),
@@ -1648,7 +1654,7 @@ test("ticking a file's box marks it viewed on GitHub at once and folds it; one G
       : { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
   );
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   await flush();
@@ -1691,7 +1697,7 @@ test("a box ticks the moment it is pressed, and unticks where GitHub refuses the
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   await flush();
@@ -1709,7 +1715,7 @@ test("V marks the file the keys stand on viewed and steps on to the next, and is
   assert.equal(press(listBox(), { key: "v" }), false, "with no marks read V is not the list's");
 
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
-  await drawTab();
+  await drawMarked();
   press(listBox(), { key: "j" });
   press(listBox(), { key: "v" });
   await flush();
@@ -1735,7 +1741,7 @@ test("each tree row is handed its file's lines, how many review threads stand on
     ],
     draw: () => null,
   };
-  await drawTab({ threads, treeOpen: true });
+  await drawMarked({ threads, treeOpen: true });
 
   const marks = lastMarks();
   assert.deepEqual(
@@ -1755,7 +1761,7 @@ test("a tree row's Viewed toggle marks its file viewed on GitHub as its header's
   viewedAnswer = MARKED;
   const asked = answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
-  await drawTab({ treeOpen: true });
+  await drawMarked({ treeOpen: true });
 
   const onViewed = treeProps.at(-1)?.onViewed ?? assert.fail("the tree is handed a Viewed door");
   act(() => onViewed("c.ts"));
@@ -1778,6 +1784,12 @@ test("a member with no GitHub sign-in is offered one, and no Viewed box stands u
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
   files = [changed("a.ts")];
   await drawTab();
+  await vi.waitFor(() =>
+    assert.match(
+      document.querySelector('[role="alert"]')?.textContent ?? "",
+      /Sign in with GitHub/u,
+    ),
+  );
 
   assert.equal(header("a.ts").querySelector(".diff-list-viewed") === null, true);
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Sign in with GitHub/u);
@@ -1786,7 +1798,7 @@ test("a member with no GitHub sign-in is offered one, and no Viewed box stands u
 test("the marks are read again with the files on a Refresh, so the two describe the same push", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts")];
-  await drawTab();
+  await drawMarked();
   assert.equal(viewedReads, 1);
 
   await refreshAsTheTab();
@@ -1823,7 +1835,7 @@ test("presses on one file go to GitHub one at a time, the last of them winning, 
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
@@ -1849,7 +1861,7 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   // A refresh's read stays out while the member marks the file and GitHub takes it.
   const reading = Promise.withResolvers<void>();
@@ -1879,7 +1891,7 @@ test("unmarking a deleted file opens it, and a press GitHub refuses puts back th
     refuse ? { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Locked." } : DONE,
   );
   files = [changed("old.ts", { status: CHANGED_FILE_STATUS.DELETED }), changed("new.ts")];
-  await drawTab();
+  await drawMarked();
   assert.deepEqual(folds()[1], ["old.ts", true]);
 
   act(() => viewedBox("old.ts").click());
@@ -1901,7 +1913,7 @@ test("a mark GitHub took stands where the press queued after it is refused, as G
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
@@ -1920,7 +1932,7 @@ test("a last press GitHub was never asked for is sent even where the press befor
   viewedAnswer = MARKED;
   const held = holdMarks();
   files = [changed("c.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("c.ts").click());
   act(() => viewedBox("c.ts").click());
@@ -1939,7 +1951,7 @@ test("a refused mark leaves a fold chosen since, as Collapse all chose it", asyn
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
   const held = holdMarks();
   files = [changed("a.ts"), changed("b.ts")];
-  await drawTab();
+  await drawMarked();
 
   act(() => viewedBox("a.ts").click());
   await flush();
