@@ -3928,12 +3928,12 @@ it.effect(
       assert.deepEqual(shown(), [KEPT_HOST]);
 
       const refusing = yield* Deferred.make<void>();
-      answerRemoves({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }, Deferred.await(refusing));
+      answerRemoves({ failure: AGENT_CALL_FAILURE.NOT_FOUND }, Deferred.await(refusing));
       const refused = yield* Effect.forkChild(acts.HOSTS_REMOVE({ id: KEPT_HOST }));
       yield* settled;
       assert.deepEqual(shown(), []);
       yield* Deferred.succeed(refusing, undefined);
-      assert.deepEqual(yield* Fiber.join(refused), { failure: AGENT_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(yield* Fiber.join(refused), { failure: AGENT_CALL_FAILURE.NOT_FOUND });
       yield* settled;
       assert.deepEqual(shown(), [KEPT_HOST], "put back once the service refused it");
     }),
