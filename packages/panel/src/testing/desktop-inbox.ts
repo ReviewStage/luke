@@ -904,6 +904,19 @@ export async function settle(): Promise<void> {
   await settleFrames();
 }
 
+/**
+ * Answers every image read the page asks for, as each is asked, until no
+ * picture on it is still being read, as the window's queries ask for an
+ * image a tick after its place is drawn and draw its answer a tick after it lands.
+ */
+export async function landImageReads(page: HTMLElement): Promise<void> {
+  await vi.waitFor(() => {
+    for (const land of world.imageReads.splice(0)) act(() => land());
+    assert.equal(page.querySelector('.picture-block[data-state="reading"]') === null, true);
+  });
+  await settle();
+}
+
 /** A row's title, as its ListRow draws it. */
 export const ROW_TITLE = ".ui-list-row-title";
 
