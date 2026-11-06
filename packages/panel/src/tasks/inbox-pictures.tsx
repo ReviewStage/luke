@@ -2,7 +2,7 @@ import type { FileChip } from "@repo/features/attachment-model";
 import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { cssCustomProperties, joinRefs, useNearView } from "@repo/ui";
-import { PICTURE_STATE } from "@repo/ui/picture-cache";
+import { PICTURE_STATE } from "@repo/ui/picture-read";
 import {
   createContext,
   type ReactNode,

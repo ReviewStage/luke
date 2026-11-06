@@ -4,20 +4,13 @@ import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { ProviderMark, SKELETON_SHAPE, Skeleton } from "@repo/ui";
 import { linksToPicture } from "@repo/ui/github-html";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@repo/ui/picture-cache";
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useReducer,
-  useState,
-} from "react";
+import { PICTURE_STATE, type PictureRead, usePicture } from "@repo/ui/picture-read";
+import { useQueries } from "@tanstack/react-query";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
+import { type PictureReader, pictureQuery } from "../picture-query.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 import { type GitHubPictureDrawer, GitHubPictureLink } from "./transcript-blocks.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -28,7 +21,7 @@ import { useOpenLink } from "./use-open-link.js";
  * GitHub's rendering (`body_html`) names each picture by an address the
  * window may not read itself, so each is read once through the service on
  * the App's token as the agent's (`githubImageOf`) and kept in the window's
- * picture cache (`@repo/ui/picture-cache`). A picture standing alone is
+ * picture cache (`@repo/ui/picture-read`). A picture standing alone is
  * drawn as a description's picture is (`../picture-block.tsx`), its press
  * (Enlarge) opening the window's file viewer (`attachment-viewer.tsx`)
  * over the description or comment it stands in, walking that entry's
@@ -56,16 +49,15 @@ interface EntryPicture {
   readonly alt: string;
 }
 
-/** How a picture drawn in an entry's words opens that entry's viewer, and says its read landed. */
+/** How a picture drawn in an entry's words opens that entry's viewer. */
 interface EntryViewerDoor {
   readonly open: (agentId: string, src: string) => void;
-  readonly landed: () => void;
 }
 
 const EntryViewerContext = createContext<EntryViewerDoor | undefined>(undefined);
 
 /** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
-export function useGitHubImageRead(): (owner: string, address: string) => Promise<PictureAnswer> {
+export function useGitHubImageRead(): PictureReader {
   const { act } = useAct();
   return useCallback(
     (owner: string, address: string) =>
@@ -124,14 +116,14 @@ function mediaTypeOf(url: string): string {
   return /^data:([^;,]+)/u.exec(url)?.[1] ?? "application/octet-stream";
 }
 
-/** An entry's pictures the window holds now, as the viewer takes files, each beside its address. */
+/** An entry's pictures that landed, each read as `reads` answers it at its place, as the viewer takes files, each beside its address. */
 function heldFiles(
-  agentId: string,
   pictures: readonly EntryPicture[],
+  reads: readonly (PictureRead | undefined)[],
 ): readonly { readonly src: string; readonly original: string; readonly file: FileChip }[] {
-  return pictures.flatMap(({ src, original, alt }) => {
-    const state = pictureNow(agentId, src);
-    if (state.kind !== PICTURE_STATE.READY) return [];
+  return pictures.flatMap(({ src, original, alt }, index) => {
+    const state = reads[index];
+    if (state?.kind !== PICTURE_STATE.READY) return [];
     const mediaType = mediaTypeOf(state.url);
     const file = { name: viewerName(alt, mediaType), mediaType, url: state.url };
     return [{ src, original, file }];
@@ -153,7 +145,13 @@ function EntryViewer({
   onClose: () => void;
 }): ReactNode {
   const openLink = useOpenLink();
-  const files = heldFiles(agentId, pictures);
+  const read = useGitHubImageRead();
+  // Note that every picture of the entry is watched, so one still being read joins the walk as it lands.
+  const reads = useQueries({
+    queries: pictures.map(({ src }) => pictureQuery(agentId, src, read)),
+    combine: (results) => results.map((result) => result.data),
+  });
+  const files = heldFiles(pictures, reads);
   const at = files.findIndex((each) => each.src === src);
   const action: ViewerAction = {
     label: PICTURE_WORDS.OPEN_ON_GITHUB,
@@ -190,9 +188,8 @@ export function EntryPictures({
 }): React.JSX.Element {
   const pictures = useMemo(() => picturesOf(html), [html]);
   const [viewing, setViewing] = useState<{ readonly agentId: string; readonly src: string }>();
-  const [, redraw] = useReducer((count: number) => count + 1, 0);
   const door = useMemo<EntryViewerDoor>(
-    () => ({ open: (agentId, src) => setViewing({ agentId, src }), landed: redraw }),
+    () => ({ open: (agentId, src) => setViewing({ agentId, src }) }),
     [],
   );
   return (
@@ -228,10 +225,8 @@ function GitHubPicture({
   alt: string;
   linked: boolean;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
+  const state = usePicture(pictureQuery(agentId, src, useGitHubImageRead()), pictureUnread);
   const door = useContext(EntryViewerContext);
-  // Note that a picture landing tells the entry, so a viewer already open walks it too.
-  useEffect(() => door?.landed(), [door, state.kind]);
   // Note that a linked picture whose read did not land is its link too, because it stands inside a link, where no Retry may stand.
   if (state.kind === PICTURE_STATE.MISSING || (linked && state.kind === PICTURE_STATE.FAILED)) {
     return <GitHubPictureLink src={src} alt={alt} />;

@@ -10,12 +10,13 @@ import {
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
-import { keepPictureRead, PICTURE_STATE, pictureNow } from "@repo/ui/picture-cache";
+import { PICTURE_STATE } from "@repo/ui/picture-read";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { keepPictureRead, pictureNow, pictureQuery } from "../picture-query.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import type { AgentPictureDoor } from "./agent-pictures.js";
 import type { HeldComposer } from "./use-agent-composer.js";
@@ -80,6 +81,7 @@ function messageOf(change: AgentQueueChange): string | undefined {
  * the box held rather than reading them back.
  */
 function keepLandedFiles(
+  client: QueryClient,
   owner: string,
   queue: AgentQueue,
   messageId: string,
@@ -89,8 +91,8 @@ function keepLandedFiles(
   for (const [index, file] of (landed?.files ?? []).entries()) {
     const held = attachments[index];
     if (file.id === undefined || held === undefined) continue;
-    if (pictureNow(owner, file.id).kind !== PICTURE_STATE.READY) {
-      keepPictureRead(owner, file.id, fileUrl(held));
+    if (pictureNow(client, owner, file.id).kind !== PICTURE_STATE.READY) {
+      keepPictureRead(client, owner, file.id, fileUrl(held));
     }
   }
 }
@@ -115,6 +117,7 @@ export interface AgentQueueControl {
 
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
   const { mutateAsync: sendQueue } = useMutation(actMutation(ACT_KIND.AGENTS_QUEUE));
+  const queryClient = useQueryClient();
   const toast = useToast();
   const messages = queue?.messages ?? NO_MESSAGES;
   const listed = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
@@ -123,7 +126,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
     const messageId = messageOf(next);
     const drawnAs = files.map((file) => {
       const id = crypto.randomUUID();
-      keepPictureRead(agentId, id, fileUrl(file));
+      keepPictureRead(queryClient, agentId, id, fileUrl(file));
       return id;
     });
     const params = {
@@ -138,7 +141,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
       .then((answer) => {
         // Note that the files are kept under the service's ids as it answers, ahead of the page that carries its queue.
         if ("queue" in answer && messageId !== undefined && files.length > 0) {
-          keepLandedFiles(agentId, answer.queue, messageId, files);
+          keepLandedFiles(queryClient, agentId, answer.queue, messageId, files);
         }
         const words = REFUSED_WORDS[next.change];
         if (!("failure" in answer) || words === undefined) return answer;
@@ -179,6 +182,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
 
 /** A queued message's files whole, read through the agent's pictures by the ids the queue names them under; none where any did not read. */
 function readQueuedFiles(
+  client: QueryClient,
   message: QueuedMessage,
   door: AgentPictureDoor,
 ): Promise<readonly AgentAttachment[] | undefined> {
@@ -186,18 +190,14 @@ function readQueuedFiles(
   return Promise.all(
     files.map(({ name, mediaType, id }) => {
       if (id === undefined) return undefined;
-      // Note that a file the window holds already, one of a message queued here, is taken as it stands.
-      const held = pictureNow(door.owner, id);
-      if (held.kind === PICTURE_STATE.READY) {
-        return { name, mediaType, data: held.url.slice(held.url.indexOf(",") + 1) };
-      }
-      return door
-        .read(door.owner, id)
-        .then((answer) =>
-          "base64" in answer
-            ? { name, mediaType: answer.contentType, data: answer.base64 }
+      // Note that a file the window holds already, one of a message queued here, is taken as it stands, since a picture's query never goes stale.
+      return client.fetchQuery(pictureQuery(door.owner, id, door.read)).then(
+        (read) =>
+          read.kind === PICTURE_STATE.READY
+            ? { name, mediaType, data: read.url.slice(read.url.indexOf(",") + 1) }
             : undefined,
-        );
+        () => undefined,
+      );
     }),
   ).then((read) => Option.getOrUndefined(Schema.decodeUnknownOption(agentAttachmentsSchema)(read)));
 }
@@ -253,6 +253,7 @@ export function useQueueEditing(
   queue: Pick<AgentQueueControl, "change" | "listed">,
   files: AgentPictureDoor,
 ): QueueEditing {
+  const queryClient = useQueryClient();
   const [stashed, setStashed] = useState<Stashed | undefined>();
   const held = useRef<string | undefined>(undefined);
   held.current = stashed?.id;
@@ -343,7 +344,7 @@ export function useQueueEditing(
       if ((message.files ?? []).length === 0) return;
       // Its files join the box ahead of any taken on meanwhile, or, where they did not read, the edit closes.
       reading.current = message.id;
-      void readQueuedFiles(message, files).then((read) => {
+      void readQueuedFiles(queryClient, message, files).then((read) => {
         if (held.current !== message.id) return;
         reading.current = undefined;
         if (read === undefined) return cancelOf(stash);

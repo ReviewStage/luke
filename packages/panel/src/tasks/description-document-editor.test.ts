@@ -450,7 +450,9 @@ test("a press on a video in a section, on its frame, its scrubber, Play, Full sc
         assumptions: [],
       },
     });
-    await settle();
+    await vi.waitFor(() =>
+      assert.equal(container.querySelector(".picture-block[data-video] video") === null, false),
+    );
     const block = container.querySelector<HTMLElement>(".picture-block[data-video]");
     const video = block?.querySelector("video");
     const seek = block?.querySelector<HTMLElement>('[aria-label="Seek"]');

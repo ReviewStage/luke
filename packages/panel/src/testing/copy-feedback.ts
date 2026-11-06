@@ -86,6 +86,11 @@ export function onRegistry(
   return createElement(RegistryContext.Provider, { value: registry }, withQueryClient(element));
 }
 
+/** The test's own Query client, for a case that looks at or changes what it keeps from outside a component, as code outside one takes the client it is handed. */
+export function testQueryClientNow(): QueryClient {
+  return testQueryClient;
+}
+
 /**
  * Writes `document` into the test's Query client, as the docs' Testing guide
  * seeds a query with `setQueryData`: for a case that draws synchronously and
