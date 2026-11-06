@@ -26,9 +26,9 @@ import { HostsSection } from "./hosts-section.js";
 
 /**
  * hosts-section.test.ts -- Settings › Hosts, drawn from the hosts the host
- * holds: Add hosts shows the public install command and names each host
- * that joins while it stands, a host updating says so, and This Mac stands
- * first. Synthetic ids, codes, and addresses.
+ * holds: Add a host shows the public install command and names each host
+ * that joins while the page stands, a host updating says so, and This Mac
+ * stands first. Synthetic ids, codes, and addresses.
  */
 
 declare global {
@@ -136,68 +136,70 @@ function holdHosts(hostsOf: () => readonly HostLine[]): (signedInAs?: string) =>
   };
 }
 
-/** The open dialog's words, apart from the list behind it, which names a host's setup too. */
-function dialogText(): string {
-  return document.querySelector('[role="dialog"]')?.textContent ?? "";
+/** The page's words. */
+function pageText(): string {
+  return document.body.textContent ?? "";
 }
 
-test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away", async () => {
+test("Add a host shows the public install command, with no secret in it, and names no host the account had", async () => {
   handBeats({});
   holdHosts(() => [{ id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" }]);
   drawHosts();
   await settle();
 
-  await press("Add hosts");
-
-  assert.ok(dialogText().includes(`curl -fsSL ${SCRIPT} | sh`), "the command is the public one");
-  assert.ok(!/lkh_|--token|sudo/u.test(dialogText()), "the command carries no secret");
-  assert.ok(dialogText().includes("Waiting for approval"));
-  assert.ok(!dialogText().includes("fra-03"), "a host the account had already is not named");
-  await press("Close");
-  assert.equal(document.querySelector('[role="dialog"]'), null, "Close puts the dialog away");
+  assert.ok(pageText().includes(`curl -fsSL ${SCRIPT} | sh`), "the command is the public one");
+  assert.ok(!/lkh_|--token|sudo/u.test(pageText()), "the command carries no secret");
+  assert.ok(!pageText().includes("is connected."), "a host the account had already is not named");
 });
 
-test("the dialog names a host that joins while it stands, as the host lays it", async () => {
+test("a host that joins while the page stands is said to be connected, and reads Setting up… until its first beat", async () => {
   const hosts: HostLine[] = [];
   handBeats({});
   const lay = holdHosts(() => [...hosts]);
   drawHosts();
   await settle();
-  await press("Add hosts");
 
   hosts.push({ id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "hel-02" });
   act(lay);
   await settle();
-  const approved = dialogText();
 
-  assert.ok(approved.includes("hel-02"), approved);
-  assert.ok(!approved.includes("Waiting for approval"));
+  assert.ok(pageText().includes("hel-02 is connected."), pageText());
+  assert.ok(pageText().includes("hel-02Setting up… · Linux server"), pageText());
 });
 
-test("Add hosts does not outlive the account it opened for", async () => {
+test("a sign-in to another account names none of its hosts as just connected", async () => {
   handBeats({});
   const lay = holdHosts(() => [{ id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" }]);
   drawHosts();
   await settle();
-  await press("Add hosts");
-  assert.ok(dialogText().includes("Waiting for approval"));
 
   act(() => lay("user-elsewhere"));
   await settle();
 
-  assert.equal(dialogText(), "", "the next account's hosts are not named as joined");
+  assert.ok(
+    !pageText().includes("is connected."),
+    "the next account's hosts are not named as joined",
+  );
 });
 
-/** The button whose words are these, pressed. */
-/** The Remove a host's row draws as its one act, found by the host's name on the row. */
-function removeOf(name: string): HTMLButtonElement {
-  return (
-    [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Remove"]')].find(
-      (button) => button.closest(".ui-settings-row")?.textContent?.includes(name) ?? false,
-    ) ?? assert.fail(`${name}'s Remove is drawn`)
-  );
+/** A host's Remove, chosen in the ⋯ of the row that names it. */
+function removeOf(name: string): void {
+  const row =
+    [...document.querySelectorAll<HTMLElement>(".ui-settings-row")].find(
+      (each) => each.textContent?.includes(name) ?? false,
+    ) ?? assert.fail(`${name}'s row is drawn`);
+  const ellipsis =
+    row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    assert.fail(`${name}'s ⋯ is drawn`);
+  act(() => ellipsis.click());
+  const item =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Remove",
+    ) ?? assert.fail(`${name}'s Remove is drawn`);
+  act(() => item.click());
 }
 
+/** The button whose words are these, pressed. */
 async function press(words: string): Promise<void> {
   const button = [...document.querySelectorAll("button")].find(
     (each) => each.textContent === words,
@@ -264,11 +266,12 @@ test("This Mac stands first on the row of the machine it is, its switch on, with
   assert.ok(text.indexOf("This Mac") < text.indexOf("fra-03"), "This Mac stands first");
   assert.ok(text.includes("Online · Mac"), text);
   assert.equal(thisMacSwitch().getAttribute("aria-checked"), "true");
+  const thisMacRow = [...document.querySelectorAll(".ui-settings-row")].find(
+    (row) => row.textContent?.includes("This Mac") ?? false,
+  );
   assert.equal(
-    [...document.querySelectorAll('button[aria-label="Remove"]')].some(
-      (button) => button.closest(".ui-settings-row")?.textContent?.includes("This Mac") ?? false,
-    ),
-    false,
+    thisMacRow?.querySelector('button[aria-haspopup="menu"]') ?? null,
+    null,
     "This Mac's row offers no Remove",
   );
 });
@@ -295,7 +298,7 @@ test("each host draws its Remove on its own row, which asks about that host firs
   ];
   await machinesWithThisMac(hosts, {});
 
-  act(() => removeOf("sfo-02").click());
+  removeOf("sfo-02");
 
   const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
   assert.ok(asked.includes("Remove sfo-02?"), asked);
@@ -319,7 +322,7 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
     },
   });
   await settle();
-  act(() => removeOf("sfo-02").click());
+  removeOf("sfo-02");
 
   await press("Remove host");
 
@@ -331,7 +334,7 @@ test("a host the service still lists for this Mac while it is off stands as any 
   await machinesWithThisMac(SERVER_AND_THIS_MAC, { machineId: MACHINE_ID });
 
   assert.equal(thisMacSwitch().getAttribute("aria-checked"), "false");
-  act(() => removeOf("Studio").click());
+  removeOf("Studio");
   const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
   assert.ok(asked.includes("Remove Studio?"), asked);
 });
