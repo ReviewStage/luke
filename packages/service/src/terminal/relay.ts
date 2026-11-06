@@ -162,17 +162,19 @@ const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema
 const readResize = readEither(terminalRelayResizeSchema);
 const readPtyExit = readEither(PtyExitSchema);
 
-/** The lease moved on from now, and again every write interval for as long as the connection stands. */
-function holdWhileConnected(deps: RelayDependencies, agent: RelayAgent): Effect.Effect<void> {
+/** The lease moved on now, before the shell attaches, and again every write interval for as long as the connection's scope stands. */
+function holdWhileConnected(
+  deps: RelayDependencies,
+  agent: RelayAgent,
+): Effect.Effect<void, never, Scope.Scope> {
   const hold = Effect.flatMap(DateTime.nowAsDate, (at) =>
     deps.hold(
       agent.conversationId,
       new Date(at.getTime() + Duration.toMillis(TERMINAL_RELAY_BOUNDS.LEASE_REACH)),
     ),
   );
-  return Effect.asVoid(
-    Effect.repeat(hold, { schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY) }),
-  );
+  const renewed = Effect.schedule(hold, Schedule.spaced(TERMINAL_RELAY_BOUNDS.LEASE_WRITE_EVERY));
+  return Effect.andThen(hold, Effect.asVoid(Effect.forkScoped(renewed)));
 }
 
 /** The credential set at the firewall; a set that failed is logged, and the next check tries again. */
@@ -329,7 +331,7 @@ export function relayTerminal(
       );
     }
     // An attached terminal is the developer using the sandbox: it is held and kept alive from the attach for as long as the connection stands.
-    yield* Effect.forkScoped(holdWhileConnected(deps, agent));
+    yield* holdWhileConnected(deps, agent);
     const { sessionId } = agent;
     yield* Effect.forkScoped(
       Effect.repeat(deps.keepAlive(sessionId), {
