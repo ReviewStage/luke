@@ -44,6 +44,7 @@ import {
   opensMenu,
   PanePin,
   PinIcon,
+  PLAIN_PRESS,
   ProviderMark,
   RESIZE_EDGE_SIDE,
   RepositoryName,
@@ -2337,6 +2338,7 @@ function SidebarColumn({
                   selection={{ selected: selection.selected, onChange: selection.onChange }}
                   order={[chooseOrder]}
                   bringIn={runs.bringIn}
+                  plain={PLAIN_PRESS.CLEARS}
                 >
                   <div
                     {...roving}
