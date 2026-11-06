@@ -5,7 +5,7 @@ import {
 } from "@repo/features/host-pairing-view";
 import { type HostPairingAnswer, shownHostUserCode } from "@repo/features/host-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { momentText } from "@repo/features/time-format";
+import { clockText, momentText } from "@repo/features/time-format";
 import { readFailedWords, readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -124,6 +124,12 @@ function boxFacts(box: HostPairingAnswer): string {
   );
 }
 
+/** When the code lapses, as a time of day, since a pairing lasts minutes. */
+function expiresAt(at: number): string {
+  const moment = new Date(at);
+  return clockText(moment.getHours(), moment.getMinutes());
+}
+
 /** What a code that cannot be approved says: why, and what to do next. */
 function refusalWords(refusal: HostPairingFailed): { title: string; body: string } {
   if (refusal.failure !== HOST_PAIRING_CALL_FAILURE.HELD) {
@@ -155,7 +161,7 @@ export function useHostConnect(): readonly [string | undefined, () => void] {
   return [code, close];
 }
 
-/** The question: whose box, the code to hold against its terminal and until when it works, and Deny and Connect, Connect's check standing once the host is made. */
+/** The question: whose box, the code to hold against its terminal and when it expires, and Deny and Connect, Connect's check standing once the host is made. */
 function AskDialog({
   code,
   box,
@@ -225,7 +231,7 @@ function AskDialog({
           <ReplayMask>{shownHostUserCode(code)}</ReplayMask>
         </Text>
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {`It works until ${momentText(box.expiresAt)}.`}
+          {`This code expires at ${expiresAt(box.expiresAt)}.`}
         </Text>
         <ErrorLine
           level={ANNOUNCE.ALERT}
