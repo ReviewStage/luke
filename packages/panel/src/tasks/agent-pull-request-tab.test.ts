@@ -885,6 +885,10 @@ test("a picture GitHub linked to itself opens over the window rather than in the
   await settle();
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  // Note that a picture is drawn once its query hands its read to React, a tick after it lands.
+  await vi.waitFor(() =>
+    assert.equal(description.querySelector('img[alt="before and after"]') === null, false),
+  );
   assert.equal(
     description.querySelector('img[alt="before and after"]')?.closest("a"),
     null,
@@ -943,6 +947,9 @@ test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to,
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
   assert.equal(description.querySelector('[aria-label="Enlarge Overview"]'), null);
+  await vi.waitFor(() =>
+    assert.equal(description.querySelector('[aria-label="Enlarge upload"]') === null, false),
+  );
   act(() =>
     (
       description.querySelector<HTMLButtonElement>('[aria-label="Enlarge upload"]') ??

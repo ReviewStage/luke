@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { AgentPicturesProvider } from "./agent-pictures.js";
@@ -157,6 +157,8 @@ test("a queued image is drawn on its row as a sent message's is, its thumbnail r
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 
-  assert.deepEqual(dock.images(0), [`data:${AGENT_ATTACHMENT_TYPE.PNG};base64,${SHOT.base64}`]);
+  await vi.waitFor(() =>
+    assert.deepEqual(dock.images(0), [`data:${AGENT_ATTACHMENT_TYPE.PNG};base64,${SHOT.base64}`]),
+  );
   assert.ok(dock.filesReached(0), "a reader reaches the files, which open as a sent message's do");
 });
