@@ -17,7 +17,7 @@ import {
   type Updater,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type MouseEvent, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import {
   Table,
@@ -30,9 +30,10 @@ import {
 import { SORT_DIRECTION } from "../../sort-direction.js";
 import { CARD_PADDING, Card } from "../card/card.js";
 import { Inline, JUSTIFY } from "../layout/layout.js";
-import { usePageScroller } from "../page-frame/page-scroller.js";
+import { usePageScroll } from "../page-frame/page-scroll.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { sizeWhileShown } from "../virtual-rows/virtual-rows.js";
 
 /**
  * data-table.tsx -- rows of records under headings that line up their columns, sorted by TanStack Table, in a flush Card that scrolls sideways on its own.
@@ -63,7 +64,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * absolutely, so the rows drawn stand in the table's own flow between a
  * spacer row above them and one below, each as tall as the rows it stands
  * for, and the columns keep the widths their words give them. The scroller
- * is the page's (`usePageScroller`), the body counted from where it stands
+ * is the page's (`usePageScroll`), the body counted from where it stands
  * in it (`scrollMargin`), and each row drawn is measured, so a row taller
  * than the rest is placed by what it measured. Since the rows left undrawn
  * are not there to be counted, the table tells a reader how many rows it
@@ -420,36 +421,45 @@ function DataTableBody<Row extends RowData>({
   onRowPress: ((row: Row) => void) | undefined;
   rowPressable: ((row: Row) => boolean) | undefined;
 }): React.JSX.Element {
-  const scroller = usePageScroller();
+  const { scroller, shiftedBy } = usePageScroll();
   const body = useRef<HTMLTableSectionElement>(null);
   const [margin, setMargin] = useState(0);
+  const [, setFound] = useState(0);
   const virtualizer = useVirtualizer<HTMLElement, HTMLTableRowElement>({
     count: rows.length,
-    getScrollElement: scroller,
+    getScrollElement: () => scroller.current,
     estimateSize: () => ROW_ESTIMATE_PX,
     getItemKey: (index) => rows[index]?.id ?? index,
     overscan: ROW_OVERSCAN,
     scrollMargin: margin,
     // Note that the view is taken to be the window's before the scroller is measured, which no view of it outgrows, so a table outside any page, as the catalog draws one, still draws a window's rows.
     initialRect: { width: window.innerWidth, height: window.innerHeight },
+    // Note that a scroller in a tab kept but not shown measures no size, and the rows drawn there stay drawn (`sizeWhileShown`).
+    observeElementRect: sizeWhileShown,
   });
-  // The body stands below whatever the page draws above it in the scroller, read again as the scroller or what it holds is sized anew.
-  useLayoutEffect(() => {
-    const box = scroller();
+  // The body stands below whatever the page draws above it in the scroller, read again as the scroller or the page's content is sized anew.
+  // Note that the body draws again as it first finds the scroller, because the page sets it only after the body's own layout effects, and the virtualizer takes it as it draws.
+  useEffect(() => {
     const element = body.current;
-    if (box === null || element === null) return;
+    const found = scroller.current;
+    if (element === null || found === null) return;
     const read = () => {
+      const box = scroller.current;
+      if (box === null) return;
       const at = Math.round(
         element.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop,
       );
       setMargin((was) => (was === at ? was : at));
     };
     read();
+    setFound((count) => count + 1);
+    // Note that a runtime with no ResizeObserver, as jsdom is, keeps the place read once, as the virtualizer keeps each row's size there.
+    if (typeof ResizeObserver === "undefined") return;
     const heard = new ResizeObserver(read);
-    heard.observe(box);
-    for (const child of box.children) heard.observe(child);
+    heard.observe(found);
+    if (shiftedBy.current !== null) heard.observe(shiftedBy.current);
     return () => heard.disconnect();
-  }, [scroller]);
+  }, [scroller, shiftedBy]);
   const items = virtualizer.getVirtualItems();
   const first = items[0];
   const last = items.at(-1);

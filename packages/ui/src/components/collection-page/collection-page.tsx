@@ -1,11 +1,11 @@
-import { type ReactNode, type Ref, useCallback, useId, useRef } from "react";
+import { type ReactNode, type Ref, useCallback, useId, useRef, useState } from "react";
 import {
   PAGE_FRAME,
   PAGE_WIDTH,
   type PageHeading,
   type PageWidth,
 } from "../page-frame/page-frame.js";
-import { PageScrollerContext } from "../page-frame/page-scroller.js";
+import { type PageScroll, PageScrollContext } from "../page-frame/page-scroll.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
@@ -170,7 +170,7 @@ export function CollectionPage({
   scrollRef?: Ref<HTMLDivElement>;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
-  // The one scroller, held for what the content draws only in view (`PageScrollerContext`) and handed on to the caller's own ref.
+  // The one scroller, held for what the content draws only in view (`PageScrollContext`) and handed on to the caller's own ref.
   const scroll = useRef<HTMLDivElement | null>(null);
   const holdScroll = useCallback(
     (element: HTMLDivElement | null) => {
@@ -180,7 +180,8 @@ export function CollectionPage({
     },
     [scrollRef],
   );
-  const scroller = useCallback(() => scroll.current, []);
+  const content = useRef<HTMLDivElement>(null);
+  const [pageScroll] = useState((): PageScroll => ({ scroller: scroll, shiftedBy: content }));
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
   const width = heading.width ?? PAGE_WIDTH.MEASURE;
   const sized = WIDTH_CLASS[width];
@@ -228,6 +229,7 @@ export function CollectionPage({
         ref={holdScroll}
       >
         <div
+          ref={content}
           className={`ui-collection-page-content ${COLUMN_CLASS} ${sized.measure} flex flex-col ${sized.content} ${toolbarGap}`}
         >
           {state === COLLECTION_STATE.LOADING ? (
@@ -240,7 +242,7 @@ export function CollectionPage({
             <div className={`ui-collection-page-notice ${NOTICE_CLASS}`}>{error}</div>
           ) : null}
           {state === COLLECTION_STATE.READY ? (
-            <PageScrollerContext value={scroller}>{children}</PageScrollerContext>
+            <PageScrollContext value={pageScroll}>{children}</PageScrollContext>
           ) : null}
         </div>
       </div>

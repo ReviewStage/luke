@@ -1,6 +1,6 @@
-import { type ReactNode, useCallback, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-frame.js";
-import { PageScrollerContext } from "../page-frame/page-scroller.js";
+import { type PageScroll, PageScrollContext } from "../page-frame/page-scroll.js";
 import { useHeadingAway } from "../page-header/heading-away.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
@@ -75,12 +75,6 @@ const COLUMN_CLASS =
 /** A column's content, ending on the page's inset or clear of a phone's call card, whichever is more, a long word broken rather than run past the column. */
 const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";
 
-/** The element scrolling `column`: the column itself where it scrolls on its own, else the body scrolling both columns as one. */
-function scrollerOf(column: HTMLElement | null, body: HTMLElement | null): HTMLElement | null {
-  if (column === null) return body;
-  return getComputedStyle(column).overflowY === "visible" ? body : column;
-}
-
 /** What stands beside the main content: facts about the thing, its people, its history. */
 export type DetailSecondary = {
   /** What the column is, said to a reader as the landmark's name. */
@@ -116,9 +110,11 @@ export function DetailPage({
   const named = useHeadingAway(body, header);
   const main = useRef<HTMLDivElement>(null);
   const side = useRef<HTMLElement>(null);
-  // Note that each column scrolls on its own in a wide pane, but the body scrolls both as one in a narrow one, where a column lets its overflow show.
-  const mainScroller = useCallback(() => scrollerOf(main.current, body.current), []);
-  const sideScroller = useCallback(() => scrollerOf(side.current, body.current), []);
+  const mainContent = useRef<HTMLDivElement>(null);
+  const sideContent = useRef<HTMLDivElement>(null);
+  // Note that each column is the scroller its content is handed, which it is wherever it scrolls on its own; in a pane too narrow for two, where the body scrolls both, a column lets all its rows show.
+  const [mainScroll] = useState((): PageScroll => ({ scroller: main, shiftedBy: mainContent }));
+  const [sideScroll] = useState((): PageScroll => ({ scroller: side, shiftedBy: sideContent }));
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
   const barOutside = !underToolbar && onPickUp !== undefined;
   // Note that the caller hears the name when it or its visibility changes, because its bar stands outside this page and cannot read the header itself.
@@ -155,8 +151,8 @@ export function DetailPage({
               />
             </div>
           )}
-          <div className={`ui-detail-page-content ${CONTENT_CLASS}`}>
-            <PageScrollerContext value={mainScroller}>{children}</PageScrollerContext>
+          <div ref={mainContent} className={`ui-detail-page-content ${CONTENT_CLASS}`}>
+            <PageScrollContext value={mainScroll}>{children}</PageScrollContext>
           </div>
         </div>
         {secondary === undefined ? null : (
@@ -167,8 +163,8 @@ export function DetailPage({
             // biome-ignore lint/a11y/noNoninteractiveTabindex: it scrolls on its own, as the main column does.
             tabIndex={0}
           >
-            <div className={`ui-detail-page-content ${CONTENT_CLASS}`}>
-              <PageScrollerContext value={sideScroller}>{secondary.content}</PageScrollerContext>
+            <div ref={sideContent} className={`ui-detail-page-content ${CONTENT_CLASS}`}>
+              <PageScrollContext value={sideScroll}>{secondary.content}</PageScrollContext>
             </div>
           </aside>
         )}
