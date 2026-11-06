@@ -93,9 +93,12 @@ const LEADING_SITE_NAME = /^Vespin\s*[:|\-–—]\s*/u;
  */
 export function cardProblems(page: string, html: string): readonly string[] {
   const tags = metaOf(html);
-  const title = tags.get("og:title");
-  if (title === undefined) return [];
+  // Note that a page with no card at all is left alone, but one that kept the rest of its card is read.
+  if (![...tags.keys()].some((key) => key.startsWith("og:") || key.startsWith("twitter:")))
+    return [];
+  const title = tags.get("og:title") ?? "";
   const problems: string[] = [];
+  if (title === "") problems.push(`${page}: carries no og:title`);
   if (tags.get("twitter:card") !== "summary_large_image")
     problems.push(`${page}: twitter:card is not summary_large_image`);
   // Note that a card missing both images, or naming both empty, would pass the twins' check below.

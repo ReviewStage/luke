@@ -54,10 +54,15 @@ test("a release shares its own screenshot, at its own size, in place of the site
     "https://vespin.dev/changelog/0.12.0/the-call-tab.png",
   );
   assert.equal(metaContent(html, "og:image:alt"), "The Call tab over the whole window.");
+  assert.equal(metaContent(html, "twitter:image:alt"), "The Call tab over the whole window.");
   assert.equal(metaContent(html, "og:image:width"), "2400");
   assert.equal(metaContent(html, "og:image:height"), "1591");
   assert.equal(
     metaContent(html, "description"),
+    "Calls read as one thread, &quot;quoted&quot; &amp; &lt;kept&gt;.",
+  );
+  assert.equal(
+    metaContent(html, "twitter:description"),
     "Calls read as one thread, &quot;quoted&quot; &amp; &lt;kept&gt;.",
   );
 });
