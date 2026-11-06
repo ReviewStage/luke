@@ -42,6 +42,7 @@ import { mutationOptions, useMutation } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { sendAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -161,9 +162,13 @@ const TOKEN_REMOVE_MUTATION = mutationOptions({
 /** A saved token with Disconnect, which asks first, as every connection in Settings ends. */
 function SavedToken({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
   const removing = useMutation(TOKEN_REMOVE_MUTATION);
+  const removalAct = useConfirmAct(removing, {
+    send: () => removing.mutateAsync(),
+    answered: sameAnswer,
+  });
   const removal = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    () => removing.mutateAsync(),
+    removalAct,
     confirmFailure(FAILURE_SURFACE.GITHUB_TOKEN_REMOVE),
   );
   return (

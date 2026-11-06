@@ -68,6 +68,7 @@ import { mutationOptions, useIsMutating, useMutation, useQuery } from "@tanstack
 import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
 import { sendAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
@@ -604,9 +605,13 @@ function MemoryList({
   if (standing.size !== selected.size) setSelected(standing);
   const chosen = listed.filter((each) => standing.has(each.memory.id)).map((each) => each.memory);
   const forgettable = asked.filter((memory) => memory.forgettable);
+  const forgetConfirmAct = useConfirmAct(forgettingAll, {
+    send: () => forgettingAll.mutateAsync(forgettable.map((memory) => memory.id)),
+    answered: sameAnswer,
+  });
   const forgetConfirm = useConfirmDialog(
     { subject: asked.length > 0, surfaceOpen: true },
-    () => forgettingAll.mutateAsync(forgettable.map((memory) => memory.id)),
+    forgetConfirmAct,
     confirmFailure(FAILURE_SURFACE.MEMORY_FORGET),
   );
   const askForget = (memories: readonly MemorySummary[]) => {

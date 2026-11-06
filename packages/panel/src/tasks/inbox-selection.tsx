@@ -1,8 +1,8 @@
 import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { ConfirmDialog, type SelectionGlyphAct, STATUS_TONE, useConfirmDialog } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useRef, useState } from "react";
 import { firstRefusal, type Kept } from "../act.js";
 import { COMMAND_PLACE, commandWords, PANEL_COMMAND } from "../command-items.js";
@@ -90,7 +90,7 @@ export function useInboxSelection({
   const asked = unchanged ? resolving : [];
   const confirm = useConfirmDialog(
     { subject: asked.length > 0, surfaceOpen: shown },
-    () => {
+    neverBusyAct(() => {
       const closing = asked;
       if (onClose !== undefined) {
         void Promise.all(closing.map(({ item }) => onClose(item, { quiet: true }))).then(
@@ -108,8 +108,7 @@ export function useInboxSelection({
         );
       }
       onClear();
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
   );
 

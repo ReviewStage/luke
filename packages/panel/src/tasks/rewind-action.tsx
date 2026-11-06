@@ -6,8 +6,9 @@ import {
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { andList, countWords, type Noun } from "@repo/features/words";
 import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@repo/ui";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@repo/wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
 import { MessageAction } from "../ai-elements/message.js";
 import { confirmFailure } from "../failure-report.js";
@@ -239,10 +240,9 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
   // Note that the revert answers at once: the box takes it in turn behind any send, and says there if it did not go.
   const confirm = useConfirmDialog(
     { subject: lineId !== undefined, surfaceOpen: true },
-    () => {
+    neverBusyAct(() => {
       if (lineId !== undefined) doors?.onRevert(lineId);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.AGENT_REWIND),
   );
   if (doors === undefined || lineId === undefined) return null;

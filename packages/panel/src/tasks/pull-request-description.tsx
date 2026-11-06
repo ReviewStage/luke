@@ -12,14 +12,14 @@ import {
   EditableBlock,
   useConfirmDialog,
 } from "@repo/ui";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
+import { type DescriptionEditorPlacement, PLACEMENT_END } from "../description-editor/contract.js";
 import { confirmFailure } from "../failure-report.js";
-import { PLACEMENT_END, type DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import { clickPlacement, documentWordsAt } from "./description-document-editor.js";
+import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
 import {
   PullRequestWriteNote,
   type ReadAgain,
@@ -326,7 +326,7 @@ export function PullRequestDescription({
     note?.kind === WRITE_NOTE.WORDS && note.reason === PULL_REQUEST_REFUSAL.DESCRIPTION_CHANGED;
   const reload = useConfirmDialog(
     { subject: changed, surfaceOpen: editing.kind === EDITING.OPEN },
-    () => {
+    neverBusyAct(() => {
       if (editing.kind === EDITING.OPEN) {
         draft.current = undefined;
         dismiss();
@@ -340,8 +340,7 @@ export function PullRequestDescription({
           ),
         );
       }
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DESCRIPTION),
   );
   const read = drawn ?? (

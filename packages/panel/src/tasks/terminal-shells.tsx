@@ -41,6 +41,7 @@ import { useMutation } from "@tanstack/react-query";
 import type { ReactNode, RefObject } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { rowMenu } from "../desktop/action-menu.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { renameWrite } from "../rename-write.js";
@@ -225,9 +226,13 @@ function ShellRow({
   const coarse = useCoarsePointer();
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
+  const endingAct = useConfirmAct(killing, {
+    send: () => killing.mutateAsync(shell.id),
+    answered: sameAnswer,
+  });
   const ending = useConfirmDialog(
     { subject: true, surfaceOpen },
-    () => killing.mutateAsync(shell.id),
+    endingAct,
     confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
   );
   return (

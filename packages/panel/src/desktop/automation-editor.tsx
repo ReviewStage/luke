@@ -151,6 +151,7 @@ import {
   useMinute,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import { GLYPH } from "@repo/ui/icons";
 import { inputProblem, UNREPORTED } from "@repo/ui/reported-failure";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
@@ -171,6 +172,7 @@ import {
 import { ACTOR_SIZE, ActorMark, ActorRef, actorMarkWidth, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useScreenRef, useScreenSplit } from "../column-split.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
@@ -1719,22 +1721,25 @@ function WebhookRows({
   onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
   const minting = useMutation(WEBHOOK_SECRET_MUTATION);
-  const rotation = useConfirmDialog(
-    { subject: automation !== undefined, surfaceOpen: true },
-    () => {
-      if (automation === undefined) return Promise.resolve(ACCEPTED);
+  const rotationAct = useConfirmAct(minting, {
+    send: () => {
+      if (automation === undefined) return Promise.resolve();
       onSecret(undefined);
-      return minting.mutateAsync(automation.id).then((answer): ActionResult => {
-        if ("failure" in answer) {
-          return {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: NEW_SECRET_REFUSAL_WORDS[answer.failure],
-          };
-        }
-        onSecret(answer.webhookSecret);
-        return ACCEPTED;
+      return minting.mutateAsync(automation.id).then((answer) => {
+        if (!("failure" in answer)) onSecret(answer.webhookSecret);
       });
     },
+    answered: (answer): ActionResult =>
+      "failure" in answer
+        ? {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: NEW_SECRET_REFUSAL_WORDS[answer.failure],
+          }
+        : ACCEPTED,
+  });
+  const rotation = useConfirmDialog(
+    { subject: automation !== undefined, surfaceOpen: true },
+    rotationAct,
     confirmFailure(FAILURE_SURFACE.AUTOMATION_SECRET_ROTATE, { automationId: automation?.id }),
   );
   const url =
@@ -2773,10 +2778,7 @@ export function AutomationEditor({
   const [leavingBy, setLeavingBy] = useState<{ readonly leave: () => void } | undefined>(undefined);
   const leaving = useConfirmDialog(
     { subject: leavingBy !== undefined, surfaceOpen: true },
-    () => {
-      leavingBy?.leave();
-      return Promise.resolve(ACCEPTED);
-    },
+    neverBusyAct(() => leavingBy?.leave()),
     confirmFailure(FAILURE_SURFACE.AUTOMATION_LEAVE),
   );
   const askLeave = useRef<LeaveAsk>(() => undefined);
@@ -2793,21 +2795,21 @@ export function AutomationEditor({
       ? Promise.resolve<AutomationView>({ failure: AUTOMATION_CALL_FAILURE.NOT_FOUND })
       : writes.toggle(automation.id, enabled);
   const removing = useMutation(AUTOMATION_DELETE_MUTATION);
-  const deletion = useConfirmDialog(
-    { subject: automation !== undefined, surfaceOpen: true },
-    () => {
-      if (automation === undefined) return Promise.resolve(ACCEPTED);
-      return removing.mutateAsync(automation.id).then((answer): ActionResult => {
-        if ("failure" in answer) {
-          return {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: SAVE_REFUSAL_WORDS[answer.failure],
-          };
-        }
-        leaveGuard.pass(() => onDeleted(automation.id));
-        return ACCEPTED;
+  const deletionAct = useConfirmAct(removing, {
+    send: () => {
+      if (automation === undefined) return Promise.resolve();
+      return removing.mutateAsync(automation.id).then((answer) => {
+        if (!("failure" in answer)) leaveGuard.pass(() => onDeleted(automation.id));
       });
     },
+    answered: (answer): ActionResult =>
+      "failure" in answer
+        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: SAVE_REFUSAL_WORDS[answer.failure] }
+        : ACCEPTED,
+  });
+  const deletion = useConfirmDialog(
+    { subject: automation !== undefined, surfaceOpen: true },
+    deletionAct,
     confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: automation?.id }),
   );
   // A run with nothing of its own to open opens the setup, where whatever kept it from starting is mended:

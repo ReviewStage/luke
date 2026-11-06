@@ -33,7 +33,6 @@ import {
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
 } from "@repo/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Schema } from "effect";
 import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -432,15 +431,7 @@ export function MergeControl({
   const inQueue = (merging?.queued ?? null) !== null;
   const confirm = useConfirmDialog(
     { subject: asked && inQueue, surfaceOpen: shown },
-    () =>
-      writes
-        .write({ action: PULL_REQUEST_ACTION.DEQUEUE })
-        .then(
-          (outcome): ActionResult =>
-            outcome.done
-              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-        ),
+    writes.confirmAct({ action: PULL_REQUEST_ACTION.DEQUEUE }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DEQUEUE),
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.

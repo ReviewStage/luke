@@ -48,6 +48,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
@@ -276,17 +277,17 @@ function ClientRow({
   arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
-  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+  const { mutateAsync: sendMcpClientsRevoke, ...revoking } = useMutation(
     actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
   );
   const name = clientName(client);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
 
+  const refused: ActionResult = {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: `Revoking ${name} didn't finish. Try again.`,
+  };
   const revoke = (): Promise<ActionResult> => {
-    const refused: ActionResult = {
-      status: ACTION_RESULT_STATUS.REJECTED,
-      reason: `Revoking ${name} didn't finish. Try again.`,
-    };
     setRejection(undefined);
     return sendMcpClientsRevoke({ clientId: client.clientId }).then(
       (answer): ActionResult => {
@@ -303,9 +304,15 @@ function ClientRow({
       },
     );
   };
+  const confirmAct = useConfirmAct(revoking, {
+    send: revoke,
+    answered: (answer): ActionResult =>
+      "failure" in answer ? refused : { status: ACTION_RESULT_STATUS.ACCEPTED },
+    failed: () => refused,
+  });
   const confirm = useConfirmDialog(
     { subject: !revoked, surfaceOpen: true },
-    revoke,
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.MCP_CLIENT_REVOKE),
   );
 

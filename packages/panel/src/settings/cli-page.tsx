@@ -35,6 +35,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { actMutation } from "../act-mutations.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
@@ -203,7 +204,7 @@ function SignedInRow({
   grant: McpClient;
   onSignedOut: () => void;
 }): React.JSX.Element {
-  const { mutateAsync: sendMcpClientsRevoke } = useMutation(
+  const { mutateAsync: sendMcpClientsRevoke, ...revoking } = useMutation(
     actMutation(ACT_KIND.MCP_CLIENTS_REVOKE),
   );
   const [rejection, setRejection] = useState<string | undefined>(undefined);
@@ -228,9 +229,15 @@ function SignedInRow({
       },
     );
   };
+  const confirmAct = useConfirmAct(revoking, {
+    send: signOut,
+    answered: (answer): ActionResult =>
+      "failure" in answer ? refused : { status: ACTION_RESULT_STATUS.ACCEPTED },
+    failed: () => refused,
+  });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    signOut,
+    confirmAct,
     confirmFailure(FAILURE_SURFACE.MCP_CLIENT_REVOKE),
   );
   return (

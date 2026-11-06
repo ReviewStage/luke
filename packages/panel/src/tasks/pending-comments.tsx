@@ -15,7 +15,6 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import { confirmFailure } from "../failure-report.js";
@@ -181,15 +180,7 @@ export function PendingComment({
   const surfaceOpen = useContext(PendingSurfaceContext);
   const deleting = useConfirmDialog(
     { subject: true, surfaceOpen },
-    () =>
-      writes
-        .write({ action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: draft.id })
-        .then(
-          (outcome): ActionResult =>
-            outcome.done
-              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-        ),
+    writes.confirmAct({ action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: draft.id }),
     confirmFailure(FAILURE_SURFACE.PULL_REQUEST_COMMENT_DELETE),
   );
   const out = writes.pending;

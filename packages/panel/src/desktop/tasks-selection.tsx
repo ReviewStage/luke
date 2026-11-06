@@ -21,6 +21,7 @@ import { useMutation } from "@tanstack/react-query";
 import { type Store, useCreateStore, useSelector } from "@tanstack/react-store";
 import { createContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
+import { useConfirmAct } from "../confirm-act.js";
 import { confirmFailure } from "../failure-report.js";
 import { useSteadyDoor } from "../steady-door.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -242,9 +243,8 @@ export function useTasksSelection(
   });
   // Note that a refusal leaves only the tasks refused asked of, so Retry sends none already deleted.
   const deleting = useMutation(tasks.deleteTasks);
-  const deletion = useConfirmDialog(
-    { subject: doomed.length > 0, surfaceOpen: tasks.shown },
-    async () => {
+  const deletionAct = useConfirmAct(deleting, {
+    send: async () => {
       const answers = await deleting.mutateAsync(doomed);
       const refused = doomed.filter(
         (_, at) => answers[at]?.status !== ACTION_RESULT_STATUS.ACCEPTED,
@@ -260,6 +260,12 @@ export function useTasksSelection(
         answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED,
       );
     },
+    answered: (answers) =>
+      answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED,
+  });
+  const deletion = useConfirmDialog(
+    { subject: doomed.length > 0, surfaceOpen: tasks.shown },
+    deletionAct,
     confirmFailure(FAILURE_SURFACE.TASK_DELETE),
   );
   const acts = selectionActs(tasks, () => latest.current, [...selected], {

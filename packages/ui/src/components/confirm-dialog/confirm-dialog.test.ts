@@ -5,6 +5,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
+import { answerOldest, onQueryClient, useMutationAct } from "../../testing/confirm-act.js";
 import { holdExits } from "../../testing/held-exits.js";
 import { recordedFailure } from "../../testing/reported-failure.js";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
@@ -61,7 +62,7 @@ function Owner({
   const field = useRef<HTMLInputElement | null>(null);
   const confirm = useConfirmDialog(
     { subject, surfaceOpen },
-    () => new Promise<ActionResult>((answer) => answers.push(answer)),
+    useMutationAct(() => new Promise<ActionResult>((answer) => answers.push(answer))),
     () => FAILURE,
   );
   return createElement(
@@ -145,15 +146,12 @@ function asked(withField = false, gate: string | undefined = undefined) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Owner, { answers, withField, gate })));
+  act(() => root.render(onQueryClient(createElement(Owner, { answers, withField, gate }))));
   const opener = button("Delete key") ?? assert.fail("no opener");
   opener.focus();
   act(() => opener.click());
   assert.ok(question(), "the question is asked");
-  const settle = async (result: ActionResult) => {
-    const answer = answers.shift() ?? assert.fail("no answer pending");
-    await act(async () => answer(result));
-  };
+  const settle = (result: ActionResult) => answerOldest(answers, result);
   return { opener, settle };
 }
 

@@ -32,6 +32,7 @@ import { mutationOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { sendAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { sameAnswer, useConfirmAct } from "../confirm-act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { githubTokenQuery, githubTokenRetryMutation } from "../live-reads.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
@@ -171,9 +172,13 @@ export function AccountSection({
   // Note that the section is only drawn while its page is, so the page
   // leaving takes the question with it.
   const deleting = useMutation(ACCOUNT_DELETE_MUTATION);
+  const deletionAct = useConfirmAct(deleting, {
+    send: () => deleting.mutateAsync(),
+    answered: sameAnswer,
+  });
   const deletion = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    () => deleting.mutateAsync(),
+    deletionAct,
     confirmFailure(FAILURE_SURFACE.ACCOUNT_DELETE),
   );
 

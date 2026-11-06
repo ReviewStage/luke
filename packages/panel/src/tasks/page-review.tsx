@@ -12,10 +12,10 @@ import {
   FailureNote,
   useConfirmDialog,
 } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
+import { neverBusyAct } from "@repo/ui/confirm-state";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Schema } from "effect";
 import { Fragment, useMemo, useState } from "react";
 import { keptLines } from "../composer-drafts.js";
@@ -236,10 +236,9 @@ export function PageReviewSection({
   const count = review.held.length;
   const discarding = useConfirmDialog(
     { subject: count > 0, surfaceOpen: true },
-    () => {
+    neverBusyAct(() => {
       review.discard();
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+    }),
     confirmFailure(FAILURE_SURFACE.DESCRIPTION_COMMENT_DISCARD),
   );
   if (count === 0) return null;

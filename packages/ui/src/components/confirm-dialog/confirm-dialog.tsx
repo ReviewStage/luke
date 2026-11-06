@@ -1,9 +1,9 @@
-import type { ActionResult } from "@repo/wire";
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isComposingKey } from "../../composing-key.js";
 import {
   CONFIRM_STAGE,
+  type ConfirmAct,
   type ConfirmFailure,
   type ConfirmSurroundings,
   confirmAsked,
@@ -98,13 +98,14 @@ export interface DialogConfirm extends HeldConfirm {
  */
 export function useConfirmDialog(
   surroundings: ConfirmSurroundings,
-  action: () => Promise<ActionResult>,
+  act: ConfirmAct,
   failure: ConfirmFailure,
 ): DialogConfirm {
-  const held = useConfirm(surroundings, action, failure);
+  const held = useConfirm(surroundings, act, failure);
   const standing = surroundings.subject && surroundings.surfaceOpen;
   if (!standing && held.rejection !== undefined && held.stage !== CONFIRM_STAGE.ACTING) {
-    held.clear();
+    // Note that the refusal is only forgotten here, never reset on the caller's mutation, because the render must not change another component's state.
+    held.forget();
   }
   return useMemo(() => ({ ...held, standing }), [held, standing]);
 }
