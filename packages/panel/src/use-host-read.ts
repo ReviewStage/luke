@@ -1,13 +1,7 @@
-import {
-  type AgentPullRequestReadParams,
-  type AgentTranscriptKey,
-  PULL_REQUEST_PART,
-  type PullRequestPart,
-} from "@repo/features/agent-view";
+import type { AgentTranscriptKey } from "@repo/features/agent-view";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { LIVE_READ } from "@repo/features/live-wire";
-import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -15,7 +9,6 @@ import {
   type AppStateSnapshot,
   EVERY_WORKSPACE,
   HOST_READ_SLICE,
-  OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
   READ_KEYS,
 } from "@repo/host/app-state";
@@ -179,28 +172,10 @@ function automationsRead(kind: AutomationFollow["kind"]) {
   };
 }
 
-/** A Pull request tab's hold on one part of the pull request it names, a stream that carries nothing, and its Try again, which answers once the part's ask has landed, so a write's read-back can wait on it. */
-function pullRequestPartRead(part: PullRequestPart) {
-  return {
-    path: (key: AgentPullRequestReadParams) => [
-      key.agentId,
-      key.number === undefined ? OWN_PULL_REQUEST : String(key.number),
-    ],
-    hold: (key: AgentPullRequestReadParams) =>
-      askAct(ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW, { part, ...key }),
-    retry: (key: AgentPullRequestReadParams) =>
-      askAct(ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY, { part, ...key }),
-  };
-}
-
 /**
  * Every read a surface reads through `useHostRead`, by its name, but
  * those moved onto TanStack Query (`live-reads.ts`): where the account's integrations stand, by the account, which every
- * surface drawing an integration holds; the parts of one agent's pull request a Pull request
- * tab holds while it shows, its pull request, checks, conversation, and what
- * the agent published, by the number the tab names or the agent's own; one
- * agent's pull request's chapters, by the number its Pull request tab's own
- * read of it found; one agent's own tools, which its
+ * surface drawing an integration holds; one agent's own tools, which its
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the outside MCP clients the account allowed, by
  * the account, which Settings › MCP holds; one agent's or worker's
@@ -248,41 +223,11 @@ const HOST_READS = {
     hold: (workspaceId) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.MEMORIES_RETRY, { workspaceId }),
   }),
-  [LIVE_READ.PULL_REQUEST]: hostRead(LIVE_READ.PULL_REQUEST, {
-    slice: APP_SLICE.PULL_REQUEST,
-    ...pullRequestPartRead(PULL_REQUEST_PART.PULL_REQUEST),
-  }),
-  [LIVE_READ.PULL_REQUEST_CHECKS]: hostRead(LIVE_READ.PULL_REQUEST_CHECKS, {
-    slice: APP_SLICE.PULL_REQUEST_CHECKS,
-    ...pullRequestPartRead(PULL_REQUEST_PART.CHECKS),
-  }),
-  [LIVE_READ.PULL_REQUEST_CONVERSATION]: hostRead(LIVE_READ.PULL_REQUEST_CONVERSATION, {
-    slice: APP_SLICE.PULL_REQUEST_CONVERSATION,
-    ...pullRequestPartRead(PULL_REQUEST_PART.CONVERSATION),
-  }),
-  [LIVE_READ.PULL_REQUEST_PUBLISHED]: hostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, {
-    slice: APP_SLICE.PULL_REQUEST_PUBLISHED,
-    ...pullRequestPartRead(PULL_REQUEST_PART.PUBLISHED),
-  }),
-  [LIVE_READ.PULL_REQUEST_VIEWED]: hostRead(LIVE_READ.PULL_REQUEST_VIEWED, {
-    slice: APP_SLICE.PULL_REQUEST_VIEWED,
-    ...pullRequestPartRead(PULL_REQUEST_PART.VIEWED),
-  }),
-  [LIVE_READ.REVIEW_OPTIONS]: hostRead(LIVE_READ.REVIEW_OPTIONS, {
-    slice: APP_SLICE.REVIEW_OPTIONS,
-    ...pullRequestPartRead(PULL_REQUEST_PART.REVIEW_OPTIONS),
-  }),
   [LIVE_READ.REPOSITORY_LISTS]: hostRead(LIVE_READ.REPOSITORY_LISTS, {
     slice: APP_SLICE.REPOSITORY_LISTS,
     path: (workspace: string) => [workspace],
     hold: (workspace) => askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, repositoryScope(workspace)),
     retry: (workspace) => tellAct(ACT_KIND.TASKS_REPOSITORIES_RETRY, repositoryScope(workspace)),
-  }),
-  [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
-    slice: APP_SLICE.PULL_REQUEST_CHAPTERS,
-    path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
-    hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
-    retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
   }),
   [LIVE_READ.WORKSPACE_INVITATIONS]: hostRead(LIVE_READ.WORKSPACE_INVITATIONS, {
     slice: APP_SLICE.WORKSPACE_INVITATIONS,

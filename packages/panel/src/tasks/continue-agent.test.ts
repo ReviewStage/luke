@@ -34,7 +34,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DRAFT_PLACE, type DraftWriter, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -426,9 +426,12 @@ test("a launch its Mac's GitHub sign-in could not start ends on a card naming th
     },
   });
   const card = signInCard(tab.container) ?? assert.fail("the transcript ends on the card");
-  assert.match(
-    card.textContent ?? "",
-    /^Studio can't reach acme\/web on GitHub\.Sign in on that Mac, then retry:/,
+  // Note that the card names the repository once what the agent published reaches its query.
+  await vi.waitFor(() =>
+    assert.match(
+      card.textContent ?? "",
+      /^Studio can't reach acme\/web on GitHub\.Sign in on that Mac, then retry:/,
+    ),
   );
   assert.equal(tab.endRow(), null);
   assert.equal(tab.buttons(tab.container).length, 0);

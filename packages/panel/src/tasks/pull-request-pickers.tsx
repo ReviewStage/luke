@@ -1,10 +1,10 @@
+import { PULL_REQUEST_PART } from "@repo/features/agent-view";
 import type {
   AgentReviewOptions,
   GitHubPerson,
   PullRequestLabel,
   PullRequestReviewTeam,
 } from "@repo/features/agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PULL_REQUEST_ACTION,
   type PullRequestAction,
@@ -31,13 +31,14 @@ import {
   type SameValue,
 } from "@repo/ui/pending-values";
 import { useDisclosure } from "@repo/ui/use-disclosure";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { type ActionSearch, ActionSearchMenu } from "../desktop/action-search-menu.js";
+import { pullRequestPartRetryMutation, reviewOptionsQuery } from "../live-reads.js";
 import { usePendingNow } from "../pending-clock.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useNamer } from "./pull-request-people.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
@@ -117,29 +118,31 @@ export interface ReviewOptions {
 
 /**
  * The agent's repository's labels, assignable users, and teams, held by the
- * host from the moment a picker first asks (`LIVE_READ.REVIEW_OPTIONS`), so a
+ * host from the moment a picker first asks (`reviewOptionsQuery`), so a
  * tab drawn again offers them at once, asked again as a window comes forward
  * and on Retry after a failure.
  */
 export function useReviewOptions(agentId: string): ReviewOptions {
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
-  const held = useHostRead(LIVE_READ.REVIEW_OPTIONS, asked === agentId ? { agentId } : undefined);
-  const answer = held.rows;
+  const held = useQuery(reviewOptionsQuery(asked === agentId ? { agentId } : undefined));
+  const { mutateAsync: retry } = useMutation(pullRequestPartRetryMutation());
+  const answer = held.data;
   const read: OptionsRead =
     asked !== agentId
       ? { kind: OPTIONS.UNASKED }
-      : retrying || (answer === undefined && held.status === HOST_READ_STATUS.LOADING)
+      : retrying || (answer === undefined && held.isPending)
         ? { kind: OPTIONS.READING }
         : answer === undefined || "failure" in answer
           ? { kind: OPTIONS.FAILED }
           : { kind: OPTIONS.LANDED, value: answer };
-  const { retry } = held;
   const ask = useCallback(() => {
     if (asked !== agentId) return setAsked(agentId);
     if (read.kind !== OPTIONS.FAILED) return;
     setRetrying(true);
-    void retry().finally(() => setRetrying(false));
+    void retry({ part: PULL_REQUEST_PART.REVIEW_OPTIONS, agentId })
+      .catch(() => undefined)
+      .finally(() => setRetrying(false));
   }, [agentId, asked, read.kind, retry]);
   return { read, ask };
 }
