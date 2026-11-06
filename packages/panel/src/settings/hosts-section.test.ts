@@ -370,7 +370,7 @@ test("This Mac's switch turns it on at once, and off only once the question is a
   await settle();
   assert.deepEqual(sent, [{ on: true }], "nothing is turned off before it is asked");
   const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
-  assert.ok(asked.includes("Stop running agents on this Mac?"), asked);
+  assert.ok(asked.includes("Turn off agents on this Mac?"), asked);
 
   await press("Turn off");
   assert.deepEqual(sent, [{ on: true }, { on: false }]);
