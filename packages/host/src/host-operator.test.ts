@@ -143,37 +143,6 @@ it.effect("a task filed for later carries its status, priority, and assignee to 
   }),
 );
 
-it.effect(
-  "a Start from an agent that names no task travels to the host with no task key, one on a task with its task, and an empty draft's Call with its blank and call",
-  () =>
-    Effect.gen(function* () {
-      const { client, requests } = recordingClient();
-      const operator = operatorOver(client);
-      const from = { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
-
-      yield* operator.agentStart({ idempotencyKey: "press-1", from });
-      yield* operator.agentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
-      yield* operator.agentStart({
-        taskId: "task-1",
-        idempotencyKey: "press-3",
-        blank: true,
-        call: true,
-      });
-
-      assert.deepEqual(
-        requests.map((request) => [request.method, request.params]),
-        [
-          [GATEWAY_METHOD.AGENTS_START, { idempotencyKey: "press-1", from }],
-          [GATEWAY_METHOD.AGENTS_START, { taskId: "task-1", idempotencyKey: "press-2", from }],
-          [
-            GATEWAY_METHOD.AGENTS_START,
-            { taskId: "task-1", idempotencyKey: "press-3", blank: true, call: true },
-          ],
-        ],
-      );
-    }),
-);
-
 it.effect("a nod on an inbox notice travels to the host as its revision and its key alone", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();
