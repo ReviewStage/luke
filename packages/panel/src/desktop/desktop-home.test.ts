@@ -22,7 +22,13 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handInboxItems, handMembers, handState } from "../testing/app-state.js";
+import {
+  handHostReads,
+  handInboxItems,
+  handMembers,
+  handState,
+  holdRepositoryLists,
+} from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -236,10 +242,51 @@ test("while the task list is read, Home greets the reader over the composer, ask
   assert.deepEqual(sections(page), {});
 });
 
+test("a workspace that reaches no repository says so over Home's composer, telling a member whom to ask and offering their own token", async () => {
+  holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
+    repositories: {
+      installed: false,
+      repositories: [],
+      installationUrl: "https://github.com/apps/vespin/installations/new",
+    },
+  }));
+  handMembers(() => ({
+    rows: {
+      members: [
+        { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.MEMBER },
+        {
+          userId: "user-ada",
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          role: WORKSPACE_ROLE.OWNER,
+        },
+      ],
+    },
+  }));
+  const base = tasksControl();
+  const newTask = {
+    ...base.newTask,
+    repositoriesIn: (scope: string | undefined) => ({
+      ...base.newTask.repositoriesIn(scope),
+      scope: ACME.id,
+      manages: false,
+    }),
+  };
+  const { page } = mount({ newTask });
+  const notice = () => page.querySelector(".new-task-notices")?.textContent ?? "";
+
+  await vi.waitFor(() =>
+    assert.equal(
+      notice(),
+      "This workspace has no repositories yetAsk Ada Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
+    ),
+  );
+});
+
 test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async () => {
   const { page } = mount();
-  await settle();
-  const first = row(page, RETRY_429.title);
+  // Note that the Inbox's row stands once the account's feed reaches its query, as the first test waits for it.
+  const first = await vi.waitFor(() => row(page, RETRY_429.title));
   act(() => first.focus());
 
   act(() => {

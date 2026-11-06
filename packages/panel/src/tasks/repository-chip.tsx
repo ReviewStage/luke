@@ -179,18 +179,12 @@ type DeadEnd = (typeof DEAD_END)[keyof typeof DEAD_END];
 const NAMED_OWNERS = 3;
 
 /**
- * A member's way out of a dead end: the GitHub row, ending in the
- * workspace's owners and admins by name, who alone can mend it, read while
- * the row stands. Until the read answers, or if it never does, it says an
- * owner or admin without names, since a name is only ever a help.
+ * Who a member asks to mend a workspace's GitHub: its owners and admins by
+ * name, the first few and then the rest counted ("Ada, Grace, or 2 others"),
+ * read while the asker stands. Until the read answers, or if it never does,
+ * it says an owner or admin without names, since a name is only ever a help.
  */
-function AskOwnersRow({
-  workspaceId,
-  ask,
-}: {
-  workspaceId: string | undefined;
-  ask: DeadEnd["ask"];
-}): React.JSX.Element {
+export function useOwnersToAsk(workspaceId: string | undefined): string {
   const members = useQuery(workspaceMembersQuery(workspaceId)).data?.members;
   const owners = (members ?? [])
     .filter((each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN)
@@ -198,7 +192,18 @@ function AskOwnersRow({
   const named = owners.slice(0, NAMED_OWNERS);
   const rest = owners.length - named.length;
   const others = rest > 0 ? [countWords(rest, { one: "other", many: "others" })] : [];
-  const whom = owners.length === 0 ? "an owner or admin" : orList([...named, ...others]);
+  return owners.length === 0 ? "an owner or admin" : orList([...named, ...others]);
+}
+
+/** A member's way out of a dead end: the GitHub row, ending in whom to ask (`useOwnersToAsk`), who alone can mend it. */
+function AskOwnersRow({
+  workspaceId,
+  ask,
+}: {
+  workspaceId: string | undefined;
+  ask: DeadEnd["ask"];
+}): React.JSX.Element {
+  const whom = useOwnersToAsk(workspaceId);
   return (
     <MenuNoteRow
       glyph={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
