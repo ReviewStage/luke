@@ -11,7 +11,6 @@ import {
   jsonOf,
 } from "./account-call.js";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
-import type { AccountPreferencesLiveAnswer } from "./account-preferences-live.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import type { AgentOriginLiveAnswer } from "./agent-origin-live.js";
 import {
@@ -142,7 +141,6 @@ import {
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
-import type { WorkspaceMemoriesLiveAnswer } from "./memory-live.js";
 import { MEMORY_QUERY } from "./memory-wire.js";
 import {
   agentDefaultWriteSchema,
@@ -552,30 +550,6 @@ export class HostedAgentClient {
     return hostedCall(this.#hosted.hosts.denyPairing, { code }, { as: HOST_PAIRING_RENAMES });
   }
 
-  /**
-   * The account's preferences row, its default agent, chapters model, and
-   * Slack notifications as stored, sealed for following, or with its row
-   * inline where `poll` asks for it; signed out where the session is
-   * another account's, or why not.
-   */
-  accountPreferencesLive(
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    AccountPreferencesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.accountPreferences, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, {}));
-  }
-
   /** The account's default written on its own, answering it as kept with the transaction it committed in; a choice the service would refuse by shape is refused here without traveling at all. */
   writeDefault(
     choice: ModelChoice,
@@ -586,31 +560,6 @@ export class HostedAgentClient {
       hostedCall(this.#hosted.account.writePreferences, admitted, { as: AGENT_RENAMES }),
       defaultOf,
     );
-  }
-
-  /**
-   * The memories our agents kept in a workspace the account is a member of,
-   * sealed for following, each with its keeper's name and whether the
-   * account may forget it, or with their rows inline where `poll` asks for
-   * them; signed out where the session is another account's, or why not.
-   */
-  workspaceMemoriesLive(
-    workspaceId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    WorkspaceMemoriesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
-    never,
-    HttpClient.HttpClient
-  > {
-    const read = { workspaceId, [LIVE_USER_QUERY]: userId };
-    return Effect.catchIf(
-      askLive(this.#hosted.live.workspaceMemories, read, poll, after),
-      (failed) =>
-        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
-      () => Effect.succeed(LIVE_SIGNED_OUT),
-    ).pipe((signed) => hostedAnswer(signed, MEMORY_REFUSALS));
   }
 
   /** One memory forgotten for good, answering the workspace's memories as they then stand. */

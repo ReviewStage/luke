@@ -9,13 +9,11 @@
  * definitions. Each view's own change defines its read, and a read with no
  * definition is looked at on its clock.
  */
-import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
-import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
@@ -33,7 +31,6 @@ import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
-  accountPreferenceSync,
   agentBrowserTabSync,
   agentDelegationSync,
   agentPinSync,
@@ -62,7 +59,6 @@ import {
   invitationSync,
   macCommandSync,
   memberSync,
-  memorySync,
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
@@ -105,7 +101,9 @@ import {
 } from "../inbox/inbox-store.js";
 import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import type { AnyBoundRead } from "../live/live-read-binding.js";
+import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 import { hostsRead } from "../live/reads/hosts.js";
+import { workspaceMemoriesRead } from "../live/reads/workspace-memories.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
@@ -262,24 +260,6 @@ export const macCommandsLive = defineLiveQuery({
     Option.map(macCommandsLiveStatement(userId, macCommandKindsRead(kinds)), (commands) => ({
       commands,
     })),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * The account's preferences row, its default agent, chapters model, and
- * Slack notifications as stored, woken by a write to any column a view
- * reads, which names the account. Note that a Start with Runs on, an
- * enroll, and a register write only the row's runs-on pick, and a settings
- * push that changes nothing writes only its instant; the capture ignores
- * both, so none of them wakes this read or the account's other reads.
- */
-export const accountPreferencesLive = defineLiveQuery({
-  name: LIVE_READ.ACCOUNT_PREFERENCES,
-  params: ["userId"],
-  reads: [accountPreferenceSync],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId }) =>
-    Option.map(accountPreferencesLiveStatement(userId), (preferences) => ({ preferences })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -458,28 +438,6 @@ export const workspaceMembersLive = defineLiveQuery({
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
   statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * A workspace's memories, each with its keeper's name and whether the
- * reader may forget it, woken on the workspace's memory topic by a memory
- * kept, corrected, or forgotten, and on the reader's own by their
- * membership made, ended, or given another role, which decides what they
- * read and may forget. Note that a teammate's rename wakes neither, since a
- * member's row names only their own topic and their workspaces': a keeper's
- * new name shows at the hold's end.
- */
-export const workspaceMemoriesLive = defineLiveQuery({
-  name: LIVE_READ.MEMORIES,
-  params: ["userId", "workspaceId"],
-  reads: [memorySync, memberSync, userSync],
-  topics: ({ userId, workspaceId }) => [
-    [TOPIC.MEMORY, workspaceId],
-    [TOPIC.ACCOUNT, userId],
-  ],
-  statements: ({ userId, workspaceId }) =>
-    Option.map(workspaceMemoriesLiveStatement(userId, workspaceId), (memories) => ({ memories })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -937,14 +895,17 @@ export const agentTranscriptLive = defineLiveQuery({
 });
 
 /** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
-export const BOUND_READS: readonly AnyBoundRead[] = [hostsRead];
+export const BOUND_READS: readonly AnyBoundRead[] = [
+  hostsRead,
+  accountPreferencesRead,
+  workspaceMemoriesRead,
+];
 
 export const LIVE_QUERIES = liveQueryRegistry([
   sidebarLive,
   tasksLive,
   workspacesLive,
   macCommandsLive,
-  accountPreferencesLive,
   integrationStatusesLive,
   inboxLive,
   inboxItemsLive,
@@ -952,7 +913,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentInboxLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
-  workspaceMemoriesLive,
   installedSkillsLive,
   workspaceIntegrationsLive,
   automationsLive,

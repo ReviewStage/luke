@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
-import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import {
@@ -103,7 +101,6 @@ function liveStatements() {
     "account.integrations": Option.getOrThrow(
       integrationStatusesLiveStatement(USER_ID, new Date(0)),
     ),
-    "account.preferences": Option.getOrThrow(accountPreferencesLiveStatement(USER_ID)),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),
@@ -130,9 +127,6 @@ function liveStatements() {
     ),
     "workspace-invitations.invitations": Option.getOrThrow(
       workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
-    ),
-    "workspace-memories.memories": Option.getOrThrow(
-      workspaceMemoriesLiveStatement(USER_ID, randomUUID()),
     ),
     "installed-skills.skills": Option.getOrThrow(
       installedSkillsLiveStatement(USER_ID, randomUUID()),

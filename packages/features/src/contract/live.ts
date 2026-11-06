@@ -45,7 +45,7 @@ import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
-import { accountPreferencesLiveAnswerSchema } from "../account-preferences-live.js";
+import { ACCOUNT_PREFERENCES_READ } from "../account-preferences-live.js";
 import { agentOriginLiveAnswerSchema } from "../agent-origin-live.js";
 import {
   automationRunsLiveAnswerSchema,
@@ -71,7 +71,7 @@ import {
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
-import { workspaceMemoriesLiveAnswerSchema } from "../memory-live.js";
+import { WORKSPACE_MEMORIES_READ } from "../memory-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
@@ -305,10 +305,7 @@ export const liveContract = {
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
   [HOSTS_READ.name]: liveProcedure(HOSTS_READ),
-  workspaceMemories: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMORIES }))
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(workspaceMemoriesLiveAnswerSchema)),
+  [WORKSPACE_MEMORIES_READ.name]: liveProcedure(WORKSPACE_MEMORIES_READ),
   installedSkills: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INSTALLED_SKILLS }))
     .input(liveWorkspaceSchema)
@@ -329,8 +326,5 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }))
     .input(liveReadSchema)
     .output(EffectSchema.flip(integrationStatusesLiveAnswerSchema)),
-  accountPreferences: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_ACCOUNT_PREFERENCES }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(accountPreferencesLiveAnswerSchema)),
+  [ACCOUNT_PREFERENCES_READ.name]: liveProcedure(ACCOUNT_PREFERENCES_READ),
 };

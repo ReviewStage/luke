@@ -1,16 +1,26 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema } from "effect";
 import { CONTEXT_WINDOW } from "./agent-wire.js";
 import { type ChaptersModelId, chaptersModelFrom } from "./chapters-model-choice.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveRowOf,
+  liveRead,
+  liveRows,
+  ORDER,
+} from "./live-read.js";
+import { LIVE_READ, LIVE_USER_QUERY } from "./live-wire.js";
 import {
   AGENT_DEFAULT_CHOICE,
   agentFallbackChoice,
   type CatalogModel,
   type ModelChoice,
 } from "./models-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 /**
- * account-preferences-live.ts -- the account's preferences row as the host follows it over the service's held poll: the statement the service answers, the row it delivers, and the choices every surface draws from it.
+ * account-preferences-live.ts -- the account's preferences row as the host follows it over the service's held poll: the read declared, and the choices every surface draws from it.
  *
  * The service answers one statement, the account's own row as stored, or
  * none for an account that stored nothing: the coding agents' default as
@@ -22,34 +32,41 @@ import {
  * models it is offered by the service's own rule (`agentDefaultOf`).
  */
 
-/** The account's preferences sealed for following: the address, and one statement. */
-export const accountPreferencesLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ preferences: sealedLiveQuerySchema }),
-});
-
-export type AccountPreferencesLiveAnswer = typeof accountPreferencesLiveAnswerSchema.Type;
-
 /**
- * The account's row as the statement delivers it, each column as stored and
- * null where never chosen. Note that the context window and the chapters
- * model are read as text, because a value a later build adds or an older
- * one dropped reads as the default rather than failing the row.
+ * The account's preferences as the host follows them: one part, the
+ * account's own row, none for an account that stored nothing. Note that the
+ * context window and the chapters model are read as text, because a value a
+ * later build adds or an older one dropped reads as the default rather than
+ * failing the row. The row has no id of its own, since it is the account's
+ * one, so it is keyed and ordered by its first column, which orders one row
+ * as it stands.
  */
-const accountPreferencesLiveRowSchema = EffectSchema.Struct({
-  agentModel: EffectSchema.NullOr(EffectSchema.String),
-  agentEffort: EffectSchema.NullOr(EffectSchema.String),
-  agentContextWindow: EffectSchema.NullOr(EffectSchema.String),
-  chaptersModel: EffectSchema.NullOr(EffectSchema.String),
-  slackNotifications: EffectSchema.NullOr(EffectSchema.Boolean),
+export const ACCOUNT_PREFERENCES_READ = liveRead({
+  name: LIVE_READ.ACCOUNT_PREFERENCES,
+  path: HOSTED_SERVICE_PATH.LIVE_ACCOUNT_PREFERENCES,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    preferences: liveRows({
+      row: Schema.Struct({
+        agentModel: Schema.NullOr(Schema.String),
+        agentEffort: Schema.NullOr(Schema.String),
+        agentContextWindow: Schema.NullOr(Schema.String),
+        chaptersModel: Schema.NullOr(Schema.String),
+        slackNotifications: Schema.NullOr(Schema.Boolean),
+      }),
+      key: "agentModel",
+      order: [["agentModel", ORDER.ASC]],
+    }),
+  },
 });
 
-export type AccountPreferencesLiveRow = typeof accountPreferencesLiveRowSchema.Type;
+export type AccountPreferencesLiveAnswer = LiveReadAnswer<typeof ACCOUNT_PREFERENCES_READ>;
 
-/** The account's row as Realtime delivers it, decoded at the boundary before anything reads it: none for an account that stored nothing. */
-export const accountPreferencesLiveRowsSchema = EffectSchema.Struct({
-  preferences: EffectSchema.Array(accountPreferencesLiveRowSchema),
-});
+/** The account's row as the statement delivers it, each column as stored and null where never chosen. */
+export type AccountPreferencesLiveRow = LiveRowOf<
+  typeof ACCOUNT_PREFERENCES_READ.parts.preferences
+>;
 
 /** The account's choices as the row holds them, each read as the preferences snapshot reads it. */
 export interface AccountPreferencesLive {

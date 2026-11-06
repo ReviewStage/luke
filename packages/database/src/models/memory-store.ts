@@ -1,15 +1,12 @@
 import { isWireUuid } from "@repo/features";
 import { MEMORY_BOUNDS } from "@repo/features/memory-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { and, desc, eq, exists, or, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
-import { member, organization, user } from "../schemas/auth.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { organization } from "../schemas/auth.js";
 import { memory } from "../schemas/memory.js";
 import { InstantColumnSchema } from "./columns.js";
-import { roleAmong, workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * memory-store.ts -- a workspace's memories, shared by its members, kept and corrected by its coding agents and read and forgotten from Settings.
@@ -30,7 +27,7 @@ import { roleAmong, workspaceReachableBy } from "./workspace-store.js";
  * workspace's git history outlives its committers: its member is then null.
  * The workspace's bound counts every memory, so a recall's read of one
  * workspace's rows stays bounded, and so does the live read Settings holds
- * (`workspaceMemoriesLiveStatement`), which answers every one of them.
+ * (`packages/service/src/live/reads/workspace-memories.ts`), which answers every one of them.
  */
 
 /** What a memory store operation answers: an effect over the ambient client. */
@@ -330,57 +327,4 @@ export function forgetMemory(
       ? { outcome: MEMORY_FORGET.FORGOTTEN }
       : { outcome: MEMORY_FORGET.FORGOTTEN, txid: deleted.txid };
   });
-}
-
-/**
- * The workspace's memories as one member's held read answers them: every
- * row of the workspace, while the reader is a member of it, each with the
- * name of the member whose words it holds, null once that account is gone,
- * and whether the reader may forget it: its words are theirs, or they own or
- * administer the workspace, as `forgetMemory`'s caller settles it. Every
- * column is under the key the wire reads it by (`@repo/features/memory-live`),
- * each instant as epoch milliseconds, and the order is the reader's to keep.
- * None where a statement names a value Realtime cannot carry.
- */
-export function workspaceMemoriesLiveStatement(
-  readerId: string,
-  organizationId: string,
-): Option.Option<LiveStatement> {
-  const manages = exists(
-    queryBuilder
-      .select({ one: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.organizationId, organizationId),
-          eq(member.userId, readerId),
-          roleAmong([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]),
-        ),
-      ),
-  );
-  // Note that a memory whose account is gone compares as unknown, so it reads forgettable only by those who manage it, as `forgetMemory` allows.
-  const forgettable = sql<boolean>`coalesce(${or(eq(memory.userId, readerId), manages)}, false)`;
-  return liveStatementOf(
-    queryBuilder
-      .select(
-        liveSelection(
-          {
-            id: memory.id,
-            text: memory.text,
-            keeperId: memory.userId,
-            keeperName: user.name,
-            forgettable,
-          },
-          { createdAt: memory.createdAt, updatedAt: memory.updatedAt },
-        ),
-      )
-      .from(memory)
-      .leftJoin(user, eq(user.id, memory.userId))
-      .where(
-        and(
-          eq(memory.organizationId, organizationId),
-          workspaceReachableBy(readerId, organizationId),
-        ),
-      ),
-  );
 }

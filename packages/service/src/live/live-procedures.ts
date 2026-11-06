@@ -66,7 +66,7 @@
  * one, each with its keeper's name and whether the reader may forget it,
  * after the account is read as a member of it, so a workspace it is not in
  * is not found; woken by a memory kept, corrected, or forgotten, and by the
- * reader's own membership moving (`workspaceMemoriesLive`).
+ * reader's own membership moving (`workspaceMemoriesRead`).
  * `GET /api/live/hosts` answers the account's hosts as one, with the install
  * script's address on the origin the request reached; woken by a host
  * enrolled, approved, renamed, removed, or moving through an update
@@ -150,7 +150,7 @@
  * as one statement, its default agent, chapters model, and Slack
  * notifications as stored, none for an account that stored nothing, woken
  * by a write to any of them or to another column a view reads
- * (`accountPreferencesLive`), so a default chosen on another device reaches
+ * (`accountPreferencesRead`), so a default chosen on another device reaches
  * an open window within one coalesce window.
  */
 
@@ -208,7 +208,6 @@ import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { SlackBot } from "../slack/slack-bot.js";
 import {
-  accountPreferencesLive,
   agentBrowserTabsLive,
   agentInboxLive,
   agentOriginLive,
@@ -235,7 +234,6 @@ import {
   workspaceIntegrationsLive,
   workspaceInvitationsLive,
   workspaceMembersLive,
-  workspaceMemoriesLive,
   workspacesLive,
 } from "../sync/live-queries.js";
 import {
@@ -249,7 +247,9 @@ import { NO_TOPICS } from "../sync/watch.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
+import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { hostsRead } from "./reads/hosts.js";
+import { workspaceMemoriesRead } from "./reads/workspace-memories.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
@@ -1131,18 +1131,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       return { ...sealed, origin: new URL(context.request.url).origin };
     }),
     hosts: signedIn.hosts.effect(answerBoundRead(hostsRead)),
-    workspaceMemories: signedIn.workspaceMemories.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        workspaceMemoriesLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
+    workspaceMemories: signedIn.workspaceMemories.effect(answerBoundRead(workspaceMemoriesRead)),
     installedSkills: signedIn.installedSkills.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const member = yield* hostedStoreOrUnavailable(
@@ -1214,9 +1203,6 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         multiple: offered.filter((provider) => connect[provider].multipleAccounts),
       };
     }),
-    accountPreferences: signedIn.accountPreferences.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(accountPreferencesLive, { userId: context.userId }, input);
-    }),
+    accountPreferences: signedIn.accountPreferences.effect(answerBoundRead(accountPreferencesRead)),
   };
 }

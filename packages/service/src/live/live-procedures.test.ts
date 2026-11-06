@@ -39,8 +39,7 @@ import {
   startTask,
 } from "@repo/database/testing";
 import {
-  accountPreferencesLiveAnswerSchema,
-  accountPreferencesLiveRowsSchema,
+  ACCOUNT_PREFERENCES_READ,
   accountPreferencesOfLiveRows,
 } from "@repo/features/account-preferences-live";
 import { AGENT_BROWSER_TAB_OPENER } from "@repo/features/agent-browser-tab-wire";
@@ -88,11 +87,7 @@ import {
   taskRecordLiveAnswerSchema,
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
-import {
-  memoriesOfLiveRows,
-  workspaceMemoriesLiveAnswerSchema,
-  workspaceMemoriesLiveRowsSchema,
-} from "@repo/features/memory-live";
+import { memoriesOfLiveRows, WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
@@ -345,8 +340,8 @@ it.layer(getTestDB())("the account's live reads", (it) => {
 
         const answered = yield* ask({ bearer: dana, path: "/api/live/account-preferences" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(accountPreferencesLiveAnswerSchema)(answered.body);
-        const rows = Schema.decodeUnknownSync(accountPreferencesLiveRowsSchema)({
+        const answer = Schema.decodeUnknownSync(ACCOUNT_PREFERENCES_READ.answer)(answered.body);
+        const rows = Schema.decodeUnknownSync(ACCOUNT_PREFERENCES_READ.rows)({
           preferences: answer.queries.preferences.rows,
         }).preferences;
         assert.equal(rows.length, 1, "one row, the account's own");
@@ -1543,9 +1538,9 @@ it.layer(getTestDB())("a workspace's memories' live read", (it) => {
               path: `/api/live/workspace-memories?workspaceId=${workspace}`,
             });
             assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-            const answer = Schema.decodeUnknownSync(workspaceMemoriesLiveAnswerSchema)(polled.body);
+            const answer = Schema.decodeUnknownSync(WORKSPACE_MEMORIES_READ.answer)(polled.body);
             assert.equal(answer.url, LIVE_POLL_URL);
-            const { memories } = Schema.decodeUnknownSync(workspaceMemoriesLiveRowsSchema)({
+            const { memories } = Schema.decodeUnknownSync(WORKSPACE_MEMORIES_READ.rows)({
               memories: answer.queries.memories.rows,
             });
             return memoriesOfLiveRows(memories).map((memory) => [
