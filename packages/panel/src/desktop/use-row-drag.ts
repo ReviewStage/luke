@@ -130,6 +130,16 @@ interface RowKind<Row> {
 /** A row of any list, heard by its place among the list's rows. */
 const PLACED_ROW: RowKind<number> = { item: "li", name: (_row, at) => at, partial: false };
 
+/** A row of a list drawing only the rows near the view, heard by its place among them all (`data-index`). */
+const RUN_ROW: RowKind<number> = {
+  item: "li",
+  name: (row) => {
+    const at = Number(row.getAttribute(ROW_INDEX));
+    return Number.isInteger(at) ? at : undefined;
+  },
+  partial: true,
+};
+
 /** A card or a row standing for a task, heard by its task's id. */
 const TASK_ROW: RowKind<string> = {
   item: `li[${TASK_ID}]`,
@@ -690,6 +700,14 @@ export function useRowDrag(
   options: RowDragOptions = {},
 ): React.PointerEventHandler<HTMLElement> | undefined {
   return useListDrag(PLACED_ROW, onMove, options);
+}
+
+/** The drag of a list of any rows drawing only those near the view (`VirtualRows`), each heard by its place among them all (`useListDrag`). */
+export function useRunRowDrag(
+  onMove: RowMove | undefined,
+  options: RowDragOptions = {},
+): React.PointerEventHandler<HTMLElement> | undefined {
+  return useListDrag(RUN_ROW, onMove, options);
 }
 
 /**

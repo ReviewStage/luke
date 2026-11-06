@@ -28,7 +28,13 @@ import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
 import type { ListSelection } from "../selection/list-selection.js";
 import { SelectionRegion } from "../selection/selection-region.js";
 import { Skeleton } from "../skeleton/skeleton.js";
-import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
+import {
+  reachInRun,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "../virtual-rows/virtual-rows.js";
 
 /**
  * task-row.tsx -- a task as one line of columns: how it stands to the list's task, its priority, key, and status before its name, what the list draws of it after, and an end of its owner's, each cell in its own column so the columns line up down every row, and its ⋯ coming in over the row's end.
@@ -222,6 +228,10 @@ const FIT_CHARS = {
 /** The repository's column's widest, in characters, as `COLUMN_WIDTH` holds it. */
 const REPOSITORY_MOST_CHARS = 22;
 
+/** A relation's pill past its words: its compact pill's sides, its kind's mark and its chevron, each with the gap beside it (`Chip`), and a character's room more, since the words are set in the chip's own weight; none on a list whose rows say no relation. */
+const RELATION_CHIP_MARKS =
+  "min(var(--ui-task-row-relation-chars, 0), 1) * (2 * var(--ui-space-8) + 2 * (var(--ui-space-12) + var(--ui-space-4)) + 1ch)";
+
 /** A pull request's chip past its number: its compact pill's sides and its edge, its mark, and the gap between them (`Chip`), and a character's room more, since the number is set in the chip's own weight. */
 const PULL_REQUEST_CHIP_MARKS =
   "(2 * var(--ui-space-8) + var(--ui-space-12) + var(--ui-space-4) + 1ch)";
@@ -242,6 +252,9 @@ const CELL_FIT: Partial<Record<TaskRowCell, CSSProperties>> = {
   },
   [TASK_ROW_CELL.PULL_REQUESTS]: {
     minWidth: `calc(var(--ui-task-row-pull-requests, 0) * (${PULL_REQUEST_CHIP_MARKS} + var(--ui-task-row-pull-request-chars, 0) * 1ch) + max(0, var(--ui-task-row-pull-requests, 0) - 1) * var(--ui-item-gap))`,
+  },
+  [TASK_ROW_CELL.RELATION]: {
+    minWidth: `calc(var(--ui-task-row-relation-chars, 0) * 1ch + ${RELATION_CHIP_MARKS})`,
   },
   [TASK_ROW_CELL.SUB_TASKS]: { minWidth: "calc(var(--ui-task-row-sub-task-chars, 0) * 1ch)" },
   [TASK_ROW_CELL.WAITING]: { minWidth: "calc(var(--ui-task-row-waiting-chars, 0) * 1ch)" },
@@ -471,6 +484,8 @@ function NameCell({
 /** What a task's row says in the cells whose words differ from row to row, as its list reads them for `taskRowFit`. */
 export interface TaskRowWords {
   readonly key?: string | undefined;
+  /** Its relation's kind in words, as its pill says it ("Blocked by"). */
+  readonly relation?: string | undefined;
   /** Each open pull request's number as its chip says it ("#42"). */
   readonly pullRequests?: readonly string[] | undefined;
   /** Its finished sub-tasks of all of them ("1/3"). */
@@ -505,6 +520,7 @@ export function taskRowFit(rows: readonly TaskRowWords[]): CSSProperties {
   const pullRequests = rows.map((row) => row.pullRequests ?? []);
   return cssCustomProperties({
     "--ui-task-row-key-chars": mostChars(rows.map((row) => row.key)),
+    "--ui-task-row-relation-chars": mostChars(rows.map((row) => row.relation)),
     "--ui-task-row-pull-requests": pullRequests.reduce(
       (most, each) => Math.max(most, each.length),
       0,
@@ -871,6 +887,109 @@ export function TaskRows({
     rows
   ) : (
     <SelectionRegion id={id ?? made} selection={selection}>
+      {rows}
+    </SelectionRegion>
+  );
+}
+
+/** The height a task's row is taken to have before it is measured, in pixels: a row's (`--spacing-tasks-list-row`). */
+const ROW_ESTIMATE_PX = 36;
+
+/**
+ * A list of task rows standing on its own, as `TaskRows` is, drawing only
+ * the rows near the view of the scroller it stands in (`VirtualRows`), the
+ * row at an index wearing its place there, every row while `overscan`
+ * asks for them all. Each row is placed out of the list's grid, so it
+ * lays the list's columns out itself, each cell whose words differ row to
+ * row as wide as the widest the list's tasks say there (`fit`,
+ * `taskRowFit`). Its rows are one Tab stop that ↑↓ walk, a key reaching
+ * past the rows drawn going on to the row it reaches, brought in where it
+ * is not drawn (`reachInRun`), the row holding the keyboard staying drawn
+ * wherever the scroller stands; and, where it is asked to (`selection`),
+ * they are chosen together as `TaskRows`' are, across the rows left
+ * undrawn, each row's key its task's id.
+ */
+export function VirtualTaskRows({
+  id,
+  label,
+  cells = RELATED_TASK_CELLS,
+  more = true,
+  edges = TASK_ROW_EDGES.LIST,
+  selection,
+  moves = false,
+  scroller,
+  shiftedBy,
+  keys,
+  overscan,
+  fit,
+  children,
+}: {
+  /** The id a `SelectionBar` over it names; one is made where none is given. */
+  id?: string | undefined;
+  label: string;
+  /** The cells its rows draw, which they are each handed too. */
+  cells?: readonly TaskRowCell[] | undefined;
+  /** Whether its rows draw their ⋯, which they are each handed too; where they leave it out, it keeps no column for it. */
+  more?: boolean | undefined;
+  /** What room its rows keep at their edges, which they are each handed too. */
+  edges?: TaskRowEdges | undefined;
+  /** Which rows are chosen and what hears the next set, where the list chooses rows at all; only a list's edges choose any. */
+  selection?: ListSelection | undefined;
+  /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion`. */
+  moves?: boolean | undefined;
+  /** The element that scrolls, which the rows stand in. */
+  scroller: RefObject<HTMLElement | null>;
+  /** A box whose resizing moves where the list stands in its scroller. */
+  shiftedBy?: RefObject<HTMLElement | null> | undefined;
+  /** Each row's key, its task's id, in order. */
+  keys: readonly string[];
+  /** How many rows past each edge of the view are drawn. */
+  overscan?: number | undefined;
+  /** How wide the cells whose words differ stand (`taskRowFit`). */
+  fit: CSSProperties;
+  /** Draws the row at an index, wearing its place (`TaskRow`'s `place`). */
+  children: (index: number, place: VirtualRowPlace) => ReactNode;
+}): React.JSX.Element {
+  const made = useId();
+  const run = useRef<VirtualRowsHandle>(null);
+  const roving = useRovingKeys<HTMLDivElement>({ reach: reachInRun(run) });
+  const rows = (
+    <div
+      {...roving}
+      style={{
+        ...fit,
+        ...cssCustomProperties({
+          "--tasks-list-columns": taskRowColumns(cells, more && edges !== TASK_ROW_EDGES.BARE),
+        }),
+      }}
+    >
+      <VirtualRows
+        scroller={scroller}
+        shiftedBy={shiftedBy}
+        keys={keys}
+        estimate={ROW_ESTIMATE_PX}
+        overscan={overscan}
+        anchor={VIRTUAL_ROWS_ANCHOR.START}
+        listItems
+        moves={moves}
+        holdsFocus
+        className="ui-task-rows"
+        aria-label={label}
+        handle={run}
+      >
+        {children}
+      </VirtualRows>
+    </div>
+  );
+  return selection === undefined || edges !== TASK_ROW_EDGES.LIST ? (
+    rows
+  ) : (
+    <SelectionRegion
+      id={id ?? made}
+      selection={selection}
+      order={[keys]}
+      bringIn={(key, then) => run.current?.bringIn(key, then) ?? false}
+    >
       {rows}
     </SelectionRegion>
   );

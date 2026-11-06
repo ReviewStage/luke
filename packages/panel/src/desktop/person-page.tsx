@@ -22,6 +22,7 @@ import {
   InlineEdit,
   List,
   ListRow,
+  type ListRun,
   MoreButton,
   moreLabel,
   NOT_FOUND_THING,
@@ -64,8 +65,9 @@ import {
 } from "@repo/ui/person-page-model";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ASSIGNED_TO } from "@repo/ui/task-list-model";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -79,6 +81,7 @@ import {
   useCopyLinkItem,
 } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
@@ -179,6 +182,7 @@ function PersonSection({
   count,
   tone,
   rowsMasked = false,
+  run,
   children,
 }: {
   title: string;
@@ -186,10 +190,13 @@ function PersonSection({
   tone?: StatusTone | undefined;
   /** Whether its rows are drawn by a component this page leaves unmarked, an Inbox item's, so they stay masked in a screen recording but for the words a row unmasks itself. */
   rowsMasked?: boolean | undefined;
-  children: ReactNode;
+  /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
+  run?: ListRun | undefined;
+  /** Its rows, where it draws every one. */
+  children?: ReactNode;
 }): React.JSX.Element {
   const list = (
-    <List label={title} moves>
+    <List label={title} moves run={run}>
       {children}
     </List>
   );
@@ -223,10 +230,13 @@ function AgentRow({
   each,
   tasks,
   now,
+  place,
 }: {
   each: PersonAgent;
   tasks: TasksControl;
   now: number;
+  /** Where it stands in its section's run of rows (`VirtualRows`). */
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
@@ -253,6 +263,7 @@ function AgentRow({
         <ListRow
           ref={hold}
           motionKey={agent.id}
+          place={place}
           leading={
             <span className={HOME_ROW_PICTURE}>
               <ActorMark actor={subject.tile} />
@@ -307,23 +318,59 @@ function agentKey({ agent }: PersonAgent): string {
   return agent.id;
 }
 
-/** A section's agents, a row no longer listed drawn on until its exit has played (`useLeaving`). */
-function AgentRows({
+/** The height an agent's row is taken to have before it is measured, in pixels: a regular `ListRow`'s, one line. */
+const AGENT_ROW_ESTIMATE_PX = 40;
+
+/** The room between two agents' rows, in pixels: a list's (`--ui-list-gap`). */
+const AGENT_ROW_GAP_PX = 2;
+
+/** Where the page's runs of rows stand: its scroller, the box under its header, whose resizing moves the runs below what grew, and whether a find bar stands open, which draws every row so the find covers them. */
+interface PersonRunsPlace {
+  readonly scroller: RefObject<HTMLElement | null>;
+  readonly body: RefObject<HTMLElement | null>;
+  readonly finding: boolean;
+}
+
+/**
+ * A section of their agents: its name and count over its rows, each drawn
+ * on after it is no longer listed until its exit has played (`useLeaving`),
+ * drawing only those near the view, every row while a find bar stands open
+ * (`List`'s `run`).
+ */
+function PersonAgentsSection({
+  title,
   agents,
   tasks,
   now,
+  place,
 }: {
+  title: string;
   agents: readonly PersonAgent[];
   tasks: TasksControl;
   now: number;
+  place: PersonRunsPlace;
 }): React.JSX.Element {
   const drawn = useLeaving(agents, agentKey);
+  const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
   return (
-    <>
-      {drawn.map(({ key, value }) => (
-        <AgentRow key={key} each={value} tasks={tasks} now={now} />
-      ))}
-    </>
+    <PersonSection
+      title={title}
+      count={agents.length}
+      run={{
+        scroller: place.scroller,
+        shiftedBy: place.body,
+        keys,
+        estimate: AGENT_ROW_ESTIMATE_PX,
+        gap: AGENT_ROW_GAP_PX,
+        overscan: place.finding ? keys.length : undefined,
+        row: (index, at) => {
+          const entry = drawn[index];
+          return entry === undefined ? null : (
+            <AgentRow each={entry.value} tasks={tasks} now={now} place={at} />
+          );
+        },
+      }}
+    />
   );
 }
 
@@ -679,6 +726,11 @@ function PersonColumn({
   away: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const body = useRef<HTMLDivElement | null>(null);
+  // Note that the runs draw only the rows near the view, and every row while a find bar stands open over the page.
+  const finding = useFindOpen();
+  const runsPlace = useMemo((): PersonRunsPlace => ({ scroller, body, finding }), [finding]);
   // What a phone's bar picks up from the page's header once it scrolls away.
   const [pickUp, setPickUp] = useState<ToolbarPickUp>({ name: "", shown: false });
   const listed = tasks.listed.tasks;
@@ -762,6 +814,7 @@ function PersonColumn({
       <DetailPage
         frame={PAGE_FRAME.PAGE}
         onPickUp={away === undefined ? undefined : setPickUp}
+        scrollRef={scroller}
         title={
           unnamed ? (
             refused ? (
@@ -780,6 +833,7 @@ function PersonColumn({
         actions={away === undefined ? actions : undefined}
       >
         <PersonBody
+          root={body}
           reading={!tasks.listRead || read.reading || theirAutomations.reading || unnamed}
         >
           <PersonTop>{note}</PersonTop>
@@ -796,9 +850,13 @@ function PersonColumn({
             <RecentTasksSkeleton label={`Reading ${theirs} tasks…`} face={false} />
           ) : null}
           {page.working.length === 0 ? null : (
-            <PersonSection title="Working now" count={page.working.length}>
-              <AgentRows agents={page.working} tasks={tasks} now={now} />
-            </PersonSection>
+            <PersonAgentsSection
+              title="Working now"
+              agents={page.working}
+              tasks={tasks}
+              now={now}
+              place={runsPlace}
+            />
           )}
           {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
           {read.failed ? (
@@ -850,9 +908,13 @@ function PersonColumn({
             unread={unread}
           />
           {page.agents.length === 0 ? null : (
-            <PersonSection title="Agents" count={page.agents.length}>
-              <AgentRows agents={page.agents} tasks={tasks} now={now} />
-            </PersonSection>
+            <PersonAgentsSection
+              title="Agents"
+              agents={page.agents}
+              tasks={tasks}
+              now={now}
+              place={runsPlace}
+            />
           )}
           {automations.length === 0 ? null : (
             <PersonSection title="Automations" count={automations.length}>

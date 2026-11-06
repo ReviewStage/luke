@@ -54,6 +54,7 @@ import {
   type TaskMark,
 } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { useQuery } from "@tanstack/react-query";
 import {
   type RefObject,
@@ -1051,6 +1052,7 @@ export function SidebarTask({
   faces = EVERY_FACE,
   depth,
   nest,
+  place,
   fold,
   childCount,
   onOpen,
@@ -1075,6 +1077,8 @@ export function SidebarTask({
   depth?: number | undefined;
   /** Where the row stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place?: VirtualRowPlace | undefined;
   /** The child tasks nested under the row, which it folds; none where the list holds none. */
   fold?: ListRowFold | undefined;
   /** How many of the task's child tasks are finished, of all of them, said before its time; none where it has none. */
@@ -1204,6 +1208,7 @@ export function SidebarTask({
           more={!coarse}
           depth={depth}
           nest={nest}
+          place={place}
           fold={fold}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
