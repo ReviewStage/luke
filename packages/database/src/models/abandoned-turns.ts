@@ -1,13 +1,14 @@
 import { RUN_EVENT, RUN_STATUS, TURN_FAILURE } from "@repo/features/turn-run";
 import { sessionKey } from "@repo/runtime/vocabulary";
 import { TURN_STATUS } from "@repo/wire";
-import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { dropNativeProjectionTurns } from "./native-projection-store.js";
+import { TURN_LEASE } from "./turn-lease.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
@@ -58,9 +59,19 @@ const ABANDONED_TURN_COLUMNS = {
 /** A turn joined to the conversation it stands in. */
 const TURN_CONVERSATION = eq(conversations.id, turns.conversationId);
 
-/** The ids of the conversation's turns still queued or running whose lease ran out before the instant, oldest first. */
+/**
+ * The ids of the conversation's turns still queued or running whose lease
+ * ran out before the instant, oldest first. Note that a turn with no lease,
+ * which a writer from before the lease may still queue while a deploy rolls
+ * out, is read as though its lease ran from its queueing, because a runner
+ * still posting gives it one at its next post (`turn-lease.ts`).
+ */
 const findLapsedTurns = SqlSchema.findAll({
-  Request: Schema.Struct({ conversationId: Schema.String, before: Schema.Date }),
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    before: Schema.Date,
+    queuedBefore: Schema.Date,
+  }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (request) =>
     Database.use((db) =>
@@ -71,7 +82,10 @@ const findLapsedTurns = SqlSchema.findAll({
           and(
             eq(turns.conversationId, request.conversationId),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
-            lt(turns.leaseUntil, request.before),
+            or(
+              lt(turns.leaseUntil, request.before),
+              and(isNull(turns.leaseUntil), lt(turns.queuedAt, request.queuedBefore)),
+            ),
           ),
         )
         .orderBy(asc(turns.queuedAt), asc(turns.id)),
@@ -190,9 +204,12 @@ export function lapsedTurnIds(
   conversationId: string,
   now: number,
 ): Effect.Effect<readonly string[], QueryError | Schema.SchemaError, DatabaseServices> {
-  return Effect.map(findLapsedTurns({ conversationId, before: new Date(now) }), (rows) =>
-    rows.map((row) => row.id),
-  );
+  const lapsed = {
+    conversationId,
+    before: new Date(now),
+    queuedBefore: new Date(now - TURN_LEASE.MS),
+  };
+  return Effect.map(findLapsedTurns(lapsed), (rows) => rows.map((row) => row.id));
 }
 
 /**

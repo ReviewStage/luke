@@ -179,6 +179,28 @@ const letGo = (
       : { exit, stderr: yield* stderrOf(runner) };
   });
 
+/**
+ * The open launch of a Mac that stopped beating taken from it, before its
+ * bearer is dropped or a turn settled: whether the run is the settle's to
+ * take. Note that the launch's settle is guarded by the Mac's last beat in
+ * the one statement that writes it (`settleLapsedDeviceAgentLine`), so a Mac
+ * that beat since keeps its launch, and the settle then takes nothing; one
+ * that settled its launch itself, or holds none, has no run to keep.
+ */
+const launchTaken = (agent: LapsedAgent, lapse: Extract<Lapse, { kind: "device" }>, now: number) =>
+  Effect.gen(function* () {
+    const launch = yield* latestDeviceAgentLaunch(agent.userId, agent.id);
+    if (Option.isNone(launch)) return true;
+    const taken = yield* settleLapsedDeviceAgentLine(
+      agent.userId,
+      launch.value.id,
+      lapse.seenBefore,
+    );
+    if (Option.isSome(taken)) return true;
+    // Read again, since a launch the guard left open is one whose Mac beat since.
+    return (yield* deviceLapse(agent, now)) !== undefined;
+  });
+
 /** The settle the header describes, its caller holding the agent's runner lease: the ids of the turns it settled failed. */
 const settledHolding = (agent: LapsedAgent, readFirst: ReadonlySet<string>) =>
   Effect.gen(function* () {
@@ -187,15 +209,10 @@ const settledHolding = (agent: LapsedAgent, readFirst: ReadonlySet<string>) =>
     // Read again under the lease, so a turn whose runner posted since the first read keeps running.
     const lost = new Set(turnIds.filter((id) => readFirst.has(id)));
     if (lost.size === 0) return [];
+    if (lapse.kind === "device" && !(yield* launchTaken(agent, lapse, now))) return [];
     const machine = yield* deploymentLifecycle;
     const found = yield* placeOf(machine, agent).pipe(Effect.orElseSucceed(() => undefined));
     const ended = yield* letGo(machine, agent, found, lapse);
-    if (lapse.kind === "device") {
-      const launch = yield* latestDeviceAgentLaunch(agent.userId, agent.id);
-      if (Option.isSome(launch)) {
-        yield* settleLapsedDeviceAgentLine(agent.userId, launch.value.id, lapse.seenBefore);
-      }
-    }
     const detail =
       lapse.kind === "device"
         ? hostAwayDetail(lapse.deviceName)

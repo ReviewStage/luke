@@ -14,7 +14,7 @@ import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { conversations } from "../../schemas/storage.js";
+import { conversations, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
@@ -274,7 +274,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
   );
 
   it.effect(
-    "a turn's lease runs from its queueing, a runner's post pushes it on, and only a turn still open past it reads as lapsed",
+    "a turn's lease runs from its queueing, a runner's post pushes it on, and only a turn still open past it reads as lapsed, as does one with no lease queued a lease ago",
     () =>
       Effect.gen(function* () {
         const writer = yield* storeWriter({ tools: {} });
@@ -284,6 +284,13 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const other = yield* openAgentConversation;
         const lapsed = yield* turnIn(writer, other, TURN_STATUS.QUEUED);
         yield* turnIn(writer, other, TURN_STATUS.SETTLED);
+        // A turn an older writer queued with no lease, as one may while a deploy rolls out.
+        const unleased = yield* openAgentConversation;
+        const leaseless = yield* turnIn(writer, unleased, TURN_STATUS.RUNNING);
+        yield* (yield* Database)
+          .update(turns)
+          .set({ leaseUntil: null })
+          .where(eq(turns.id, leaseless));
 
         const fresh = yield* renewTurnLease(target.conversationId, 60_000);
         const pushed = yield* renewTurnLease(target.conversationId, 10 * 60_000);
@@ -298,6 +305,8 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* lapsedTurnIds(target.conversationId, 10 * 60_000 + past), [
           renewed,
         ]);
+        assert.deepEqual(yield* lapsedTurnIds(unleased.conversationId, TURN_LEASE.MS), []);
+        assert.deepEqual(yield* lapsedTurnIds(unleased.conversationId, past), [leaseless]);
       }),
   );
 
