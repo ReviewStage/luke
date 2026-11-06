@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, readAppState, testQueryClientNow } from "./testing/copy-feedback.js";
 import { appStateQuery } from "./use-app-state.js";
 
 /**
@@ -34,6 +34,7 @@ beforeAll(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
+  vi.restoreAllMocks();
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -137,4 +138,41 @@ test("a delivery older than the document held is dropped", async () => {
 
   await push({ version: 2, entries: { network: { online: false, reachable: true } } });
   assert.equal(drawn.at(-1), held);
+});
+
+test("a window whose second read is refused follows on from the document its first read laid, rather than holding every delivery back", async () => {
+  const first = stateWith({}, {});
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  let reads = 0;
+  fakeAppBridge({
+    requestAppState: () => {
+      reads += 1;
+      return reads === 1
+        ? Promise.resolve(structuredClone(first))
+        : Promise.reject(new Error("gone"));
+    },
+    onAppState: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  await readAppState();
+  root = createRoot(document.createElement("div"));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement("div"))));
+  await settle();
+
+  act(() => {
+    for (const listener of listeners) {
+      listener({ version: 2, entries: { network: { online: false, reachable: true } } });
+    }
+  });
+  await settle();
+
+  assert.equal(reads, 2, "the subscription asked for the document again");
+  assert.deepEqual(testQueryClientNow().getQueryData(appStateQuery.queryKey), {
+    ...first,
+    version: 2,
+    network: { online: false, reachable: true },
+  });
 });

@@ -95,8 +95,8 @@ export const appStateQuery = queryOptions({
 });
 
 /**
- * Subscribes to `app:state`, then asks for the document once, answering what
- * stops the subscription; none where the bridge cannot be heard, as a test's
+ * Subscribes to `app:state`, then asks for the document once, handing a
+ * refusal to `onRefused`, and answers what stops the subscription; none where the bridge cannot be heard, as a test's
  * fake answering other calls alone cannot, which leaves the client on the
  * document seeded into it. Note that the read is asked after the
  * subscription stands, so a delivery sent while it is in flight is heard.
@@ -104,11 +104,12 @@ export const appStateQuery = queryOptions({
 function heard(
   onDelivered: (delivered: AppStateDelivery) => void,
   onRead: (read: AppStateSnapshot) => void,
+  onRefused: (cause: unknown) => void,
 ): (() => void) | undefined {
   try {
     const bridge = appBridge();
     const stop = bridge.onAppState(onDelivered);
-    bridge.requestAppState().then(onRead, () => undefined);
+    bridge.requestAppState().then(onRead, onRefused);
     return stop;
   } catch {
     return undefined;
@@ -125,7 +126,9 @@ function heard(
  * (`fixture-moves.ts`) hands the document held on to be staged anew, and its
  * staging waits on the fixture, so its writes queue behind one another. The
  * client is handed to the fixture while it is written into, whose staged
- * acts read the run from it (`act.ts`); a refused read is the root's to report.
+ * acts read the run from it (`act.ts`). A refused read follows on from the
+ * document the client holds, and a staging that throws is reported and
+ * passed over.
  */
 function followAppState(client: QueryClient): () => void {
   let following = true;
@@ -137,10 +140,18 @@ function followAppState(client: QueryClient): () => void {
       client.setQueryData(appStateQuery.queryKey, state);
       return;
     }
+    // Note that a staging that throws is reported and passed over, because the readings queued behind it must still land.
     const next = (staging ?? Promise.resolve())
       .then(() => staged(state))
-      .then((shown) => {
-        if (following) client.setQueryData(appStateQuery.queryKey, shown);
+      .then(
+        (shown) => {
+          if (following) client.setQueryData(appStateQuery.queryKey, shown);
+        },
+        (error: unknown) => {
+          console.error("A fixture run's document could not be staged.", error);
+        },
+      )
+      .then(() => {
         if (staging === next) staging = undefined;
       });
     staging = next;
@@ -162,6 +173,19 @@ function followAppState(client: QueryClient): () => void {
       held = early.reduce(adopt, read);
       early = [];
       write(held);
+    },
+    // Note that a refused read follows on from the document the client holds, the root's own read,
+    // rather than leaving every later delivery waiting on a read that will never answer.
+    (cause) => {
+      console.error(
+        "The window's state could not be read again; it follows on from what it holds.",
+        cause,
+      );
+      const holding = client.getQueryData<AppStateSnapshot>(appStateQuery.queryKey);
+      if (!following || holding === undefined) return;
+      held = early.reduce(adopt, holding);
+      early = [];
+      if (held !== holding) write(held);
     },
   );
   const stopMoves = onFixtureMoved(() => {
