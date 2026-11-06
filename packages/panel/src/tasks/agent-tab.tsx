@@ -123,7 +123,7 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
-import { AgentForward } from "./agent-forward.js";
+import { useForwardEntry } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -2773,6 +2773,7 @@ function AgentTabView({
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
   const queue = useAgentQueue(agent.id, transcript.queue);
   const pictures = useAgentPictureDoor(agent.id);
+  const forward = useForwardEntry(agent);
   const queueEditing = useQueueEditing(composer, queue, pictures);
   const enterQueues = useQuery({ ...appStateQuery, select: selectEnterQueues }).data === true;
   // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
@@ -3097,12 +3098,8 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => (
-              <>
-                <AgentPlace agent={agent} narrow={narrow} />
-                <AgentForward agent={agent} narrow={narrow} />
-              </>
-            )}
+            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
+            plus={forward === undefined ? undefined : [forward]}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its description or
             // task, so the box takes a follow up even before the transcript is read.
