@@ -140,6 +140,12 @@ token-shaped parts of addresses. Reports name your account by its id only. The
 Service does not send Sentry what was sent to or returned by a model, though an
 error's own words can quote what an agent was working on.
 
+Every five minutes the Mac app also sends Sentry how much processor time each
+kind of its processes used (the app itself, its windows, graphics, and
+helpers), whether its windows were mostly focused, shown, or hidden, about how
+many agents were working, the app's version, and the Mac's processor type,
+under your account's id. It sends nothing of what the windows show.
+
 ### Feedback
 
 If you send feedback, we receive your words, any screenshots you attach, and,

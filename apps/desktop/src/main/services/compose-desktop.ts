@@ -1,4 +1,5 @@
 import { CLI_RELEASE } from "@repo/features/cli-release";
+import { workingAgentCount } from "@repo/features/tasks-view";
 import { AgentNoticeDoors, type AgentNotices } from "@repo/host/agent-notices";
 import {
   AppStateStore,
@@ -250,6 +251,7 @@ export function composeDesktop(
         recordEvent: (name, properties) => {
           void run(operator.host.recordEvent(name, properties));
         },
+        workingAgents: () => workingAgentCount(state.snapshot().tasks),
       });
       const windows = createWindowService({
         config,
