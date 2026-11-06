@@ -61,8 +61,8 @@
  * a drag counts, and tells its owner the row dragged by its task's id rather
  * than its place, so the task found is the one pressed whichever of the
  * list's rows are drawn. Such a list may draw only the rows near the view
- * (`VirtualRows`): a place in it, or in a zone it is carried over, counts
- * from where the first row drawn stands among them all (`data-index`); the
+ * (`VirtualRows`): a place in it, or in a zone it is carried over, is the
+ * place among them all of the row drawn at it (`data-index`); the
  * pressed row takes the keyboard as it is lifted, which keeps it drawn
  * however far the list is scrolled beneath it; and rows drawn or dropped by
  * that scroll leave the drag standing, which only the pressed row's leaving
@@ -218,10 +218,20 @@ function rowsIn(list: HTMLElement, item: string): HTMLElement[] {
   return [...list.querySelectorAll<HTMLElement>(`:scope > ${item}:not([data-leaving])`)];
 }
 
-/** Where the first of `rows` stands among every row of its list, where the list may draw only those near the view (`data-index`); 0 where it draws them all. */
-function firstPlace(press: RowPress, rows: readonly HTMLElement[]): number {
-  if (!press.partial) return 0;
-  return Number(rows[0]?.getAttribute(ROW_INDEX) ?? 0) || 0;
+/**
+ * Where the slot `at` among `rows` stands among every row of their list:
+ * the slot itself where the list draws them all, else the place of the row
+ * drawn there (`data-index`), or one past the last drawn for the slot after
+ * them all. Note that each slot is read by its own row, because a list
+ * drawing only the rows near the view also draws the row holding the
+ * keyboard wherever it stands, so the rows drawn need not run on unbroken.
+ */
+function placeAmong(press: RowPress, rows: readonly HTMLElement[], at: number): number {
+  if (!press.partial) return at;
+  const before = rows[at];
+  if (before !== undefined) return Number(before.getAttribute(ROW_INDEX)) || 0;
+  const last = rows.at(-1);
+  return last === undefined ? 0 : (Number(last.getAttribute(ROW_INDEX)) || 0) + 1;
 }
 
 /** A drop zone's rows of the kind (`item`), where it keeps an order of its own that a drop lands at a place in. */
@@ -592,7 +602,7 @@ function useListDrag<Row>(
       draw(press, list, out);
       const zone = press.zone;
       if (zone !== undefined) {
-        const at = zone.at + firstPlace(press, zoneRowsIn(zone.zone, press.item));
+        const at = placeAmong(press, zoneRowsIn(zone.zone, press.item), zone.at);
         // The row now stands in the zone's list, so it comes down there rather than settling here.
         flushSync(() => {
           latestOut.current?.(name, zone.id, at);
@@ -604,7 +614,7 @@ function useListDrag<Row>(
       // The list is drawn in its new order before the rows come down, so they
       // come down where that drew them, and the copy lands on the row there.
       flushSync(() => {
-        if (press.to !== press.at) latest.current?.(name, press.to + firstPlace(press, press.rows));
+        if (press.to !== press.at) latest.current?.(name, placeAmong(press, press.rows, press.to));
         carried(false);
       });
       const copy = press.carried;
