@@ -62,12 +62,8 @@ const size = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
 export const mirrorFrameSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(MIRROR_FRAME.HEADER),
-    /**
-     * The merge base of the checkout's `HEAD` and the branch it was cloned
-     * from, a commit GitHub holds; `HEAD` itself where the checkout names no
-     * such branch, and none where it has no commit yet.
-     */
-    base: EffectSchema.NullOr(EffectSchema.NonEmptyString),
+    /** The merge base of the checkout's `HEAD` and the branch it was cloned from, a commit GitHub holds. */
+    base: EffectSchema.NonEmptyString,
   }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(MIRROR_FRAME.MANIFEST),

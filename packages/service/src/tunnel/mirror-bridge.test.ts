@@ -23,20 +23,22 @@ const readMessage = Schema.decodeUnknownSync(mirrorFrameSchema);
 
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
-/** A checkout with one commit: a tracked file, an untracked executable, an ignored log, and a symlink. */
+/** A one-branch clone of a repository with one commit, as the sandbox clones it: a tracked file, then an untracked executable, an ignored log, and a symlink. */
 async function checkout(t: TestContext) {
+  const upstream = await temporaryDirectory(t, "mirror-upstream-");
   const root = await temporaryDirectory(t, "mirror-");
-  const git = (...args: string[]) =>
-    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: root });
-  git("init", "--quiet");
-  fs.writeFileSync(path.join(root, ".gitignore"), "*.log\n");
-  fs.writeFileSync(path.join(root, "a.txt"), "tracked");
-  git("add", ".");
-  git("commit", "--quiet", "-m", "base");
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd });
+  git(upstream, "init", "--quiet", "--initial-branch=main");
+  fs.writeFileSync(path.join(upstream, ".gitignore"), "*.log\n");
+  fs.writeFileSync(path.join(upstream, "a.txt"), "tracked");
+  git(upstream, "add", ".");
+  git(upstream, "commit", "--quiet", "-m", "base");
+  git(root, "clone", "--quiet", "--single-branch", "--branch", "main", upstream, ".");
   fs.writeFileSync(path.join(root, "b.sh"), "#!/bin/sh\n", { mode: 0o755 });
   fs.writeFileSync(path.join(root, "out.log"), "ignored");
   fs.symlinkSync("a.txt", path.join(root, "link"));
-  return { root, head: git("rev-parse", "HEAD").toString().trim() };
+  return { root, head: git(root, "rev-parse", "HEAD").toString().trim() };
 }
 
 /** The bridge at the root given, its channel open, each mirror message it sends read in turn. */

@@ -8,15 +8,15 @@
  * as git lists it, and from then on a watch on each folder that listing
  * holds is only a trigger: once the checkout has been quiet for a moment,
  * or at most a second after it first stirred, it is listed again and
- * compared by size, modified time, and mode with the last listing, held in
+ * compared by size and modified time with the last listing, held in
  * memory and nowhere else, each file new or changed is sent, each one gone
  * is deleted, and the folders watched follow the new listing. Note that we
  * watch the listed folders rather than the checkout recursively, because
  * Node on Linux watches a recursive tree file by file, ignored folders such
  * as `node_modules` included, which costs seconds and hundreds of megabytes.
  * A missed watch event costs nothing, since the next listing catches it,
- * and a listing git refuses ends the bridge, which the Mac answers by
- * connecting again. A request is answered only for a path the last listing
+ * and whatever the bridge cannot do, such as a listing git refuses or a
+ * base it cannot find, ends it, which the Mac answers by connecting again. A request is answered only for a path the last listing
  * holds, so the Mac can never read outside it. The bridge writes nothing but
  * frames, and git's own words go nowhere.
  */
@@ -46,44 +46,21 @@ const tell = (message) => {
 const git = (args) => execFileSync("git", args, {
   cwd: root, encoding: "utf8", maxBuffer: 1024 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"],
 });
-const gitOr = (args) => { try { return git(args).trim(); } catch { return ""; } };
 const list = () => {
   const found = new Map();
   for (const name of git(["ls-files", "-co", "--exclude-standard", "-z"]).split("\\0")) {
-    if (name === "" || found.has(name)) continue;
+    if (name === "") continue;
     let stat;
     try { stat = fs.lstatSync(path.join(root, name)); } catch { continue; }
     if (stat.isFile()) found.set(name, stat);
   }
   return found;
 };
-const clonedBranch = () => {
-  const head = gitOr(["symbolic-ref", "-q", "refs/remotes/origin/HEAD"]);
-  if (head !== "") return head;
-  const specs = gitOr(["config", "--get-all", "remote.origin.fetch"]).split("\\n");
-  const at = specs[0].indexOf(":refs/remotes/origin/");
-  return specs.length !== 1 || at < 0 || specs[0].includes("*") ? "" : specs[0].slice(at + 1);
-};
 const base = () => {
-  const branch = clonedBranch();
-  const merged = branch === "" ? "" : gitOr(["merge-base", "HEAD", branch]);
-  if (merged !== "") return merged;
-  const head = gitOr(["rev-parse", "--verify", "-q", "HEAD"]);
-  return head === "" ? null : head;
+  const cloned = git(["config", "--get", "remote.origin.fetch"]).trim().split(":")[1];
+  return git(["merge-base", "HEAD", cloned]).trim();
 };
-const hashOf = (name) => {
-  const hash = createHash("sha256");
-  const chunk = Buffer.allocUnsafe(1024 * 1024);
-  const fd = fs.openSync(path.join(root, name), "r");
-  try {
-    for (let read = fs.readSync(fd, chunk); read > 0; read = fs.readSync(fd, chunk)) {
-      hash.update(chunk.subarray(0, read));
-    }
-  } finally {
-    fs.closeSync(fd);
-  }
-  return hash.digest("hex");
-};
+const hashOf = (name) => createHash("sha256").update(fs.readFileSync(path.join(root, name))).digest("hex");
 const manifest = () => {
   const files = [];
   for (const [name, stat] of listing) {
@@ -95,7 +72,6 @@ const fileOf = (name, stat) => {
   if (stat.size > ${MIRROR_BOUNDS.FILE_BYTES}) return { type: "skipped", path: name, size: stat.size };
   let bytes;
   try { bytes = fs.readFileSync(path.join(root, name)); } catch { return undefined; }
-  if (bytes.length > ${MIRROR_BOUNDS.FILE_BYTES}) return { type: "skipped", path: name, size: bytes.length };
   const mode = (stat.mode & 0o111) === 0 ? "${MIRROR_FILE_MODE.REGULAR}" : "${MIRROR_FILE_MODE.EXECUTABLE}";
   return { type: "file", path: name, mode, bytes: bytes.toString("base64") };
 };
@@ -115,15 +91,10 @@ const watchFolders = () => {
   }
   for (const folder of folders) {
     if (watched.has(folder)) continue;
-    try {
-      const watcher = fs.watch(path.join(root, folder), stir);
-      watcher.on("error", () => { watcher.close(); watched.delete(folder); });
-      watched.set(folder, watcher);
-    } catch {}
+    watched.set(folder, fs.watch(path.join(root, folder), stir));
   }
 };
 const open = (opened) => {
-  if (channel !== undefined && channel !== opened) say({ type: "close", channel });
   channel = opened;
   listing = list();
   watchFolders();
@@ -139,8 +110,7 @@ const settle = () => {
   const now = list();
   for (const [name, stat] of now) {
     const was = listing.get(name);
-    const same = was !== undefined && was.size === stat.size && was.mtimeMs === stat.mtimeMs && was.mode === stat.mode;
-    if (!same) send(name, stat);
+    if (was === undefined || was.size !== stat.size || was.mtimeMs !== stat.mtimeMs) send(name, stat);
   }
   for (const name of listing.keys()) {
     if (!now.has(name)) tell({ type: "delete", path: name });
@@ -155,15 +125,14 @@ const stir = () => {
 };
 const answer = (paths) => {
   for (const name of paths) {
-    const stat = typeof name === "string" ? listing.get(name) : undefined;
+    const stat = listing.get(name);
     if (stat !== undefined) send(name, stat);
-    else if (typeof name === "string") tell({ type: "delete", path: name });
+    else tell({ type: "delete", path: name });
   }
 };
 const asked = (data) => {
-  let message;
-  try { message = JSON.parse(Buffer.from(data, "base64").toString("utf8")); } catch { return; }
-  if (message !== null && message.type === "request" && Array.isArray(message.paths)) answer(message.paths);
+  const message = JSON.parse(Buffer.from(data, "base64").toString("utf8"));
+  if (Array.isArray(message.paths)) answer(message.paths);
 };
 const take = (line) => {
   let frame;
