@@ -68,14 +68,12 @@ import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-co
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
-  type AgentToolCall,
   runAgentComment,
   runAgentEditDescription,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
   runAgentShowImage,
   runAgentShowPage,
-  runAgentTools,
 } from "../coder-host/agent-doors.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "../coder-host/description-edit.js";
 import { postToInbox } from "../coder-host/inbox.js";
@@ -332,16 +330,8 @@ function post(
 const descriptionsOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
 
-/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
-const SERVED_TOOLS = [
-  "post_thread",
-  "read_threads",
-  "withdraw_ask",
-  "open_pull_request",
-  "edit_description",
-  "look_at_picture",
-  "show_image",
-  "show_page",
+/** The agent tools about the workspace's agents, tasks, automations, and memory, each of whose catalog entries names its own run (`tool-catalog/catalog.ts`'s `agentTool`). */
+const AGENT_TOOLS = [
   "read_page",
   "start_agent",
   "stop_agent",
@@ -363,6 +353,19 @@ const SERVED_TOOLS = [
   "run_automation",
   "save_memory",
   "search_memory",
+] as const;
+
+/** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
+const SERVED_TOOLS = [
+  "post_thread",
+  "read_threads",
+  "withdraw_ask",
+  "open_pull_request",
+  "edit_description",
+  "look_at_picture",
+  "show_image",
+  "show_page",
+  ...AGENT_TOOLS,
   "read_comments",
   "reply_to_comment",
   "update_comment",
@@ -379,11 +382,6 @@ type DirectCall = (
   seams: AgentDoorSeams,
 ) => Effect.Effect<object, never, WorkspaceMcpServices>;
 
-const agentTool =
-  (tool: AgentToolCall["tool"]): DirectCall =>
-  (admitted, input, seams) =>
-    runAgentTools(seams, admitted, { tool, input, callId: randomUUID() }, true);
-
 const commentTool =
   (name: CommentToolName): DirectCall =>
   (admitted, input) =>
@@ -392,9 +390,13 @@ const commentTool =
 /**
  * Each tool's own door, called as eve's tool calls it: the server's answer to
  * a tool is to be this one's, so a tool routed to any other door, or to
- * none, answers otherwise.
+ * none, answers otherwise. The agent tools are left out, since each one's
+ * catalog entry names its run itself, and no door of theirs stands apart
+ * from the catalog to call.
  */
-const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
+const DOOR_OF: Readonly<
+  Record<Exclude<ServedTool, "run_on_mac" | "browser" | (typeof AGENT_TOOLS)[number]>, DirectCall>
+> = {
   post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
@@ -404,27 +406,6 @@ const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, Di
   look_at_picture: (admitted, input) => runAgentLookAtPicture(admitted, input),
   show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
   show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
-  read_page: agentTool("read_page"),
-  start_agent: agentTool("start_agent"),
-  stop_agent: agentTool("stop_agent"),
-  list_agents: agentTool("list_agents"),
-  read_agent: agentTool("read_agent"),
-  message_agent: agentTool("message_agent"),
-  update_agent: agentTool("update_agent"),
-  list_models: agentTool("list_models"),
-  list_tasks: agentTool("list_tasks"),
-  read_task: agentTool("read_task"),
-  create_task: agentTool("create_task"),
-  update_task: agentTool("update_task"),
-  create_section: agentTool("create_section"),
-  delete_section: agentTool("delete_section"),
-  list_automations: agentTool("list_automations"),
-  create_automation: agentTool("create_automation"),
-  update_automation: agentTool("update_automation"),
-  delete_automation: agentTool("delete_automation"),
-  run_automation: agentTool("run_automation"),
-  save_memory: agentTool("save_memory"),
-  search_memory: agentTool("search_memory"),
   read_comments: commentTool("read_comments"),
   reply_to_comment: commentTool("reply_to_comment"),
   update_comment: commentTool("update_comment"),
