@@ -3,13 +3,11 @@ import {
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationDeletedAnswerSchema,
-  automationListAnswerSchema,
   automationRunAnswerSchema,
-  automationRunsAnswerSchema,
-  automationSummarySchema,
 } from "./automation-wire.js";
-import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
-import { wireUuidSchema } from "./service-wire.js";
+import { automationsContract } from "./contract/automations.js";
+import { answerView, failureSetOf } from "./hosted-failure.js";
+import { HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 
 /**
  * automation-view.ts -- the account's automations as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -24,30 +22,23 @@ import { wireUuidSchema } from "./service-wire.js";
  * other answer, event, or window ever holds it.
  */
 
-/** Why an automation call answered nothing a window can draw. */
-export const AUTOMATION_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The automation, or the task or workspace it names, is gone or not the account's to reach. */
-  NOT_FOUND: "not-found",
-  /** The task it stands on names no repository, so no agent could work on it. */
-  NO_REPOSITORY: "no-repository",
-  /** A repository it names is one its workspace's installation does not reach. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The service refused what was written: a schedule that does not read, a model it does not offer, or a place it cannot stand on. */
-  INVALID: "invalid",
-  /** The account may read it but not do this with it: a teammate's personal automation, or a workspace one only its owners and admins change. */
-  NOT_PERMITTED: "not-permitted",
+/**
+ * The failures that shipped under a spelling other than their slug: a
+ * request the service will not take is invalid, and GitHub not saying
+ * whether a repository is reached is no answer, as it always read.
+ */
+export const AUTOMATION_RENAMES = {
+  [HOSTED_API_ERROR.INVALID_REQUEST]: "invalid",
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: "unanswered",
 } as const;
+
+/** Why an automation call answered nothing a window can draw. */
+export const AUTOMATION_CALL_FAILURE = failureSetOf(automationsContract, {
+  as: AUTOMATION_RENAMES,
+});
 
 export type AutomationCallFailure =
   (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE];
-
-const failed = EffectSchema.Struct({
-  failure: EffectSchema.Literals(Object.values(AUTOMATION_CALL_FAILURE)),
-  /** Why the repository is out of reach, where that is the failure and the service said. */
-  unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
-});
 
 /** The list asked for: the account's automations, or one task's, or one workspace's. */
 export const automationListParamsSchema = EffectSchema.Struct({
@@ -84,19 +75,16 @@ export const automationRunParamsSchema = EffectSchema.Struct({
 export type AutomationRunParams = typeof automationRunParamsSchema.Type;
 
 /** The account's automations as the window hears them. */
-export const automationListViewSchema = EffectSchema.Union([automationListAnswerSchema, failed]);
+export const automationListViewSchema = answerView(automationsContract.list, {
+  as: AUTOMATION_RENAMES,
+});
 
 export type AutomationListView = typeof automationListViewSchema.Type;
 
 /** One automation as a write answers it to the window, with the webhook secret it minted where it minted one. */
-export const automationViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    automation: automationSummarySchema,
-    webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
-    txid: automationDeletedAnswerSchema.fields.txid,
-  }),
-  failed,
-]);
+export const automationViewSchema = answerView(automationsContract.change, {
+  as: AUTOMATION_RENAMES,
+});
 
 export type AutomationView = typeof automationViewSchema.Type;
 
@@ -106,18 +94,23 @@ export const automationDeletedViewSchema = EffectSchema.Union([
     deleted: EffectSchema.Literal(true),
     txid: automationDeletedAnswerSchema.fields.txid,
   }),
-  failed,
+  answerView(automationsContract.remove, { as: AUTOMATION_RENAMES }).members[1],
 ]);
 
 export type AutomationDeletedView = typeof automationDeletedViewSchema.Type;
 
-/** The run a "Run now" made, as the window hears it. */
-export const automationRunViewSchema = EffectSchema.Union([automationRunAnswerSchema, failed]);
+/** The run a "Run now" made, as the window hears it: the run, not the status it was answered with. */
+export const automationRunViewSchema = EffectSchema.Union([
+  automationRunAnswerSchema,
+  answerView(automationsContract.run, { as: AUTOMATION_RENAMES }).members[1],
+]);
 
 export type AutomationRunView = typeof automationRunViewSchema.Type;
 
 /** One automation's runs, as the window hears them. */
-export const automationRunsViewSchema = EffectSchema.Union([automationRunsAnswerSchema, failed]);
+export const automationRunsViewSchema = answerView(automationsContract.runs, {
+  as: AUTOMATION_RENAMES,
+});
 
 export type AutomationRunsView = typeof automationRunsViewSchema.Type;
 

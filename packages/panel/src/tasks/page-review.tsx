@@ -1,15 +1,13 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
 import {
+  DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_BOUNDS,
   type DescriptionCommentStart,
 } from "@repo/features/description-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
-  BLOCK_LIST_ELEMENT,
-  BlockList,
-  BlockListItem,
   CONFIRM_LOSS,
   ConfirmDialog,
   type DialogQuestion,
@@ -24,7 +22,6 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { keptLines } from "../composer-drafts.js";
 import { confirmFailure, failureShown } from "../failure-report.js";
 import { undoToast, useToast } from "../toast.js";
-import { PENDING_WORDS } from "./pending-comments.js";
 import { REVIEW_PANEL_WORDS, ReviewPress, type ReviewWords } from "./review-panel.js";
 
 /**
@@ -314,6 +311,14 @@ export function usePageReview(
     remove,
     discard: () => {
       setFailed(false);
+      // Note that a thread a stopped send posted already is deleted with the rest, so a discarded review leaves nothing behind, as its question says.
+      for (const comment of held) {
+        if (comment.landed === true) {
+          void control?.act(comment.clientKey, {
+            action: DESCRIPTION_COMMENT_ACTION.DELETE_THREAD,
+          });
+        }
+      }
       drop((comment) => !heldOn(comment, planId, pageId));
     },
     send,
@@ -363,17 +368,10 @@ export function PageReviewPress({
             nothing || review.editing || body.length > DESCRIPTION_COMMENT_BOUNDS.MAX_WORDS_CHARS,
         }}
         sending={review.sending}
-        pendingList={
-          count === 0 ? null : (
-            <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
-              {review.held.map((comment) => (
-                <BlockListItem key={comment.clientKey}>
-                  {pendingOf(comment, review.sending)}
-                </BlockListItem>
-              ))}
-            </BlockList>
-          )
-        }
+        pending={review.held.map((comment) => ({
+          key: comment.clientKey,
+          comment: pendingOf(comment, review.sending),
+        }))}
         note={
           review.failed ? (
             <FailureNote

@@ -202,7 +202,7 @@ export function hostedFetch(router: HostedRouter): HostedFetch {
   return async (incoming, services) => {
     const request = counted(incoming);
     const { matched, response } = await handler.handle(request, {
-      context: { "effect/context": services, "effect/wrap": hostedRefusalWrap, request },
+      context: { "effect/context": services, "effect/wrap": hostedRefusalWrap(services), request },
     });
     if (matched) return sameOriginOnly(settled(response));
     const { pathname } = new URL(request.url);

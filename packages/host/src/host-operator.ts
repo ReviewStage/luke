@@ -1,6 +1,5 @@
-import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
+import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
-import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
@@ -91,23 +90,15 @@ import {
   terminalStateEventSchema,
   terminalsActAnswerSchema,
 } from "@repo/features/terminal-view";
-import { isSignInFailure } from "@repo/features/words";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayCallResult,
   type GatewayClient,
-  type GatewayMethod,
   gatewayEventReader,
 } from "@repo/gateway";
-import type {
-  AppSettingField,
-  AppSettingValue,
-  Experiment,
-  SettingsResetScope,
-} from "@repo/settings";
-import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
+import type { AppSettings } from "@repo/settings/wire";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -118,7 +109,7 @@ import {
   type WireRecord,
 } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
@@ -196,33 +187,7 @@ export interface HostOperator {
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   /** Which machine This Mac is and the device its host's record names, held by the host for the session, whole, each time it moves; never on a platform with no This Mac. */
   onThisMacHostChanged(listener: (held: AppThisMacHosts) => void): () => void;
-  updateSetting<Field extends AppSettingField>(
-    field: Field,
-    value: AppSettingValue<Field>,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  /** One group returned to its defaults, but for the fields `kept`, which the asking page does not draw. */
-  resetSettings(
-    scope: SettingsResetScope,
-    kept: readonly AppSettingField[],
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  /** One experiment turned on or off for the signed-in account, on the service. */
-  setExperiment(
-    experiment: Experiment,
-    on: boolean,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  /** The account a sign-in settled on, or the key of why it ended without landing. */
-  beginSignIn(provider: AccountProvider): Effect.Effect<SignInAnswer>;
-  /** The sign-in taken again over the session that stands: whether a new session landed. */
-  signInAgain(provider: AccountProvider): Effect.Effect<boolean>;
-  cancelSignIn(): Effect.Effect<void>;
-  signOut(): Effect.Effect<AccountSnapshot>;
-  deleteAccount(): Effect.Effect<AccountSnapshot>;
-  /** The member's grant of support access granted for seven days, or revoked: when it then runs out, or null. */
-  supportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -655,19 +620,6 @@ function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
 }
 
 /**
- * The host refused a call, or answered a shape its method does not document:
- * a defect of this build, worded by the router as the kind's refusal. Note
- * that only the shape is reported to Sentry, because a refusal is the host's
- * own answer, and a handler that died behind one was reported where it died
- * (`gatewayHost`).
- */
-function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Effect<never> {
-  if (answer.ok) return Effect.die(new Error(`${method} answered a shape this client cannot read`));
-  const refusal = new Error(`${method} was refused: ${answer.error.message}`);
-  return Effect.die(Object.assign(refusal, { [ErrorReporter.ignore]: true }));
-}
-
-/**
  * The host's answers are the same structured-clone payloads the windows
  * already receive over the bridge, carried through the protocol as JSON. The
  * readers below check the field the client itself decides on and hand the
@@ -708,43 +660,14 @@ const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
-  const settingsResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SettingsUpdateResult> =>
-    Effect.flatMap(result, (answer) => {
-      const parsed = answered<SettingsUpdateResult>(record(answer));
-      return parsed?.settings !== undefined ? Effect.succeed(parsed) : unanswered(method, answer);
-    });
-
-  const accountResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<AccountSnapshot> =>
-    Effect.flatMap(result, (answer) => {
-      const account = answered<AccountSnapshot>(record(answer)?.account);
-      return account ? Effect.succeed(account) : unanswered(method, answer);
-    });
-
   const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
     Effect.asVoid(result);
 
   const on = gatewayEventReader(client);
 
-  const wireReporter = (reporter: string) => ({ reporter });
-
   /** A repository list's scope as the gateway carries it: its workspace, or nothing for every one. */
   const repositoryScope = (params: TasksRepositoriesParams) =>
     params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId };
-
-  /**
-   * A setting's value as the method's own field, or no field for a cleared
-   * one. The envelope is JSON, and its encoder refuses a record holding
-   * `undefined` rather than dropping the key, so a clear carried as a value
-   * would never leave this process.
-   */
-  const wireValue = <Value>(value: Value | undefined) =>
-    value !== undefined ? { value: carried(value) } : undefined;
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -810,68 +733,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AppSettings>(record(answer)?.settings)),
       ),
-    updateSetting: (field, value, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_UPDATE,
-        client.call(GATEWAY_METHOD.SETTINGS_UPDATE, {
-          field,
-          ...wireValue(value),
-          ...wireReporter(reporter),
-        }),
-      ),
-    resetSettings: (scope, kept, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_RESET,
-        client.call(GATEWAY_METHOD.SETTINGS_RESET, {
-          scope,
-          kept: [...kept],
-          ...wireReporter(reporter),
-        }),
-      ),
-    setExperiment: (experiment, on, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.EXPERIMENTS_SET,
-        client.call(GATEWAY_METHOD.EXPERIMENTS_SET, {
-          experiment,
-          on,
-          ...wireReporter(reporter),
-        }),
-      ),
     accountSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>
         Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
-    beginSignIn: (provider) =>
-      Effect.flatMap(
-        client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
-        (answer): Effect.Effect<SignInAnswer> => {
-          const failure = record(answer)?.failure;
-          if (isSignInFailure(failure)) return Effect.succeed({ failure });
-          return Effect.map(
-            accountResult(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, Effect.succeed(answer)),
-            (account) => ({ account }),
-          );
-        },
-      ),
-    signInAgain: (provider) =>
-      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider }), (answer) => {
-        const signedIn = record(answer)?.signedIn;
-        return isWireBoolean(signedIn)
-          ? Effect.succeed(signedIn)
-          : unanswered(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, answer);
-      }),
-    cancelSignIn: () => fire(client.call(GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN)),
-    signOut: () =>
-      accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
-    deleteAccount: () =>
-      accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
-    supportAccess: (grant) =>
-      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, { grant }), (answer) => {
-        const until = record(answer)?.supportAccessUntil;
-        return until === null || isWireNumber(until)
-          ? Effect.succeed({ supportAccessUntil: until })
-          : unanswered(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, answer);
-      }),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(

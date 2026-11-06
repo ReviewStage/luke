@@ -3467,7 +3467,7 @@ it.effect(
 );
 
 it.effect(
-  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
+  "a close drops its update from what waits across the account, its task counting one fewer as for a question, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
   () =>
     Effect.gen(function* () {
       const { call, acts, sealAccount, live, commitIn, accountInboxes } = yield* subject();
@@ -3476,7 +3476,8 @@ it.effect(
       yield* settled;
       const plan = { planId: TASK_ID, items: 1, toDo: 1, updatedAt: ITEM.updatedAt };
       const parts = { planless: [], automations: [], failedRuns: [] };
-      live.account.set({ ...parts, items: [WAITING], plans: [plan] }, ["9100"]);
+      const update = { ...WAITING, asking: false };
+      live.account.set({ ...parts, items: [update], plans: [plan] }, ["9100"]);
       yield* toldTimes(accountInboxes, 1);
       /** What waits, and each task's count, as the account inbox was last told. */
       const waiting = () => {
@@ -3499,7 +3500,7 @@ it.effect(
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
       // The read answers once more from before the close, which still stands over it.
-      live.account.set({ ...parts, items: [WAITING], plans: [{ ...plan, updatedAt: NOW }] });
+      live.account.set({ ...parts, items: [update], plans: [{ ...plan, updatedAt: NOW }] });
       yield* nextPoll;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
