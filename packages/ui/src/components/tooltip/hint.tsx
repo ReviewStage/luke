@@ -76,15 +76,13 @@
  * The pill and the card are drawn, and placed, by `TooltipPill` and
  * `TooltipCard` (`tooltip.tsx`); what is here is when one shows and goes,
  * the warm spell, a card's linger, and the stack of cards hung over one
- * another. The waits are atoms' work on the registry the app's root provides
- * (`RegistryContext`), or the library's own where none is, over no services,
- * so nothing here builds a runtime of its own. Whether focus moved by the
+ * another. The waits fork on the library's edge (`../../wait.ts`), so
+ * nothing here builds a runtime or arms a timer of its own. Whether focus moved by the
  * keyboard is read from the root's `data-keyboard`, which the app's root
  * marks as the keyboard moves it; an app that marks nothing shows no pill on
  * focus.
  */
 
-import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@repo/brand";
 import {
   APP_SHORTCUTS,
@@ -93,7 +91,6 @@ import {
   shortcutAria,
 } from "@repo/settings/shortcuts";
 import { Duration, Effect } from "effect";
-import * as Atom from "effect/reactivity/Atom";
 import {
   cloneElement,
   createContext,
@@ -118,6 +115,7 @@ import {
 import { createPortal } from "react-dom";
 import { useDisclosure } from "../../use-disclosure.js";
 import { useStateWithRef } from "../../use-state-with-ref.js";
+import { makeWait, useWait, type Wait } from "../../wait.js";
 import type { ListRowHint } from "../list-row/list-row.js";
 import { useTouchHold } from "../menu/touch-hold.js";
 import type { OneLineHint } from "../one-line/clipped-line.js";
@@ -243,15 +241,11 @@ function unstack(id: string): void {
 }
 
 /**
- * The window's one wait for a hint, as an atom whose work is the wait: it
- * shows the hint once the rest has run out. A rest begun on another control
- * starts it afresh, which calls off the one before, and an interrupt calls
- * it off. Note that the way up is handed inside a record, as a linger's way
- * down is (`cardLingerAtom`).
+ * The window's one wait for a hint: it shows the hint once the rest has run
+ * out. A rest begun on another control starts it afresh, which calls off the
+ * one before.
  */
-const hintRestAtom = Atom.fn(({ show }: { readonly show: () => void }) =>
-  Effect.andThen(Effect.sleep(HINT_REST), Effect.sync(show)),
-);
+const hintRest = makeWait();
 
 /**
  * Who the window's one wait is for, by an id of theirs, so only they call
@@ -290,27 +284,27 @@ function hearRestEnders(stop: () => void): () => void {
   };
 }
 
-/**
- * A card's linger, as an atom whose work is the wait: it takes the card down
- * once it has run out. Each tooltip has its own, by its id, held for as long
- * as the tooltip is mounted: a new linger starts it afresh and an interrupt
- * calls it off. Note that a card hung over another lingers apart from it,
- * because the pointer leaving the stack lets both linger at once, and the
- * pointer back on either calls off that one's alone. Note too that the way
- * down is handed inside a record, because a function handed to an atom's
- * setter is read as an update of its value and called at once.
- */
-const cardLingerAtom = Atom.family((_tooltip: string) =>
-  Atom.fn(({ leave }: { readonly leave: () => void }) =>
-    Effect.andThen(Effect.sleep(CARD_LINGER), Effect.sync(leave)),
-  ),
-);
+/** A tooltip's linger: `leave` takes it down once the linger runs out, starting it afresh, and `stop` calls it off. */
+interface Linger {
+  readonly leave: (hide: () => void) => void;
+  readonly stop: () => void;
+}
 
 /**
- * A pill's linger, which is none: one atom every pill shares, so only a
- * tooltip that hangs a card holds a linger of its own.
+ * A card's linger, over a wait the tooltip holds for as long as it is
+ * mounted. Note that a card hung over another lingers apart from it,
+ * because the pointer leaving the stack lets both linger at once, and the
+ * pointer back on either calls off that one's alone.
  */
-const noLingerAtom = Atom.fn((_pill: { readonly leave: () => void }) => Effect.void);
+function cardLinger(wait: Wait): Linger {
+  return {
+    leave: (hide) => wait.start(Effect.andThen(Effect.sleep(CARD_LINGER), Effect.sync(hide))),
+    stop: wait.stop,
+  };
+}
+
+/** A pill's linger, which is none, so only a tooltip that hangs a card lingers. */
+const NO_LINGER: Linger = { leave: () => undefined, stop: () => undefined };
 
 /** What the tooltip adds to its control's props. */
 interface AnchorProps {
@@ -359,24 +353,26 @@ interface HintRest {
  */
 export function useHintRest(): HintRest {
   const id = useId();
-  const wait = useAtomSet(hintRestAtom);
   const stop = useCallback(() => {
     if (resting?.id !== id) return;
     letGoRest();
-    wait(Atom.Interrupt);
-  }, [id, wait]);
+    hintRest.stop();
+  }, [id]);
   const rest = useCallback(
     (show: () => void) => {
       letGoRest();
       resting = { id, unhear: hearRestEnders(stop) };
-      wait({
-        show: () => {
-          letGoRest();
-          show();
-        },
-      });
+      hintRest.start(
+        Effect.andThen(
+          Effect.sleep(HINT_REST),
+          Effect.sync(() => {
+            letGoRest();
+            show();
+          }),
+        ),
+      );
     },
-    [id, wait, stop],
+    [id, stop],
   );
   useEffect(() => stop, [stop]);
   return useMemo(() => ({ rest, stop }), [rest, stop]);
@@ -592,7 +588,8 @@ export function Tooltip({
     [carded, cardRegion],
   );
   // Note that only a tooltip hanging a card holds a linger of its own.
-  const linger = useAtomSet(carded ? cardLingerAtom(id) : noLingerAtom);
+  const lingerWait = useWait();
+  const linger = useMemo(() => (carded ? cardLinger(lingerWait) : NO_LINGER), [carded, lingerWait]);
   const { rest, stop: stopRest } = useHintRest();
   // Note that this is a ref, because the window's key listener reads it,
   // which no render stands between.
@@ -628,7 +625,7 @@ export function Tooltip({
     if (at !== -1) takeDownOver(at + 1, id);
     unstack(id);
     overCard.current = false;
-    linger(Atom.Interrupt);
+    linger.stop();
     setShown(undefined);
   }, [latest, stopRest, carded, id, setShown, linger]);
   // The hint up over `anchor`, over the standing card it stands on, if any,
@@ -655,7 +652,7 @@ export function Tooltip({
     if (label === undefined) return;
     // The pointer back on a lingering card's control keeps the card as it stands.
     if (latest()?.anchor === anchor) {
-      linger(Atom.Interrupt);
+      linger.stop();
       return;
     }
     // A control in the standing card's row is part of that row, and leaves the card standing.
@@ -687,15 +684,15 @@ export function Tooltip({
   // A card on screen lingers for the pointer crossing to it; a pill goes at
   // once, and a hint still waiting is called off.
   const leave = useCallback(() => {
-    if (carded && latest() !== undefined) linger({ leave: hide });
+    if (carded && latest() !== undefined) linger.leave(hide);
     else hide();
   }, [carded, latest, linger, hide]);
   // A selection dragged past the card's edge leaves it standing until the
   // press ends, and the pointer then off the card lets it linger.
   const onCard = (over: boolean) => {
     overCard.current = over;
-    if (over) linger(Atom.Interrupt);
-    else if (!pressingCard.current) linger({ leave: hide });
+    if (over) linger.stop();
+    else if (!pressingCard.current) linger.leave(hide);
   };
   const onCardPress = () => {
     pressingCard.current = true;
@@ -706,7 +703,7 @@ export function Tooltip({
       // A card a finger opened stands until a tap elsewhere, as a popover does.
       const stood = latest();
       if (stood !== undefined && !stood.touched && !overCard.current) {
-        linger({ leave: hide });
+        linger.leave(hide);
       }
     };
     window.addEventListener("pointerup", end, true);
@@ -719,7 +716,7 @@ export function Tooltip({
     () => () => {
       if (!standing.some((each) => each.id === id)) return;
       unstack(id);
-      linger(Atom.Interrupt);
+      linger.stop();
     },
     [id, linger],
   );
@@ -825,7 +822,7 @@ export function Tooltip({
     const out = (event: PointerEvent) => {
       if (event.pointerType !== "touch" && !overCard.current) leave();
     };
-    const back = () => linger(Atom.Interrupt);
+    const back = () => linger.stop();
     row.addEventListener("pointerleave", out);
     row.addEventListener("pointerenter", back);
     row.addEventListener("pointerdown", hide);

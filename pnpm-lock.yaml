@@ -1181,9 +1181,6 @@ importers:
       '@base-ui/react':
         specifier: 1.9.0
         version: 1.9.0(@types/react@19.2.18)(react-dom@19.2.8)(react@19.2.8)
-      '@effect/atom-react':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
       '@repo/brand':
         specifier: workspace:*
         version: link:../brand
@@ -1199,6 +1196,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.106.1
         version: 5.106.1(@types/react@19.2.18)(react@19.2.8)
+      '@tanstack/react-store':
+        specifier: 'catalog:'
+        version: 0.11.2(react-dom@19.2.8)(react@19.2.8)
       '@tanstack/react-table':
         specifier: 9.3.1
         version: 9.3.1(react-dom@19.2.8)(react@19.2.8)

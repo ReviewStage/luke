@@ -54,7 +54,7 @@ import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppWorkspaceMembers } from "@repo/host/app-state";
-import { timeRuntime } from "@repo/ui";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Clock, Context, Effect } from "effect";
@@ -602,11 +602,9 @@ const NO_GITHUB: GitHubConnectControl = {
 
 /** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
+  serveEffectsOn(Context.make(Clock.Clock, clock));
   return AtomRegistry.make({
-    initialValues: [
-      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-    ],
+    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
   });
 }
 
