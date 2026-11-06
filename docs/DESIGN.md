@@ -48,8 +48,12 @@ Nothing that holds text animates its width, height, padding, or font-size:
 that re-shapes the text on every frame, and that is what makes motion
 stutter. Everything moves with `transform`, `opacity`, and, for reveals,
 `clip-path`. A scrolling viewport may animate a `mask-image` edge to disclose
-overflow, because the mask neither changes layout nor moves content; nothing
-else gets a size-animation exception.
+overflow, because the mask neither changes layout nor moves content. The
+public site's bar is the one other exception: it narrows from the page's
+width to its floating pill by transitioning its own width, height, and padding
+(`landing.css`'s `.ui-landing-bar-in`), because a rebuild on `transform` and
+`clip-path` (#7162) read worse than the glide it replaced. Nothing else gets a
+size-animation exception.
 
 The window's panes keep the same rule. A pane opening, closing, or filling the
 window lands in the layout at once, and what it displaced replays the journey
@@ -98,8 +102,9 @@ parse computed clip-paths accordingly before trusting a sample.
 
 Review holds this contract: the generated brand art and motion tokens match
 their generators in `@repo/brand` (`pnpm --filter @repo/brand check` reports
-drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
-a layout property. A new exception belongs in this contract in the same change.
+drift when run by hand), renderer CSS may not reintroduce `@starting-style`,
+and no rule but the site bar's may transition a layout property. A new
+exception belongs in this contract in the same change.
 
 ## Width lines and zoom
 
