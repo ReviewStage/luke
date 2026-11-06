@@ -6,6 +6,7 @@ import {
   type TaskCallResult,
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
+  type WorkspaceCallFailure,
   type WorkspaceCallResult,
 } from "@repo/features";
 import {
@@ -100,10 +101,7 @@ import {
   type TasksTreeAnswer,
   type TasksView,
   type TasksWorkspaceAnswer,
-  type TasksWorkspaceGitHubConnectAnswer,
-  type TasksWorkspaceInvitationAnswer,
   type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceLeaveAnswer,
   type TasksWorkspaceMemberRemoveParams,
   type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
@@ -112,6 +110,7 @@ import {
   type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceSlugSetParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
+  type TasksWorkspaceTokenRepositorySetParams,
   taskBrowserTabsFollowSchema,
   taskDocumentFollowSchema,
   taskHistoryFollowSchema,
@@ -143,32 +142,22 @@ import {
   tasksSkillsParamsSchema,
   tasksStartRequestSchema,
   tasksTreeParamsSchema,
-  tasksWorkspaceCreateParamsSchema,
-  tasksWorkspaceInvitationCancelParamsSchema,
-  tasksWorkspaceInviteParamsSchema,
-  tasksWorkspaceLeaveParamsSchema,
-  tasksWorkspaceMemberRemoveParamsSchema,
-  tasksWorkspaceMemberRoleParamsSchema,
   tasksWorkspaceParamsSchema,
-  tasksWorkspacePhotoSetParamsSchema,
-  tasksWorkspaceRenameParamsSchema,
-  tasksWorkspaceSentryDisconnectParamsSchema,
-  tasksWorkspaceSlackBotChannelParamsSchema,
-  tasksWorkspaceSlackBotNotificationsParamsSchema,
-  tasksWorkspaceSlackBotRepositoryParamsSchema,
-  tasksWorkspaceSlugSetParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
-  tasksWorkspaceTokenRepositorySetParamsSchema,
-  tasksWorkspaceTransferParamsSchema,
   tasksWriteSectionParamsSchema,
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
-import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
+import {
+  WORKSPACE_SLUG_PROBLEM,
+  type Workspace,
+  type WorkspaceMember,
+} from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
   type AnyWrite,
   anyWrite,
   declaredMethod,
+  declaredWrite,
   type EntityPool,
   type FieldChange,
   ROW_GONE,
@@ -198,6 +187,11 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { slackNotificationsWritten } from "./account-preferences-follow.js";
 import {
+  ALREADY_INVITED_REFUSAL,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+  WORKSPACE_SLUG_REFUSAL,
+} from "./acts.js";
+import {
   type AppLinkStanding,
   type AppLinkStandings,
   type AppRepositoryLists,
@@ -210,6 +204,7 @@ import {
 } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { WORKSPACE_ACTS } from "./contract/index.js";
 import {
   type CommentSubjectKey,
   commentSubjectOf,
@@ -221,6 +216,7 @@ import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import { fixturePage } from "./fixture-stage.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { heldFetch } from "./held-fetch.js";
+import { ActRefused, type HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   DescriptionPictureKey,
@@ -428,6 +424,36 @@ function browserTabsPlaceOf(owner: BrowserTabsOwnerKey): BrowserTabsPlace {
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
+/** The sentence a workspace act is refused in for a failure that says why, each other failure refused in the act's own. */
+const WORKSPACE_REFUSAL: Partial<Record<WorkspaceCallFailure, string>> = {
+  [WORKSPACE_CALL_FAILURE.NOT_PERMITTED]: WORKSPACE_NOT_PERMITTED_REFUSAL,
+  [WORKSPACE_CALL_FAILURE.ALREADY_INVITED]: ALREADY_INVITED_REFUSAL,
+  [WORKSPACE_CALL_FAILURE.SLUG_MALFORMED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.MALFORMED],
+  [WORKSPACE_CALL_FAILURE.SLUG_RESERVED]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.RESERVED],
+  [WORKSPACE_CALL_FAILURE.SLUG_TAKEN]: WORKSPACE_SLUG_REFUSAL[WORKSPACE_SLUG_PROBLEM.TAKEN],
+};
+
+/** A workspace act refused for `failure`: in words that say why where the failure says it, and in the act's own sentence otherwise. */
+function workspaceRefused(failure: WorkspaceCallFailure): Effect.Effect<never, ActRefused> {
+  const sentence = WORKSPACE_REFUSAL[failure];
+  return Effect.fail(new ActRefused(sentence === undefined ? {} : { sentence }));
+}
+
+/**
+ * A workspace answer as its act answers the panel: the value under `field`,
+ * or refused for the failure it carries (`workspaceRefused`), as the act
+ * port refused it before the act was declared.
+ */
+function workspaceAnswered<const Field extends string>(field: Field) {
+  return <Value>(
+    answer: { readonly [Key in Field]: Value } | { readonly failure: WorkspaceCallFailure },
+  ): Effect.Effect<Value, ActRefused> =>
+    // SAFETY: an answer that carries no failure is the value under `field`, by its type.
+    "failure" in answer
+      ? workspaceRefused(answer.failure)
+      : Effect.succeed((answer as { readonly [Key in Field]: Value })[field]);
+}
+
 /** A channel of a workspace's Slack team as the held list keeps it, with no repository, which is the workspace's held integrations'. */
 function listedChannel({
   repository: _repository,
@@ -580,6 +606,8 @@ export interface TasksDependencies {
 }
 
 export interface TasksComposer extends Composer {
+  /** The workspaces' plain acts, answered directly at the act port. */
+  acts: HostActTable<typeof WORKSPACE_ACTS>;
   /** The view as this Mac holds it now. */
   snapshot: () => TasksView;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
@@ -1586,7 +1614,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
   });
   /** A token repository added or removed, sent where the gate stands open. */
-  const tokenRepositorySet = tokenRepositoryWritten.set<WireValue>(
+  const tokenRepositorySet = tokenRepositoryWritten.set<TasksWorkspaceTokenRepositoriesAnswer>(
     ({ workspaceId, repository, added }) =>
       gate()
         ? Effect.gen(function* () {
@@ -1595,22 +1623,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             if (!changed.ok) {
               return {
-                refused: carried<TasksWorkspaceTokenRepositoriesAnswer>({
+                refused: {
                   failure: changed.failure,
-                }),
+                },
               };
             }
             return {
-              answer: carried<TasksWorkspaceTokenRepositoriesAnswer>({
+              answer: {
                 repositories: changed.answer,
-              }),
+              },
               repositories: changed.answer,
             };
           })
         : Effect.succeed({
-            refused: carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
+            refused: WORKSPACE_UNANSWERED,
           }),
-    carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED),
+    WORKSPACE_UNANSWERED,
   );
 
   /** A workspace's Slack bot as the window hears it from the service's answer, or why there is none. */
@@ -1731,24 +1759,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       HttpClient.HttpClient
     >,
     userIds: readonly string[],
-  ): Effect.Effect<MemberWritten<WireValue>> {
+  ): Effect.Effect<MemberWritten<TasksWorkspaceMembersAnswer>> {
     if (!gate()) {
       return Effect.succeed({
-        refused: carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED),
+        refused: WORKSPACE_UNANSWERED,
       });
     }
     return Effect.map(workspaceCall(call), (written) =>
       written.ok
         ? {
-            answer: carried<TasksWorkspaceMembersAnswer>({ members: written.answer }),
+            answer: { members: written.answer },
             moved: membersMoved(written.answer, userIds),
           }
-        : { refused: carried<TasksWorkspaceMembersAnswer>({ failure: written.failure }) },
+        : { refused: { failure: written.failure } },
     );
   }
 
   /** A member's role changed, drawn on their row at once, kept until the people's read carries it. */
-  const memberRoleChanged = membersReads.write<TasksWorkspaceMemberRoleParams, WireValue>({
+  const memberRoleChanged = membersReads.write<
+    TasksWorkspaceMemberRoleParams,
+    TasksWorkspaceMembersAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     moves: ({ userId, role }) => [{ userId, role }],
     send: ({ workspaceId, userId, role }) =>
@@ -1756,7 +1787,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
 
   /** A member removed, drawn gone at once, kept until the people's read no longer carries them. */
-  const memberRemoved = membersReads.write<TasksWorkspaceMemberRemoveParams, WireValue>({
+  const memberRemoved = membersReads.write<
+    TasksWorkspaceMemberRemoveParams,
+    TasksWorkspaceMembersAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     moves: ({ userId }) => [{ userId, gone: true }],
     send: ({ workspaceId, userId }) =>
@@ -1768,18 +1802,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * read no longer carries it. Note that the list it answers is never laid
    * whole, since the read alone says what stands.
    */
-  const invitationCanceled = invitationsReads.cancel<WireValue>(({ workspaceId, invitationId }) =>
-    gate()
-      ? Effect.map(
-          served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
-          (pending) =>
-            pending.ok
-              ? {
-                  answer: carried<TasksWorkspaceInvitationsAnswer>({ invitations: pending.answer }),
-                }
-              : { refused: carried<TasksWorkspaceInvitationsAnswer>({ failure: pending.failure }) },
-        )
-      : Effect.succeed({ refused: carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED) }),
+  const invitationCanceled = invitationsReads.cancel<TasksWorkspaceInvitationsAnswer>(
+    ({ workspaceId, invitationId }) =>
+      gate()
+        ? Effect.map(
+            served(client.workspaces.cancelInvitation(workspaceId, invitationId)),
+            (pending) =>
+              pending.ok
+                ? {
+                    answer: { invitations: pending.answer },
+                  }
+                : { refused: { failure: pending.failure } },
+          )
+        : Effect.succeed({ refused: WORKSPACE_UNANSWERED }),
   );
 
   /**
@@ -2230,38 +2265,44 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function workspaceWritten(
     call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<WorkspaceWritten<WireValue>> {
+  ): Effect.Effect<WorkspaceWritten<TasksWorkspaceAnswer>> {
     if (!gate()) {
-      return Effect.succeed({ refused: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED) });
+      return Effect.succeed({ refused: WORKSPACE_UNANSWERED });
     }
     return Effect.map(served(call), (written) =>
       written.ok
         ? {
-            answer: carried<TasksWorkspaceAnswer>({ workspace: written.answer }),
+            answer: { workspace: written.answer },
             workspace: written.answer,
           }
-        : { refused: carried<TasksWorkspaceAnswer>({ failure: written.failure }) },
+        : { refused: { failure: written.failure } },
     );
   }
 
   /** A workspace renamed, its name drawn at once and kept until the follow moves it. */
-  const workspaceRenamed = workspaceWrite<TasksWorkspaceRenameParams & AskedOver, WireValue>({
+  const workspaceRenamed = workspaceWrite<
+    TasksWorkspaceRenameParams & AskedOver,
+    TasksWorkspaceAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     change:
       ({ name }) =>
       (row) => ({ ...row, name }),
     send: ({ workspaceId, name }) => workspaceWritten(client.workspaces.rename(workspaceId, name)),
-    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+    unsent: WORKSPACE_UNANSWERED,
   });
 
   /** A workspace's slug changed, drawn at once and kept until the follow moves it; a slug another workspace holds is refused and taken back. */
-  const workspaceSlugSet = workspaceWrite<TasksWorkspaceSlugSetParams & AskedOver, WireValue>({
+  const workspaceSlugSet = workspaceWrite<
+    TasksWorkspaceSlugSetParams & AskedOver,
+    TasksWorkspaceAnswer
+  >({
     workspaceId: ({ workspaceId }) => workspaceId,
     change:
       ({ slug }) =>
       (row) => ({ ...row, slug }),
     send: ({ workspaceId, slug }) => workspaceWritten(client.workspaces.setSlug(workspaceId, slug)),
-    unsent: carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED),
+    unsent: WORKSPACE_UNANSWERED,
   });
 
   /**
@@ -2727,6 +2768,220 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(opened === undefined ? undefined : { opened }),
     };
   }
+
+  /** The workspaces' plain acts, each answering what the panel reads or refused as `workspaceAnswered` words it. */
+  const acts: HostActTable<typeof WORKSPACE_ACTS> = {
+    WORKSPACE_CREATE: ({ name }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const made = yield* workspaceCall(client.workspaces.create(name));
+        return yield* workspaceAnswered("workspace")(
+          made.ok ? { workspace: made.answer } : { failure: made.failure },
+        );
+      }),
+    // A rename moves no task: its name is drawn at once, and the follow
+    // carries the same name a moment later.
+    WORKSPACE_RENAME: declaredWrite(dependencies.pool, workspaceRenamed, {
+      read: (rename: TasksWorkspaceRenameParams) =>
+        Effect.succeed({ ...rename, rows: workspaceList.rows }),
+      answered: workspaceAnswered("workspace"),
+    }),
+    // A slug moves no task either: links resolve by id, or by a former
+    // slug the workspace keeps, so it is drawn at once as a rename is.
+    WORKSPACE_SLUG_SET: declaredWrite(dependencies.pool, workspaceSlugSet, {
+      read: (slugSet: TasksWorkspaceSlugSetParams) =>
+        Effect.succeed({ ...slugSet, rows: workspaceList.rows }),
+      answered: workspaceAnswered("workspace"),
+    }),
+    // A photo moves no task either, but it uploads, so its workspace is
+    // drawn once the service answers it, its photo's new version or none,
+    // and the photo at that version is fetched for the windows' tiles
+    // (`photosListed`).
+    WORKSPACE_PHOTO_SET: ({ workspaceId, photo }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const written = yield* served(client.workspaces.setPhoto(workspaceId, photo));
+        if (!written.ok) return yield* workspaceRefused(written.failure);
+        yield* workspaceList.rows.answered(written.answer);
+        return written.answer;
+      }),
+    // The install address is answered to the procedure that opens it and
+    // held nowhere: the connection lands in the browser, and the follow
+    // carries the organization.
+    WORKSPACE_GITHUB_CONNECT: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const begun = yield* served(client.workspaces.githubConnect(workspaceId));
+        if (!begun.ok) return yield* workspaceRefused(begun.failure);
+        return begun.answer;
+      }),
+    WORKSPACE_GITHUB_DISCONNECT: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const disconnected = yield* workspaceCall(client.workspaces.githubDisconnect(workspaceId));
+        if (!disconnected.ok) return yield* workspaceRefused(disconnected.failure);
+      }),
+    // Sentry's install address is answered to the procedure that opens it
+    // and held nowhere: the install lands in the browser.
+    WORKSPACE_SENTRY_INSTALL: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const begun = yield* served(client.workspaces.sentryInstall(workspaceId));
+        if (!begun.ok) return yield* workspaceRefused(begun.failure);
+        return begun.answer;
+      }),
+    WORKSPACE_SENTRY_DISCONNECT: declaredWrite(
+      dependencies.pool,
+      sentryDisconnect(({ workspaceId, installationId }) =>
+        gate()
+          ? Effect.map(
+              served(client.workspaces.sentryDisconnect(workspaceId, installationId)),
+              (sentry): TasksWorkspaceSentryAnswer =>
+                sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
+            )
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      { answered: workspaceAnswered("sentry") },
+    ),
+    WORKSPACE_SLACK_BOT_CONNECT: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const connected = yield* served(client.workspaces.slackBotConnect(workspaceId));
+        // Note that the bot's row is known only once Slack named its team, so the answer waits for the held read to carry it, and the window draws the team as the answer lands.
+        if (connected.ok) yield* integrations.confirmed(workspaceId, connected.answer.txid);
+        return yield* workspaceAnswered("slackBot")(slackBotAnswered(slackBotOf(connected)));
+      }),
+    WORKSPACE_SLACK_BOT_DISCONNECT: declaredWrite(
+      dependencies.pool,
+      slackBotDisconnect(({ workspaceId }) =>
+        gate()
+          ? Effect.map(served(client.workspaces.slackBotDisconnect(workspaceId)), slackBotOf)
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    // Note that the switch lives on the account's preferences row, so it is drawn over that row at once, whichever workspace's Settings turned it.
+    WORKSPACE_SLACK_BOT_NOTIFICATIONS: declaredWrite(
+      dependencies.pool,
+      slackNotificationsWritten(
+        (write) =>
+          gate()
+            ? Effect.map(
+                served(
+                  client.workspaces.slackBotNotifications(write.workspaceId, write.notifications),
+                ),
+                slackBotOf,
+              )
+            : Effect.succeed(WORKSPACE_UNANSWERED),
+        dependencies.accountId,
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    WORKSPACE_SLACK_BOT_REPOSITORY: declaredWrite(
+      dependencies.pool,
+      slackBotRepository((repository) =>
+        gate()
+          ? Effect.map(served(client.workspaces.slackBotRepository(repository)), slackBotOf)
+          : Effect.succeed(WORKSPACE_UNANSWERED),
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    // Note that whether the bot is in a channel is Slack's own, so the channels a write's answer carries are laid on the held list, and asked again where it carries none.
+    WORKSPACE_SLACK_BOT_CHANNEL: declaredWrite(
+      dependencies.pool,
+      slackBotChannel(
+        (channel) =>
+          gate()
+            ? Effect.map(served(client.workspaces.slackBotChannel(channel)), slackBotOf)
+            : Effect.succeed(WORKSPACE_UNANSWERED),
+        ({ workspaceId }, answer) => {
+          if (!("slackBot" in answer)) return Effect.void;
+          const { channels } = answer.slackBot;
+          return channels === undefined
+            ? slackChannels.wake((held) => held === workspaceId)
+            : slackChannels.answered(workspaceId, channels.map(listedChannel));
+        },
+      ),
+      { answered: workspaceAnswered("slackBot") },
+    ),
+    // An addition is drawn as the reader's own, newest first and removable,
+    // until the service answers the list as it then stands.
+    WORKSPACE_TOKEN_REPOSITORY_SET: declaredWrite(dependencies.pool, tokenRepositorySet, {
+      read: (set: TasksWorkspaceTokenRepositorySetParams) =>
+        Effect.map(Clock.currentTimeMillis, (addedAt) => ({
+          ...set,
+          addedBy: dependencies.accountId() ?? "",
+          addedAt,
+          session: tokenRepositoryWritten.session(),
+        })),
+      answered: workspaceAnswered("repositories"),
+    }),
+    WORKSPACE_MEMBER_REMOVE: declaredWrite(dependencies.pool, memberRemoved, {
+      answered: workspaceAnswered("members"),
+    }),
+    // A role changed moves no task; the people's read carries it, as a
+    // removal's, drawn at once until then.
+    WORKSPACE_MEMBER_ROLE: declaredWrite(dependencies.pool, memberRoleChanged, {
+      answered: workspaceAnswered("members"),
+    }),
+    // Note that a handover changes the account's own role in the workspace,
+    // which the view's workspaces carry and every owner's and admin's act is
+    // drawn from, and which the follow carries; it moves no task. The heir's
+    // role and the account's own are drawn from its answer until the
+    // people's read carries them.
+    WORKSPACE_TRANSFER: ({ workspaceId, userId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
+        if (!handedOver.ok) return yield* workspaceRefused(handedOver.failure);
+        yield* membersReads.moved(
+          workspaceId,
+          membersMoved(handedOver.answer, [userId, dependencies.accountId()]),
+        );
+        return handedOver.answer;
+      }),
+    // Note that a leave closes the open task where it is that workspace's, as
+    // a delete of it does, because the account can no longer read or write a
+    // task of a workspace it left; a refused leave closes nothing. The
+    // account is drawn gone from the workspace's people, which its read,
+    // ended as the account no longer reaches it, never takes back.
+    WORKSPACE_LEAVE: ({ workspaceId }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const openTaskId = view.activeTaskId;
+        const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
+        const closeOpenTask = Effect.gen(function* () {
+          yield* serial(
+            Effect.sync(() => {
+              if (view.activeTaskId === openTaskId) closeActive();
+            }),
+          );
+        });
+        const leave = Effect.tap(client.workspaces.leave(workspaceId), (answer) =>
+          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
+        );
+        const left = yield* workspaceCall(leave);
+        if (!left.ok) return yield* workspaceRefused(left.failure);
+        const readerId = dependencies.accountId();
+        if (readerId !== undefined) {
+          yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
+        }
+      }),
+    // An invitation made or canceled moves no workspace or task, so nothing
+    // else is read with it; the invitations' read carries it, an invitation
+    // made drawn from its answer until then where a window holds them.
+    WORKSPACE_INVITE: ({ workspaceId, email, role }) =>
+      Effect.gen(function* () {
+        if (!gate()) return yield* workspaceRefused(WORKSPACE_UNANSWERED.failure);
+        const made = yield* served(client.workspaces.invite(workspaceId, email, role));
+        if (!made.ok) return yield* workspaceRefused(made.failure);
+        yield* invitationsReads.made(workspaceId, made.answer);
+        return made.answer;
+      }),
+    WORKSPACE_INVITATION_CANCEL: declaredWrite(dependencies.pool, invitationCanceled, {
+      answered: workspaceAnswered("invitations"),
+    }),
+  };
 
   const methods: HostMethodTable = {
     // The list's Try again: what is followed already stands (`open`), so it
@@ -3547,217 +3802,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<boolean>(false);
         return carried<boolean>(yield* served(client.admin.favorite(read.id, read.favorite)));
       }),
-    [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceCreateParamsSchema,
-          params,
-          "making a workspace names it",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const made = yield* workspaceCall(client.workspaces.create(read.name));
-        return carried<TasksWorkspaceAnswer>(
-          made.ok ? { workspace: made.answer } : { failure: made.failure },
-        );
-      }),
-    // A rename moves no task: its name is drawn at once, and the follow
-    // carries the same name a moment later.
-    [GATEWAY_METHOD.WORKSPACES_RENAME]: declaredMethod(
-      dependencies.pool,
-      workspaceRenamed,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksWorkspaceRenameParamsSchema,
-            params,
-            "renaming a workspace names it and its new name",
-          ),
-          (read) => ({ ...read, rows: workspaceList.rows }),
-        ),
-    ),
-    // A slug moves no task either: links resolve by id, or by a former
-    // slug the workspace keeps, so it is drawn at once as a rename is.
-    [GATEWAY_METHOD.WORKSPACES_SLUG_SET]: declaredMethod(
-      dependencies.pool,
-      workspaceSlugSet,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            tasksWorkspaceSlugSetParamsSchema,
-            params,
-            "changing a workspace's slug names it and its new slug",
-          ),
-          (read) => ({ ...read, rows: workspaceList.rows }),
-        ),
-    ),
-    // A photo moves no task either, but it uploads, so its workspace is
-    // drawn once the service answers it, its photo's new version or none,
-    // and the photo at that version is fetched for the windows' tiles
-    // (`photosListed`).
-    [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspacePhotoSetParamsSchema,
-          params,
-          "setting a workspace's photo names it and a photo or none",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, photo } = read;
-        const written = yield* served(client.workspaces.setPhoto(workspaceId, photo));
-        if (!written.ok) return carried<TasksWorkspaceAnswer>({ failure: written.failure });
-        yield* workspaceList.rows.answered(written.answer);
-        return carried<TasksWorkspaceAnswer>({ workspace: written.answer });
-      }),
-    // The install address is answered to the caller that opens it and held
-    // nowhere: the connection lands in the browser, and the follow carries
-    // the organization.
-    [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting GitHub names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.githubConnect(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting GitHub names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const disconnected = yield* workspaceCall(
-          client.workspaces.githubDisconnect(read.workspaceId),
-        );
-        return carried<TasksWorkspaceAnswer>(
-          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
-        );
-      }),
-    // Sentry's install address is answered to the caller that opens it and
-    // held nowhere: the install lands in the browser.
-    [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "installing Sentry names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.sentryInstall(read.workspaceId));
-        return carried<TasksWorkspaceGitHubConnectAnswer>(
-          begun.ok ? { url: begun.answer } : { failure: begun.failure },
-        );
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: declaredMethod(
-      dependencies.pool,
-      sentryDisconnect(({ workspaceId, installationId }) =>
-        gate()
-          ? Effect.map(
-              served(client.workspaces.sentryDisconnect(workspaceId, installationId)),
-              (sentry): TasksWorkspaceSentryAnswer =>
-                sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
-            )
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSentryDisconnectParamsSchema,
-          params,
-          "disconnecting Sentry names a workspace and an installation",
-        ),
-    ),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CONNECT]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "connecting the Slack bot names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceSlackBotAnswer>(WORKSPACE_UNANSWERED);
-        const connected = yield* served(client.workspaces.slackBotConnect(read.workspaceId));
-        // Note that the bot's row is known only once Slack named its team, so the answer waits for the held read to carry it, and the window draws the team as the answer lands.
-        if (connected.ok) yield* integrations.confirmed(read.workspaceId, connected.answer.txid);
-        return slackBotAnswered(slackBotOf(connected));
-      }),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_DISCONNECT]: declaredMethod(
-      dependencies.pool,
-      slackBotDisconnect(({ workspaceId }) =>
-        gate()
-          ? Effect.map(served(client.workspaces.slackBotDisconnect(workspaceId)), slackBotOf)
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceParamsSchema,
-          params,
-          "disconnecting the Slack bot names a workspace",
-        ),
-    ),
-    // Note that the switch lives on the account's preferences row, so it is drawn over that row at once, whichever workspace's Settings turned it.
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_NOTIFICATIONS]: declaredMethod(
-      dependencies.pool,
-      slackNotificationsWritten(
-        (write) =>
-          gate()
-            ? Effect.map(
-                served(
-                  client.workspaces.slackBotNotifications(write.workspaceId, write.notifications),
-                ),
-                slackBotOf,
-              )
-            : Effect.succeed(WORKSPACE_UNANSWERED),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlackBotNotificationsParamsSchema,
-          params,
-          "changing Slack notifications names a workspace and the switch",
-        ),
-    ),
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_REPOSITORY]: declaredMethod(
-      dependencies.pool,
-      slackBotRepository((repository) =>
-        gate()
-          ? Effect.map(served(client.workspaces.slackBotRepository(repository)), slackBotOf)
-          : Effect.succeed(WORKSPACE_UNANSWERED),
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlackBotRepositoryParamsSchema,
-          params,
-          "naming the Slack bot's default repository names a workspace and a repository or none",
-        ),
-    ),
-    // Note that whether the bot is in a channel is Slack's own, so the channels a write's answer carries are laid on the held list, and asked again where it carries none.
-    [GATEWAY_METHOD.WORKSPACES_SLACK_BOT_CHANNEL]: declaredMethod(
-      dependencies.pool,
-      slackBotChannel(
-        (channel) =>
-          gate()
-            ? Effect.map(served(client.workspaces.slackBotChannel(channel)), slackBotOf)
-            : Effect.succeed(WORKSPACE_UNANSWERED),
-        ({ workspaceId }, answer) => {
-          if (!("slackBot" in answer)) return Effect.void;
-          const { channels } = answer.slackBot;
-          return channels === undefined
-            ? slackChannels.wake((held) => held === workspaceId)
-            : slackChannels.answered(workspaceId, channels.map(listedChannel));
-        },
-      ),
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceSlackBotChannelParamsSchema,
-          params,
-          "changing a Slack channel names a workspace, the channel, and what changes",
-        ),
-    ),
     // A workspace's own integrations are held for the windows while they
     // draw them, and told only on the app state
     // (`WORKSPACE_INTEGRATIONS_CHANGED`). Note that the windows' hold is one
@@ -3955,138 +3999,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* tokenRepositories.retry(workspaceId);
         return {};
       }),
-    // An addition is drawn as the reader's own, newest first and removable,
-    // until the service answers the list as it then stands.
-    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: declaredMethod(
-      dependencies.pool,
-      tokenRepositorySet,
-      (params: WireRecord) =>
-        Effect.all({
-          read: readParams(
-            tasksWorkspaceTokenRepositorySetParamsSchema,
-            params,
-            "adding or removing a token repository names the workspace, the repository, and which",
-          ),
-          addedAt: Clock.currentTimeMillis,
-        }).pipe(
-          Effect.map(({ read, addedAt }) => ({
-            ...read,
-            addedBy: dependencies.accountId() ?? "",
-            addedAt,
-            session: tokenRepositoryWritten.session(),
-          })),
-        ),
-    ),
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: declaredMethod(
-      dependencies.pool,
-      memberRemoved,
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceMemberRemoveParamsSchema,
-          params,
-          "removing a member names the workspace and the member",
-        ),
-    ),
-    // A role changed moves no task; the people's read carries it, as a
-    // removal's, drawn at once until then.
-    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: declaredMethod(
-      dependencies.pool,
-      memberRoleChanged,
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceMemberRoleParamsSchema,
-          params,
-          "changing a role names the workspace, the member, and the role",
-        ),
-    ),
-    // Note that a handover changes the account's own role in the workspace,
-    // which the view's workspaces carry and every owner's and admin's act is
-    // drawn from, and which the follow carries; it moves no task. The heir's
-    // role and the account's own are drawn from its answer until the
-    // people's read carries them.
-    [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceTransferParamsSchema,
-          params,
-          "handing a workspace over names it and the admin",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId } = read;
-        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
-        if (!handedOver.ok) {
-          return carried<TasksWorkspaceMembersAnswer>({ failure: handedOver.failure });
-        }
-        yield* membersReads.moved(
-          workspaceId,
-          membersMoved(handedOver.answer, [userId, dependencies.accountId()]),
-        );
-        return carried<TasksWorkspaceMembersAnswer>({ members: handedOver.answer });
-      }),
-    // Note that a leave closes the open task where it is that workspace's, as
-    // a delete of it does, because the account can no longer read or write a
-    // task of a workspace it left; a refused leave closes nothing. The
-    // account is drawn gone from the workspace's people, which its read,
-    // ended as the account no longer reaches it, never takes back.
-    [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceLeaveParamsSchema,
-          params,
-          "leaving a workspace names it",
-        );
-        if (!gate()) return carried<TasksWorkspaceLeaveAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId } = read;
-        const openTaskId = view.activeTaskId;
-        const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
-        const closeOpenTask = Effect.gen(function* () {
-          yield* serial(
-            Effect.sync(() => {
-              if (view.activeTaskId === openTaskId) closeActive();
-            }),
-          );
-        });
-        const leave = Effect.tap(client.workspaces.leave(workspaceId), (answer) =>
-          answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
-        );
-        const left = yield* workspaceCall(leave);
-        if (!left.ok) return carried<TasksWorkspaceLeaveAnswer>({ failure: left.failure });
-        const readerId = dependencies.accountId();
-        if (readerId !== undefined) {
-          yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
-        }
-        return carried<TasksWorkspaceLeaveAnswer>({ left: true });
-      }),
-    // An invitation made or canceled moves no workspace or task, so nothing
-    // else is read with it; the invitations' read carries it, an invitation
-    // made drawn from its answer until then where a window holds them.
-    [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceInviteParamsSchema,
-          params,
-          "an invitation names a workspace, an address, and a role",
-        );
-        if (!gate()) return carried<TasksWorkspaceInvitationAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, email, role } = read;
-        const made = yield* served(client.workspaces.invite(workspaceId, email, role));
-        if (!made.ok) return carried<TasksWorkspaceInvitationAnswer>({ failure: made.failure });
-        yield* invitationsReads.made(workspaceId, made.answer);
-        return carried<TasksWorkspaceInvitationAnswer>({ invitation: made.answer });
-      }),
-    [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: declaredMethod(
-      dependencies.pool,
-      invitationCanceled,
-      (params: WireRecord) =>
-        readParams(
-          tasksWorkspaceInvitationCancelParamsSchema,
-          params,
-          "canceling an invitation names the workspace and the invitation",
-        ),
-    ),
   };
 
   return {
+    acts,
     methods,
     snapshot: () => view,
     // The gate opening follows the account's task list, workspaces, and

@@ -225,7 +225,7 @@ export function slackNotificationsWritten(
   AccountPreferencesPoolRow,
   PreferencesChange,
   TasksWorkspaceSlackBotNotificationsParams,
-  WireValue
+  TasksWorkspaceSlackBotAnswer
 > {
   return {
     kind: ACCOUNT_PREFERENCES,
@@ -233,9 +233,7 @@ export function slackNotificationsWritten(
     change: (write) => () => ({ slackNotifications: write.notifications }),
     send: (write) =>
       Effect.map(send(write), (answer) =>
-        "slackBot" in answer
-          ? { answer: carried<TasksWorkspaceSlackBotAnswer>(answer), txid: answer.slackBot.txid }
-          : { refused: carried<TasksWorkspaceSlackBotAnswer>(answer) },
+        "slackBot" in answer ? { answer, txid: answer.slackBot.txid } : { refused: answer },
       ),
   };
 }

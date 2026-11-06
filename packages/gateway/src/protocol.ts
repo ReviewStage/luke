@@ -163,32 +163,6 @@ export const GATEWAY_METHOD = {
   TASKS_RESTORE: "tasks.restore",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
-  /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
-  WORKSPACES_CREATE: "workspaces.create",
-  /** A workspace renamed on the service by an owner or admin; the view's workspaces are read again. */
-  WORKSPACES_RENAME: "workspaces.rename",
-  /** A workspace's slug changed on the service by its owner; the view's workspaces are read again. */
-  WORKSPACES_SLUG_SET: "workspaces.slugSet",
-  /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */
-  WORKSPACES_PHOTO_SET: "workspaces.photoSet",
-  /** A GitHub organization's connection to a workspace begun on the service: our GitHub App's install address, for the caller to open. */
-  WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
-  /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
-  WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
-  WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
-  /** One of a workspace's Sentry installations disconnected on the service, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands. */
-  WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
-  /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands once the workspace's held integrations carry it. */
-  WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
-  /** A workspace's Slack bot disconnected on the service by an owner or admin, drawn gone at once over the workspace's held integrations; the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
-  /** The reader's own Slack notifications turned on or off on the service, answered with the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_NOTIFICATIONS: "workspaces.slackBotNotifications",
-  /** A workspace's default repository for Slack starts named or cleared on the service by an owner or admin, drawn at once over the workspace's held integrations; the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_REPOSITORY: "workspaces.slackBotRepository",
-  /** One channel's bot membership or default repository changed on the service by an owner or admin, its repository drawn at once over the workspace's held integrations and its membership laid on the held channels as answered; the bot as it then stands. */
-  WORKSPACES_SLACK_BOT_CHANNEL: "workspaces.slackBotChannel",
   /**
    * One workspace's own integrations, its Sentry installations and its Slack
    * bot, held followed for a window from now until it is let go, over Neon
@@ -250,20 +224,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW: "workspaces.tokenRepositoriesUnfollow",
   /** One workspace's held token repositories asked again at once, as Try again asks; answered once the ask has landed. */
   WORKSPACES_TOKEN_REPOSITORIES_RETRY: "workspaces.tokenRepositoriesRetry",
-  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand, which are laid on its held read too. */
-  WORKSPACES_TOKEN_REPOSITORY_SET: "workspaces.tokenRepositorySet",
-  /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
-  WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
-  /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
-  WORKSPACES_MEMBER_ROLE: "workspaces.memberRole",
-  /** A workspace handed by its owner to one of its admins on the service, the owner becoming an admin, answered with the members as they then stand; the view's workspaces are read again, the account's role in it among them. */
-  WORKSPACES_TRANSFER: "workspaces.transfer",
-  /** The account left one workspace on the service; the view's workspaces and tasks are read again. */
-  WORKSPACES_LEAVE: "workspaces.leave",
-  /** An invitation to a workspace made on the service, answered with its accept link; the held invitations draw it until their read carries it. */
-  WORKSPACES_INVITE: "workspaces.invite",
-  /** A pending invitation canceled on the service, answered with those still pending; the held invitations draw it gone until their read carries it. */
-  WORKSPACES_INVITATION_CANCEL: "workspaces.invitationCancel",
   /** The page that connects the account's GitHub, asked of the service now and used once; the next workspaces read is owed at once. */
   GITHUB_CONNECT: "github.connect",
   /** The account's GitHub disconnected on the service under the Mac's session; the view takes the connection, and the next workspaces read is owed at once. */
