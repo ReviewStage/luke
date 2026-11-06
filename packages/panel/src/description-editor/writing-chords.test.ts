@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import { installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
@@ -54,7 +55,7 @@ function mount(markdown: string) {
   const ran: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(KeyedWindow, { ran })));
+  act(() => root.render(withQueryClient(createElement(KeyedWindow, { ran }))));
   const host = document.body.appendChild(document.createElement("div"));
   const handle = mountDescriptionEditor(host, {
     markdown,

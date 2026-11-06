@@ -4,9 +4,10 @@
  * The prerender serves many routes from one built template (every changelog
  * page and release from `changelog.html`), and a browser tab, a search
  * result, and a share card each read the route's own head, not the
- * template's. The template's tags are the contract: each one rewritten here
- * must be in it once, and a template without it is refused rather than
- * shipped with another route's words.
+ * template's. X reads its own `twitter:` copies of the card's tags, so each
+ * is rewritten beside its Open Graph twin. The template's tags are the
+ * contract: each one rewritten here must be in it once, and a template
+ * without it is refused rather than shipped with another route's words.
  */
 
 import type { PageHead } from "./changelog-releases";
@@ -68,13 +69,17 @@ export function withPageHead(
   let rewritten = html.replace(title, () => `<title>${escapeText(head.title)}</title>`);
   rewritten = withMeta(rewritten, "name", "description", head.description);
   rewritten = withMeta(rewritten, "property", "og:title", head.title);
+  rewritten = withMeta(rewritten, "name", "twitter:title", head.title);
   rewritten = withMeta(rewritten, "property", "og:description", head.description);
+  rewritten = withMeta(rewritten, "name", "twitter:description", head.description);
   rewritten = withMeta(rewritten, "property", "og:url", head.url);
   rewritten = withCanonical(rewritten, head.url);
   if (head.image === undefined) return rewritten;
   const origin = new URL(head.url).origin;
   rewritten = withMeta(rewritten, "property", "og:image", `${origin}${head.image.src}`);
+  rewritten = withMeta(rewritten, "name", "twitter:image", `${origin}${head.image.src}`);
   rewritten = withMeta(rewritten, "property", "og:image:alt", head.image.alt);
+  rewritten = withMeta(rewritten, "name", "twitter:image:alt", head.image.alt);
   if (imageSize === undefined) return rewritten;
   rewritten = withMeta(rewritten, "property", "og:image:width", String(imageSize.width));
   return withMeta(rewritten, "property", "og:image:height", String(imageSize.height));

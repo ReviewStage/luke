@@ -16,7 +16,7 @@ import { OWN_ENROLL_OUTCOME, type OwnEnrollOutcome } from "@repo/features";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, GATEWAY_METHOD } from "@repo/gateway";
+import { GATEWAY_EVENT } from "@repo/gateway";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
@@ -42,7 +42,6 @@ const SCRIPT = "#!/bin/sh\necho install\n";
 const ENROLL_URL = `${SERVICE}/enroll`;
 const FILES = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 /** The desktop's own window, as the Gateway hands a method its caller. */
-const CONTEXT = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const BRING_YOUR_OWN_HOST_ON = {
   [EXPERIMENT.BRING_YOUR_OWN_HOST]: true,
@@ -170,11 +169,11 @@ const thisMac = (stateRoot: string, options: MacOptions = {}) =>
     );
     yield* composer.lifetime;
     const held = (): AppThisMacHost | undefined => told?.[USER_ID]?.rows;
-    const set = composer.methods[GATEWAY_METHOD.HOSTS_THIS_MAC_SET];
-    assert.ok(set !== undefined, "This Mac answers being turned on and off");
     /** Run agents on this Mac turned on or off, as its switch turns it; what it answered. */
     const turn = (on: boolean, deleteFolders?: boolean) =>
-      Effect.orDie(set(deleteFolders === undefined ? { on } : { on, deleteFolders }, CONTEXT));
+      composer.acts.HOSTS_THIS_MAC_SET(
+        deleteFolders === undefined ? { on } : { on, deleteFolders },
+      );
     return { asked, enrolled, held, turn };
   });
 

@@ -1,5 +1,5 @@
 /**
- * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill still runs, and gone after a fill that failed.
+ * base-drive.test.ts -- a workspace's repository's base drive, against a fake of Vercel Sandbox's API: filled once from the image with the repository cloned and its dependencies installed and no credential left behind, filled by one of several launches at once, not filled while its fill's sandbox is still being created or still runs, filled once a sandbox a fill could not delete is, and gone after a fill that failed.
  */
 
 import assert from "node:assert/strict";
@@ -78,15 +78,32 @@ it.effect(
     Effect.gen(function* () {
       const { fake, api } = yield* fixture;
 
-      yield* filled(api);
+      const atFork: { installed: boolean; stopped: boolean }[] = [];
+      const forking: VercelSandboxApi = {
+        ...api,
+        forkDrive: (source, target) =>
+          Effect.andThen(
+            Effect.sync(() =>
+              atFork.push({
+                installed: fake.runs.some((run) => isInstall(run.args)),
+                stopped: fake.sandboxes[0]?.status === "stopped",
+              }),
+            ),
+            api.forkDrive(source, target),
+          ),
+      };
+
+      yield* fillBaseDrive(forking, RELAY, IMAGE, CREDENTIAL, opener(api));
 
       const name = baseDriveName(RELAY);
+      // The base drive is forked once, from a staging drive already installed and let go by its stopped sandbox.
+      assert.deepEqual(atFork, [{ installed: true, stopped: true }]);
       assert.deepEqual([...fake.drives], [name]);
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);
       assert.equal(sandbox.image, IMAGE);
       assert.deepEqual(sandbox.mounts, {
-        [BASE_DRIVE.MOUNT_PATH]: { drive: name, mode: "read-write" },
+        [BASE_DRIVE.MOUNT_PATH]: { drive: `${name}-staging`, mode: "read-write" },
       });
       assert.equal(sandbox.deleted, true);
       const clone = fake.runs.findIndex((run) =>
@@ -116,6 +133,28 @@ it.effect("launches that fill at once leave one base drive", () =>
   }),
 );
 
+it.effect("a base drive is not filled while its fill's sandbox is still being created", () =>
+  Effect.gen(function* () {
+    const { api } = yield* fixture;
+    let whileCreating: boolean | undefined;
+    const creating: VercelSandboxApi = {
+      ...api,
+      create: (ask) =>
+        Effect.andThen(
+          Effect.map(baseDriveFilled(api, RELAY), (filled) => {
+            whileCreating = filled;
+          }),
+          api.create(ask),
+        ),
+    };
+
+    yield* fillBaseDrive(creating, RELAY, IMAGE, CREDENTIAL, opener(api));
+
+    assert.equal(whileCreating, false);
+    assert.equal(yield* baseDriveFilled(api, RELAY), true);
+  }),
+);
+
 it.effect(
   "a base drive whose fill is still installing is not filled until its sandbox is gone",
   () =>
@@ -142,6 +181,59 @@ it.effect(
       yield* Fiber.join(fill);
 
       assert.equal(whileInstalling, false);
+      assert.equal(yield* baseDriveFilled(api, RELAY), true);
+    }),
+);
+
+it.effect(
+  "a base drive whose fill's sandbox could not be deleted reads filled once the next fill deletes it",
+  () =>
+    Effect.gen(function* () {
+      const { fake, api } = yield* fixture;
+      // The fill's delete after its fork, and the delete its cleanup tries again, are both refused.
+      fake.failDelete.remaining = 2;
+      yield* Effect.result(filled(api));
+      const stuck = yield* baseDriveFilled(api, RELAY);
+
+      yield* filled(api);
+
+      assert.equal(stuck, false);
+      assert.equal(yield* baseDriveFilled(api, RELAY), true);
+      assert.equal(fake.sandboxes.length, 1, "the next fill opened no sandbox of its own");
+    }),
+);
+
+it.effect(
+  "a fill another finished ahead of, after its look for the base drive, undoes what it made once its sandbox stands",
+  () =>
+    Effect.gen(function* () {
+      const { fake, api } = yield* fixture;
+      let forks = 0;
+      const counted: VercelSandboxApi = {
+        ...api,
+        forkDrive: (source, target) =>
+          Effect.andThen(
+            Effect.sync(() => {
+              forks += 1;
+            }),
+            api.forkDrive(source, target),
+          ),
+      };
+      // The other fill runs whole after this one looked for the base drive, before it makes its staging drive.
+      const overtaken: VercelSandboxApi = {
+        ...counted,
+        getOrCreateDrive: (name) =>
+          Effect.andThen(
+            Effect.orDie(fillBaseDrive(counted, RELAY, IMAGE, CREDENTIAL, opener(api))),
+            api.getOrCreateDrive(name),
+          ),
+      };
+
+      yield* fillBaseDrive(overtaken, RELAY, IMAGE, CREDENTIAL, opener(api));
+
+      assert.equal(forks, 1);
+      assert.deepEqual([...fake.drives], [baseDriveName(RELAY)]);
+      assert.equal(fake.sandboxes.filter((each) => !each.deleted).length, 0);
       assert.equal(yield* baseDriveFilled(api, RELAY), true);
     }),
 );

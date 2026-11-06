@@ -42,16 +42,9 @@ import {
   PICTURE_LOOK_STATUS,
   pictureNotLooked,
 } from "../../tasks/picture-look.js";
-import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
+import { openGithubUser } from "../../testing/github-app-fake.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { EXPERIMENT_OFF_REFUSAL } from "../workspace-experiment-on.js";
-import {
-  runAgentComment,
-  runAgentEditDescription,
-  runAgentLookAtPicture,
-  runAgentOpenPullRequest,
-} from "./agent-doors.js";
-import { CODER_REFUSAL } from "./bounds.js";
+import { runAgentComment, runAgentEditDescription, runAgentLookAtPicture } from "./agent-doors.js";
 import { DESCRIPTION_EDIT_REFUSAL } from "./description-edit.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -293,10 +286,10 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
   );
 
   it.effect(
-    "an agent's notes naming no task, or a task of another workspace its member is also in, or made once its workspace turned Task descriptions off, are refused and save nothing, as is its look at a description's picture",
+    "an agent's notes naming no task, or a task of another workspace its member is also in, are refused and save nothing",
     () =>
       Effect.gen(function* () {
-        const { userId, agent, admitted } = yield* openAgent();
+        const { userId, admitted } = yield* openAgent();
         const elsewhere = yield* openWorkspace(userId);
         const other = yield* createTask(userId, {
           name: "Side project",
@@ -328,24 +321,6 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         });
         const after = Option.getOrThrow(yield* readTask(userId, other.id));
         assert.equal(after.text, before.text);
-
-        // Note that a harness may call a tool it was not listed, so the door refuses it on its own.
-        yield* descriptionsIn(agent, false);
-        const off = yield* runAgentEditDescription(
-          admitted,
-          unparsedWire({ taskId: other.id, notes }),
-          0,
-          noSandbox,
-        );
-        const looked = yield* runAgentLookAtPicture(
-          admitted,
-          unparsedWire({ taskId: other.id, attachmentId: randomUUID() }),
-        );
-        assert.deepEqual(off, {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: EXPERIMENT_OFF_REFUSAL,
-        });
-        assert.deepEqual(looked, pictureNotLooked(EXPERIMENT_OFF_REFUSAL));
       }),
   );
 
@@ -390,7 +365,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const call = (
           name: Parameters<typeof runAgentComment>[1],
           input: Readonly<Record<string, string | boolean>>,
-        ) => runAgentComment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }));
+        ) => runAgentComment(admitted, name, unparsedWire({ taskId: sibling.id, ...input }), true);
 
         const read = yield* call(CODER_TOOL.READ_COMMENTS, {});
         const replied = yield* call(CODER_TOOL.REPLY_TO_COMMENT, { thread, words: "Link too." });
@@ -435,7 +410,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
         const agent = yield* tasklessAgentOn(userId, own.workspaceId);
         const admitted = admittedOf(agent);
         const reply = (input: Readonly<Record<string, string>>) =>
-          runAgentComment(admitted, CODER_TOOL.REPLY_TO_COMMENT, unparsedWire(input));
+          runAgentComment(admitted, CODER_TOOL.REPLY_TO_COMMENT, unparsedWire(input), true);
 
         const unnamed = yield* reply({ thread, words: "Done." });
         const outside = yield* reply({ taskId: elsewhere.id, thread: outsideThread, words: "x" });
@@ -443,6 +418,7 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           admitted,
           CODER_TOOL.READ_COMMENTS,
           unparsedWire({ taskId: theirs.id }),
+          true,
         );
 
         assert.deepEqual(unnamed, {
@@ -461,26 +437,6 @@ it.layer(getTestDB())("a coding agent's tool doors", (it) => {
           const [stored] = Option.getOrThrow(yield* readDescriptionCommentThreads(owner, taskId));
           assert.equal(stored?.entries.length, 1, taskId);
         }
-      }),
-  );
-
-  it.effect(
-    "an agent in no repository is refused its pull request by name, though its harness may call the tool",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openGithubUser();
-        const workspaceId = yield* openWorkspace(userId);
-        const agent = yield* tasklessAgentOn(userId, workspaceId);
-
-        const opened = yield* runAgentOpenPullRequest(
-          admittedOf(agent),
-          unparsedWire({ head: "luke/x", title: "x", body: "" }),
-        ).pipe(Effect.provide(githubReaching([]).layer));
-
-        assert.deepEqual(opened, {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: CODER_REFUSAL.NO_REPOSITORY,
-        });
       }),
   );
 });

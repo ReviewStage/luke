@@ -10,7 +10,6 @@ import {
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
-  type AutomationView,
 } from "@repo/features/automation-view";
 import {
   AUTOMATION_SCOPE,
@@ -118,7 +117,11 @@ import {
 } from "./automation-words.js";
 import { PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
-import { AUTOMATION_DELETE_MUTATION, useAutomations } from "./use-automations.js";
+import {
+  AUTOMATION_DELETE_MUTATION,
+  type AutomationWriteAnswer,
+  useAutomations,
+} from "./use-automations.js";
 
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
@@ -311,7 +314,7 @@ function AutomationRow({
   now: number;
   narrow: boolean;
   onOpen: () => void;
-  onToggle: (enabled: boolean) => Promise<AutomationView>;
+  onToggle: (enabled: boolean) => Promise<AutomationWriteAnswer>;
   /** Asks whether to delete it. */
   onDelete: () => void;
 }): React.JSX.Element {
@@ -405,7 +408,7 @@ interface AutomationRowsShown {
   now: number;
   narrow: boolean;
   onOpen: (automation: AutomationSummary) => void;
-  onToggle: (automation: AutomationSummary, enabled: boolean) => Promise<AutomationView>;
+  onToggle: (automation: AutomationSummary, enabled: boolean) => Promise<AutomationWriteAnswer>;
   onDelete: (automation: AutomationSummary) => void;
 }
 

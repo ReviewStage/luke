@@ -70,6 +70,12 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
   "uuid[]",
 ]);
 
+/** A serial column is its integer with a sequence's default, which `information_schema` reads back as the integer alone. */
+const SERIAL_TYPES: ReadonlyMap<string, string> = new Map([
+  ["serial", "integer"],
+  ["bigserial", "bigint"],
+]);
+
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";
 
@@ -110,7 +116,8 @@ function declaredTables(): ReadonlyMap<string, Table> {
       if (column.primary) primaryKey.add(column.name);
       // Note that v1 states an array column's dimensions apart from its type, which reads as the element's alone.
       const dimensions = is(column, PgColumn) ? (column.dimensions ?? 0) : 0;
-      const type = `${column.getSQLType()}${"[]".repeat(dimensions)}`;
+      const declared = column.getSQLType();
+      const type = `${SERIAL_TYPES.get(declared) ?? declared}${"[]".repeat(dimensions)}`;
       columns.set(column.name, { type, notNull: column.notNull });
     }
     tables.set(getTableName(exported), { columns, primaryKey });

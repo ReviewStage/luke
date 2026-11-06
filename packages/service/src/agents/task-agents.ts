@@ -22,6 +22,7 @@ import {
   pullRequestAuthorOf,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
+import { standingFailures } from "@repo/features/task-agents-model";
 import {
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
@@ -121,7 +122,8 @@ const PULL_REQUEST_RANK = {
  * merged, then closed, newest agent's first within each, so the few a row
  * names always hold the one its mark is drawn for; and the latest settled
  * activity of every agent, named or not and archived or not, which the
- * plan's last update is read beside; and how many agents failed. A plan
+ * plan's last update is read beside; and how many agents failed with no
+ * agent started since (`standingFailures`). A plan
  * whose every agent is archived carries its activity alone, with no agent
  * and no pull request counted.
  */
@@ -150,7 +152,7 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   return {
     total: agents.length,
     working: working.length,
-    failed: agents.filter((agent) => agent.line.status === AGENT_STATUS.FAILED).length,
+    failed: standingFailures(agents, Math.max(...read.map((agent) => agent.createdAt))),
     ...(read.length === 0
       ? undefined
       : { activityAt: Math.max(...read.map((agent) => agent.activityAt)) }),

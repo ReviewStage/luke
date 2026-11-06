@@ -25,6 +25,7 @@ test("a route's head replaces the changelog template's title, description, addre
   );
   assert.match(html, /<title>Changelog, page 2 — Vespin<\/title>/);
   assert.equal(metaContent(html, "og:title"), "Changelog, page 2 — Vespin");
+  assert.equal(metaContent(html, "twitter:title"), "Changelog, page 2 — Vespin");
   assert.equal(metaContent(html, "og:url"), "https://vespin.dev/changelog/page/2");
   assert.match(html, /<link rel="canonical" href="https:\/\/vespin\.dev\/changelog\/page\/2" \/>/);
   assert.equal(metaContent(html, "og:image"), "https://vespin.dev/og-card.png");
@@ -48,11 +49,20 @@ test("a release shares its own screenshot, at its own size, in place of the site
     metaContent(html, "og:image"),
     "https://vespin.dev/changelog/0.12.0/the-call-tab.png",
   );
+  assert.equal(
+    metaContent(html, "twitter:image"),
+    "https://vespin.dev/changelog/0.12.0/the-call-tab.png",
+  );
   assert.equal(metaContent(html, "og:image:alt"), "The Call tab over the whole window.");
+  assert.equal(metaContent(html, "twitter:image:alt"), "The Call tab over the whole window.");
   assert.equal(metaContent(html, "og:image:width"), "2400");
   assert.equal(metaContent(html, "og:image:height"), "1591");
   assert.equal(
     metaContent(html, "description"),
+    "Calls read as one thread, &quot;quoted&quot; &amp; &lt;kept&gt;.",
+  );
+  assert.equal(
+    metaContent(html, "twitter:description"),
     "Calls read as one thread, &quot;quoted&quot; &amp; &lt;kept&gt;.",
   );
 });

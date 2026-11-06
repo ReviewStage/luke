@@ -75,14 +75,20 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
           release and leaves sticky nowhere to travel. On one column the rail
           becomes the entry's own dated heading line. */}
       <div className="sticky top-24 flex flex-col gap-1 self-start max-[640px]:static max-[640px]:flex-row max-[640px]:items-baseline max-[640px]:gap-3">
-        <TextLink
-          href={changelogReleasePath(release.version)}
-          look={TEXT_LINK_LOOK.HEADING}
-          variant={TEXT_VARIANT.LABEL}
-          font={TEXT_FONT.MONO}
-        >
-          v{release.version}
-        </TextLink>
+        {/* The version heads its release under the page's title, so a
+            screen reader steps from release to release by heading; the
+            heading wears the link's own role and face, so its line is the
+            link's and the date stays where it stood. */}
+        <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.LABEL} font={TEXT_FONT.MONO}>
+          <TextLink
+            href={changelogReleasePath(release.version)}
+            look={TEXT_LINK_LOOK.HEADING}
+            variant={TEXT_VARIANT.LABEL}
+            font={TEXT_FONT.MONO}
+          >
+            v{release.version}
+          </TextLink>
+        </Text>
         <time dateTime={release.date}>
           <Text
             as={TEXT_ELEMENT.SPAN}

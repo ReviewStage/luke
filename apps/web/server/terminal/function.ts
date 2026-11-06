@@ -1,4 +1,7 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { workspaceSeams } from "@repo/database/models/workspace-seams";
+import { agentImageFromDirectory } from "@repo/service/agents/coder-host/agent-image";
 import { auth } from "@repo/service/auth/auth";
 import { authDeployment } from "@repo/service/auth/auth-deployment";
 import { resolveHostedUserId, resolveRelayUserId } from "@repo/service/auth/bearer";
@@ -30,6 +33,9 @@ import { runWeb } from "../runtime.js";
  * session cookie (`http/relay-upgrade.ts`).
  */
 
+/** The agents' image a sandbox is made again from, named in the file the build ships beside this function (`agent-image.ts`). */
+const agentImage = agentImageFromDirectory(dirname(fileURLToPath(import.meta.url)));
+
 let standingTerminal: RelayServer | undefined;
 
 let standingTunnel: RelayServer | undefined;
@@ -43,7 +49,7 @@ function standTerminal(relay: RelayServer): void {
     runWeb,
     Effect.scoped(
       Effect.gen(function* () {
-        const dependencies = yield* relayDependencies;
+        const dependencies = yield* relayDependencies.pipe(Effect.provide(agentImage));
         yield* standTerminalRelay({
           server: relay,
           ownOrigins: new Set(authDeployment(process.env).ownOrigins),
@@ -61,7 +67,7 @@ function standTunnelOn(tunnel: RelayServer): void {
     runWeb,
     Effect.scoped(
       Effect.gen(function* () {
-        const dependencies = yield* tunnelDependencies;
+        const dependencies = yield* tunnelDependencies.pipe(Effect.provide(agentImage));
         yield* standTunnel({
           server: tunnel,
           ownOrigins: new Set(authDeployment(process.env).ownOrigins),
@@ -79,7 +85,7 @@ function standBrowser(live: RelayServer): void {
     runWeb,
     Effect.scoped(
       Effect.gen(function* () {
-        const dependencies = yield* browserLiveDependencies;
+        const dependencies = yield* browserLiveDependencies.pipe(Effect.provide(agentImage));
         yield* standBrowserLive({
           server: live,
           ownOrigins: new Set(authDeployment(process.env).ownOrigins),

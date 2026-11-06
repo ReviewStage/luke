@@ -67,6 +67,7 @@ import {
   shownTicks,
   stepParts,
   taskHolder,
+  waitingByAgent,
   waitsOnReader,
   withChoice,
   withDoPress,
@@ -137,6 +138,7 @@ test("the board holds every item the plan's inbox holds, an agent the window has
       item({ id: "unlisted", agentId: UNLISTED, postedAt: 20, updatedAt: 20 }),
     ],
     undefined,
+    0,
   );
   assert.deepEqual(
     board.open.map((each) => each.id),
@@ -148,25 +150,36 @@ test("the board holds every item the plan's inbox holds, an agent the window has
   );
 });
 
-test("a task's Inbox counts what waits on the reader: a teammate's open item stands on the board but is left out of what waits, as is one settled", () => {
-  const board = inboxBoard(
-    [
-      item({ id: "mine", startedBy: ME, postedAt: 10 }),
-      item({ id: "assigned-to-me", startedBy: DANA, waitsOn: ME, postedAt: 20 }),
-      item({ id: "danas", startedBy: DANA, postedAt: 30 }),
-      item({ id: "assigned-to-dana", startedBy: ME, waitsOn: DANA, postedAt: 40 }),
-      item({ id: "unowned", postedAt: 50 }),
-      item({ id: "answered", startedBy: ME, status: INBOX_STATUS.ANSWERED, postedAt: 60 }),
-    ],
-    ME.userId,
-  );
+test("a task's Inbox counts what waits on the reader: a teammate's open item stands on the board but is left out of what waits, as is one settled, and one whose reminder is still ahead until it comes due", () => {
+  const items = [
+    item({ id: "mine", startedBy: ME, postedAt: 10 }),
+    item({ id: "assigned-to-me", startedBy: DANA, waitsOn: ME, postedAt: 20 }),
+    item({ id: "danas", startedBy: DANA, postedAt: 30 }),
+    item({ id: "assigned-to-dana", startedBy: ME, waitsOn: DANA, postedAt: 40 }),
+    item({ id: "unowned", postedAt: 50 }),
+    item({ id: "answered", startedBy: ME, status: INBOX_STATUS.ANSWERED, postedAt: 60 }),
+    item({ id: "reminded", agentId: UNLISTED, startedBy: ME, postedAt: 70, remindAt: 5_000 }),
+  ];
+  const board = inboxBoard(items, ME.userId, 4_000);
   assert.deepEqual(
     board.open.map((each) => each.id),
-    ["mine", "assigned-to-me", "danas", "assigned-to-dana", "unowned"],
+    ["mine", "assigned-to-me", "danas", "assigned-to-dana", "unowned", "reminded"],
   );
   assert.deepEqual(
     board.waiting.map((each) => each.id),
     ["mine", "assigned-to-me", "unowned"],
+  );
+  assert.equal(waitingByAgent(board.waiting).has(UNLISTED), false);
+  const due = inboxBoard(items, ME.userId, 5_000);
+  assert.deepEqual(
+    due.waiting.map((each) => each.id),
+    ["mine", "assigned-to-me", "unowned", "reminded"],
+  );
+  assert.deepEqual(
+    waitingByAgent(due.waiting)
+      .get(UNLISTED)
+      ?.map((each) => each.id),
+    ["reminded"],
   );
 });
 

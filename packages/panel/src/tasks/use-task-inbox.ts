@@ -14,6 +14,7 @@ import {
 import type { AgentAttachment } from "@repo/features/agent-wire";
 import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import type { AppInboxItems } from "@repo/host/app-state";
+import { useMinute } from "@repo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -353,28 +354,18 @@ function keptDraft(draft: InboxDraft, revision: number): Draft {
     values: draft.values,
     steps: draft.steps,
     press: draft.press,
-    resolving: draft.resolving,
   };
-}
-
-/** Whether a draft holds picks of an answer, a resolve staged aside, which answers nothing and so never stands for the picks that went. */
-function holdsAnswer(draft: Draft): boolean {
-  return holdsPicks({ ...draft, resolving: undefined });
 }
 
 /**
  * What a box holds once a reply carrying an answer is refused: the words and
  * files that went, then any written on the thread while the answer stood
- * settled, and the picks that went unless others were made meanwhile, or a
- * resolve was staged meanwhile on a revision since, which the picks that went
- * no longer stand on.
+ * settled, and the picks that went unless others were made meanwhile.
  */
 function withRefused(now: Draft, went: Draft): Draft {
   if (holdsNothing(now)) return went;
-  const keeps = holdsAnswer(now) || (now.resolving === true && now.revision !== went.revision);
   return {
-    ...(keeps ? now : went),
-    resolving: now.resolving ?? went.resolving,
+    ...(holdsPicks(now) ? now : went),
     text: [went.text, now.text].filter((words) => words !== "").join("\n"),
     attachments: [...went.attachments, ...now.attachments],
   };
@@ -389,8 +380,7 @@ function withRefused(now: Draft, went: Draft): Draft {
 function carriedBack(first: Draft, behind: readonly Draft[]): Draft {
   return behind.reduce(
     (joined, went) => ({
-      ...(holdsAnswer(went) ? went : joined),
-      resolving: went.resolving ?? joined.resolving,
+      ...(holdsPicks(went) ? went : joined),
       text: [joined.text, went.text].filter((words) => words !== "").join("\n"),
       attachments: [...joined.attachments, ...went.attachments],
     }),
@@ -418,8 +408,7 @@ function holdsNothing(draft: Draft): boolean {
     draft.choices.length === 0 &&
     draft.values.length === 0 &&
     (draft.steps ?? []).length === 0 &&
-    draft.press === undefined &&
-    draft.resolving === undefined
+    draft.press === undefined
   );
 }
 
@@ -802,7 +791,9 @@ export function useHeldTaskInbox(input: {
     latest.current.onRetryList();
   }, [held.items, ids]);
 
-  const board = useMemo(() => inboxBoard(held.items, readerId), [held.items, readerId]);
+  // Note that the clock moves with the minute, so a thread whose reminder comes due counts again without a read.
+  const now = useMinute();
+  const board = useMemo(() => inboxBoard(held.items, readerId, now), [held.items, readerId, now]);
 
   return {
     board,
@@ -909,7 +900,6 @@ export function useInboxCardDrafts(
             attachments: kept.attachments,
             steps: kept.steps,
             press: kept.press,
-            resolving: kept.resolving,
           };
     },
     [drafts],
@@ -928,7 +918,6 @@ export function useInboxCardDrafts(
         attachments: draft.attachments,
         steps: draft.steps,
         press: draft.press,
-        resolving: draft.resolving,
       })),
     [writer, draftsOn],
   );

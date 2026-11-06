@@ -12,7 +12,7 @@ import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { runAppCommand } from "../app-commands";
 import { DOCUMENT_REGION } from "../planning/planning-model";
-import { isAgentTab } from "../planning/tab-strip-model";
+import { STRIP_TAB_KIND } from "../planning/tab-strip-model";
 import type { SidePanelTab } from "../tasks/use-side-panel";
 import { armPaletteQuery } from "./palette-query";
 import { currentShot } from "./shot-profiles";
@@ -87,11 +87,11 @@ function layoutSteps(shot: ShotSpec): ShotStep[] {
       key: "main-tab",
       ready: (context) =>
         drawnTask(context) !== undefined &&
-        (!isAgentTab(mainTab) || (context.tasks.agents.agentIds?.includes(mainTab.agent) ?? false)),
+        (!(typeof mainTab !== "string" && mainTab.kind === STRIP_TAB_KIND.AGENT) || (context.tasks.agents.agentIds?.includes(mainTab.agent) ?? false)),
       run: (context) => {
         const taskId = drawnTask(context);
         if (taskId === undefined) return;
-        if (isAgentTab(mainTab)) context.tasks.onShowAgent(taskId, mainTab.agent);
+        if (typeof mainTab !== "string" && mainTab.kind === STRIP_TAB_KIND.AGENT) context.tasks.onShowAgent(taskId, mainTab.agent);
         else context.tasks.onShowInbox(taskId);
       },
     });

@@ -845,7 +845,7 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
   /** The agents starting or running now. */
   working: countedNumber,
-  /** The agents whose run failed, the archived left out. Absent from a service before it. */
+  /** The agents whose run failed with no agent started on the task since, the archived left out. Absent from a service before it. */
   failed: EffectSchema.optionalKey(countedNumber),
   /**
    * Epoch milliseconds the plan's agents last did something settled, every

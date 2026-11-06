@@ -19,7 +19,7 @@ import { installShownFailureReporter } from "./failure-report.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
 import {
   TOAST_HOLD,
   ToastHost,
@@ -29,7 +29,7 @@ import {
   useWorkingToast,
 } from "./toast.js";
 import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
-import { appStateFirstRead, appStateNow } from "./use-app-state.js";
+import { appStateFirstRead, appStateIn } from "./use-app-state.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
@@ -300,7 +300,10 @@ test("a failure toast reports what failed: an unexpected one as an error line an
     },
     ...TRACED,
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
 
   act(() => show?.(unheardStop()));
   act(() => show?.(refusedStart()));
@@ -379,7 +382,10 @@ test("a failure toast for a hosted call that never answered reports what the hos
     },
     ...TRACED,
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
 
   act(() =>
     show?.({
@@ -436,11 +442,22 @@ it.effect(
       handState({}, { network: { online: true, reachable: false } });
       // Note that we wait on the read itself, because it lands after a fiber's hops a busy runner can stretch past any one tick.
       yield* Effect.orDie(appStateFirstRead);
-      assert.equal(appStateNow()?.network.reachable, false, "the window read the document");
       mount(WINDOW.TALL);
+      // Note that we wait on the test's client, because the window's registry reads the document again before the subscription writes it there.
+      yield* Effect.promise(() =>
+        vi.waitFor(() =>
+          assert.equal(
+            appStateIn(testQueryClientNow())?.network.reachable,
+            false,
+            "the window read the document",
+          ),
+        ),
+      );
+      const uninstall = installShownFailureReporter(() => undefined, testQueryClientNow());
 
       act(() => show?.(unheardStop()));
       act(() => show?.(refusedStart()));
+      uninstall();
 
       assert.deepEqual(standing(), ["Messages are limited to 20,000 characters."]);
     }),
@@ -457,7 +474,10 @@ test("an unexpected failure toast's Copy details copies what its report sent, wi
     logger: { warn: () => undefined, error: () => undefined },
     ...TRACED,
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
   act(() => show?.(unheardStop()));
   act(() => show?.(refusedStart()));
   uninstall();
@@ -524,9 +544,11 @@ test("an Undo toast's Undo takes a row write back once, leaving ⌘Z nothing to 
     sent.push(payload);
     return Promise.resolve(true);
   };
-  const pressed = pressRows(ROW_WRITE.TASK_PIN, { rows: () => drawn, send: sendPin }, [
-    { id: taskId, after: { pinned: true, position: null } },
-  ]);
+  const pressed = pressRows(
+    ROW_WRITE.TASK_PIN,
+    { rows: () => ({ tasks: drawn, held: undefined }), send: sendPin },
+    [{ id: taskId, after: { pinned: true, position: null } }],
+  );
   // The pin is kept and drawn, as the host draws it.
   drawn = { ...IDLE_TASKS_VIEW, tasks: [{ ...task, pinnedAt: 3 }] };
   const undo = pressed.keep("Task pinned") ?? assert.fail("the pin's entry");

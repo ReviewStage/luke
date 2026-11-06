@@ -8,6 +8,38 @@
     <meta name="robots" content="noindex" />
     <title>Join a workspace on Vespin</title>
 
+    <!-- What a pasted invitation link unfurls as: the site's card, the same
+         for every invitation. An unfurler fetches the link signed out, so the
+         card names neither the workspace nor who sent it, and, as in app.html,
+         it leaves out og:url, which could only lead away from the link the
+         invitee was handed. The tag set is documented in index.html. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vespin" />
+    <meta property="og:title" content="Join a workspace on Vespin" />
+    <meta
+      property="og:description"
+      content="You're invited to a workspace on Vespin, an inbox for all your coding agents."
+    />
+    <meta property="og:image" content="https://vespin.dev/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta
+      property="og:image:alt"
+      content="The Vespin logo — a disc cut by a V, beside the name — on a near-black ground."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Join a workspace on Vespin" />
+    <meta
+      name="twitter:description"
+      content="You're invited to a workspace on Vespin, an inbox for all your coding agents."
+    />
+    <meta name="twitter:image" content="https://vespin.dev/og-card.png" />
+    <meta
+      name="twitter:image:alt"
+      content="The Vespin logo — a disc cut by a V, beside the name — on a near-black ground."
+    />
+
     <!-- Vespin's app icon, the same icons the landing page carries — the tag set
          is documented there, in index.html. -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />

@@ -33,7 +33,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -774,7 +774,10 @@ test("a message refused for want of a connected credential is reported as the se
       getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
     }),
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
   try {
     const box = await mounted(() =>
       Promise.resolve({

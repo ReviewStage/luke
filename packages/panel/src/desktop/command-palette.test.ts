@@ -34,6 +34,7 @@ import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@repo/settings
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
 import { experimentsOn, settingsView } from "@repo/settings/testing";
+import { agentTab, changesTab, fileTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -51,6 +52,7 @@ import {
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
 import { installPanelSpanRecorder, PANEL_SPAN, type PanelSpan } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
+import { ROUTED_PLACE, type RoutedPlace } from "../places/routed-places.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { fileLook } from "../tasks/file-ref.js";
@@ -116,11 +118,13 @@ function AgentPageTelling(props: { agentId: string; workspaceId: string }): null
 /** The palette as the window draws it, offering the links at hand through the window's own Copy link, beside an agent's page where one tells its workspace. */
 function WindowPalette({
   page,
+  place,
   ...props
 }: Omit<Parameters<typeof CommandPalette>[0], "links"> & {
   page?: { agentId: string; workspaceId: string } | undefined;
+  place?: RoutedPlace | undefined;
 }): React.JSX.Element {
-  const links = useCopyLink(props.tasks, undefined, true);
+  const links = useCopyLink(props.tasks, undefined, true, SHELL_ROOM.WIDE, undefined, place);
   return createElement(
     PageWorkspaceProvider,
     { value: links.onPageWorkspace },
@@ -139,6 +143,8 @@ function openPalette(
   tab: PanelTab = PANEL_TAB.TASKS,
   /** A registry of its own, so the palette reads main's document anew as the test handed it; the window's shared one where none is given. */
   registry?: AtomRegistry.AtomRegistry,
+  /** The routed place the window stands on, which offers its own links. */
+  place?: RoutedPlace,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -160,6 +166,7 @@ function openPalette(
       onViewChange: (view) => sent.views.push(view),
     },
     page,
+    place,
   });
   // The repository's files are read whole through the act port, by the plan they stand on.
   fakeActPort({
@@ -1763,7 +1770,7 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
     ...ON_AGENT_TAB,
     mainTabs: {
       ...ON_AGENT_TAB.mainTabs,
-      tabs: [{ agent: LINKED_AGENT }],
+      tabs: [agentTab(LINKED_AGENT)],
       openAgents: [LINKED_AGENT],
     },
   });
@@ -1830,7 +1837,7 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
   workspaces: [
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
   ],
-  mainTabs: { ...tasksControl().mainTabs, tab: { agent: LINKED_AGENT } },
+  mainTabs: { ...tasksControl().mainTabs, tab: agentTab(LINKED_AGENT) },
   agents: agentsControl({
     agents: [
       {
@@ -1872,26 +1879,32 @@ test("⇧⌘C copies the link of what is open, the most specific first: the Inbo
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
-  for (const tasks of [
-    ON_AGENT_TAB,
-    tasksControl({
-      ...listed,
-      inboxView: {
-        ...tasksControl().inboxView,
-        open: true,
-        chosen: { agentId: LINKED_AGENT, itemId },
-      },
-    }),
-    tasksControl({
-      ...listed,
-      automationsView: {
-        ...tasksControl().automationsView,
-        open: true,
-        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
-      },
-    }),
-  ]) {
-    openPalette(tasks);
+  for (const [tasks, place] of [
+    [ON_AGENT_TAB, undefined],
+    [
+      tasksControl({
+        ...listed,
+        inboxView: {
+          ...tasksControl().inboxView,
+          open: true,
+          chosen: { agentId: LINKED_AGENT, itemId },
+        },
+      }),
+      ROUTED_PLACE.INBOX,
+    ],
+    [
+      tasksControl({
+        ...listed,
+        automationsView: {
+          ...tasksControl().automationsView,
+          open: true,
+          place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
+        },
+      }),
+      ROUTED_PLACE.AUTOMATIONS,
+    ],
+  ] as const) {
+    openPalette(tasks, undefined, undefined, undefined, undefined, undefined, place);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -1918,7 +1931,7 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
     return tasksControl({
       ...listed,
       agentView: { ...base.agentView, agentId: LINKED_AGENT },
-      sidePanel: { ...base.sidePanel, open: true, fullScreen, tab: { page: pageId } },
+      sidePanel: { ...base.sidePanel, open: true, fullScreen, tab: pageTab(pageId) },
     });
   };
   for (const tasks of [onPage(true), onPage(false)]) {
@@ -1939,20 +1952,25 @@ test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies
   ]);
 });
 
-test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⇧⌘C copies their page's link in the workspace it opened in", async () => {
+test("on a person's page ⌘K offers Copy link to profile and ⇧⌘C copies their page's link in the workspace it opened in", async () => {
   const copied = installClipboard();
   const [acme] = ON_AGENT_TAB.workspaces;
   openPalette(
     tasksControl({
       workspaces: ON_AGENT_TAB.workspaces,
       workspace: acme,
-      inboxView: { ...tasksControl().inboxView, open: true },
       personView: {
         ...tasksControl().personView,
         userId: "user-charles",
         workspaceId: acme?.id,
       },
     }),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    ROUTED_PLACE.PERSON,
   );
   type("copy link");
   const listed = rows().filter((row) => row.startsWith("Copy link to "));
@@ -1983,7 +2001,7 @@ test("with the side panel filling the window over an agent's tab, ⇧⌘C copies
         ...ON_AGENT_TAB.sidePanel,
         open: true,
         fullScreen: true,
-        tab: { changes: LINKED_AGENT },
+        tab: changesTab(LINKED_AGENT),
       },
     }),
   );
@@ -2004,7 +2022,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
   openPalette(
     tasksControl({
       ...ON_AGENT_TAB,
-      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: { changes: LINKED_AGENT } },
+      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: changesTab(LINKED_AGENT) },
     }),
   );
   type("copy link");
@@ -2612,7 +2630,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
   const listed = rows();
   assert.ok(listed.includes(`Invite funnel · ${DOCUMENT_TASK.name}`), "the page is listed");
   assert.ok(
-    listed.includes(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`),
+    listed.includes(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`),
     "the agent's terminal is listed",
   );
 
@@ -2621,8 +2639,11 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens again");
   });
   chooseFilter("This task");
-  press(`Invoice export · Terminal · ${DOCUMENT_TASK.name}`);
-  assert.deepEqual(chosen, [{ page: "page-1" }, { terminal: agent.id }]);
+  press(`Invoice export · Cloud Terminal · ${DOCUMENT_TASK.name}`);
+  const [page, terminal] = chosen;
+  assert.deepEqual(page, pageTab("page-1"));
+  assert.ok(terminal instanceof Object && "terminal" in terminal && "title" in terminal);
+  assert.deepEqual([terminal.terminal, terminal.title], [agent.id, "Cloud 1"]);
 });
 
 test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages the Inbox\'s panel read, as that panel\'s "+" offers them', async () => {
@@ -2838,7 +2859,21 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
   assert.deepEqual(asked, [`${agent.id}:true`, `${agent.id}:false`]);
 });
 
-test("⌘K's \"This task\" still offers the task's Inbox while an item waits on it and its agents are unread", async () => {
+/** The words at the end of the row listed as exactly `listed`, as a reader hears them; empty where it draws none. */
+function endWordsOf(listed: string): string {
+  const row = document.querySelectorAll('[role="option"]')[rows().indexOf(listed)];
+  assert.ok(row, `${listed} is listed`);
+  const end = row.querySelector(".ui-combobox-option-hint");
+  return end === null ? "" : heard(end).trim();
+}
+
+test("⌘K's \"This task\" offers the task's Inbox while an item waits on it and its agents are unread, counting the threads that wait", async () => {
+  const waiting = (id: string) => ({
+    id,
+    agentId: "agent-1",
+    title: id,
+    postedAt: 1,
+  });
   const tasks = tasksControl({
     activeTaskId: DOCUMENT_TASK.id,
     tasks: [
@@ -2852,11 +2887,13 @@ test("⌘K's \"This task\" still offers the task's Inbox while an item waits on 
       },
     ],
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    inbox: [{ taskId: DOCUMENT_TASK.id, items: [] }],
+    inbox: [{ taskId: DOCUMENT_TASK.id, items: [waiting("first"), waiting("second")] }],
   });
   await paletteUnderState(tasks);
   chooseFilter("This task");
-  assert.ok(rows().includes(`Inbox · ${DOCUMENT_TASK.name}`), "a waiting item holds the Inbox");
+  const listed = `Inbox · ${DOCUMENT_TASK.name}`;
+  assert.ok(rows().includes(listed), "a waiting item holds the Inbox");
+  assert.equal(endWordsOf(listed), "2 need you");
 });
 
 test("⌘K draws no Issues filter, with every experiment on, since Vespin keeps no issues of its own", async () => {
@@ -3035,13 +3072,13 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.ok(needs, "the item that needs you is listed");
   assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
-  assert.ok(needs.querySelector(".ui-combobox-option-hint .inbox-row-attention"), "it needs you");
-  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
-  assert.equal(
-    answered?.querySelector(".inbox-row-attention"),
-    null,
-    "an answered item needs no one",
+  assert.match(
+    needs.querySelector(".ui-combobox-option-hint")?.textContent ?? "",
+    /Needs you/u,
+    "it needs you",
   );
+  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
+  assert.doesNotMatch(answered?.textContent ?? "", /Needs you/u, "an answered item needs no one");
 
   restOn(needs);
   const card = document.querySelector(".ui-tooltip-card [data-inbox-item-card]");
@@ -3049,7 +3086,6 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
     card?.querySelector(".ui-hover-card-name")?.textContent,
     "Which webhook secret should rotate?",
   );
-  assert.match(card?.textContent ?? "", /Rotate the Stripe signing secret today\./u);
 });
 
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {
@@ -3278,7 +3314,7 @@ test("with files open and nothing typed, Files lists them first, in the strip's 
         { path: moved, range: undefined, opened: 2, browsedOn: "plan-1" },
       ],
       // The later tab was moved before the earlier one in the strip, which leaves the files held as they were.
-      order: [{ file: moved }, { file: opened }],
+      order: [fileTab(moved), fileTab(opened)],
     },
   });
   const tree = ["README.md", "package.json", "src/index.ts", other, opened, moved];

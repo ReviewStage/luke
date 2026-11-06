@@ -146,6 +146,7 @@ test("a replay is a continue with no message and a fork at one, and says its ste
   assert.equal(replayCount(replay()), "3 steps");
   assert.equal(replayCount(replay({ steps: STEPS.slice(0, 1), totalSteps: 1 })), "1 step");
   assert.equal(replayCount(replay({ totalSteps: 212 })), "3 of 212 steps");
+  assert.equal(replayCount(replay({ carried: true, steps: [], totalSteps: 0 })), undefined);
   assert.equal(leftOutLine(replay()), undefined);
   assert.equal(
     leftOutLine(replay({ totalSteps: 212 })),

@@ -24,8 +24,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type NavigateOptions, useNavigate, useRouter } from "@tanstack/react-router";
 import { Store, useSelector } from "@tanstack/react-store";
 import { useState } from "react";
-import { ROUTED_PLACE } from "./route-gates.js";
-import { useRoutedLocation } from "./routed-location.js";
+import { ROUTED_PLACE, useWindowPlace } from "./places/routed-places.js";
 import { inboxItemHomeQueryOptions } from "./tasks/agent-reads.js";
 import type { InboxChoice } from "./tasks/use-tasks-tab.js";
 
@@ -118,7 +117,7 @@ export function useInboxRoute(input: { onClose: () => void; onStay: () => void }
   const router = useRouter();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const here = useRoutedLocation();
+  const here = useWindowPlace();
   // Only grows: each item a door chose, by its id, for as long as the window lives.
   const [choices] = useState<ChoicesHeld>(() => new Store(new Map()));
   const open = here.place === ROUTED_PLACE.INBOX;

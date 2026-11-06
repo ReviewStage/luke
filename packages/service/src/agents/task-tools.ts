@@ -37,6 +37,7 @@ import {
 } from "../tasks/task-create-relation.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
+  AGENT_CALLER,
   AGENT_TOOL_REFUSAL,
   type AgentCall,
   type AgentReadCall,
@@ -46,7 +47,6 @@ import {
   callerTask,
   callerUserId,
   callerWorkspace,
-  callerWorkspaceId,
   cutOnLine,
   orStoreRefusal,
   repositoryRefusalWords,
@@ -136,9 +136,11 @@ export function readTaskToolOf(on: Pick<ExperimentsOn, "descriptionsOn">) {
 
 export const READ_TASK_TOOL = readTaskToolOf(EVERY_EXPERIMENT_ON);
 
-/** Whether the caller reaches tasks' descriptions: whether the workspace it calls in has Task descriptions on (`experimentOnIn`). */
+/** Whether the caller reaches tasks' descriptions: as the coding agent's standing read its workspace's Task descriptions, or as the workspace the member's call is about has them (`experimentOnIn`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
-  return experimentOnIn(callerWorkspaceId(caller), EXPERIMENT.DESCRIPTIONS);
+  return caller.kind === AGENT_CALLER.AGENT
+    ? Effect.succeed(caller.descriptionsOn)
+    : experimentOnIn(caller.workspaceId, EXPERIMENT.DESCRIPTIONS);
 }
 
 /** One call of `read_task`: a task of the caller's workspace, its description cut to the bound, or why there is none; no description where the caller has Task descriptions off. */

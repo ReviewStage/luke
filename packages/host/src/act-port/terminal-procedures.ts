@@ -62,6 +62,7 @@ export interface TerminalActsDependencies<Sender> {
     | "terminalInput"
     | "terminalResize"
     | "terminalAck"
+    | "terminalShown"
     | "terminalDisconnect"
     | "onTerminalOutput"
     | "onTerminalState"
@@ -130,6 +131,7 @@ export function terminalProcedures<Sender>(
     if (inbound.type === TERMINAL_PORT_MESSAGE.RESIZE) {
       return host.terminalResize({ connectionId, cols: inbound.cols, rows: inbound.rows });
     }
+    if (inbound.type === TERMINAL_PORT_MESSAGE.SHOWN) return host.terminalShown({ connectionId });
     return host.terminalAck({ connectionId, bytes: inbound.bytes });
   };
 

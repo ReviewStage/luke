@@ -4,10 +4,9 @@ import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
-import { shellsAsked } from "@repo/features/terminal-store";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import type { StripTab } from "@repo/ui/tab-strip-model";
+import { agentTab, STRIP_TAB_KIND, type StripTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -28,9 +27,9 @@ import { NO_LOOKS } from "./use-task-looks.js";
 
 /**
  * Show terminal (⌘J) and New terminal from each place a developer can be,
- * as the new-terminal rules have them: which agent's Terminal tab the side
- * panel is asked to show, whether a new shell is asked of its sandbox, and
- * the picker where the rules leave the agent to the developer. The task is
+ * as the new-terminal rules have them: which agent's cloud terminal tab the
+ * side panel is asked to show, whether it is a new one, and the picker where
+ * the rules leave the agent to the developer. The task is
  * drawn by the real window over a staged control.
  */
 
@@ -83,6 +82,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  // The window's terminals are kept in its session storage, which each test starts without.
+  window.sessionStorage.clear();
 });
 
 /** Lets main's answers, and the redraws they cause, land. */
@@ -111,7 +112,7 @@ async function mount(input: {
   const shown: StripTab[] = [];
   const base = tasksControl();
   const listed = input.agents ?? [];
-  const agentTabs = listed.map((each) => ({ agent: each.id }));
+  const agentTabs = listed.map((each) => agentTab(each.id));
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [SUMMARY],
@@ -158,10 +159,13 @@ async function mount(input: {
   const terminals = input.terminals ?? true;
   await vi.waitFor(() => assert.equal(appCommandOffered(APP_COMMAND.SHOW_TERMINAL), terminals));
   return {
-    /** Every tab the side panel was asked to show, in order. */
-    shown,
-    /** How many new shells were asked of the agent's sandbox and not yet started. */
-    asked: (agentId: string) => registry.get(shellsAsked(agentId)),
+    /** Every tab the side panel was asked to show, in order, a terminal's by its agent and its name. */
+    shown: () =>
+      shown.map((tab) =>
+        typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TERMINAL
+          ? [tab.terminal, tab.title]
+          : tab,
+      ),
     run: async (command: typeof APP_COMMAND.SHOW_TERMINAL | typeof APP_COMMAND.NEW_TERMINAL) => {
       act(() => {
         runAppCommand(command);
@@ -191,35 +195,37 @@ function picker() {
   };
 }
 
-test("on a plan with one agent, ⌘J shows its Terminal tab and New terminal asks for a new shell there", async () => {
+test("on a plan with one agent, ⌘J shows its cloud terminal and New terminal opens another there", async () => {
   const task = await mount({ agents: [WORKING] });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
-  assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
-  assert.equal(task.asked(WORKING.id), 0);
+  assert.deepEqual(task.shown(), [[WORKING.id, "Cloud 1"]]);
+  await task.run(APP_COMMAND.SHOW_TERMINAL);
+  assert.deepEqual(task.shown().at(-1), [WORKING.id, "Cloud 1"], "⌘J again opens no new one");
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  assert.deepEqual(task.shown, [{ terminal: WORKING.id }, { terminal: WORKING.id }]);
-  assert.equal(task.asked(WORKING.id), 1);
+  assert.deepEqual(task.shown().at(-1), [WORKING.id, "Cloud 2"]);
   assert.equal(picker(), undefined);
 });
 
 test("from an agent's own tab, both mean that agent, whatever else is on the plan", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
-    main: { agent: DONE.id },
+    main: agentTab(DONE.id),
     lastTerminal: WORKING.id,
   });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  assert.deepEqual(task.shown, [{ terminal: DONE.id }, { terminal: DONE.id }]);
+  assert.deepEqual(task.shown(), [
+    [DONE.id, "Cloud 1"],
+    [DONE.id, "Cloud 2"],
+  ]);
 });
 
-test("with several agents, both mean the terminal used last, and New terminal asks for a new shell there", async () => {
+test("with several agents, both mean the terminal used last, and New terminal opens another there", async () => {
   const task = await mount({ agents: [WORKING, DONE], lastTerminal: DONE.id });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
-  assert.deepEqual(task.shown, [{ terminal: DONE.id }]);
+  assert.deepEqual(task.shown(), [[DONE.id, "Cloud 1"]]);
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  assert.deepEqual(task.shown.at(-1), { terminal: DONE.id });
-  assert.equal(task.asked(DONE.id), 1);
+  assert.deepEqual(task.shown().at(-1), [DONE.id, "Cloud 2"]);
   assert.equal(picker(), undefined);
 });
 test("with no agent on the plan, both offer to start one", async () => {
@@ -235,7 +241,7 @@ test("with no agent on the plan, both offer to start one", async () => {
   assert.deepEqual(picker()?.rows, [{ name: "Start an agent", chosen: true }]);
   await picker()?.choose("Start an agent");
   assert.equal(started, 1);
-  assert.deepEqual(task.shown, []);
+  assert.deepEqual(task.shown(), []);
 });
 
 test("a Start the picker pressed that the service refused says why on the toast, its repository's remedy beside it", async () => {
@@ -252,7 +258,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
   assert.ok(said.includes("Choose a repository"), "and offers the remedy");
 });
 
-test("the panel's + lists each agent's terminal under Terminal, and a pick adds a shell to that agent's sandbox", async () => {
+test("the panel's + lists each agent's terminal under Cloud Terminal, and a pick opens a new one in that agent's sandbox", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     side: SIDE_PANEL_TAB.COMMENTS,
@@ -266,7 +272,9 @@ test("the panel's + lists each agent's terminal under Terminal, and a pick adds 
   await settle();
   const rows = [
     ...document.querySelectorAll<HTMLElement>('.ui-searchable-menu [role="option"]'),
-  ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Terminal") === true);
+  ].filter(
+    (row) => row.closest('[role="group"]')?.textContent?.startsWith("Cloud Terminal") === true,
+  );
   assert.deepEqual(
     rows.map((row) => [
       row.querySelector(".ui-combobox-option-label")?.textContent,
@@ -278,8 +286,7 @@ test("the panel's + lists each agent's terminal under Terminal, and a pick adds 
     ],
   );
   await act(async () => rows[0]?.click());
-  assert.deepEqual(task.shown.at(-1), { terminal: WORKING.id });
-  assert.equal(task.asked(WORKING.id), 1);
+  assert.deepEqual(task.shown().at(-1), [WORKING.id, "Cloud 1"]);
 });
 
 /** The open menu's item named `label`: whether it shows a shortcut and what, and a press of it, the menu closing behind. */
@@ -312,10 +319,10 @@ function rightClickTab(name: string): void {
   });
 }
 
-test("an agent's tab offers Show terminal on its right-click, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
+test("an agent's tab offers Show terminal on its right-click, which opens that agent's own terminal, and its composer wears no Terminal chip", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
     lastTerminal: DONE.id,
   });
   assert.ok(document.querySelector(".agent-composer"), "the agent's composer is drawn");
@@ -329,15 +336,13 @@ test("an agent's tab offers Show terminal on its right-click, which opens that a
   const fromChosen = menuItem("Show terminal");
   assert.equal(fromChosen.hint, "⌘J");
   await fromChosen.press();
-  assert.deepEqual(task.shown, [{ terminal: WORKING.id }]);
+  assert.deepEqual(task.shown(), [[WORKING.id, "Cloud 1"]]);
   // Another agent's tab opens its own terminal, which ⌘J would not from here, so it says no shortcut.
   rightClickTab("Expiry job");
   const fromOther = menuItem("Show terminal");
   assert.equal(fromOther.hint, undefined);
   await fromOther.press();
-  assert.deepEqual(task.shown.at(-1), { terminal: DONE.id });
-  assert.equal(task.asked(WORKING.id), 0);
-  assert.equal(task.asked(DONE.id), 0);
+  assert.deepEqual(task.shown().at(-1), [DONE.id, "Cloud 1"]);
 });
 
 /** The labels of the menu standing open. */
@@ -361,7 +366,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
     each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.MAC_TERMINAL;
   await mountOn(DESKTOP_CAPABILITIES, {
     agents: [WORKING],
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
   });
   rightClickTab("Invite flow");
   const onDesktop = menuLabels();
@@ -369,7 +374,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
 
   await mountOn(DESKTOP_CAPABILITIES.filter(offered), {
     agents: [WORKING],
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
     side: SIDE_PANEL_TAB.COMMENTS,
   });
   rightClickTab("Invite flow");
@@ -389,7 +394,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   assert.ok(onDesktop.includes("Show terminal"), "the desktop offers it");
   assert.equal(without.includes("Show terminal"), false);
   assert.equal(
-    groups.some((group) => group.startsWith("Terminal")),
+    groups.some((group) => group.startsWith("Cloud Terminal")),
     false,
   );
 });
@@ -402,5 +407,5 @@ test("while the plan's agents are still being read, the offer says so and starts
     document.querySelector('[role="dialog"] .ui-note-line')?.textContent,
     "Reading the task’s agents",
   );
-  assert.deepEqual(task.shown, []);
+  assert.deepEqual(task.shown(), []);
 });

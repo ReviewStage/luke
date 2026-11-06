@@ -107,8 +107,8 @@ function heard(held: Held, message: WireBoundaryInput): void {
     held.shell.resume();
     return;
   }
-  // Note that a shell that exited takes nothing more, because its terminal is closed.
-  if (held.exitCode !== undefined) return;
+  // Note that a shell that exited takes nothing more, because its terminal is closed; one on this Mac holds nothing a shown tab need keep.
+  if (held.exitCode !== undefined || inbound.type === TERMINAL_PORT_MESSAGE.SHOWN) return;
   if (inbound.type === TERMINAL_PORT_MESSAGE.INPUT) held.shell.write(inbound.data);
   else held.shell.resize(inbound.cols, inbound.rows);
 }

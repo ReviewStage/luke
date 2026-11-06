@@ -16,6 +16,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
+import { draftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -329,7 +330,7 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the des
     repositoryMenu: { taskId: TASK.id, request: 1 },
     mainTabs: {
       ...tasks.mainTabs,
-      tab: overview ? MAIN_TAB.OVERVIEW : { draft: "draft-1" },
+      tab: overview ? MAIN_TAB.OVERVIEW : draftTab("draft-1"),
       onChoose: (tab) => told.push(`choose ${JSON.stringify(tab)}`),
     },
   });

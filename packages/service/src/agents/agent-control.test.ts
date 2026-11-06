@@ -20,9 +20,9 @@ import {
   openTokenMember,
 } from "../testing/github-app-fake.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
-import { startFromOf } from "./coder-host/replay.js";
 import { routedSessions } from "./coder-host/runtime-sessions.js";
 import { steerAgent } from "./coder-host/steer.js";
+import { startFromOf } from "./coder-host/takeover.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 

@@ -14,7 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { failureShown, installShownFailureReporter, type ShownFailure } from "./failure-report.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
 
 /**
  * failure-report.test.ts -- a failure drawn in place, through `ErrorState`
@@ -77,7 +77,10 @@ test("a failure drawn in place is reported once as it stands, again for another,
     getActiveSpan: () => undefined,
     getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: "trace-fixture" }) }),
   };
-  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const uninstall = installShownFailureReporter(
+    (report) => sendShownFailure(recording, report),
+    testQueryClientNow(),
+  );
   try {
     draw(unreadTasks());
     draw(unreadTasks());

@@ -22,6 +22,7 @@ import { Clock, Duration, Effect, Fiber, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
+  FAKE_IMAGE,
   FAKE_RECORDING_PATH,
   type FakeCdpAnswer,
   type FakeCdpCommand,
@@ -74,7 +75,10 @@ function recordingBrowser(
 ) {
   const sandbox = fakeSandboxApi({ status: "running", sessionId: SESSION, recording });
   return {
-    layer: Layer.succeed(AgentBrowser, agentBrowserOver(sandbox.api, fakeBridgePty(peer))),
+    layer: Layer.succeed(
+      AgentBrowser,
+      agentBrowserOver(sandbox.api, fakeBridgePty(peer), FAKE_IMAGE),
+    ),
     ran: sandbox.ran,
   };
 }
@@ -896,6 +900,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
               listTagged: (session) => (opened ? api.listTagged(session) : Effect.succeed([])),
             },
             fakeBridgePty(peer),
+            FAKE_IMAGE,
           ),
         );
         const input = unparsedWire({

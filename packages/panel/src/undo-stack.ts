@@ -27,11 +27,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { AgentAgentAnswer } from "@repo/features/agent-view";
 import type { AgentSummary } from "@repo/features/agent-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
+import type { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE, type FailureSurface } from "@repo/features/shown-failure";
 import type { TaskPriority, TaskStatus, TaskSummary } from "@repo/features/task-wire";
 import type { TasksView } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import type { PortActKind } from "@repo/host/contract";
 import { STATUS_TONE } from "@repo/ui";
 import * as Atom from "effect/reactivity/Atom";
@@ -48,7 +49,6 @@ import { priorityOf, statusOf } from "./desktop/task-row-parts.js";
 import type { ShownFailure } from "./failure-report.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
-import { appStateNow } from "./use-app-state.js";
 
 /** The most entries each list keeps; an older one leaves as a newer one comes. */
 const MAX_ENTRIES = 50;
@@ -383,15 +383,25 @@ export function pressRows<Rows, Fields extends object, Kind extends PortActKind>
 }
 
 /**
- * A task's row as the tasks drawn show it: the list's, else its plan's as
- * the host holds it for the window (`LIVE_READ.DESCRIPTION_DOCUMENT`), as a task
- * just started is held before the list carries it.
+ * The rows a task's write reads: the tasks drawn, and the plans the host
+ * holds for the window (`LIVE_READ.DESCRIPTION_DOCUMENT`), none before the
+ * document is read, as the caller's Query client holds them.
  */
-function taskRow(tasks: TasksView, taskId: string): TaskSummary | undefined {
+export interface TaskRows {
+  readonly tasks: TasksView;
+  readonly held: AppStateSnapshot[typeof LIVE_READ.DESCRIPTION_DOCUMENT] | undefined;
+}
+
+/**
+ * A task's row as the tasks drawn show it: the list's, else its plan's as
+ * the host holds it for the window, as a task just started is held before
+ * the list carries it.
+ */
+function taskRow({ tasks, held }: TaskRows, taskId: string): TaskSummary | undefined {
   const listed = tasks.tasks.find((task) => task.id === taskId);
   if (listed !== undefined) return listed;
-  const held = appStateNow()?.[LIVE_READ.DESCRIPTION_DOCUMENT][taskId]?.rows;
-  return held !== undefined && "task" in held ? held.task : undefined;
+  const rows = held?.[taskId]?.rows;
+  return rows !== undefined && "task" in rows ? rows.task : undefined;
 }
 
 /** A pin as an entry reads and sends it: whether it stands, and where it was dragged, none while it stands by when it was pinned. */
@@ -446,7 +456,7 @@ export const ROW_WRITE = {
     kind: ACT_KIND.TASKS_RENAME,
     send: (send, taskId, { name }) => askKept(send({ taskId, name })),
     surface: FAILURE_SURFACE.TASK_RENAME,
-  } satisfies RowWrite<TasksView, { readonly name: string }, typeof ACT_KIND.TASKS_RENAME>,
+  } satisfies RowWrite<TaskRows, { readonly name: string }, typeof ACT_KIND.TASKS_RENAME>,
   TASK_STANDING: {
     read: (tasks, taskId) => {
       const task = taskRow(tasks, taskId);
@@ -475,7 +485,7 @@ export const ROW_WRITE = {
         }),
       ),
     surface: FAILURE_SURFACE.TASK_STANDING,
-  } satisfies RowWrite<TasksView, StandingFields, typeof ACT_KIND.TASKS_SET_STANDING>,
+  } satisfies RowWrite<TaskRows, StandingFields, typeof ACT_KIND.TASKS_SET_STANDING>,
   TASK_PIN: {
     read: (tasks, taskId) => {
       const task = taskRow(tasks, taskId);
@@ -486,14 +496,14 @@ export const ROW_WRITE = {
     kind: ACT_KIND.TASKS_PIN,
     send: (send, taskId, pin) => askKept(send({ taskId, ...pinSent(pin) })),
     surface: FAILURE_SURFACE.TASK_MARK,
-  } satisfies RowWrite<TasksView, PinFields, typeof ACT_KIND.TASKS_PIN>,
+  } satisfies RowWrite<TaskRows, PinFields, typeof ACT_KIND.TASKS_PIN>,
   AGENT_PIN: {
-    read: agentPin,
+    read: ({ tasks }, agentId) => agentPin(tasks, agentId),
     holds: holdsEach,
     kind: ACT_KIND.AGENTS_PIN,
     send: (send, agentId, pin) => agentKept(send({ agentId, ...pinSent(pin) })),
     surface: FAILURE_SURFACE.AGENT_PIN,
-  } satisfies RowWrite<TasksView, PinFields, typeof ACT_KIND.AGENTS_PIN>,
+  } satisfies RowWrite<TaskRows, PinFields, typeof ACT_KIND.AGENTS_PIN>,
   AGENT_ARCHIVE: {
     read: (agents, agentId) => {
       const agent = agents.find((each) => each.id === agentId);
