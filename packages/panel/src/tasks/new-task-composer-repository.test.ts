@@ -33,7 +33,7 @@ import type { NewTaskRelation } from "./new-task-relation.js";
  * not started on before the picker's read lands. The first pick replaces
  * the repository the card chose, one checked after it travels beside the
  * task's with the agent the card starts, and unchecking the task's own makes
- * the next pick the task's. Synthetic throughout.
+ * the next pick the task's; a sub-task's card holds its parent's first. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -289,13 +289,13 @@ test("a recent default a read does not list is let go, so a later read listing i
   assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
 });
 
-/** A read listing two repositories the workspace's App reaches, and one reached only on a member's token. */
+/** A read listing three repositories the workspace's App reaches, and one reached only on a member's token. */
 const SEVERAL_LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
       installed: true,
       repositories: [
-        ...["api", "web"].map((name) => ({
+        ...["api", "web", "docs"].map((name) => ({
           owner: "acme",
           name,
           fullName: `acme/${name}`,
@@ -327,7 +327,7 @@ function row(name: string): HTMLElement {
   );
 }
 
-test("the first pick replaces the repository the card chose, and a later one is checked beside it and travels with the agent the card starts, the menu standing open and a row the service would refuse beside it dimmed", async () => {
+test("the first pick replaces the repository the card chose, later ones check beside it with the menu standing open and a row the service would refuse dimmed, and unchecking the primary makes the next pick the task's", async () => {
   const { container, starts, also } = await mount(SEVERAL_LISTING, "acme/api");
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
@@ -347,31 +347,16 @@ test("the first pick replaces the repository the card chose, and a later one is 
   assert.equal(row("tools").getAttribute("aria-disabled"), "true");
   assert.equal(row("tools").textContent?.includes("Token only"), true);
   assert.equal(chip.textContent, "web, api");
+  act(() => row("docs").click());
+  await settle();
+  act(() => row("web").click());
+  await settle();
   typeInComposer(container, "Bump the client in both");
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(starts, ["acme/web"]);
-  assert.deepEqual(also, [["acme/api"]]);
-});
-
-test("unchecking the primary makes the next pick the task's", async () => {
-  const { container, starts, also } = await mount(SEVERAL_LISTING, "acme/api");
-  act(() => container.querySelector<HTMLButtonElement>(".ui-chip")?.click());
-  await settle();
-  act(() => row("web").click());
-  await settle();
-  act(() => row("api").click());
-  await settle();
-  act(() => row("web").click());
-  await settle();
-
-  typeInComposer(container, "Bump the client");
-  pressInComposer(container, "Enter");
-  await settle();
-
   assert.deepEqual(starts, ["acme/api"]);
-  assert.deepEqual(also, [undefined]);
+  assert.deepEqual(also, [["acme/docs"]]);
 });
 
 test("a sub-task's card holds its parent's repository first and checks another beside it, which travels with the agent the card starts", async () => {
@@ -389,8 +374,6 @@ test("a sub-task's card holds its parent's repository first and checks another b
     task: parent,
   });
   act(() => container.querySelector<HTMLButtonElement>(".ui-chip")?.click());
-  await settle();
-  act(() => row("api").click());
   await settle();
   act(() => row("web").click());
   await settle();
