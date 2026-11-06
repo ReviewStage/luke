@@ -10,7 +10,7 @@ import { ThreadsDock } from "./threads-dock.js";
 /**
  * threads-dock.test.ts -- the line over an agent's box names the one thread
  * waiting on the developer, or how many wait and the next of them, and
- * opens the next one, the oldest posted, in the Inbox. Synthetic items.
+ * opens the next one, the oldest posted. Synthetic items.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -55,7 +55,7 @@ function dock(threads: readonly InboxItem[]) {
   return { words: container.textContent, row, opened };
 }
 
-test("the dock names the one thread waiting, or how many and the next, and opens the oldest in the Inbox", () => {
+test("the dock names the one thread waiting, or how many and the next, and opens the oldest", () => {
   const one = dock([waiting(1, "Expire after 7 days?")]);
   assert.equal(one.words, "Expire after 7 days?Needs you");
 

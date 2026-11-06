@@ -97,6 +97,7 @@ import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
+import { AgentThreads, useAgentThreadViews } from "./agent-threads.js";
 import { DesktopHome } from "./desktop-home.js";
 import {
   AGENTS_SECTION,
@@ -779,10 +780,14 @@ function DescriptionDocument({
   const openedId = opened?.id;
   const openedRepository = opened?.repository ?? null;
   // The threads each agent posted that wait on the developer, which its tab counts and its box's
-  // dock opens in the Inbox narrowed to the task, on the next of them.
+  // dock opens in the agent's card, on the next of them (`agent-threads.tsx`); a phone, with no room
+  // for the list beside the thread, opens them in the Inbox narrowed to the task.
   const waitingOf = useMemo(() => waitingByAgent(inbox.board.waiting), [inbox.board.waiting]);
+  const agentThreads = useAgentThreadViews();
   const openWaitingThread = useSteadyDoor((item: InboxItem) => {
-    if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId, itemId: item.id });
+    if (openedId === undefined) return;
+    if (phone) tasks.onShowInbox({ taskId: openedId, itemId: item.id });
+    else agentThreads.onOpen(item.agentId, item.id);
   });
   const tabAgent = tab === undefined ? undefined : agentOfTab(tab);
   const threads = useMemo(() => {
@@ -1149,6 +1154,23 @@ function DescriptionDocument({
   // The panel holds the keys while the focus went into it last, or while it
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The agent's threads, where its card shows them in its transcript's place.
+  const threadsShown = phone || tabAgent === undefined ? undefined : agentThreads.shown(tabAgent);
+  const agentThreadsView =
+    tabAgent === undefined || threadsShown === undefined ? undefined : (
+      <AgentThreads
+        key={tabAgent}
+        agentId={tabAgent}
+        task={listed}
+        tasks={tasks}
+        inbox={inbox}
+        chosen={threadsShown.itemId}
+        shown={tasks.shown && !sidePanel.fullScreen}
+        active={tasks.shown && !sideFocused}
+        onChoose={(itemId) => agentThreads.onOpen(tabAgent, itemId)}
+        onBack={() => agentThreads.onClose(tabAgent)}
+      />
+    );
   // The agent a terminal command means from where the developer is: the one
   // whose own tab, Changes tab, or Terminal tab holds the keys, if any.
   const terminalHere = agentOfTab(
@@ -1428,8 +1450,10 @@ function DescriptionDocument({
                                 onFork={forkDoor}
                                 onContinue={continueDoor}
                                 threads={threads}
+                                hidden={agentThreadsView !== undefined}
                               />
                             )}
+                            {agentThreadsView}
                           </FindScope>
                           {detailsWide ? null : (
                             <TaskSummary

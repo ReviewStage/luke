@@ -10,15 +10,16 @@ import { NEEDS_YOU, threadsWaitingWords } from "./inbox-model.js";
 /**
  * threads-dock.tsx -- the line docked over an agent's box while threads it posted wait on the developer.
  *
- * Threads are answered in the Inbox alone, so the agent's tab points to
- * them rather than drawing them: one row, as the pull request's dock is
- * one, names the thread waiting, its title and Needs you, or, where
- * several wait, how many and the next one's title, the oldest posted
- * first, the title left out under a finger, where the row has no room for
- * both; pressing it opens the Inbox narrowed to the task on that thread.
+ * The agent's transcript points to its threads rather than drawing them:
+ * one row, as the pull request's dock is one, names the thread waiting,
+ * its title and Needs you, or, where several wait, how many and the next
+ * one's title, the oldest posted first, the title left out under a finger,
+ * where the row has no room for both; pressing it opens the agent's threads
+ * in its card on that thread (`agent-threads.tsx`), or, on a phone, the
+ * Inbox narrowed to the task on it.
  */
 
-/** The threads an agent posted that wait on the developer, the oldest posted first, and the door to one of them in the Inbox. */
+/** The threads an agent posted that wait on the developer, the oldest posted first, and the door to one of them. */
 export interface AgentThreads {
   readonly waiting: readonly InboxItem[];
   readonly onOpen: (item: InboxItem) => void;

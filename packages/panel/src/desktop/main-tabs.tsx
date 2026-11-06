@@ -883,6 +883,7 @@ export function MainTabContent({
 export const AgentPane = memo(function AgentPane({
   label,
   tabbed,
+  hidden = false,
   ...content
 }: Omit<Parameters<typeof MainTabContent>[0], "tab"> & {
   /** The agent's or the draft's tab whose pane it is; Overview's is the task's page's own. */
@@ -891,6 +892,8 @@ export const AgentPane = memo(function AgentPane({
   label: string | undefined;
   /** Whether the pane is the panel of a tab in a strip, as the task column's is. */
   tabbed: boolean;
+  /** Whether the agent's threads stand in its place (`agent-threads.tsx`), which keeps it drawn beneath, hidden, so going back finds the transcript where it was. */
+  hidden?: boolean | undefined;
 }): React.JSX.Element {
   return (
     <Fill
@@ -898,6 +901,7 @@ export const AgentPane = memo(function AgentPane({
       className="desktop-agent"
       role={tabbed ? "tabpanel" : undefined}
       aria-label={label}
+      hidden={hidden}
       data-popover-room=""
     >
       <MainTabContent {...content} />

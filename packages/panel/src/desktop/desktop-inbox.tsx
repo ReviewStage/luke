@@ -973,9 +973,10 @@ function repositoryReads(place: TasklessPlace | undefined): FileReads | undefine
  * the panel stands for the task; an automation's open its page where the
  * Automations experiment is on, its agents' own pages, and its agent's
  * files, read through its workspace and repository (`answerPlace`), in the
- * panel beside the Inbox, which stands for that agent.
+ * panel beside the Inbox, which stands for that agent. An agent's card
+ * hands its threads the same doors (`agent-threads.tsx`).
  */
-function paneDoors(
+export function paneDoors(
   tasks: TasksControl,
   holder: InboxHolder,
   seams: {
