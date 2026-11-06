@@ -1,8 +1,8 @@
 /**
  * error-boundary.test.ts -- a child that throws while drawing leaves its
- * place saying so, one alert with its sentence and Reload, and what it
- * threw under it, rather than nothing, and the rest of the window stands;
- * Reload runs what it is handed and draws the place again.
+ * place saying so, one alert with its sentence and Reload, rather than
+ * nothing, and the rest of the window stands; Reload runs what it is handed
+ * and draws the place again.
  */
 
 // @vitest-environment jsdom
@@ -20,9 +20,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const FAILURE = "This window could not be shown.";
 
-/** What a failed place's alert says around `failure`: the heading, the sentence and its promise, and Reload with its chord. */
+/** What a failed place's alert says around `failure`: the heading, the sentence, and Reload. */
 function alertSaying(failure: string): string {
-  return `Something went wrong${failure} Reloading usually fixes it.Reload⌘R`;
+  return `Something went wrong${failure}Reload`;
 }
 
 let roots: Root[] = [];
@@ -70,20 +70,10 @@ test("a child that throws while drawing draws the failure and Reload rather than
   const alerts = page.querySelectorAll('[role="alert"]');
   expect(alerts).toHaveLength(1);
   expect(alerts[0]?.textContent).toBe(alertSaying(FAILURE));
-  expect(page.textContent).toBe(
-    `The sidebar${alertSaying(FAILURE)}Error: The place could not draw.`,
-  );
+  expect(page.textContent).toBe(`The sidebar${alertSaying(FAILURE)}`);
   expect([...page.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
-    "Reload⌘R",
+    "Reload",
   ]);
-});
-
-test("a child that throws a value with no words of its own still draws the failure and Reload", () => {
-  function Place(): React.JSX.Element {
-    throw Object.create(null);
-  }
-  const page = mount(createElement(ErrorBoundary, { failure: FAILURE }, createElement(Place)));
-  expect(page.textContent).toBe(alertSaying(FAILURE));
 });
 
 test("a place that names no failure says the boundary's own sentence", () => {

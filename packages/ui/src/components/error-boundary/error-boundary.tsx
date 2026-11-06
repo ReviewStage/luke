@@ -13,15 +13,12 @@
  * A window whose first read failed has no surface to stand a boundary
  * over, so it draws what a boundary would have, `ReloadState`, alone.
  *
- * `ReloadState` is the product's own, laid out as a crash screen in a
- * polished desktop tool is: the product's mark in the ring an auth page opens
- * with, badged with the failure's cross; "Something went wrong" as the
- * place's heading; the place's own sentence and the promise that a reload
- * usually mends it in the muted ink under it; Reload as its one primary
- * press, with the chord that does the same; and, under it, what was thrown,
- * in the code face in a well, which a person can select and send with a
- * report. A place that failed to draw is most often mended by the next
- * draw, so the words stay calm and the red is the badge's alone.
+ * `ReloadState` is the product's own, and says little, as a polished tool's
+ * error page does: the mark, faint, over "Something went wrong" as the
+ * place's heading, the place's own sentence in the muted ink under it, and
+ * Reload as its one primary press, because a place that failed to draw is
+ * most often mended by the next draw, and an alert glyph or a stack of
+ * details reads as something broken for good.
  *
  * It stands centered in the room it fills, a little above the middle where
  * the eye takes the middle to be, as an empty state does (`EmptyState`). A
@@ -40,15 +37,11 @@
  * way to its first paint.
  */
 
-import { LANDING_TONE } from "@repo/features/landing-outcome";
-import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import { Component, type ReactNode } from "react";
-import { RetryIcon } from "../../icons/lucide-glyphs.js";
+import { ProductMark } from "../../marks/product-mark.js";
 import { ReplayWords } from "../../session-replay-marks.js";
-import { AuthMark } from "../auth-page/auth-mark.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
-import { Shortcut } from "../shortcut/shortcut.js";
-import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
 /** What a place whose drawing failed says where its caller names nothing more fitting. */
 const SHOWN_FAILED = "This page could not be shown.";
@@ -56,7 +49,6 @@ const SHOWN_FAILED = "This page could not be shown.";
 /** The words every failed place says around its own sentence. */
 const WORDS = {
   HEADING: "Something went wrong",
-  MENDS: "Reloading usually fixes it.",
   RELOAD: "Reload",
 } as const;
 
@@ -88,44 +80,20 @@ const HEADING_ELEMENT = {
 } as const satisfies Record<ReloadRoom, (typeof TEXT_ELEMENT)[keyof typeof TEXT_ELEMENT]>;
 
 /**
- * What was thrown, as one line a person can send: an error's name and
- * message, or the thrown value said as words; nothing where nothing was
- * handed. Note that a value that cannot be said as words (one with no
- * prototype, or a getter that throws) answers nothing too, because a throw
- * here would take down the very screen that says the place failed.
- */
-function thrownWords(thrown: unknown): string | undefined {
-  if (thrown === undefined) return undefined;
-  try {
-    if (thrown instanceof Error) {
-      return thrown.message === "" ? String(thrown.name) : `${thrown.name}: ${thrown.message}`;
-    }
-    return String(thrown);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * What a place whose drawing failed stands in its stead: the badged mark
- * over the heading, `failure` or the boundary's own sentence, and Reload,
- * whose press is `onReload`, as one alert, with what was thrown under it
- * where `error` is handed, filling `room`.
+ * What a place whose drawing failed stands in its stead: the faint mark
+ * over the heading and `failure`, or the boundary's own sentence, with
+ * Reload, whose press is `onReload`, as one alert, filling `room`.
  */
 export function ReloadState({
   failure = SHOWN_FAILED,
-  error,
   room = RELOAD_ROOM.REGION,
   onReload,
 }: {
   failure?: string | undefined;
-  /** What was thrown, shown in the code face under Reload; nothing where none is handed. */
-  error?: unknown;
   /** The room it fills; a region of the window where none is named. */
   room?: ReloadRoom | undefined;
   onReload: () => void;
 }): React.JSX.Element {
-  const thrown = thrownWords(error);
   return (
     <div className={ROOM[room]} data-room={room}>
       {room === RELOAD_ROOM.WINDOW ? (
@@ -134,45 +102,31 @@ export function ReloadState({
           aria-hidden="true"
         />
       ) : null}
-      <div className="ui-reload-state-body box-border flex w-full max-w-auth-card flex-col items-center p-ui-24 text-center">
-        <div role="alert" className="flex flex-col items-center">
-          <span className="ui-reload-state-mark inline-flex" aria-hidden="true">
-            <AuthMark tone={LANDING_TONE.DANGER} />
-          </span>
-          <Text
-            as={HEADING_ELEMENT[room]}
-            variant={TEXT_VARIANT.DIALOG}
-            className="mt-ui-20 text-balance"
-          >
-            <ReplayWords unmasked>{WORDS.HEADING}</ReplayWords>
-          </Text>
-          <Text tone={TEXT_TONE.MUTED} className="mt-ui-8 text-balance">
-            <ReplayWords unmasked>{`${failure} ${WORDS.MENDS}`}</ReplayWords>
-          </Text>
-          <div className="ui-reload-state-action mt-ui-24 in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]">
-            <Button
-              variant={BUTTON_VARIANT.PRIMARY}
-              icon={<RetryIcon />}
-              turns
-              trailing={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.RELOAD].chord} />}
-              onClick={onReload}
-            >
-              <ReplayWords unmasked>{WORDS.RELOAD}</ReplayWords>
-            </Button>
-          </div>
+      <div
+        role="alert"
+        className="ui-reload-state-body box-border flex max-w-auth-card flex-col items-center p-ui-24 text-center"
+      >
+        <span
+          className="ui-reload-state-mark flex text-muted-foreground opacity-60 [&_svg]:size-ui-32"
+          aria-hidden="true"
+        >
+          <ProductMark inherit />
+        </span>
+        <Text
+          as={HEADING_ELEMENT[room]}
+          variant={TEXT_VARIANT.DIALOG}
+          className="mt-ui-16 text-balance"
+        >
+          <ReplayWords unmasked>{WORDS.HEADING}</ReplayWords>
+        </Text>
+        <Text tone={TEXT_TONE.MUTED} className="mt-ui-4 text-balance">
+          <ReplayWords unmasked>{failure}</ReplayWords>
+        </Text>
+        <div className="ui-reload-state-action mt-ui-20 in-data-[ui-profile=desktop]:[-webkit-app-region:no-drag]">
+          <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onReload}>
+            <ReplayWords unmasked>{WORDS.RELOAD}</ReplayWords>
+          </Button>
         </div>
-        {thrown === undefined ? null : (
-          <div className="ui-reload-state-thrown mt-ui-32 box-border w-full max-w-full rounded-control bg-well px-ui-12 py-ui-8 text-start">
-            <Text
-              variant={TEXT_VARIANT.CAPTION}
-              font={TEXT_FONT.MONO}
-              tone={TEXT_TONE.MUTED}
-              className="line-clamp-3"
-            >
-              {thrown}
-            </Text>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -190,8 +144,6 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   readonly failed: boolean;
-  /** What its children threw, shown under Reload. */
-  readonly error?: unknown;
 }
 
 /**
@@ -201,24 +153,19 @@ interface ErrorBoundaryState {
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override state: ErrorBoundaryState = { failed: false };
 
-  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
-    return { failed: true, error };
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { failed: true };
   }
 
   reload = (): void => {
     this.props.onReload?.();
-    this.setState({ failed: false, error: undefined });
+    this.setState({ failed: false });
   };
 
   override render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     return (
-      <ReloadState
-        failure={this.props.failure}
-        error={this.state.error}
-        room={this.props.room}
-        onReload={this.reload}
-      />
+      <ReloadState failure={this.props.failure} room={this.props.room} onReload={this.reload} />
     );
   }
 }

@@ -65,7 +65,7 @@ test("a route prefetched before its draw stands the page at once", async () => {
 /** The Reload a route's failure stands with, once it stands. */
 function reloadButton(): HTMLButtonElement {
   const reload = [...host.querySelectorAll("button")].find(
-    (button) => button.textContent?.startsWith("Reload") === true,
+    (button) => button.textContent === "Reload",
   );
   assert.ok(
     host.querySelector('[role="alert"]') !== null && reload !== undefined,

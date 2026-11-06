@@ -60,12 +60,12 @@ test("a tab whose host cannot stand takes the frame down and says so with Reload
   await vi.waitFor(() => {
     assert.equal(
       root.querySelector('[role="alert"]')?.textContent,
-      "Something went wrongThis page could not be shown. Reloading usually fixes it.Reload⌘R",
+      "Something went wrongThis page could not be shown.Reload",
     );
   });
   assert.deepEqual(
     [...root.querySelectorAll("button")].map((button) => button.textContent),
-    ["Reload⌘R"],
+    ["Reload"],
   );
 });
 

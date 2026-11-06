@@ -80,17 +80,6 @@
     --ui-button-ink: var(--ui-color-on-danger);
   }
 
-  /* On a filled press a note after its words (a count, a badge, a chord)
-     is the press's own ink a step quieter, because the muted ink it wears
-     on a quiet press all but vanishes into the fill. */
-  .ui-button:is([data-variant="primary"], [data-variant="danger"], [data-variant="ink"]) {
-    --ui-button-note-ink: color-mix(in srgb, var(--ui-button-ink) 70%, transparent);
-  }
-
-  .ui-button-trailing {
-    --ui-shortcut-ink: var(--ui-button-note-ink, var(--ui-color-text-muted));
-  }
-
   .ui-button[data-variant="danger-outline"] {
     --ui-button-edge: var(--ui-color-border-strong);
     --ui-button-ink: var(--ui-color-danger-text);

@@ -157,12 +157,7 @@ export async function mountWebApp(
     rootElement.replaceChildren();
     await runtime.dispose();
     createRoot(rootElement).render(
-      <ReloadState
-        failure={TAB_FAILED}
-        error={error}
-        room={RELOAD_ROOM.WINDOW}
-        onReload={reloadTab}
-      />,
+      <ReloadState failure={TAB_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadTab} />,
     );
     return undefined;
   }

@@ -100,7 +100,7 @@ function reloadDocument(): void {
  * otherwise, a route that landed and threw while drawing, draws it again in
  * place, as `lazy-route.ts` does.
  */
-function RouteFailed({ error, reset }: ErrorComponentProps): React.JSX.Element {
+function RouteFailed({ reset }: ErrorComponentProps): React.JSX.Element {
   const router = useRouter();
   const loadFailed = useMatch({ strict: false, select: (match) => match.status === "error" });
   const reload = () => {
@@ -111,7 +111,7 @@ function RouteFailed({ error, reset }: ErrorComponentProps): React.JSX.Element {
     reset();
     void router.invalidate();
   };
-  return <ReloadState error={error} onReload={reload} />;
+  return <ReloadState onReload={reload} />;
 }
 
 /** A lazy route's options: its own frame stands at once while its chunk loads, as the `Suspense` it replaces did, and `RouteFailed` where it fails. */

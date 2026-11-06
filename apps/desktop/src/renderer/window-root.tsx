@@ -120,12 +120,7 @@ export function mountWindow(
       );
       sentry.load();
       draw(
-        <ReloadState
-          failure={WINDOW_FAILED}
-          error={error}
-          room={RELOAD_ROOM.WINDOW}
-          onReload={reloadWindow}
-        />,
+        <ReloadState failure={WINDOW_FAILED} room={RELOAD_ROOM.WINDOW} onReload={reloadWindow} />,
       );
       return;
     }

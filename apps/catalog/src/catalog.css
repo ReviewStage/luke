@@ -362,12 +362,12 @@ body {
   width: 200px;
 }
 
-/* A region whose drawing failed, tall enough for the mark, the words,
-   Reload, and what was thrown. */
+/* A region whose drawing failed, tall enough for the mark, the words, and
+   Reload. */
 .catalog-reload-room {
   display: flex;
   flex-direction: column;
-  height: 440px;
+  height: 280px;
 }
 
 /* A region a failed read would have filled, its failure centered in it. */
