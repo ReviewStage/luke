@@ -252,21 +252,6 @@
     color: var(--ui-color-text);
   }
 
-  /* Note that the hero's rows glide on the pane's ease over a longer
-     shape than a list's own, rather than the spring, because a spring's
-     overshoot on every arrival reads as a wobble in a list that never
-     stops; and a post arriving fades in over that same glide as it
-     unrolls. Reduced motion
-     keeps the zeroed tokens, and the scene holds still under it anyway. */
-  @media (prefers-reduced-motion: no-preference) {
-    .ui-landing-hero-inbox {
-      /* off-scale: the hero's glide, twice the shape's */
-      --ui-duration-shape: 900ms;
-      --ui-duration-quick: 900ms;
-      --ui-spring: var(--ui-motion-pane);
-    }
-  }
-
   .ui-landing-hero-inbox {
     display: grid;
     grid-template-rows: 50px minmax(0, 1fr);
