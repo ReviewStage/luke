@@ -9,8 +9,9 @@ import { ThreadsDock } from "./threads-dock.js";
 
 /**
  * threads-dock.test.ts -- the line over an agent's box counts the threads
- * waiting on the developer, and opens the next one, the oldest posted; once none waits it stays, quiet,
- * counting every thread, and opens the latest changed. Synthetic items.
+ * waiting on the developer, and opens the next one, the oldest posted; once
+ * none waits it stays, quiet, counting every thread, and opens the latest
+ * changed. Synthetic items.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -63,7 +64,9 @@ test("the dock counts the threads waiting, and opens the oldest", () => {
   const one = dock([waiting(1, "Expire after 7 days?")]);
   assert.equal(one.words, "Inbox1 needs you");
 
-  const many = dock([waiting(1, "Expire after 7 days?"), waiting(2, "Who can withdraw?")]);
+  const older = waiting(1, "Expire after 7 days?");
+  const newer = waiting(2, "Who can withdraw?");
+  const many = dock([older, newer], [newer, older]);
   assert.equal(many.words, "Inbox2 need you");
   many.press();
   assert.deepEqual(many.opened, ["Expire after 7 days?"]);
