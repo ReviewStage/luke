@@ -331,10 +331,13 @@ export function composeMirrors(
         );
       });
 
-    /** The mirror kept in step, its tunnel opened again on `RECONNECT`, until its agent is gone. */
+    /** The mirror kept in step, its tunnel opened again on `RECONNECT`, and `FIRST` after one that was in step, until its agent is gone. */
     const kept = (agentId: string, mirror: Mirror) =>
       Effect.retry(attempt(agentId, mirror), RECONNECT).pipe(
-        Effect.repeat({ until: (ended: TunnelEnding) => ended === TUNNEL_ENDING.GONE }),
+        Effect.repeat({
+          schedule: Schedule.spaced(MIRROR_RECONNECT.FIRST),
+          until: (ended: TunnelEnding) => ended === TUNNEL_ENDING.GONE,
+        }),
         Effect.andThen(removed(agentId)),
       );
 
