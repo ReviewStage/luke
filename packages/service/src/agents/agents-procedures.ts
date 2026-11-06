@@ -126,6 +126,7 @@ import {
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 import { memoryOnFor } from "./memory-tools.js";
+import { plansOnFor } from "./plans-on.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import type { SandboxStopReach } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
@@ -312,11 +313,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         nativeRuntimesOfReached([agent.conversationId]),
       );
       const memoryOn = yield* memoryOnFor(agent.userId);
+      const plansOn = yield* plansOnFor(agent.userId, agent.kind);
       return {
         tools: offeredWorkspaceTools({
           agent,
           native: runtimes.has(agent.conversationId),
           memoryOn,
+          plansOn,
         }),
         runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
       };

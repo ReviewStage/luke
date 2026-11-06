@@ -590,6 +590,54 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
   }
 });
 
+test("with Plans off the instructions say nothing of a plan: no edit_plan, no plan handed with a task's link or read_task, no plan to name or write a write-up into, and comments on pages alone", () => {
+  const PLAN_WORDS = [
+    `\`${CODER_TOOL.EDIT_PLAN}\``,
+    "## Updating the plan",
+    "take that decision into the plan",
+    "write it into the plan",
+    "what its plan said when the message was sent",
+    "its plan included",
+    "Your task's plan, whose link is",
+    "Keep a mention in the plan",
+    "comment threads on a plan's text",
+  ];
+  for (const brief of Object.values(AGENT_BRIEF)) {
+    const told = (plansOn: boolean) =>
+      coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        TASK_LINK,
+        undefined,
+        null,
+        false,
+        CODER_HARNESS.CLAUDE_CODE,
+        AGENT_KIND.CODER,
+        false,
+        undefined,
+        [],
+        plansOn,
+      );
+    const on = told(true);
+    const off = told(false);
+    assert.equal(on, coderInstructions("Acme/Relay", brief, true, TASK_LINK), brief);
+    assert.deepEqual(
+      PLAN_WORDS.filter((words) => off.includes(words)),
+      [],
+      brief,
+    );
+    const comments = off.slice(off.indexOf("## Comments"), off.indexOf("## Handing work"));
+    assert.ok(comments.includes(`\`${CODER_TOOL.REPLY_TO_COMMENT}\``), brief);
+    assert.ok(off.includes(`show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``), brief);
+  }
+  const planned = coderInstructions("Acme/Relay", AGENT_BRIEF.PLAN, true, TASK_LINK);
+  assert.deepEqual(
+    PLAN_WORDS.filter((words) => !planned.includes(words)),
+    [],
+  );
+});
+
 /** A pilot's instructions, recorded byte for byte: an agent of kind pilot, handed a prompt, on a task and a repository. */
 const PILOT_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/pilot.json", import.meta.url),

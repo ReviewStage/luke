@@ -62,6 +62,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { plansOnFor } from "../plans-on.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";
@@ -425,7 +426,9 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
   const reads = yield* Effect.fromResult(reached.reads);
-  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads, agent.id);
+  const mentioned = reviewers
+    ? undefined
+    : mentionedContext(pointed, task, reads, agent.id, yield* plansOnFor(agent.userId, agent.kind));
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the

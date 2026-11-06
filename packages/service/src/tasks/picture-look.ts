@@ -55,6 +55,7 @@ export const PICTURE_LOOK_REFUSAL = {
   VIDEO:
     "Not looked: that address is a video, which is never shown to a model. Its alt text and caption in the plan's text say what it shows.",
   UNAVAILABLE: "Not looked: the picture could not be read just now. The call may be made again.",
+  OFF: "Not looked: your developer has Plans off, so no plan's picture is shown.",
 } as const;
 
 export const PICTURE_LOOK_STATUS = {

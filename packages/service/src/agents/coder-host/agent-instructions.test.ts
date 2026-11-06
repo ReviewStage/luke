@@ -46,6 +46,7 @@ const CONTEXT = {
   authorship: undefined,
   workspace: "acme",
   memoryOn: false,
+  plansOn: true,
 } as const;
 
 const PLAN_JOB = "implement the plan given as the first message";
