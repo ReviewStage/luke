@@ -43,6 +43,9 @@
     --ui-toolbar-start: var(--ui-toolbar-page-inset);
     --ui-toolbar-end: var(--ui-toolbar-page-inset);
     --ui-toolbar-edge-block: var(--ui-toolbar-block-inset, var(--ui-space-8));
+    /* A bar tucked under another may stand its controls flush with its top,
+       the room above them the bar over it already keeps (`--ui-toolbar-top-inset`). */
+    --ui-toolbar-edge-top: var(--ui-toolbar-top-inset, var(--ui-toolbar-edge-block));
     --ui-toolbar-edge-start: var(--ui-toolbar-start-at, var(--ui-toolbar-start));
     --ui-toolbar-edge-end: var(--ui-toolbar-end-at, var(--ui-toolbar-end));
 
@@ -52,7 +55,7 @@
     align-items: center;
     gap: var(--ui-control-gap);
     min-height: var(--ui-toolbar-height);
-    padding: var(--ui-toolbar-edge-block) var(--ui-toolbar-edge-end) var(--ui-toolbar-edge-block)
+    padding: var(--ui-toolbar-edge-top) var(--ui-toolbar-edge-end) var(--ui-toolbar-edge-block)
       var(--ui-toolbar-edge-start);
     background: var(--ui-toolbar-ground, transparent);
   }
