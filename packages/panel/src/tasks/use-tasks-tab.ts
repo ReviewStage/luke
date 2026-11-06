@@ -3380,7 +3380,9 @@ export function useTasksTab(input: {
     const standing = input.agentView.agentId === agentId ? input.agentView.workspace : undefined;
     const listed = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
     const workspace = standing ?? home ?? listed;
-    if (workspace !== undefined) input.agentView.onOpen(agentId, workspace);
+    if (workspace === undefined) return;
+    setUnknownWorkspace(false);
+    input.agentView.onOpen(agentId, workspace);
   };
   // The Inbox of the workspace `workspaceId`, the listed one where it names none of the reader's, narrowed to `narrowed`.
   const inboxIn = (

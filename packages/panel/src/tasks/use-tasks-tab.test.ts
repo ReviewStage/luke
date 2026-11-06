@@ -2160,6 +2160,15 @@ test("a workspace's Board link opens in the workspace its step names, and one na
   );
 });
 
+test("an agent's page opened over a workspace not there for the reader takes its place", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onOpenLink({ workspace: "xyz", place: { kind: LINK_PLACE.BOARD } }));
+  assert.equal(tab.control().unknownWorkspace.open, true);
+
+  act(() => tab.control().agentView.onOpen("agent-9"));
+  assert.equal(tab.control().unknownWorkspace.open, false);
+});
+
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
