@@ -160,7 +160,14 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { withoutFinishedRuns, withoutFinishedRunTasks } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
-import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
+import {
+  childTasksFold,
+  listedSlot,
+  movedBeside,
+  nestsOf,
+  storedSlot,
+  useNestedRows,
+} from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE, TASKS_ROUTE } from "./pages-on-demand.js";
 import { PhoneAccount } from "./phone-account.js";
@@ -845,7 +852,7 @@ function PinnedRows({
     : undefined;
   const drawn = useLeaving(listed, pinnedDrawnKey);
   const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
-  // Note that a row is heard by its place among the rows drawn, child tasks and rows on their way out among them, and found among those listed by its key.
+  // Note that a row is heard by its place among the rows drawn, child tasks and rows on their way out among them, and found among those listed by its key, as the slot it is carried to is (`listedSlot`).
   const listedAt = new Map(listed.map((each, at) => [pinnedDrawnKey(each), at]));
   const fromListed = (from: number) => {
     const key = drawn[from]?.key;
@@ -858,7 +865,8 @@ function PinnedRows({
       ? undefined
       : (from: number, to: number) => {
           const at = fromListed(from);
-          const beside = at === undefined ? undefined : movedBeside(depths, at, to);
+          const beside =
+            at === undefined ? undefined : movedBeside(depths, at, listedSlot(drawn, from, to));
           const moved = at === undefined ? undefined : listed[at]?.pin;
           const by = beside === undefined ? undefined : listed[beside]?.pin;
           if (moved !== undefined && by !== undefined) {

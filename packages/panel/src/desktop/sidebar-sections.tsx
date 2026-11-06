@@ -76,7 +76,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { movedBeside, nestsOf, siblingsAt, useNestedRows } from "./nested-rows.js";
+import { listedSlot, movedBeside, nestsOf, siblingsAt, useNestedRows } from "./nested-rows.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconWell, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
@@ -660,7 +660,7 @@ function SectionRows({
   const shown = useLeaving(nested, ({ row }) => taskRowKey(row));
   const keys = useMemo(() => shown.map(({ key }) => key), [shown]);
   const listedAt = new Map(nested.map(({ row }, at) => [taskRowKey(row), at]));
-  // Note that a row is heard by its place among the rows drawn, rows on their way out among them, and found among those listed by its key.
+  // Note that a row is heard by its place among the rows drawn, rows on their way out among them, and found among those listed by its key, as the slot it is carried to is (`listedSlot`).
   const fromListed = (from: number) => {
     const key = shown[from]?.key;
     return key === undefined ? undefined : listedAt.get(key);
@@ -678,7 +678,8 @@ function SectionRows({
     ? undefined
     : (from: number, to: number) => {
         const at = fromListed(from);
-        if (at !== undefined) besideSibling(at, movedBeside(nested, at, to));
+        if (at !== undefined)
+          besideSibling(at, movedBeside(nested, at, listedSlot(shown, from, to)));
       };
   const drag = useRunRowDrag(move, {
     onDropOut: (from, zone, at) => {
