@@ -178,8 +178,8 @@ export interface VirtualRowPlace {
  * which a scroller in a tab kept but not shown measures: the rows drawn
  * there stay drawn, so showing the tab again draws nothing anew.
  */
-function sizeWhileShown(
-  instance: Virtualizer<HTMLElement, HTMLElement>,
+export function sizeWhileShown<Item extends Element>(
+  instance: Virtualizer<HTMLElement, Item>,
   hear: (rect: Rect) => void,
 ): (() => void) | undefined {
   return observeElementRect(instance, (rect) => {

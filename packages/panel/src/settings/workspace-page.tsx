@@ -69,7 +69,7 @@ import {
   useConfirmDialog,
   useFilePicker,
   useMenu,
-  useSettingsPageScroll,
+  usePageScroll,
   wholeWordsHint,
 } from "@repo/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@repo/ui/actor-model";
@@ -897,12 +897,12 @@ function MemberRows({
   readerId: string | undefined;
   members: readonly WorkspaceMember[];
 }): React.JSX.Element {
-  const { scroller, sections } = useSettingsPageScroll();
+  const { scroller, shiftedBy } = usePageScroll();
   const keys = useMemo(() => members.map((member) => member.userId), [members]);
   return (
     <VirtualRows
       scroller={scroller}
-      shiftedBy={sections}
+      shiftedBy={shiftedBy}
       keys={keys}
       estimate={MEMBER_ESTIMATE_PX}
       anchor={VIRTUAL_ROWS_ANCHOR.START}

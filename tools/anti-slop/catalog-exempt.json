@@ -2,6 +2,7 @@
   "notAComponent": {
     "DisclosureFind": "A context provider: draws only its children.",
     "DisclosureScope": "A context provider: draws only its children.",
+    "PageScrollContext": "A React context a page provides its scroller in: draws nothing.",
     "RetryOffered": "A React context ErrorState reads: draws nothing.",
     "RevealArea": "A context provider: draws only its children."
   },

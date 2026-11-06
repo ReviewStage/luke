@@ -18,7 +18,7 @@ import {
   SettingsRowMark,
   TEXT_BUTTON_TONE,
   TextButton,
-  useSettingsPageScroll,
+  usePageScroll,
 } from "@repo/ui";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
@@ -147,7 +147,7 @@ export function GitHubOwnerRow({
   const count = names.length;
   const cut = !whole && count > FIRST_SHOWN;
   const shown = cut ? names.slice(0, FIRST_SHOWN) : names;
-  const { scroller, sections } = useSettingsPageScroll();
+  const { scroller, shiftedBy } = usePageScroll();
   const keys = shown.map((name) => name.toLowerCase());
   const foot = cut ? (
     <SettingsFoldFoot>
@@ -158,7 +158,7 @@ export function GitHubOwnerRow({
   ) : undefined;
   const run = {
     scroller,
-    shiftedBy: sections,
+    shiftedBy,
     keys,
     line: (index: number, place: VirtualRowPlace) => (
       <SettingsFoldLine place={place}>{shown[index] ?? ""}</SettingsFoldLine>

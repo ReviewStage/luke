@@ -50,7 +50,7 @@ import {
   useConfirmDialog,
   useLeaving,
   useMenu,
-  useSettingsPageScroll,
+  usePageScroll,
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-model";
@@ -601,7 +601,7 @@ function MemoryList({
     setKept(new Set());
   };
   const keepers = keepersOf(searched);
-  const { scroller, sections } = useSettingsPageScroll();
+  const { scroller, shiftedBy } = usePageScroll();
   const run = useRef<VirtualRowsHandle>(null);
   const keys = useMemo(() => listed.map((each) => each.memory.id), [listed]);
   const order = useMemo(() => [keys], [keys]);
@@ -638,7 +638,7 @@ function MemoryList({
           >
             <VirtualRows
               scroller={scroller}
-              shiftedBy={sections}
+              shiftedBy={shiftedBy}
               keys={keys}
               estimate={MEMORY_ESTIMATE_PX}
               gap={MEMORY_GAP_PX}

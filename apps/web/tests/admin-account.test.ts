@@ -208,6 +208,7 @@ let root: Root | undefined;
 /** jsdom's stand-in for the browser's ResizeObserver, which it lacks; the page is never resized. */
 class StillResizeObserver {
   observe(): void {}
+  unobserve(): void {}
   disconnect(): void {}
 }
 
