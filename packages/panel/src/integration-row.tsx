@@ -59,6 +59,7 @@ import {
 import type { ServerRow } from "@repo/ui/agent-servers-model";
 import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "./act.js";
@@ -339,6 +340,7 @@ function RowToolsPanel({
   const rows = useRef(new Map<string, HTMLElement>());
   const body = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
   // A tool the search no longer finds hands its place to the first that it does.
   const current = shown.find((tool) => tool.name === held) ?? shown[0];
 
@@ -371,7 +373,11 @@ function RowToolsPanel({
     // Note that Escape stops here, because it hands the focus back to the list rather than leaving Settings.
     event.preventDefault();
     event.stopPropagation();
-    if (current !== undefined) rows.current.get(current.name)?.focus({ preventScroll: true });
+    if (current === undefined) return;
+    const row = rows.current.get(current.name);
+    // Note that the tool held may have been scrolled out of the rows drawn, so it is brought in first.
+    if (row !== undefined) row.focus({ preventScroll: true });
+    else run.current?.bringIn(current.name, () => rows.current.get(current.name)?.focus());
   };
 
   return (
@@ -381,6 +387,8 @@ function RowToolsPanel({
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
           <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
             <IntegrationToolList
+              scroller={list}
+              handle={run}
               server={name}
               toolWordsShown={toolWordsShown}
               tools={shown}
