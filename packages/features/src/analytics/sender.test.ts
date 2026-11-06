@@ -290,3 +290,16 @@ it.effect(
       );
     }),
 );
+
+it.effect("the flush runs once a cadence, the first a cadence after the sender is built", () =>
+  Effect.gen(function* () {
+    const { sender, requests } = yield* sharingSender({ flushIntervalMs: 1_000 });
+    sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+    yield* TestClock.adjust(1_000);
+    assert.equal(requests.length, 1);
+
+    sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+    yield* TestClock.adjust(1_000);
+    assert.equal(requests.length, 2);
+  }),
+);
