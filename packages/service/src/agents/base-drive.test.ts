@@ -78,12 +78,17 @@ it.effect(
     Effect.gen(function* () {
       const { fake, api } = yield* fixture;
 
-      const installedAtFork: boolean[] = [];
+      const atFork: { installed: boolean; stopped: boolean }[] = [];
       const forking: VercelSandboxApi = {
         ...api,
         forkDrive: (source, target) =>
           Effect.andThen(
-            Effect.sync(() => installedAtFork.push(fake.runs.some((run) => isInstall(run.args)))),
+            Effect.sync(() =>
+              atFork.push({
+                installed: fake.runs.some((run) => isInstall(run.args)),
+                stopped: fake.sandboxes[0]?.status === "stopped",
+              }),
+            ),
             api.forkDrive(source, target),
           ),
       };
@@ -91,8 +96,8 @@ it.effect(
       yield* fillBaseDrive(forking, RELAY, IMAGE, CREDENTIAL, opener(api));
 
       const name = baseDriveName(RELAY);
-      // The base drive is forked once, from a staging drive already installed.
-      assert.deepEqual(installedAtFork, [true]);
+      // The base drive is forked once, from a staging drive already installed and let go by its stopped sandbox.
+      assert.deepEqual(atFork, [{ installed: true, stopped: true }]);
       assert.deepEqual([...fake.drives], [name]);
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);

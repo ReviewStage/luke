@@ -2650,21 +2650,36 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a message after a launch whose clone failed clones the repository into the sandbox the launch left before its runner starts",
+    "messages after a launch whose clone failed make the checkout it left whole before its runner starts: cloned where it is missing, finished where it stands unfinished",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
-        // The fake runs no git, so the checkout stands once a clone has gone through.
-        const checkout = { refused: true, stands: false };
+        // The fake runs no git, so the checkout holds what went through: its clone, then its identity.
+        const checkout = {
+          cloneRefused: true,
+          identityRefused: true,
+          cloned: false,
+          finished: false,
+        };
         api.hooks.runExit = (args) => {
-          if (args[0] === "-d" || args[0] === "config") return checkout.stands ? 0 : 1;
-          if (!args.some((arg) => arg.includes("git clone"))) return 0;
-          if (checkout.refused) return 1;
-          checkout.stands = true;
+          if (args[0] === "-d") return checkout.cloned ? 0 : 1;
+          if (args[0] === "config") return checkout.finished ? 0 : 1;
+          if (args.some((arg) => arg.includes("git clone"))) {
+            if (checkout.cloneRefused) return 1;
+            checkout.cloned = true;
+            return 0;
+          }
+          if (args.some((arg) => arg.includes("git config user.email"))) {
+            if (checkout.identityRefused) return 1;
+            checkout.finished = true;
+            return 0;
+          }
           return 0;
         };
+        const isIdentity = (run: { readonly args: readonly string[] }) =>
+          run.args.some((arg) => arg.includes("git config user.email"));
         const kept = keptAfterResponse();
         const opened = yield* sessions
           .open(message(agent, "Fix the relay."))
@@ -2676,16 +2691,26 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal((yield* newestTurn(agent)).status, TURN_STATUS.FAILED);
         const own = sandboxOfAgent(api, agent)?.currentSessionId;
         const failedRuns = api.runs.length;
-        checkout.refused = false;
 
+        // The clone goes through now, and the identity is refused.
+        checkout.cloneRefused = false;
+        yield* sessions
+          .send(opened.sessionId, message(agent, "Try again."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
+        const clonedRuns = api.runs.length;
+        checkout.identityRefused = false;
         const sent = yield* sessions
           .send(opened.sessionId, message(agent, "Try again."))
           .pipe(Effect.provide(kept.layer));
         yield* kept.run;
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        const relaunchRuns = api.runs.slice(failedRuns).filter((run) => run.session === own);
-        assert.equal(relaunchRuns.filter(isClone).length, 1);
+        const ownAfter = (from: number) =>
+          api.runs.slice(from).filter((run) => run.session === own);
+        assert.equal(ownAfter(failedRuns).filter(isClone).length, 1, "cloned once");
+        assert.equal(ownAfter(clonedRuns).filter(isClone).length, 0, "not cloned again");
+        assert.equal(ownAfter(clonedRuns).filter(isIdentity).length, 1, "finished");
         assert.equal(api.commands.length, 1);
         assert.equal(api.commands[0]?.sandboxSessionId, own);
       }),
