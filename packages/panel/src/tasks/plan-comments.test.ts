@@ -45,6 +45,7 @@ import { relayout } from "../testing/resize-observer.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
 import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./plan-comments.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -1319,7 +1320,7 @@ async function caretInThread() {
             children: createElement(PlanBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              onEdit: () => Promise.resolve({ saved: true } as const),
+              edit: planEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
             }),
           }),
         ),

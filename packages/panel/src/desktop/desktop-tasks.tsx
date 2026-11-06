@@ -84,7 +84,6 @@ import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-c
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenAddressesHere, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
 import { usePlanComments } from "../tasks/use-plan-comments.js";
-import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
@@ -726,7 +725,7 @@ function PlanDocument({
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
-  const editDoor = usePlanEditDoor(opened?.id, tasks.edit);
+  const planEdit = opened === undefined ? undefined : tasks.planEdit(opened.id);
   // Note that the plan's title reads its rename's answer, on the same mutation the header's field draws its refusal from.
   const renameDoor = useSteadyDoor(
     (name: string): Promise<boolean> =>
@@ -1164,7 +1163,7 @@ function PlanDocument({
         reader={reader}
         agents={editAgents}
         onShowHistory={showHistory}
-        onEdit={editDoor}
+        edit={planEdit}
         // The title renames as the chip's field does, so a refusal is said beside it.
         onRename={renameDoor}
         onDraftName={draftNameDoor}
