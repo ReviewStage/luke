@@ -13,11 +13,13 @@ import {
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { OpenSettingsProvider } from "../open-settings.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -27,6 +29,7 @@ import {
   handInboxItems,
   handMembers,
   handState,
+  holdGitHubToken,
   holdRepositoryLists,
 } from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
@@ -119,14 +122,30 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task and item it opens recorded. */
+/** Home for Dean over `tasks` in `room`, each place of Settings it opens heard by `onSettings`. */
+function home(tasks: TasksControl, room: ShellRoom, onSettings: (link: SettingsLink) => void) {
+  return onRegistry(
+    AtomRegistry.make(),
+    createElement(
+      OpenSettingsProvider,
+      { value: onSettings },
+      createElement(DesktopHome, { tasks, room, accountName: DEAN.name, staged: true }),
+    ),
+  );
+}
+
+/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task, item, and place of Settings it opens recorded. */
 function mount(
   overrides: Partial<TasksControl> = {},
   items: readonly InboxItem[] = [RETRY_429],
   room: ShellRoom = SHELL_ROOM.WIDE,
   refused = false,
 ) {
-  const opened: { tasks: string[]; items: InboxChoice[] } = { tasks: [], items: [] };
+  const opened: { tasks: string[]; items: InboxChoice[]; settings: SettingsLink[] } = {
+    tasks: [],
+    items: [],
+    settings: [],
+  };
   handInboxItems(
     refused
       ? { failed: true }
@@ -162,14 +181,7 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopHome, { tasks, room, accountName: DEAN.name, staged: true }),
-      ),
-    ),
-  );
+  act(() => root?.render(home(tasks, room, (link) => opened.settings.push(link))));
   return { page: container, opened, tasks };
 }
 
@@ -242,7 +254,7 @@ test("while the task list is read, Home greets the reader over the composer, ask
   assert.deepEqual(sections(page), {});
 });
 
-test("a workspace that reaches no repository says so over Home's composer, telling a member whom to ask and offering their own token", async () => {
+test("a workspace that reaches no repository says so over Home's composer, telling a member whom to ask and sending one with no token saved to save one", async () => {
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
     repositories: {
       installed: false,
@@ -250,6 +262,7 @@ test("a workspace that reaches no repository says so over Home's composer, telli
       installationUrl: "https://github.com/apps/vespin/installations/new",
     },
   }));
+  holdGitHubToken(() => ({ rows: { token: null } }));
   handMembers(() => ({
     rows: {
       members: [
@@ -272,7 +285,7 @@ test("a workspace that reaches no repository says so over Home's composer, telli
       manages: false,
     }),
   };
-  const { page } = mount({ newTask });
+  const { page, opened } = mount({ newTask });
   const notice = () => page.querySelector(".new-task-notices")?.textContent ?? "";
 
   await vi.waitFor(() =>
@@ -281,6 +294,17 @@ test("a workspace that reaches no repository says so over Home's composer, telli
       "This workspace has no repositories yetAsk Ada Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
     ),
   );
+  // Note that the workspace's Add repository stands only once a token is saved, so a member with none saves one first.
+  const add = [...page.querySelectorAll<HTMLButtonElement>(".new-task-notices button")].find(
+    (each) => each.textContent === "Add with your token",
+  );
+  await vi.waitFor(() => {
+    act(() => add?.click());
+    assert.deepEqual(opened.settings.at(-1), {
+      page: SETTINGS_VIEW.ACCOUNT,
+      section: SETTINGS_SECTION.GITHUB_TOKEN,
+    });
+  });
 });
 
 test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async () => {
@@ -367,18 +391,6 @@ test("New task pressed while Home stands hands the composer's words the caret, o
   await settle();
   assert.ok(document.activeElement !== composerEditor(page));
   const pressed = { ...tasks, newTask: { ...tasks.newTask, homeAsks: 1 } };
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopHome, {
-          tasks: pressed,
-          room: SHELL_ROOM.NARROW,
-          accountName: DEAN.name,
-          staged: true,
-        }),
-      ),
-    ),
-  );
+  act(() => root?.render(home(pressed, SHELL_ROOM.NARROW, () => undefined)));
   assert.ok(document.activeElement === composerEditor(page), "the words take the caret");
 });

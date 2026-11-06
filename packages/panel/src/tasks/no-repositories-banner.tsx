@@ -1,5 +1,6 @@
+import { signedInAccountId } from "@repo/credentials/snapshot";
 import { EVERY_WORKSPACE } from "@repo/host/app-state";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import {
   BANNER_LOOK,
   Banner,
@@ -13,8 +14,9 @@ import {
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useQuery } from "@tanstack/react-query";
-import { repositoryListsQuery } from "../live-reads.js";
+import { githubTokenQuery, repositoryListsQuery } from "../live-reads.js";
 import { useOpenSettings } from "../open-settings.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { type RepositoryChooser, useOwnersToAsk } from "./repository-chip.js";
 
 /**
@@ -30,8 +32,11 @@ import { type RepositoryChooser, useOwnersToAsk } from "./repository-chip.js";
  * it as the chip's menu offers it, Connect GitHub, Reconnect GitHub where
  * GitHub removed or suspended the App, or Choose repositories where the App
  * reaches none; a member is told whom to ask, by name, and offered adding
- * one with their own GitHub token. Every press opens Settings on the
- * workspace's GitHub repositories, where all of it is done. Nothing stands
+ * one with their own GitHub token. A press opens Settings on the
+ * workspace's GitHub repositories, where all of it is done, but a member's
+ * with no token saved, which opens the token's row on Account instead, since
+ * the workspace's Add repository stands only once a token is saved
+ * (`AddTokenRepository`). Nothing stands until a workspace is chosen, nor
  * while the listing is still read or could not be, which the chip says.
  */
 
@@ -71,16 +76,24 @@ export function NoRepositoriesBanner({
 }): React.JSX.Element | null {
   const openSettings = useOpenSettings();
   const listed = useQuery(repositoryListsQuery(chooser.scope ?? EVERY_WORKSPACE)).data;
-  if (listed === undefined || listed.repositories.length > 0) return null;
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
+  const token = useQuery(githubTokenQuery(accountId)).data?.token;
+  // Note that every workspace's listing speaks for no one workspace, so the card waits for one to be chosen.
+  const { scope } = chooser;
+  if (scope === undefined || listed === undefined || listed.repositories.length > 0) return null;
   const way = chooser.manages
     ? managerWay(listed.installed, chooser.connected === true)
     : { label: NO_REPOSITORIES_COPY.ADD_WITH_TOKEN, detail: undefined };
-  const open = () =>
-    openSettings({
-      page: SETTINGS_VIEW.WORKSPACE,
-      section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-      ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
-    });
+  // A member known to have no token saved saves one first, on Account, since the workspace's Add repository waits on it.
+  const destination: SettingsLink =
+    chooser.manages || token !== null
+      ? {
+          page: SETTINGS_VIEW.WORKSPACE,
+          section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
+          workspaceId: scope,
+        }
+      : { page: SETTINGS_VIEW.ACCOUNT, section: SETTINGS_SECTION.GITHUB_TOKEN };
+  const open = () => openSettings(destination);
   return (
     <Banner
       look={BANNER_LOOK.CARD}
@@ -96,9 +109,7 @@ export function NoRepositoriesBanner({
       }
     >
       <Text variant={TEXT_VARIANT.SECTION}>{NO_REPOSITORIES_COPY.TITLE}</Text>
-      <Text tone={TEXT_TONE.MUTED}>
-        {way.detail ?? <MemberDetail workspaceId={chooser.scope} />}
-      </Text>
+      <Text tone={TEXT_TONE.MUTED}>{way.detail ?? <MemberDetail workspaceId={scope} />}</Text>
     </Banner>
   );
 }
