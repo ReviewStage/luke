@@ -64,6 +64,7 @@ import { MENTION_KIND, mentionMarkdown } from "@repo/features/mention-link";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import {
+  heldTaskListAnswerSchema,
   TASK_LIST_ARCHIVED,
   TASK_STATUS,
   taskDeleteAnswerSchema,
@@ -964,7 +965,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
 
         const listed = readAnswer(
-          taskListAnswerSchema,
+          heldTaskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, other)),
         );
@@ -990,7 +991,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
               yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
             );
             const tasks = readAnswer(
-              taskListAnswerSchema,
+              heldTaskListAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(TASKS, owner)),
             );

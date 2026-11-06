@@ -730,7 +730,7 @@ function PersonColumn({
   const known = opened === undefined ? undefined : { userId, name: opened };
   // Note that someone who left having only revised or answered is named by the former members read alone, since a link to them opens with no name.
   const left = former?.find((each) => each.userId === userId);
-  const ref = personRef(userId, listed) ?? member ?? known ?? left;
+  const ref = personRef(userId, listed, tasks.liveAgents) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
   // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
@@ -755,13 +755,13 @@ function PersonColumn({
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
-  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
+  // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the list followed live from a service that names neither.
   // On the reader's own page it must also wait on them now as the sidebar's Inbox row counts it (`waitsOnReaderNow`), so one with a reminder still ahead is left out until it comes due.
   const waiting = read.items.filter(
     ({ holder, item }) =>
       (inboxWaitsOn(item)?.userId ??
         (holder.kind === INBOX_HOLDER.TASK
-          ? agentStarter(holder.task, item.agentId)
+          ? agentStarter(liveAgents, item.agentId)
           : undefined)) === userId &&
       (!you || waitsOnReaderNow(item, tasks.me, now)),
   );

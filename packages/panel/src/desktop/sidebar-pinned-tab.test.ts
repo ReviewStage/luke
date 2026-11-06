@@ -8,7 +8,7 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
-import type { TaskSummary } from "@repo/features/task-wire";
+import type { TaskPullRequestLine, TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { AGENT_ACT_KIND } from "@repo/host/contract";
 import { agentTab, changesTab } from "@repo/ui/tab-strip-model";
@@ -29,7 +29,7 @@ import {
 import { handState, stateWith } from "../testing/app-state.js";
 import { onRegistry, writeAppState } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { agentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, listedAgent, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 
 /**
@@ -114,6 +114,16 @@ function drawPin(
   return list.querySelector<HTMLElement>("button.ui-list-row-main") ?? assert.fail("the row");
 }
 
+/** Lays the task's pull requests on the window's document, as the list followed live holds them. */
+function holdPullRequests(pullRequests: readonly TaskPullRequestLine[]): void {
+  writeAppState(
+    stateWith(
+      {},
+      { tasks: { ...IDLE_TASKS_VIEW, taskPullRequests: [{ taskId: TASK.id, pullRequests }] } },
+    ),
+  );
+}
+
 async function settled(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -151,28 +161,23 @@ test("a pointer crossing a pinned agent's row asks the service nothing", async (
   assert.deepEqual(reads, []);
 });
 
-test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the gray icon and pinned label where it holds none", () => {
+test("a pinned Changes tab wears its pull request's mark and current label where its task's pull requests hold it, and the gray icon and pinned label where they do not", () => {
   const pin: SidebarPin = { task: TASK.id, tab: changesTab(AGENT), label: "#42 Old title", at: 1 };
   const held: TaskSummary = {
     ...TASK,
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: [
-        {
-          number: 42,
-          title: "Expire invitations",
-          state: PULL_REQUEST_STATE.MERGED,
-          checks: CHECK_SUMMARY.PASSING,
-          additions: 4,
-          deletions: 1,
-          agentId: AGENT,
-        },
-      ],
-    },
+    agents: { total: 1, working: 0, pullRequestTotal: 1 },
   };
+  holdPullRequests([
+    {
+      number: 42,
+      title: "Expire invitations",
+      state: PULL_REQUEST_STATE.MERGED,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 4,
+      deletions: 1,
+      agentId: AGENT,
+    },
+  ]);
   const live = drawPin(pin, held);
   assert.equal(live.textContent, "#42 Expire invitations");
   assert.equal(
@@ -182,31 +187,28 @@ test("a pinned Changes tab wears its pull request's mark and current label where
 
   act(() => root?.unmount());
   document.body.replaceChildren();
+  holdPullRequests([]);
   const unknown = drawPin(pin, TASK);
   assert.equal(unknown.textContent, "#42 Old title");
   assert.equal(unknown.querySelector("[data-pull-request-mark]"), null);
 });
 
-test("a pinned agent's tab of a task not open says its agent's name as the task's row says it now, and the label it was pinned under where the row names no such agent", () => {
+test("a pinned agent's tab of a task not open says its agent's name as the list followed live says it now, and the label it was pinned under where it holds no such agent", () => {
   const renamed: TaskSummary = {
     ...TASK,
-    agents: {
-      total: 1,
-      working: 0,
-      agents: [
-        {
-          id: AGENT,
-          title: "Expire stale invitations",
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          status: AGENT_STATUS.COMPLETED,
-        },
-      ],
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
+    agents: { total: 1, working: 0, pullRequestTotal: 0 },
   };
-  const live = drawPin(PIN, renamed);
+  const followed = listedAgent({
+    id: AGENT,
+    planId: TASK.id,
+    title: "Expire stale invitations",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    status: AGENT_STATUS.COMPLETED,
+    createdAt: 1,
+    turnId: null,
+  });
+  const live = drawPin(PIN, renamed, tasksControl({ tasks: [renamed], liveAgents: [followed] }));
   assert.equal(live.textContent, "Expire stale invitations");
 
   act(() => root?.unmount());
@@ -220,24 +222,19 @@ test("a pinned Changes tab of an agent that shares its pull request with a newer
   const newer = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const held: TaskSummary = {
     ...TASK,
-    agents: {
-      total: 2,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 1,
-      pullRequests: [
-        {
-          number: 42,
-          title: "Newer title",
-          state: PULL_REQUEST_STATE.OPEN,
-          checks: CHECK_SUMMARY.PASSING,
-          additions: 4,
-          deletions: 1,
-          agentId: newer,
-        },
-      ],
-    },
+    agents: { total: 2, working: 0, pullRequestTotal: 1 },
   };
+  holdPullRequests([
+    {
+      number: 42,
+      title: "Newer title",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 4,
+      deletions: 1,
+      agentId: newer,
+    },
+  ]);
   const base = tasksControl({ tasks: [held] });
   const control: TasksControl = {
     ...base,
@@ -288,14 +285,9 @@ test("a pinned Changes tab naming a pull request by number keeps its pinned labe
   });
   const held: TaskSummary = {
     ...TASK,
-    agents: {
-      total: 2,
-      working: 0,
-      agents: [],
-      pullRequestTotal: 2,
-      pullRequests: [line("old"), line("new")],
-    },
+    agents: { total: 2, working: 0, pullRequestTotal: 2 },
   };
+  holdPullRequests([line("old"), line("new")]);
   const row = drawPin(pin, held);
   assert.equal(row.textContent, "#42 Old title");
   assert.equal(row.querySelector("[data-pull-request-mark]"), null);

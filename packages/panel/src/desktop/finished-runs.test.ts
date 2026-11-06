@@ -11,8 +11,8 @@ import { describe, it } from "vitest";
 import {
   type RunsHeld,
   type RunTasksHeld,
-  withoutFinishedRunTasks,
   withoutFinishedRuns,
+  withoutFinishedRunTasks,
 } from "./finished-runs.js";
 
 /**
@@ -102,11 +102,7 @@ const FAILED_RUN_AGENTS: TaskAgentsSummary = {
   total: 1,
   working: 0,
   failed: 1,
-  agents: [
-    { id: RUN.id, title: null, model: RUN.model, effort: RUN.effort, status: AGENT_STATUS.FAILED },
-  ],
   pullRequestTotal: 0,
-  pullRequests: [],
 };
 
 /** A task a run made whose run failed, as the sidebar lists it. */
@@ -125,10 +121,15 @@ const RUN_TASK: TaskSummary = {
 const { madeByRun: _madeByRun, ...BY_MEMBER } = RUN_TASK;
 
 /** Nothing holding any task. */
-const NO_TASK_HELD: RunTasksHeld = { unread: () => false, inbox: [], shown: () => false };
+const NO_TASK_HELD: RunTasksHeld = {
+  unread: () => false,
+  inbox: [],
+  shown: () => false,
+  pullRequests: [],
+};
 
-/** The run's task with one pull request in the state given. */
-function taskWithPullRequest(state: PullRequestState): TaskSummary {
+/** The run's task's one pull request, in the state given, as the list followed live holds it. */
+function heldPullRequest(state: PullRequestState): RunTasksHeld {
   const pullRequest = {
     number: 42,
     title: "Remove the stale copy",
@@ -137,10 +138,7 @@ function taskWithPullRequest(state: PullRequestState): TaskSummary {
     additions: 3,
     deletions: 1,
   };
-  return {
-    ...RUN_TASK,
-    agents: { ...FAILED_RUN_AGENTS, pullRequestTotal: 1, pullRequests: [pullRequest] },
-  };
+  return { ...NO_TASK_HELD, pullRequests: [{ taskId: RUN_TASK.id, pullRequests: [pullRequest] }] };
 }
 
 /** The task ids that stand. */
@@ -166,7 +164,7 @@ describe("the tasks an automation's runs made under Tasks", () => {
       RUN_TASK,
       { ...NO_TASK_HELD, inbox: [{ taskId: RUN_TASK.id }] },
     ],
-    ["with a pull request open", taskWithPullRequest(PULL_REQUEST_STATE.OPEN), NO_TASK_HELD],
+    ["with a pull request open", RUN_TASK, heldPullRequest(PULL_REQUEST_STATE.OPEN)],
     ["shown", RUN_TASK, { ...NO_TASK_HELD, shown: (taskId) => taskId === RUN_TASK.id }],
   ])("keeps a task %s", (_, task, held) => {
     assert.deepEqual(tasksStanding(task, held), [RUN_TASK.id]);

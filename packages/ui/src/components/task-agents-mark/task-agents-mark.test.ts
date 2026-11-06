@@ -31,21 +31,28 @@ function pullRequest(number: number, state: TaskPullRequestLine["state"]): TaskP
 function agents(
   counts: Partial<Pick<TaskAgentsSummary, "working" | "failed">>,
   pullRequests: readonly TaskPullRequestLine[] = [],
-): TaskAgentsSummary {
+): Agents {
   return {
-    total: 2,
-    working: 0,
-    agents: [],
-    pullRequestTotal: pullRequests.length,
-    pullRequests: [...pullRequests],
-    ...counts,
+    summary: { total: 2, working: 0, pullRequestTotal: pullRequests.length, ...counts },
+    pullRequests,
   };
 }
 
-/** What a reader hears of the icon drawn for `summary`; nothing where none is drawn. */
-function heard(summary: TaskAgentsSummary | undefined): string | undefined {
+/** A task's agents counted, and every pull request they opened. */
+interface Agents {
+  readonly summary: TaskAgentsSummary;
+  readonly pullRequests: readonly TaskPullRequestLine[];
+}
+
+/** What a reader hears of the icon drawn for `task`; nothing where none is drawn. */
+function heard(task: Agents | undefined): string | undefined {
   const box = document.createElement("div");
-  box.innerHTML = renderToStaticMarkup(createElement(TaskAgentsMark, { agents: summary }));
+  box.innerHTML = renderToStaticMarkup(
+    createElement(TaskAgentsMark, {
+      agents: task?.summary,
+      pullRequests: task?.pullRequests ?? [],
+    }),
+  );
   return box.querySelector("[role='img']")?.getAttribute("aria-label") ?? undefined;
 }
 

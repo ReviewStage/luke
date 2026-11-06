@@ -1,6 +1,7 @@
 import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
 import { automationRun } from "@repo/features/model-label";
-import type { TaskSummary } from "@repo/features/task-wire";
+import { pullRequestsOfTask } from "@repo/features/task-agents-model";
+import type { TaskPullRequests, TaskSummary } from "@repo/features/task-wire";
 import type { AppInboxTask, AppInboxTasklessItem } from "@repo/host/app-state";
 import { waitsOnReader } from "../tasks/inbox-model.js";
 
@@ -61,11 +62,12 @@ export function withoutFinishedRuns(
   );
 }
 
-/** What else holds a finished run's task in the list: the tasks unread, the reader's waiting Inbox items by task, and the task shown. */
+/** What else holds a finished run's task in the list: the tasks unread, the reader's waiting Inbox items by task, the task shown, and every task's pull requests (`pullRequestsOfTask`). */
 export interface RunTasksHeld {
   readonly unread: (task: TaskSummary) => boolean;
   readonly inbox: readonly Pick<AppInboxTask, "taskId">[];
   readonly shown: (taskId: string) => boolean;
+  readonly pullRequests: readonly TaskPullRequests[] | undefined;
 }
 
 /** The tasks of the list that stand under Tasks, in the list's order: all but the tasks a run made whose run finished and holds nothing of the reader's. */
@@ -81,7 +83,7 @@ export function withoutFinishedRunTasks(
       held.shown(task.id) ||
       held.unread(task) ||
       waiting.has(task.id) ||
-      (task.agents?.pullRequests ?? []).some((pullRequest) =>
+      pullRequestsOfTask(held.pullRequests, task.id).some((pullRequest) =>
         OPEN_PULL_REQUEST.has(pullRequest.state),
       ),
   );

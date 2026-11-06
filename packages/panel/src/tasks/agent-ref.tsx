@@ -1,7 +1,12 @@
-import type { AgentStatus, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import type {
+  AgentStatus,
+  AgentSummary,
+  ListedAgent,
+  TasklessAgent,
+} from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
-import type { TaskAgentLine } from "@repo/features/task-wire";
+import { agentMovedAt } from "@repo/features/task-agents-model";
 import {
   HoverCard,
   HoverCardHead,
@@ -127,19 +132,20 @@ export function agentCardReading(
   };
 }
 
-/** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
+/** An agent on a task as the list followed live carries it, where no tab of it is held: its tile, where it stands and since when (`agentMovedAt`), its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
 export function lineSubject(
-  line: TaskAgentLine,
+  line: ListedAgent,
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject {
   const writing = agentStillWriting(line.status);
   const name = agentName(line, models);
+  const at = agentMovedAt(line);
   const reading: CardReading = {
     corner: cardCorner({
       writing,
-      startedAt: writing ? line.at : undefined,
-      movedAt: writing ? undefined : line.at,
+      startedAt: writing ? at : undefined,
+      movedAt: writing ? undefined : at,
       state: agentStateWords(line.status),
     }),
     choice: { model: line.model, effort: line.effort },

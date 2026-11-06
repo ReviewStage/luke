@@ -5526,7 +5526,7 @@ it.effect(
       const drawn = last()?.tasks[0];
       assert.equal(drawn?.name, "Teammate invitations, live");
       assert.deepEqual(
-        [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
+        [drawn?.agents?.working, last()?.taskAgents?.map((each) => each.status)],
         [1, [AGENT_STATUS.STARTING]],
       );
       assert.deepEqual(
@@ -5539,9 +5539,8 @@ it.effect(
       yield* TestClock.adjust(Duration.minutes(5));
       yield* settled;
 
-      const ended = last()?.tasks[0]?.agents;
       assert.deepEqual(
-        [ended?.working, ended?.agents.map((line) => line.status)],
+        [last()?.tasks[0]?.agents?.working, last()?.taskAgents?.map((each) => each.status)],
         [0, [AGENT_STATUS.FAILED]],
       );
     }),
@@ -5576,20 +5575,20 @@ it.effect(
       });
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.RUNNING],
       );
       yield* TestClock.adjust(Duration.minutes(3));
       yield* settled;
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.RUNNING],
         "inside the line's grace",
       );
       yield* TestClock.adjust(Duration.minutes(2));
       yield* settled;
       assert.deepEqual(
-        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        last()?.taskAgents?.map((each) => each.status),
         [AGENT_STATUS.FAILED],
         "the line's grace ran out with no row moving",
       );
