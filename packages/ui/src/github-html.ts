@@ -28,7 +28,10 @@
  * the place's to open (the Pull request tab's viewer) rather than a link out
  * to the browser; a picture linked anywhere else keeps its link. Everything
  * else GitHub writes, a heading's permalink included, the sanitizer already
- * leaves harmless.
+ * leaves harmless. `inlinePictures` runs after the sanitizer and marks each
+ * picture that shares its line with words (`INLINE_PICTURE`), a bot's glyph
+ * in its bold lead or a folded section's summary, so the place draws it in
+ * that line as GitHub does rather than as a block of its own.
  */
 
 import { githubImageOf } from "@repo/features/github-image";
@@ -145,6 +148,73 @@ function selfLinkedPicture(link: HtmlNode): HtmlNode | undefined {
   return linksToPicture(href, String(picture.properties?.src ?? "")) ? picture : undefined;
 }
 
+/**
+ * The property `inlinePictures` sets on a picture that shares its line with
+ * words. Note that it is set after the sanitizer, which would drop it.
+ */
+export const INLINE_PICTURE = "dataInlinePicture";
+
+/** The elements that stand in a line of words rather than breaking it, as HTML's phrasing content does. */
+const PHRASING_TAGS: ReadonlySet<string> = new Set([
+  "a",
+  "abbr",
+  "b",
+  "bdi",
+  "bdo",
+  "br",
+  "cite",
+  "code",
+  "del",
+  "dfn",
+  "em",
+  "g-emoji",
+  "i",
+  "img",
+  "ins",
+  "kbd",
+  "mark",
+  "picture",
+  "q",
+  "s",
+  "samp",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "u",
+  "var",
+]);
+
+/** A block's line, the nodes it holds outside any block nested in it, and the blocks nested in it. */
+function lineOf(block: HtmlNode): { line: HtmlNode[]; blocks: HtmlNode[] } {
+  const line: HtmlNode[] = [];
+  const blocks: HtmlNode[] = [];
+  for (const child of block.children ?? []) {
+    if (child.type === "element" && !PHRASING_TAGS.has(child.tagName ?? "")) {
+      blocks.push(child);
+      continue;
+    }
+    line.push(child);
+    const held = lineOf(child);
+    line.push(...held.line);
+    blocks.push(...held.blocks);
+  }
+  return { line, blocks };
+}
+
+/** Marks each picture in a block's line where that line holds words, then each block nested in it. */
+function markInlinePictures(block: HtmlNode): void {
+  const { line, blocks } = lineOf(block);
+  const worded = line.some((node) => node.type === "text" && !blank(node));
+  for (const node of line) {
+    if (worded && node.type === "element" && node.tagName === "img") {
+      node.properties = { ...node.properties, [INLINE_PICTURE]: true };
+    }
+  }
+  for (const nested of blocks) markInlinePictures(nested);
+}
+
 /** What one node of GitHub's rendering becomes: itself, nodes in its place, or nothing. */
 function reshaped(node: HtmlNode): readonly HtmlNode[] {
   if (node.type !== "element") return [node];
@@ -182,4 +252,9 @@ export function githubShapes(): (tree: HtmlNode) => void {
   return (tree) => {
     tree.children = reshapeChildren(tree.children ?? []);
   };
+}
+
+/** The step that marks each picture sharing its line with words (`INLINE_PICTURE`), run after the sanitizer. */
+export function inlinePictures(): (tree: HtmlNode) => void {
+  return (tree) => markInlinePictures(tree);
 }
