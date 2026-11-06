@@ -12,7 +12,6 @@ import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
 import { fixtureToken } from "../testing/runner-sandbox-fake.js";
 import {
   composePolicy,
-  type KeptLaunch,
   LAUNCH_SWAP,
   placeholderSwap,
   sandboxFirewall,
@@ -24,8 +23,8 @@ import { vercelSandboxApi } from "./vercel-sandbox-api.js";
  * network-policy write answering from a script and a database of the
  * test's own: each write carries what its writer names beside the swaps the
  * session's launch keeps, the kept launch holds no value in the clear, its
- * end and a clear take the swaps off, a renewal lands only on the launch it
- * read, and a placeholder swap matches its header at the placeholder.
+ * end and a clear take the swaps off, a renewal's token is what every later
+ * write sends, and a placeholder swap matches its header at the placeholder.
  * Synthetic accounts, sessions, agents, and tokens throughout.
  */
 
@@ -158,51 +157,44 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
   );
 
   it.effect(
-    "a renewal lands only on the launch it read, so one racing a relaunch leaves the new runner's swaps standing",
+    "a renewal sets the plan's new token behind the launch's placeholder, which every write after sends",
     () =>
       Effect.gen(function* () {
         const api = vercel();
         const session = yield* ownSession;
         const { firewall, services } = yield* firewallOver(api.layer);
-        const planLaunch = (placeholder: string, token: string) => ({
-          agentId: "agent-fixture",
-          swaps: new Map([
-            [LAUNCH_SWAP.OPENAI_PLAN, swapOf("api.openai.test", placeholder, token)],
-          ]),
-        });
-        const planRule = (placeholder: string, token: string) => ({
-          match: { headers: [{ key: { exact: "authorization" }, value: { exact: placeholder } }] },
-          transform: [{ headers: { authorization: token } }],
-        });
+        const placeholder = "Bearer plan-placeholder-fixture";
 
-        const renewals = yield* Effect.gen(function* () {
-          yield* firewall.keepLaunch(session, planLaunch("Bearer first-placeholder", "Bearer one"));
-          const first = yield* firewall.launchOf(session);
-          yield* firewall.keepLaunch(
+        yield* Effect.gen(function* () {
+          yield* firewall.keepLaunch(session, {
+            agentId: "agent-fixture",
+            swaps: new Map([
+              [LAUNCH_SWAP.OPENAI_PLAN, swapOf("api.openai.test", placeholder, "Bearer one")],
+            ]),
+          });
+          const launch = yield* firewall.launchOf(session);
+          assert.ok(launch !== undefined);
+          yield* firewall.renew(
             session,
-            planLaunch("Bearer second-placeholder", "Bearer two"),
+            launch,
+            LAUNCH_SWAP.OPENAI_PLAN,
+            swapOf("api.openai.test", placeholder, "Bearer two"),
+            {},
           );
-          const second = yield* firewall.launchOf(session);
-          assert.ok(first !== undefined && second !== undefined);
-          const renew = (launch: KeptLaunch, placeholder: string) =>
-            firewall.renew(
-              session,
-              launch,
-              LAUNCH_SWAP.OPENAI_PLAN,
-              swapOf("api.openai.test", placeholder, "Bearer three"),
-              {},
-            );
-          const stale = yield* renew(first, "Bearer first-placeholder");
-          const current = yield* renew(second, "Bearer second-placeholder");
           yield* firewall.write(session, {});
-          return [stale, current];
         }).pipe(services);
 
-        assert.deepEqual(renewals, [false, true]);
         const renewed = {
           allow: {
             "*": [],
-            "api.openai.test": [planRule("Bearer second-placeholder", "Bearer three")],
+            "api.openai.test": [
+              {
+                match: {
+                  headers: [{ key: { exact: "authorization" }, value: { exact: placeholder } }],
+                },
+                transform: [{ headers: { authorization: "Bearer two" } }],
+              },
+            ],
           },
         };
         assert.deepEqual(api.landed, [renewed, renewed]);

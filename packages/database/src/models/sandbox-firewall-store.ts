@@ -1,5 +1,5 @@
 /**
- * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, renewed only while it stands, let go at its end or cleared ahead of a stop, and dropped once its session is long gone.
+ * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, renewed in place, let go at its end or cleared ahead of a stop, and dropped once its session is long gone.
  *
  * Every write to a session's firewall composes the whole policy, and the one
  * source a writer cannot gather again is the launch's, whose placeholders are
@@ -7,10 +7,9 @@
  * `agents/sandbox-firewall.ts`). So the launch keeps them here, one row per
  * sandbox session and the account whose agent the session is, beside the
  * agent it runs, replacing an earlier launch's; nothing but the launch keeps
- * a row. `version` is minted as the launch is kept, and the sweep's renewal
- * of a swap's value lands only where the row still holds that launch, so a
- * renewal never sets an ended launch's swaps over a new one's or back after
- * its end. A row is the account's own, keyed by the account and the session,
+ * a row. The sweep's renewal of a swap's value writes over the row as it
+ * stands, the last write winning, and never makes one where none stands.
+ * A row is the account's own, keyed by the account and the session,
  * so a read, a keep, a renewal, and a let-go reach that account's row alone;
  * a clear, made by the service ahead of a stop, and the sweep's drop read
  * nothing and are the deployment's, as are the sweep's count and list of the
@@ -28,9 +27,8 @@ import type { FirewallOwner } from "./provider-key-seal.js";
 
 type FirewallEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
-/** What a session's row holds: the launch's id, minted as it was kept; the agent it runs, none in a row kept before agents were named; and its swaps as the service sealed them. */
+/** What a session's row holds: the agent the launch runs, none in a row kept before agents were named, and its swaps as the service sealed them. */
 export interface FirewallLaunchRow {
-  readonly version: string;
   readonly agentId: string | null;
   readonly sealedEntries: string;
 }
@@ -38,12 +36,9 @@ export interface FirewallLaunchRow {
 const OwnerFields = { userId: Schema.String, sandboxSessionId: Schema.String };
 
 const LaunchSchema = Schema.Struct({
-  version: Schema.String,
   agentId: Schema.NullOr(Schema.String),
   sealedEntries: Schema.String,
 });
-
-const VersionSchema = Schema.Struct({ version: Schema.String });
 
 /** The row of the account's session given, where one stands. */
 const ownRow = (userId: string, sandboxSessionId: string) =>
@@ -56,7 +51,6 @@ const findLaunch = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          version: sandboxFirewall.version,
           agentId: sandboxFirewall.agentId,
           sealedEntries: sandboxFirewall.sealedEntries,
         })
@@ -90,21 +84,18 @@ const upsertLaunch = SqlSchema.void({
     ),
 });
 
-const updateLaunch = SqlSchema.findAll({
+const updateLaunch = SqlSchema.void({
   Request: Schema.Struct({
     ...OwnerFields,
-    version: Schema.String,
     sealedEntries: Schema.String,
     updatedAt: Schema.Date,
   }),
-  Result: VersionSchema,
-  execute: ({ userId, sandboxSessionId, version, sealedEntries, updatedAt }) =>
+  execute: ({ userId, sandboxSessionId, sealedEntries, updatedAt }) =>
     Database.use((db) =>
       db
         .update(sandboxFirewall)
         .set({ sealedEntries, updatedAt })
-        .where(and(ownRow(userId, sandboxSessionId), eq(sandboxFirewall.version, version)))
-        .returning({ version: sandboxFirewall.version }),
+        .where(ownRow(userId, sandboxSessionId)),
     ),
 });
 
@@ -173,21 +164,13 @@ export function keepFirewallLaunch(
   return upsertLaunch({ ...owner, ...launch, updatedAt });
 }
 
-/**
- * The swaps of the launch kept for the account's session sealed anew, only
- * where the row still holds the launch `version` names, answering whether it
- * landed; a launch let go or replaced since is left as it stands.
- */
+/** The swaps kept for the account's session sealed anew over whatever launch the row holds, the last write winning; nothing where no row stands. */
 export function renewFirewallLaunch(
   owner: FirewallOwner,
-  version: string,
   sealedEntries: string,
   updatedAt: Date,
-): FirewallEffect<boolean> {
-  return Effect.map(
-    updateLaunch({ ...owner, version, sealedEntries, updatedAt }),
-    (rows) => rows.length > 0,
-  );
+): FirewallEffect<void> {
+  return updateLaunch({ ...owner, sealedEntries, updatedAt });
 }
 
 /** The launch kept for the account's session let go, as its runner ends. */

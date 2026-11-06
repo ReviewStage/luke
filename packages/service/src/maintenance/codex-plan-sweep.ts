@@ -17,8 +17,7 @@
  * its account's token moves on, about every quarter hour. The swap stands no
  * longer than its runner: it is cleared ahead of its sandbox's stop, and let
  * go where a Terminal keeps the sandbox up past the runner's end, so a
- * launch's renewals end with it, and a renewal lands only on the launch it
- * read, never on one let go or replaced since.
+ * launch's renewals end with it.
  *
  * Note that a swap is set with at least the margin left on its token, and
  * the window is as wide as reads every standing session within a quarter

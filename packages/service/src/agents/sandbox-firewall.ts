@@ -17,9 +17,8 @@
  * every write sends them beside what it gathered. A launch keeps them before
  * it writes, its end lets them go, a stop's clear deletes them, and nothing
  * else changes them but the sweep's renewal of a ChatGPT plan's token
- * (`renew`), which lands only while the row still holds the launch it read,
- * so a renewal racing a relaunch never sets the ended launch's swaps over
- * the new runner's. With nothing to carry, the policy is the open internet.
+ * (`renew`), which writes over the row as it stands, the last write
+ * winning. With nothing to carry, the policy is the open internet.
  *
  * Two writers that compose from the same sources send the same policy, so
  * whichever lands last is right; a GitHub credential minted twice is two
@@ -27,8 +26,11 @@
  * stand still between a writer's read and its send: a writer that read the
  * launch before a relaunch kept its own, or before an end or a clear let it
  * go, may land after them and send what it read until the session's next
- * write; one that read the plan's swap before a renewal sends the token it
- * read, which still has the renewal's margin left; and a clone's token
+ * write; a renewal that read a launch before a relaunch replaced it writes
+ * the ended launch's swaps over the new runner's, which every later write
+ * sends until the next launch keeps its own; one that read the plan's swap
+ * before a renewal sends the token it read, which still has the renewal's
+ * margin left; and a clone's token
  * stands only in its own writes, so another writer landing during a clone
  * takes it off, though the clone goes on under the agent's own credential
  * that writer carries, minted afresh, which reaches every repository the
@@ -145,9 +147,8 @@ export interface FirewallLaunch {
   readonly swaps: LaunchSwaps;
 }
 
-/** A launch as its session's row holds it: the id minted as it was kept, which a renewal lands on, and the agent, none in a row kept before agents were named. */
+/** A launch as its session's row holds it: the agent, none in a row kept before agents were named, and its swaps. */
 export interface KeptLaunch {
-  readonly id: string;
   readonly agentId: string | undefined;
   readonly swaps: LaunchSwaps;
 }
@@ -186,10 +187,9 @@ export interface SandboxFirewall {
     session: FirewallSession,
   ) => Effect.Effect<KeptLaunch | undefined, SandboxUnavailable, DatabaseServices>;
   /**
-   * The swap given set in place of the launch's own of its kind, where the
-   * session's row still holds that launch, and the policy sent with the
-   * sources given; nothing kept or sent where the launch was let go or
-   * replaced since it was read. Answers whether it landed.
+   * The swap given set in place of the launch's own of its kind, the swaps
+   * written over the session's row as it stands, the last write winning, and
+   * the policy sent with the sources given.
    */
   readonly renew: (
     session: FirewallSession,
@@ -197,7 +197,7 @@ export interface SandboxFirewall {
     kind: LaunchSwapKind,
     entry: FirewallEntry,
     sources: FirewallSources,
-  ) => Effect.Effect<boolean, SandboxUnavailable, DatabaseServices>;
+  ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
   /** Every credential taken off the session's firewall ahead of its stop, which is left the open internet, its launch deleted. */
   readonly clear: (
     sandboxSessionId: string,
@@ -451,7 +451,7 @@ const launchKept = (session: FirewallSession) =>
       yield* Effect.logWarning("a sandbox firewall's launch would not open, and is sent as none");
       return undefined;
     }
-    return { id: row.version, agentId: row.agentId ?? undefined, swaps } satisfies KeptLaunch;
+    return { agentId: row.agentId ?? undefined, swaps } satisfies KeptLaunch;
   });
 
 /** A store failure as the policy write unavailable, in words naming no value. */
@@ -500,14 +500,12 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
     renew: (session, launch, kind, entry, sources) =>
       Effect.gen(function* () {
         const swaps = new Map(launch.swaps).set(kind, entry);
-        const landed = yield* renewFirewallLaunch(
+        yield* renewFirewallLaunch(
           session,
-          launch.id,
           sealed(yield* keyRing, session, swaps),
           yield* DateTime.nowAsDate,
         ).pipe(storeUnavailable("the firewall's launch could not be renewed"));
-        if (landed) yield* sent(session, sources, swaps);
-        return landed;
+        yield* sent(session, sources, swaps);
       }),
     // Note that a launch that would not go is logged and the open internet sent anyway, because the
     // stop it goes ahead of must not wait on the store, and the sweep drops the row once its session is gone.

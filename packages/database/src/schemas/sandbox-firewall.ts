@@ -14,9 +14,7 @@ import { user } from "./auth.js";
  * session is, naming the agent, with the swaps as the service sealed them
  * under the deployment's key ring, bound to that account and session
  * (`../models/sandbox-firewall-store.ts`, `@repo/service`'s
- * `agents/sandbox-firewall.ts`). `version` is minted as the launch is kept,
- * which is how a renewal knows the row still holds the launch it read. The
- * row goes as its launch ends or the session is cleared ahead of its stop,
+ * `agents/sandbox-firewall.ts`). The row goes as its launch ends or the session is cleared ahead of its stop,
  * and the scheduled sweep drops a row left past the longest a session can
  * run. Every row goes with its account.
  */
@@ -28,7 +26,7 @@ export const sandboxFirewall = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** Minted as the launch is kept, so a renewal lands only on the launch it read. */
+    /** Minted as the launch is kept. Nothing reads it now; the code this replaced compared it, so it stays until no deployment runs that code. */
     version: uuid("version").notNull(),
     /** The agent the launch runs, whose repository credential a write made apart from the launch mints; none in a row kept before agents were named here. */
     agentId: text("agent_id"),

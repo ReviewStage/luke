@@ -414,8 +414,7 @@ export const PLAN_RENEWAL = {
  * set behind the same placeholder where it is not what the swap already
  * sets, and the session's whole policy sent with the agent's repository
  * credential minted afresh beside it, since every write is whole
- * (`firewallSourcesOfAgent`); a launch let go or replaced since it was read
- * is left as it stands. A sign-in that no longer answers a token, or a
+ * (`firewallSourcesOfAgent`). A sign-in that no longer answers a token, or a
  * credential that could not be minted, leaves the swap as it stands, which
  * OpenAI refuses once its token lapses, as the route refused a Mac's command.
  */
@@ -444,14 +443,8 @@ export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSessio
       ),
     );
     if (typeof next === "string") return next;
-    const landed = yield* firewall.renew(
-      session,
-      launch,
-      LAUNCH_SWAP.OPENAI_PLAN,
-      next.entry,
-      next.sources,
-    );
-    return landed ? PLAN_RENEWAL.RENEWED : PLAN_RENEWAL.LEFT;
+    yield* firewall.renew(session, launch, LAUNCH_SWAP.OPENAI_PLAN, next.entry, next.sources);
+    return PLAN_RENEWAL.RENEWED;
   });
 
 /** The sessions for one account, over the calling fiber's services. */
