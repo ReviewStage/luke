@@ -21,6 +21,7 @@ import {
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppStateSnapshot } from "@repo/host/app-state";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -29,7 +30,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { actMutation } from "./act-mutations.js";
 import { integrationsQuery, integrationsRetryMutation } from "./live-reads.js";
 import { rendererRuntime } from "./renderer-runtime.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery } from "./use-app-state.js";
 
 /**
  * integration-statuses.ts -- where every one of the account's integrations stands, as every surface that draws one reads it.
@@ -209,9 +210,8 @@ const sharedOf = Atom.family(
 );
 
 /** The account signed in to the window, by its id, which the host holds its integrations by; none while signed out. */
-const ownerAtom: Atom.Atom<string | null> = Atom.map(APP_SLICE.ACCOUNT, (account) =>
-  account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? null) : null,
-);
+const selectOwner = ({ account }: AppStateSnapshot): string | null =>
+  account.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? null) : null;
 
 /** The book with its sign-ins as `change` leaves them. */
 function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
@@ -227,7 +227,7 @@ function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
 export function useIntegrationStatuses(): IntegrationStatuses {
   const { mutateAsync: cancelIntegration } = useMutation(actMutation(ACT_KIND.INTEGRATIONS_CANCEL));
   const registry = useContext(RegistryContext);
-  const owner = useAppSlice(ownerAtom);
+  const owner = useQuery({ ...appStateQuery, select: selectOwner }).data ?? null;
   const held = useQuery(integrationsQuery(owner ?? undefined));
   const { mutateAsync: retryIntegrations } = useMutation(integrationsRetryMutation());
   const answer = held.data;

@@ -8,9 +8,9 @@ import {
   type SettingsRowsInput,
 } from "@repo/settings";
 import { BUTTON_VARIANT, Button, SettingsRow, SettingsSection } from "@repo/ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { pressMutation } from "../act-mutations.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccess, selectAccount } from "../use-app-state.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -36,8 +36,8 @@ const SUPPORT_ACCESS_MEANING = `A ${PRODUCT_NAME} maintainer may sign in as you,
  * ends that sign-in.
  */
 function SupportAccessRow(): React.JSX.Element {
-  const access = useAppSlice(APP_SLICE.ACCESS);
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const access = useQuery({ ...appStateQuery, select: selectAccess }).data;
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const until = access?.supportAccessUntil;
   const granted = until !== undefined && until > Date.now();
   const impersonated = account?.status === ACCOUNT_STATUS.SIGNED_IN && account.impersonated;

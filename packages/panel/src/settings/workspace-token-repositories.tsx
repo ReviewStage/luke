@@ -33,7 +33,7 @@ import {
 } from "../live-reads.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { AddMenuButton } from "./add-menu-button.js";
 import { GitHubOwnerRow, repositoryCount } from "./workspace-github-accounts.js";
 
@@ -186,7 +186,7 @@ export function AddTokenRepository(props: {
   repositories: TokenRepositories;
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element | null {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const token = useQuery(githubTokenQuery(accountId));
   return token.data?.token ? <AddRepositoryMenu {...props} /> : null;
 }

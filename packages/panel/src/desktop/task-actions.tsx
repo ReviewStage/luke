@@ -113,7 +113,7 @@ import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import { TASK_RENAME_SHAPE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, appStateQuery, selectExperiment, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount, selectExperiment } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
@@ -718,7 +718,7 @@ function TaskMenuFooter({
 }): React.JSX.Element {
   const now = useMinute();
   const reader = useEditReader({ readerId: tasks.me });
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
   // Note that the open task's last editor is its plan's, so while Plans is off it is said only by when the task last changed, as another task is.

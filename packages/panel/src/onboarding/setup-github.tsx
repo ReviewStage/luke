@@ -37,7 +37,7 @@ import {
   useTokenRepositories,
 } from "../settings/workspace-token-repositories.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 
 /**
  * setup-github.tsx -- setup's GitHub step: the App installed on the workspace's repositories, or the member's own token, chosen as two cards.
@@ -149,7 +149,7 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
   const saveToken = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
   const openLink = useOpenLink();
   const repositories = useTokenRepositories(workspaceId);
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const held = useQuery(githubTokenQuery(accountId));
   // Note that a token read that failed is taken for none, so the card offers a paste rather than waiting.
   const token = held.isError ? null : held.data?.token;

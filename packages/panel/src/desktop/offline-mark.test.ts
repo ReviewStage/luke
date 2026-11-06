@@ -6,7 +6,7 @@ import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { deliveryOf, stateWith } from "../testing/app-state.js";
@@ -73,58 +73,58 @@ function why(): string | undefined {
 
 test("nothing is drawn while the Mac is online and live updates are current", async () => {
   await mount(documentOf(true, HOST_LIVE.LIVE));
-  assert.equal(said(), undefined);
+  await vi.waitFor(() => assert.equal(said(), undefined));
 });
 
 test("a host whose follow has said nothing yet reads as live", async () => {
   await mount(documentOf(true, undefined));
-  assert.equal(said(), undefined);
+  await vi.waitFor(() => assert.equal(said(), undefined));
 });
 
 test("a broken follow says catching up, and its recovery clears it", async () => {
   const push = await mount(documentOf(true, HOST_LIVE.LIVE));
 
   await push(documentOf(true, HOST_LIVE.CATCHING_UP, 2));
-  assert.equal(said(), "Catching up");
+  await vi.waitFor(() => assert.equal(said(), "Catching up"));
   assert.equal(document.querySelector(".offline-mark-word")?.textContent, "Catching up");
 
   await push(documentOf(true, HOST_LIVE.LIVE, 3));
-  assert.equal(said(), undefined);
+  await vi.waitFor(() => assert.equal(said(), undefined));
 });
 
 test("the pill going offline or catching up is announced politely as it changes, and taken back once live", async () => {
   mountAnnouncer();
   const push = await mount(documentOf(true, HOST_LIVE.LIVE));
-  assert.equal(announcedPolitely(), "");
+  await vi.waitFor(() => assert.equal(announcedPolitely(), ""));
 
   await push(documentOf(true, HOST_LIVE.CATCHING_UP, 2));
-  assert.equal(announcedPolitely(), "Catching up");
+  await vi.waitFor(() => assert.equal(announcedPolitely(), "Catching up"));
 
   await push(documentOf(false, HOST_LIVE.CATCHING_UP, 3));
-  assert.equal(announcedPolitely(), "Offline");
+  await vi.waitFor(() => assert.equal(announcedPolitely(), "Offline"));
 
   await push(documentOf(true, HOST_LIVE.LIVE, 4));
-  assert.equal(announcedPolitely(), "");
+  await vi.waitFor(() => assert.equal(announcedPolitely(), ""));
 });
 
 test("a service that answers no seal says offline while the Mac is online", async () => {
   const push = await mount(documentOf(true, HOST_LIVE.OFFLINE));
-  assert.equal(said(), "Offline");
+  await vi.waitFor(() => assert.equal(said(), "Offline"));
 
   await push(documentOf(true, HOST_LIVE.LIVE, 2));
-  assert.equal(said(), undefined);
+  await vi.waitFor(() => assert.equal(said(), undefined));
 });
 
 test("a service whose calls go unanswered says it isn't answering while the Mac is online, and an answer clears it", async () => {
   const push = await mount(documentOf(true, HOST_LIVE.LIVE, 1, false));
-  assert.equal(said(), "Offline");
-  assert.equal(why(), "The service isn't answering.");
+  await vi.waitFor(() => assert.equal(said(), "Offline"));
+  await vi.waitFor(() => assert.equal(why(), "The service isn't answering."));
 
   await push(documentOf(true, HOST_LIVE.LIVE, 2));
-  assert.equal(said(), undefined);
+  await vi.waitFor(() => assert.equal(said(), undefined));
 });
 
 test("the Mac offline says offline, whatever the follow last found", async () => {
   await mount(documentOf(false, HOST_LIVE.CATCHING_UP));
-  assert.equal(said(), "Offline");
+  await vi.waitFor(() => assert.equal(said(), "Offline"));
 });

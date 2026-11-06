@@ -483,6 +483,7 @@ test("with no plan open, the agent the list carries is drawn from its row, on a 
     tab.control().agents?.map((agent) => [agent.id, agent.planId]),
     [[AGENT, TASK]],
   );
+  await vi.waitFor(() => assert.equal(tab.control().readSkills !== undefined, true));
   const read = tab.control().readSkills ?? assert.fail("the agent's box offers its skills");
   await read();
   assert.deepEqual(tab.asked, [

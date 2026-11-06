@@ -19,7 +19,7 @@ import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -267,7 +267,8 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
     sweep: undefined,
   });
 
-  assert.deepEqual(chips(container), [["#42", "Merged"]]);
+  // Note that the item's words stand once the account's inbox read reaches its query.
+  await vi.waitFor(() => assert.deepEqual(chips(container), [["#42", "Merged"]]));
   assert.deepEqual(readThrough(asked), [`workspace-acme ${PULL}`]);
 });
 

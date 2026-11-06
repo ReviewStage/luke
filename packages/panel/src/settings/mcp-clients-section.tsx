@@ -53,7 +53,7 @@ import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js"
 import { HarnessMark } from "../harness-marks.js";
 import { mcpClientsQuery, mcpClientsRetryMutation } from "../live-reads.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -461,7 +461,7 @@ function ConnectSection({
 
 /** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const read = useQuery(mcpClientsQuery(accountId));
   const retry = useMutation(mcpClientsRetryMutation());
   const rows = read.data;

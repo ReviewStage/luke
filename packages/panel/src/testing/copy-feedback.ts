@@ -20,6 +20,7 @@ import {
   useContext,
 } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
+import { appBridge } from "../app-bridge.js";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
@@ -121,6 +122,16 @@ export function testQueryClientNow(): QueryClient {
  */
 export function writeAppState(document: AppStateSnapshot): void {
   testQueryClient.setQueryData(appStateQuery.queryKey, document);
+}
+
+/**
+ * Writes the document the window's bridge hands into the test's Query client,
+ * as the window's root reads it with `ensureQueryData` before anything is
+ * drawn: for a case that reads a surface once, so its first frame holds the
+ * account and the run the bridge hands rather than none.
+ */
+export async function writeHandedAppState(): Promise<void> {
+  writeAppState(await appBridge().requestAppState());
 }
 
 /**
