@@ -15,8 +15,10 @@ import { NewWorkspaceSteps } from "./new-workspace-steps.js";
 /**
  * New workspace's cards as the developer walks them: Cancel before Create
  * makes nothing; Create makes the workspace, lists it, and goes on to
- * GitHub, whose Skip lands on the new workspace's Home; and an invitation
- * refused holds the first card on what was refused. Synthetic throughout.
+ * GitHub, whose Skip lands on the new workspace's Home; Back from GitHub
+ * finds the workspace's fields, where Continue renames it rather than
+ * making another; and an invitation refused holds the first card on what
+ * was refused. Synthetic throughout.
  */
 
 const PAPERSTAR: Workspace = {
@@ -77,13 +79,19 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-/** Types `words` into the field labeled `label`, as a person does. */
-function type(container: HTMLElement, label: string, words: string): void {
+/** The field labeled `label`. */
+function field(container: HTMLElement, label: string): HTMLInputElement {
   const labeled = [...container.querySelectorAll("label")].find(
     (candidate) => candidate.textContent?.startsWith(label) === true,
   );
   const input = document.getElementById(labeled?.htmlFor ?? "");
   assert.ok(input instanceof HTMLInputElement, `no ${label} field`);
+  return input;
+}
+
+/** Types `words` into the field labeled `label`, as a person does. */
+function type(container: HTMLElement, label: string, words: string): void {
+  const input = field(container, label);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(input, words);
@@ -139,6 +147,36 @@ test("Create makes the workspace and lists it, goes on to GitHub, and Skip lands
   assert.deepEqual(pressed, [`choose:${PAPERSTAR.id}`, "close", "home"]);
 });
 
+test("Back from GitHub finds the workspace's name, and Continue renames it rather than making another", async () => {
+  const made: string[] = [];
+  const renamed: string[] = [];
+  fakeActPort({
+    [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: ({ name }) => {
+      made.push(name);
+      return Promise.resolve(PAPERSTAR);
+    },
+    [WORKSPACE_ACT_KIND.WORKSPACE_RENAME]: ({ name }) => {
+      renamed.push(name);
+      return Promise.resolve({ ...PAPERSTAR, name });
+    },
+  });
+  const container = mount([]);
+  type(container, "Name", "Paperstar");
+  await act(async () => button(container, "Create").click());
+  await settle();
+
+  act(() => button(container, "Back").click());
+  const kept = field(container, "Name").value;
+  type(container, "Name", "Paperstar Labs");
+  await act(async () => button(container, "Continue").click());
+  await settle();
+
+  assert.equal(kept, "Paperstar");
+  assert.deepEqual(made, ["Paperstar"]);
+  assert.deepEqual(renamed, ["Paperstar Labs"]);
+  assert.equal(container.querySelector("h1")?.textContent, "Connect GitHub");
+});
+
 test("an invitation refused holds the first card on what was refused, and Continue goes on to GitHub", async () => {
   fakeActPort({
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: () => Promise.resolve(PAPERSTAR),
@@ -154,7 +192,6 @@ test("an invitation refused holds the first card on what was refused, and Contin
   const held = container.textContent ?? "";
   act(() => button(container, "Continue").click());
 
-  assert.match(held, /Workspace created/u);
   assert.match(held, /dana@paperstar\.app: That address is already a member\./u);
   assert.equal(container.querySelector("h1")?.textContent, "Connect GitHub");
 });

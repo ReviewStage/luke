@@ -1,21 +1,10 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_SETTING_SCHEMA } from "@repo/settings";
-import {
-  AuthPage,
-  AuthStepFoot,
-  ChoiceList,
-  type ChoiceOption,
-  ProductMark,
-  SETTINGS_ROW_STATE,
-  SettingsRowStateLine,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-} from "@repo/ui";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { AuthPage, AuthStepFoot, ChoiceList, type ChoiceOption, ProductMark } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { Schema } from "effect";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
@@ -130,8 +119,12 @@ export function useSetupGate(
 }
 
 const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
-  { value: SETUP_AUDIENCE.ME, label: "Just me" },
-  { value: SETUP_AUDIENCE.TEAM, label: "With my team" },
+  { value: SETUP_AUDIENCE.ME, label: "Just me", detail: "Your own workspace, ready now" },
+  {
+    value: SETUP_AUDIENCE.TEAM,
+    label: "With my team",
+    detail: "A workspace you share, with teammates invited",
+  },
 ];
 
 /**
@@ -164,8 +157,8 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
   const place = places[accountId] ?? start;
   const { audience, team } = place;
-  const [creating, setCreating] = useState(false);
-  const [refused, setRefused] = useState<readonly string[]>([]);
+  const { workspaces } = tasks.newTask;
+  const personal = workspaces.find((workspace) => workspace.personal === true)?.id;
   const move = (change: Partial<SetupPlace>) =>
     changePlaces((kept) => ({
       ...kept,
@@ -177,7 +170,12 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
       kept[accountId] === undefined ? { ...kept, [accountId]: start } : kept,
     );
   }, [accountId, changePlaces, start]);
-  const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
+  // A team's workspace made stands listed only while setup is for the team, so Just me goes back to the account's own.
+  const setAudience = (chosen: SetupAudience) => {
+    move({ audience: chosen });
+    const listed = chosen === SETUP_AUDIENCE.TEAM ? team : personal;
+    if (team !== undefined && listed !== undefined) tasks.onChooseWorkspace(listed);
+  };
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
   const [reached, setReached] = useState(false);
@@ -200,7 +198,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const back = at === 0 ? undefined : () => setAt(at - 1);
   // A team's workspace made and then left for Just me is not the one GitHub is installed on.
   const workspaceId =
-    (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
+    (audience === SETUP_AUDIENCE.TEAM ? team : personal) ?? tasks.newTask.workspaceId;
   // Note that a skippable step offers Skip until done and Continue after it; the team's draws its own foot.
   const foot = (done: boolean, label = "Continue", skippable = false) => (
     <AuthStepFoot
@@ -219,17 +217,21 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
       }),
   };
   const teamForm = useTeamForm({
+    made: team,
+    madeName: workspaces.find((workspace) => workspace.id === team)?.name,
     onCreated: (made) => {
-      setCreating(true);
       move({ team: made });
       tasks.onChooseWorkspace(made);
     },
     onDone: (failed) => {
-      setCreating(false);
-      setRefused(failed);
       if (failed.length === 0) setAt(at + 1);
     },
   });
+  // The caret lands in the team's name as its step opens, since the name is all Create needs.
+  const nameField = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (step === SETUP_STEP.TEAM) nameField.current?.focus();
+  }, [step]);
 
   if (step === SETUP_STEP.WELCOME) {
     return (
@@ -251,47 +253,31 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     );
   }
   if (step === SETUP_STEP.TEAM) {
-    const forming = team === undefined || creating;
-    // Note that Create is the step's way on until the workspace is made, and Continue after it.
+    const { busy } = teamForm;
+    // Note that Create is the step's way on until the workspace is made, and Continue after it, which saves what changed; Back waits on Create, whose end moves the step.
     return (
       <AuthPage
         mark={<ProductMark />}
         exit={exit}
-        title="Create a team workspace"
+        title={team === undefined ? "Create a team workspace" : "Your team workspace"}
+        description="Tasks, agents, and repositories, shared with your team."
         foot={
-          forming ? (
-            <AuthStepFoot
-              at={at + 1}
-              total={steps.length}
-              onBack={back}
-              onSkip={teamForm.busy ? undefined : forward}
-              next={{
-                label: "Create",
-                onPress: teamForm.create,
-                disabled: !teamForm.ready,
-                busy: teamForm.busy,
-                busyLabel: "Creating",
-              }}
-            />
-          ) : (
-            foot(true)
-          )
+          <AuthStepFoot
+            at={at + 1}
+            total={steps.length}
+            onBack={busy ? undefined : back}
+            onSkip={team === undefined && !busy ? forward : undefined}
+            next={{
+              label: team === undefined ? "Create" : "Continue",
+              onPress: teamForm.create,
+              disabled: !teamForm.ready,
+              busy,
+              busyLabel: team === undefined ? "Creating" : "Saving",
+            }}
+          />
         }
       >
-        {forming ? (
-          <TeamForm form={teamForm} disabled={teamForm.busy} />
-        ) : (
-          <>
-            <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-              Workspace created
-            </SettingsRowStateLine>
-            {refused.map((words) => (
-              <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                <ReplayMask>{words}</ReplayMask>
-              </Text>
-            ))}
-          </>
-        )}
+        <TeamForm form={teamForm} nameRef={nameField} disabled={busy} />
       </AuthPage>
     );
   }
@@ -327,6 +313,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     <AuthPage
       mark={<ProductMark />}
       title="Connect your tools"
+      description="Agents read your issues, messages, and docs. Connect any now, or later in Settings."
       foot={foot(true, "Finish")}
       exit={exit}
     >

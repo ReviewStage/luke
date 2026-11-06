@@ -1,3 +1,4 @@
+import { andList } from "@repo/features/words";
 import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { WORKSPACE_BOUNDS } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -14,7 +15,7 @@ import {
 } from "@repo/ui";
 import type { ShownError } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
-import { type Ref, useState } from "react";
+import { type Ref, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { useWorkspacePhotoPick } from "../workspace-photo.js";
 
@@ -24,7 +25,9 @@ import { useWorkspacePhotoPick } from "../workspace-photo.js";
  * The workspace is made first, then its photo set and each address invited
  * as a member. A photo or an invitation refused does not undo the
  * workspace: the step says what was refused, and goes on at Continue, since
- * both can be done again in Settings › Workspace.
+ * both can be done again in Settings › Workspace. Back onto the step once
+ * the workspace is made finds the same fields over it, where Continue saves
+ * what changed, so the step never stands as a bare line saying it was made.
  */
 
 /** The addresses typed into the invite field, each once. */
@@ -40,9 +43,13 @@ export interface TeamFields {
   readonly onEmails: (emails: string) => void;
   readonly photo: string | undefined;
   readonly picker: FilePicker;
+  /** The addresses invited from this form, said under the invite field once the workspace is made. */
+  readonly invited: readonly string[];
   /** What was refused, said under the fields, while something was. */
   readonly refusal: string | undefined;
-  /** Enter in the name: makes the workspace. */
+  /** What the last Create or Continue had refused of the photo, the name, or an invitation, said under the fields. */
+  readonly refused: readonly string[];
+  /** Enter in the name: makes the workspace, or saves what changed once it is made. */
   readonly create: () => void;
 }
 
@@ -54,17 +61,37 @@ export interface TeamFormState extends TeamFields {
   readonly ready: boolean;
 }
 
+/** What the workspace holds as this form last wrote it: its name, its photo, and who was invited. */
+interface TeamSaved {
+  readonly name: string | undefined;
+  readonly photo: string | undefined;
+  readonly invited: readonly string[];
+}
+
+const NOTHING_SAVED: TeamSaved = { name: undefined, photo: undefined, invited: [] };
+
 /**
  * The team step's form. `onCreated` hears the workspace made, by its id, the
  * moment it is made, so a reload while its photo and invitations go out does
  * not make it again; `onDone` hears, once they have gone, what was refused.
- * Note that the form's state is held here rather than in `TeamForm`, because
- * Create stands in the step's foot, outside the form.
+ * Once the caller holds the workspace made (`made`), the form stands over it
+ * rather than making another: its name comes back from the list
+ * (`madeName`) where a reload lost what was typed, and the same press saves
+ * a new name, a new photo, and the addresses not yet invited. Note that what
+ * was refused is said once and not tried again, so Continue never holds the
+ * step on a refusal that would only come back; the name alone goes back to
+ * the one the workspace holds. Note that the form's state is held here
+ * rather than in `TeamForm`, because Create stands in the step's foot,
+ * outside the form.
  */
 export function useTeamForm({
+  made,
+  madeName,
   onCreated,
   onDone,
 }: {
+  made: string | undefined;
+  madeName: string | undefined;
   onCreated: (workspaceId: string) => void;
   onDone: (refused: readonly string[]) => void;
 }): TeamFormState {
@@ -73,38 +100,66 @@ export function useTeamForm({
   const [emails, setEmails] = useState("");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const [refused, setRefused] = useState<readonly string[]>([]);
+  const [saved, setSaved] = useState<TeamSaved>(NOTHING_SAVED);
   const { photo, reading, picker } = useWorkspacePhotoPick(setRefusal);
+  // A workspace made before a reload comes back under its own name, where the field lost what was typed.
+  useEffect(() => {
+    if (madeName !== undefined) setName((typed) => (typed === "" ? madeName : typed));
+  }, [madeName]);
   const trimmed = name.trim();
   const ready = trimmed !== "" && !reading;
   const create = async () => {
     if (!ready || busy) return;
     setBusy(true);
     setRefusal(undefined);
-    let workspaceId: string;
-    try {
-      workspaceId = (await act(ACT_KIND.WORKSPACE_CREATE, { name: trimmed })).id;
-    } catch (refused) {
-      setBusy(false);
-      setRefusal((refused as Error).message);
-      return;
+    const missed: string[] = [];
+    let workspaceId = made;
+    let named = saved.name ?? madeName;
+    if (workspaceId === undefined) {
+      try {
+        workspaceId = (await act(ACT_KIND.WORKSPACE_CREATE, { name: trimmed })).id;
+      } catch (failed) {
+        setBusy(false);
+        setRefusal((failed as Error).message);
+        return;
+      }
+      named = trimmed;
+      onCreated(workspaceId);
+    } else if (trimmed !== named) {
+      const renamed = await act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name: trimmed }).then(
+        () => true,
+        (why: Error) => {
+          missed.push(why.message);
+          return false;
+        },
+      );
+      if (renamed) named = trimmed;
+      else if (named !== undefined) setName(named);
     }
-    onCreated(workspaceId);
     // Note that the photo and the invitations follow the workspace made, and one refused leaves the rest standing.
-    const refused: string[] = [];
-    if (photo !== undefined) {
+    if (photo !== undefined && photo !== saved.photo) {
       await act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo }).catch((why: Error) =>
-        refused.push(why.message),
+        missed.push(why.message),
       );
     }
+    const invited = [...saved.invited];
     for (const email of addressesOf(emails)) {
+      if (invited.includes(email)) continue;
       await act(ACT_KIND.WORKSPACE_INVITE, {
         workspaceId,
         email,
         role: INVITATION_ROLE.MEMBER,
-      }).catch((why: Error) => refused.push(`${email}: ${why.message}`));
+      }).then(
+        () => invited.push(email),
+        (why: Error) => missed.push(`${email}: ${why.message}`),
+      );
     }
+    setSaved({ name: named, photo, invited });
+    setEmails("");
+    setRefused(missed);
     setBusy(false);
-    onDone(refused);
+    onDone(missed);
   };
   return {
     name,
@@ -113,8 +168,10 @@ export function useTeamForm({
     onEmails: setEmails,
     photo,
     picker,
+    invited: saved.invited,
     busy,
     refusal,
+    refused,
     ready,
     create: () => void create(),
   };
@@ -162,7 +219,17 @@ export function TeamForm({
           />
         )}
       </FormField>
-      <FormField label="Invite by email" optional>
+      <FormField
+        label="Invite by email"
+        optional
+        description={
+          form.invited.length === 0 ? undefined : (
+            <>
+              Invited <ReplayMask>{andList(form.invited)}</ReplayMask>
+            </>
+          )
+        }
+      >
         {(control) => (
           <TextField
             field={control}
@@ -174,11 +241,11 @@ export function TeamForm({
           />
         )}
       </FormField>
-      {form.refusal === undefined ? null : (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          <ReplayMask>{form.refusal}</ReplayMask>
+      {[...(form.refusal === undefined ? [] : [form.refusal]), ...form.refused].map((words) => (
+        <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          <ReplayMask>{words}</ReplayMask>
         </Text>
-      )}
+      ))}
     </Stack>
   );
 }
