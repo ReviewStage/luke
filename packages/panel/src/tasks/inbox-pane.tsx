@@ -18,7 +18,6 @@ import {
 } from "@repo/features/inbox-wire";
 import { markdownLink } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   BackButton,
@@ -30,7 +29,6 @@ import {
   Card,
   CardHead,
   type Crumb,
-  ErrorState,
   Fill,
   GAP,
   IconButton,
@@ -83,10 +81,8 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
-import { useConnected } from "../connection.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
-import { unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { appStateQuery, selectAccount } from "../use-app-state.js";
@@ -134,7 +130,6 @@ import {
   holderAutomationId,
   holderName,
   INBOX_HOLDER,
-  INBOX_NOT_READ,
   INBOX_SETTLED_STANDING,
   type InboxDraft,
   type InboxHolder,
@@ -1619,7 +1614,6 @@ export function InboxPane({
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
-  const connected = useConnected();
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
@@ -1869,15 +1863,6 @@ export function InboxPane({
                 </ConversationRows>
               </ReplyDoorProvider>
             </ItemWords>
-            {/* Note that the thread above keeps its words with no line under it while the app is offline, since the Offline mark says why. */}
-            {control.failed && connected ? (
-              <ErrorState
-                failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
-                onRetry={control.onRetry}
-              >
-                {INBOX_NOT_READ}
-              </ErrorState>
-            ) : null}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
