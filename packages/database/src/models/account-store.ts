@@ -73,8 +73,8 @@ export interface AccountPreferencesWritten extends AccountPreferencesRow {
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
  * `preferences` is the shared part; the link choice, Enter's choice, the
- * commit author, and setup finished are parts of their own, which a build that predates them
- * never sends.
+ * commit author, setup finished, and the setup place are parts of their own, which a build
+ * that predates them never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
@@ -82,6 +82,7 @@ export interface AccountPreferencesWrite {
   agentEnter?: AgentEnter;
   commitAuthor?: CommitAuthor;
   setupFinished?: boolean;
+  setupPlace?: string;
   agent?: ModelChoice;
   chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
@@ -153,6 +154,7 @@ const PREFERENCE_COLUMNS = {
   agentEnter: accountPreference.agentEnter,
   commitAuthor: accountPreference.commitAuthor,
   setupFinished: accountPreference.setupFinished,
+  setupPlace: accountPreference.setupPlace,
   agentModel: accountPreference.agentModel,
   agentEffort: accountPreference.agentEffort,
   agentContextWindow: accountPreference.agentContextWindow,
@@ -166,6 +168,7 @@ const PreferenceRowSchema = Schema.Struct({
   agentEnter: Schema.NullOr(Schema.String),
   commitAuthor: Schema.NullOr(Schema.String),
   setupFinished: Schema.NullOr(Schema.Boolean),
+  setupPlace: Schema.NullOr(Schema.String),
   agentModel: Schema.NullOr(Schema.String),
   agentEffort: Schema.NullOr(Schema.String),
   agentContextWindow: Schema.NullOr(contextWindowSchema),
@@ -189,6 +192,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         ...(row.agentEnter ? { agentEnter: row.agentEnter } : undefined),
         ...(row.commitAuthor ? { commitAuthor: row.commitAuthor } : undefined),
         ...(row.setupFinished === null ? undefined : { setupFinished: row.setupFinished }),
+        ...(row.setupPlace ? { setupPlace: row.setupPlace } : undefined),
       }) ?? {},
     agent: storedAgentChoice(row),
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
@@ -312,6 +316,7 @@ const PreferenceWriteSchema = Schema.Struct({
   agentEnter: Schema.optionalKey(Schema.Literals(AGENT_ENTER_LIST)),
   commitAuthor: Schema.optionalKey(Schema.Literals(COMMIT_AUTHOR_LIST)),
   setupFinished: Schema.optionalKey(Schema.Boolean),
+  setupPlace: Schema.optionalKey(Schema.String),
   agent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
@@ -335,6 +340,7 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
     ...(write.commitAuthor === undefined ? undefined : { commitAuthor: write.commitAuthor }),
     ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
+    ...(write.setupPlace === undefined ? undefined : { setupPlace: write.setupPlace }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
     ...(write.agent === undefined
@@ -397,6 +403,7 @@ export function writeAccountPreferences(
       ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
       ...(write.commitAuthor === undefined ? undefined : { commitAuthor: write.commitAuthor }),
       ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
+      ...(write.setupPlace === undefined ? undefined : { setupPlace: write.setupPlace }),
       ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),

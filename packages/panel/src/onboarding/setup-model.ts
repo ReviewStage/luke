@@ -6,14 +6,7 @@
  * workspace with no agent connected walks its Connect an agent step alone.
  */
 
-/** Who the account is set up for, as setup's first step asks, or a team's, which invited it, and asks nothing. */
-export const SETUP_AUDIENCE = {
-  ME: "me",
-  TEAM: "team",
-  INVITED: "invited",
-} as const;
-
-export type SetupAudience = (typeof SETUP_AUDIENCE)[keyof typeof SETUP_AUDIENCE];
+import { SETUP_AUDIENCE, type SetupAudience } from "@repo/settings";
 
 /** Setup's steps, each a card of its own. */
 export const SETUP_STEP = {
@@ -63,21 +56,23 @@ export type SetupGate = (typeof SETUP_GATE)[keyof typeof SETUP_GATE];
  * belongs to no team's workspace, so an account that has worked before is
  * never set up again on another machine, or one invited into a team's
  * workspace, whose teammates' tasks it holds, which is asked for an agent
- * alone. Finished is the account's, so it holds on every machine. Once setup
- * has started on this machine it stands until finished, whatever it has
- * connected or made meanwhile. Until the account's preferences are read,
- * which say whether it finished on another machine, its workspaces, which
- * say whether a team invited it, and the agent's read answer, a new account
- * waits on them rather than glimpsing setup or the app; one a team invited
- * is let in meanwhile, since most have an agent.
+ * alone. Finished is the account's, so it holds on every machine, and so is
+ * where setup stands: once setup has started on any machine it stands until
+ * finished, whatever it has connected or made meanwhile. Until the account's
+ * preferences are read, which say whether it started or finished on another
+ * machine, its workspaces, which say whether a team invited it, and the
+ * agent's read answer, a new account waits on them rather than glimpsing
+ * setup or the app, even with an agent connected; one a team invited is let
+ * in meanwhile, since most have an agent.
  */
 export function setupGate(account: {
   readonly id: string | undefined;
   readonly fresh: boolean;
   /** Whether the account finished setup, on any machine. */
   readonly finished: boolean;
-  /** Whether the account's preferences were read, so `finished` speaks for every machine. */
+  /** Whether the account's preferences were read, so `finished` and `started` speak for every machine. */
   readonly accountRead: boolean;
+  /** Whether setup started for the account, on any machine. */
   readonly started: boolean;
   /** Whether the account belongs to a team's workspace; nothing while its workspaces are still read. */
   readonly invited: boolean | undefined;
@@ -86,7 +81,9 @@ export function setupGate(account: {
 }): SetupGate {
   if (account.id === undefined || account.finished) return SETUP_GATE.NONE;
   if (account.started) return account.accountRead ? SETUP_GATE.OWED : SETUP_GATE.WAIT;
-  if (account.agent === true) return SETUP_GATE.NONE;
+  if (account.agent === true) {
+    return account.fresh && !account.accountRead ? SETUP_GATE.WAIT : SETUP_GATE.NONE;
+  }
   if (account.invited === true) {
     return account.accountRead && account.agent === false ? SETUP_GATE.OWED : SETUP_GATE.NONE;
   }

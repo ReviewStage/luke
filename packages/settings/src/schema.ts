@@ -39,6 +39,7 @@ import {
   MAC_COMMAND_MODE_LIST,
 } from "./mac-commands.js";
 import {
+  accountHiddenSetting,
   accountToggleSetting,
   buildToggleSetting,
   choiceSetting,
@@ -52,6 +53,7 @@ import {
   SETTINGS_RESET_SCOPE,
   type SettingsVisibility,
 } from "./schema-types.js";
+import { isSetupPlaceJson } from "./setup-place.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
@@ -335,6 +337,21 @@ export const APP_SETTING_SCHEMA = {
     // Nothing to run per write: the window reads it as it decides whether setup stands.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: () => false,
+  }),
+  /*
+   * Where the account stands in setup, as its JSON (`setup-place.ts`), so
+   * setup left partway resumes at the same step on every machine. An account
+   * preference riding a part of the snapshot of its own, as setup finished
+   * does; drawn nowhere, since only setup's steps write it.
+   */
+  setupPlace: accountHiddenSetting({
+    field: "setupPlace",
+    id: APP_SETTING_ID.SETUP_PLACE,
+    page: SETTINGS_PAGE.ACCOUNT,
+    order: 910,
+    // Nothing to run per write: the window reads it as it draws setup.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    guard: isSetupPlaceJson,
   }),
   lineNumbers: toggleSetting({
     field: "lineNumbers",

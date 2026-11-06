@@ -79,6 +79,14 @@ export {
   settingVisible,
   snapshotAccountPreferences,
 } from "./schema-access.js";
+export {
+  isSetupPlaceJson,
+  SETUP_AUDIENCE,
+  type SetupAudience,
+  type SetupPlace,
+  setupPlaceFrom,
+  setupPlaceStored,
+} from "./setup-place.js";
 export { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 export {
   isZoomPercent,

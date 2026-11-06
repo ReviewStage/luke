@@ -194,6 +194,8 @@ const SAMPLE_VALUE = {
   commitAuthor: COMMIT_AUTHOR.APP,
   // Not yet is the default, so finished is the state that has to survive a reopen.
   setupFinished: true,
+  // Not yet started is the default, so a place midway through a team's setup is the state that has to survive a reopen.
+  setupPlace: '{"audience":"team","at":2,"team":"workspace-ada"}',
   // Each diff setting away from its default, the look a review tool's reader picked.
   lineNumbers: false,
   wordWrap: false,
