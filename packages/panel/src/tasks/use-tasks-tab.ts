@@ -3603,6 +3603,16 @@ export function useTasksTab(input: {
    * slug, which may name a workspace by a slug it has since given up.
    */
   const openInboxItemById = (place: InboxItemPlace) => {
+    // Note that the item the Inbox already stands on, once found, opens at once, so the door keeps it standing rather than waiting on the service while the window leaves it.
+    const standing = inboxView?.chosen;
+    const found =
+      standing !== undefined &&
+      ("taskId" in standing || "agentId" in standing || standing.opened === true);
+    if (inboxView?.standingIn !== undefined && found && standing.itemId === place.itemId) {
+      const at = { workspace: inboxView.standingIn, narrowed: inboxView.narrowed };
+      standInbox(at, { ...standing, opened: true });
+      return;
+    }
     const mine = navigations.current;
     readInboxItemHome(queryClient, place.itemId).then((home) => {
       if (navigations.current !== mine) return;

@@ -2,8 +2,8 @@ import type { Workspace } from "@repo/features/workspace-wire";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@repo/settings/settings-views";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useRef } from "react";
-import { ROUTED_PLACE, settingsViewOfPage } from "./route-gates.js";
-import { useRoutedLocation } from "./routed-location.js";
+import { ROUTED_PLACE, useWindowPlace } from "./places/routed-places.js";
+import { settingsViewOfPage } from "./route-gates.js";
 import { landOnSettingsRow } from "./settings-search.js";
 
 /**
@@ -54,7 +54,7 @@ export function useSettingsRoute(input: {
   const { workspaces, listedId, narrow } = input;
   const router = useRouter();
   const navigate = useNavigate();
-  const here = useRoutedLocation();
+  const here = useWindowPlace();
   const standing = here.place === ROUTED_PLACE.SETTINGS;
   const { params } = here;
   const slug = standing ? params.workspace : undefined;

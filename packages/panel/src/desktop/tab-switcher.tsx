@@ -63,8 +63,8 @@ import { liveStepTitle, memberName, NAMED_STEP, stepTitle } from "../history-tit
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
+import type { RoutedPlace } from "../places/routed-places.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { ROUTED_PLACE } from "../route-gates.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { stripTabLook } from "../tasks/strip-tab-kinds.js";
 import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
@@ -337,11 +337,14 @@ function claim(event: Event): void {
 export function TabSwitcher({
   available,
   tab,
+  place,
   onTabChange,
   tasks,
 }: {
   available: boolean;
   tab: PanelTab;
+  /** The routed place the window stands on, which names its step; none while the window's state says where it stands. */
+  place: RoutedPlace | undefined;
   onTabChange: (tab: PanelTab) => void;
   tasks: TasksControl;
 }): React.JSX.Element | null {
@@ -426,7 +429,7 @@ export function TabSwitcher({
 
   // The window's stops follow where it stands, each render, and what Back's list calls the stop standing.
   const now = standingOf(tab, tasks);
-  const title = stepTitle(tab === PANEL_TAB.SETTINGS ? ROUTED_PLACE.SETTINGS : undefined, tasks);
+  const title = stepTitle(place, tasks);
   useEffect(() => {
     const before = shown.current;
     shown.current = now;
