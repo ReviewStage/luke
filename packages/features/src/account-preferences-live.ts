@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { CONTEXT_WINDOW } from "./agent-wire.js";
-import { type ChaptersModelId, chaptersModelFrom } from "./chapters-model-choice.js";
+import { type ChaptersPick, chaptersModelFrom } from "./chapters-model-choice.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import {
   AGENT_DEFAULT_CHOICE,
@@ -56,7 +56,7 @@ export interface AccountPreferencesLive {
   /** The coding agents' default the account stored; none until it chooses, where a surface draws the fallback (`agentDefaultOf`). */
   readonly agent: ModelChoice | undefined;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses. */
-  readonly chaptersModel: ChaptersModelId;
+  readonly chaptersModel: ChaptersPick;
   /** Whether our Slack bot writes the account the threads that wait on it; on until the account chooses. */
   readonly slackNotifications: boolean;
 }

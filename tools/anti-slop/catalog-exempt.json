@@ -4,7 +4,8 @@
     "DisclosureScope": "A context provider: draws only its children.",
     "PageScrollContext": "A React context a page provides its scroller in: draws nothing.",
     "RetryOffered": "A React context ErrorState reads: draws nothing.",
-    "RevealArea": "A context provider: draws only its children."
+    "RevealArea": "A context provider: draws only its children.",
+    "TimeTicks": "Runs the window's minute tick: draws only its children."
   },
   "awaitingAnExample": [
     "MenuRowList",

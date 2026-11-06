@@ -33,12 +33,11 @@ import {
   readMessageByClientId,
 } from "@repo/database/models/message-reads";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
 import { automationRun } from "@repo/features/model-label";
 import { toolPartName } from "@repo/wire/ui-messages";
 import { Effect } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
 
 /** Why a turn may keep no memory, in words the model can act on. */

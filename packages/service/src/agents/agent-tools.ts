@@ -42,6 +42,7 @@ import {
   runtimeChoiceRefusalWords,
   runtimeModels,
 } from "@repo/features/agent-runtime-models";
+import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   ADDED_REPOSITORY_CHECKOUT,
   AGENT_ARCHIVER,
@@ -113,7 +114,6 @@ import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "../tasks/
 import { createTaskAsked } from "../tasks/task-create-relation.js";
 import { archivedAgent, changedAgent } from "./agent-change.js";
 import { agentStarterName, controlsAgent } from "./agent-reach.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { addAgentRepository, addedRepositoryLine } from "./coder-host/agent-repository-add.js";
 import {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CALL_FAULT } from "@repo/features";
+import { CALL_FAULT, ServiceReach } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
@@ -76,7 +76,7 @@ import {
 import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber, SubscriptionRef } from "effect";
 import { TestClock } from "effect/testing";
 import {
   type AppAccountPreferences,
@@ -365,6 +365,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
+      }),
+    writeChaptersProvider: (provider) =>
+      Effect.sync(() => {
+        asked.push(`chapters-provider:${provider}`);
+        return { provider };
       }),
     // SAFETY: the hosts' read is the one live read the client is asked for by its declaration.
     liveRead: ((
@@ -1214,6 +1219,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } },
     );
+    assert.deepEqual(
+      yield* acts.AGENTS_CHAPTERS_PROVIDER_WRITE({ provider: MODEL_PROVIDER.OPENAI }),
+      { provider: MODEL_PROVIDER.OPENAI },
+    );
     assert.deepEqual(yield* acts.AGENTS_LIST({ taskId: TASK_ID }), {
       agents: [AGENT],
     });
@@ -1446,6 +1455,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
 
     assert.deepEqual(asked, [
       "default:openai/gpt-6.1-sol:xhigh",
+      `chapters-provider:${MODEL_PROVIDER.OPENAI}`,
       `list:${TASK_ID}`,
       `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
@@ -2136,34 +2146,39 @@ it.effect(
 );
 
 it.effect(
-  "a live read that gets no answer is asked again past the bound, and the transcript reads on once the service answers",
+  "a live read that gets no answer is asked again past the bound on a backoff, and the transcript reads on the moment the service answers again",
   () =>
     Effect.gen(function* () {
-      const { call, asked, held, sealTranscript, live } = yield* subject();
-      const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
-      sealTranscript(OFFLINE);
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      yield* TestClock.adjust("2 minutes");
-      yield* settled;
-      assert.ok(seals() > 60, `read ${seals()} times`);
-      assert.deepEqual(
-        held().at(-1)?.failure,
-        OFFLINE,
-        "the read said it got no answer, never that it gave up",
-      );
+      const reach = yield* SubscriptionRef.make({ reachable: false, answeredAt: 0 });
+      yield* Effect.gen(function* () {
+        const { call, asked, held, sealTranscript, live } = yield* subject();
+        const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
+        sealTranscript(OFFLINE);
+        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* settled;
+        yield* TestClock.adjust("2 minutes");
+        yield* settled;
+        // Note that the waits double from two seconds, asking at 0, 2, 6, 14, 30, and 62 seconds: past the bound of refusals, and nowhere near once a second.
+        assert.equal(seals(), 6);
+        assert.deepEqual(
+          held().at(-1)?.failure,
+          OFFLINE,
+          "the read said it got no answer, never that it gave up",
+        );
 
-      // Note that the read never gave up, so its next ask, a second on, finds the service answering.
-      sealTranscript(LIVE_ANSWERED);
-      yield* TestClock.adjust("1 second");
-      yield* settled;
-      transcriptRows(live, 2);
-      yield* settled;
-      assert.equal(held().at(-1)?.failure, undefined, "the failure is let go once it reads");
-      assert.ok(
-        asked.includes(`messages-now:${AGENT_ID}:1:0`),
-        "the page past the newest is read once the live read stands",
-      );
+        // Note that the read never gave up, so the service answering again asks at once, a minute short of its wait.
+        sealTranscript(LIVE_ANSWERED);
+        yield* SubscriptionRef.set(reach, { reachable: true, answeredAt: 1 });
+        yield* settled;
+        assert.equal(seals(), 7);
+        transcriptRows(live, 2);
+        yield* settled;
+        assert.equal(held().at(-1)?.failure, undefined, "the failure is let go once it reads");
+        assert.ok(
+          asked.includes(`messages-now:${AGENT_ID}:1:0`),
+          "the page past the newest is read once the live read stands",
+        );
+      }).pipe(Effect.provideService(ServiceReach, reach));
     }),
 );
 
@@ -2458,26 +2473,29 @@ it.effect(
 );
 
 it.effect(
-  "a transcript held again while the service answers no read at all stays followed, and reads on once the service is back",
+  "a transcript held again while the service answers no read at all stays followed, and reads on the moment the service is back",
   () =>
     Effect.gen(function* () {
-      const harness = yield* subject();
-      yield* followedOnce(harness);
-      const { held } = harness;
-      harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      yield* TestClock.adjust("40 seconds");
-      yield* settled;
+      const reach = yield* SubscriptionRef.make({ reachable: false, answeredAt: 0 });
+      yield* Effect.gen(function* () {
+        const harness = yield* subject();
+        yield* followedOnce(harness);
+        const { held } = harness;
+        harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+        harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+        yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+        yield* settled;
+        yield* TestClock.adjust("40 seconds");
+        yield* settled;
 
-      const back = pageNow("3:0", { holds: false, text: "Back again." });
-      harness.pageNow(back);
-      harness.pageNewest(newestPage("3:0", "Back again.", "40"));
-      yield* TestClock.adjust("5 seconds");
-      yield* settled;
-      assert.equal(held().at(-1)?.failure, undefined);
-      assert.ok(JSON.stringify(held().at(-1)?.messages).includes("Back again."));
+        const back = pageNow("3:0", { holds: false, text: "Back again." });
+        harness.pageNow(back);
+        harness.pageNewest(newestPage("3:0", "Back again.", "40"));
+        yield* SubscriptionRef.set(reach, { reachable: true, answeredAt: 1 });
+        yield* settled;
+        assert.equal(held().at(-1)?.failure, undefined);
+        assert.ok(JSON.stringify(held().at(-1)?.messages).includes("Back again."));
+      }).pipe(Effect.provideService(ServiceReach, reach));
     }),
 );
 

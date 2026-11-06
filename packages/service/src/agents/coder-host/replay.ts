@@ -29,7 +29,7 @@ import {
   type StartNoteHeading,
   toolStep,
 } from "@repo/features/agent-replay";
-import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_BOUNDS,
@@ -63,7 +63,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import type { SnapshotOutcome } from "./snapshot.js";
-import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
+import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
 
 /**
@@ -141,13 +141,13 @@ interface CallWords {
  * their files in their own input and stand apart.
  */
 const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
-  [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
-  [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
-  [CODER_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
-  [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [AGENT_TOOL.BASH, { verb: "Ran", key: "command" }],
+  [AGENT_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
+  [AGENT_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
+  [AGENT_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
+  [AGENT_TOOL.GREP, { verb: "Searched", key: "pattern" }],
+  [AGENT_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
+  [AGENT_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
   [RETIRED_CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
   [CLAUDE_CODE_TOOL.BASH, { verb: "Ran", key: "command" }],
@@ -163,14 +163,14 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   // Note that its verb is the transcript's own, which the replay card reads back as the pull request's line.
   [
-    CODER_TOOL.OPEN_PULL_REQUEST,
+    AGENT_TOOL.OPEN_PULL_REQUEST,
     { verb: ROW_CALL_WORDS[CALL_KIND.OPEN_PULL_REQUEST].verb, key: "title" },
   ],
 ]);
 
 /** The tools that edit the one file their input names: the retired runtime's own, and Claude Code's. */
 const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
-  CODER_TOOL.WRITE_FILE,
+  AGENT_TOOL.WRITE_FILE,
   CLAUDE_CODE_TOOL.WRITE,
   CLAUDE_CODE_TOOL.EDIT,
   CLAUDE_CODE_TOOL.NOTEBOOK_EDIT,
@@ -239,14 +239,14 @@ function changedFiles(input: UnparsedWireValue): readonly string[] {
 
 /** The files a patch or a Codex file change edits; none for any other call. */
 function patchedFiles(name: string, input: UnparsedWireValue): readonly string[] {
-  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
+  if (name === AGENT_TOOL.APPLY_PATCH) return patchFiles(input);
   if (name === CODEX_TOOL.FILE_CHANGE) return changedFiles(input);
   return [];
 }
 
 /** What a call was done to, read from its input alone. */
 function subjectOf(name: string, input: UnparsedWireValue): string {
-  if (name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
+  if (name === AGENT_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
     return patchedFiles(name, input).join(", ");
   }
   const words = CALL_WORDS.get(name);
@@ -259,7 +259,7 @@ function subjectOf(name: string, input: UnparsedWireValue): string {
 export function callEntry(part: StoredToolPart): string {
   const name = part.type.slice("tool-".length);
   const verb =
-    name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
+    name === AGENT_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
       ? CALL_ENTRY_WORDS.EDITED
       : (CALL_WORDS.get(name)?.verb ?? CALL_ENTRY_WORDS.USED);
   // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.

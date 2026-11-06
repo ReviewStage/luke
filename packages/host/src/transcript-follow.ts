@@ -37,7 +37,14 @@ import {
 } from "effect";
 import type { AppTranscript } from "./app-state.js";
 import type { HeldAnswers } from "./live-collection.js";
-import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
+import {
+  decodedLiveRows,
+  followBackoffWhile,
+  LIVE_STATE,
+  resealWait,
+  type SealedRead,
+  waitOrRegained,
+} from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here over the service's held poll for the windows that draw it, each page laid on its app-state slice as it is read.
@@ -70,12 +77,14 @@ import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
  * then too.
  *
  * The live read is let go a while after the last follow let go of it. A
- * first read the service did not answer is asked for again every `RESEAL`:
- * for as long as its calls get no answer at all, so a transcript opened
- * offline reads itself once the connection is back, and otherwise up to
- * `RESEALS` refusals, and then the follow is told the transcript could not
- * be read, which the window offers to try again, as it is where the live
- * read stops for good. One the account does not reach is told not found.
+ * first read the service did not answer is asked for again on
+ * `FOLLOW_BACKOFF`, as every live follow is, its wait doubling and ended at
+ * once where the service answers again: for as long as its calls get no
+ * answer at all, so a transcript opened offline reads itself the moment the
+ * connection is back, and otherwise up to `RESEALS` refusals, and then the
+ * follow is told the transcript could not be read, which the window offers
+ * to try again, as it is where the live read stops for good. One the
+ * account does not reach is told not found.
  */
 
 /** How many transcripts no window holds any longer stay drawn at most, the least recently let go closed first. */
@@ -87,10 +96,8 @@ export const HELD_BYTES_EACH = HELD_BYTES / 4;
 
 /** How long a live read no follow holds is kept, so the window's next read finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long after a read the service did not answer the transcript is read again. */
-const RESEAL = Duration.seconds(1);
-/** How many refusals of a read the service answered are asked for again before the follow says the transcript could not be read. */
-const RESEALS = 30;
+/** How many refusals of a read the service answered are asked for again before the follow says the transcript could not be read: on `FOLLOW_BACKOFF`, about half a minute. */
+const RESEALS = 4;
 
 /** Whether a failure's own facts say its call got no answer: it ended on the network or its deadline, anywhere down its chain (`CALL_FAULT.NETWORK`). */
 function noAnswer(facts: FailureFacts | undefined): boolean {
@@ -260,7 +267,7 @@ function followedAnswer<Failure extends Failed>(answer: AgentTranscriptLiveAnswe
   return "failure" in answer ? answer : followedRead(answer);
 }
 
-/** The transcript's first read, its newest messages past the start, asked again every `RESEAL` as `resealing` allows while the service does not answer; none where the account does not reach it. */
+/** The transcript's first read, its newest messages past the start, asked again on `FOLLOW_BACKOFF` as `resealing` allows while the service does not answer; none where the account does not reach it. */
 function sealedOf(
   seal: (
     poll: boolean,
@@ -283,7 +290,7 @@ function sealedOf(
         new SealUnanswered(cause === undefined ? { failure } : { failure, cause }),
       );
     }),
-    Effect.retry({ schedule: Schedule.spaced(RESEAL), while: (unsealed) => again(unsealed) }),
+    Effect.retry(followBackoffWhile((unsealed: SealUnanswered) => again(unsealed))),
   );
 }
 
@@ -362,7 +369,7 @@ function movedFrom(was: LiveState): (state: LiveState) => boolean {
       state.digest !== was.digest);
 }
 
-/** A page the service did not answer, which is read again after `RESEAL`; not found is the service's last word. */
+/** A page the service did not answer, which is read again after `resealWait`; not found is the service's last word. */
 function unanswered(answer: { readonly failure: string } | object): boolean {
   return "failure" in answer && answer.failure !== AGENT_CALL_FAILURE.NOT_FOUND;
 }
@@ -548,7 +555,8 @@ function forgetCursor(held: HeldTranscript): Effect.Effect<void> {
  * drops what was held of it, as does a live read the service stopped
  * answering or that stopped for good, told as a page that could not be read
  * and let go, so a follow after it reads anew; a page the service did not
- * answer is told as such and read again after `RESEAL`.
+ * answer is told as such and read again after `resealWait`, doubling while
+ * the pages go unanswered in a row, or as soon as the service answers again.
  */
 export function followTranscript<Key>(
   follows: TranscriptFollows<Key>,
@@ -572,10 +580,14 @@ export function followTranscript<Key>(
             return tell(answer);
           }),
           // Note that a newest page the service keeps not answering is asked for again as the live read is (`resealing`), and then ends the follow on the failure told, so the window offers Try again.
-          Effect.repeat({
-            schedule: Schedule.spaced(RESEAL),
-            while: (answer) => "failure" in answer && unanswered(answer) && again(answer),
-          }),
+          Effect.repeat(
+            Schedule.passthrough(
+              followBackoffWhile(
+                (answer: Effect.Success<ReturnType<TranscriptReads["newest"]>>) =>
+                  "failure" in answer && unanswered(answer) && again(answer),
+              ),
+            ),
+          ),
         );
       });
       // Note that a window held stands drawn before the service is asked anything, so the window draws it with no round trip; one holding nothing reads the newest page beside the live read, not after it, its cursor what makes following on from it safe.
@@ -676,6 +688,12 @@ export function followTranscript<Key>(
       );
       /** The last page told, whose word on the agent the rows drawn beside the next read are told with; none before the first. */
       let last: AgentTranscriptPage | undefined;
+      // Note that the wait before reading again after an unanswered page doubles while they go unanswered in a row, and counts from the first again once one is answered.
+      let unansweredInRow = 0;
+      const readAgain = () => {
+        unansweredInRow += 1;
+        return waitOrRegained(resealWait(unansweredInRow));
+      };
       while (true) {
         yield* wake;
         const was = yield* SubscriptionRef.get(state);
@@ -703,10 +721,11 @@ export function followTranscript<Key>(
           if ("failure" in newest) {
             if (newest.failure === AGENT_CALL_FAILURE.NOT_FOUND) return;
             // Note that a service that answers neither read is down rather than refusing the cursor, so the follow stays and tries both again, as any page it did not answer is read again.
-            wake = Effect.sleep(RESEAL);
+            wake = readAgain();
             continue;
           }
           fromHeld = false;
+          unansweredInRow = 0;
           window = newest;
           heardPaged(newest.messages, newest.cursor);
           wake = Effect.void;
@@ -718,9 +737,10 @@ export function followTranscript<Key>(
           const newest = yield* readNewest;
           if ("failure" in newest) {
             if (newest.failure === AGENT_CALL_FAILURE.NOT_FOUND) return;
-            wake = Effect.sleep(RESEAL);
+            wake = readAgain();
             continue;
           }
+          unansweredInRow = 0;
           window = newest;
           told.clear();
           heardPaged(newest.messages, newest.cursor);
@@ -738,9 +758,10 @@ export function followTranscript<Key>(
         last = page;
         if ("failure" in answer) {
           if (answer.failure === AGENT_CALL_FAILURE.NOT_FOUND) return;
-          wake = Effect.sleep(RESEAL);
+          wake = readAgain();
           continue;
         }
+        unansweredInRow = 0;
         window = joinedWindow(window, shown);
         // Note that a full page is followed by the next at once, and a short one is caught up, with no empty page read to say so.
         if (answer.messages.length >= AGENT_BOUNDS.MESSAGES_PAGE) {

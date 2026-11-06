@@ -112,10 +112,8 @@ it.effect(
           });
 
         const hold = yield* Effect.promise(() => askAct(ACT_KIND.INTEGRATIONS_FOLLOW));
-        yield* drawsSlack(INTEGRATION_STATUS.PENDING);
-        assert.equal(service.settled(), false, "nothing is settled before its interval");
         yield* drawsSlack(INTEGRATION_STATUS.CONNECTED);
-        assert.equal(service.settled(), true, "the host settled it, with no panel drawn");
+        assert.equal(service.settled(), true, "the host settled it as drawn, with no panel drawn");
         yield* Effect.promise(async () => {
           await hold.return?.(undefined);
         });

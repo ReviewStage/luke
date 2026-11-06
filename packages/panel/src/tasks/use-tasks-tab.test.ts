@@ -47,7 +47,6 @@ import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
-import { timeRuntime } from "@repo/ui";
 import {
   agentTab,
   changesTab,
@@ -58,6 +57,7 @@ import {
   subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { serveEffectsOn } from "@repo/ui/testing/effect-services";
 import { useRouter } from "@tanstack/react-router";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -3842,10 +3842,10 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
  * those waits.
  */
 function registryOn(clock: Clock.Clock): AtomRegistry {
+  serveEffectsOn(Context.make(Clock.Clock, clock));
   fakeActPort({});
   return registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), [
     [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-    [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
   ]);
 }
 

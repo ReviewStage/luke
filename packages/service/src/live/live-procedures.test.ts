@@ -1879,6 +1879,10 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
             number: 7,
             generatable: true,
             runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: "claude-haiku-5-5" },
+            runsOnChoices: [
+              { provider: MODEL_PROVIDER.ANTHROPIC, model: "claude-haiku-5-5" },
+              { provider: MODEL_PROVIDER.OPENAI, model: "gpt-6-luna" },
+            ],
             chapters: {
               status: "generating",
               headSha: "c0ffee1",

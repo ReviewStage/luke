@@ -4,11 +4,11 @@ import { it } from "@effect/vitest";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_PAIRING_POLL_STATUS } from "@repo/features/host-wire";
 import { inArray } from "drizzle-orm";
-import { Clock, Effect, Exit, Option } from "effect";
+import { Effect, Exit, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { hostPairing } from "../../schemas/host-pairing.js";
+import { hostPairing, hostPairingGuess } from "../../schemas/host-pairing.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   approveHostPairing,
@@ -17,7 +17,6 @@ import {
   openHostPairing,
   pollHostPairing,
   readHostPairing,
-  sweepHostPairings,
 } from "../host-pairing-store.js";
 import { enrollOwnDevice, hostBySecret, hostsOf } from "../host-store.js";
 
@@ -26,9 +25,10 @@ import { enrollOwnDevice, hostBySecret, hostsOf } from "../host-store.js";
  * denied a code, no account reads, approves, or denies it again, and the
  * approve made one host, listed under its approver alone; an approve never
  * takes over a device that stands; a box that polls past its collect
- * grace is handed no secret; and the sweep deletes a lapsed pairing, the
- * address it kept with it, and a host whose box never collected its secret,
- * while a host keyed by its poll stays.
+ * grace is handed no secret; and a start deletes a lapsed pairing, the
+ * address it kept with it, a host whose box never collected its secret, and
+ * a guess window that ended, while a keyed host, a live pairing, the host
+ * it approved, and a window still open stay.
  * Synthetic accounts, codes, hashes, addresses, and boxes throughout.
  */
 
@@ -121,30 +121,33 @@ it.layer(getTestDB())("a box's pairings", (it) => {
   );
 
   it.effect(
-    "the sweep deletes lapsed pairings and the address each kept, and a host whose box never collected its secret, while a keyed host stays",
+    "a start deletes lapsed pairings, the address each kept, a host whose box never collected its secret, and ended guess windows, and leaves what is live",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        const { owner } = yield* openAccounts;
+        const { owner, other } = yield* openAccounts;
         const collected = yield* opened;
         const uncollected = yield* opened;
         const pending = yield* opened;
-        const [collectedId, uncollectedId] = [randomUUID(), randomUUID()];
+        const [collectedId, uncollectedId, liveId] = [randomUUID(), randomUUID(), randomUUID()];
         yield* approveHostPairing(owner, collected.userCode, collectedId);
         yield* approveHostPairing(owner, uncollected.userCode, uncollectedId);
+        yield* readHostPairing(other, randomUUID());
         const polled = yield* pollHostPairing(collected.pollSecretHash, `secret-${randomUUID()}`);
         const listedBefore = (yield* hostsOf(owner)).map((host) => host.id).sort();
 
-        yield* TestClock.adjust("11 minutes");
+        yield* TestClock.adjust("16 minutes");
         const late = yield* pollHostPairing(uncollected.pollSecretHash, `secret-${randomUUID()}`);
-        yield* sweepHostPairings(new Date(yield* Clock.currentTimeMillis));
+        const live = yield* opened;
+        yield* approveHostPairing(owner, live.userCode, liveId);
+        const livePending = yield* opened;
 
         assert.equal(polled.status, HOST_PAIRING_POLL_STATUS.APPROVED);
         assert.equal(late.status, HOST_PAIRING_POLL_STATUS.EXPIRED, "past its grace, no secret");
         assert.deepEqual(listedBefore, [collectedId, uncollectedId].sort());
         assert.deepEqual(
-          (yield* hostsOf(owner)).map((host) => host.id),
-          [collectedId],
+          (yield* hostsOf(owner)).map((host) => host.id).sort(),
+          [collectedId, liveId].sort(),
         );
         const kept = yield* db
           .select({ ip: hostPairing.ip })
@@ -157,6 +160,16 @@ it.layer(getTestDB())("a box's pairings", (it) => {
             ]),
           );
         assert.deepEqual(kept, []);
+        const windows = yield* db
+          .select({ userId: hostPairingGuess.userId })
+          .from(hostPairingGuess)
+          .where(inArray(hostPairingGuess.userId, [owner, other]));
+        assert.deepEqual(windows, [{ userId: owner }]);
+        assert.equal((yield* readHostPairing(owner, livePending.userCode)).guess, "found");
+        assert.equal(
+          (yield* pollHostPairing(live.pollSecretHash, `secret-${randomUUID()}`)).status,
+          HOST_PAIRING_POLL_STATUS.APPROVED,
+        );
       }),
   );
 });

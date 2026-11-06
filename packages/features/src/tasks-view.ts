@@ -10,6 +10,9 @@ import {
   tasklessAgentSchema,
 } from "./agent-wire.js";
 import { githubContract } from "./contract/github.js";
+import { repositoryPinsContract } from "./contract/repository-pins.js";
+import { taskFilesContract } from "./contract/task-files.js";
+import { taskSectionsContract } from "./contract/task-sections.js";
 import { tasksContract } from "./contract/tasks.js";
 import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
@@ -405,6 +408,9 @@ const declaredTaskCalls = {
   block: tasksContract.block,
   parent: tasksContract.parent,
   relation: tasksContract.relation,
+  files: taskFilesContract,
+  sections: taskSectionsContract,
+  pins: repositoryPinsContract,
 };
 
 /** Every failure those procedures may end with, as the domain spells it. */
@@ -807,12 +813,11 @@ export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
 
 export type TasksPictureKeepParams = typeof tasksPictureKeepParamsSchema.Type;
 
-/** Why a picture was not kept: the description holds its bound of pictures, or of videos, the plan is not the account's to write, or no answer. */
+/** Why a picture was not kept: the description holds its bound of pictures, or of videos, as the service answers in band, or how its procedure failed: the plan is not the account's to write, or no answer. */
 export const PICTURE_KEEP_FAILURE = {
   TOO_MANY: "too-many",
   TOO_MANY_VIDEOS: "too-many-videos",
-  NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
-  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
+  ...failureSetOf(taskFilesContract.keepPicture),
 } as const;
 
 /** A picture kept, as the editor hears it: the id its text names it by, or why it was not kept. */
