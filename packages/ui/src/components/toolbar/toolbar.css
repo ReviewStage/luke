@@ -285,7 +285,10 @@
      room kept for the window's buttons at the start, the actions at the end.
      The title moves aside only once it would meet them, and is cut short only
      once it no longer fits between them. The bar is inset alike on both
-     sides, so centered in the bar is centered in the column. */
+     sides, so centered in the bar is centered in the column: at the
+     column's own inset, or nearer its edge where the window stands the
+     bar's start nearer (`--ui-toolbar-start-at`), as a card's way back
+     does. */
   @container style(--ui-toolbar-center: on) {
     .ui-toolbar {
       display: grid;
@@ -300,7 +303,7 @@
         )
         minmax(0, max-content)
         minmax(max-content, 1fr);
-      padding-left: var(--ui-toolbar-column-inset);
+      padding-left: min(var(--ui-toolbar-edge-start), var(--ui-toolbar-column-inset));
     }
 
     .ui-toolbar > .ui-toolbar-heading {
