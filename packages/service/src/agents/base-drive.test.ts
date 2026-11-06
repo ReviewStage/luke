@@ -85,7 +85,9 @@ it.effect(
       const [sandbox] = fake.sandboxes;
       assert.ok(sandbox !== undefined);
       assert.equal(sandbox.image, IMAGE);
-      assert.equal(sandbox.mounts?.[BASE_DRIVE.MOUNT_PATH]?.mode, "read-write");
+      assert.deepEqual(sandbox.mounts, {
+        [BASE_DRIVE.MOUNT_PATH]: { drive: `${name}-staging`, mode: "read-write" },
+      });
       assert.equal(sandbox.deleted, true);
       const clone = fake.runs.findIndex((run) =>
         Object.hasOwn(run.env, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.URL),

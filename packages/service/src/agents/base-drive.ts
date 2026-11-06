@@ -76,6 +76,13 @@ const INSTALL_SCRIPT = [
   "if [ -f pnpm-lock.yaml ]; then pnpm install; elif [ -f package.json ]; then npm install; fi",
 ].join("\n");
 
+/**
+ * What a fill clears from its staging drive before it clones: everything
+ * at the workspace, which only a fill left behind could hold, since a fill
+ * that failed deletes its staging drive where Vercel lets it.
+ */
+const CLEAR_SCRIPT = "find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +";
+
 /** The staging drive a base drive's fill writes, forked under the base drive's own name once whole. */
 function stagingDriveName(name: string): string {
   return `${name}${BASE_DRIVE.STAGING_SUFFIX}`;
@@ -138,7 +145,8 @@ export const installDependencies = Effect.fn("web/installCheckoutDependencies")(
 /**
  * The workspace's repository's base drive filled, where it has none: its
  * staging drive created, a sandbox opened from the agents' image with it
- * mounted at the workspace, the default branch cloned whole onto it through
+ * mounted at the workspace, whatever an earlier fill left on it cleared
+ * (`CLEAR_SCRIPT`), the default branch cloned whole onto it through
  * the token at the firewall for the clone alone, its dependencies installed,
  * the sandbox stopped, the staging drive forked under the base drive's name,
  * and the sandbox and the staging drive deleted. A sandbox name another
@@ -190,6 +198,18 @@ export const fillBaseDrive = Effect.fn("web/fillBaseDrive")(function* (
   );
   yield* Effect.gen(function* () {
     const sandbox = open({ name, running });
+    // Note that what a failed fill left is cleared, or the clone would keep its checkout and the install build on it.
+    const cleared = yield* runInSandbox(
+      sandbox,
+      { command: CLEAR_SCRIPT, workingDirectory: BASE_DRIVE.MOUNT_PATH },
+      REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+    );
+    if (cleared.exitCode !== 0) {
+      return yield* new RepositoryRefusal({
+        reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+        detail: "the staging drive could not be cleared",
+      });
+    }
     yield* cloneRepository(
       sandbox,
       {
