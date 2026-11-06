@@ -18,7 +18,6 @@ import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
 import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { useInboxTask } from "./tasks/use-inbox-task.js";
 import type { SidePanelTab } from "./tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
 
@@ -312,19 +311,8 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
     return [at_(list, LINK_THING.AUTOMATIONS)];
   }
-  const { agentId } = tasks.agentView;
-  if (agentId !== undefined) {
-    const page = at.pageWorkspace;
-    const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
-    const own = at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home);
-    // A tab of the panel beside it with a link of its own, a page the agent showed, its Changes, or a worker's, is at hand under the agent's link, first where the panel holds the keys.
-    const held = tasks.sidePanel.open ? panelTabPlace({ agentId }, tasks.sidePanel.tab) : undefined;
-    const thing = held === undefined ? undefined : panelThing(held);
-    if (held === undefined || thing === undefined) return [own];
-    const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
-    return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
-  }
-  if (tasks.inboxView.open) {
+  // The Inbox is a routed place over whatever the window's state says, on the same terms as the Board.
+  if (tasks.inboxView.open && at.underRouted !== true) {
     // An Inbox narrowed to a task is linked by it, so a copied link or a reload opens it narrowed again.
     const inboxPlace: LinkPlace =
       at.inboxTask === undefined
@@ -339,6 +327,18 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
       return [at_(item, LINK_THING.INBOX_ITEM), within(inboxPlace, LINK_THING.INBOX)];
     }
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
+  }
+  const { agentId } = tasks.agentView;
+  if (agentId !== undefined) {
+    const page = at.pageWorkspace;
+    const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
+    const own = at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home);
+    // A tab of the panel beside it with a link of its own, a page the agent showed, its Changes, or a worker's, is at hand under the agent's link, first where the panel holds the keys.
+    const held = tasks.sidePanel.open ? panelTabPlace({ agentId }, tasks.sidePanel.tab) : undefined;
+    const thing = held === undefined ? undefined : panelThing(held);
+    if (held === undefined || thing === undefined) return [own];
+    const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
+    return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
   }
   // A workspace's address naming none of the reader's has no link of the reader's to offer, so the tab keeps the one it was opened at.
   if (tasks.unknownWorkspace.open) return [];
@@ -398,7 +398,7 @@ export function useCopyLink(
   const copy = (held: LinkAtHand) =>
     copyWords(linkOf(held.link.place, held.link.workspace), LINK_COPY.COPIED);
   const [pageWorkspace, onPageWorkspace] = useState<PageWorkspace | undefined>(undefined);
-  const inboxTask = useInboxTask();
+  const inboxTask = tasks.inboxView.narrowed;
   const linksAt = (sidePanelFocused: boolean) =>
     linksAtHand(tasks, {
       settings,

@@ -28,7 +28,6 @@ import { beforeAll, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { chooseInboxTask } from "../tasks/use-inbox-task.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import {
   type AnyAct,
@@ -1180,7 +1179,7 @@ test("a task chosen narrows the Inbox to every item of its own, open and settled
   chooseView(page, "Addressed to", "Me");
   await settle();
 
-  act(() => chooseInboxTask(BILLING.id));
+  act(() => world.narrowTo(BILLING.id));
   await settle();
   const narrowed = rowTitles(page).toSorted();
   const menu = page.querySelector('button[aria-label="View options"]');

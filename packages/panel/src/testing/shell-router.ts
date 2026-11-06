@@ -7,7 +7,8 @@
  * (`ShellPlaces`) with what the window's state says in their slot
  * (`StatePlace`), and the routed places, Settings, Admin, the Board, a
  * person's page, the Automations pages, and a version history, as their own
- * lazy modules and frames draw them. It is built from TanStack Router's own
+ * lazy modules and frames draw them, and the Inbox, kept beside them all,
+ * whose route draws nothing of its own (`InboxPlace`). It is built from TanStack Router's own
  * routes over the same components `panel-router.tsx` mounts, rather than
  * the window's router, whose root is `App`, so the test's props are what
  * the shell draws from. It holds the shell, the places layout, and the
@@ -30,6 +31,7 @@ import {
   AdminRouteLoading,
   AutomationsRouteLoading,
   BoardRouteLoading,
+  InboxPlace,
   PersonRouteLoading,
   SettingsRouteLoading,
   ShellPlaces,
@@ -40,9 +42,10 @@ import { LAZY_ROUTE } from "../panel-router.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { routeAccessNow } from "../route-gates.js";
 
-/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, a version history's list, or a person's page. */
+/** Where a shell under test stands: a place its state says, Settings's list or a page of it, Admin, the Board, the Automations list, a version history's list, the Inbox, or a person's page. */
 export const SHELL_AT = {
   PLACES: "/app",
+  INBOX: "/acme/inbox",
   SETTINGS: "/app/settings",
   ADMIN: "/acme/admin",
   BOARD: "/acme/tasks",
@@ -82,10 +85,11 @@ interface StandingProps {
     readonly personView?: { readonly userId?: string | undefined };
     readonly automationsView?: { readonly open?: boolean };
     readonly history?: { readonly open?: boolean };
+    readonly inboxView?: { readonly open?: boolean };
   };
 }
 
-/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, a version history, or a person's page where one stands, else the places. */
+/** Where a shell stands by its props: Settings where its tab is, Admin, the Board, the Automations pages, a version history, the Inbox, or a person's page where one stands, else the places. */
 function standingOf(shell: ReactElement): string {
   const props: StandingProps =
     typeof shell.props === "object" && shell.props !== null ? shell.props : {};
@@ -94,6 +98,7 @@ function standingOf(shell: ReactElement): string {
   if (props.tasks?.boardView?.open === true) return SHELL_AT.BOARD;
   if (props.tasks?.automationsView?.open === true) return SHELL_AT.AUTOMATIONS;
   if (props.tasks?.history?.open === true) return SHELL_AT.VERSION_HISTORY;
+  if (props.tasks?.inboxView?.open === true) return SHELL_AT.INBOX;
   const person = props.tasks?.personView?.userId;
   return person === undefined ? SHELL_AT.PLACES : personAt(person);
 }
@@ -143,6 +148,12 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
     getParentRoute: () => automationPages,
     path: "automation/$automationId",
   });
+  const inbox = createRoute({
+    getParentRoute: () => workspace,
+    path: "inbox",
+    component: InboxPlace,
+  });
+  const inboxItem = createRoute({ getParentRoute: () => inbox, path: "$itemId" });
   const settings = createRoute({
     getParentRoute: () => root,
     path: SHELL_AT.SETTINGS,
@@ -178,7 +189,10 @@ function shellRouter(at: string = SHELL_AT.PLACES): ShellRouter {
         admin,
         board,
         person,
-        workspace.addChildren([automationPages.addChildren([automations, automation])]),
+        workspace.addChildren([
+          automationPages.addChildren([automations, automation]),
+          inbox.addChildren([inboxItem]),
+        ]),
       ]),
       settings.addChildren([settingsPage]),
       versionHistory.addChildren([versions, version]),

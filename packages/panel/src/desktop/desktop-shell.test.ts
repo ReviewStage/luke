@@ -200,6 +200,8 @@ function mount(
         onChoose: ignore,
         onOpenItem: () => undefined,
         onClear: ignore,
+        narrowed: undefined,
+        onWiden: () => undefined,
         pages: undefined,
         onTaskAgents: () => undefined,
       },
@@ -218,7 +220,9 @@ function mount(
           ? SHELL_AT.AUTOMATIONS
           : overrides.history?.open === true
             ? SHELL_AT.VERSION_HISTORY
-            : undefined;
+            : (overrides.inboxView?.open ?? inboxOpen)
+              ? SHELL_AT.INBOX
+              : undefined;
   act(() => root?.render(onRegistry(registry, underRouter(createElement(Shell), at))));
   return container;
 }
@@ -397,7 +401,7 @@ function drawLoadingNarrow(
               onBack: () => went.push("back"),
               steps: {
                 back: [
-                  { at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } },
+                  { at: 0, title: { label: "Inbox" }, page: { kind: "routed", of: "/acme/inbox" } },
                 ],
                 forward: [],
               },
@@ -1463,13 +1467,16 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   assert.equal(opened, 1);
 });
 
-test("Admin stands in the plan's place beside the sidebar, its row marked and no row of the place under it, the Inbox under it kept but hidden, with no way back of its own, and the Inbox's row leaves it", async () => {
+test("Admin stands in the plan's place beside the sidebar, its row marked and no other, with no way back of its own, and the Inbox's row opens the Inbox by the router from it", async () => {
   handState({}, { access: { admin: true } });
   const tabs: PanelTab[] = [];
-  // Note that the Inbox stands under Admin, as the window's state holds it while Admin stands over it.
+  const opened: string[] = [];
   const page = mount(
-    true,
-    { adminView: { ...tasksControl().adminView, open: true } },
+    false,
+    {
+      adminView: { ...tasksControl().adminView, open: true },
+      inboxView: { ...tasksControl().inboxView, onOpen: () => opened.push("inbox") },
+    },
     PANEL_TAB.TASKS,
     (tab) => tabs.push(tab),
   );
@@ -1488,14 +1495,10 @@ test("Admin stands in the plan's place beside the sidebar, its row marked and no
     ).length,
     0,
   );
-  const inboxSearch = page.querySelector<HTMLElement>(
-    '.inbox-tasks input[aria-label="Search inbox"]',
-  );
-  assert.ok(inboxSearch, "the Inbox under Admin stays drawn, kept");
-  assert.equal(shownToReader(inboxSearch), false, "and hidden from a reader");
 
   act(() => placeRow(page, "Inbox")?.click());
-  assert.deepEqual(tabs, [PANEL_TAB.TASKS], "the Inbox's row leaves Admin for the Inbox");
+  assert.deepEqual(opened, ["inbox"], "the Inbox's row opens the Inbox");
+  assert.deepEqual(tabs, [], "by its navigation alone, as the Board's row does");
 });
 
 /** The offline status in the title bar beside the traffic lights, if one stands. */

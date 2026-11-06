@@ -50,7 +50,7 @@ const FROM_INBOX: NavigationHistory = {
   onBack: ignore,
   onForward: ignore,
   steps: {
-    back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+    back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "routed", of: "/acme/inbox" } }],
     forward: [],
   },
   onGoTo: ignore,

@@ -25,6 +25,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { AutomationsRoute } from "../automations-route.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
+import type { InboxRoute } from "../inbox-route.js";
 import { descriptionEditMutation } from "../tasks/description-edit-mutation.js";
 import {
   AGENT_RENAME_SHAPE,
@@ -430,6 +431,22 @@ export const VERSION_HISTORY_AWAY: VersionHistoryRoute = {
   onPreload: ignore,
 };
 
+/** The Inbox's route standing nowhere, for a tasks tab drawn with no router to stand it. */
+export const INBOX_AWAY: InboxRoute = {
+  open: false,
+  standingIn: undefined,
+  narrowed: undefined,
+  chosen: undefined,
+  listAddress: undefined,
+  onOpen: ignore,
+  choiceOf: () => undefined,
+  onChoose: ignore,
+  onClear: ignore,
+  onWiden: ignore,
+  onClose: ignore,
+  onTurn: ignore,
+};
+
 /** A person's route standing nowhere, for a tasks tab drawn with no router to stand it. */
 export const PERSON_AWAY: PersonRoute = {
   userId: undefined,
@@ -598,6 +615,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onChoose: ignore,
       onOpenItem: ignore,
       onClear: ignore,
+      narrowed: undefined,
+      onWiden: ignore,
       pages: undefined,
       onTaskAgents: () => undefined,
     },

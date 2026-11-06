@@ -297,6 +297,8 @@ async function inbox(
             onChoose: setChosen,
             onOpenItem: () => undefined,
             onClear: () => setChosen(undefined),
+            narrowed: undefined,
+            onWiden: () => undefined,
             pages,
             onTaskAgents: taskAgents.onRead,
           },
