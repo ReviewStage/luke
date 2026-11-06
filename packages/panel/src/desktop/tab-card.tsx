@@ -88,6 +88,12 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
     }
+  | {
+      readonly kind: typeof TAB_KIND.LOCAL;
+      /** The agent whose mirror its shells stand in. */
+      readonly subject: AgentSubject;
+      readonly models: readonly CatalogModel[] | undefined;
+    }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | {
       readonly kind: typeof TAB_KIND.PAGE;
@@ -233,6 +239,9 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
           }}
         />
       );
+    // A Local tab hangs its agent's card.
+    case TAB_KIND.LOCAL:
+      return <AgentCard subject={subject.subject} models={subject.models} />;
     case TAB_KIND.FILE:
       return <FileCard path={subject.path} />;
     case TAB_KIND.PAGE:

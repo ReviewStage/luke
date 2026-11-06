@@ -67,6 +67,7 @@ import {
   isCloudBrowserTab,
   isDraftTab,
   isFileTab,
+  isLocalTab,
   isPageTab,
   isSubagentTab,
   isTerminalTab,
@@ -215,6 +216,7 @@ import {
 import {
   DRAWN_KINDS,
   drawsChanges,
+  drawsLocal,
   drawsSubagent,
   drawsTerminal,
   isPinnable,
@@ -3641,6 +3643,7 @@ export function useTasksTab(input: {
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
+    if (isLocalTab(tab)) return drawsLocal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);

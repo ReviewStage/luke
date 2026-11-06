@@ -753,7 +753,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
     [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["Pages", "Terminal", "Browser"],
+    ["Pages", "Terminal", "Local", "Browser"],
   );
   const row =
     [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")].find(
@@ -941,7 +941,7 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
     ),
     headings,
   );
-  assert.deepEqual(headings, ["Pull requests", "Terminal", "Browser"]);
+  assert.deepEqual(headings, ["Pull requests", "Terminal", "Local", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the + offers the agent's pull request");
   act(() => changes.click());
@@ -1601,6 +1601,7 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order
     "Copy transcript",
     "Rename",
     "Show terminal⌘J",
+    "Show local",
     "Add repository…",
     "Archive",
     "Permanently delete⌘⌫",
@@ -1639,6 +1640,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "PinP",
     "Move to section",
     "Show terminal⌘J",
+    "Show local",
     "Add repository…",
     "Archive",
     "Permanently delete⌘⌫",

@@ -475,6 +475,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       changes: [],
       pages: [],
       terminals: [],
+      locals: [],
       lastTerminal: undefined,
       pullRequestViews: new Map(),
       onPullRequestView: () => undefined,
