@@ -243,7 +243,7 @@ export function TeamForm({
                 ref={nameRef}
                 field={control}
                 value={form.name}
-                placeholder="Acme"
+                placeholder="Team name"
                 spellCheck={false}
                 maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
                 disabled={disabled}
@@ -262,7 +262,7 @@ export function TeamForm({
               chips={form.invitees.chips}
               typed={form.invitees.typed}
               onTyped={form.invitees.onTyped}
-              placeholder="Ex. ellis@acme.dev, maria@acme.dev"
+              placeholder="name@example.com"
               disabled={disabled}
               onAdd={form.invitees.add}
               onRemove={form.invitees.remove}

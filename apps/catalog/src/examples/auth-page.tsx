@@ -95,7 +95,7 @@ function TeamFields(): React.JSX.Element {
             chips={chips}
             typed={typed}
             onTyped={setTyped}
-            placeholder="Ex. ellis@acme.dev, maria@acme.dev"
+            placeholder="name@example.com"
             onAdd={(words) =>
               setChips((now) => [
                 ...now,
