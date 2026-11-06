@@ -130,6 +130,6 @@ function datesIn(words: string): (string | undefined)[] {
 }
 
 test("a coding agent is shown a day, a time, and a range, each a date Vespin draws as its chip", () => {
-  const words = coderInstructions(REPOSITORY, AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
+  const words = coderInstructions(REPOSITORY, AGENT_BRIEF.DESCRIPTION, true, TASK_ADDRESS);
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
 });

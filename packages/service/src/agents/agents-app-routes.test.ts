@@ -357,7 +357,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(agent.effort, AGENT_DEFAULT_CHOICE.effort);
         assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.equal(agent.turnId, null);
-        assert.equal(agent.brief, AGENT_BRIEF.PLAN);
+        assert.equal(agent.brief, AGENT_BRIEF.DESCRIPTION);
         const stored = yield* readAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
         assert.equal(stored.value.descriptionSnapshot, SNAPSHOT);

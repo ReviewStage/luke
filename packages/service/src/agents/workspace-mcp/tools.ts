@@ -28,7 +28,7 @@
  * agent tools key a start or a message on, is the key the store holds for the
  * agent's conversation, the tool, and the input within a window
  * (`call-key.ts`), so the call a harness retries after a timeout starts or
- * sends once, as eve's run again does; and the turn's count of plan notes is
+ * sends once, as eve's run again does; and the turn's count of description notes is
  * kept on the running turn's row in the store (`runTurnCappedEditDescription`), so
  * the cap holds per turn as eve's does. The list is narrowed per agent as
  * eve narrows its own (`offeredWorkspaceMcpTool`), `save_memory` and `search_memory` by its
@@ -213,7 +213,7 @@ function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
   );
 }
 
-/** A tool of the plan's comment threads, run through the comment door. */
+/** A tool of the description's comment threads, run through the comment door. */
 function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
   return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
 }
@@ -355,7 +355,7 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
   ),
-  // The pull request, the plan, and pages and pictures.
+  // The pull request, the description, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
   entry(EDIT_DESCRIPTION_TOOL, (admitted, input, { sandbox }) =>
     runTurnCappedEditDescription(admitted, input, sandbox),
@@ -396,7 +396,7 @@ export const WORKSPACE_MCP_TOOLS: ReadonlyMap<string, WorkspaceMcpTool> = new Ma
   // The workspace's shared memory.
   agentTool(SAVE_MEMORY_TOOL),
   agentTool(SEARCH_MEMORY_TOOL),
-  // The plan's comments.
+  // The description's comments.
   commentTool(READ_COMMENTS_TOOL),
   commentTool(REPLY_TO_COMMENT_TOOL),
   commentTool(UPDATE_COMMENT_TOOL),
@@ -412,13 +412,13 @@ export type WorkspaceMcpOfferedTo = Pick<Agent, "repository" | "machine">;
 /** The workspace's shared memory, offered only where the agent's starter turned Memory on. */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY];
 
-/** The plan's notes and pictures, offered only where the agent's starter has Plans on (`descriptionsOnFor`). */
+/** The description's notes and pictures, offered only where the agent's starter has Task descriptions on (`descriptionsOnFor`). */
 const DESCRIPTION_TOOLS: readonly string[] = [
   CODER_TOOL.EDIT_DESCRIPTION,
   CODER_TOOL.LOOK_AT_PICTURE,
 ];
 
-/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory or Plans withholds. */
+/** The tools eve offers some agents and not others: each one some agent's repository, machine, or starter's Memory or Task descriptions withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...DESCRIPTION_TOOLS,
@@ -431,7 +431,7 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
  * repository, where it runs, and, beside its row, whether its starter has
- * Memory and Plans on (`beside`), the same rules eve's tool files read
+ * Memory and Task descriptions on (`beside`), the same rules eve's tool files read
  * at each turn. Note that a harness reads the list as its launch begins, so
  * an agent is narrowed launch by launch, as eve's is turn by turn, and that
  * a tool left off the list still runs when called, so each narrowed tool's

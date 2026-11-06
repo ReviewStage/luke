@@ -1131,6 +1131,7 @@ const RETIRED_TOOL_VIEWS = {
   [RETIRED_TOOL.SEARCH_WEB]: READ_WEB_SEARCH,
   [RETIRED_TOOL.LIST_CODING_AGENTS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
+  [RETIRED_TOOL.EDIT_PLAN]: AGENT_TOOL_VIEWS[AGENT_TOOL.EDIT_DESCRIPTION],
   [RETIRED_TOOL.READ_CODING_AGENT]: ({ input, output }) =>
     namedCall(CALL_KIND.READ_AGENT, input, output, "agentId"),
   [RETIRED_TOOL.MESSAGE_CODING_AGENT]: ({ input, output }) =>
@@ -1416,6 +1417,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_DESCRIPTION, namedDescription],
+  [RETIRED_TOOL.EDIT_PLAN, namedDescription],
   [AGENT_TOOL.LOOK_AT_PICTURE, lookedDescription],
   [AGENT_TOOL.READ_COMMENTS, namedDescription],
   [AGENT_TOOL.REPLY_TO_COMMENT, namedDescription],

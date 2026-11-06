@@ -33,24 +33,24 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
- * comment-tools.ts -- a plan's comments, and its task's pages', as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, and `update_comment`.
+ * comment-tools.ts -- a description's comments, and its task's pages', as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, and `update_comment`.
  *
- * A thread on one of the task's pages is the task's as a plan's thread is,
+ * A thread on one of the task's pages is the task's as a description's thread is,
  * so it is answered and settled by its id the same way; `read_comments`
- * reads a page's threads where it names the page, and the plan's otherwise.
+ * reads a page's threads where it names the page, and the description's otherwise.
  *
  * An agent reads the threads for context at any time, but replies only where
  * someone sent a thread to it (`comment-ask.ts`), which its instructions say;
  * resolving and reopening are any agent's, as they are any member's. Every
- * call names the task whose plan it acts on, the agent's own or any other of
+ * call names the task whose description it acts on, the agent's own or any other of
  * its workspace, which the door holds to that workspace
  * (`../agents/coder-host/agent-doors.ts`), so an agent on no task answers a
- * thread too. It runs on the plan the door bound, as the member whose turn
+ * thread too. It runs on the description the door bound, as the member whose turn
  * it is, and is written under the agent that made it, by its id. A call
  * answers what it did as the model reads it, never a failure.
  */
 
-/** Where a call reads and writes: the plan the door bound, who writes, the member whose turn it is and the agent, and whether the plan's own threads are reached, which they are not while Plans is off (`EXPERIMENT.DESCRIPTIONS`), its pages' alone. */
+/** Where a call reads and writes: the description the door bound, who writes, the member whose turn it is and the agent, and whether the description's own threads are reached, which they are not while Task descriptions is off (`EXPERIMENT.DESCRIPTIONS`), its pages' alone. */
 export interface CommentToolBinding {
   readonly taskId: string;
   readonly writer: DescriptionCommentWriterRef;
@@ -60,19 +60,19 @@ export interface CommentToolBinding {
 /** Why a call took nothing, in the words its result says. */
 export const COMMENT_TOOL_REFUSAL = {
   UNREADABLE: "The input is not one this tool takes.",
-  NO_TASK_NAMED: `Name the task whose plan's comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
-  NO_THREAD: "No thread of this plan has that id; read_comments lists them.",
+  NO_TASK_NAMED: `Name the task whose description's comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  NO_THREAD: "No thread of this description has that id; read_comments lists them.",
   NO_TASK: `No task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   RESOLVED: `The thread is resolved; reopen it with ${AGENT_TOOL.UPDATE_COMMENT} before replying.`,
   UNAVAILABLE: "The comments could not be reached; try again.",
   DESCRIPTIONS_OFF:
-    "Plans is off, so the plan's comment threads are not reached; a page's threads still are, by the page's id.",
+    "Task descriptions is off, so the description's comment threads are not reached; a page's threads still are, by the page's id.",
 } as const;
 
-/** The task a call names, whose plan's comments it acts on. */
+/** The task a call names, whose description's comments it acts on. */
 const TASK_ID = describeWire(
   wireUuidSchema,
-  `The task whose plan's comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  `The task whose description's comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
 );
 
 const THREAD_ID = describeWire(wireUuidSchema, "The thread's id, as read_comments lists it.");
@@ -87,7 +87,7 @@ const READ_INPUT = Schema.Struct({
   page: Schema.optionalKey(
     describeWire(
       wireUuidSchema,
-      `One of the task's pages, by the id ${AGENT_TOOL.SHOW_PAGE} answered or a mention of it names, to read its threads instead of the plan's.`,
+      `One of the task's pages, by the id ${AGENT_TOOL.SHOW_PAGE} answered or a mention of it names, to read its threads instead of the description's.`,
     ),
   ),
   status: Schema.optionalKey(
@@ -116,11 +116,11 @@ const UPDATE_INPUT = Schema.Struct({
   ),
 });
 
-/** `read_comments`: the plan's threads as they stand. */
+/** `read_comments`: the description's threads as they stand. */
 export const READ_COMMENTS_TOOL = {
   name: AGENT_TOOL.READ_COMMENTS,
   description:
-    "Read the comment threads on the plan of the task taskId names, your own task or any other of your workspace, or on one of its pages where you name the page: each thread's id, the words of the plan it is on and their section, " +
+    "Read the comment threads on the description of the task taskId names, your own task or any other of your workspace, or on one of its pages where you name the page: each thread's id, the words of the description it is on and their section, " +
     "whether those words were since deleted, and every comment with who wrote it, when, and the names of the files it carries. A page's thread names the version it was left on and the element it is on, by its words and its path, or none for the whole page. Open threads unless you ask " +
     "for resolved ones. Reading asks nothing of you: reply only to a thread someone sent you.",
   inputSchema: READ_INPUT,
@@ -130,7 +130,7 @@ export const READ_COMMENTS_TOOL = {
 export const REPLY_TO_COMMENT_TOOL = {
   name: AGENT_TOOL.REPLY_TO_COMMENT,
   description:
-    "Reply in one comment thread on the plan of the task taskId names, by the thread's id, as yourself; every member of the workspace sees it beside " +
+    "Reply in one comment thread on the description of the task taskId names, by the thread's id, as yourself; every member of the workspace sees it beside " +
     "the words it is on. Reply where someone sent you the thread, answering what it asks; your replies send the thread to no one.",
   inputSchema: REPLY_INPUT,
 } as const;
@@ -139,7 +139,7 @@ export const REPLY_TO_COMMENT_TOOL = {
 export const UPDATE_COMMENT_TOOL = {
   name: AGENT_TOOL.UPDATE_COMMENT,
   description:
-    "Resolve or reopen one comment thread on the plan of the task taskId names, by the thread's id: a resolved thread leaves the plan's margin " +
+    "Resolve or reopen one comment thread on the description of the task taskId names, by the thread's id: a resolved thread leaves the description's margin " +
     "and stays in its history.",
   inputSchema: UPDATE_INPUT,
 } as const;
@@ -195,7 +195,7 @@ function threadRead(thread: DescriptionCommentThread): WireRecord {
   const asked = thread.entries
     .filter((entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.ASKED && entry.asked !== undefined)
     .map((entry) => ({ by: writerOf(entry), to: askedName(entry.asked) }));
-  // Note that a page's thread stands on no words of the plan, so it names its page in their place.
+  // Note that a page's thread stands on no words of the description, so it names its page in their place.
   const where =
     thread.page !== undefined
       ? { page: thread.page }
@@ -238,7 +238,7 @@ function written(outcome: DescriptionCommentOutcome): WireRecord {
   return commentAnswerRead(outcome.answer);
 }
 
-/** Whether a thread is the plan's, standing on no page, and so out of reach while Plans is off; a thread not found is left to the call to refuse as none. */
+/** Whether a thread is the description's, standing on no page, and so out of reach while Task descriptions is off; a thread not found is left to the call to refuse as none. */
 export function descriptionThreadOff(
   thread: DescriptionCommentThread | undefined,
   descriptionsOn: boolean,
@@ -246,7 +246,7 @@ export function descriptionThreadOff(
   return !descriptionsOn && thread !== undefined && thread.page === undefined;
 }
 
-/** One call of a comment tool on the plan the door bound, answered as the result the model reads. */
+/** One call of a comment tool on the description the door bound, answered as the result the model reads. */
 export function runCommentTool(
   name: CommentToolName,
   binding: CommentToolBinding,
@@ -310,10 +310,10 @@ export function runCommentTool(
 }
 
 /**
- * The plan's open threads as a coding agent's standing context hands them
+ * The description's open threads as a coding agent's standing context hands them
  * beside the saved document (`agent-runtime/standing-context.ts`): one line
  * each, so a comment a member left since its last turn is there to raise.
- * Nothing where the plan holds no open thread.
+ * Nothing where the description holds no open thread.
  */
 export function openThreadsText(threads: readonly DescriptionCommentThread[]): readonly string[] {
   const open = threads.filter((thread) => thread.status === DESCRIPTION_COMMENT_STATUS.OPEN);

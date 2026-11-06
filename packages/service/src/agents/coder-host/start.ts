@@ -1008,7 +1008,7 @@ function openingOf(
     taken === undefined
       ? {
           channel: MESSAGE_CHANNEL.START,
-          brief: brief.prompt === null ? START_LINE_BRIEF.PLAN : START_LINE_BRIEF.PROMPT,
+          brief: brief.prompt === null ? START_LINE_BRIEF.DESCRIPTION : START_LINE_BRIEF.PROMPT,
         }
       : {
           channel: MESSAGE_CHANNEL.START,

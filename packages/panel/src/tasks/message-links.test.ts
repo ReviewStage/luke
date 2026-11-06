@@ -209,7 +209,7 @@ test("a link to the plan an agent was handed, its first message, brings the plan
   const { container, revealed } = await drawn(
     { agentId: AGENT.id, messageId: "task-1", ask: 1 },
     [MESSAGES],
-    { ...AGENT, brief: AGENT_BRIEF.PLAN },
+    { ...AGENT, brief: AGENT_BRIEF.DESCRIPTION },
   );
 
   assert.equal(messageNamed(container, "task-1").hasAttribute("data-landed"), true);

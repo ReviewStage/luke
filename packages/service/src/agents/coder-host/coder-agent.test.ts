@@ -309,7 +309,7 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
       words.includes(READ_FIRST),
     ];
   };
-  assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(AGENT_BRIEF.DESCRIPTION, TASK_ADDRESS), [true, true, false]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
@@ -319,7 +319,7 @@ test("an agent on a task with no repository names what it decided in its message
   const decided = (repository: string | null, kind: AgentKind) =>
     coderInstructions(
       repository,
-      AGENT_BRIEF.PLAN,
+      AGENT_BRIEF.DESCRIPTION,
       true,
       TASK_ADDRESS,
       undefined,
@@ -365,7 +365,7 @@ test("an agent asked for a plan, a proposal, or research opens no pull request o
     assert.ok(words.includes(NO_DOCUMENT), brief);
     return [words.includes(PLAN), words.includes(PAGE)];
   };
-  assert.deepEqual(told(AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true]);
+  assert.deepEqual(told(AGENT_BRIEF.DESCRIPTION, TASK_ADDRESS), [true, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true]);
   assert.deepEqual(told(AGENT_BRIEF.PROMPT, null), [false, true]);
 });
@@ -631,7 +631,7 @@ test("with Plans off the instructions say nothing of a plan: no edit_description
     assert.ok(comments.includes(`\`${CODER_TOOL.REPLY_TO_COMMENT}\``), brief);
     assert.ok(off.includes(`show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``), brief);
   }
-  const planned = coderInstructions("Acme/Relay", AGENT_BRIEF.PLAN, true, TASK_LINK);
+  const planned = coderInstructions("Acme/Relay", AGENT_BRIEF.DESCRIPTION, true, TASK_LINK);
   assert.deepEqual(
     DESCRIPTION_WORDS.filter((words) => !planned.includes(words)),
     [],

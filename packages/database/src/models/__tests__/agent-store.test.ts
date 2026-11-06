@@ -1963,7 +1963,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           snapshotted: {
             id: snapshotted.id,
             title: "Invite emails",
-            brief: AGENT_BRIEF.PLAN,
+            brief: AGENT_BRIEF.DESCRIPTION,
             automationName: null,
             startedFrom: null,
             text: [],

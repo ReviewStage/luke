@@ -72,10 +72,11 @@ export const THREAD_LINE_EVENT = {
   CLOSE: "close",
 } as const;
 
-/** What a Start handed a new agent as its first line: the developer's prompt, the plan, or another agent it continues or forks. */
+/** What a Start handed a new agent as its first line: the developer's prompt, the task's description, or another agent it continues or forks. */
 export const START_LINE_BRIEF = {
   PROMPT: "prompt",
-  PLAN: "plan",
+  // Note that the value says "plan", the description's name before it, because every start line written before the rename carries it.
+  DESCRIPTION: "plan",
   CONTINUE: "continue",
   FORK: "fork",
 } as const;

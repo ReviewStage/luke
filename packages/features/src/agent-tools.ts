@@ -121,8 +121,9 @@ export const CONNECTION_TOOL = {
  * code put on the developer's screen and its two whiteboard tools, removed
  * with the Code and Board tabs, a voice call's question queue and
  * hang-up, removed with GPT Live, the memory's two tools, since named for
- * the memory, and the plan comments' resolve and reopen, folded into
- * `update_comment`.
+ * the memory, the plan comments' resolve and reopen, folded into
+ * `update_comment`, and the plan's edit, renamed for the description it
+ * edits.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -170,7 +171,19 @@ export const RETIRED_TOOL = {
   // Folded into `update_comment` (`resolved`), whose name no inbox thread's tool shares.
   RESOLVE_THREAD: "resolve_thread",
   REOPEN_THREAD: "reopen_thread",
+  // Renamed `edit_description`, as the task's document is its description.
+  EDIT_PLAN: "edit_plan",
 } as const;
+
+/**
+ * The retired tools a call may still name, from an agent whose session
+ * listed its tools before they were renamed, each with the tool that took
+ * its place, which the service names in its refusal rather than answering
+ * an unknown tool.
+ */
+export const RENAMED_TOOL: ReadonlyMap<string, AgentTool> = new Map([
+  [RETIRED_TOOL.EDIT_PLAN, AGENT_TOOL.EDIT_DESCRIPTION],
+]);
 
 /**
  * Claude Code's own tools, by the names its CLI calls them, which a coding

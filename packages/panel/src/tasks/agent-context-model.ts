@@ -47,7 +47,7 @@ const ESTIMATE_MARK = "~";
 
 /** What the brief's row is called, by what the agent was handed. */
 const BRIEF_LABEL = {
-  [AGENT_BRIEF.PLAN]: "Description",
+  [AGENT_BRIEF.DESCRIPTION]: "Description",
   [AGENT_BRIEF.PROMPT]: "Prompt",
   [AGENT_BRIEF.BLANK]: "First message",
 } as const satisfies Record<AgentBrief, string>;
@@ -127,7 +127,7 @@ export function contextRows(context: AgentContext, brief: AgentBrief | undefined
   if (briefTokens !== undefined) {
     rows.push({
       part: CONTEXT_PART.BRIEF,
-      label: BRIEF_LABEL[brief ?? AGENT_BRIEF.PLAN],
+      label: BRIEF_LABEL[brief ?? AGENT_BRIEF.DESCRIPTION],
       tokens: briefTokens,
       estimated: true,
     });

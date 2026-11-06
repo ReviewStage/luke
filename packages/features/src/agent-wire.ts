@@ -415,7 +415,8 @@ export function deviceStanding(beat: BeatReading, readFailed: boolean): DeviceSt
 
 /** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const AGENT_BRIEF = {
-  PLAN: "plan",
+  // Note that the value says "plan", the description's name before it, because a released desktop decodes it.
+  DESCRIPTION: "plan",
   // Note that the value says "task", because a released desktop decodes it.
   PROMPT: "task",
   BLANK: "blank",

@@ -55,7 +55,7 @@ import { listTaskSections } from "@repo/database/models/task-section-store";
 import { readTask, readTaskWorkspace } from "@repo/database/models/task-store";
 import { listWorkspaces } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
-import { AGENT_TOOL } from "@repo/features/agent-tools";
+import { AGENT_TOOL, RETIRED_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_BOUNDS,
   AGENT_STATUS,
@@ -294,6 +294,17 @@ export const MEMBER_MCP_TOOL = {
 
 export type MemberMcpToolName = (typeof MEMBER_MCP_TOOL)[keyof typeof MEMBER_MCP_TOOL];
 
+/**
+ * The member tools since renamed, each with the tool in its place, which
+ * the server names in its refusal (`app.ts`) rather than answering an
+ * unknown tool, because a client keeps the list it was handed before the
+ * rename.
+ */
+export const RENAMED_MEMBER_MCP_TOOL: ReadonlyMap<string, MemberMcpToolName> = new Map([
+  [RETIRED_TOOL.EDIT_PLAN, MEMBER_MCP_TOOL.EDIT_DESCRIPTION],
+  ["comment_on_plan", MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION],
+]);
+
 /** A read's annotations: it changes nothing of the member's. */
 const READ_ONLY: ToolAnnotations = { readOnlyHint: true };
 
@@ -449,7 +460,7 @@ const MEMBER_READ_TASK_TOOL = memberMcpTool({
     "member's workspaces it stands: its key (such as ACME-42), name, where it stands (its " +
     "status) and how much it matters (its priority), repository, who started it, its mention, " +
     "the brief it was started with (null for none), the tasks it is blocked by and the tasks it " +
-    "blocks (each with its id, name, status, and mention), and its plan as last saved, cut on a " +
+    "blocks (each with its id, name, status, and mention), and its description as last saved, cut on a " +
     `line at ${DESCRIPTION_TEXT_READ_CHARS} characters with how many were left out. ` +
     `${MEMBER_MCP_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
   input: READ_TASK_TOOL.inputSchema,
@@ -589,7 +600,7 @@ const MEMBER_READ_PAGE_TOOL = memberMcpTool({
  * `task-tools.ts`, `task-section-tools.ts`) with the member as the caller, on
  * a full call of the agent tools built once here (`memberWriteCall`), or,
  * where a member's act is not an agent's, the desktop's own operation for
- * it: a plan's notes are the member's own edit (`recordMemberDescriptionNotes`),
+ * it: a description's notes are the member's own edit (`recordMemberDescriptionNotes`),
  * and a message is the member's own words (`steerMemberWords`), as their
  * message box sends them. A write is about the workspace that holds what it
  * names, as a read by id is, or the one its slug names, as a list is.
@@ -682,7 +693,7 @@ const CreateTaskInputSchema = Schema.Struct({
     ),
   ),
   brief: CREATE_TASK_TOOL.inputSchema.fields.brief,
-  plan: CREATE_TASK_TOOL.inputSchema.fields.plan,
+  description: CREATE_TASK_TOOL.inputSchema.fields.description,
   status: CREATE_TASK_TOOL.inputSchema.fields.status,
   priority: CREATE_TASK_TOOL.inputSchema.fields.priority,
   assignee: CREATE_TASK_TOOL.inputSchema.fields.assignee,
@@ -694,7 +705,7 @@ const MEMBER_CREATE_TASK_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.CREATE_TASK,
   description:
     "Make a task in a workspace the member belongs to, as the member's own sidebar New task " +
-    "would: owned by them, on the repository named or none, with their brief and a plan to " +
+    "would: owned by them, on the repository named or none, with their brief and a description to " +
     "start from where given, and no agent on it; the desktop shows it as one they made. Give " +
     "it a status, a priority, and an assignee where the member said them. Give it a " +
     "parentTaskId to make it a child task of another, to any depth: a child always works in " +
@@ -759,11 +770,11 @@ const MEMBER_UPDATE_TASK_TOOL = memberMcpTool({
     ),
 });
 
-/** A plan's notes name the task and the notetaker's own notes. */
+/** A description's notes name the task and the notetaker's own notes. */
 const EditDescriptionInputSchema = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
-    `The task whose plan to edit, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
+    `The task whose description to edit, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
   ),
   ...descriptionNotesSchema.fields,
 });
@@ -771,17 +782,17 @@ const EditDescriptionInputSchema = Schema.Struct({
 const MEMBER_EDIT_DESCRIPTION_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.EDIT_DESCRIPTION,
   description:
-    "Take notes on the plan of a task the member can open, by its taskId, as the member's own " +
+    "Take notes on the description of a task the member can open, by its taskId, as the member's own " +
     `edit, which ${MEMBER_MCP_TOOL.READ_TASK} reads first: add a point under one of its ` +
-    "headings, or replace text copied exactly from the saved plan, as much as names one place, " +
+    "headings, or replace text copied exactly from the saved description, as much as names one place, " +
     "headings and whole sections included, with what it becomes, or with nothing to delete " +
     "it. A note's text may open headings of its own, so you can rename, split, merge, move, and " +
     "drop sections. Write a file, a pull request, or an issue a note names as a mention, a " +
     "Markdown link to its page whose words start with @, such as " +
-    "[@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as " +
-    "a chip. Every save is kept in the plan's history as the member's own. A call's notes land " +
-    "together or not at all: where one names text or a heading the plan does not hold exactly " +
-    "once, nothing is saved and the call answers the plan as it stands, to retry from. Answers " +
+    "[@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the description draws it as " +
+    "a chip. Every save is kept in the description's history as the member's own. A call's notes land " +
+    "together or not at all: where one names text or a heading the description does not hold exactly " +
+    "once, nothing is saved and the call answers the description as it stands, to retry from. Answers " +
     "`accepted` with how many notes it took, or `rejected` and why.",
   input: EditDescriptionInputSchema,
   annotations: { readOnlyHint: false, destructiveHint: false },
@@ -901,11 +912,11 @@ const MEMBER_START_AGENT_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.START_AGENT,
   description:
     "Start a new coding agent as the member, exactly as their own Start would: on a task " +
-    "they can open by its taskId, on the task's plan itself with no prompt, or on the prompt " +
-    "given in the plan's place, with the note after either; or on a new task made for it in " +
+    "they can open by its taskId, on the task's description itself with no prompt, or on the prompt " +
+    "given in the description's place, with the note after either; or on a new task made for it in " +
     "the workspace named, named as its agent is, assigned to the member, in the repository " +
     "named or none, and done by itself once its agents finish well, where it needs a prompt, " +
-    "since that task has no plan to hand it. This one call carries everything the agent is told as it starts, and the " +
+    "since that task has no description to hand it. This one call carries everything the agent is told as it starts, and the " +
     "agent sets to work on it at once. Its checkout is the repository's default branch, or " +
     "the branch named, which must already be on GitHub. It runs on the model and effort " +
     "named, as the member is offered them, or on the member's default with neither; " +
@@ -1366,12 +1377,12 @@ const AGENT_PULL_REQUEST_ACTION_TOOL = memberMcpTool({
 });
 
 /*
- * The comments and the memory. A plan's comment threads, and its task's
+ * The comments and the memory. A description's comment threads, and its task's
  * pages', are read, answered, resolved, and reopened as the member, on a task
  * they can open, as their window's own threads are: a read and a settle run
  * the agents' own door (`../tasks/comment-tools.ts`), written under the
  * member rather than an agent, and a comment, a reply or a thread started on
- * the plan's words, is answered as the desktop answers one
+ * the description's words, is answered as the desktop answers one
  * (`memberCommentAnswer`), so it hands its thread to the agents in it, and to
  * each one its words mention, as one typed in the window does. The
  * workspace's shared memory is searched, kept, and forgotten as the member,
@@ -1385,13 +1396,13 @@ const AGENT_PULL_REQUEST_ACTION_TOOL = memberMcpTool({
 /** Why a comment or a memory call took nothing, in words for one acting for the member. */
 const MEMBER_NOTE_REFUSAL = {
   NO_WORDS:
-    "Not posted: the plan does not hold those words exactly once; copy them, or more of them, " +
-    `from the plan as ${MEMBER_MCP_TOOL.READ_TASK} reads it.`,
+    "Not posted: the description does not hold those words exactly once; copy them, or more of them, " +
+    `from the description as ${MEMBER_MCP_TOOL.READ_TASK} reads it.`,
   MEMORY_OFF:
     "Not run: the member you act for has Memory off; they turn it on in Settings › " +
     "Experimental. Carry on without it.",
   DESCRIPTIONS_OFF:
-    "Not run: the member you act for has Plans off, so tasks have no plan to write or comment " +
+    "Not run: the member you act for has Task descriptions off, so tasks have no description to write or comment " +
     "on; they turn it on in Settings › Experimental.",
   NOT_MEMBER: "Not forgotten: the member no longer belongs to that workspace.",
   NOT_FORGETTABLE:
@@ -1405,7 +1416,7 @@ type MemberCommentWriter = Extract<
   { readonly actor: typeof DESCRIPTION_COMMENT_ACTOR.MEMBER }
 >;
 
-/** A comment call run as the member, on the task it names as the member reaches it, told whether they have Plans on, which the plan's own threads stand on and a page's do not; refused where they reach no task. */
+/** A comment call run as the member, on the task it names as the member reaches it, told whether they have Task descriptions on, which the description's own threads stand on and a page's do not; refused where they reach no task. */
 const commentAsMember = <R>(
   taskId: string,
   act: (
@@ -1441,7 +1452,7 @@ const memberCommented = (outcome: DescriptionCommentOutcome, comment: Mentioning
 /** The task a comment tool acts on, by its id. */
 const COMMENTED_TASK_INPUT = describeWire(
   wireUuidSchema,
-  `The task whose plan's comments to act on, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
+  `The task whose description's comments to act on, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
 );
 
 /** A comment's words, as the member's own. */
@@ -1451,14 +1462,14 @@ const COMMENT_WORDS_INPUT = describeWire(
     "under the member's name.",
 );
 
-/** A read of comments names the task, and the page to read in the plan's place, and which threads. */
+/** A read of comments names the task, and the page to read in the description's place, and which threads. */
 const ReadCommentsInputSchema = Schema.Struct({
   taskId: COMMENTED_TASK_INPUT,
   page: Schema.optionalKey(
     describeWire(
       wireUuidSchema,
       "One of the task's pages, by the id a mention of it or a link to it names, to read its " +
-        "threads instead of the plan's.",
+        "threads instead of the description's.",
     ),
   ),
   status: READ_COMMENTS_TOOL.inputSchema.fields.status,
@@ -1467,9 +1478,9 @@ const ReadCommentsInputSchema = Schema.Struct({
 const MEMBER_READ_COMMENTS_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.READ_COMMENTS,
   description:
-    "Read the comment threads on the plan of a task the member can open, by its taskId, a " +
+    "Read the comment threads on the description of a task the member can open, by its taskId, a " +
     "teammate's included, in whichever of the member's workspaces it stands, or on one of its " +
-    "pages where you name the page: each thread's id, the words of the plan it is on and their " +
+    "pages where you name the page: each thread's id, the words of the description it is on and their " +
     "section, whether those words were since deleted, every comment with who wrote it, when, " +
     "and the names of the files it carries, and the agents it was sent to. A page's thread " +
     "names the version it was left on and the element it is on, by its words and its path, or " +
@@ -1487,7 +1498,7 @@ const MEMBER_READ_COMMENTS_TOOL = memberMcpTool({
     ),
 });
 
-/** A thread started on the plan names the task, the words it stands on, and its first comment. */
+/** A thread started on the description names the task, the words it stands on, and its first comment. */
 const CommentOnDescriptionInputSchema = Schema.Struct({
   taskId: COMMENTED_TASK_INPUT,
   quote: describeWire(
@@ -1495,7 +1506,7 @@ const CommentOnDescriptionInputSchema = Schema.Struct({
       Schema.isNonEmpty(),
       Schema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
     ),
-    "The words of the plan the thread stands on, copied exactly from the plan as " +
+    "The words of the description the thread stands on, copied exactly from the description as " +
       `${MEMBER_MCP_TOOL.READ_TASK} reads it, as much as stands there exactly once.`,
   ),
   words: COMMENT_WORDS_INPUT,
@@ -1504,7 +1515,7 @@ const CommentOnDescriptionInputSchema = Schema.Struct({
 type CommentOnDescriptionInput = typeof CommentOnDescriptionInputSchema.Type;
 
 /**
- * A thread started on the words of the plan as saved, the one place they
+ * A thread started on the words of the description as saved, the one place they
  * stand there, found as a note's replacement finds its words, with the
  * member's first comment, handed to the agents its words mention.
  */
@@ -1544,9 +1555,9 @@ const MENTION_WORDS =
 const MEMBER_COMMENT_ON_DESCRIPTION_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.COMMENT_ON_DESCRIPTION,
   description:
-    "Start a comment thread on words of the plan of a task the member can open, by its taskId, " +
-    "as the member's own comment in the plan's margin: name the words by copying them from " +
-    `the plan as ${MEMBER_MCP_TOOL.READ_TASK} reads it, as much as stands there exactly once, ` +
+    "Start a comment thread on words of the description of a task the member can open, by its taskId, " +
+    "as the member's own comment in the description's margin: name the words by copying them from " +
+    `the description as ${MEMBER_MCP_TOOL.READ_TASK} reads it, as much as stands there exactly once, ` +
     "and give the first comment. Every member of the workspace sees it beside those words. " +
     `${MENTION_WORDS} Each call starts a thread of its own, so call it once for each. Answers ` +
     "`accepted` with the thread as it stands, or `rejected` and why nothing was posted.",
@@ -1609,7 +1620,7 @@ const memberReply = (
 const MEMBER_REPLY_TO_COMMENT_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.REPLY_TO_COMMENT,
   description:
-    "Reply in one comment thread on the plan of a task the member can open, or on one of its " +
+    "Reply in one comment thread on the description of a task the member can open, or on one of its " +
     "pages, by the thread's id, as the member's own reply in the window would: every member " +
     "of the workspace sees it, and the thread is sent to every agent in it, each one sent it " +
     "before or that answered in it, and, on a page, the agent that showed the page; each reads " +
@@ -1636,9 +1647,9 @@ const UpdateCommentInputSchema = Schema.Struct({
 const MEMBER_UPDATE_COMMENT_TOOL = memberMcpTool({
   name: MEMBER_MCP_TOOL.UPDATE_COMMENT,
   description:
-    "Resolve or reopen one comment thread on the plan of a task the member can open, or on one " +
+    "Resolve or reopen one comment thread on the description of a task the member can open, or on one " +
     "of its pages, by the thread's id, as the member's own Resolve or Reopen would: a resolved " +
-    "thread leaves the plan's margin and stays in its history, under the member's name. " +
+    "thread leaves the description's margin and stays in its history, under the member's name. " +
     "Answers `accepted` with the thread as it now stands, or `rejected` and why.",
   input: UpdateCommentInputSchema,
   annotations: IDEMPOTENT_CHANGE,

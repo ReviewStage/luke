@@ -3146,7 +3146,7 @@ export function StartingAgentTab({
     <AgentTabFrame>
       <AgentTranscriptView
         messages={messages}
-        brief={line === undefined ? AGENT_BRIEF.PLAN : AGENT_BRIEF.PROMPT}
+        brief={line === undefined ? AGENT_BRIEF.DESCRIPTION : AGENT_BRIEF.PROMPT}
         reading={false}
         failed={false}
         working

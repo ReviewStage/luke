@@ -44,31 +44,31 @@ import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
 
 /**
- * description-edit.ts -- the coding agent's `edit_description` tool: the notetaker's own notes, taken into the plan of the task it names, and pictures from its sandbox added to it.
+ * description-edit.ts -- the coding agent's `edit_description` tool: the notetaker's own notes, taken into the description of the task it names, and pictures from its sandbox added to it.
  *
- * An agent that meets something the plan does not settle, verifies a fact
- * the plan has wrong, or makes a decision the plan left open does not stop
- * and does not keep it to itself: it takes notes on the plan through the
- * plan's one write (`description-notes.ts`), which journals the save under the
+ * An agent that meets something the description does not settle, verifies a fact
+ * the description has wrong, or makes a decision the description left open does not stop
+ * and does not keep it to itself: it takes notes on the description through the
+ * description's one write (`description-notes.ts`), which journals the save under the
  * agent's id, so the developer and the other agents read them and see which
- * agent wrote what. Every call names the task whose plan it edits, its own
- * or any other of its workspace, as a pilot fixes a child task's plan, so
+ * agent wrote what. Every call names the task whose description it edits, its own
+ * or any other of its workspace, as a pilot fixes a child task's description, so
  * an agent on no task edits one too; the store writes only a task the
  * member whose turn it is reaches (`agent-doors.ts`). A call's notes
- * may land anywhere in the plan, its headings among it, and land together or
- * not at all: one naming what the plan does not hold exactly once answers the
- * plan as it stands, so the agent retries from it rather than from the text
+ * may land anywhere in the description, its headings among it, and land together or
+ * not at all: one naming what the description does not hold exactly once answers the
+ * description as it stands, so the agent retries from it rather than from the text
  * it was handed. Note that the call answers at once, whatever was
  * saved, because the agent's turn is its whole run and nothing is answered
  * to it mid-turn; an answer reaches it as a later message. A turn may take
  * only so many notes: past the cap the agent is told to go on and name the
  * rest in its message, so a model that writes at every step cannot rewrite
- * the plan under the developer.
+ * the description under the developer.
  *
  * Beside its notes the agent may add pictures, which the notetaker cannot,
  * having none: a screenshot it took, or a WebM it recorded of a flow, named
  * by its file in its sandbox, read as an inbox post's is (`inbox-image.ts`),
- * a recording as it is and up to a video's bound, kept as one of the plan's
+ * a recording as it is and up to a video's bound, kept as one of the description's
  * pictures as the member the turn runs for, and written as the picture's
  * line at the end of its section, an added point like any other, so the
  * save is the agent's and its byline names it. Every file is read before any
@@ -79,7 +79,7 @@ import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
  * and with no picture (`recordMemberDescriptionNotes`).
  */
 const DESCRIPTION_EDIT = {
-  /** The most notes one turn may take on the plan, across its calls, each picture one of them. */
+  /** The most notes one turn may take on the description, across its calls, each picture one of them. */
   MAX_NOTES_PER_TURN: 40,
   MAX_PICTURES_PER_CALL: 4,
   MAX_PATH_CHARS: 1_024,
@@ -101,7 +101,7 @@ const pictureSchema = Schema.Struct({
     trimmedText(DESCRIPTION_EDIT.MAX_PATH_CHARS),
     "The picture's file in your sandbox, such as a screenshot you took or a recording you made of " +
       `a flow, relative to your working folder or absolute: a PNG, JPEG, or WebP of at most ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, ` +
-      `or a WebM video of at most ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB, which the plan plays.`,
+      `or a WebM video of at most ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB, which the description plays.`,
   ),
   alt: describeWire(
     trimmedText(DESCRIPTION_EDIT.MAX_ALT_CHARS),
@@ -125,11 +125,11 @@ const editedTaskSchema = Schema.Struct({ taskId: wireUuidSchema });
 // The call's notes and pictures stand beside its task, and are read on their own.
 const readEditedTask = readEither(editedTaskSchema, { excess: EXCESS_KEYS.DROP });
 
-/** What a call carries: the task whose plan it edits, the notetaker's notes, and the pictures only an agent adds. */
+/** What a call carries: the task whose description it edits, the notetaker's notes, and the pictures only an agent adds. */
 const EDIT_DESCRIPTION_INPUT = Schema.Struct({
   taskId: describeWire(
     wireUuidSchema,
-    `The task whose plan to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+    `The task whose description to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   ),
   ...descriptionNotesSchema.fields,
   pictures: Schema.optionalKey(
@@ -144,22 +144,22 @@ const EDIT_DESCRIPTION_INPUT = Schema.Struct({
 export const EDIT_DESCRIPTION_TOOL = {
   name: "edit_description",
   description:
-    "Take notes on the plan of the task taskId names, your own task or any other of your " +
+    "Take notes on the description of the task taskId names, your own task or any other of your " +
     `workspace, which ${AGENT_TOOL.READ_TASK} reads first, as its notetaker does: add a point ` +
-    "under one of its headings, or replace text copied exactly from the saved plan, as much as " +
+    "under one of its headings, or replace text copied exactly from the saved description, as much as " +
     "names one place, headings and whole sections included, with what it becomes, or with " +
     "nothing to delete it. A note's text may open headings of its own, so you can rename, " +
-    "split, merge, move, and drop sections. Use it to record a question the plan does not answer under its open " +
+    "split, merge, move, and drop sections. Use it to record a question the description does not answer under its open " +
     "questions together with the assumption you go on under, to correct a fact you verified in " +
     "the code, to record a hard part you met, an interface you had to change, or a decision you " +
     "made, each under the heading it belongs to. Write a file, a pull request, or an issue a note names as a mention, " +
-    "a Markdown link to its page whose words start with @, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as a chip. " +
+    "a Markdown link to its page whose words start with @, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the description draws it as a chip. " +
     "To add a picture, such as a screenshot of what you built, name its file in your sandbox " +
     "under pictures, with alt text saying what it shows. " +
-    "Every save is recorded in the plan as yours. The developer reads the plan when they next " +
+    "Every save is recorded in the description as yours. The developer reads the description when they next " +
     `open it in ${PRODUCT_NAME}; you do not wait for an answer. A call's notes and pictures land together ` +
-    "or not at all: where one names text or a heading the plan does not hold exactly once, " +
-    "nothing is saved and the call answers the plan as it stands, to retry from. " +
+    "or not at all: where one names text or a heading the description does not hold exactly once, " +
+    "nothing is saved and the call answers the description as it stands, to retry from. " +
     `A turn may take at most ${DESCRIPTION_EDIT.MAX_NOTES_PER_TURN} notes, each picture one.`,
   inputSchema: EDIT_DESCRIPTION_INPUT,
 } as const;
@@ -167,21 +167,22 @@ export const EDIT_DESCRIPTION_TOOL = {
 /** Why a call saved nothing, in the words the model reads. */
 export const DESCRIPTION_EDIT_REFUSAL = {
   UNREADABLE: "Not saved: the notes do not read under the notes' schema.",
-  TOO_MANY: `Not saved: a turn may take at most ${DESCRIPTION_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
+  TOO_MANY: `Not saved: a turn may take at most ${DESCRIPTION_EDIT.MAX_NOTES_PER_TURN} notes on the description. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
-  OFF: "Not saved: your developer has Plans off, so no plan is written. Say in your message what you would have noted.",
-  NO_TASK_NAMED: `Not saved: name the task whose plan to edit as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  OFF: "Not saved: your developer has Task descriptions off, so no description is written. Say in your message what you would have noted.",
+  NO_TASK_NAMED: `Not saved: name the task whose description to edit as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_TASK: `Not saved: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_TURN:
     "Not saved: your turn is not recorded yet, so its notes cannot be counted. Try again in a moment.",
-  TOO_MANY_PICTURES: `Not saved: the plan holds ${DESCRIPTION_ATTACHMENT_BOUNDS.MAX_PER_DESCRIPTION} pictures, as many as a plan may. Leave the pictures out.`,
-  TOO_MANY_VIDEOS: `Not saved: the plan holds ${DESCRIPTION_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_DESCRIPTION} videos, as many as a plan may. Leave the videos out, or show them with show_image instead.`,
-  TASK_GONE: "Not saved: this task no longer exists, so no picture can be added to its plan.",
+  TOO_MANY_PICTURES: `Not saved: the description holds ${DESCRIPTION_ATTACHMENT_BOUNDS.MAX_PER_DESCRIPTION} pictures, as many as a description may. Leave the pictures out.`,
+  TOO_MANY_VIDEOS: `Not saved: the description holds ${DESCRIPTION_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_DESCRIPTION} videos, as many as a description may. Leave the videos out, or show them with show_image instead.`,
+  TASK_GONE:
+    "Not saved: this task no longer exists, so no picture can be added to its description.",
   CONFLICT:
-    "Not saved: none of this call's notes was taken, because one names what the plan does not hold exactly once. The plan as it stands is in current; retry from it.",
+    "Not saved: none of this call's notes was taken, because one names what the description does not hold exactly once. The description as it stands is in current; retry from it.",
 } as const;
 
-/** The most of a missed note's find its answer repeats; the plan as it stands follows it whole. */
+/** The most of a missed note's find its answer repeats; the description as it stands follows it whole. */
 const MISSED_FIND_CHARS = 200;
 
 /** Why a picture's file was not read (`inbox-image.ts`), in the words the model reads; each is followed by the path. */
@@ -259,7 +260,7 @@ export function requestedNotes(input: UnparsedWireValue): number {
 /**
  * What a call answers, as the model reads it: how many
  * notes it took, or why nothing was saved, with the note that missed and the
- * plan as it stands where the plan no longer holds what a note names.
+ * description as it stands where the description no longer holds what a note names.
  */
 export type DescriptionEditResult =
   | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly taken: number }
@@ -297,7 +298,7 @@ interface PictureRead {
 /**
  * Every picture's file read from the sandbox, in order, or the refusal of
  * the first that is not, naming its path. Note that a file is read under an
- * inbox post's bounds, because a plan holds an image and a recording to the
+ * inbox post's bounds, because a description holds an image and a recording to the
  * same two (`PICTURE_BOUNDS`).
  */
 function readPictureFiles(
@@ -340,10 +341,10 @@ class EditRefused extends Data.TaggedError("EditRefused")<{
 
 /**
  * The call's pictures read before anything is kept, or why none can be: the
- * plan gone or archived, or a file to mend. The plan's address names its
+ * description gone or archived, or a file to mend. The description's address names its
  * workspace by the slug the account reads it under, or by its id where the
  * workspace names none, as the desktop names it: an address is found by its
- * plan's id alone.
+ * description's id alone.
  */
 function picturesInSandbox(
   binding: DescriptionDocumentBinding,
@@ -364,7 +365,7 @@ function picturesInSandbox(
 }
 
 /**
- * The pictures read kept on the plan as the binding's account, each written
+ * The pictures read kept on the description as the binding's account, each written
  * as an added point, its picture's line under its section. Note that this
  * runs inside the call's transaction, so a refusal keeps none of them.
  */
@@ -407,7 +408,7 @@ function keptAsNotes(
  * The call's notes, and the pictures read for it kept and added after them,
  * saved in one transaction under the writer given, or the refusal the save
  * answered. Note that a refusal anywhere keeps no picture, so none holds a
- * place in the plan's bound.
+ * place in the description's bound.
  */
 function savedEdit(
   binding: DescriptionDocumentBinding,
@@ -444,7 +445,7 @@ function savedEdit(
 }
 
 /**
- * Runs one call: the notes taken into the plan the binding names, and its
+ * Runs one call: the notes taken into the description the binding names, and its
  * pictures read from the sandbox, kept, and added after them. Every file is
  * read before the store is written (`savedEdit`). Note that `takenInTurn` is
  * the caller's count of this turn's notes, because the turn's row keeps it

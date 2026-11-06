@@ -830,7 +830,7 @@ test("an agent on a task, an archived one's page among them, opens on its plan s
     repository: "acme/relay",
     document: { body: "", assumptions: [] },
   };
-  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.PLAN };
+  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.DESCRIPTION };
   transcript = {
     messages: [
       { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "# Invitations" }] },

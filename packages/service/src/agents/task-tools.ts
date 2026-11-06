@@ -59,7 +59,7 @@ import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
 
 /**
- * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's plan and where it stands, and make one.
+ * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's description and where it stands, and make one.
  *
  * Every coding agent is offered the same `read_task`,
  * one implementation, beside `list_tasks` (`agent-tools.ts`), which
@@ -69,15 +69,15 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  * standing now; a task of another workspace is none of the caller's, even
  * where the member is also in it. It answers the task as its row stands, the
  * brief the developer started it with, the tasks it is blocked by and blocks
- * that the member reaches, and its plan's saved text cut on a
- * line to a bound, so an agent reads another task's plan without its being
+ * that the member reaches, and its description's saved text cut on a
+ * line to a bound, so an agent reads another task's description without its being
  * mentioned.
  *
  * `create_task` makes a task as the member the caller acts for makes one from
  * the sidebar, through the one make every door shares
  * (`tasks/task-create-relation.ts`): in the caller's workspace, on the
  * repository named, the one the caller works in where none is, or none, and
- * with a plan to start from where one is given. Only a pilot may make a task
+ * with a description to start from where one is given. Only a pilot may make a task
  * in pilot mode, and only as a child, which is how it gives a part too big
  * for one pull request a pilot of its own. It is made under an id drawn from
  * eve's key for the call (`called-id.ts`), so a call run again answers the
@@ -85,7 +85,7 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  * Every answer is data the model reads, never a credential.
  */
 
-/** The most characters of a plan a read answers, about ten thousand tokens: the rest is counted, never sent. */
+/** The most characters of a description a read answers, about ten thousand tokens: the rest is counted, never sent. */
 export const DESCRIPTION_TEXT_READ_CHARS = 40_000;
 
 /** Why a read answered nothing, in words the model can act on. */
@@ -111,18 +111,18 @@ export const READ_TASK_TOOL = {
     "priority), repository, who started it, whether it is the task you " +
     "work on, its mention, the brief the developer started it with (null for none), the tasks " +
     "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), " +
-    `and its plan as last saved, cut on a line at ${DESCRIPTION_TEXT_READ_CHARS} characters with how many were ` +
+    `and its description as last saved, cut on a line at ${DESCRIPTION_TEXT_READ_CHARS} characters with how many were ` +
     `left out. Read one before you start an agent on it, or to learn what another task is about; ` +
     `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** Whether the caller reaches tasks' plans: the coding agent's starter's Plans, or a pilot's Pilot, or the member's own Plans (`descriptionsOnFor`). */
+/** Whether the caller reaches tasks' descriptions: the coding agent's starter's Task descriptions, or a pilot's Pilot, or the member's own Task descriptions (`descriptionsOnFor`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
   return descriptionsOnFor(callerUserId(caller), callerAgent(caller)?.kind);
 }
 
-/** One call of `read_task`: a task of the caller's workspace, its plan cut to the bound, or why there is none; no plan where the caller has Plans off. */
+/** One call of `read_task`: a task of the caller's workspace, its description cut to the bound, or why there is none; no description where the caller has Task descriptions off. */
 export function runReadTask(
   call: AgentReadCall,
   input: UnparsedWireValue,
@@ -146,7 +146,7 @@ export function runReadTask(
       }
       const { task, text, saved, brief } = stored.value;
       const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
-      const plan = cutOnLine(text, DESCRIPTION_TEXT_READ_CHARS);
+      const description = cutOnLine(text, DESCRIPTION_TEXT_READ_CHARS);
       const descriptionsOn = yield* callerDescriptionsOn(call.caller);
       const blocks = yield* taskBlockReadings(userId, task, step);
       return {
@@ -163,7 +163,13 @@ export function runReadTask(
           ...blocks,
         },
         ...(descriptionsOn
-          ? { plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars } }
+          ? {
+              description: {
+                text: description.text,
+                saved,
+                leftOutChars: description.leftOutChars,
+              },
+            }
           : undefined),
       };
     }),
@@ -175,7 +181,7 @@ export const CREATE_TASK_REFUSAL = {
   UNREADABLE:
     `Not made: give a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a repository as ` +
     `owner/name, null for none, or none for the one you work in, a brief of at most ` +
-    `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, a plan of at most ` +
+    `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, a description of at most ` +
     `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none, a status ` +
     `(${Object.values(TASK_STATUS).join(", ")}) or none, a priority ` +
     `(${Object.values(TASK_PRIORITY).join(", ")}) or none, an assignee as a member's ` +
@@ -205,6 +211,10 @@ export const CREATE_TASK_REFUSAL = {
   NOT_PILOT:
     "Not made: only a pilot makes a task in pilot mode; leave mode out to make one its agents " +
     "work, or tell your pilot the task is too big for one pull request.",
+  // Note that the field was `plan` before the task's document was its description, and an agent whose session listed the tool then may still send it, which the schema would otherwise drop and make the task empty.
+  RENAMED_DESCRIPTION:
+    "Not made: the task's starting text is now named description, not plan; call again with the " +
+    "same text as description.",
   PILOT_NO_PARENT:
     "Not made: a task in pilot mode is a child task of yours; give it a parentTaskId, your own " +
     "task's id where it is a part of your work.",
@@ -230,10 +240,10 @@ const CREATE_TASK_INPUT = Schema.Struct({
         "it; their words where they gave them, left out otherwise.",
     ),
   ),
-  plan: Schema.optionalKey(
+  description: Schema.optionalKey(
     describeWire(
       Schema.String.check(Schema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
-      "The plan's body to start it with, as Markdown under its sections' ## headings, without " +
+      "The description's body to start it with, as Markdown under its sections' ## headings, without " +
         "the # title, which the task's name is; an agent started on it with no prompt is handed " +
         "it. Left out, it starts empty.",
     ),
@@ -286,12 +296,15 @@ const CREATE_TASK_INPUT = Schema.Struct({
 
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
 
+/** A make that names the starting text by the field's name before the rename. */
+const namesRetiredPlan = Schema.is(Schema.Struct({ plan: Schema.Unknown }));
+
 export const CREATE_TASK_TOOL = {
   name: AGENT_TOOL.CREATE_TASK,
   description:
     "Make a task in your workspace for the developer you work for, as the sidebar's New task " +
     "would: owned by them, on the repository named or the one you work in, with their brief " +
-    "and a plan to start from where given, and no agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
+    "and a description to start from where given, and no agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
     "where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status, a priority, and an assignee where the developer said them. Give it a " +
@@ -304,15 +317,15 @@ export const CREATE_TASK_TOOL = {
   inputSchema: CREATE_TASK_INPUT,
 } as const;
 
-/** A # title at a plan's head, as Markdown spells one: at most three spaces in, and a space, a tab, or the line's end after the #, so `#define` or a code line is no title. */
+/** A # title at a description's head, as Markdown spells one: at most three spaces in, and a space, a tab, or the line's end after the #, so `#define` or a code line is no title. */
 const TITLE_HEADING = /^(?:[ \t]*\r?\n)*[ ]{0,3}#(?:[ \t][^\r\n]*)?\r?(?:\n|$)/u;
 
-/** A plan's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
-function descriptionTextOf(plan: string): string {
-  return plan.replace(TITLE_HEADING, "").trim();
+/** A description's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
+function descriptionTextOf(description: string): string {
+  return description.replace(TITLE_HEADING, "").trim();
 }
 
-/** Who a task's first plan is written by, as its history names them: the calling coding agent, or the member calling, as the developer. */
+/** Who a task's first description is written by, as its history names them: the calling coding agent, or the member calling, as the developer. */
 function revisionWriterOf(call: AgentCall): NonNullable<TaskCreateAsked["writer"]> {
   const agent = callerAgent(call.caller);
   return agent === undefined
@@ -381,11 +394,14 @@ export function runCreateTask(
   call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AgentToolServices> {
+  if (namesRetiredPlan(input)) {
+    return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.RENAMED_DESCRIPTION));
+  }
   const asked = readCreateAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan, status, priority, assignee, relation, mode } = asked.success;
+  const { name, brief, description, status, priority, assignee, relation, mode } = asked.success;
   if (asked.success.parentTaskId !== undefined && relation !== undefined) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.PARENT_AND_RELATION));
   }
@@ -424,7 +440,7 @@ export function runCreateTask(
           : yield* workedRepository(call.caller);
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
-      // Note that a plan is written only for a caller with Plans on; the schema takes one alike, so the tool's words stay the same.
+      // Note that a description is written only for a caller with Task descriptions on; the schema takes one alike, so the tool's words stay the same.
       const descriptionsOn = yield* callerDescriptionsOn(call.caller);
       const made = Option.isSome(before)
         ? before.value.task
@@ -442,7 +458,7 @@ export function runCreateTask(
               ...(parentTaskId === undefined ? undefined : { parentTaskId }),
               ...(mode === undefined ? undefined : { mode }),
               ...originOf(call),
-              text: descriptionsOn ? descriptionTextOf(plan ?? "") : "",
+              text: descriptionsOn ? descriptionTextOf(description ?? "") : "",
               writer: revisionWriterOf(call),
               relations: relation === undefined ? [] : [relation],
             },

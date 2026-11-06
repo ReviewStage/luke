@@ -144,7 +144,7 @@ function listedLine({ descriptionSnapshot, prompt, automationOrigin, ...row }: A
     prompt !== null
       ? AGENT_BRIEF.PROMPT
       : descriptionSnapshot !== null
-        ? AGENT_BRIEF.PLAN
+        ? AGENT_BRIEF.DESCRIPTION
         : AGENT_BRIEF.BLANK;
   return { ...row, automationName: automationOrigin?.name ?? null, brief };
 }

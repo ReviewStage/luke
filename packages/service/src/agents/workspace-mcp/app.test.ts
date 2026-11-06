@@ -320,7 +320,7 @@ function post(
   });
 }
 
-/** Turns Plans on for an agent's starter, whose agents are offered the plan's tools only then. */
+/** Turns Task descriptions on for an agent's starter, whose agents are offered the description's tools only then. */
 const descriptionsOn = (userId: string) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
 
@@ -617,7 +617,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
 
   it.effect.each([
     {
-      // An agent on no task is listed the plan's tools all the same.
+      // An agent on no task is listed the description's tools all the same.
       why: "in no repository, the checkout's",
       agent: agentOnNoTaskWithBearer,
       withheld: ["open_pull_request"],
@@ -637,7 +637,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
       withheld: ["browser", "run_on_mac"],
     },
   ])(
-    "tools/list leaves out what eve offers no agent $why, and the memory and the plan's tools where its starter has Memory and Plans off",
+    "tools/list leaves out what eve offers no agent $why, and the memory and the description's tools where its starter has Memory and Task descriptions off",
     ({ agent: made, withheld }) =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -841,7 +841,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a picture of the agent's plan comes back as its look's status and image content, never as text",
+    "a picture of the agent's description comes back as its look's status and image content, never as text",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -870,7 +870,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
   );
 
   it.effect(
-    "a look at a video of the agent's plan comes back as the refusal alone, with no image and none of its bytes",
+    "a look at a video of the agent's description comes back as the refusal alone, with no image and none of its bytes",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;

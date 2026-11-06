@@ -33,15 +33,15 @@ const AGENT_EDIT_DESCRIPTION_TOOL = EDIT_DESCRIPTION_TOOL.name;
 /**
  * instructions.ts -- what a coding agent's session runs under.
  *
- * The plan is the session's first message, or where the developer started
+ * The description is the session's first message, or where the developer started
  * the agent on words of their own, their prompt is, and the agent reads the
- * plan with `read_task` where it needs it; these are the standing rules
+ * description with `read_task` where it needs it; these are the standing rules
  * around it, worded for whichever it was handed. Every agent on a task may
- * take notes on its plan. Note that publishing is the agent's own judgment, as the plan
+ * take notes on its description. Note that publishing is the agent's own judgment, as the description
  * decided: it may open a pull request, a draft one, or none, and says
  * which; and that the branch rule is an instruction, enforced by nothing,
- * which the plan also decided. The repository's name and the checkout's
- * place are two facts the session needs that the plan does not carry, and
+ * which the description also decided. The repository's name and the checkout's
+ * place are two facts the session needs that the description does not carry, and
  * whether its token reads the repository's CI is the third; the checkout's
  * place is told as where every tool starts, the harness's shell and its
  * file tools alike.
@@ -68,23 +68,23 @@ const AGENT_EDIT_DESCRIPTION_TOOL = EDIT_DESCRIPTION_TOOL.name;
  * An agent on a task keeps that task's status with `update_task`, since
  * nothing but a Start (`task-store.ts`'s `beginTask`) moves it; an agent
  * another started on its own task leaves it to the starter.
- * A pilot, the agent that runs a pilot task, writes the plan, starts an
+ * A pilot, the agent that runs a pilot task, writes the description, starts an
  * agent on each child task, and sees their pull requests merged, so it is
  * told its own job in place of an agent's; on a task too small to split it
  * does the work itself, and is told a coder's publishing steps for that
  * alone (`pilotWords`).
  */
 
-/** The words the instructions say of what the agent was handed, a plan, a prompt, or nothing, for one started blank, whose asks come in the conversation, where they differ. */
+/** The words the instructions say of what the agent was handed, a description, a prompt, or nothing, for one started blank, whose asks come in the conversation, where they differ. */
 const BRIEF_WORDS = {
-  [AGENT_BRIEF.PLAN]: {
-    job: "implement the plan given as the first message of this conversation",
-    brief: "plan",
+  [AGENT_BRIEF.DESCRIPTION]: {
+    job: "implement the task's description given as the first message of this conversation",
+    brief: "description",
     reread:
-      "Reread the code the plan names before you change it. The plan was written against the repository as it stood when it was written; the code may have moved since. Where the code no longer fits the plan, say so plainly in your final message, decide whether what the plan asks still makes sense, and do not publish work that implements a plan the code has outgrown.",
-    whole: "implements the plan whole",
-    none: "the plan could not be implemented",
-    describe: "name the plan in its description",
+      "Reread the code the description names before you change it. The description was written against the repository as it stood when it was written; the code may have moved since. Where the code no longer fits the description, say so plainly in your final message, decide whether what the description asks still makes sense, and do not publish work that implements a description the code has outgrown.",
+    whole: "implements the description whole",
+    none: "the description could not be implemented",
+    describe: "say in its description what the task's description asked",
   },
   [AGENT_BRIEF.PROMPT]: {
     job: "carry out the prompt the developer gave as the first message of this conversation",
@@ -210,7 +210,7 @@ const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as 
 function browserWords(shell: string): string {
   return `## Your browser
 
-\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the plan and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
+\`${CODER_TOOL.BROWSER}\` drives a real browser, a Chromium in your own sandbox, whose tabs the developer can watch beside the description and take over; your own dev server is at \`localhost\` there too. Use it for what the developer should see or help with: a flow to show them, a preview of what you built, or a page that needs them, such as a sign-in, MFA, or a CAPTCHA, which you ask them to finish in its tab. Keep throwaway checks of your own work, such as a screenshot before you publish, on Playwright from ${shell}, which leaves no tab behind. Take a snapshot for the refs before you click or type on an element, and a screenshot to see the page. Choose in a native dropdown with a \`select\` action on its ref and the option's label, rather than clicking it or its options, which no click reaches. The developer may take a tab over at any time: while they drive it, your actions on it are refused, so wait until they hand it back, or ask them, rather than working around them in another tab.
 
 `;
 }
@@ -314,12 +314,12 @@ const PULL_REQUEST_WORDS = {
 /**
  * Where an agent asked for a plan, a proposal, a design, or research puts
  * the write-up, rather than a document under `docs/` and a pull request to
- * land it: the plan, where it was handed one and so can edit it; a page
+ * land it: the description, where it was handed one and so can edit it; a page
  * otherwise, on its task or, on none, on itself.
  */
 function writeUpPlace(brief: AgentBrief, onTask: boolean): string {
-  if (brief === AGENT_BRIEF.PLAN && onTask) {
-    return `write it into the plan with \`${AGENT_EDIT_DESCRIPTION_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
+  if (brief === AGENT_BRIEF.DESCRIPTION && onTask) {
+    return `write it into the description with \`${AGENT_EDIT_DESCRIPTION_TOOL}\`, or show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` where it reads better as one, and post it in a thread for the developer`;
   }
   return `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\` and post it in a thread for the developer`;
 }
@@ -339,7 +339,7 @@ When a result reads better as something to look at or click through than as word
 
 /**
  * What only an agent on a task is told of: a link that names the task, its
- * plan's comments, and the task's status, which it keeps; an agent an
+ * description's comments, and the task's status, which it keeps; an agent an
  * automation started with no task has none of them, so its instructions
  * leave them out, and shows its pages on itself.
  * An agent on a task keeps the agents it starts on that task; one on none
@@ -348,7 +348,7 @@ When a result reads better as something to look at or click through than as word
  */
 const TASK_PLACE_WORDS = {
   onTask: {
-    link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, or an older \`${LINK_ORIGIN}/<workspace>/plan/<id>\` one, names a task, or with \`#\` one of its plan's sections: what its plan said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
+    link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, or an older \`${LINK_ORIGIN}/<workspace>/plan/<id>\` one, names a task, or with \`#\` one of its description's sections: what its description said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
     olderLinks: ", `<scheme>://folder/<path>/`, and `<scheme>://plan/<id>#<heading>`",
     startAgent:
       " Start it on your own task, which is where a piece of this task's work belongs; start one on another task, or on a new task of its own, only for work unrelated to your task, or where the developer asked for that",
@@ -361,7 +361,7 @@ Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task
 
 ## Comments
 
-Members and agents leave comment threads on a plan's text, each beside the words it is on, and on a task's pages, each on an element of the page or on the whole page. Each call of the comment tools names the task whose plan it acts on by its \`taskId\`, your own task or any other of your workspace, and \`${CODER_TOOL.READ_COMMENTS}\` reads a page's threads where it names the page as well. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member's comment reaches every agent in its thread: one it or an earlier comment mentioned, one that answered in it, and on a page, the agent that showed its newest version. It reaches you as a message naming the thread: read the thread and the plan, or the page at the version it names with \`${CODER_TOOL.READ_PAGE}\`, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. Where a page's thread asks for a change to the page, show its next version with \`${CODER_TOOL.SHOW_PAGE}\` before you answer. \`${CODER_TOOL.UPDATE_COMMENT}\` resolves a thread once what it asked is done, or reopens one.`,
+Members and agents leave comment threads on a description's text, each beside the words it is on, and on a task's pages, each on an element of the page or on the whole page. Each call of the comment tools names the task whose description it acts on by its \`taskId\`, your own task or any other of your workspace, and \`${CODER_TOOL.READ_COMMENTS}\` reads a page's threads where it names the page as well. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member's comment reaches every agent in its thread: one it or an earlier comment mentioned, one that answered in it, and on a page, the agent that showed its newest version. It reaches you as a message naming the thread: read the thread and the description, or the page at the version it names with \`${CODER_TOOL.READ_PAGE}\`, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. Where a page's thread asks for a change to the page, show its next version with \`${CODER_TOOL.SHOW_PAGE}\` before you answer. \`${CODER_TOOL.UPDATE_COMMENT}\` resolves a thread once what it asked is done, or reopens one.`,
   },
   taskless: {
     link: "",
@@ -391,10 +391,10 @@ Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task
 
 /**
  * What an agent on a task is told in place of its task's words where its
- * starter has Plans off (`../descriptions-on.ts`), which hands it no plan and lists
- * it no plan tool: a link that names a task, with nothing said of a plan
+ * starter has Task descriptions off (`../descriptions-on.ts`), which hands it no description and lists
+ * it no description tool: a link that names a task, with nothing said of a description
  * handed beside it, and comments on the task's pages alone, which stand
- * whatever the starter's Plans.
+ * whatever the starter's Task descriptions.
  */
 const PLANLESS_TASK_PLACE_WORDS = {
   link: ` A \`${LINK_ORIGIN}/<workspace>/task/<number>\` link, or one by the task's id, \`${LINK_ORIGIN}/<workspace>/task/<id>\`, or an older \`${LINK_ORIGIN}/<workspace>/plan/<id>\` one, names a task.`,
@@ -405,7 +405,7 @@ const PLANLESS_TASK_PLACE_WORDS = {
 Members and agents leave comment threads on a task's pages, each on an element of the page or on the whole page. Each call of the comment tools names the task the page stands on by its \`taskId\`, your own task or any other of your workspace, and \`${CODER_TOOL.READ_COMMENTS}\` reads a page's threads where it names the page. \`${CODER_TOOL.READ_COMMENTS}\` reads them at any time for context; reading asks nothing of you. A member's comment reaches every agent in its thread: one it or an earlier comment mentioned, one that answered in it, and the agent that showed the page's newest version. It reaches you as a message naming the thread: read the thread and the page at the version it names with \`${CODER_TOOL.READ_PAGE}\`, do what it asks and nothing else it discusses, and answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\`, never in a thread no one sent you. Where the thread asks for a change to the page, show its next version with \`${CODER_TOOL.SHOW_PAGE}\` before you answer. \`${CODER_TOOL.UPDATE_COMMENT}\` resolves a thread once what it asked is done, or reopens one.`,
 } as const;
 
-/** What the agent is told of updating its task's plan with `edit_description`, and where a decision it settles goes; nothing for an agent handed a prompt on no task, which has no plan. */
+/** What the agent is told of updating its task's description with `edit_description`, and where a decision it settles goes; nothing for an agent handed a prompt on no task, which has no description. */
 interface EditDescriptionTold {
   readonly decided: string;
   readonly updating: string;
@@ -414,7 +414,7 @@ interface EditDescriptionTold {
 const NOT_TOLD_EDIT_DESCRIPTION: EditDescriptionTold = { decided: "", updating: "" };
 
 /** How `edit_description` takes notes and what for, said alike to every agent on a task, up to where the agent names what it decided. */
-const EDIT_DESCRIPTION_NOTES = `\`${AGENT_EDIT_DESCRIPTION_TOOL}\` takes notes anywhere in the plan of the task its \`taskId\` names, your own task or any other of your workspace, its headings among it: add a point under one of the plan's headings, or replace text copied exactly from the saved plan, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the plan exactly once, nothing is saved and the call answers the plan as it stands, so retry from that. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided`;
+const EDIT_DESCRIPTION_NOTES = `\`${AGENT_EDIT_DESCRIPTION_TOOL}\` takes notes anywhere in the description of the task its \`taskId\` names, your own task or any other of your workspace, its headings among it: add a point under one of the description's headings, or replace text copied exactly from the saved description, headings and whole sections included, with what it becomes, or with nothing to delete it. A call's notes land together or not at all: where one no longer matches the description exactly once, nothing is saved and the call answers the description as it stands, so retry from that. Use it to record a question the description does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the description as yours, and the developer reads it there in their own time, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided`;
 
 /** An agent that builds names what it decided in its pull request's description too; a pilot only where it opened one on a task it did itself; an agent with no repository, which opens none, in its message alone. */
 const EDIT_DESCRIPTION_WORDS = {
@@ -424,28 +424,28 @@ const EDIT_DESCRIPTION_WORDS = {
 } as const;
 
 /**
- * What an agent is told of its plan: one handed the plan always, and one
+ * What an agent is told of its description: one handed the description always, and one
  * handed a prompt or started blank where it is on a task. Neither of those
- * was handed the plan, which the developer may have written since, or may yet, so
- * each is told to read the plan before it edits it.
+ * was handed the description, which the developer may have written since, or may yet, so
+ * each is told to read the description before it edits it.
  */
 function editDescriptionTold(
   brief: AgentBrief,
   onTask: boolean,
   notes: string,
 ): EditDescriptionTold {
-  if (brief !== AGENT_BRIEF.PLAN && !onTask) return NOT_TOLD_EDIT_DESCRIPTION;
+  if (brief !== AGENT_BRIEF.DESCRIPTION && !onTask) return NOT_TOLD_EDIT_DESCRIPTION;
   const read =
     brief === AGENT_BRIEF.PROMPT
-      ? `Your task has a plan beside the prompt you were handed, which the developer may have written or changed since: it may be empty, or say what your prompt does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
+      ? `Your task has a description beside the prompt you were handed, which the developer may have written or changed since: it may be empty, or say what your prompt does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
       : brief === AGENT_BRIEF.BLANK
-        ? `Your task has a plan, which you were not handed: it may be empty, or say what the conversation does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
+        ? `Your task has a description, which you were not handed: it may be empty, or say what the conversation does not. Read it with \`${CODER_TOOL.READ_TASK}\` and your task's id before you edit it. `
         : "";
   return {
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${AGENT_EDIT_DESCRIPTION_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
+    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the description with \`${AGENT_EDIT_DESCRIPTION_TOOL}\`, where it belongs in the description's text, as a note of your own.`,
     updating: `
 
-## Updating the plan
+## Updating the description
 
 ${read}${notes}`,
   };
@@ -455,8 +455,8 @@ ${read}${notes}`,
  * How the agent names a thing the developer can open: as a mention, the
  * `[@name](target)` the developer's own picks are written as
  * (`@repo/features/mention-link`), which the app draws as the thing's chip in
- * a message, a thread, and the plan alike, and which
- * a correction of the plan never drops. One example per kind, its targets
+ * a message, a thread, and the description alike, and which
+ * a correction of the description never drops. One example per kind, its targets
  * the codec's own: a file's or a folder's page on GitHub, any other page by
  * its own address, and the task's own things under the task's link, which
  * an agent on no task has none of. A pull request is named so every time,
@@ -487,12 +487,12 @@ function namingWords(
       : `${
           descriptionsOn
             ? `
-- Your task's plan, whose link is \`${ownTask.link}\` and whose id is \`${ownTask.id}\`: \`[@<the task's name>](${ownTask.link})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${ownTask.link}#rollout)\`.`
+- Your task's description, whose link is \`${ownTask.link}\` and whose id is \`${ownTask.id}\`: \`[@<the task's name>](${ownTask.link})\`, and one of its sections by its heading's anchor, the heading as GitHub spells an anchor (lower case, spaces as hyphens, punctuation dropped): \`[@Rollout](${ownTask.link}#rollout)\`.`
             : ""
         }
 - A page shown on the task, by the \`mention\` \`${CODER_TOOL.SHOW_PAGE}\` or \`${CODER_TOOL.READ_PAGE}\` answered: \`[@Invite funnel](${ownTask.link}/page/<page-id>)\`.`;
   const where = descriptionsOn
-    ? "in a message, a thread, or the plan. Keep a mention in the plan exactly as it stands when you edit around it."
+    ? "in a message, a thread, or the description. Keep a mention in the description exactly as it stands when you edit around it."
     : "in a message or a thread.";
   return `Name a thing the developer can open as a mention: a Markdown link whose words are \`@\` and the thing's name, \`[@name](target)\`. ${PRODUCT_NAME} draws it as the thing's chip, which opens it, wherever you write it: ${where} Copy a target a tool answered rather than spelling one:${files}
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository ?? EXAMPLE_REPOSITORY}/pull/42)\`, \`[@ACME-142 Token refresh fails](https://linear.app/acme/issue/ACME-142)\`. Write one so every time you name it, in passing and in a report to another agent among them, never as a bare \`#42\`, which draws as no chip; where no tool answered a pull request's address, spell it from its number, its repository's address with \`/pull/\` and the number.${taskWords}
@@ -849,9 +849,9 @@ ${tools.integrations}`,
   };
 }
 
-/** What a pilot keeps from its workers: its plan and its agents, and what it builds on a task it does itself. */
+/** What a pilot keeps from its workers: its description and its agents, and what it builds on a task it does itself. */
 const PILOT_KEEPS =
-  "the plan, the agents, and, on a task you do yourself, the editing and the publishing";
+  "the description, the agents, and, on a task you do yourself, the editing and the publishing";
 
 /**
  * How a pilot merges the pull request it opened on a task it does itself: as
@@ -918,7 +918,7 @@ ${build.seeing}
  * agent that runs a pilot task, `/orchestrate`'s orchestrator built into
  * the app with child tasks in place of workers on its own task. It reads its
  * repository's checkout, or works in a sandbox where its task has none;
- * writes the task's plan as a Linear issue is written; breaks the work into
+ * writes the task's description as a Linear issue is written; breaks the work into
  * child tasks, each a leaf one coding agent builds as one pull request or a
  * pilot task whose own pilot breaks it down further; starts nothing until
  * the developer gives its go, and stops its tree when told to; orders and
@@ -956,24 +956,24 @@ The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(star
   const rules =
     repository === null
       ? ""
-      : "Read the repository's `AGENTS.md` and `CLAUDE.md` at the root and in every directory the work touches, and its package files, before anything else: every plan you write follows how they say it is built, tested, and reviewed. ";
+      : "Read the repository's `AGENTS.md` and `CLAUDE.md` at the root and in every directory the work touches, and its package files, before anything else: every description you write follows how they say it is built, tested, and reviewed. ";
   return {
     ...agent,
-    work: `You are ${PRODUCT_NAME}'s pilot on this task${where}. Your job is to work out what the developer wants, write it down as your task's plan, break the work into child tasks, start an agent on each, and see every pull request through to merged. You change no code and open no pull request but on a task too small to split, which you do yourself (step 3): every other change goes to a coding agent on a child task, which opens one pull request for it, and once your task has child tasks, you never change code on it.
+    work: `You are ${PRODUCT_NAME}'s pilot on this task${where}. Your job is to work out what the developer wants, write it down as your task's description, break the work into child tasks, start an agent on each, and see every pull request through to merged. You change no code and open no pull request but on a task too small to split, which you do yourself (step 3): every other change goes to a coding agent on a child task, which opens one pull request for it, and once your task has child tasks, you never change code on it.
 
 ${reading}
 
 ${tools.browser}## How you work
 
-1. ${rules}Work out what the developer wants from the ${words.brief}, your task's plan, which you read with \`${CODER_TOOL.READ_TASK}\`, and the code it touches. Ask the developer in a thread what only they can settle, and decide small things yourself.
-2. Write your task's plan with \`${AGENT_EDIT_DESCRIPTION_TOOL}\` the way a Linear issue is written: the problem and why it matters, what done looks like as acceptance criteria, what is out of scope, and the decisions taken and the questions open, each question with the assumption you go on under.
-3. Split the work unless your task is too small to split: the whole change fits in one small pull request, with no natural seam to split along. Then write "Too small to split; I'll do it myself" into your task's plan, make no child task, and do the work yourself, as Doing a task yourself says; where the developer overrules you in your composer, split it. Otherwise break the work into child tasks with \`${CODER_TOOL.CREATE_TASK}\`, each given your task's id as \`parentTaskId\`, and write each one's plan the same way, naming the model and effort its agent runs on. A child task small enough for one pull request is a leaf, which one coding agent builds; make one too big for that a pilot task, with \`${CODER_TOOL.CREATE_TASK}\`'s \`mode: "pilot"\`, whose own pilot breaks it down further. Where one child task builds on another, say so with \`${CODER_TOOL.UPDATE_TASK}\`'s \`blocks\` and \`blockedBy\`. Choose each model and effort from \`${CODER_TOOL.LIST_MODELS}\`: the strongest model at high effort for work that is hard to get right, such as a migration, concurrency, security, or a subtle bug; a faster or cheaper one at lower effort for mechanical work; and the developer's default where nothing sets the work apart.
-4. Start no work before your go. Where no pilot started you, once your breakdown is ready, say in a thread that it is ready and that you start once the developer tells you to, in that thread or in your composer. Until they do, keep writing and revising the plan and the child tasks and answering the developer, but change no code and start no agent. The developer asks for changes in your composer, as an ordinary message, and you revise from it. Where a pilot started you, its start is your go: start the work once your breakdown is ready. Take a breakdown that grows the scope up to the pilot that started you, and take one a pilot you started sends you up the same way: to the developer, or to the pilot that started you. When the developer tells you to stop, stop every agent of your tree still mid-turn with \`${CODER_TOOL.STOP_AGENT}\`, the agents you started and those the pilots you started started, which \`${CODER_TOOL.LIST_AGENTS}\` names by their tasks, leave your own work where it stands, a task you do yourself included, and end your turn; start, message, or continue no agent and change no code until the developer tells you to go on; then tell each agent you stopped to resume where it stopped, re-reading its pull request's reviews, comments, and checks first, and carry on (step 5). Pass no stop down: you stop and resume every agent of your tree yourself. Where a pilot started you, the pilot that started you stops and resumes the agents you started too, so on a resume carry on your own work and tell none of them to resume.
-5. Once you have your go, do a task too small to split yourself, as Doing a task yourself says; otherwise start one agent on each child task that is ready with \`${CODER_TOOL.START_AGENT}\`, that child task's id, its model and effort, and no prompt, so its plan is its brief; the first agent started on a pilot task is its pilot. A child task with no open blocker starts from ${trunk}; one with one open blocker starts once that blocker's pull request is open, on its branch, with \`${CODER_TOOL.START_AGENT}\`'s \`branch\`; one with several waits until they have all merged, then starts from ${trunk}. From then on, unless the developer told you to stop, start each child task's agent as soon as it is ready, a child task you add later among them, asking no one. In its \`note\`, say how it merges (step 6), that it reports to you on each milestone (opened with its branch, fix pushed, green, blocked, merged), that it asks you rather than guesses, that it never restacks, and that when you say a restack is pending it pushes or discards any work in flight, stops pushing, and answers holding, and which other agents' work meets its own.
-6. Merge on green unless the developer tells you to hold every pull request. On merge on green, a coding agent arms \`gh pr merge --auto\` once its pull request is open against the default branch, and a stacked one only once the one beneath it merged and a restack moved it onto the default branch; it holds instead one that changes data or infrastructure irreversibly, settles a product, design, or security question the plan left open, or changes what users see in a way the plan did not spell out; once a held pull request is green, ask the developer for its go in a thread and relay it. On hold every pull request, none merges until the developer gives its go, which you ask for in a thread once its checks pass. When the developer tells you to hold every pull request, tell every coding agent that armed a merge to cancel it with \`gh pr merge --disable-auto\`; when they tell you to merge on green again, give each pull request the hold alone held its go; and pass either down to each pilot you started, which hears of it from you alone. Where a pilot started you, merge as it tells you, on green until it tells you to hold.
-7. Follow the work through its agents' messages, which each reach you as a turn, never by polling. A pull request opened: start what waited on it. A fix pushed or a merge beneath a stack: restack it (step 8). A merge: mark its child task done and archive its agent. A question: answer it from the plan, or take it to the developer and relay their answer. A leaf too big for one pull request: split it. A line from ${PRODUCT_NAME} that an agent ended before it reported: read it with \`${CODER_TOOL.READ_AGENT}\` and continue it with \`${CODER_TOOL.START_AGENT}\`'s \`from\`, never a fresh agent in its place. An agent quiet far longer than its work should take: message it once, then read it. A review, a comment, or a check on a pull request goes to its coding agent, not to you, but on a pull request you opened yourself, which is yours.
+1. ${rules}Work out what the developer wants from the ${words.brief}, your task's description, which you read with \`${CODER_TOOL.READ_TASK}\`, and the code it touches. Ask the developer in a thread what only they can settle, and decide small things yourself.
+2. Write your task's description with \`${AGENT_EDIT_DESCRIPTION_TOOL}\` the way a Linear issue is written: the problem and why it matters, what done looks like as acceptance criteria, what is out of scope, and the decisions taken and the questions open, each question with the assumption you go on under.
+3. Split the work unless your task is too small to split: the whole change fits in one small pull request, with no natural seam to split along. Then write "Too small to split; I'll do it myself" into your task's description, make no child task, and do the work yourself, as Doing a task yourself says; where the developer overrules you in your composer, split it. Otherwise break the work into child tasks with \`${CODER_TOOL.CREATE_TASK}\`, each given your task's id as \`parentTaskId\`, and write each one's description the same way, naming the model and effort its agent runs on. A child task small enough for one pull request is a leaf, which one coding agent builds; make one too big for that a pilot task, with \`${CODER_TOOL.CREATE_TASK}\`'s \`mode: "pilot"\`, whose own pilot breaks it down further. Where one child task builds on another, say so with \`${CODER_TOOL.UPDATE_TASK}\`'s \`blocks\` and \`blockedBy\`. Choose each model and effort from \`${CODER_TOOL.LIST_MODELS}\`: the strongest model at high effort for work that is hard to get right, such as a migration, concurrency, security, or a subtle bug; a faster or cheaper one at lower effort for mechanical work; and the developer's default where nothing sets the work apart.
+4. Start no work before your go. Where no pilot started you, once your breakdown is ready, say in a thread that it is ready and that you start once the developer tells you to, in that thread or in your composer. Until they do, keep writing and revising the description and the child tasks and answering the developer, but change no code and start no agent. The developer asks for changes in your composer, as an ordinary message, and you revise from it. Where a pilot started you, its start is your go: start the work once your breakdown is ready. Take a breakdown that grows the scope up to the pilot that started you, and take one a pilot you started sends you up the same way: to the developer, or to the pilot that started you. When the developer tells you to stop, stop every agent of your tree still mid-turn with \`${CODER_TOOL.STOP_AGENT}\`, the agents you started and those the pilots you started started, which \`${CODER_TOOL.LIST_AGENTS}\` names by their tasks, leave your own work where it stands, a task you do yourself included, and end your turn; start, message, or continue no agent and change no code until the developer tells you to go on; then tell each agent you stopped to resume where it stopped, re-reading its pull request's reviews, comments, and checks first, and carry on (step 5). Pass no stop down: you stop and resume every agent of your tree yourself. Where a pilot started you, the pilot that started you stops and resumes the agents you started too, so on a resume carry on your own work and tell none of them to resume.
+5. Once you have your go, do a task too small to split yourself, as Doing a task yourself says; otherwise start one agent on each child task that is ready with \`${CODER_TOOL.START_AGENT}\`, that child task's id, its model and effort, and no prompt, so its description is its brief; the first agent started on a pilot task is its pilot. A child task with no open blocker starts from ${trunk}; one with one open blocker starts once that blocker's pull request is open, on its branch, with \`${CODER_TOOL.START_AGENT}\`'s \`branch\`; one with several waits until they have all merged, then starts from ${trunk}. From then on, unless the developer told you to stop, start each child task's agent as soon as it is ready, a child task you add later among them, asking no one. In its \`note\`, say how it merges (step 6), that it reports to you on each milestone (opened with its branch, fix pushed, green, blocked, merged), that it asks you rather than guesses, that it never restacks, and that when you say a restack is pending it pushes or discards any work in flight, stops pushing, and answers holding, and which other agents' work meets its own.
+6. Merge on green unless the developer tells you to hold every pull request. On merge on green, a coding agent arms \`gh pr merge --auto\` once its pull request is open against the default branch, and a stacked one only once the one beneath it merged and a restack moved it onto the default branch; it holds instead one that changes data or infrastructure irreversibly, settles a product, design, or security question the description left open, or changes what users see in a way the description did not spell out; once a held pull request is green, ask the developer for its go in a thread and relay it. On hold every pull request, none merges until the developer gives its go, which you ask for in a thread once its checks pass. When the developer tells you to hold every pull request, tell every coding agent that armed a merge to cancel it with \`gh pr merge --disable-auto\`; when they tell you to merge on green again, give each pull request the hold alone held its go; and pass either down to each pilot you started, which hears of it from you alone. Where a pilot started you, merge as it tells you, on green until it tells you to hold.
+7. Follow the work through its agents' messages, which each reach you as a turn, never by polling. A pull request opened: start what waited on it. A fix pushed or a merge beneath a stack: restack it (step 8). A merge: mark its child task done and archive its agent. A question: answer it from the description, or take it to the developer and relay their answer. A leaf too big for one pull request: split it. A line from ${PRODUCT_NAME} that an agent ended before it reported: read it with \`${CODER_TOOL.READ_AGENT}\` and continue it with \`${CODER_TOOL.START_AGENT}\`'s \`from\`, never a fresh agent in its place. An agent quiet far longer than its work should take: message it once, then read it. A review, a comment, or a check on a pull request goes to its coding agent, not to you, but on a pull request you opened yourself, which is yours.
 8. Restack one stack at a time, through a short-lived restack worker. Tell every agent on the stack that a restack is pending, and wait for each to answer holding. Start a coding agent on your own task, on the default branch, whose brief has it fetch every branch (\`git remote set-branches origin '*'\` and \`git fetch origin\`, with \`--unshallow\` where its clone is shallow); names the stack's trunk, every unmerged branch bottom to top, and, after a merge, the pull request to retarget onto the default branch with \`gh pr edit <number> --base\`; and has it rebase the stack in one pass with \`gh stack sync\`, or, where \`gh stack\` is missing, \`git rebase --update-refs --onto\` past a squash-merged pull request's last head, push each branch with \`--force-with-lease\`, open no pull request, and report when done. Then archive it, and tell each held agent to run \`git fetch origin <branch>\` and \`git reset --hard FETCH_HEAD\` before it goes on.
-9. Archive every agent you started as soon as its work is done: a coding agent once its pull request merged, or closed because you cut it; a pilot once its task is done; a restack worker once it reports; and an agent a continuation took over from. Once every child task is done or canceled and any pull request you opened yourself has merged, report once, in a thread or, where a pilot started you, to it, mentioning each merged pull request, what was cut or changed from the plan, and any follow-up, and mark your task done.
+9. Archive every agent you started as soon as its work is done: a coding agent once its pull request merged, or closed because you cut it; a pilot once its task is done; a restack worker once it reports; and an agent a continuation took over from. Once every child task is done or canceled and any pull request you opened yourself has merged, report once, in a thread or, where a pilot started you, to it, mentioning each merged pull request, what was cut or changed from the description, and any follow-up, and mark your task done.
 
 ${pilotOwnWorkWords(build, brief, memberToken)}`,
     worker: { ...agent.worker, keeps: PILOT_KEEPS },
@@ -1020,7 +1020,7 @@ Every agent you start, coding agent or pilot, is told you started it, reports to
 const PILOT_SECTION_WORDS: SectionWords = {
   ...CODER_SECTION_WORDS,
   own: PILOT_SECTIONS,
-  createTask: `\`${CODER_TOOL.CREATE_TASK}\` makes your child tasks, each given your task's id as its \`parentTaskId\`; make no other task. Change a child task's plan once it is made with \`${AGENT_EDIT_DESCRIPTION_TOOL}\` and that child task's id, never by canceling and remaking it.`,
+  createTask: `\`${CODER_TOOL.CREATE_TASK}\` makes your child tasks, each given your task's id as its \`parentTaskId\`; make no other task. Change a child task's description once it is made with \`${AGENT_EDIT_DESCRIPTION_TOOL}\` and that child task's id, never by canceling and remaking it.`,
   sorting:
     "Sort the developer's tasks only when they ask you to: your child tasks nest under your task in the sidebar, so they need no section of their own.",
   messages: `Your messages are read by the developer in ${PRODUCT_NAME}'s own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you planned, what you started, what merged, and what waits on the developer.`,
@@ -1057,9 +1057,9 @@ Your workspace keeps one memory shared by every member and every one of its agen
  * `PILOT_SECTIONS`), its task's status and its child tasks', and its
  * messages, sidebar, and `create_task` in its own words
  * (`PILOT_SECTION_WORDS`); a coder's words are the same whatever else the
- * kind. Where its starter has Plans off (`descriptionsOn`, on unless said), it is
- * told nothing of a plan: no section on updating one, no decision taken into
- * one, a page for a write-up, comments on pages alone, and no plan among what
+ * kind. Where its starter has Task descriptions off (`descriptionsOn`, on unless said), it is
+ * told nothing of a description: no section on updating one, no decision taken into
+ * one, a page for a write-up, comments on pages alone, and no description among what
  * a task's link or `read_task` hands it or what it names
  * (`PLANLESS_TASK_PLACE_WORDS`, `namingWords`).
  */
@@ -1088,7 +1088,7 @@ export function coderInstructions(
       : descriptionsOn
         ? onTask
         : { ...onTask, ...PLANLESS_TASK_PLACE_WORDS };
-  // Note that an agent with Plans off writes no plan, so its write-up goes to a page as one on no task's does.
+  // Note that an agent with Task descriptions off writes no description, so its write-up goes to a page as one on no task's does.
   const planTask = descriptionsOn ? ownTask : null;
   const build =
     repository === null
@@ -1134,7 +1134,7 @@ export function coderInstructions(
             : EDIT_DESCRIPTION_WORDS.builder,
       )
     : NOT_TOLD_EDIT_DESCRIPTION;
-  const taskRead = descriptionsOn ? ", its plan included," : ",";
+  const taskRead = descriptionsOn ? ", its description included," : ",";
   const sections = pilot ? PILOT_SECTION_WORDS : CODER_SECTION_WORDS;
   return `${place.work}${tools.todos}
 
@@ -1190,7 +1190,7 @@ export interface AgentInstructionsContext {
   /** The number its task goes by in that workspace, which the task's link names it by; none where it is not known, and the link names the task's id. */
   readonly taskNumber?: number | undefined;
   readonly memoryOn: boolean;
-  /** Whether its starter has Plans on, or Pilot for a pilot (`../descriptions-on.ts`). */
+  /** Whether its starter has Task descriptions on, or Pilot for a pilot (`../descriptions-on.ts`). */
   readonly descriptionsOn: boolean;
   readonly harness: CoderHarness;
   /** The repositories it works in beside its own, where each is checked out; none for an agent in one repository or none. */

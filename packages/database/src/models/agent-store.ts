@@ -433,7 +433,7 @@ const AGENT_LINE_COLUMNS = {
   contextWindow: agentTable.contextWindow,
   brief: sql<AgentBrief>`case
     when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT}
-    when ${agentTable.descriptionSnapshot} is not null then ${AGENT_BRIEF.PLAN}
+    when ${agentTable.descriptionSnapshot} is not null then ${AGENT_BRIEF.DESCRIPTION}
     else ${AGENT_BRIEF.BLANK}
   end`,
   repository: agentTable.repository,
@@ -454,7 +454,7 @@ const AGENT_LINE_COLUMNS = {
 /** What an agent was handed as its first message, as `AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
 export function agentBriefOf(agent: Pick<Agent, "descriptionSnapshot" | "prompt">): AgentBrief {
   if (agent.prompt !== null) return AGENT_BRIEF.PROMPT;
-  return agent.descriptionSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.PLAN;
+  return agent.descriptionSnapshot === null ? AGENT_BRIEF.BLANK : AGENT_BRIEF.DESCRIPTION;
 }
 
 /** The line a full read of an agent draws, as `AGENT_LINE_COLUMNS` reads it from the row. */
