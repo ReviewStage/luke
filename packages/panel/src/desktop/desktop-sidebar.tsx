@@ -1886,7 +1886,9 @@ function SidebarColumn({
       door();
     })();
   const openTask = (taskId: string) => leaveFor(() => tasks.onResume(taskId));
-  const newTask = () => leaveFor(() => tasks.onNewTask());
+  // Note that New task's card stands over whatever place stands, so it leaves only Settings, which takes the window, for it.
+  const newTaskOver = (door: () => void) => (onTasks ? door() : leaveFor(door));
+  const newTask = () => newTaskOver(() => tasks.onNewTask());
   const openPinnedTab = (pin: SidebarPin) => leaveFor(() => tasks.onOpenPinnedTab(pin));
   // Note that the Inbox, the Board, and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
   const openInbox = () => tasks.inboxView.onOpen();
@@ -1898,7 +1900,7 @@ function SidebarColumn({
   // place. New task's composer is on it, so its row draws no Draft pencil
   // for the words shown there.
   const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME;
-  const newTaskIn = (repository: string) => leaveFor(() => tasks.onNewTaskIn(repository));
+  const newTaskIn = (repository: string) => newTaskOver(() => tasks.onNewTaskIn(repository));
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
   // The Tasks head's own menu, on a right-click and a long press, drawn only once it offers more than the buttons beside it.
