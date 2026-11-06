@@ -482,8 +482,6 @@ function deviceMachineOver(
     // nothing is thrown away here; a retired bearer shuts its runner out.
     discard: () => Effect.void,
 
-    discardSession: () => Effect.void,
-
     // Note that files go to an away Mac no more than the message naming them does, so a message
     // refused while it is away leaves nothing behind for it to write when it is back. They go in
     // as many lines as their size takes, because the Mac's claim of one answers 4.5 MB at most;

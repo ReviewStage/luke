@@ -19,8 +19,11 @@
  * The drive outlives each sandbox of its session: a sandbox thrown away for
  * its lapsed snapshot leaves it, as an archive's stop does. It is deleted
  * once the session is let go of for good, at a task's, an agent's, or an
- * account's delete, after the sandboxes that mount it, since Vercel refuses
- * to delete a drive a running sandbox holds.
+ * account's delete, by the queue that deletes the session's sandboxes
+ * (`session-sandboxes.ts`), after them. Note that a running sandbox just
+ * deleted holds its drive a few seconds more, and Vercel refuses the
+ * drive's delete until it lets go, so a pass of the queue that meets it
+ * still held leaves the session queued for the next.
  */
 
 import { createHash } from "node:crypto";

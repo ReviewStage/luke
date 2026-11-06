@@ -128,6 +128,7 @@ import {
   withdrawRunnerLine,
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
@@ -1897,7 +1898,9 @@ export const runnerSessions = <
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
           if (retired === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
-          yield* machine.discardSession(sessionId);
+          // Note that the session's drive goes through the delete queue rather than here, because a
+          // sandbox just deleted holds its drive a few seconds more, which the queue's next pass waits out.
+          yield* queueSessionSandboxes([sessionId]);
           return { outcome: EVE_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),

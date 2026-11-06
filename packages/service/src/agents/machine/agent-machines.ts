@@ -47,7 +47,6 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
     resume: (found) => of(found.machine).resume(found),
     stop: (place) => of(place.machine).stop(place),
     discard: (found) => of(found.machine).discard(found),
-    discardSession: (session) => bySession(session, (machine) => machine.discardSession(session)),
     writeFiles: (place, files) => of(place.machine).writeFiles(place, files),
     writeLine: (handle, text) => of(handle.machine).writeLine(handle, text),
     wrote: (handle, text) => of(handle.machine).wrote(handle, text),

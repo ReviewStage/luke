@@ -236,6 +236,13 @@ export function runnerSandboxApi() {
   const drives = new Set<string>();
   /** Each drive a fork made, by its name, and the drive it was forked from. */
   const driveForks = new Map<string, string>();
+  /**
+   * The drives of a sandbox deleted while its session ran, which Vercel's
+   * delete answers before that session stops: the next delete of each is
+   * refused as still attached, as Vercel refuses one a few seconds after,
+   * and the one after it goes through.
+   */
+  const releasingDrives = new Set<string>();
   /** The live running sandbox a drive is mounted in, which Vercel refuses the drive's delete and a second mount for. */
   const mountedIn = (drive: string) =>
     sandboxes.find(
@@ -343,7 +350,7 @@ export function runnerSandboxApi() {
       if (method === "POST") drives.add(name);
       if (!drives.has(name)) return new Response(null, { status: 404 });
       if (method === "DELETE") {
-        if (mountedIn(name) !== undefined) {
+        if (mountedIn(name) !== undefined || releasingDrives.delete(name)) {
           return Response.json({ error: { code: "drive_attached" } }, { status: 409 });
         }
         const found = driveFound(name);
@@ -374,6 +381,9 @@ export function runnerSandboxApi() {
         return Response.json({ error: { code: "bad_request" } }, { status: 400 });
       }
       if (method === "DELETE") {
+        if (sandbox.status === "running") {
+          for (const mount of Object.values(sandbox.mounts ?? {})) releasingDrives.add(mount.drive);
+        }
         sandbox.deleted = true;
         return Response.json(sandboxDeleted(listed(sandbox)));
       }

@@ -83,7 +83,6 @@ import {
   type AgentDrive,
   type AgentDriveFrom,
   agentDrive,
-  agentDriveName,
 } from "../agent-drive.js";
 import { type BaseDriveOf, fillBaseDrive, installDependencies } from "../base-drive.js";
 import { AgentImage } from "../coder-host/agent-image.js";
@@ -563,10 +562,6 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
         forgetAgentRunnerRecord(keptOf(found).userId, found.session, found.name),
       ),
 
-    // Note that the drive goes only now, because a sandbox opened in place of one whose snapshot
-    // lapsed mounts it again, and Vercel refuses to delete a drive a running sandbox holds.
-    discardSession: (session) => api.deleteDrive(agentDriveName(session)),
-
     writeFiles: (place, files) =>
       Effect.flatMap(api.session(sessionOfPlace(place)), (session) => session.writeFiles(files)),
 
@@ -641,9 +636,41 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     running: opened.currentSessionId,
   });
 
-  /** The session's drive deleted again where this open made it, since no conversation records the session that would find it; one kept from an earlier sandbox holds the agent's work and is left be. */
+  /** The session's drive deleted again where this open made it and no sandbox holds it, since no conversation records the session that would find it; one kept from an earlier sandbox holds the agent's work and is left be. */
   const madeDriveDeleted = (drive: AgentDrive) =>
     drive.from === AGENT_DRIVE_FROM.KEPT ? Effect.void : Effect.ignore(api.deleteDrive(drive.name));
+
+  /**
+   * The effect given, run on the sandbox the open made, which is let go of
+   * again where it fails: deleted alone where the session's drive was kept
+   * from an earlier sandbox, since the drive holds the agent's work. Where
+   * this open made the drive, nothing records the session that would find
+   * it, so the drive goes too, on an interruption as on a failure, in a base
+   * drive's failed fill's order (`base-drive.ts`): the session stopped, which
+   * lets the drive go at once, then the drive, then the sandbox. Note that
+   * the stop goes first, because Vercel refuses to delete a drive a running
+   * sandbox holds, and a sandbox's delete answers before its session stops.
+   */
+  const discardedOnFailure = <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+    opened: OpenedPlace,
+    drive: AgentDrive,
+  ) =>
+    drive.from === AGENT_DRIVE_FROM.KEPT
+      ? effect.pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))))
+      : effect.pipe(
+          Effect.onError(() =>
+            Effect.forEach(
+              [
+                Effect.flatMap(api.session(sessionOfPlace(opened)), (session) => session.stop()),
+                api.deleteDrive(drive.name),
+                api.deleteSandbox(opened.name),
+              ],
+              (step) => Effect.ignore(step),
+              { discard: true },
+            ),
+          ),
+        );
 
   /**
    * The base drive the agent's own may be forked from: its workspace's, of
@@ -692,7 +719,9 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * The agent's sandbox opened from the image with the session's drive
    * mounted, asked again while the registry still prepares the image
    * (`IMAGE_RETRY`), and the `agent` user made in it as the SDK makes one; a
-   * sandbox the user could not be made in is deleted again.
+   * sandbox the user could not be made in is let go of again
+   * (`discardedOnFailure`), and a drive this open made goes where no sandbox
+   * opened on it.
    */
   const openedFromImage = (agent: Agent, sessionId: string, image: string, drive: AgentDrive) =>
     Effect.gen(function* () {
@@ -703,11 +732,14 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
             times: IMAGE_RETRY.TIMES,
             while: (failure) => failure.code === IMAGE_NOT_READY,
           }),
+          Effect.onError(() => madeDriveDeleted(drive)),
         ),
       );
-      yield* api
-        .createUser(opened.name, AGENT_USER, AGENT_HOME_FOLDERS)
-        .pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+      yield* discardedOnFailure(
+        api.createUser(opened.name, AGENT_USER, AGENT_HOME_FOLDERS),
+        opened,
+        drive,
+      );
       return opened;
     });
 
@@ -744,7 +776,8 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * code, and then each repository it works in beside its own cloned whole
    * into its folder, on the reads the caller made of them
    * (`cloneAgentExtras`), one already standing on a kept drive left as it
-   * is; the sandbox is deleted again where one would not check out.
+   * is; the sandbox is let go of again where one would not check out
+   * (`discardedOnFailure`).
    */
   const checkedOutSandbox = (
     agent: WithRepository<Agent>,
@@ -757,19 +790,23 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     Effect.gen(function* () {
       const opened = yield* openedFromImage(agent, sessionId, image, drive);
       const sandbox = yield* checkoutIn(opened, agent.userId);
-      yield* Effect.andThen(
-        checkedOutOnDrive(agent, sandbox, read, drive.from),
-        cloneAgentExtras(sandbox, extras),
-      ).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
+      yield* discardedOnFailure(
+        Effect.andThen(
+          checkedOutOnDrive(agent, sandbox, read, drive.from),
+          cloneAgentExtras(sandbox, extras),
+        ),
+        opened,
+        drive,
+      );
       return opened;
     });
 
   /**
    * The agent's sandbox opened from the image on its session's drive
    * (`agent-drive.ts`), its repository checked out on it where it has one
-   * (`checkedOutSandbox`), and the drive deleted again where this open made
-   * it and failed; with the drive, which the caller lets go of likewise
-   * where its own use fails. The image's reference and the repository are
+   * (`checkedOutSandbox`), each step letting go of what it made where it
+   * fails; with the drive, which the caller's own use lets go of on the same
+   * terms. The image's reference and the repository are
    * read at once, since neither waits on the other and both are read before
    * any drive or sandbox is made. A Start on the repository's default branch
    * fills its base drive past the answer where it has none, for the agents
@@ -793,11 +830,9 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         yield* fillBaseDriveInBackground(agent, base.value, image, read);
       }
       const drive = yield* agentDrive(api, sessionId, Option.getOrUndefined(base));
-      const opened = yield* (
-        hasRepository(agent) && read !== undefined
-          ? checkedOutSandbox(agent, read, extras, sessionId, image, drive)
-          : openedFromImage(agent, sessionId, image, drive)
-      ).pipe(Effect.tapError(() => madeDriveDeleted(drive)));
+      const opened = yield* hasRepository(agent) && read !== undefined
+        ? checkedOutSandbox(agent, read, extras, sessionId, image, drive)
+        : openedFromImage(agent, sessionId, image, drive);
       return { ...opened, drive };
     });
 
@@ -835,18 +870,18 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
             ? openWorkingFolder(repositorySandbox)
             : deepenCheckoutWith(repositorySandbox, plan),
         );
-        return yield* use(
-          {
-            place: vercelPlace(ask.session, name, running),
-            name: nameOfSandbox(name),
-            checkoutPath: SANDBOX_LAYOUT.checkoutPath,
-            finishCheckout,
-          },
-          beside,
-        ).pipe(
-          Effect.tapError(() =>
-            Effect.andThen(Effect.ignore(api.deleteSandbox(name)), madeDriveDeleted(drive)),
+        return yield* discardedOnFailure(
+          use(
+            {
+              place: vercelPlace(ask.session, name, running),
+              name: nameOfSandbox(name),
+              checkoutPath: SANDBOX_LAYOUT.checkoutPath,
+              finishCheckout,
+            },
+            beside,
           ),
+          { name, running },
+          drive,
         );
       }),
 

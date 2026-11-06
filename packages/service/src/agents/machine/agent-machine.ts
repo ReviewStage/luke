@@ -294,13 +294,6 @@ export interface AgentMachineService {
   readonly discard: (
     found: FoundPlace,
   ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
-  /**
-   * What the session keeps apart from its places thrown away for good, once
-   * every place of it is discarded: a sandbox session's drive, which a place
-   * opened in place of a discarded one mounts again; nothing on a machine
-   * that keeps nothing apart.
-   */
-  readonly discardSession: (session: string) => Effect.Effect<void, SandboxUnavailable>;
   /** Files written into the running place, as the machine's default user, before a later line names them; refused (`LaunchRefused`'s `deviceAway`) where they would go to a device that is away, as the line naming them would be. */
   readonly writeFiles: (
     place: MachinePlace,

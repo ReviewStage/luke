@@ -10,8 +10,8 @@
  * eve opens one persistent Vercel Sandbox per top-level session, tagged with
  * the session's id, and a worker shares its parent's; a stopped sandbox
  * keeps its checkout in snapshots until Vercel lets them expire. Once we
- * let go of a session for good, the purge of a deleted task's
- * conversations or an account's deletion queues it
+ * let go of a session for good, its retire's reset, the purge of a deleted
+ * task's conversations, or an account's deletion queues it
  * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
  * bounded batch at a time: every sandbox carrying the session's tag is
  * deleted with the snapshots only it kept, then the session's drive

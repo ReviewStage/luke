@@ -42,6 +42,7 @@ import {
 } from "@repo/database/models/provider-key-store";
 import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
+import { nextSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { messages } from "@repo/database/schemas/storage";
@@ -490,6 +491,9 @@ const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
 function ownInstallation(): InstallationFixture {
   return { ...RELAY_INSTALLATION, id: 1_000 + Math.floor(Math.random() * 1_000_000) };
 }
+
+/** How much of the sandbox delete queue a test reads, the store's other sessions among it. */
+const QUEUE_READ = 1_000;
 
 /** Whether a run in the sandbox was the clone, by the variable only the clone is handed. */
 const isClone = (run: { readonly env: Readonly<Record<string, string>> }) =>
@@ -2274,7 +2278,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "reset deletes the sandbox and its drive and retires the runner's bearer; a session gone answers retired",
+    "reset deletes the sandbox, queues its drive for the delete sweep, and retires the runner's bearer; a session gone answers retired",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2290,7 +2294,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
-        assert.deepEqual([...api.drives], []);
+        assert.ok((yield* nextSessionSandboxes(QUEUE_READ)).includes(opened.sessionId));
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
