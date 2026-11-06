@@ -1484,8 +1484,6 @@ test("a mark another window makes later on the same item stands once the plan's 
     world.main.push(billing, { items: [{ ...THRESHOLD, unread: false }, RETRY] }),
   );
   await settle();
-  // Note that each push reaches the plan's read one notify tick later, which passes before the next.
-  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
   await act(async () =>
     world.main.push(billing, { items: [{ ...THRESHOLD, unread: true }, RETRY] }),
   );

@@ -848,10 +848,12 @@ test("an answer leaves Needs you the moment it is sent, its row staying where it
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.deepEqual(
-    listed(page),
-    ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
-    "the answered row stays where it stood",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      listed(page),
+      ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
+      "the answered row stays where it stood",
+    ),
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
 });
@@ -914,8 +916,8 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   // The invites plan's change is pushed, as an answer from another Mac would be.
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }, { items: [answered] });
   await settle();
-  // Note that the push reaches the hidden Inbox's read one notify tick later, which passes before it is shown again.
-  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  // Note that the push reaches the hidden Inbox's read one notify tick later, which lands before it is shown again.
+  await vi.waitFor(() => assert.deepEqual(listed(page), ["*Alert at 80%?"]));
   act(() => world.setInboxOpen(true));
   await settle();
   assert.deepEqual(
@@ -983,7 +985,7 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   await settle();
   const pane = itemPane(page);
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
   assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
   assert.ok(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,

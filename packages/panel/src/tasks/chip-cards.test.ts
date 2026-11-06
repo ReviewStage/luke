@@ -676,9 +676,12 @@ test("an Inbox item's labeled chip is called by the item's title, whether it wai
     ].join(" "),
   );
 
-  assert.deepEqual(
-    chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
-    ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+  // Note that the feed's items name their chips once they reach its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      chipsOf(container).map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
+      ["Keep expired links?", "Rename the invite email?", "Quarantine the flaky test?"],
+    ),
   );
 });
 
