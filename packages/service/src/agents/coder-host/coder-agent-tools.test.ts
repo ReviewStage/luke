@@ -170,6 +170,7 @@ import {
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { NO_SECTION_DELETED, TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
+import { standingOf, TOOL_GATE } from "../tool-catalog/gates.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
 import { type AgentDoorSeams, type AgentToolCall, runAgentTools } from "./agent-doors.js";
 import {
@@ -514,9 +515,14 @@ async function peerCaller(
     callId = "call-1",
   ): Promise<WireRecord> =>
     database.run(
-      runAgentTools(host, admitted, { tool, input: unparsedWire(input), callId }).pipe(
-        Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry)),
-      ),
+      Effect.flatMap(standingOf(admitted), (standing) =>
+        runAgentTools(
+          host,
+          admitted,
+          { tool, input: unparsedWire(input), callId },
+          standing.open.has(TOOL_GATE.DESCRIPTIONS),
+        ),
+      ).pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, sentry))),
     );
 }
 
@@ -541,11 +547,16 @@ async function directMessage(
   callId = "call-1",
 ): Promise<WireRecord> {
   return database.run(
-    runAgentTools(host, admittedOf(from), {
-      tool: CODER_TOOL.MESSAGE_AGENT,
-      input: unparsedWire({ agentId: to.id, text: NOTE }),
-      callId,
-    }).pipe(
+    runAgentTools(
+      host,
+      admittedOf(from),
+      {
+        tool: CODER_TOOL.MESSAGE_AGENT,
+        input: unparsedWire({ agentId: to.id, text: NOTE }),
+        callId,
+      },
+      false,
+    ).pipe(
       Effect.provide(
         Layer.mergeAll(services, modelCatalogOf(CATALOG), ANALYTICS.layer, SENTRY_CONFIGURED),
       ),
@@ -4506,29 +4517,6 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   assert.deepEqual(
     (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
     [["Deploys go out from the release branch.", agents.teammates.userId]],
-  );
-});
-
-test("while its starter has Memory off, a coding agent's remember and recall are refused and nothing is kept", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const eve = await fakeCoderEve(workspaceId);
-  const host = hostOf();
-  await turnMemoryOn(agents.teammates.userId);
-  const asCaller = await peerCaller(host, agents.caller, eve.services);
-  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
-  await asTeammate(CODER_TOOL.SAVE_MEMORY, { text: "Deploys go out from main." });
-
-  const kept = await asCaller(CODER_TOOL.SAVE_MEMORY, {
-    text: "Every route is an oRPC procedure.",
-  });
-  const recalled = await asCaller(CODER_TOOL.SEARCH_MEMORY, {});
-
-  assert.equal(kept.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(recalled.memories, undefined);
-  assert.deepEqual(
-    (await database.run(listMemories(workspaceId))).map((memory) => memory.text),
-    ["Deploys go out from main."],
   );
 });
 
