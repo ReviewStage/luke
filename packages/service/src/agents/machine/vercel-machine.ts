@@ -1029,7 +1029,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           Effect.flatMap(AgentImage, (agentImage) => agentImage.reference),
           hasRepository(agent) ? agentRepositoryRead(target, agent) : Effect.succeed(undefined),
           hasRepository(agent) ? agentExtraReads(target, agent) : Effect.succeed([]),
-          hasRepository(agent) ? sourceSnapshotOf(agent) : Effect.succeed(undefined),
+          sourceSnapshotOf(agent),
         ],
         { concurrency: "unbounded" },
       );

@@ -130,6 +130,7 @@ import {
   withdrawRunnerLine,
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
@@ -1980,9 +1981,11 @@ export const runnerSessions = <
             yield* machine.discard(place);
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
-          return retired === 0
-            ? ({ outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
-            : ({ outcome: SESSION_RESET_OUTCOME.RESET } as const);
+          if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          // Note that the session is queued for the delete sweep too, because a sandbox opened under
+          // its tag while the reset ran is none of the places it found, and the sweep's next pass deletes it.
+          yield* queueSessionSandboxes([sessionId]);
+          return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),
           Effect.annotateLogs(agentLogIds({}, sessionId)),

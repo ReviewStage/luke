@@ -44,6 +44,7 @@ import {
 } from "@repo/database/models/provider-key-store";
 import { runnerLinesPast } from "@repo/database/models/runner-line-store";
 import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
+import { nextSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { storeWriter } from "@repo/database/models/writer";
 import type { StoredStartedFrom } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -526,6 +527,9 @@ const isRefresh = (run: { readonly env: Readonly<Record<string, string>> }) =>
 /** Whether a run in the sandbox was the install. */
 const isInstall = (run: { readonly args: readonly string[] }) =>
   run.args.some((arg) => arg.includes("pnpm install"));
+
+/** How much of the sandbox delete queue a test reads, the store's other sessions among it. */
+const QUEUE_READ = 1_000;
 
 /** The base snapshot's sandbox standing, where one does. */
 const baseSandbox = (api: ReturnType<typeof runnerSandboxApi>) =>
@@ -2351,7 +2355,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "reset deletes the sandbox and retires the runner's bearer; a session gone answers retired",
+    "reset deletes the sandbox, queues the session for the delete sweep, and retires the runner's bearer; a session gone answers retired",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2367,6 +2371,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(reset.outcome, SESSION_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
+        assert.ok((yield* nextSessionSandboxes(QUEUE_READ)).includes(opened.sessionId));
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
@@ -2901,6 +2906,41 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           ],
           [0, 0, 0, 0],
         );
+      }),
+  );
+
+  it.effect(
+    "an agent with no repository continued from another is created from its source's stopped sandbox's snapshot",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        yield* sessions.open(message(agent, "Draft the notes."));
+        const source = sandboxOfAgent(api, agent);
+        assert.ok(source !== undefined && agent.taskId !== null);
+        source.status = "stopped";
+        source.currentSnapshotId = "snap_source";
+        const started = yield* createAgent(userId, {
+          taskId: agent.taskId,
+          idempotencyKey: `start-${randomUUID()}`,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          descriptionSnapshot: "# Invitations\n",
+          prompt: null,
+          repository: null,
+          startedFrom: { agentId: agent.id, steps: 0, totalSteps: 0, sandbox: source.name },
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+        });
+        const continued = Option.getOrThrow(started).agent;
+
+        const opened = yield* sessions.open(message(continued, "Go on."));
+
+        assert.ok(opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED);
+        assert.equal(sandboxOfAgent(api, continued)?.sourceSnapshotId, "snap_source");
       }),
   );
 
