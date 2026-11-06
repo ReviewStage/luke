@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { claimAgentRunnerLease } from "@repo/database/models/agent-runner-lease";
-import { createAgent } from "@repo/database/models/agent-store";
+import { writeAgentRunnerRecord } from "@repo/database/models/agent-runner-record";
+import { type Agent, createAgent } from "@repo/database/models/agent-store";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
@@ -159,35 +160,47 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
-/** How a native sandbox was named and tagged: as a launch tags one now, or as one made before the rename was. */
+/** How a native sandbox was named and tagged: as one is opened now, or as one made before the rename was. */
 const NAMING = {
-  TODAY: { name: "agent-sandbox-", agent: "agentId", runner: "agentRunner" },
-  BEFORE_RENAME: { name: "luke-agent-", agent: "lukeAgent", runner: "lukeRunner" },
+  TODAY: { name: "agent-sandbox-", agent: "agentId" },
+  BEFORE_RENAME: { name: "luke-agent-", agent: "lukeAgent" },
 } as const;
 
-/** A running sandbox as we name a native agent's, tagged with its agent, and with the runner named where one was launched. */
+/** A running sandbox as we name a native agent's, tagged with its session and its agent. */
 function nativeSandbox(
   agentId: string,
-  commandId?: string,
   naming: (typeof NAMING)[keyof typeof NAMING] = NAMING.TODAY,
 ): FakeSandbox {
   const id = randomUUID();
-  const running = `sbs_${id}`;
-  const runner =
-    commandId === undefined
-      ? {}
-      : {
-          [`${naming.runner}Session`]: running,
-          [`${naming.runner}Command`]: commandId,
-          [`${naming.runner}Launch`]: "7",
-        };
   return {
     name: `${naming.name}${id}`,
     status: "running",
-    currentSessionId: running,
-    tags: { sessionId: `claude-code-${id}`, [naming.agent]: agentId, ...runner },
+    currentSessionId: `sbs_${id}`,
+    tags: { sessionId: `claude-code-${id}`, [naming.agent]: agentId },
   };
 }
+
+/** The session a sandbox's tag names. */
+function sessionOf(sandbox: FakeSandbox): string {
+  const { sessionId } = sandbox.tags;
+  assert.ok(sessionId !== undefined);
+  return sessionId;
+}
+
+/** A running native sandbox of the agent's whose session records the command given as its runner, as a launch at event 7 records it. */
+const sandboxRunning = (agent: Agent, commandId: string) =>
+  Effect.gen(function* () {
+    const sandbox = nativeSandbox(agent.id);
+    yield* writeAgentRunnerRecord(agent.userId, sessionOf(sandbox), {
+      agentId: agent.id,
+      sandboxName: sandbox.name,
+      firstSequence: 7,
+      fingerprint: null,
+      sandboxSessionId: sandbox.currentSessionId,
+      commandId,
+    });
+    return sandbox;
+  });
 
 /** A running sandbox as eve names one, tagged with its session alone. */
 function eveSandbox(): FakeSandbox {
@@ -209,7 +222,7 @@ const lostSandbox = (api: ReturnType<typeof vercel>) =>
     });
     const commandId = `cmd_${randomUUID()}`;
     api.commands.set(commandId, { id: commandId, exitCode: 1 });
-    return nativeSandbox(agent.id, commandId);
+    return yield* sandboxRunning(agent, commandId);
   });
 
 afterEach(() => {
@@ -247,8 +260,8 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           stderr: "agent-runner: JavaScript heap out of memory\n",
         });
         api.commands.set("cmd_running", { id: "cmd_running", exitCode: null });
-        const dead = nativeSandbox(crashed.id, "cmd_killed");
-        const alive = nativeSandbox(working.id, "cmd_running");
+        const dead = yield* sandboxRunning(crashed, "cmd_killed");
+        const alive = yield* sandboxRunning(working, "cmd_running");
         api.sandboxes.push(dead, alive);
 
         const reported: Record<string, unknown>[] = [];

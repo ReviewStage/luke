@@ -39,7 +39,7 @@
  * as a Stop's is, which the runner ends on.
  *
  * Whether a runner runs is read off the agent's newest launch line, which
- * stands for the record a sandbox keeps in its tags: it runs while that
+ * stands for the record a sandbox's runner keeps in our store: it runs while that
  * line is unsettled and no stop line was queued after it, so a Stop is
  * honored the moment it is queued, whenever the Mac gets to it. A record
  * that no longer tells of a runner still running, as a retire's, queues a
@@ -416,7 +416,8 @@ function deviceMachineOver(
         );
       }),
 
-    findPlaces: (session) =>
+    // The session's pin names its account, so the account given is not needed to find it.
+    findPlaces: (_userId, session) =>
       Effect.gen(function* () {
         const pin = yield* pinOfSession(session);
         if (Option.isNone(pin)) return [];
