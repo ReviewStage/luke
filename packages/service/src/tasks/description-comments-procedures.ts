@@ -636,7 +636,11 @@ const reviewAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
       page: { id: last.page.id, title: shown.title, newestVersion: page.value.newestVersion },
     }),
     threadId: last.id,
-    words: reviewLineWords(asked, userId),
+    // Note that the words are read from the threads as the review found them, before its own asks, which would end each thread past the comments it sends.
+    words: reviewLineWords(
+      threads.filter((thread) => asked.some((each) => each.id === thread.id)),
+      userId,
+    ),
     line: { taskId, quote: undefined, page: { id: last.page.id, title: shown.title } },
   }).pipe(
     Effect.onError(() =>
