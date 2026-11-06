@@ -61,8 +61,8 @@ import { useOpenLink } from "./use-open-link.js";
  * shells go on running in the sandbox, and showing the tab again attaches
  * to the same one, which tmux redraws.
  *
- * What each state asks of the developer is what a terminal asks: after five
- * minutes without typing any key reconnects, a shell that ended takes any key
+ * What each state asks of the developer is what a terminal asks: after a
+ * disconnect any key reconnects, a shell that ended takes any key
  * for a new one, and the bar's action (its click, or Return) retries a
  * dropped connection or resumes a stopped sandbox, which nothing but that
  * resumes. While the agent has not opened its sandbox the tab lists again
