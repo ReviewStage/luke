@@ -104,11 +104,12 @@ function fakeService(script: ServiceScript) {
   const live = polledLive(["connections"] as const);
   const beside = { offered: INTEGRATION_PROVIDER_LIST, multiple: [] };
   const client: IntegrationsClient = {
-    statusesLive: (_userId, poll, after) =>
+    // SAFETY: the integrations' read is the one live read the client is asked for, answering its script's rows.
+    liveRead: ((_read: unknown, _params: unknown, poll?: { readonly after?: string | undefined }) =>
       Effect.map(
-        poll ? live.poll(after) : Effect.succeed(live.first()),
+        poll === undefined ? Effect.succeed(live.first()) : live.poll(poll.after),
         (answer): IntegrationStatusesLiveAnswer => ({ ...answer, ...beside }),
-      ),
+      )) as IntegrationsClient["liveRead"],
     settle: () =>
       Effect.sync(() => {
         settles += 1;

@@ -13,10 +13,20 @@ import {
   integrationProviderSchema,
   type integrationStatusesAnswerSchema,
 } from "./integration-wire.js";
-import { sealedLiveQuerySchema } from "./live-wire.js";
+import {
+  LIVE_MODE,
+  LIVE_PARAM,
+  type LiveReadAnswer,
+  type LiveRowOf,
+  liveRead,
+  liveRows,
+  ORDER,
+} from "./live-read.js";
+import { LIVE_READ, LIVE_USER_QUERY } from "./live-wire.js";
+import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 /**
- * integration-live.ts -- the account's integrations as the host follows them over the service's held poll: the statement the service answers, and where every provider and account stands as its rows say.
+ * integration-live.ts -- the account's integrations as the host follows them over the service's held poll: the read declared, and where every provider and account stands as its rows say.
  *
  * The service answers one statement, every integration row the account
  * holds, each where it stands as stored, with the providers the account is
@@ -30,22 +40,6 @@ import { sealedLiveQuerySchema } from "./live-wire.js";
  * this build does not know read as no row, as that read is read leniently.
  */
 
-/**
- * The account's integrations sealed for following: the address, the one
- * statement of its rows, and the providers it is offered and those that
- * take several accounts, each kept in words so one this build does not
- * know hides none of the others. Asked to poll, the service answers the
- * statement's rows inline instead (`LIVE_POLL`).
- */
-export const integrationStatusesLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ connections: sealedLiveQuerySchema }),
-  offered: EffectSchema.Array(EffectSchema.String),
-  multiple: EffectSchema.Array(EffectSchema.String),
-});
-
-export type IntegrationStatusesLiveAnswer = typeof integrationStatusesLiveAnswerSchema.Type;
-
 /** Where every provider stands, each account, and where another may be added, as the statuses read answers it. */
 export type IntegrationStatusesAnswer = typeof integrationStatusesAnswerSchema.Type;
 
@@ -57,18 +51,46 @@ const rowStatusSchema = EffectSchema.Literals([
   INTEGRATION_STATUS.DISCONNECTED,
 ]);
 
-/** One integration row as the statement delivers it, by its id. */
-const integrationLiveRowSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  connection: integrationConnectionNameSchema,
-  provider: integrationProviderSchema,
-  label: EffectSchema.NullOr(EffectSchema.String),
-  status: rowStatusSchema,
+/**
+ * The account's integrations as the host follows them: one part, every
+ * integration row the account holds, each where it stands as stored, and
+ * the providers it is offered and those that take several accounts beside
+ * it, each kept in words so one this build does not know hides none of the
+ * others. The sign-in window a row's standing is read against is the
+ * service's, from its clock (`issuedSince`). The rows are read each alone
+ * (`integrationLiveRowsOf`), so one naming a provider or a status this
+ * build does not know hides none of the others.
+ */
+export const INTEGRATION_STATUSES_READ = liveRead({
+  name: LIVE_READ.INTEGRATIONS,
+  path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES,
+  params: { [LIVE_USER_QUERY]: LIVE_PARAM.USER, issuedSince: LIVE_PARAM.SERVED },
+  mode: LIVE_MODE.SNAPSHOT,
+  parts: {
+    connections: liveRows({
+      row: EffectSchema.Struct({
+        id: EffectSchema.String,
+        connection: integrationConnectionNameSchema,
+        provider: integrationProviderSchema,
+        label: EffectSchema.NullOr(EffectSchema.String),
+        status: rowStatusSchema,
+      }),
+      key: "id",
+      order: [["id", ORDER.ASC]],
+    }),
+  },
+  beside: {
+    offered: EffectSchema.Array(EffectSchema.String),
+    multiple: EffectSchema.Array(EffectSchema.String),
+  },
 });
 
-export type IntegrationLiveRow = typeof integrationLiveRowSchema.Type;
+export type IntegrationStatusesLiveAnswer = LiveReadAnswer<typeof INTEGRATION_STATUSES_READ>;
 
-const readRow = EffectSchema.decodeUnknownOption(integrationLiveRowSchema);
+/** One integration row as the statement delivers it, by its id. */
+export type IntegrationLiveRow = LiveRowOf<typeof INTEGRATION_STATUSES_READ.parts.connections>;
+
+const readRow = EffectSchema.decodeUnknownOption(INTEGRATION_STATUSES_READ.parts.connections.row);
 
 /** The rows this build reads, each alone, so one naming a provider or a status it does not know hides none of the others. */
 export function integrationLiveRowsOf(rows: readonly unknown[]): readonly IntegrationLiveRow[] {

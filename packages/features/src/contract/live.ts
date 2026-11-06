@@ -55,7 +55,7 @@ import {
 import { taskCommentsLiveAnswerSchema } from "../description-comment-live.js";
 import { HOSTS_READ } from "../host-live.js";
 import { INSTALLED_SKILLS_READ } from "../installed-skill-live.js";
-import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
+import { INTEGRATION_STATUSES_READ } from "../integration-live.js";
 import { liveProcedure } from "../live-read.js";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -64,13 +64,13 @@ import {
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_USER_QUERY,
-  macCommandsLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
   taskBrowserTabsLiveAnswerSchema,
   taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
+import { MAC_COMMANDS_READ } from "../mac-command-live.js";
 import { WORKSPACE_MEMORIES_READ } from "../memory-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -97,7 +97,7 @@ const syncField = EffectSchema.optionalKey(EffectSchema.String);
 const userField = EffectSchema.optionalKey(EffectSchema.String);
 
 /** A live read's own query: whether it polls. */
-const liveReadSchema = EffectSchema.Struct({
+const _liveReadSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
   [LIVE_USER_QUERY]: userField,
@@ -172,7 +172,7 @@ const liveTranscriptSchema = EffectSchema.Struct({
 });
 
 /** The kinds of command a Mac's live read follows, as its held read names them (`macCommandKindsQuery`). */
-const liveMacCommandsSchema = EffectSchema.Struct({
+const _liveMacCommandsSchema = EffectSchema.Struct({
   kinds: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
@@ -274,10 +274,7 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)
     .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
-  macCommands: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_MAC_COMMANDS }))
-    .input(liveMacCommandsSchema)
-    .output(EffectSchema.flip(macCommandsLiveAnswerSchema)),
+  [MAC_COMMANDS_READ.name]: liveProcedure(MAC_COMMANDS_READ),
   taskInbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_INBOX }))
     .input(liveScopeSchema)
@@ -300,9 +297,6 @@ export const liveContract = {
     )
     .input(livePullRequestChaptersSchema)
     .output(EffectSchema.flip(pullRequestChaptersLiveAnswerSchema)),
-  integrationStatuses: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INTEGRATION_STATUSES }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(integrationStatusesLiveAnswerSchema)),
+  [INTEGRATION_STATUSES_READ.name]: liveProcedure(INTEGRATION_STATUSES_READ),
   [ACCOUNT_PREFERENCES_READ.name]: liveProcedure(ACCOUNT_PREFERENCES_READ),
 };

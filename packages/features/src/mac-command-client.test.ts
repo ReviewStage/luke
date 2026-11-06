@@ -15,7 +15,13 @@ import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import { HostedMacCommandClient } from "./mac-command-client.js";
-import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
+import { MAC_COMMANDS_READ } from "./mac-command-live.js";
+import {
+  MAC_COMMAND_KIND,
+  type MacCommand,
+  type MacCommandResult,
+  macCommandKindsQuery,
+} from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const BASE_URL = "https://app.test";
@@ -72,7 +78,16 @@ it.effect(
       const api = fakeCloudApi({ "GET /api/live/mac-commands": { answer: () => sealed } });
       const kinds = [MAC_COMMAND_KIND.SHELL];
 
-      assert.deepEqual(yield* Effect.provide(client().live(kinds, "user-mac"), api.layer), sealed);
+      assert.deepEqual(
+        yield* Effect.provide(
+          client().liveRead(MAC_COMMANDS_READ, {
+            userId: "user-mac",
+            kinds: macCommandKindsQuery(kinds),
+          }),
+          api.layer,
+        ),
+        sealed,
+      );
       const asked = new URL(api.requests()[0]?.url ?? BASE_URL);
       assert.equal(asked.searchParams.get("userId"), "user-mac");
       assert.equal(asked.searchParams.get("kinds"), "shell");
@@ -84,7 +99,13 @@ it.effect(
         },
       });
       assert.deepEqual(
-        yield* Effect.provide(client().live(kinds, "user-mac"), refused.layer),
+        yield* Effect.provide(
+          client().liveRead(MAC_COMMANDS_READ, {
+            userId: "user-mac",
+            kinds: macCommandKindsQuery(kinds),
+          }),
+          refused.layer,
+        ),
         LIVE_SIGNED_OUT,
       );
     }),

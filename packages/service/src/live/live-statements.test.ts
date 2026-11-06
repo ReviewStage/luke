@@ -3,11 +3,9 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
 import { LIVE_PARAM } from "@repo/features/live-read";
-import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
@@ -16,7 +14,6 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
-import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { BOUND_READS } from "../sync/live-queries.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
@@ -86,12 +83,6 @@ function liveStatements() {
     ),
     "agent.pullRequestChapters": Option.getOrThrow(
       pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
-    ),
-    "account.integrations": Option.getOrThrow(
-      integrationStatusesLiveStatement(USER_ID, new Date(0)),
-    ),
-    "mac.commands": Option.getOrThrow(
-      macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskRecordLiveStatements(USER_ID, randomUUID()))).map(

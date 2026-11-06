@@ -28,7 +28,6 @@ import {
   inboxReadAskSchema,
   standingAsk,
 } from "./inbox-wire.js";
-import { type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { type PageLine, pageLineSchema, pageShowerSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 import {
@@ -588,55 +587,6 @@ export const transcriptNowAnswerSchema = EffectSchema.Struct({
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;
 
 /**
- * The commands the account's agents queued for its Mac, of the kinds it
- * runs, sealed for following: the address, and the commands no Mac has
- * claimed yet as one statement. The Mac claims each it hears of
- * (`mac-command-wire.ts`), on the service's clock, so a command left waiting
- * too long is refused there.
- */
-export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-  queries: EffectSchema.Struct({ commands: sealedLiveQuerySchema }),
-});
-
-export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
-
-const [macShellCommandSchema] = macCommandSchema.members;
-
-/**
- * One unclaimed command as its row delivers it: the command of its kind, and
- * when it was queued in epoch milliseconds. Note that a column its kind
- * leaves null is read past, as every key a struct does not name is.
- */
-const macCommandLiveRowSchema = EffectSchema.Struct({
-  ...macShellCommandSchema.fields,
-  queuedAt: countedNumber,
-});
-
-/** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
-export const macCommandsLiveRowsSchema = EffectSchema.Struct({
-  commands: EffectSchema.Array(macCommandLiveRowSchema),
-});
-
-/** The unclaimed commands, the earliest queued first, so the Mac claims them in the order they were asked for. */
-export function macCommandsOfLiveRows(
-  rows: typeof macCommandsLiveRowsSchema.Type,
-): readonly MacCommand[] {
-  return rows.commands
-    .toSorted((a, b) =>
-      a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-    )
-    .map(
-      (row): MacCommand => ({
-        id: row.id,
-        kind: row.kind,
-        command: row.command,
-        timeoutSeconds: row.timeoutSeconds,
-      }),
-    );
-}
-
-/**
  * One plan's inbox, or one agent's, sealed for following: the address, and
  * its open items and its latest settled ones as one statement, as the held
  * read reads them, so an item settling moves in one change, with their
@@ -865,7 +815,7 @@ export const LIVE_READ = {
   HOLDER_INBOX: "holderInbox",
   /** The skills the account sees in one workspace, the workspace's and its own, by the workspace: the service's `installedSkills` query, held for the windows that draw Settings › Skills and a few they drew lately. */
   INSTALLED_SKILLS: "installedSkills",
-  /** Where each of the account's integrations stands, by the account: the service's `integrationStatusesLive` query, with GitHub's standing fetched beside it, held while a window draws an integration. */
+  /** Where each of the account's integrations stands, by the account: the service's `integrationStatuses` read, with GitHub's standing fetched beside it, held while a window draws an integration. */
   INTEGRATIONS: "integrationStatuses",
   /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
   INTEGRATION_TOOLS: "integrationTools",

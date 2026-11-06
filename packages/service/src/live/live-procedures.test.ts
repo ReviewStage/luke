@@ -58,10 +58,7 @@ import {
   installedSkillsOfLiveRows,
 } from "@repo/features/installed-skill-live";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
-import {
-  integrationLiveRowsOf,
-  integrationStatusesLiveAnswerSchema,
-} from "@repo/features/integration-live";
+import { INTEGRATION_STATUSES_READ, integrationLiveRowsOf } from "@repo/features/integration-live";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -74,9 +71,6 @@ import {
   LIVE_USER_QUERY,
   liveDigestOf,
   liveDigestOn,
-  macCommandsLiveAnswerSchema,
-  macCommandsLiveRowsSchema,
-  macCommandsOfLiveRows,
   scopeInboxLiveAnswerSchema,
   taskBrowserTabsLiveAnswerSchema,
   taskBrowserTabsLiveRowsSchema,
@@ -85,6 +79,7 @@ import {
   taskPagesLiveRowsSchema,
   taskRecordLiveAnswerSchema,
 } from "@repo/features/live-wire";
+import { MAC_COMMANDS_READ, macCommandsOfLiveRows } from "@repo/features/mac-command-live";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { memoriesOfLiveRows, WORKSPACE_MEMORIES_READ } from "@repo/features/memory-live";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
@@ -298,11 +293,11 @@ it.layer(getTestDB())("the account's live reads", (it) => {
           path: "/api/live/mac-commands?kinds=shell,browser",
         });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(macCommandsLiveAnswerSchema)(answered.body);
+        const answer = Schema.decodeUnknownSync(MAC_COMMANDS_READ.answer)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(
           macCommandsOfLiveRows(
-            Schema.decodeUnknownSync(macCommandsLiveRowsSchema)({
+            Schema.decodeUnknownSync(MAC_COMMANDS_READ.rows)({
               commands: answer.queries.commands.rows,
             }),
           ),
@@ -1791,7 +1786,7 @@ it.layer(getTestDB())("the account's integrations' live read", (it) => {
 
         const answered = yield* ask({ bearer: dana, path: "/api/live/integration-statuses" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
-        const answer = Schema.decodeUnknownSync(integrationStatusesLiveAnswerSchema)(answered.body);
+        const answer = Schema.decodeUnknownSync(INTEGRATION_STATUSES_READ.answer)(answered.body);
         assert.equal(answer.url, LIVE_POLL_URL);
         assert.deepEqual(
           integrationLiveRowsOf(answer.queries.connections.rows ?? [])

@@ -11,7 +11,6 @@
  */
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -39,8 +38,6 @@ import {
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
-  integrationConnectionSync,
-  macCommandSync,
   memberSync,
   messagesSync,
   pullRequestChaptersSync,
@@ -55,7 +52,6 @@ import {
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { LIVE_MODE } from "@repo/features/live-read";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { macCommandKindsRead } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
 import { cursorOfWire, cursorToWire } from "../agents/coder-host/transcript.js";
@@ -72,11 +68,12 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
-import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import type { AnyBoundRead } from "../live/live-read-binding.js";
 import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 import { hostsRead } from "../live/reads/hosts.js";
 import { installedSkillsRead } from "../live/reads/installed-skills.js";
+import { integrationStatusesRead } from "../live/reads/integration-statuses.js";
+import { macCommandsRead } from "../live/reads/mac-commands.js";
 import { sidebarRead } from "../live/reads/sidebar.js";
 import { workspaceIntegrationsRead } from "../live/reads/workspace-integrations.js";
 import { workspaceInvitationsRead } from "../live/reads/workspace-invitations.js";
@@ -88,6 +85,7 @@ import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
+import { instantParam } from "./live-param.js";
 import { defineLiveQuery, liveQueryRegistry } from "./live-query.js";
 import { readerAndWorkspaceTopics } from "./reader-topics.js";
 
@@ -145,51 +143,6 @@ export const tasksLive = defineLiveQuery({
     },
     statements: ({ userId }, moved) => taskListDeltaStatements(userId, moved),
   },
-});
-
-/**
- * The commands of the kinds a Mac runs that no Mac of the account has
- * claimed yet, woken by a command queued, claimed, settled, or taken back,
- * each of which names the account. The kinds are the read's query as the
- * Mac spelled them, read here as its held read always read them.
- */
-export const macCommandsLive = defineLiveQuery({
-  name: "macCommands",
-  params: ["userId", "kinds"],
-  reads: [macCommandSync],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
-  statements: ({ userId, kinds }) =>
-    Option.map(macCommandsLiveStatement(userId, macCommandKindsRead(kinds)), (commands) => ({
-      commands,
-    })),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * Every integration row the account holds, where each stands as stored,
- * woken on the account's integrations topic alone, which a sign-in begun,
- * completed, or ended, a label, an expiry, and a disconnect each name. Note
- * that a sign-in counts as under way while it began at `issuedSince` or
- * later, which its procedure binds from the clock, since a live statement
- * reads none; one that lapses with no write turns not pending only as the
- * read is looked at again. Which providers the account is offered, and
- * which take several accounts, come from the deployment and the account's
- * email, which no statement reads, so the procedure answers them beside the
- * rows on every poll.
- */
-export const integrationStatusesLive = defineLiveQuery({
-  name: LIVE_READ.INTEGRATIONS,
-  params: ["userId", "issuedSince"],
-  reads: [integrationConnectionSync],
-  topics: ({ userId }) => [[TOPIC.ACCOUNT_INTEGRATIONS, userId]],
-  statements: ({ userId, issuedSince }) =>
-    Option.map(
-      integrationStatusesLiveStatement(userId, instantParam(issuedSince)),
-      (connections) => ({
-        connections,
-      }),
-    ),
-  mode: LIVE_MODE.SNAPSHOT,
 });
 
 /** What reaches an inbox item: its workspace's membership and, for one of an agent on a member's own token, that member's GitHub access. */
@@ -259,12 +212,6 @@ export const taskInboxLive = defineLiveQuery({
   statements: ({ userId, taskId }) => taskInboxLiveStatements(userId, taskId),
   mode: LIVE_MODE.SNAPSHOT,
 });
-
-/** An instant a read's param binds as epoch milliseconds, as its procedure wrote it; the epoch where it names none. */
-function instantParam(param: string): Date {
-  const millis = Number(param);
-  return new Date(Number.isSafeInteger(millis) && millis > 0 ? millis : 0);
-}
 
 /**
  * Every inbox item the account reaches, where each stands and those
@@ -706,6 +653,10 @@ export const agentTranscriptLive = defineLiveQuery({
 
 /** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
 export const BOUND_READS: readonly AnyBoundRead[] = [
+  macCommandsRead,
+
+  integrationStatusesRead,
+
   sidebarRead,
 
   workspaceIntegrationsRead,
@@ -725,8 +676,6 @@ export const BOUND_READS: readonly AnyBoundRead[] = [
 
 export const LIVE_QUERIES = liveQueryRegistry([
   tasksLive,
-  macCommandsLive,
-  integrationStatusesLive,
   inboxLive,
   inboxItemsLive,
   taskInboxLive,

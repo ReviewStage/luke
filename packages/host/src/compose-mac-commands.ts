@@ -1,9 +1,9 @@
 import { type HostedMacCommandClient, MAC_COMMAND_CALL_FAILURE } from "@repo/features";
 import {
+  MAC_COMMANDS_READ,
   type MacCommandsLiveAnswer,
-  macCommandsLiveRowsSchema,
   macCommandsOfLiveRows,
-} from "@repo/features/live-wire";
+} from "@repo/features/mac-command-live";
 import {
   isMacShellCommand,
   MAC_COMMAND_KIND,
@@ -13,6 +13,7 @@ import {
   type MacCommandResult,
   type MacShellCommand,
   type MacShellResult,
+  macCommandKindsQuery,
 } from "@repo/features/mac-command-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
@@ -109,7 +110,7 @@ const RUNS: readonly MacCommandKind[] = [MAC_COMMAND_KIND.SHELL];
 /** The service's side of the commands, as this concern asks it. */
 export type MacCommandClient = Pick<
   HostedMacCommandClient,
-  "live" | "claim" | "listening" | "settle"
+  "liveRead" | "claim" | "listening" | "settle"
 >;
 
 export interface MacCommandsDependencies {
@@ -339,7 +340,13 @@ export function composeMacCommands(
 
     /** The unclaimed commands of this Mac's kinds, their rows inline, held past `after` where it names one, for the account `userId` names. */
     const seal = (userId: string, poll: boolean, after?: string) =>
-      asked(client.live(RUNS, userId, poll, after));
+      asked(
+        client.liveRead(
+          MAC_COMMANDS_READ,
+          { userId, kinds: macCommandKindsQuery(RUNS) },
+          poll ? { after } : undefined,
+        ),
+      );
 
     /**
      * That this Mac listens for its kinds, said every `LISTENING_EVERY` for
@@ -377,7 +384,7 @@ export function composeMacCommands(
         const rows = decodedLiveRows(
           { poll: (after) => seal(userId, true, after) },
           first,
-          macCommandsLiveRowsSchema,
+          MAC_COMMANDS_READ.rows,
         );
         const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
         return Effect.raceFirst(following, presence(userId)).pipe(

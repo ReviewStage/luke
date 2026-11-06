@@ -142,7 +142,7 @@
  * providers the deployment offers the account and those that take several
  * accounts beside them, which no statement can read. It is woken by a
  * sign-in begun, completed, or ended, a label, an expiry, or a disconnect
- * (`integrationStatusesLive`), so a sign-in finished in the browser reaches
+ * (`integrationStatusesRead`), so a sign-in finished in the browser reaches
  * an open view with no focus. GitHub's standing is
  * `/api/account/integrations/github`'s, read beside it.
  *
@@ -166,7 +166,6 @@ import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
-import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   type AnyLiveRead,
   LIVE_PARAM,
@@ -198,8 +197,6 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountIntegrationConnect } from "../integrations/integration-connect.js";
-import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentBrowserTabsLive,
@@ -213,8 +210,6 @@ import {
   DESCRIPTION_THREADS,
   inboxItemsLive,
   inboxLive,
-  integrationStatusesLive,
-  macCommandsLive,
   pullRequestChaptersLive,
   taskBrowserTabsLive,
   taskCommentsLive,
@@ -237,6 +232,8 @@ import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { hostsRead } from "./reads/hosts.js";
 import { installedSkillsRead } from "./reads/installed-skills.js";
+import { integrationStatusesRead } from "./reads/integration-statuses.js";
+import { macCommandsRead } from "./reads/mac-commands.js";
 import { sidebarRead } from "./reads/sidebar.js";
 import { workspaceIntegrationsRead } from "./reads/workspace-integrations.js";
 import { workspaceInvitationsRead } from "./reads/workspace-invitations.js";
@@ -1025,15 +1022,8 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         LIVE_POLL_HOLD.WATCHED_LOOK,
       );
     }),
-    macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      return yield* liveQueryParts(
-        macCommandsLive,
-        { userId: context.userId, kinds: input.kinds ?? "" },
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
-    }),
+    macCommands: signedIn.macCommands.effect(answerBoundRead(macCommandsRead)),
+
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
@@ -1133,22 +1123,10 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         ...(runsOn === undefined ? {} : { runsOn }),
       };
     }),
-    integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(context.userId));
-      const offered = INTEGRATION_PROVIDER_LIST.filter((provider) => connect[provider].configured);
-      const now = yield* Clock.currentTimeMillis;
-      const sealed = yield* liveQueryParts(
-        integrationStatusesLive,
-        { userId: context.userId, issuedSince: String(signInIssuedSince(now)) },
-        input,
-      );
-      return {
-        ...sealed,
-        offered,
-        multiple: offered.filter((provider) => connect[provider].multipleAccounts),
-      };
-    }),
+    integrationStatuses: signedIn.integrationStatuses.effect(
+      answerBoundRead(integrationStatusesRead),
+    ),
+
     accountPreferences: signedIn.accountPreferences.effect(answerBoundRead(accountPreferencesRead)),
   };
 }
