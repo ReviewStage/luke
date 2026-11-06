@@ -440,6 +440,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         cipher: tokenCipher,
         accountId: signedInId,
         queued: pool.queued,
+        queueMoves: pool.queueMoves,
       }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
       entities = { store, scope };
       // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.

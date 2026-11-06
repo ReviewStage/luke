@@ -3,8 +3,8 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
-import type { QueuedEntry } from "@repo/sync";
-import { Effect, Exit, Layer, Path, Result, Scope } from "effect";
+import { entityPool, type FieldChange, fieldKind, type WriteDeclaration } from "@repo/sync";
+import { Effect, Exit, Layer, Path, Result, Schema, Scope } from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
@@ -123,21 +123,42 @@ it.effect(
     }).pipe(Effect.provide(files)),
 );
 
-it.effect("a write waiting for the service is written within two seconds of its queuing", () =>
+/** A plan's row as the waiting write below renames it. */
+interface Row {
+  readonly id: string;
+  readonly name: string;
+}
+
+it.effect("a write waiting for the service is written within half a second of its queuing", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("entity-store-");
-    const waiting: QueuedEntry[] = [];
+    const pool = yield* entityPool({ mintKey: () => "rename-1", replayRefused: Effect.void });
+    const rename: WriteDeclaration<Row, FieldChange<Row>, string, string> = {
+      kind: fieldKind((row: Row) => row.id),
+      keys: () => ["1"],
+      change: (name) => () => ({ name }),
+      send: () => Effect.succeed({ refused: "unreachable", unanswered: true as const }),
+      queue: { name: "plans.rename", input: Schema.String, queued: () => "waits" },
+    };
     const scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     yield* Scope.provide(scope)(
-      openEntityStore({ directory, cipher: testCipher(), accountId: DANA, queued: () => waiting }),
+      openEntityStore({
+        directory,
+        cipher: testCipher(),
+        accountId: DANA,
+        queued: pool.queued,
+        queueMoves: pool.queueMoves,
+      }),
     );
-    waiting.push({ name: "plans.rename", key: "rename-1", input: { name: "Invites" } });
+    yield* pool.write(rename, "Invites");
 
-    yield* TestClock.adjust("2 seconds");
+    yield* TestClock.adjust("500 millis");
     yield* writtenText(directory);
 
-    assert.deepEqual(JSON.parse(yield* openedText(directory)).queue, waiting);
+    assert.deepEqual(JSON.parse(yield* openedText(directory)).queue, [
+      { name: "plans.rename", key: "rename-1", input: "Invites" },
+    ]);
   }).pipe(Effect.provide(files)),
 );
 
