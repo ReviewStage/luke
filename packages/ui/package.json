@@ -83,7 +83,7 @@
     "@repo/features": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/wire": "workspace:*",
-    "@tanstack/react-virtual": "3.14.21",
+    "@tanstack/react-virtual": "3.14.26",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
