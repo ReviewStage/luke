@@ -44,7 +44,7 @@ import type { AgentImage } from "../coder-host/agent-image.js";
 import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
 import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
 import type { FirewallLaunch, FirewallSources } from "../sandbox-firewall.js";
-import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
+import type { CommandExit, SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
 export type MachineRunning = string & Brand.Brand<"MachineRunning">;
@@ -177,16 +177,6 @@ export interface RunnerHandle extends MachinePlace {
 /** What a machine's calls reach of the caller's services: the store, GitHub, and the agents' image. */
 type MachineServices = CheckoutServices | AgentImage;
 
-/**
- * A failure as the log says it: a machine's own words, which name the call
- * that failed, its status, and the machine's error or the cause's, never
- * what was sent; the kind alone for any other, since a store failure's
- * message may name a statement.
- */
-export function describeFailure(failure: { readonly _tag: string }): string {
-  return failure instanceof SandboxUnavailable ? failure.message : failure._tag;
-}
-
 /** A launch could not start: no agent, no credential, no snapshot, a model the harness cannot name, or the account's plan or API key refused. */
 export class LaunchRefused extends Data.TaggedError("LaunchRefused")<{
   readonly reason: string;
@@ -304,6 +294,13 @@ export interface AgentMachineService {
   readonly discard: (
     found: FoundPlace,
   ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
+  /**
+   * What the session keeps apart from its places thrown away for good, once
+   * every place of it is discarded: a sandbox session's drive, which a place
+   * opened in place of a discarded one mounts again; nothing on a machine
+   * that keeps nothing apart.
+   */
+  readonly discardSession: (session: string) => Effect.Effect<void, SandboxUnavailable>;
   /** Files written into the running place, as the machine's default user, before a later line names them; refused (`LaunchRefused`'s `deviceAway`) where they would go to a device that is away, as the line naming them would be. */
   readonly writeFiles: (
     place: MachinePlace,

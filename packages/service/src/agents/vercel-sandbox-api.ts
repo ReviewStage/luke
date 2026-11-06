@@ -6,10 +6,10 @@
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall,
- * a native harness's sandbox opened from the agents' image or a snapshot,
+ * a native harness's sandbox opened from the agents' image on its drive,
  * its harness's user made and its runner started as that user, a
- * repository's snapshot, a repository's base drive and the sandbox that
- * fills it — it asks here, of the SDK at the version the
+ * repository's base drive and the sandbox that fills it, an agent's drive
+ * forked from it — it asks here, of the SDK at the version the
  * catalog pins, which loads in a function's bundle. The SDK tries a 429, a
  * 5xx, and a failure to connect again before it answers (a 429 waits out
  * Vercel's `Retry-After` up to 20 seconds), so nothing here tries again.
@@ -149,6 +149,7 @@ export const SANDBOX_CALL = {
   SNAPSHOT: "snapshot",
   DRIVE_GET: "drive-get",
   DRIVE_CREATE: "drive-create",
+  DRIVE_FORK: "drive-fork",
   DRIVE_DELETE: "drive-delete",
   USER: "user",
 } as const;
@@ -301,17 +302,14 @@ interface DetachedCommandAsk extends CommandAsk {
   readonly sudo: boolean;
 }
 
-/** What a sandbox is opened from: an image in the project's registry, or a snapshot. */
-type SandboxSource = { readonly image: string } | { readonly snapshotId: string };
-
 /**
- * A sandbox opened from an image or a snapshot: its name, its tags, how long
- * it may run and how large, how many of its snapshots Vercel keeps, and what
- * a name another sandbox already holds does.
+ * A sandbox opened from an image: its name, the image in the project's
+ * registry, its tags, how long it may run and how large, how many of its
+ * snapshots Vercel keeps, and what a name another sandbox already holds does.
  */
 interface SandboxCreate {
   readonly name: string;
-  readonly from: SandboxSource;
+  readonly image: string;
   readonly tags: Readonly<Record<string, string>>;
   readonly timeoutMs: number;
   readonly vcpus: number;
@@ -450,7 +448,7 @@ export interface VercelSandboxApi {
    */
   readonly session: (ref: SessionRef) => Effect.Effect<SandboxSessionApi, SandboxUnavailable>;
   /**
-   * Opens a sandbox from the image or snapshot named, persistent unless it
+   * Opens a sandbox from the image named, persistent unless it
    * says not, on the open internet; answers it with the session it runs.
    * Where the name is taken, `whenNameTaken` joins the sandbox holding it,
    * resumed, or refuses with Vercel's 409, which is what makes a name a lock.
@@ -487,6 +485,11 @@ export interface VercelSandboxApi {
   readonly getDrive: (name: string) => Effect.Effect<ListedDrive | undefined, SandboxUnavailable>;
   /** The drive under the name, created in the sandboxes' region where there is none. */
   readonly getOrCreateDrive: (name: string) => Effect.Effect<ListedDrive, SandboxUnavailable>;
+  /** A new drive under the name, holding all the source drive held, in its region; refused where the source was never written to. */
+  readonly forkDrive: (
+    source: string,
+    name: string,
+  ) => Effect.Effect<ListedDrive, SandboxUnavailable>;
   /** Deletes the drive under the name with all it holds; one already gone is no failure. */
   readonly deleteDrive: (name: string) => Effect.Effect<void, SandboxUnavailable>;
   /** Replaces the named sandbox's tags whole. */
@@ -1061,9 +1064,7 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
         asked(SANDBOX_CALL.CREATE, (signal, under) =>
           Sandbox.create({
             ...under,
-            ...("image" in ask.from
-              ? { image: ask.from.image }
-              : { source: { type: "snapshot" as const, snapshotId: ask.from.snapshotId } }),
+            image: ask.image,
             name: ask.name,
             persistent: ask.persistent ?? true,
             ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
@@ -1127,6 +1128,14 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           asked(SANDBOX_CALL.DRIVE_CREATE, (signal, under) =>
             Drive.getOrCreate({ ...under, name, signal }),
           ),
+          listedDrive,
+        ),
+      forkDrive: (source, name) =>
+        Effect.map(
+          asked(SANDBOX_CALL.DRIVE_FORK, async (signal, under) => {
+            const drive = await Drive.get({ ...under, name: source, signal });
+            return drive.fork({ name, signal });
+          }),
           listedDrive,
         ),
       deleteDrive: (name) =>

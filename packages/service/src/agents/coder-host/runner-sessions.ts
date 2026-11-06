@@ -1896,9 +1896,9 @@ export const runnerSessions = <
             yield* machine.discard(place);
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
-          return retired === 0
-            ? ({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
-            : ({ outcome: EVE_RESET_OUTCOME.RESET } as const);
+          if (retired === 0) return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          yield* machine.discardSession(sessionId);
+          return { outcome: EVE_RESET_OUTCOME.RESET } as const;
         }).pipe(
           Effect.catch(unavailable("reset")),
           Effect.annotateLogs(agentLogIds({}, sessionId)),

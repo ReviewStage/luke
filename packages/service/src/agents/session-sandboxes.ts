@@ -14,11 +14,12 @@
  * conversations or an account's deletion queues it
  * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
  * bounded batch at a time: every sandbox carrying the session's tag is
- * deleted with the snapshots only it kept, and the session leaves the queue.
+ * deleted with the snapshots only it kept, then the session's drive
+ * (`agent-drive.ts`), and the session leaves the queue.
  * A delete Vercel did not confirm leaves the session queued, stamped, behind
  * the rest. An agent's archive stops its sandbox rather than deleting it, in
  * the background (`stoppedInBackground`), so an unarchive still resumes from
- * the snapshot; a local agent's archive queues its device a discard line
+ * the snapshot, its drive kept; a local agent's archive queues its device a discard line
  * there too (`device-discard.ts`). Nothing here reads a sandbox's files or a word of any account:
  * what is asked of Vercel is a tag and a name, and what is logged of a
  * failure is its status.
@@ -39,6 +40,7 @@ import {
 } from "@repo/database/models/session-sandbox-cleanup";
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { afterResponse } from "../http/after-response.js";
+import { agentDriveName } from "./agent-drive.js";
 import { discardedOrLogged } from "./device-discard.js";
 import { sandboxFirewall } from "./sandbox-firewall.js";
 import { keepAliveExtension } from "./sandbox-keep-alive.js";
@@ -75,7 +77,7 @@ export interface SessionSandboxesService {
    * is left as it is.
    */
   readonly keepAliveFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
-  /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
+  /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses, and then the session's drive; answers how many sandboxes went. */
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /**
    * Stops every running sandbox tagged with the session, keeping its
@@ -115,6 +117,8 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
       Effect.gen(function* () {
         const sandboxes = yield* api.listTagged(sessionId);
         for (const { name } of sandboxes) yield* api.deleteSandbox(name);
+        // The drive goes last, because Vercel refuses to delete one a running sandbox holds.
+        yield* api.deleteDrive(agentDriveName(sessionId));
         return sandboxes.length;
       }),
     stopFor: (sessionId) =>

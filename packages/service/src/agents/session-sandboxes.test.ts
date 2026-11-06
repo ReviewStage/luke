@@ -4,6 +4,7 @@ import { getTestDB } from "@repo/database/testing";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
+import { runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
 import {
   fixtureToken,
   sandboxesListed,
@@ -13,9 +14,10 @@ import {
   sandboxStopRefusal,
   sessionAnswered,
 } from "../testing/vercel-sandbox-fake.js";
+import { AGENT_DRIVE, agentDriveName } from "./agent-drive.js";
 import { CODER } from "./coder-host/bounds.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
-import { SandboxUnavailable } from "./vercel-sandbox-api.js";
+import { NAME_TAKEN, SandboxUnavailable, vercelSandboxApi } from "./vercel-sandbox-api.js";
 
 /**
  * A session's sandboxes stopped through `@vercel/sandbox`, as the deployment
@@ -118,6 +120,37 @@ it.effect(
         ],
       );
     }),
+);
+
+it.effect("a retired session's sandboxes are deleted, and then the drive they mounted", () =>
+  Effect.gen(function* () {
+    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+    const fake = runnerSandboxApi();
+    const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(
+      Effect.provide(fake.layer),
+    );
+    const drive = agentDriveName(SESSION);
+    yield* api.getOrCreateDrive(drive);
+    yield* api.create({
+      name: "agent-sandbox-fixture",
+      image: "agent-image:fixture",
+      tags: { sessionId: SESSION },
+      timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+      vcpus: 2,
+      keepLastSnapshots: { count: 1, deleteEvicted: true },
+      env: {},
+      mounts: { [AGENT_DRIVE.MOUNT_PATH]: drive },
+      whenNameTaken: NAME_TAKEN.REFUSE,
+    });
+
+    const deleted = yield* Effect.flatMap(SessionSandboxes, (sandboxes) =>
+      sandboxes.deleteFor(SESSION),
+    ).pipe(Effect.provide(Layer.provide(sessionSandboxesLayer, fake.layer)));
+
+    assert.equal(deleted, 1);
+    assert.equal(fake.sandboxes[0]?.deleted, true);
+    assert.deepEqual([...fake.drives], []);
+  }),
 );
 
 it.effect("a stop Vercel refused fails with its status alone", () =>
