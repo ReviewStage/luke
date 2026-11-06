@@ -135,10 +135,9 @@ function entryChanged<Row extends Entry>(
   return (entry.unread === true) === unread ? undefined : { ...entry, unread };
 }
 
-/** Whether a task's open item is a question waiting on the reader, as its task's count counts it. */
+/** Whether a task's open item, a question or an update alike, waits on the reader, as its task's count counts it. */
 function counted(entry: AccountInboxLiveRows["items"][number], readerId: string): boolean {
-  const waitsOn = entry.waitsOn ?? entry.startedBy ?? readerId;
-  return entry.asking !== false && waitsOn === readerId;
+  return (entry.waitsOn ?? entry.startedBy ?? readerId) === readerId;
 }
 
 /** The parts of the read a write changes. */
