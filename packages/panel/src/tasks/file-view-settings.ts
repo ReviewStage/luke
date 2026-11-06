@@ -22,9 +22,10 @@
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@repo/settings";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useAct } from "../act.js";
+import { settingMutation } from "../act-mutations.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 
 /** The settings code and diffs are drawn by, by their fields in the settings schema. */
@@ -150,7 +151,7 @@ function without(
 
 export function useFileViewSettings(): FileViewSettingsControl {
   const stored = useAppSlice(storedFileViewAtom);
-  const { updateSetting } = useAct();
+  const { mutateAsync: updateSetting } = useMutation(settingMutation());
   const out = useSyncExternalStore(subscribePending, pendingNow);
   const settings = useMemo(() => ({ ...stored, ...out }), [stored, out]);
   const change = useCallback(
@@ -166,7 +167,7 @@ export function useFileViewSettings(): FileViewSettingsControl {
         setPending(without(pending, field));
       };
       // Note that a refusal is answered as a rejected result, as a control reads one, rather than thrown.
-      const write: Promise<ActionResult> = updateSetting(field, value).then(
+      const write: Promise<ActionResult> = updateSetting({ field, value }).then(
         (result) => result,
         () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSED }),
       );

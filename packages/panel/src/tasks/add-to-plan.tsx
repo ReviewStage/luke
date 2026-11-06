@@ -16,9 +16,11 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
 import { keepPictureRead } from "@repo/ui/picture-cache";
+import { useMutation } from "@tanstack/react-query";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
-import { unreachedAs, useAct } from "../act.js";
+import { unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
@@ -128,7 +130,8 @@ async function edited(
 export function useAddToPlan(): ViewerAction | undefined {
   const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const page = useTaskMentions();
-  const { act } = useAct();
+  const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
+  const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));
   const toast = useToast();
   const working = useWorkingToast();
   return useMemo(() => {
@@ -138,7 +141,7 @@ export function useAddToPlan(): ViewerAction | undefined {
     }
     const { workspace } = page;
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
-      act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
+      sendEdit({ taskId: taskId, edit: { document: { base, value } } }).catch(
         unreachedAs(TASK_CALL_FAILURE.UNANSWERED),
       );
     const add = async (chip: FileChip) => {
@@ -158,7 +161,7 @@ export function useAddToPlan(): ViewerAction | undefined {
       const keeping = await keptUrlOf(chip);
       if ("refused" in keeping) return failed(keeping.refused, keeping.refused, true);
       const { url } = keeping;
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
+      const kept = await sendKeep({ planId: taskId, picture: url }).catch(
         unreachedAs(PICTURE_KEEP_FAILURE.UNANSWERED),
       );
       if ("failure" in kept) return failed(KEEP_FAILED_WORDS[kept.failure], kept);
@@ -211,5 +214,5 @@ export function useAddToPlan(): ViewerAction | undefined {
       icon: <ImagePlusIcon aria-hidden="true" />,
       onPress: (chip: FileChip) => void add(chip),
     };
-  }, [plansOn, act, page, toast, working]);
+  }, [plansOn, sendEdit, sendKeep, page, toast, working]);
 }

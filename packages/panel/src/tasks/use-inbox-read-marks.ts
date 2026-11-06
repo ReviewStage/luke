@@ -5,8 +5,10 @@ import { countWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { STATUS_TONE } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { type ActHandle, firstRefusal, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { firstRefusal, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { afterPaint } from "../after-paint.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -79,15 +81,16 @@ const REMIND_REFUSED = {
 /** What a mark the act channel refused hears, as the service not answering. */
 const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
-/** The Inbox's read marks, sent through `act`; every item marked read in `workspaceId` where the Inbox lists one. */
+/** The Inbox's read marks, each sent on its act's mutation; every item marked read in `workspaceId` where the Inbox lists one. */
 export function useInboxReadMarks({
-  act,
   workspaceId,
 }: {
-  act: ActHandle["act"];
   workspaceId: string | undefined;
 }): InboxReadMarks {
   const toast = useToast();
+  const { mutateAsync: sendReadState } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_READ_STATE));
+  const { mutateAsync: sendReadAll } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_READ_ALL));
+  const { mutateAsync: sendRemind } = useMutation(actMutation(ACT_KIND.AGENTS_INBOX_REMIND));
   const refused = useCallback(
     (words: string, cause: unknown, about: FailureAbout) =>
       toast({
@@ -101,7 +104,7 @@ export function useInboxReadMarks({
   );
   const onMark = useCallback(
     (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<Kept> =>
-      act(ACT_KIND.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
+      sendReadState({ itemId: item.id, unread })
         .catch(unreached)
         .then((answer) => {
           if (!("failure" in answer)) return KEPT;
@@ -110,13 +113,13 @@ export function useInboxReadMarks({
           }
           return notKept(answer);
         }),
-    [act, workspaceId, refused],
+    [sendReadState, workspaceId, refused],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
       const itemIds = items.filter(isUnread).map((item) => item.id);
       if (itemIds.length === 0) return;
-      act(ACT_KIND.AGENTS_INBOX_READ_ALL, {
+      sendReadAll({
         ...(workspaceId === undefined ? undefined : { workspaceId }),
         itemIds,
       })
@@ -126,7 +129,7 @@ export function useInboxReadMarks({
             refused(markedNote(false, 0, itemIds.length), answer, { workspaceId });
         });
     },
-    [act, workspaceId, refused],
+    [sendReadAll, workspaceId, refused],
   );
   // Note that each item's mark goes on its own, there being no act marking several but the workspace's whole, and one toast answers them all.
   const onMarkEach = useCallback(
@@ -148,7 +151,7 @@ export function useInboxReadMarks({
   // Note that a reminder reaches the reader alone and is undone by canceling it, so it asks nothing and offers Undo, as the panel's other such acts do.
   const onRemind = useCallback(
     (item: InboxItem, until: number | null): void => {
-      void act(ACT_KIND.AGENTS_INBOX_REMIND, { itemId: item.id, until })
+      void sendRemind({ itemId: item.id, until })
         .catch(unreached)
         .then((answer) => {
           if ("failure" in answer) {
@@ -168,7 +171,7 @@ export function useInboxReadMarks({
           }
         });
     },
-    [act, workspaceId, refused, toast],
+    [sendRemind, workspaceId, refused, toast],
   );
   return useMemo(
     () => ({ onMark, onMarkAll, onMarkEach, onRemind }),

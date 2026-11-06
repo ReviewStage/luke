@@ -9,6 +9,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,7 +21,7 @@ import {
   useDraftWriter,
   useInboxDrafts,
 } from "../composer-drafts.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { type InboxCloser, useInboxClose, useInboxCloser } from "./inbox-close.js";
@@ -160,9 +161,9 @@ test("a close taken keeps the words of a message begun on the item while it was 
       land = () =>
         resolve({ item: { ...ITEM, status: INBOX_STATUS.CLOSED, updatedAt: 2_000 }, taken: true });
     });
+  fakeActPort({ [ACT_KIND.AGENTS_INBOX_CLOSE]: closeAct });
   function Probe(): null {
-    // SAFETY: the probe answers the one act the closer sends, the close.
-    closer = useInboxCloser({ act: closeAct as never });
+    closer = useInboxCloser();
     const writer = useDraftWriter();
     write = (text) =>
       writer.update(PLACE, () => ({ text, attachments: [], choices: [], values: [] }));
