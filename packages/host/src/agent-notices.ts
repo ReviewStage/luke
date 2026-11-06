@@ -279,8 +279,8 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
 /**
  * Each agent the open items of agents with no task name, once, as a service
  * before `agents` leaves the window to list them: how many it holds open,
- * how many are asks among those that wait on the account (`waiting`, as
- * `waitingOnAccount` keeps them), and when the latest changed, named as its
+ * how many of those wait on the account, asks and notices alike (`waiting`,
+ * as `waitingOnAccount` keeps them), and when the latest changed, named as its
  * latest names it. Note that its settled items are not among them, since
  * such a service names none.
  */
@@ -288,7 +288,7 @@ function agentsOfOpenItems(
   items: readonly AccountTasklessEntry[],
   waiting: readonly AccountTasklessEntry[],
 ): AppInboxSlice["agents"] {
-  const toDo = new Set(waiting.filter(asking).map((item) => item.id));
+  const toDo = new Set(waiting.map((item) => item.id));
   const held = new Map<string, AppInboxSlice["agents"][number]>();
   // The read answers its items the latest changed first, so an agent's first is the one it is named by.
   for (const item of items) {

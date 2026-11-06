@@ -658,7 +658,7 @@ const TasksPageRow = memo(function TasksPageRow({
   workspaceName: string;
   /** The task's repository as the row says it: its name alone, unless another repository the List draws shares it. */
   repositoryName: string;
-  /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
+  /** How many of its threads wait on the reader, questions and updates alike, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   properties: readonly TaskRowCell[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
