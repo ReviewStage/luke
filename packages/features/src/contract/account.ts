@@ -11,6 +11,15 @@
  * refused (`exactInput`), but for the preferences write, whose parts the
  * service has always read one by one and whose other keys it passes over.
  *
+ * The procedures a coding agent's settings call declare their own
+ * refusals (`declaredProcedure`): the preferences write, the provider keys,
+ * and the account's ChatGPT sign-in refuse only as any procedure may, the
+ * key ring a deployment holds among them, but that a device-code login is
+ * braked as quota exhausted, and its start refused as an upstream error
+ * where OpenAI gave no code; a memories read or forget refuses a workspace
+ * the account is not in as not found and a memory it may not forget as not
+ * permitted. The rest still declare the whole map (`hostedProcedure`).
+ *
  * The outputs are the wire schemas flipped, so oRPC's output check encodes
  * the handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
@@ -45,8 +54,9 @@ import {
   providerKeysAnswerSchema,
 } from "../provider-key-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import { workspaceIdSchema } from "../task-wire.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, hostedProcedure, refuses } from "./base.js";
 
 /** A key's save is a provider and a key bounded at 512 characters, so a body past this is not one. */
 const PROVIDER_KEY_BODY_BYTES = 2_048;
@@ -64,26 +74,26 @@ export const accountContract = {
   preferences: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),
-  writePreferences: hostedProcedure
+  writePreferences: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .input(accountPreferencesWriteSchema)
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),
   access: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_ACCESS }))
     .output(EffectSchema.flip(accountAccessAnswerSchema)),
-  providerKeys: hostedProcedure
+  providerKeys: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
-  saveProviderKey: hostedProcedure
+  saveProviderKey: declaredProcedure
     .meta(bodyCap(PROVIDER_KEY_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
     .input(exactInput(providerKeySaveRequestSchema))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
-  setProviderKeyForAgents: hostedProcedure
+  setProviderKeyForAgents: declaredProcedure
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }))
     .input(exactInput(providerKeyForAgentsRequestSchema))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
-  removeProviderKey: hostedProcedure
+  removeProviderKey: declaredProcedure
     .meta(
       openapi({
         method: HTTP_METHOD.DELETE,
@@ -102,11 +112,13 @@ export const accountContract = {
       }),
     )
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
-  memories: hostedProcedure
+  memories: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES }))
     .input(EffectSchema.Struct({ [MEMORY_QUERY.WORKSPACE_ID]: workspaceIdSchema }))
     .output(EffectSchema.flip(memoriesAnswerSchema)),
-  forgetMemory: hostedProcedure
+  forgetMemory: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(
       openapi({
         method: HTTP_METHOD.DELETE,
@@ -137,17 +149,20 @@ export const accountContract = {
       }),
     )
     .output(EffectSchema.flip(memorySearchAnswerSchema)),
-  startChatGptDeviceLogin: hostedProcedure
+  startChatGptDeviceLogin: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.QUOTA_EXHAUSTED, HOSTED_API_ERROR.UPSTREAM_ERROR))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_DEVICE }))
     .output(EffectSchema.flip(chatGptDeviceStartAnswerSchema)),
-  pollChatGptDeviceLogin: hostedProcedure
+  pollChatGptDeviceLogin: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.QUOTA_EXHAUSTED))
     .meta(bodyCap(CHATGPT_DEVICE_LOGIN_BODY_BYTES))
     .meta(
       openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_DEVICE_POLL }),
     )
     .input(exactInput(chatGptDeviceLoginRequestSchema))
     .output(EffectSchema.flip(chatGptDevicePollAnswerSchema)),
-  cancelChatGptDeviceLogin: hostedProcedure
+  cancelChatGptDeviceLogin: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.QUOTA_EXHAUSTED))
     .meta(bodyCap(CHATGPT_DEVICE_LOGIN_BODY_BYTES))
     .meta(
       openapi({
