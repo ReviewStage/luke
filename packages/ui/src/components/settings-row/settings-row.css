@@ -45,13 +45,20 @@
      the line wraps rather than squeezing them a letter wide, and the controls
      stand below the words at the row's end; where the controls leave more,
      the subject grows past its basis to the controls as before. */
-  .ui-settings-row:not([data-density="compact"], [data-labels-control="true"])
-  .ui-settings-row-line {
+  .ui-settings-row:not(
+    [data-density="compact"],
+    [data-labels-control="true"],
+    [data-controls="beside"]
+  ) .ui-settings-row-line {
     flex-wrap: wrap;
     gap: var(--ui-space-8) var(--ui-space-12);
   }
 
-  .ui-settings-row:not([data-density="compact"], [data-labels-control="true"])
+  .ui-settings-row:not(
+      [data-density="compact"],
+      [data-labels-control="true"],
+      [data-controls="beside"]
+    )
     .ui-settings-row-subject {
     flex-basis: calc(var(--ui-settings-row-words-inset) + var(--ui-space-96) + var(--ui-space-24));
   }
@@ -59,6 +66,13 @@
   .ui-settings-row:not([data-density="compact"], [data-labels-control="true"])
     .ui-settings-row-controls {
     margin-inline-start: auto;
+  }
+
+  /* Note that a row that keeps its controls beside its words keeps them
+     whole, because the words are what give way there, wrapping in their
+     column. */
+  .ui-settings-row[data-controls="beside"] .ui-settings-row-controls {
+    flex: none;
   }
 
   /* A container query cannot read a custom property, so the contract's

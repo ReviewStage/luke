@@ -22,6 +22,7 @@ import { CODER } from "../agents/coder-host/bounds.js";
 import { SERVER_AGENT_TOOL } from "../events/server-events.js";
 import type { RelayFrame } from "../terminal/relay.js";
 import {
+  FAKE_IMAGE,
   type FakeCdpCommand,
   type FakeCdpPeer,
   fakeBridgePty,
@@ -143,7 +144,7 @@ function liveBrowser(
       },
     });
     const sandbox = fakeSandboxApi({ status: "running", sessionId: SESSION });
-    const browser = agentBrowserOver(sandbox.api, fakeBridgePty(peer));
+    const browser = agentBrowserOver(sandbox.api, fakeBridgePty(peer), FAKE_IMAGE);
     return { peer, browser, commands };
   });
 }

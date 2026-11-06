@@ -66,6 +66,7 @@ import {
   personRef,
 } from "@repo/ui/person-page-model";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { changesTab } from "@repo/ui/tab-strip-model";
 import { ASSIGNED_TO } from "@repo/ui/task-list-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { useQueryClient } from "@tanstack/react-query";
@@ -313,7 +314,7 @@ function AgentRow({
         }
         more={!coarse}
         onPress={() => tasks.onShowAgent(task.id, agent.id)}
-        onOpenPullRequest={() => tasks.onShowPanelTab(task.id, { changes: agent.id })}
+        onOpenPullRequest={() => tasks.onShowPanelTab(task.id, changesTab(agent.id))}
       />
       {actions.dialog}
     </>

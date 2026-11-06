@@ -1,14 +1,12 @@
 import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { ConfirmDialog, type SelectionGlyphAct, STATUS_TONE, useConfirmDialog } from "@repo/ui";
-import { neverBusyAct } from "@repo/ui/confirm-state";
+import { type SelectionGlyphAct, STATUS_TONE } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { firstRefusal, type Kept } from "../act.js";
 import { COMMAND_PLACE, commandWords, PANEL_COMMAND } from "../command-items.js";
-import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { closeAllQuestion, closedNote, type InboxCloser } from "./inbox-close.js";
+import { type InboxResolver, RESOLVE } from "./inbox-close.js";
 import { type InboxListed, isUnread } from "./inbox-model.js";
 import { type InboxRemindMany, REMIND_ME, remindManyGroups } from "./inbox-remind.js";
 import { type MarkSaying, markedNote } from "./use-inbox-read-marks.js";
@@ -29,15 +27,10 @@ import { type MarkSaying, markedNote } from "./use-inbox-read-marks.js";
  * row's own does, one item at a time (`use-inbox-read-marks.ts`), and
  * answers with one toast once the service did, whose Undo puts each item
  * it took back as it stood, and which names how many it refused. Resolve
- * closes the open items without an answer as the row's own close does
- * (`inbox-close.tsx`): since only an item's agent can open it again, and
- * each agent is told, it asks once for them all first, in red, and no Undo
- * follows; a toast names how many the service refused. Each act lets the
- * selection go.
+ * resolves the open items without an answer as the row's own does, at once,
+ * with one toast whose Undo takes them all back before any agent is told
+ * (`inbox-close.tsx`). Each act lets the selection go.
  */
-
-/** What the bar's Resolve says. */
-const RESOLVE = "Resolve";
 
 /** Marks one listed item read or unread, answering whether the service took it, with what refused it where it did not. */
 export type InboxListMark = (
@@ -46,16 +39,14 @@ export type InboxListMark = (
   saying?: MarkSaying,
 ) => Promise<Kept>;
 
-/** What the Inbox offers for the items chosen in its list: the acts, and the question Resolve asks, which its owner draws. */
+/** What the Inbox offers for the items chosen in its list. */
 export interface InboxSelection {
   readonly acts: readonly SelectionGlyphAct[];
-  readonly dialog: React.ReactNode;
 }
 
 /** The acts on the items `listed`, chosen in the Inbox's list; none while none is. */
 export function useInboxSelection({
   listed,
-  shown,
   onClear,
   onMark,
   onClose,
@@ -64,13 +55,11 @@ export function useInboxSelection({
 }: {
   /** The items chosen, in the order the list draws them. */
   listed: readonly InboxListed[];
-  /** Whether the list is on screen, for Resolve's question not to outlive it. */
-  shown: boolean;
   onClear: () => void;
   /** Marks one item read or unread, answering whether the service took it; none where the list offers no mark. */
   onMark?: InboxListMark | undefined;
-  /** Closes one open item without an answer; none where the list offers no close. */
-  onClose?: InboxCloser | undefined;
+  /** Resolves open items without an answer; none where the list offers no resolve. */
+  onClose?: InboxResolver | undefined;
   /** Sets or clears the reminder of several items; none where the list offers no reminder. */
   onRemindMany?: InboxRemindMany | undefined;
   /** Opens the date picker by the items chosen for a time of the reader's own, handing it to `onAt`. */
@@ -80,37 +69,7 @@ export function useInboxSelection({
   // The items chosen as of the latest draw, which a time picked after the picker opened is set on.
   const chosenNow = useRef(listed);
   chosenNow.current = listed;
-  // The open items Resolve asked about, at the revisions it asked on.
-  const [resolving, setResolving] = useState<readonly InboxListed[]>([]);
   const open = listed.filter(({ item }) => item.status === INBOX_STATUS.OPEN);
-  // Note that the question stands only while every item it asked about is still chosen and open at the revision asked on, so an agent's change or an item let go withdraws it whole rather than resolving what the reader never saw.
-  const unchanged = resolving.every(({ item }) =>
-    open.some((each) => each.item.id === item.id && each.item.revision === item.revision),
-  );
-  const asked = unchanged ? resolving : [];
-  const confirm = useConfirmDialog(
-    { subject: asked.length > 0, surfaceOpen: shown },
-    neverBusyAct(() => {
-      const closing = asked;
-      if (onClose !== undefined) {
-        void Promise.all(closing.map(({ item }) => onClose(item, { quiet: true }))).then(
-          (taken) => {
-            const refused = taken.filter((each) => !each.kept).length;
-            if (refused === 0) return;
-            toast({
-              replayUnmasked: true,
-              words: closedNote(taken.length - refused, refused),
-              tone: STATUS_TONE.DANGER,
-              hold: TOAST_HOLD.FAILED,
-              failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: firstRefusal(taken) },
-            });
-          },
-        );
-      }
-      onClear();
-    }),
-    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
-  );
 
   // Note that each item's mark goes on its own, there being no act marking several, and one toast answers them all once each did.
   const markAll = (marking: readonly InboxListed[], unread: boolean, undoable: boolean) => {
@@ -193,22 +152,10 @@ export function useInboxSelection({
       : [
           {
             label: RESOLVE,
-            icon: <GLYPH.DISMISSED />,
-            // Note that only an item's agent can open it again, so a chosen row's menu draws it red, last and alone.
-            danger: true,
-            onAct: () => {
-              setResolving(open);
-              confirm.ask();
-            },
+            icon: <GLYPH.RESOLVED />,
+            onAct: acted(() => onClose(open.map(({ item }) => item))),
           },
         ]),
   ];
-  const dialog = (
-    <ConfirmDialog
-      open
-      confirm={confirm}
-      question={closeAllQuestion(asked.map(({ item }) => item))}
-    />
-  );
-  return { acts, dialog };
+  return { acts };
 }

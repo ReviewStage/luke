@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { agentTab } from "@repo/ui/tab-strip-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -77,7 +78,7 @@ test("the column draws a Start still out on the description as its agent's tab s
       onRegistry(
         AtomRegistry.make(),
         createElement(MainTabContent, {
-          tab: { agent: "press-1" },
+          tab: agentTab("press-1"),
           agents,
           shown: true,
           views: {

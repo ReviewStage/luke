@@ -5,6 +5,7 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import type { Task } from "@repo/features/task-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { agentTab, draftTab, pageTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -54,7 +55,7 @@ const AGENT: AgentSummary = {
 };
 
 /** The draft's tab, a New agent not yet started. */
-const DRAFT = { draft: "draft" } as const;
+const DRAFT = draftTab("draft");
 
 /** A page an agent showed on the plan, whose tab offers a link to itself. */
 const PAGE = {
@@ -99,8 +100,8 @@ afterEach(() => {
 test("the screen standing follows the column and the panel: a tab of the panel while it is open, else Overview on the task's Overview and the agent's on an agent's tab", () => {
   assert.equal(taskPaneOf({ open: true, column: MAIN_TAB.OVERVIEW }), TASK_PANE.PANEL);
   assert.equal(taskPaneOf({ open: false, column: MAIN_TAB.OVERVIEW }), TASK_PANE.OVERVIEW);
-  assert.equal(taskPaneOf({ open: false, column: { agent: AGENT.id } }), TASK_PANE.AGENT);
-  assert.equal(taskPaneOf({ open: false, column: { draft: "draft" } }), TASK_PANE.AGENT);
+  assert.equal(taskPaneOf({ open: false, column: agentTab(AGENT.id) }), TASK_PANE.AGENT);
+  assert.equal(taskPaneOf({ open: false, column: draftTab("draft") }), TASK_PANE.AGENT);
 });
 
 /** The task's page in `room`, its panel open on `tab` over the plan, the Inbox, and the comments, a page of the plan's where `paged`, and its column on the agent's tab where `agent`, every press on the panel, the way out, and a rename told; `draw` draws it again over a panel opened or shut on another tab. */
@@ -167,8 +168,8 @@ function mount(
                     : { taskId: TASK.id, request: repositoryAsk },
                 mainTabs: {
                   ...tasksControl().mainTabs,
-                  tabs: [MAIN_TAB.OVERVIEW, { agent: AGENT.id }, ...(draft ? [DRAFT] : [])],
-                  tab: draft ? DRAFT : onAgent ? { agent: AGENT.id } : MAIN_TAB.OVERVIEW,
+                  tabs: [MAIN_TAB.OVERVIEW, agentTab(AGENT.id), ...(draft ? [DRAFT] : [])],
+                  tab: draft ? DRAFT : onAgent ? agentTab(AGENT.id) : MAIN_TAB.OVERVIEW,
                   openAgents: [AGENT.id],
                   onChoose: (chosen) => told.push(`column ${JSON.stringify(chosen)}`),
                   onClose: (closed) => told.push(`close column ${JSON.stringify(closed)}`),
@@ -185,7 +186,7 @@ function mount(
                   fullScreenOnly: shown && narrow,
                   tabs: [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
                   strip: [SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.COMMENTS],
-                  pages: paged ? [{ page: PAGE.id }] : [],
+                  pages: paged ? [pageTab(PAGE.id)] : [],
                   tab: on,
                   onChoose: (chosen) =>
                     told.push(
@@ -312,7 +313,7 @@ test("on a phone ⌘T starts New agent at once, the panel shut over it, since no
 });
 
 test("on a phone a tab of the panel is pushed over the column, titled by the tab, going back shutting the panel, its ⋯ the tab's own", () => {
-  const page = mount(SHELL_ROOM.NARROW, true, { page: PAGE.id }, true);
+  const page = mount(SHELL_ROOM.NARROW, true, pageTab(PAGE.id), true);
   assert.deepEqual(page.head(), {
     buttons: [`Back to ${TASK.name}`, "Tab actions"],
     title: PAGE.title,
@@ -408,7 +409,7 @@ test("on a phone a task still read, or one that cannot be, is headed by its way 
 });
 
 test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offers each of its controls by name, a press there acting as the bar's did", async () => {
-  const page = mount(SHELL_ROOM.NARROW, true, { page: PAGE.id }, true);
+  const page = mount(SHELL_ROOM.NARROW, true, pageTab(PAGE.id), true);
   await act(async () => undefined);
   assert.equal(page.container.querySelector(".page-view .file-view-bar"), null);
   const menu = page.menu();

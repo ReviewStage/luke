@@ -43,7 +43,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
-import { isTerminalTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { changesTab, isTerminalTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -1485,7 +1485,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
-  assert.deepEqual(chosen, [{ changes: AGENT_ID, number: 2905 }]);
+  assert.deepEqual(chosen, [changesTab(AGENT_ID, 2905)]);
 });
 
 test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {

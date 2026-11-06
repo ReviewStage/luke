@@ -22,6 +22,7 @@ import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
+import { draftTab, fileTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -1221,7 +1222,7 @@ const PLACE = {
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
 /** A draft agent's tab, which the column shows beside a panel. */
-const DRAFT_TAB = { draft: "draft" };
+const DRAFT_TAB = draftTab("draft");
 
 /** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
@@ -1246,11 +1247,11 @@ function placed(place: Place) {
         ...control.sidePanel,
         open: true,
         fullScreen: true,
-        strip: [{ file: "docs/notes.md" }],
+        strip: [fileTab("docs/notes.md")],
         files: [
           { path: "docs/notes.md", range: undefined, opened: 0, browsedOn: DOCUMENT_TASK.id },
         ],
-        tab: { file: "docs/notes.md" },
+        tab: fileTab("docs/notes.md"),
       },
     },
     [PLACE.SETTINGS]: { page: TASKS_PAGE.HOME },

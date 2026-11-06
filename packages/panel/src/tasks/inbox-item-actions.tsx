@@ -2,7 +2,7 @@ import type { InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction, MenuEntry } from "../desktop/action-menu.js";
-import { closeAction } from "./inbox-close.js";
+import { type InboxResolver, resolveAction } from "./inbox-close.js";
 import { isUnread } from "./inbox-model.js";
 import { type RemindDoors, remindEntries } from "./inbox-remind.js";
 import { markReadItem } from "./task-menu-items.js";
@@ -13,8 +13,8 @@ import { markReadItem } from "./task-menu-items.js";
  * Each menu offers the same groups in the same order: Copy link, the
  * item's link under the task or the agent that holds it; Mark as read or
  * unread, naming U where U reaches the item, and Remind me beside it, naming H
- * there too (`inbox-remind.tsx`); and, alone and last while the item is open, Resolve without answering, asked first
- * through the surface's one question (`inbox-close.tsx`). A surface hands
+ * there too (`inbox-remind.tsx`), and Resolve while the item is open, naming E
+ * there too, at once with Undo (`inbox-close.tsx`). A surface hands
  * down only the doors it has, and a group whose door is missing stands
  * nowhere.
  */
@@ -23,9 +23,9 @@ import { markReadItem } from "./task-menu-items.js";
 interface InboxItemDoors {
   /** Marks the item read or unread; none where the surface offers no mark. */
   readonly onMark: ((item: InboxItem, unread: boolean) => void) | undefined;
-  /** Asks to close an open item without an answer, through the question the surface draws (`useInboxCloseAsk`); none where it offers no close. */
-  readonly onAskClose: ((item: InboxItem) => void) | undefined;
-  /** Whether U marks this item, so its Mark names the chord, and H sets its reminder, so its Remind me does. */
+  /** Resolves open items without an answer; none where the surface offers no resolve. */
+  readonly onResolve: InboxResolver | undefined;
+  /** Whether U marks this item, so its Mark names the chord, H sets its reminder, so its Remind me does, and E resolves it, so its Resolve does. */
   readonly keyed: boolean;
   /** Sets the item's reminder, and opens the date picker for a time of the reader's own where the surface holds one; none where it offers no reminder. */
   readonly remind?: RemindDoors | undefined;
@@ -44,13 +44,13 @@ function inboxItemPlace(item: InboxItem): LinkPlace {
 
 /** One item's acts. */
 export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): InboxItemActions {
-  const { onMark, onAskClose, keyed, remind } = doors;
+  const { onMark, onResolve, keyed, remind } = doors;
   const read =
     onMark === undefined
       ? undefined
       : markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }, keyed);
   const copyLink = useCopyLinkItem()(inboxItemPlace(item));
-  const close = closeAction(item, onAskClose);
+  const resolve = resolveAction([item], onResolve, keyed);
   const groups = (lead: readonly MenuAction[][] = []) =>
     [
       ...lead,
@@ -58,8 +58,8 @@ export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): Inb
       [
         ...(read === undefined ? [] : [read]),
         ...(remind === undefined ? [] : remindEntries(item, remind, keyed)),
+        ...(resolve === undefined ? [] : [resolve]),
       ],
-      close === undefined ? [] : [close],
     ].filter((group) => group.length > 0);
   return { groups };
 }
