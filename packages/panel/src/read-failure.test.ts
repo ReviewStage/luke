@@ -226,6 +226,8 @@ test("the Inbox's list says its feed could not be read as the sidebar does, and 
           onChoose: ignore,
           onOpenItem: () => undefined,
           onClear: ignore,
+          narrowed: undefined,
+          onWiden: () => undefined,
           pages: undefined,
           onTaskAgents: () => undefined,
         },
@@ -330,6 +332,8 @@ const INBOX_VIEW = {
   onChoose: ignore,
   onOpenItem: () => undefined,
   onClear: ignore,
+  narrowed: undefined,
+  onWiden: () => undefined,
   pages: undefined,
   onTaskAgents: () => undefined,
 } as const;

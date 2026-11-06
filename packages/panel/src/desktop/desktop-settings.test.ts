@@ -799,7 +799,7 @@ test("on a phone the page list is headed by its way out alone, named for the ste
         ...NO_HISTORY,
         canGoBack: true,
         steps: {
-          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "routed", of: "/acme/inbox" } }],
           forward: [],
         },
       },

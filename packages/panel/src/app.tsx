@@ -60,6 +60,7 @@ import { useExpiredServerToasts } from "./expired-server-toasts.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
 import { stepTitle } from "./history-titles.js";
+import { useInboxRoute } from "./inbox-route.js";
 import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
 import { LinkMenu } from "./link-menu.js";
@@ -427,6 +428,10 @@ function AppWindow(): React.JSX.Element {
     onClose: () => leaveRouted.current(),
     onStay: () => stayRouted.current(),
   });
+  const inboxView = useInboxRoute({
+    onClose: () => leaveRouted.current(),
+    onStay: () => stayRouted.current(),
+  });
   const tasks = useTasksTab({
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
@@ -450,6 +455,7 @@ function AppWindow(): React.JSX.Element {
     personView,
     automationsView,
     versionHistoryView,
+    inboxView,
   });
   // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
   listedSlug.current =
@@ -574,6 +580,7 @@ function AppWindow(): React.JSX.Element {
     onSettingsList: settingsPlace.list,
     automations: automationsView,
     versionHistory: versionHistoryView,
+    inbox: inboxView,
     room,
     tasks,
   });

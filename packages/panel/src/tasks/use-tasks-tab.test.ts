@@ -61,6 +61,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { KEPT, type Kept } from "../act.js";
 import { ADMIN_PAGE, type AdminView } from "../admin/routing.js";
 import { type AutomationsRoute, useAutomationsRoute } from "../automations-route.js";
+import { type InboxRoute, useInboxRoute } from "../inbox-route.js";
 import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
@@ -104,7 +105,6 @@ import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { HISTORY_READ } from "./use-description-history.js";
-import { useInboxTask } from "./use-inbox-task.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
@@ -284,11 +284,13 @@ function mount(
     room,
     automations,
     versionHistory,
+    inbox,
   }: {
     tasks: TasksControl;
     room: ShellRoom;
     automations: AutomationsRoute;
     versionHistory: VersionHistoryRoute;
+    inbox: InboxRoute;
   }) {
     windowHistory = useWindowHistory({
       known: true,
@@ -298,6 +300,7 @@ function mount(
       onSettingsList: () => undefined,
       automations,
       versionHistory,
+      inbox,
       room,
       tasks,
     });
@@ -343,6 +346,7 @@ function mount(
       onClose: leaveRouted,
       onStay: () => undefined,
     });
+    const inboxView = useInboxRoute({ onClose: leaveRouted, onStay: () => undefined });
     restand = setHeld;
     control = useTasksTab({
       tasks: held.tasks,
@@ -371,6 +375,7 @@ function mount(
       personView: usePersonRoute({ onClose: leaveRouted, onStay: () => undefined }),
       automationsView,
       versionHistoryView,
+      inboxView,
     });
     return held.history
       ? createElement(WindowHistoryProbe, {
@@ -378,6 +383,7 @@ function mount(
           room: held.room,
           automations: automationsView,
           versionHistory: versionHistoryView,
+          inbox: inboxView,
         })
       : null;
   }
@@ -634,7 +640,11 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
 });
 
 test("New task on Home opens no dialog over Home's own composer, asking it for the caret instead, and opens the dialog over a page standing in Home's place", () => {
-  const home = mount({ shown: true, tasks: listRead([]) });
+  // Note that the Inbox stands under a workspace's address, so the window lists one.
+  const home = mount({
+    shown: true,
+    tasks: { ...listRead([]), workspaces: TWO_WORKSPACES.workspaces },
+  });
   act(() => home.control().onNewTask());
   assert.equal(home.control().newTask.open, false, "no dialog over Home");
   assert.equal(home.control().newTask.homeAsks, 1, "Home's composer is asked for the caret");
@@ -1572,11 +1582,10 @@ test("a Vespin link to an Inbox item opens it in the window's Inbox as it stands
         }),
     },
   );
-  const narrowed = inboxTaskNow();
   const opened = () => ({
     open: tab.control().inboxView.open,
     chosen: tab.control().inboxView.chosen,
-    taskId: narrowed(),
+    taskId: tab.control().inboxView.narrowed,
     panel: tab.control().sidePanel.tab,
   });
 
@@ -1666,19 +1675,6 @@ test("a Vespin link to an Inbox item by its id alone opens it where the service 
   assert.deepEqual(tab.control().inboxView.chosen, { itemId: unknownId, opened: true });
 });
 
-/** The task the Inbox is narrowed to, as a surface drawing it reads it now. */
-function inboxTaskNow(): () => string | undefined {
-  let seen: string | undefined;
-  const Reader = () => {
-    seen = useInboxTask();
-    return null;
-  };
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  act(() => root.render(createElement(Reader)));
-  return () => seen;
-}
-
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
   const tab = mount(
     { shown: true, tasks: TWO_WORKSPACES },
@@ -1686,11 +1682,10 @@ test("a task's Inbox door and its link narrow the Inbox to the task, an agent's 
     registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
-  const narrowed = inboxTaskNow();
   const narrowedTo = () => ({
     open: tab.control().inboxView.open,
     chosen: tab.control().inboxView.chosen,
-    taskId: narrowed(),
+    taskId: tab.control().inboxView.narrowed,
   });
 
   act(() => tab.control().onShowInbox({ taskId: "notes" }));

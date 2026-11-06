@@ -25,6 +25,8 @@ export interface RoutedLocation {
   /** The id of the route the address ends on, the deepest it matches; none where it matches none. */
   readonly leaf: string | undefined;
   readonly params: Readonly<Record<string, string | undefined>>;
+  /** The keys its query carries, each the string it is, as the router reads them (`panel-router.tsx`). */
+  readonly search: Readonly<Record<string, string>>;
 }
 
 /** The same path under the workspace whose address step is `workspace`, in place of the step it names first. */
@@ -36,7 +38,7 @@ export function pathUnder(pathname: string, workspace: string): string {
 /** The routed place the history stands on, and its params. */
 export function useRoutedLocation(): RoutedLocation {
   const router = useRouter();
-  const { pathname, href } = useHistoryLocation();
+  const { pathname, href, search } = useHistoryLocation();
   const matches = useMemo(() => router.matchRoutes(pathname), [router, pathname]);
   return useMemo(
     () => ({
@@ -44,7 +46,8 @@ export function useRoutedLocation(): RoutedLocation {
       href,
       leaf: matches.at(-1)?.routeId,
       params: matches.at(-1)?.params ?? {},
+      search: Object.fromEntries(new URLSearchParams(search)),
     }),
-    [matches, href],
+    [matches, href, search],
   );
 }

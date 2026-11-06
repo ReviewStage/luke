@@ -286,6 +286,14 @@ describe("the panel's route tree", () => {
     });
   });
 
+  it("names an Inbox item chosen in a list narrowed to a task by its address, the task kept in its query", () => {
+    expect(landingOf(`/${W}/inbox/i1?task=42`)).toEqual({
+      routeId: "/places/$workspace/inbox/$itemId",
+      params: { workspace: W, itemId: "i1" },
+      search: { task: "42" },
+    });
+  });
+
   it("names the version history's places no link names, its list, a version's sections, and one of them", () => {
     expect(landingOf(`/${W}/task/42/versions`).routeId).toBe(
       "/version-history/$workspace/task/$taskId/versions",

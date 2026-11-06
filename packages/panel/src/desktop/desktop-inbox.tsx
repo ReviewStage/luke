@@ -1,10 +1,10 @@
 import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@repo/features/agent-view";
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import {
+  type DescriptionMention,
   encodeMention,
   MENTION_KIND,
   type MentionLines,
-  type DescriptionMention,
 } from "@repo/features/mention-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { CodeRef } from "@repo/features/task-wire";
@@ -64,7 +64,6 @@ import type { AgentsControl } from "../tasks/use-agents.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { useInboxItemOpenSpan, useInboxOpenSpan } from "../tasks/use-inbox-spans.js";
-import { leaveInboxTask, openTaskThread, useInboxTask } from "../tasks/use-inbox-task.js";
 import { OpenAddressesHere, type OpenAddressHere, placeOfMention } from "../tasks/use-open-link.js";
 import {
   type FileReads,
@@ -197,7 +196,7 @@ export const DesktopInbox = memo(function DesktopInbox({
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   // A task chosen narrows the Inbox to its own items, which a chip over the list names and clears.
-  const narrowedTask = useInboxTask();
+  const narrowedTask = tasks.inboxView.narrowed;
   const narrowedTaskRow = tasks.tasks.find((task) => task.id === narrowedTask);
   const narrowedTaskName = narrowedTaskRow?.name;
   const {
@@ -424,7 +423,7 @@ export const DesktopInbox = memo(function DesktopInbox({
               ? undefined
               : { agentId, itemId, opened: true };
         if (choice === undefined) return false;
-        openTaskThread(holder);
+        // Note that the Inbox's door widens a list narrowed to another task, so the list it opens in holds it (`inbox-route.ts`).
         view.onChoose(choice);
         return true;
       }
@@ -642,7 +641,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                         : {
                             name: narrowedTaskName,
                             status: narrowedTaskRow?.status,
-                            onClear: leaveInboxTask,
+                            onClear: tasks.inboxView.onWiden,
                           },
                   }}
                   models={named.models}

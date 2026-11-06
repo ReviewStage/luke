@@ -309,6 +309,8 @@ class InboxWorld {
   setInboxOpen: (open: boolean) => void = () => undefined;
   /** Chooses an item from outside the list, as a notification's click does. */
   chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
+  /** Narrows the Inbox to one task's items, as its address does (`inbox-route.ts`), or lists every task's again. */
+  narrowTo: (taskId: string | undefined) => void = () => undefined;
   /** Moves main's read of what waits on the agents with no task, and of the agents holding items, those it names unless given, as main does when an item opens or is answered. */
   setTaskless: (
     taskless: readonly AppInboxTasklessItem[],
@@ -791,6 +793,14 @@ export function mount(
     const [inboxOpen, setOpen] = useState(true);
     world.setInboxOpen = setOpen;
     world.chooseFromOutside = setChosen;
+    const [narrowed, setNarrowed] = useState<string | undefined>(undefined);
+    world.narrowTo = setNarrowed;
+    // Note that an item of another task than the one the list is narrowed to widens it, as the Inbox's door does.
+    const choose = (next: InboxChoice) => {
+      setChosen(next);
+      const holder = "taskId" in next ? next.taskId : undefined;
+      setNarrowed((held) => (held === undefined || held === holder ? held : undefined));
+    };
     const [holding, setHeld] = useState(firstHolding);
     const [listed, setListed] = useState<readonly TaskSummary[]>(listUnread ? [] : standing);
     const [listRead, setRead] = useState(!listUnread);
@@ -844,9 +854,11 @@ export function mount(
         onClose: () => {
           asked.closed += 1;
         },
-        onChoose: setChosen,
-        onOpenItem: setChosen,
+        onChoose: choose,
+        onOpenItem: choose,
         onClear: () => setChosen(undefined),
+        narrowed,
+        onWiden: () => setNarrowed(undefined),
         pages: undefined,
         onTaskAgents: () => undefined,
       },

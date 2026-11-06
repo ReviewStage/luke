@@ -1888,8 +1888,8 @@ function SidebarColumn({
   const openTask = (taskId: string) => leaveFor(() => tasks.onResume(taskId));
   const newTask = () => leaveFor(() => tasks.onNewTask());
   const openPinnedTab = (pin: SidebarPin) => leaveFor(() => tasks.onOpenPinnedTab(pin));
-  const openInbox = () => leaveFor(() => tasks.inboxView.onOpen());
-  // Note that the Board and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
+  // Note that the Inbox, the Board, and the Automations pages are the router's places, which their navigation stands from wherever the window stands, as Admin's does.
+  const openInbox = () => tasks.inboxView.onOpen();
   const openBoard = () => tasks.boardView.onOpen();
   const openAutomations = () => tasks.automationsView.onOpen();
   const openAdmin = () => tasks.adminView.onOpen();

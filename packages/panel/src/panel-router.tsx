@@ -18,8 +18,8 @@
  * sidebar, under the pathless `places` layout, which stays drawn as the
  * window moves between them, and a task's version history takes the whole
  * window as Settings does. Settings, Admin, a workspace's Board, a
- * person's page, the Automations pages, and a task's version history are routed places: the router alone says the window stands
- * on them, their routes draw them as lazy routes, and each gate is a
+ * person's page, the Automations pages, a task's version history, and the Inbox are routed places: the router alone says the window stands
+ * on them, their routes draw them, as lazy routes but for the Inbox kept drawn beside them all, and each gate is a
  * `beforeLoad` over a predicate the window's Back and Forward ask too
  * (`route-gates.ts`). Every other place
  * is still the window's state's, which its routes draw through one
@@ -48,6 +48,7 @@ import {
   AdminRouteLoading,
   AutomationsRouteLoading,
   BoardRouteLoading,
+  InboxPlace,
   PersonRouteLoading,
   SettingsRouteLoading,
   ShellPlaces,
@@ -256,17 +257,46 @@ const agentInboxItemRoute = createRoute({
   path: "inbox/$itemId",
 });
 
+/**
+ * The Inbox of one of the reader's workspaces: its list, `/inbox`, the list
+ * narrowed to one task's items, `/inbox/task/<taskId>`, and an item chosen
+ * in it, `/inbox/<itemId>`, whose `?task=<taskId>` keeps the task the list
+ * it was chosen in was narrowed to. An address naming none of the reader's
+ * workspaces opens the same place under the workspace listed, as a link to
+ * it does. The Inbox itself is kept drawn beside every place's route
+ * (`ShellPlaces`), so its rows, scroll, and search stand as they were left;
+ * its route draws nothing of its own (`InboxPlace`).
+ */
 const inboxRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "inbox",
-  component: StatePlace,
+  beforeLoad: ({ context, params, location }) => {
+    const { listed } = context.access;
+    if (workspaceRouteStands(params.workspace, context.access) || listed === undefined) return;
+    throw redirect({
+      href: `${pathUnder(location.pathname, listed)}${location.searchStr}`,
+      replace: true,
+    });
+  },
+  component: InboxPlace,
 });
 
 const inboxIndexRoute = createRoute({ getParentRoute: () => inboxRoute, path: "/" });
 
 const inboxTaskRoute = createRoute({ getParentRoute: () => inboxRoute, path: "task/$taskId" });
 
-const inboxItemRoute = createRoute({ getParentRoute: () => inboxRoute, path: "$itemId" });
+/** An Inbox item's address: `?task=<taskId>`, the task the list it was chosen in was narrowed to; every other key the address carries is left as it stands. */
+const inboxItemSearchSchema = Schema.toStandardSchemaV1(
+  Schema.StructWithRest(Schema.Struct({ task: Schema.optionalKey(Schema.String) }), [
+    Schema.Record(Schema.String, Schema.String),
+  ]),
+);
+
+const inboxItemRoute = createRoute({
+  getParentRoute: () => inboxRoute,
+  path: "$itemId",
+  validateSearch: inboxItemSearchSchema,
+});
 
 /**
  * The Automations pages of one of the reader's workspaces: the list, its

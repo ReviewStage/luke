@@ -134,7 +134,7 @@ export function versionHistoryRouteStands(access: RouteAccess): boolean {
   return !access.experimentsRead || experimentOn(access.experiments, EXPERIMENT.DESCRIPTIONS);
 }
 
-/** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, a person's page, the Automations pages, and a task's version history. */
+/** The places the router alone says the window stands on, rather than the window's state: Settings, Admin, a workspace's Board, a person's page, the Automations pages, a task's version history, and the Inbox. */
 export const ROUTED_PLACE = {
   SETTINGS: "settings",
   ADMIN: "admin",
@@ -142,6 +142,7 @@ export const ROUTED_PLACE = {
   PERSON: "person",
   AUTOMATIONS: "automations",
   VERSION_HISTORY: "version-history",
+  INBOX: "inbox",
 } as const;
 
 export type RoutedPlace = (typeof ROUTED_PLACE)[keyof typeof ROUTED_PLACE];
@@ -155,6 +156,7 @@ const ROUTED_ROUTES = {
   "/places/$workspace/person/$userId": ROUTED_PLACE.PERSON,
   "/places/$workspace/automation-pages": ROUTED_PLACE.AUTOMATIONS,
   "/version-history": ROUTED_PLACE.VERSION_HISTORY,
+  "/places/$workspace/inbox": ROUTED_PLACE.INBOX,
 } as const satisfies Partial<Record<RouteIds<RegisteredRouter["routeTree"]>, RoutedPlace>>;
 
 /** What a routed place's gate reads of a match: its route and the params it was matched with. */
@@ -180,7 +182,8 @@ export function routedStands(matches: readonly RouteMatchSeen[], access: RouteAc
   if (
     place === ROUTED_PLACE.BOARD ||
     place === ROUTED_PLACE.PERSON ||
-    place === ROUTED_PLACE.AUTOMATIONS
+    place === ROUTED_PLACE.AUTOMATIONS ||
+    place === ROUTED_PLACE.INBOX
   ) {
     const workspace = matches.find((match) => match.params.workspace !== undefined)?.params
       .workspace;

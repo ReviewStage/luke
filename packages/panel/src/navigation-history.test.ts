@@ -17,6 +17,7 @@ import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { type AutomationsRoute, useAutomationsRoute } from "./automations-route.js";
 import { stepTitle } from "./history-titles.js";
+import { type InboxRoute, useInboxRoute } from "./inbox-route.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
   MOUSE_BUTTON,
@@ -30,7 +31,6 @@ import {
   type WindowHistoryLists,
 } from "./navigation-history.js";
 import { SHELL_ROOM } from "./shell-room.js";
-import { chooseInboxTask, leaveInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   type AdminViewControl,
@@ -106,6 +106,7 @@ function mount(
   let board: BoardRoute | undefined;
   let person: PersonRoute | undefined;
   let automations: AutomationsRoute | undefined;
+  let inbox: InboxRoute | undefined;
   function Probe() {
     const [standing, setTasks] = useState(initial);
     restand = setTasks;
@@ -128,9 +129,32 @@ function mount(
       onClose: () => history?.onLeaveRouted(),
       onStay: () => history?.onStayRouted(),
     });
+    inbox = useInboxRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
     const listedStep = standing.workspaces.find((each) => each.id === standing.workspace?.id)?.slug;
+    const inboxAt = (narrowed: string | undefined) =>
+      listedStep === undefined ? undefined : { workspace: listedStep, narrowed };
+    const openInbox = (narrowed: string | undefined) => {
+      const at = inboxAt(narrowed);
+      if (at !== undefined) inbox?.onOpen(at);
+    };
     const tasks: TasksControl = {
       ...standing,
+      // The Inbox stands where the router does, as the window's root reads it, its doors the router's.
+      inboxView: {
+        ...standing.inboxView,
+        open: inbox.open,
+        chosen: inbox.chosen,
+        narrowed: inbox.narrowed,
+        onOpen: () => openInbox(undefined),
+        onClose: inbox.onClose,
+        onChoose: (chosen) => inbox?.onChoose(chosen),
+        onClear: inbox.onClear,
+        onWiden: inbox.onWiden,
+      },
+      onShowInbox: ({ taskId }) => openInbox(taskId),
       automationsView: {
         open: automations.open,
         place: automations.place,
@@ -174,6 +198,7 @@ function mount(
       onSettingsList: () => undefined,
       automations,
       versionHistory: versions,
+      inbox,
       room: SHELL_ROOM.WIDE,
       title: titled?.(tasks),
       tasks,
@@ -183,18 +208,46 @@ function mount(
     shown = throughHistory(tasks, history.lists);
     return null;
   }
+  // The Inbox `tasks` says stands, open or not and on the item it names, stood by the router as its own doors stand it.
+  const standInbox = (tasks: TasksControl) => {
+    const want = tasks.inboxView;
+    const workspace = tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug;
+    if (inbox === undefined) return;
+    if (!want.open) {
+      if (inbox.open) inbox.onClose();
+      return;
+    }
+    if (workspace === undefined) return;
+    const at = { workspace, narrowed: inbox.narrowed };
+    if (want.chosen !== undefined) inbox.onChoose(want.chosen, at);
+    else if (!inbox.open || inbox.chosen !== undefined) inbox.onOpen(at);
+  };
+  // A window opening on the Inbox opens at its address, as a reloaded one does.
+  const initialStep = initial.workspaces.find((each) => each.id === initial.workspace?.id)?.slug;
+  if (initial.inboxView.open && initialStep !== undefined) {
+    const item = initial.inboxView.chosen?.itemId;
+    held.history.replace(`/${initialStep}/inbox${item === undefined ? "" : `/${item}`}`);
+  }
   const container = document.createElement("div");
   document.body.append(container);
   // Each window reads its state under a registry of its own, as the window's root provides one.
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(held.provide(onRegistry(AtomRegistry.make(), createElement(Probe)))));
+  act(() => standInbox(initial));
   return {
     history: () => {
       assert.ok(history);
       return history;
     },
-    stand: (tasks: TasksControl) => act(() => restand?.(tasks)),
+    /** Stands the window on `tasks`, its Inbox by the router, as the Inbox's own doors stand it. */
+    stand: (tasks: TasksControl) =>
+      act(() => {
+        restand?.(tasks);
+        standInbox(tasks);
+      }),
+    /** The Inbox as the router stands it. */
+    inbox: () => inbox ?? assert.fail("the Inbox's route stands"),
     /** Opens the Board of the workspace at `workspace` by the router, as the Board's own doors do. */
     openBoard: (workspace: string) => act(() => board?.onOpen(workspace)),
     /** Opens a person's page by the router, as a press on their name does. */
@@ -394,10 +447,9 @@ test("a move landing on an entry holding no step opens Home, as a page loaded th
   assert.ok(savesStep(home.history.location));
 });
 
-/** The window on the Inbox, or on the task `onTask` stands, each Inbox opened recorded in `inboxes` and each task left in `left`. */
+/** The window on Acme's Inbox, which the router stands, or on the task `onTask` stands, each task left recorded in `left`. */
 function inboxOrTask(
   onTask: boolean,
-  inboxes: string[],
   left: string[],
   ask: LeaveAskHolder = { current: undefined },
 ): TasksControl {
@@ -406,25 +458,22 @@ function inboxOrTask(
     ask,
     tasksControl({
       ...(onTask ? { page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID } : {}),
+      workspaces: [ACME],
+      workspace: ACME,
       onLeaveTask: () => left.push(TASK_ID),
-      inboxView: {
-        ...base.inboxView,
-        open: !onTask,
-        onOpen: () => inboxes.push("inbox"),
-      },
+      inboxView: { ...base.inboxView, open: !onTask },
     }),
   );
 }
 
 test("Escape on a task opened from the Inbox returns to the Inbox, as Back does, rather than leaving the task for the home page", () => {
-  const inboxes: string[] = [];
   const left: string[] = [];
-  const window = mount(inboxOrTask(false, inboxes, left));
-  window.stand(inboxOrTask(true, inboxes, left));
+  const window = mount(inboxOrTask(false, left));
+  window.stand(inboxOrTask(true, left));
 
   window.escape();
 
-  assert.deepEqual(inboxes, ["inbox"]);
+  assert.equal(window.at(), "/acme/inbox");
   assert.deepEqual(left, [], "the task is not left for the home page");
   assert.equal(window.history().canGoBack, false, "Escape took the one step back");
   assert.equal(window.history().canGoForward, true, "which Forward takes again");
@@ -471,19 +520,18 @@ test("Escape on a task with no step behind it, as a launch or a link opens one o
 test("Escape on a task whose step back is canceled at the leave ask moves nothing, and Leave takes that step", () => {
   const asked: (() => void)[] = [];
   const ask: LeaveAskHolder = { current: undefined };
-  const inboxes: string[] = [];
   const left: string[] = [];
-  const window = mount(inboxOrTask(false, inboxes, left, ask));
-  window.stand(inboxOrTask(true, inboxes, left, ask));
+  const window = mount(inboxOrTask(false, left, ask));
+  window.stand(inboxOrTask(true, left, ask));
 
   ask.current = (leave) => asked.push(leave);
   window.escape();
-  assert.deepEqual(inboxes, [], "the step waits on the ask");
+  assert.notEqual(window.at(), "/acme/inbox", "the step waits on the ask");
   assert.deepEqual(left, [], "and the task is not left in its place");
   assert.equal(window.history().canGoBack, true, "and the trail has not moved");
 
   act(() => asked[0]?.());
-  assert.deepEqual(inboxes, ["inbox"], "Leave takes the step it asked about");
+  assert.equal(window.at(), "/acme/inbox", "Leave takes the step it asked about");
   assert.deepEqual(left, []);
 });
 
@@ -810,34 +858,6 @@ test("a workspace's slug or a task's number read after the visit moves the stand
   }
 });
 
-test("an Inbox told no column of its own until an item stands alone in it takes that item's step, so Back from the item leaves the Inbox rather than landing on a list no column shows", async () => {
-  const ITEM = {
-    taskId: "3c4d5e6f-0000-4000-8000-0000000000a1",
-    itemId: "3c4d5e6f-0000-4000-8000-0000000000b2",
-  };
-  const base = tasksControl({ workspace: ACME, workspaces: [ACME] });
-  const inbox = (chosen: typeof ITEM | undefined) =>
-    tasksControl({
-      workspace: ACME,
-      workspaces: [ACME],
-      inboxView: {
-        ...base.inboxView,
-        open: true,
-        chosen,
-        single: chosen !== undefined,
-      },
-    });
-  const window = mount(base);
-  await settle();
-  window.stand(inbox(undefined));
-  await settle();
-  window.stand(inbox(ITEM));
-  await settle();
-  const addresses = window.addresses();
-  assert.equal(addresses.length, 2, "the Inbox and its first item are one step");
-  assert.equal(addresses.at(-1), `/acme/inbox/${ITEM.itemId}`);
-});
-
 /** A press of the pointer, as lands before whatever door it opens. */
 function press(): void {
   act(() => {
@@ -1053,12 +1073,9 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
   const onItem = (taskId: string, itemId: string, side: SidePanelTab | undefined, opened = 0) => {
     const base = tasksControl();
     return tasksControl({
-      inboxView: {
-        ...base.inboxView,
-        open: true,
-        chosen: { itemId, taskId },
-        onChoose: (choice) => done.push(`item:${choice.itemId}`),
-      },
+      workspace: ACME,
+      workspaces: [ACME],
+      inboxView: { ...base.inboxView, open: true, chosen: { itemId, taskId } },
       sidePanel: {
         ...base.sidePanel,
         open: side !== undefined,
@@ -1081,10 +1098,12 @@ test("an Inbox item's step holds the panel beside it, so Back from the next item
   );
 
   act(() => window.history().onBack());
-  assert.deepEqual(done, ["item:item-a", `side:${TASK_ID}:page-plan`]);
+  assert.equal(window.at(), "/acme/inbox/item-a");
+  assert.deepEqual(done, [`side:${TASK_ID}:page-plan`]);
   window.stand(onItem(TASK_ID, "item-a", page, 2));
   act(() => window.history().onBack());
-  assert.deepEqual(done.slice(2), ["item:item-a", "side:shut"]);
+  assert.equal(window.at(), "/acme/inbox/item-a");
+  assert.deepEqual(done.slice(1), ["side:shut"]);
 });
 
 test("a tab the window chooses by itself, with no press leading to it, takes the step standing in place", () => {
@@ -1128,15 +1147,11 @@ test("a step on a tab since closed is passed over by Back, which goes back to th
 });
 
 test("an Inbox item chosen by a press where the Inbox splits is a step of its own, which Back chooses again", () => {
-  const chosen: string[] = [];
   const onInbox = (itemId: string) =>
     tasksControl({
-      inboxView: {
-        ...tasksControl().inboxView,
-        open: true,
-        chosen: { itemId, taskId: TASK_ID },
-        onChoose: (choice) => chosen.push(choice.itemId),
-      },
+      workspace: ACME,
+      workspaces: [ACME],
+      inboxView: { ...tasksControl().inboxView, open: true, chosen: { itemId, taskId: TASK_ID } },
     });
   const window = mount(onInbox("item-1"));
   press();
@@ -1146,7 +1161,8 @@ test("an Inbox item chosen by a press where the Inbox splits is a step of its ow
   assert.equal(window.addresses().length, 3);
 
   act(() => window.history().onBack());
-  assert.deepEqual(chosen, ["item-2"]);
+  assert.equal(window.at(), "/acme/inbox/item-2");
+  assert.deepEqual(window.inbox().chosen, { itemId: "item-2", taskId: TASK_ID });
 });
 
 test("the side panel's tabs a link opens are steps though the task's agents are not read, as a task with none never reads them in a fixture run", () => {
@@ -1253,31 +1269,22 @@ test("a task the Inbox is narrowed to is a step linked by it, which Back leaves 
     github: null,
   };
   const taskId = "a1000001-0000-4000-8000-0000000000b1";
-  leaveInboxTask();
-  let narrowed: string | undefined;
-  const Reader = () => {
-    narrowed = useInboxTask();
-    return null;
-  };
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  act(() => root.render(createElement(Reader)));
   const base = tasksControl();
   const onInbox = tasksControl({
     workspace,
     workspaces: [workspace],
-    inboxView: { ...base.inboxView, open: true, onOpen: leaveInboxTask, onChoose: () => undefined },
+    inboxView: { ...base.inboxView, open: true },
   });
   const window = mount(onInbox, windowRouter(), stepTitleOf);
   await settle();
   press();
-  act(() => chooseInboxTask(taskId));
+  act(() => window.inbox().onOpen({ workspace: "acme", narrowed: taskId }));
 
   assert.deepEqual(window.addresses(), ["/acme/inbox", `/acme/inbox/task/${taskId}`]);
   act(() => window.history().onBack());
-  assert.equal(narrowed, undefined, "Back shows every task's items");
+  assert.equal(window.inbox().narrowed, undefined, "Back shows every task's items");
   act(() => window.history().onForward());
-  assert.equal(narrowed, taskId, "Forward narrows to the task again");
+  assert.equal(window.inbox().narrowed, taskId, "Forward narrows to the task again");
 });
 
 test("each surface the window opens is counted once, by its kind and layout alone, and not again while it stands", () => {
@@ -1303,7 +1310,13 @@ test("each surface the window opens is counted once, by its kind and layout alon
   window.stand(onTabs({ column: AGENT_A, side: file }));
   assert.deepEqual(counted.slice(2), [opened("agent")]);
 
-  window.stand(tasksControl({ inboxView: { ...tasksControl().inboxView, open: true } }));
+  window.stand(
+    tasksControl({
+      workspace: ACME,
+      workspaces: [ACME],
+      inboxView: { ...tasksControl().inboxView, open: true },
+    }),
+  );
   assert.deepEqual(counted.slice(3), [opened("inbox")]);
 
   // The task's Overview in the column and its Inbox in the side panel are two panes, each counted.
