@@ -118,7 +118,7 @@ import {
 } from "./automation-words.js";
 import { PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { useWorkspaceRuns, type WorkspaceRunsRead } from "./use-automation-runs.js";
-import { useAutomations } from "./use-automations.js";
+import { AUTOMATION_DELETE_MUTATION, useAutomations } from "./use-automations.js";
 
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
@@ -496,9 +496,9 @@ function listState(
  */
 function useRowDeletion(
   groups: readonly AutomationGroup[],
-  remove: ReturnType<typeof useAutomations>["remove"],
   onDeleted: (automationId: string) => void,
 ) {
+  const removing = useMutation(AUTOMATION_DELETE_MUTATION);
   const [asking, setAsking] = useState<AutomationSummary | undefined>(undefined);
   const asked =
     asking !== undefined &&
@@ -509,7 +509,7 @@ function useRowDeletion(
     { subject: asked !== undefined, surfaceOpen: true },
     () => {
       if (asked === undefined) return Promise.resolve(ACCEPTED);
-      return remove(asked.id).then((answer): ActionResult => {
+      return removing.mutateAsync(asked.id).then((answer): ActionResult => {
         if ("failure" in answer) {
           return {
             status: ACTION_RESULT_STATUS.REJECTED,
@@ -619,11 +619,11 @@ function ListPage({
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const now = useMinute();
   const workspace = tasks.workspace;
-  const { read, reload, toggle, remove } = automations;
+  const { read, reload, toggle } = automations;
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
-  const deletion = useRowDeletion(groups, remove, (automationId) =>
+  const deletion = useRowDeletion(groups, (automationId) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId }),
   );
   return (

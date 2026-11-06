@@ -9,9 +9,9 @@ import {
 import type { AutomationSummary } from "@repo/features/automation-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useMutation } from "@tanstack/react-query";
+import { mutationOptions, useMutation } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { unreachedAs } from "../act.js";
+import { sendAct, unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
@@ -40,14 +40,24 @@ const unreached = unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED);
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** One workspace's automations, none held while no workspace is listed, with the writes that make, change, and delete one. */
+/** One automation deleted, as the question asking it holds its own mutation over it, and why where the service refused it. */
+export const AUTOMATION_DELETE_MUTATION = mutationOptions({
+  mutationKey: [ACT_KIND.AUTOMATIONS_DELETE],
+  mutationFn: (automationId: string): Promise<AutomationDeletedView> =>
+    sendAct(ACT_KIND.AUTOMATIONS_DELETE, { automationId }).catch(unreached),
+});
+
+/** A webhook's new secret, as the question asking it holds its own mutation over it, answered once for the asking page to show; the list keeps the automation alone. */
+export const WEBHOOK_SECRET_MUTATION = mutationOptions({
+  mutationKey: [ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET],
+  mutationFn: (automationId: string): Promise<AutomationView> =>
+    sendAct(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, { automationId }).catch(unreached),
+});
+
+/** One workspace's automations, none held while no workspace is listed, with the writes that make and change one. */
 export function useAutomations(workspaceId: string | undefined) {
   const { mutateAsync: sendCreate } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_CREATE));
   const { mutateAsync: sendChange } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_CHANGE));
-  const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.AUTOMATIONS_DELETE));
-  const { mutateAsync: sendNewSecret } = useMutation(
-    actMutation(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET),
-  );
   const held = useHostRead(LIVE_READ.AUTOMATIONS, workspaceId);
   // Note that the read keeps one identity while its rows do, so a page memoized on it draws again only as they move.
   const rows = held.rows;
@@ -71,16 +81,5 @@ export function useAutomations(workspaceId: string | undefined) {
     (automationId: string, enabled: boolean) => change({ automationId, change: { enabled } }),
     [change],
   );
-  const remove = useCallback(
-    (automationId: string): Promise<AutomationDeletedView> =>
-      sendDelete({ automationId }).catch(unreached),
-    [sendDelete],
-  );
-  /** A webhook's new secret, answered once for the asking page to show; the list keeps the automation alone. */
-  const newWebhookSecret = useCallback(
-    (automationId: string): Promise<AutomationView> =>
-      sendNewSecret({ automationId }).catch(unreached),
-    [sendNewSecret],
-  );
-  return { read, reload: held.retry, create, change, toggle, remove, newWebhookSecret };
+  return { read, reload: held.retry, create, change, toggle };
 }

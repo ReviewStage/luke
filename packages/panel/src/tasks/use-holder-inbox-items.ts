@@ -1,14 +1,14 @@
 import { type AgentInboxScope, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { InboxItem } from "@repo/features/inbox-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import type {
   AppInboxAgentHolding,
   AppInboxItems,
   AppInboxTaskHolding,
 } from "@repo/host/app-state";
-import { useMemo } from "react";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { inboxItemsQuery, inboxItemsRetryMutation } from "../live-reads.js";
 import {
   agentGroups,
   type InboxGroup,
@@ -24,7 +24,7 @@ import {
  * The window's Inbox lists the items of every holder of one, settled as
  * well as waiting, and main's read of the account carries only what waits,
  * in brief. So every holder, a task or an agent with no task, is drawn from
- * the account's feed of whole items (`useHostRead`), which stands for every
+ * the account's feed of whole items (`inboxItemsQuery`), which stands for every
  * holder whole: one it holds nothing of holds nothing now. The holder whose
  * item is chosen is followed by its own control besides
  * (`use-task-inbox.ts`), which reads its settled items past the feed's
@@ -177,8 +177,10 @@ function byKind<Value>(of: (kind: ScopeKind) => Value): ByHolderKind<Value> {
 }
 
 export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderInboxItems {
-  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
-  const fed = feed.rows;
+  const feed = useQuery(inboxItemsQuery());
+  const { mutate: retry } = useMutation(inboxItemsRetryMutation());
+  const onRetry = useCallback(() => retry(), [retry]);
+  const fed = feed.data;
   // Note that a holder the feed holds nothing of is current with none, since the feed stands for every holder whole.
   const read = useMemo(() => {
     const items = byKind((kind) => feedStanding(fed?.[kind], holdings, kind));
@@ -197,11 +199,11 @@ export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderIn
       ),
     };
   }, [fed, holdings]);
-  const failed = holdings.length > 0 && feed.status === HOST_READ_STATUS.FAILED;
+  const failed = holdings.length > 0 && feed.isError;
   return {
     ...read,
     failed,
     pending: !failed && holdings.some((holding) => !read.current[holding.kind].has(holding.id)),
-    onRetry: feed.retry,
+    onRetry,
   };
 }

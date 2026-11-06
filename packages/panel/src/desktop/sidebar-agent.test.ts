@@ -16,12 +16,13 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import {
   AGENT_RENAME_SHAPE,
   type AgentsControl,
+  agentDeleteMutation,
   agentRenameMutation,
 } from "../tasks/use-agents.js";
 import {
@@ -145,10 +146,10 @@ function mount(
         return Promise.resolve(answer);
       }),
     },
-    onDelete: (agentId) => {
+    deleteAgent: agentDeleteMutation((agentId) => {
       deletes.push(agentId);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+      return Promise.resolve({ deleted: true } as const);
+    }),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -286,8 +287,13 @@ test("a refused rename reopens the row's field holding the name typed, and says 
   });
   await settle();
 
-  const reopened = row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
-  assert.equal(reopened?.value, "Remove the stale banners");
+  // Note that the refusal reaches the row through the rename's mutation, a moment after the write is refused.
+  await vi.waitFor(() =>
+    assert.equal(
+      row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]')?.value,
+      "Remove the stale banners",
+    ),
+  );
   assert.ok(row.textContent?.includes("The agent could not be renamed. Try again."));
 });
 

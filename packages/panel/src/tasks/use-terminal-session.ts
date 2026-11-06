@@ -286,7 +286,7 @@ export interface TerminalSession {
     readonly options: ReturnType<typeof terminalRenameMutation<PendingValue<string>>>;
   };
   /** Ends a shell, answering whether it ended; the one shown gives way to the oldest left, or a new one. */
-  readonly onKill: (shell: string) => Promise<ActionResult>;
+  readonly kill: ReturnType<typeof terminalKillMutation>;
 }
 
 /** What runs once a wait has passed. Note that it is wrapped, because an atom's setter calls a bare function as an update. */
@@ -299,6 +299,15 @@ const waitAtom = (wait: Duration.Duration) =>
   rendererRuntime.fn((after: AfterWait) =>
     Effect.sleep(wait).pipe(Effect.andThen(Effect.sync(after.run))),
   );
+
+/**
+ * A shell ended, as the question asking it holds its own mutation over it,
+ * run through `run`: answering whether it ended, the one shown giving way to
+ * the oldest left, or a new one.
+ */
+function terminalKillMutation(run: (shell: string) => Promise<ActionResult>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.TERMINAL_KILL], mutationFn: run });
+}
 
 /** A shell's rename as a mutation asks it: the shell, and its new title. */
 interface TerminalRenameAsk {
@@ -345,7 +354,6 @@ export function useTerminalSession(
   const queryClient = useQueryClient();
   const { mutateAsync: sendAttach } = useMutation(actMutation(ACT_KIND.TERMINAL_ATTACH));
   const { mutateAsync: sendCreate } = useMutation(actMutation(ACT_KIND.TERMINAL_CREATE));
-  const { mutateAsync: sendKill } = useMutation(actMutation(ACT_KIND.TERMINAL_KILL));
   const { mutateAsync: sendResume } = useMutation(actMutation(ACT_KIND.TERMINAL_RESUME));
   const { mutate: sendDetach } = useMutation(actMutation(ACT_KIND.TERMINAL_DETACH));
   const openLink = useOpenLink();
@@ -581,38 +589,35 @@ export function useTerminalSession(
   // place beside the one this starts. Once the end answers, the screen moves
   // on only where nothing else has moved it meanwhile: to the oldest shell
   // left, or back to the same shell where it was not ended.
-  const onKill = useCallback(
-    async (target: string): Promise<ActionResult> => {
-      const held = live.current;
-      held.listMoves += 1;
-      const shown = target === held.shell;
-      if (shown) {
-        letGo();
-        held.shell = undefined;
-        held.handle?.reset();
-      }
-      const generation = held.generation;
-      const moveOn = async (ended: boolean) => {
-        if (!shown || held.generation !== generation) return;
-        if (!ended) held.shell = target;
-        await connect();
-      };
-      try {
-        const answer = await sendKill({ agentId, terminalId: target });
-        if ("refused" in answer) {
-          await moveOn(false);
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
-        }
-        writeList(answer);
-        await moveOn(true);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      } catch {
+  const kill = terminalKillMutation(async (target) => {
+    const held = live.current;
+    held.listMoves += 1;
+    const shown = target === held.shell;
+    if (shown) {
+      letGo();
+      held.shell = undefined;
+      held.handle?.reset();
+    }
+    const generation = held.generation;
+    const moveOn = async (ended: boolean) => {
+      if (!shown || held.generation !== generation) return;
+      if (!ended) held.shell = target;
+      await connect();
+    };
+    try {
+      const answer = await sendAct(ACT_KIND.TERMINAL_KILL, { agentId, terminalId: target });
+      if ("refused" in answer) {
         await moveOn(false);
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
       }
-    },
-    [sendKill, agentId, connect, letGo, writeList],
-  );
+      writeList(answer);
+      await moveOn(true);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    } catch {
+      await moveOn(false);
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
+    }
+  });
 
   const resume = useCallback(async () => {
     const generation = live.current.generation;
@@ -852,6 +857,6 @@ export function useTerminalSession(
     onChoose,
     onCreate: () => void onCreate(),
     rename,
-    onKill,
+    kill,
   };
 }

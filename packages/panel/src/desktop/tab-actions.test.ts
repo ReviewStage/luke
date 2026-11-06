@@ -358,12 +358,15 @@ test("the Pull request tab's right-click offers Copy link first, then Copy GitHu
     published,
   );
   const { side } = bars(container);
-  assert.deepEqual(contentOf(rightClickChosen(side)), [
-    "Copy link",
-    "Copy GitHub link",
-    "Open on GitHub",
-    "Refresh",
-  ]);
+  // Note that the pull request's actions stand once its read reaches its query.
+  await vi.waitFor(() =>
+    assert.deepEqual(contentOf(rightClickChosen(side)), [
+      "Copy link",
+      "Copy GitHub link",
+      "Open on GitHub",
+      "Refresh",
+    ]),
+  );
   const tab = side.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
   act(() => {
     tab?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));

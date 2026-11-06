@@ -130,6 +130,7 @@ import { type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { pagesQuery, planDocumentQuery, planDocumentRetryMutation } from "../live-reads.js";
 import {
   beginPanelSpan,
   PANEL_SPAN,
@@ -143,7 +144,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -821,6 +822,8 @@ export interface TasksControl {
     workspaceId: string,
     told?: { readonly quiet: boolean },
   ) => Promise<boolean>;
+  /** The same move, as a question asking it first holds its own mutation over it. */
+  moveTask: TaskMoveMutation;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Opens the New task dialog over whatever stands open, which it leaves standing; on Home, hands Home's own composer the caret instead (`newTask.homeAsks`). */
@@ -940,6 +943,8 @@ export interface TasksControl {
   onWriteSections: (writes: readonly TaskSectionWrite[]) => void;
   /** Deletes a task, which ends its call and returns to the home page if it is the open one; answers whether it was deleted. */
   onDeleteTask: (taskId: string) => Promise<ActionResult>;
+  /** The same delete, as a question asking it first holds its own mutation over it. */
+  deleteTask: TaskDeleteMutation;
   /**
    * Steps back one layer, answering whether there was one to step back from:
    * a side panel filling the window back beside the document, else an open
@@ -1222,6 +1227,29 @@ export function taskRenameMutation(
 /** A task's rename as a surface holds it (`taskRenameMutation`). */
 export type TaskRenameMutation = ReturnType<typeof taskRenameMutation>;
 
+/** A task's delete as each place asking it holds its own mutation over it, run through `run`, answering whether it was deleted. */
+export function taskDeleteMutation(run: (taskId: string) => Promise<ActedResult>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.TASKS_DELETE], mutationFn: run });
+}
+
+/** A task's delete, as a place asking it holds it. */
+type TaskDeleteMutation = ReturnType<typeof taskDeleteMutation>;
+
+/** A task moved to another workspace, and whether a refusal goes unsaid, as the Move dialog says it under its list. */
+interface TaskMoveAsk {
+  readonly taskId: string;
+  readonly workspaceId: string;
+  readonly quiet: boolean;
+}
+
+/** A task's move as each place asking it holds its own mutation over it, run through `run`, answering whether it moved. */
+export function taskMoveMutation(run: (asked: TaskMoveAsk) => Promise<boolean>) {
+  return mutationOptions({ mutationKey: [ACT_KIND.TASKS_MOVE], mutationFn: run });
+}
+
+/** A task's move, as a place asking it holds it. */
+type TaskMoveMutation = ReturnType<typeof taskMoveMutation>;
+
 /** How a task's rename is asked and read back, its refusal the answer that it was not renamed. */
 export const TASK_RENAME_SHAPE: RenameShape<boolean, TaskRenameAsk> = {
   ask: (taskId, name) => ({ taskId, name }),
@@ -1396,7 +1424,6 @@ export function useTasksTab(input: {
     actMutation(ACT_KIND.GITHUB_DISCONNECT),
   );
   const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.TASKS_CLOSE));
-  const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.TASKS_DELETE));
   const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
   const { mutateAsync: sendTaskPin } = useMutation(actMutation(ROW_WRITE.TASK_PIN.kind));
   const { mutateAsync: sendRepositoryPin } = useMutation(
@@ -1411,7 +1438,6 @@ export function useTasksTab(input: {
   const { mutateAsync: sendBlock } = useMutation(actMutation(ACT_KIND.TASKS_BLOCK));
   const { mutateAsync: sendParent } = useMutation(actMutation(ACT_KIND.TASKS_SET_PARENT));
   const { mutateAsync: sendRelation } = useMutation(actMutation(ACT_KIND.TASKS_CHANGE_RELATION));
-  const { mutateAsync: sendMove } = useMutation(actMutation(ACT_KIND.TASKS_MOVE));
   const { mutateAsync: sendRestore } = useMutation(actMutation(ACT_KIND.TASKS_RESTORE));
   const { mutateAsync: sendTaskStart } = useMutation(actMutation(ACT_KIND.TASKS_START));
   // Note that which agent is shown is told, quiet whatever comes back, since no person pressed for it.
@@ -1575,11 +1601,14 @@ export function useTasksTab(input: {
   const page = tasksPage(tasks);
   // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
-  const heldPlan = useHostRead(LIVE_READ.PLAN_DOCUMENT, viewed.activeTaskId);
-  const heldPlanRows = heldPlan.rows;
-  const heldPlanFailed = heldPlan.status === HOST_READ_STATUS.FAILED;
-  const retryPlan = heldPlan.retry;
+  const heldPlan = useQuery(planDocumentQuery(viewed.activeTaskId));
+  const heldPlanRows = heldPlan.data;
+  const heldPlanFailed = heldPlan.isError;
+  const { mutate: retryPlanAct } = useMutation(planDocumentRetryMutation());
   const openedTaskId = viewed.activeTaskId;
+  const retryPlan = useCallback(() => {
+    if (openedTaskId !== undefined) retryPlanAct({ taskId: openedTaskId });
+  }, [retryPlanAct, openedTaskId]);
   const region = useMemo(
     () =>
       renamedRegion(
@@ -1674,10 +1703,9 @@ export function useTasksTab(input: {
   });
   // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
   // among them, so its page draws them from where they stand, and a page's tab is held to them.
-  const taskPages = useHostRead(
-    LIVE_READ.PAGES,
-    viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId },
-  ).rows;
+  const taskPages = useQuery(
+    pagesQuery(viewed.activeTaskId === undefined ? undefined : { taskId: viewed.activeTaskId }),
+  ).data;
   const pages = useMemo(() => (taskPages ?? NO_PAGES).map((page) => page.id), [taskPages]);
   // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
   // Terminal's tabs, and nothing of the plan the host has open beneath it, which keeps its own.
@@ -1702,21 +1730,23 @@ export function useTasksTab(input: {
   const inboxAgent = inboxChosen === undefined ? undefined : choiceAgentOf(inboxChosen);
   // Note that an item of an agent on no task opens that agent's own pages beside it (`route.ts`), and that the
   // pages are held in the host while drawn and a while after, so choosing another item of the task, or the task again, reads none anew.
-  const inboxPages = useHostRead(
-    LIVE_READ.PAGES,
-    inboxView === undefined
-      ? undefined
-      : inboxTask !== undefined
-        ? { taskId: inboxTask }
-        : inboxAgent !== undefined
-          ? { agentId: inboxAgent }
-          : undefined,
-  ).rows;
+  const inboxPages = useQuery(
+    pagesQuery(
+      inboxView === undefined
+        ? undefined
+        : inboxTask !== undefined
+          ? { taskId: inboxTask }
+          : inboxAgent !== undefined
+            ? { agentId: inboxAgent }
+            : undefined,
+    ),
+  ).data;
   // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
-  const agentPages = useHostRead(
-    LIVE_READ.PAGES,
-    inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
-  ).rows;
+  const agentPages = useQuery(
+    pagesQuery(
+      inboxView !== undefined || pageAgent === undefined ? undefined : { agentId: pageAgent },
+    ),
+  ).data;
   const agentPageIds = useMemo(() => (agentPages ?? NO_PAGES).map((page) => page.id), [agentPages]);
   const inboxPageIds = useMemo(() => (inboxPages ?? NO_PAGES).map((page) => page.id), [inboxPages]);
   const inboxAgents = useMemo(
@@ -2110,12 +2140,13 @@ export function useTasksTab(input: {
   // delete that landed says nothing, since the task leaving the list says it;
   // a refusal is said where the question that asked it stands, or in a toast
   // where the task leaving took it away (`use-refusal-heard.ts`).
-  const deleteTask = async (taskId: string): Promise<ActedResult> => {
+  const deleteTaskOptions = taskDeleteMutation(async (taskId) => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await askKept(sendDelete({ taskId }));
+    const deleted = await askKept(sendAct(ACT_KIND.TASKS_DELETE, { taskId }));
     if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     return { ...DELETE_REFUSED, cause: deleted.cause };
-  };
+  });
+  const { mutateAsync: deleteTask } = useMutation(deleteTaskOptions);
 
   // The tasks the tab draws as they stand at each call, and each row write's
   // mutation, which ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
@@ -2641,14 +2672,10 @@ export function useTasksTab(input: {
   // workspace's tasks and the open task must not drop out of it, but only
   // while that task is still open and no workspace was chosen since, so a
   // move answered late never undoes where the developer went meanwhile.
-  const moveTask = (
-    taskId: string,
-    workspaceId: string,
-    told?: { readonly quiet: boolean },
-  ): Promise<boolean> => {
+  const moveTaskOptions = taskMoveMutation(({ taskId, workspaceId, quiet }) => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
-    return sendMove({ taskId, workspaceId })
+    return sendAct(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2658,7 +2685,7 @@ export function useTasksTab(input: {
           }
           return true;
         }
-        if (told?.quiet !== true) {
+        if (quiet !== true) {
           toast({
             replayUnmasked: true,
             words: MOVE_REFUSED_NOTE,
@@ -2673,7 +2700,13 @@ export function useTasksTab(input: {
         }
         return false;
       });
-  };
+  });
+  const { mutateAsync: sendTaskMove } = useMutation(moveTaskOptions);
+  const moveTask = (
+    taskId: string,
+    workspaceId: string,
+    told?: { readonly quiet: boolean },
+  ): Promise<boolean> => sendTaskMove({ taskId, workspaceId, quiet: told?.quiet === true });
 
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
   const planEdit = (taskId: string) =>
@@ -4018,6 +4051,7 @@ export function useTasksTab(input: {
     onRemoveTaskParent: removeTaskParent,
     onChangeTaskRelation: changeTaskRelation,
     onMoveTask: moveTask,
+    moveTask: moveTaskOptions,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.
       const workspaceId =
@@ -4080,6 +4114,7 @@ export function useTasksTab(input: {
     listedPullRequests: tasks.agentPullRequests,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
+    deleteTask: deleteTaskOptions,
     back,
     leaveGuard,
   });

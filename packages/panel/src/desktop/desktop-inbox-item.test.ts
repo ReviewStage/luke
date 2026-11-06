@@ -391,11 +391,14 @@ test("a page's link alone on its line, naming its task by the task's number, is 
   world.inboxes.set(BILLING.id, [saying(THRESHOLD, `[@${FUNNEL.title}](${link})`), RETRY]);
   const { page } = mount([], { chosen: ON_THRESHOLD, standing: [numbered, INVITES] });
   await settle();
-  assert.equal(
-    page
-      .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
-      ?.getAttribute("src"),
-    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  // Note that the page is drawn once its task's pages reach their query.
+  await vi.waitFor(() =>
+    assert.equal(
+      page
+        .querySelector(`[data-inbox-message-text] iframe[title="${FUNNEL.title}"]`)
+        ?.getAttribute("src"),
+      pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+    ),
   );
 });
 
@@ -1086,8 +1089,7 @@ test("files still being read as the agent posts on the item again land in its bo
       value: { items: [revised, RETRY], cursor: "2" },
     }),
   );
-  await settle();
-  assert.equal(readTitle(page), "Alert at 85%?");
+  await vi.waitFor(() => assert.equal(readTitle(page), "Alert at 85%?"));
   await act(async () => {
     slow.open();
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -1338,6 +1340,8 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   await settle();
   act(() => world.chooseFromOutside({ agentId: STRAY_AGENT, itemId: BUMP.id, opened: true }));
   await settle();
+  // Note that the agent's own read lands one notify tick later, which the item waits on.
+  await vi.waitFor(() => assert.equal(itemPane(page).getAttribute("aria-label"), BUMP.title));
   await pressNoteSkill(page, "/release");
 
   assert.deepEqual(files, [".agents/skills/release/SKILL.md"]);
@@ -1850,7 +1854,9 @@ test("what an item's box holds unsent, its words and its files, outlasts every m
   };
   act(() => deliver([answered, RETRY], "2"));
   await settle();
-  assert.equal(composerEditor(itemPane(page)).getAttribute("aria-label"), "Reply");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(itemPane(page)).getAttribute("aria-label"), "Reply"),
+  );
   assert.deepEqual(box(), ["Use 90%", ["alerts.yml"]], "a teammate's answer takes nothing");
 
   const asked: InboxItem = {

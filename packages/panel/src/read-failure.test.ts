@@ -227,11 +227,18 @@ test("the Inbox's list says its feed could not be read as the sidebar does, and 
       }),
     }),
   );
-  const failure = readFailure(page);
+  // Note that the failure, and then the feed read again, stand once they reach the feed's query.
+  const failure = await vi.waitFor(() => readFailure(page));
   assertSaidAlike(failure, "The inbox could not be read.");
   failure.retry();
   await settle();
-  assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      page.querySelector('[role="alert"]') === null,
+      true,
+      "the read landed, so nothing fails",
+    ),
+  );
 });
 
 test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {

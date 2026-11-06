@@ -12,7 +12,6 @@ import { ACT_KIND } from "@repo/host/acts";
 import type { PortActKind } from "@repo/host/contract";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
-import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -135,7 +134,6 @@ async function mountAndOpen(open = true): Promise<void> {
           createElement(AccountSection, {
             account: ADA,
             onSignOut: () => Promise.resolve(),
-            onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
           }),
         ),
       ),
@@ -386,7 +384,6 @@ test("the row draws no other account's token when Profile is drawn for another a
               provider: ACCOUNT_PROVIDER.GOOGLE,
             },
             onSignOut: () => Promise.resolve(),
-            onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
           }),
         ),
       ),

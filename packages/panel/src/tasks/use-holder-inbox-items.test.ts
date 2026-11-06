@@ -14,7 +14,7 @@ import { UNREAD } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handInboxItems } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -102,10 +102,10 @@ test("each listed plan is pending until the account's feed first answers, then h
   await settle();
   const before = control()?.pending;
   deliver(fed({ "acme-plan": [ITEM] }));
-  await settle();
+  // Note that the feed's rows stand once they reach its query.
+  await vi.waitFor(() => assert.equal(control()?.pending, false));
 
   assert.equal(before, true);
-  assert.equal(control()?.pending, false);
   assert.deepEqual(control()?.items[INBOX_SCOPE_KIND.PLAN].get("acme-plan"), [ITEM]);
   assert.deepEqual(control()?.items[INBOX_SCOPE_KIND.PLAN].get("personal-plan"), []);
 });
@@ -113,15 +113,14 @@ test("each listed plan is pending until the account's feed first answers, then h
 test("a plan main says changed later than the feed holds it is pending until the feed catches up, its items standing meanwhile", async () => {
   const deliver = handInboxItems(fed({ "acme-plan": [ITEM] }));
   const { control, list } = mount([holding("acme-plan")]);
-  await settle();
+  await vi.waitFor(() => assert.equal(control()?.pending, false));
   const answered = control()?.pending;
   list([{ ...holding("acme-plan"), updatedAt: 2 }]);
   const behind = [control()?.pending, control()?.items[INBOX_SCOPE_KIND.PLAN].get("acme-plan")];
   deliver(fed({ "acme-plan": [{ ...ITEM, updatedAt: 2 }] }));
-  await settle();
+  await vi.waitFor(() => assert.equal(control()?.pending, false));
 
   assert.deepEqual([answered, ...behind], [false, true, [ITEM]]);
-  assert.equal(control()?.pending, false);
   assert.deepEqual(control()?.current[INBOX_SCOPE_KIND.PLAN], new Set(["acme-plan"]));
 });
 
@@ -136,7 +135,7 @@ test("a feed refused before it ever answered says so only while a plan is listed
     },
   });
   const { control, list } = mount([holding("acme-plan")]);
-  await settle();
+  await vi.waitFor(() => assert.equal(control()?.failed, true));
   const failed = control()?.failed;
   list([]);
   const unlisted = control()?.failed;
