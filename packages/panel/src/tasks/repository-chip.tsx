@@ -76,7 +76,8 @@ import { useOpenSettings } from "../open-settings.js";
  * developer back from connecting GitHub in the browser sees the change on
  * the next opening; nothing polls. Where the opener picks several, as New
  * task does for an agent in the cloud, a press checks or unchecks a row and
- * the menu stands open: the first pick is the primary, marked Primary, where
+ * the menu stands open: the first pick is the primary, marked Primary once
+ * another is picked beside it, where
  * the agent starts and its pull requests open by default, and unchecking it
  * makes the next pick the primary; the chip names the picks, the first two
  * and then the rest counted, under the first's owner picture; and once a
@@ -411,7 +412,13 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const isPicked = (name: string) => picked.some((each) => sameName(each, name));
   const listing = (name: string) => reached?.find((each) => sameName(each.fullName, name));
   const primary = several === undefined || value === null ? undefined : value;
-  const rows = repositoryRows(recent, reached, chooser.pictures, primary)
+  // Note that the primary is marked only beside another pick, since a lone pick is simply the task's.
+  const rows = repositoryRows(
+    recent,
+    reached,
+    chooser.pictures,
+    picked.length > 1 ? primary : undefined,
+  )
     .filter((row) => !omitted.has(row.id.toLowerCase()))
     .map((row) => {
       // Once a primary is picked, a row the service would refuse beside it says why before the pick.

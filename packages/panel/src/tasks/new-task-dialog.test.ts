@@ -1067,10 +1067,15 @@ test("the repository menu names each repository first and its owner after it, so
     search.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await dialog.press("Enter", search);
-  dialog.type("Ledger");
-  await dialog.key("Enter");
 
-  assert.deepEqual(dialog.starts, [["", `${owner}/billing-ledger-and-invoicing-pipeline`]]);
+  // Note that the search leaves the one row it finds, which Enter checks beside the default.
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="option"]')].map((row) => [
+      row.querySelector(".ui-combobox-option-label")?.textContent,
+      row.getAttribute("aria-current"),
+    ]),
+    [["billing-ledger-and-invoicing-pipeline", "true"]],
+  );
 });
 
 test("for an automation's agent the card is titled for it, and Return hands the agent the brief with the words fenced last", async () => {

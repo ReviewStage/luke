@@ -333,6 +333,7 @@ test("a repository checked in the chip's menu travels beside the task's with the
     ["api", "web"].map((name) => row(name).getAttribute("aria-current")),
     ["true", "true"],
   );
+  assert.equal(row("api").textContent?.includes("Primary"), true);
   assert.equal(row("tools").getAttribute("aria-disabled"), "true");
   assert.equal(row("tools").textContent?.includes("Token only"), true);
   assert.equal(chip.textContent, "api, web");
@@ -353,7 +354,6 @@ test("unchecking the primary makes the next pick the task's", async () => {
   act(() => row("api").click());
   await settle();
 
-  assert.equal(row("web").textContent?.includes("Primary"), true);
   typeInComposer(container, "Bump the client");
   pressInComposer(container, "Enter");
   await settle();
