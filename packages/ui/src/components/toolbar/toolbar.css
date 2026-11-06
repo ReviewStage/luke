@@ -134,6 +134,15 @@
     gap: 0;
   }
 
+  /* Note that a centered column sizes each part to its words, which one
+     line never wraps, so each is held to the heading's width, to be cut
+     there rather than drawn over the corners. */
+  .ui-toolbar[data-look="phone"]
+    > .ui-toolbar-heading
+    > :is(.ui-toolbar-title, .ui-toolbar-title-menu, .ui-toolbar-pick-up, .ui-toolbar-tag) {
+    max-width: 100%;
+  }
+
   .ui-toolbar[data-look="phone"]
     > .ui-toolbar-heading
     > :is(.ui-toolbar-title, .ui-toolbar-title-menu > .ui-toolbar-title) {
