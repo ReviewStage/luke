@@ -58,8 +58,6 @@ export const PLAN_COMMENT_BOUNDS = {
   MAX_ELEMENT_PATH_CHARS: 1_000,
   /** The longest heading a page thread keeps of the section its element stands in. */
   MAX_SECTION_CHARS: 200,
-  /** The most threads one review hands over together, the one that sends it among them. */
-  MAX_REVIEW_THREADS: 50,
 } as const;
 
 /** What a thread is anchored to: words a member selected or a whole block they commented beside, on the plan; an element they picked or the whole of a page, on a page. */
@@ -287,10 +285,10 @@ const planCommentPageStartSchema = EffectSchema.Struct({
   attachments: planCommentFilesSchema,
   /** Whether the thread is held in a review: posted, but handed to no agent until the start that sends the review names it along. */
   held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
-  /** The threads of the same page this member started held in the review this start sends, by their ids, handed over together with this one. */
+  /** The threads of the same page this member started held in the review this start sends, by their ids, handed over together with this one; no more than a page holds. */
   along: EffectSchema.optionalKey(
     EffectSchema.Array(wireUuidSchema).check(
-      EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_REVIEW_THREADS - 1),
+      EffectSchema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_THREADS_PER_PLAN),
     ),
   ),
 });

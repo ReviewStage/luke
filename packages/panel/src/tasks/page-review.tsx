@@ -1,10 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { AgentAttachment } from "@repo/features/agent-wire";
-import {
-  PLAN_COMMENT_ACTION,
-  PLAN_COMMENT_BOUNDS,
-  type PlanCommentStart,
-} from "@repo/features/plan-comment-wire";
+import { PLAN_COMMENT_ACTION, type PlanCommentStart } from "@repo/features/plan-comment-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
@@ -14,10 +10,6 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   FailureNote,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
@@ -48,8 +40,7 @@ import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
  * (the service's `reviewHandedOver`). A comment started held is marked so,
  * so a send that stopped part way and is tried again names it along rather
  * than starting it twice, and Remove or Discard deletes its thread, which
- * no agent was handed. A review holds as many comments as one send hands
- * over (`MAX_REVIEW_THREADS`); past that, a comment posts at once.
+ * no agent was handed.
  */
 
 /** What the review's press, panel, and the field's presses say. */
@@ -66,7 +57,6 @@ export const PAGE_REVIEW_WORDS = {
   WHOLE_PAGE: "Whole page",
   NOT_SENT: "Some comments could not be sent.",
   NOT_REMOVED: "A comment already posted could not be deleted.",
-  FULL: "Your review is full. Comments you write now post at once.",
   /** A held pin's name. */
   pin: (count: number) => `${count} ${count === 1 ? "comment" : "comments"} in your review`,
 } as const;
@@ -162,8 +152,6 @@ export interface PageReviewControl {
   readonly failed: boolean;
   /** Whether a comment posted by a send that stopped could not be deleted, until the next Remove or Discard. */
   readonly unremoved: boolean;
-  /** Whether the review holds as many comments as one send hands over, so the next posts at once. */
-  readonly full: boolean;
   /** Holds a comment in the review, starting it where none was held. */
   readonly hold: (comment: Omit<HeldComment, "planId" | "pageId" | "posted">) => void;
   readonly remove: (clientKey: string) => void;
@@ -223,15 +211,13 @@ export function usePageReview(
         });
     }
   };
-  const full = held.length >= PLAN_COMMENT_BOUNDS.MAX_REVIEW_THREADS;
   return {
     held,
     sending,
     failed,
     unremoved,
-    full,
     hold: (comment) => {
-      if (planId === undefined || full) return;
+      if (planId === undefined) return;
       setAll((now) => [...now, { ...comment, planId, pageId, posted: false }]);
     },
     // Note that nothing is let go while a send is out, since a start on its way may still post the comment whose record would be gone.
@@ -283,11 +269,6 @@ export function PageReviewSection({
           {cardOf(comment, review.sending ? undefined : () => review.remove(comment.clientKey))}
         </Fragment>
       ))}
-      {review.full ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-          <ReplayUnmask>{PAGE_REVIEW_WORDS.FULL}</ReplayUnmask>
-        </Text>
-      ) : null}
       {review.failed ? (
         <FailureNote
           onRetry={review.send}

@@ -3166,6 +3166,9 @@ export function HeldCommentCard({
               <ReplayUnmask>{PAGE_REVIEW_WORDS.WHOLE_PAGE}</ReplayUnmask>
             </QuietWords>
           ) : null}
+          {comment.attachments.length > 0 ? (
+            <AttachedFileChips files={attachmentChips(comment.attachments)} />
+          ) : null}
           <CommentWords words={comment.words} />
         </Comment>
         {onRemove === undefined ? null : (
@@ -3405,9 +3408,8 @@ export function PageCommentLayer({
               })}
               onStarted={onStarted}
               onCancel={onCancel}
-              // Note that a full review holds no more, so the comment posts at once, as its panel says.
               review={
-                review === undefined || review.control.full
+                review === undefined
                   ? undefined
                   : {
                       open: review.control.held.length > 0,
