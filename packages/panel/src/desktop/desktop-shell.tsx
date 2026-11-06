@@ -1135,6 +1135,7 @@ export function ShellPlaces(): React.JSX.Element {
       {newTaskDialog}
       <PaneGlide
         root={shell}
+        place={tasks.sidePanel.stop}
         layout={{
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: tasks.sidePanel.open,
