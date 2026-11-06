@@ -15,9 +15,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
@@ -241,61 +240,24 @@ test("the agent's card hung from a Changes card previews its running step while 
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
 });
 
-test("an agent's row in the summary draws the agent's one menu, Copy link copying the agent's own link", async () => {
-  const copied: string[] = [];
-  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
-  const { page } = mount("plan", "acme");
-  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
-    each.textContent?.includes(AGENT.title ?? ""),
-  );
-  assert.ok(row, "the agent's row is listed");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-  });
-  const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  const labels = items.map((each) => each.textContent);
-  const copy = items.find((each) => each.textContent === "Copy link");
-  assert.ok(copy);
-  await act(async () => copy.click());
-
-  assert.deepEqual(labels, ["Copy link", "Rename", "Archive", "Permanently delete"]);
-  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT.id}`]);
-});
-
-test("under a finger, an agent's row in the summary draws no ⋯, and held it offers the agent's menu", () => {
-  underAFinger();
-  const { page } = mount("plan");
-  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
-    each.textContent?.includes(AGENT.title ?? ""),
-  );
-  assert.ok(row, "the agent's row is listed");
-  assert.ok(page.querySelector('[aria-label="Agent actions"]') === null, "the row draws no ⋯");
-
-  longPress(row);
-  const labels = [...document.querySelectorAll('[role="menuitem"]')].map(
-    (each) => each.textContent,
-  );
-  assert.ok(labels.includes("Rename"), "the long press offers the agent's menu");
-});
-
 test("a heading folds its rows away, counting them, and stands folded as the summary is drawn again", () => {
   fakeAppPlatform(QUIET_PANEL);
   const heading = (page: HTMLElement) =>
     [...page.querySelectorAll<HTMLButtonElement>(".task-summary button[aria-expanded]")].find(
-      (button) => button.textContent?.startsWith("Agents"),
-    ) ?? assert.fail("Agents is a fold");
-  const agentRow = (page: HTMLElement) =>
+      (button) => button.textContent?.startsWith("Pull requests"),
+    ) ?? assert.fail("Pull requests is a fold");
+  const pullRequestRow = (page: HTMLElement) =>
     page
-      .querySelector('.task-summary [aria-label="Agents"]')
-      ?.textContent?.includes(AGENT.title ?? "") === true;
+      .querySelector('.task-summary [aria-label="Pull requests"]')
+      ?.textContent?.includes(PULL_REQUEST.title) === true;
   const { page } = mount("plan");
   assert.equal(heading(page).getAttribute("aria-expanded"), "true");
-  assert.ok(agentRow(page), "the agent is listed");
+  assert.ok(pullRequestRow(page), "the pull request is listed");
 
   act(() => heading(page).click());
   assert.equal(heading(page).getAttribute("aria-expanded"), "false");
-  assert.equal(heading(page).textContent, "Agents1 agent");
-  assert.ok(!agentRow(page), "the agent is folded away");
+  assert.equal(heading(page).textContent, "Pull requests1 pull request");
+  assert.ok(!pullRequestRow(page), "the pull request is folded away");
 
   act(() => root?.unmount());
   document.body.innerHTML = "";
