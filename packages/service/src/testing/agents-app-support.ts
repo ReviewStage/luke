@@ -39,10 +39,10 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import type { MessageReceivedPart } from "eve/client";
 import { agentPullRequestProcedures } from "../agents/agent-pull-request-procedures.js";
 import { agentsApp } from "../agents/agents-app.js";
 import { agentsProcedures } from "../agents/agents-procedures.js";
+import type { MessageReceivedPart } from "../agents/attached-files.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";

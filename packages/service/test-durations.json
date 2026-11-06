@@ -52,7 +52,6 @@
   "src/agents/coder-host/codex-sessions.test.ts": 3821,
   "src/agents/coder-host/inbox-store.test.ts": 15254,
   "src/agents/coder-host/inbox-threads.test.ts": 4521,
-  "src/agents/coder-host/opens-sandbox.test.ts": 6,
   "src/agents/coder-host/pull-request.test.ts": 2674,
   "src/agents/coder-host/replay-summary.test.ts": 310,
   "src/agents/coder-host/replay.test.ts": 9,
