@@ -122,12 +122,8 @@ export function useSetupGate(
 }
 
 const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
-  { value: SETUP_AUDIENCE.ME, label: "Just me", detail: "Your own workspace, ready now" },
-  {
-    value: SETUP_AUDIENCE.TEAM,
-    label: "With my team",
-    detail: "A workspace you share, with teammates invited",
-  },
+  { value: SETUP_AUDIENCE.ME, label: "Just me" },
+  { value: SETUP_AUDIENCE.TEAM, label: "With my team" },
 ];
 
 /**
