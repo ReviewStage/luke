@@ -67,6 +67,7 @@ import { AgentImage, type AgentImageService } from "../coder-host/agent-image.js
 import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
+  IMAGE_NOT_READY,
   type ListedSandbox,
   SANDBOX_STATUS,
   type SandboxSessionApi,
@@ -96,7 +97,12 @@ import {
 } from "./sandbox-recorder.js";
 
 const AGENT_BROWSER = {
-  /** How often a resuming sandbox is asked whether it runs yet, and how many times before it is given up on: a minute in all. */
+  /**
+   * How often a resuming sandbox is asked whether it runs yet, and how many
+   * times before it is given up on: a minute in all, beside the wait on an
+   * image the registry still prepares, which the open makes itself
+   * (`agent-sandbox-open.ts`) and this never makes again.
+   */
   RESUME_SPACING: Duration.seconds(2),
   RESUME_TRIES: 30,
   /** How long the bridge may take to say it is ready once its PTY is open. */
@@ -476,14 +482,10 @@ export function agentBrowserOver(
       // Note that each try opens it again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
       // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
-      // gone, which only a sandbox opened before `getOrCreate` answers, is the one refusal answered at
-      // once, since no later try finds it again.
+      // gone, which only a sandbox opened before `getOrCreate` answers, is answered at once, since no
+      // later try finds it again, as is an image still being prepared, which the open has already
+      // waited on as long as it ever does.
       const resumed = reopened(sessionId, sandbox).pipe(
-        Effect.mapError((error) =>
-          snapshotGone(error)
-            ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, error.status)
-            : sandboxUnavailable(error),
-        ),
         Effect.flatMap((found) =>
           found.status === SANDBOX_STATUS.RUNNING
             ? Effect.succeed({ name: found.name, sessionId: found.currentSessionId })
@@ -494,8 +496,17 @@ export function agentBrowserOver(
         Effect.retry({
           schedule: Schedule.spaced(AGENT_BROWSER.RESUME_SPACING),
           times: AGENT_BROWSER.RESUME_TRIES,
-          while: (failure) => failure.reason !== BROWSER_UNREACHABLE.SNAPSHOT_GONE,
+          while: (failure) =>
+            failure._tag === "BrowserUnreachable" ||
+            !(snapshotGone(failure) || failure.code === IMAGE_NOT_READY),
         }),
+        Effect.mapError((failure) =>
+          failure._tag === "BrowserUnreachable"
+            ? failure
+            : snapshotGone(failure)
+              ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, failure.status)
+              : sandboxUnavailable(failure),
+        ),
       );
     });
 
