@@ -36,7 +36,7 @@
  * changes its width alone, so the edge stays under the pointer frame for
  * frame with nothing easing behind it. Nor does the window going to another
  * place, since navigation does not travel (docs/DESIGN.md): a panel the new
- * place stands open, or shut, lands there at once, as the window opens.
+ * place stands open, or shut, lands there at once.
  */
 
 import { MOTION_TOKEN, tokenTiming } from "@repo/ui";
@@ -403,18 +403,13 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
    * waiting on its column's width among it, and none of that is a change
    * anyone asked for: the window opens as it stands.
    */
-  #open(): void {
-    if (this.#opening !== undefined) cancelAnimationFrame(this.#opening);
+  override componentDidMount(): void {
+    window.addEventListener("resize", this.#land);
     this.#opening = requestAnimationFrame(() => {
       this.#opening = requestAnimationFrame(() => {
         this.#opening = undefined;
       });
     });
-  }
-
-  override componentDidMount(): void {
-    window.addEventListener("resize", this.#land);
-    this.#open();
   }
 
   override componentWillUnmount(): void {
@@ -423,16 +418,14 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
   }
 
   /**
-   * Note that a place arrived at opens as the window does, every motion
-   * under way landed where it was going and nothing played over its first
-   * frames, because the panel the window left, or the one the place stands,
-   * is no change anyone asked for there.
+   * Note that a place arrived at plays nothing, and lands what was playing,
+   * because the panel the window left, or the one the place stands, is no
+   * change anyone asked for there.
    */
   override getSnapshotBeforeUpdate(previous: PaneGlideProps): Snapshot | null {
     const root = this.props.root.current;
     if (previous.place !== this.props.place) {
       this.#land();
-      this.#open();
       return null;
     }
     if (root === null || this.#opening !== undefined) return null;

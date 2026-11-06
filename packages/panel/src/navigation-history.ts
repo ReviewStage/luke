@@ -1703,12 +1703,12 @@ export function useWindowHistory(input: {
       const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
       const { itemId } = params;
       const chosen = itemId === undefined ? undefined : inbox.choiceOf(itemId);
-      standSide(chosen === undefined ? undefined : choiceHolder(chosen), to.side);
+      standSide(chosen === undefined ? undefined : choiceHolder(chosen), itemId, to.side);
       return;
     }
     if (to.kind === PLACE_KIND.AGENT) {
       tasks.agentView.onOpen(to.agentId);
-      standSide(to.agentId, to.side);
+      standSide(to.agentId, to.agentId, to.side);
       return;
     }
     // Every other place of the Plans tab is the plan's, which an agent's page stands over.
@@ -1718,19 +1718,22 @@ export function useWindowHistory(input: {
       tasks.mainTabs.onShow(to.taskId, to.column);
     }
     if (to.kind === PLACE_KIND.TASK && to.panel !== undefined) standPanel(to.taskId, to.panel);
-    else if (to.kind === PLACE_KIND.TASK) standSide(to.taskId, to.side);
+    else if (to.kind === PLACE_KIND.TASK) standSide(to.taskId, to.taskId, to.side);
     if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) tasks.onLeaveTask();
   };
   // The side panel as a wide step, an Inbox item's, or an agent page's held it: shut, or open on its tab, on the stop's own task or agent; one not yet known is left as it stands.
-  const standSide = (holder: string | undefined, side: SideStep) => {
-    if (side === null) tasks.sidePanel.onSetOpen(false);
-    else if (side !== undefined && holder !== undefined) tasks.sidePanel.onShow(holder, side);
+  // Note that it is shut only where the step is the stop standing, because another stop starts with it shut, and
+  // shutting it here first would slide it out over the place the window is leaving.
+  const standSide = (holder: string | undefined, stop: string | undefined, side: SideStep) => {
+    if (side === null) {
+      if (stop === tasks.sidePanel.stop) tasks.sidePanel.onSetOpen(false);
+    } else if (side !== undefined && holder !== undefined) tasks.sidePanel.onShow(holder, side);
   };
-  // The side panel as a narrow room's step held it: shut, or open on its tab.
+  // The side panel as a narrow room's step held it: shut, or open on its tab, shut or shown without a tab only on the stop standing, as `standSide` shuts it.
   const standPanel = (taskId: string, panel: PanelStep) => {
     const { sidePanel } = tasks;
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
-    else sidePanel.onSetOpen(panel.open);
+    else if (taskId === sidePanel.stop) sidePanel.onSetOpen(panel.open);
   };
   // The person a routed step's page is, where it is one's, which its step is listed by the name they go by now.
   const personOf = (to: Place): string | undefined => {
