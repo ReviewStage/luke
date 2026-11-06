@@ -206,10 +206,13 @@ const CELL_LEAST = { REST: "min-w-0", UNDER_MORE: "min-w-ui-24" } as const;
  * The room past its words a cell's own marks take, in characters of the
  * cell's type, where its row is placed out of its list's grid
  * (`taskRowFit`): a count's ring and its badge's sides, the waiting mark,
- * and the repository's picture; and the characters the time the row was
- * updated says at most ("11mo ago").
+ * and the repository's picture; the characters the time the row was
+ * updated says at most ("11mo ago"); and the characters a maker's name is
+ * cut short at before its face in the creator's cell, as the Tasks page
+ * cuts it (`--spacing-tasks-list-maker`).
  */
 const FIT_CHARS = {
+  MAKER: 16,
   SUB_TASKS_MARKS: 5,
   WAITING_MARKS: 3,
   REPOSITORY_MARKS: 4,
@@ -228,9 +231,9 @@ const PULL_REQUEST_CHIP_MARKS =
  * where its row is placed out of its list's grid, read from what the list
  * sets on its element (`taskRowFit`): the key in its own monospaced type,
  * so a character of it is one `ch`, a cell of words by its characters, the
- * pull requests by their chips, and the agents' mark by its seat, which
- * stands empty on a task with none. A cell not named here draws the same
- * marks on every row.
+ * pull requests by their chips, the agents' mark by its seat, which
+ * stands empty on a task with none, and the creator's by its widest maker
+ * and face. A cell not named here draws the same marks on every row.
  */
 const CELL_FIT: Partial<Record<TaskRowCell, CSSProperties>> = {
   [TASK_ROW_CELL.KEY]: {
@@ -245,6 +248,11 @@ const CELL_FIT: Partial<Record<TaskRowCell, CSSProperties>> = {
   [TASK_ROW_CELL.REPOSITORY]: { minWidth: "calc(var(--ui-task-row-repository-chars, 0) * 1ch)" },
   [TASK_ROW_CELL.AGENTS]: { minWidth: "var(--ui-space-16)" },
   [TASK_ROW_CELL.UPDATED]: { minWidth: `${FIT_CHARS.UPDATED}ch` },
+  // Note that a maker's name is read per task where the row draws, never by its list, so the creator's cell keeps the room of a name cut short and its face, the face at its end, so faces line up whether a row names a maker or not.
+  [TASK_ROW_CELL.CREATOR]: {
+    minWidth: `calc(${FIT_CHARS.MAKER}ch + var(--ui-item-gap) + var(--ui-space-20))`,
+    justifyContent: "flex-end",
+  },
 };
 
 /** A cell over the row's press where it holds anything, and the press's own where it stands empty. */
