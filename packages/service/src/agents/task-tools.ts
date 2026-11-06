@@ -36,6 +36,7 @@ import {
 } from "../tasks/task-create-relation.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
+  AGENT_CALLER,
   AGENT_TOOL_REFUSAL,
   type AgentCall,
   type AgentReadCall,
@@ -117,9 +118,11 @@ export const READ_TASK_TOOL = {
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** Whether the caller reaches tasks' descriptions: the coding agent's starter's Task descriptions, or a pilot's Pilot, or the member's own Task descriptions (`descriptionsOnFor`). */
+/** Whether the caller reaches tasks' descriptions: as the coding agent's standing read it, or the member's own Task descriptions (`descriptionsOnFor`). */
 function callerDescriptionsOn(caller: AgentCall["caller"]) {
-  return descriptionsOnFor(callerUserId(caller), callerAgent(caller)?.kind);
+  return caller.kind === AGENT_CALLER.AGENT
+    ? Effect.succeed(caller.descriptionsOn)
+    : descriptionsOnFor(caller.userId);
 }
 
 /** One call of `read_task`: a task of the caller's workspace, its description cut to the bound, or why there is none; no description where the caller has Task descriptions off. */

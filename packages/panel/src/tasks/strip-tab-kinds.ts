@@ -124,6 +124,9 @@ export interface TaskDraws {
   readonly pages: readonly string[] | undefined;
 }
 
+/** The kinds whose tab stands for a shell session (`ShellTab`), the only ones whose close may end one. */
+type ShellKind = ShellTab["kind"];
+
 /** Whether a kind's tab is kept across a launch in each strip that holds it. */
 interface KeptIn {
   readonly column: boolean;
@@ -160,7 +163,7 @@ interface StripTabKindDeclaration<K extends StripTabKind> {
   readonly link: (tab: KindTab<K>, holder: PagePlace) => LinkPlace | undefined;
   readonly drawsAgain: (tab: KindTab<K>, draws: TaskDraws) => boolean;
   readonly reopens: boolean;
-  readonly endsSession: boolean;
+  readonly endsSession: K extends ShellKind ? boolean : false;
   readonly closesIdle: boolean;
   readonly pin: (tab: KindTab<K>) => TabPin;
   readonly kept: KeptIn;

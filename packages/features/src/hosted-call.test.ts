@@ -78,7 +78,11 @@ it.effect.each<Row>([
     call: (hosted) => hostedCall(hosted.mcpClients.list, undefined),
     expected: {
       failure: "unanswered",
-      cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, code: HOSTED_API_ERROR.NOT_FOUND },
+      cause: {
+        _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+        status: HTTP_STATUS.NOT_FOUND,
+        code: HOSTED_API_ERROR.NOT_FOUND,
+      },
     },
   },
   {

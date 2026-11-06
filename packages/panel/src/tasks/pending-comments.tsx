@@ -15,6 +15,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
 import { confirmFailure } from "../failure-report.js";
@@ -149,9 +150,13 @@ export function usePendingThread(thread: ReviewThread): boolean {
   return usePendingComment(thread.comments[0]?.url) !== undefined;
 }
 
-/** The Pending words a pending comment and a thread it starts wear. */
+/** The Pending words a pending comment and a thread it starts wear, a pull request's and a page's alike: the app's own words, unmasked. */
 export function PendingWords(): React.JSX.Element {
-  return <QuietWords>{PENDING_WORDS.PENDING}</QuietWords>;
+  return (
+    <QuietWords>
+      <ReplayUnmask>{PENDING_WORDS.PENDING}</ReplayUnmask>
+    </QuietWords>
+  );
 }
 
 /**

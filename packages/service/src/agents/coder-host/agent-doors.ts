@@ -65,7 +65,6 @@ import {
   runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
@@ -204,10 +203,6 @@ export function runAgentEditDescription(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return descriptionEditRejected(found.failure);
-    // Note that no agent whose starter has Descriptions off is listed the tool; a harness may call it anyway, and this refuses it.
-    if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
-      return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.OFF);
-    }
     const taskId = editedTaskOf(input);
     if (taskId === undefined)
       return descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.NO_TASK_NAMED);
@@ -233,9 +228,6 @@ export function runAgentLookAtPicture(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-    if (!(yield* descriptionsOnFor(found.success.userId, found.success.kind))) {
-      return pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF);
-    }
     const taskId = lookedTaskOf(input);
     if (taskId === undefined) return pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE);
     if (Option.isNone(yield* agentTaskOf(admitted, found.success, taskId))) {
@@ -261,7 +253,7 @@ export function runAgentOpenPullRequest(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pullRequestRejected(found.failure);
-    // Note that the catalog offers the tool to no agent with no repository (`../tool-catalog/gates.ts`'s `REPOSITORY`); a harness may call it anyway, and this refuses it.
+    // Note that the catalog refuses the call of an agent with no repository at its `REPOSITORY` gate (`../tool-catalog/gates.ts`), so this only narrows the row it read since.
     if (!hasRepository(found.success)) return pullRequestRejected(CODER_REFUSAL.NO_REPOSITORY);
     return yield* openPullRequest(admitted.target, found.success, input);
   }).pipe(
@@ -274,12 +266,13 @@ export function runAgentOpenPullRequest(
  * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the description of
  * the task it names, or one of its pages, in the agent's workspace, as the
  * member whose turn it is, written under the agent; the description's threads only
- * where the agent's starter has Descriptions on (`descriptionsOnFor`).
+ * where the agent's standing has Descriptions open (`../tool-catalog/gates.ts`).
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
   name: CommentToolName,
   input: UnparsedWireValue,
+  descriptionsOn: boolean,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
@@ -296,7 +289,6 @@ export function runAgentComment(
       agentId,
     } as const;
     // A page's threads stand whatever the starter's Descriptions setting; the description's are left out while it is off.
-    const descriptionsOn = yield* descriptionsOnFor(found.success.userId, found.success.kind);
     return yield* runCommentTool(name, { taskId, writer, descriptionsOn }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),
@@ -353,6 +345,7 @@ export function runAgentTools(
   seams: AgentDoorSeams,
   admitted: AdmittedConversation,
   call: AgentToolCall,
+  descriptionsOn: boolean,
 ): Effect.Effect<
   WireRecord,
   never,
@@ -366,7 +359,7 @@ export function runAgentTools(
     // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
     const eveAs = yield* sessionsRouter;
     const eve = eveAs(sender.userId);
-    const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
+    const caller = { kind: AGENT_CALLER.AGENT, agent: sender, descriptionsOn } as const;
     const toolCall = {
       caller,
       eve,

@@ -11,7 +11,6 @@ import type {
   TasksWorkspaceSlackBotAnswer,
   TasksWorkspaceSlackBotNotificationsParams,
 } from "@repo/features/tasks-view";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -19,7 +18,6 @@ import {
   type HeldRows,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, type Scope } from "effect";
 import { type AppAccountPreferences, type AppHostReads, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -197,7 +195,7 @@ function readerRow(readerId: () => string | undefined): readonly string[] {
 export function agentDefaultWritten(
   send: (choice: ModelChoice) => Effect.Effect<AgentDefaultAnswer>,
   readerId: () => string | undefined,
-): WriteDeclaration<AccountPreferencesPoolRow, PreferencesChange, ModelChoice, WireValue> {
+): WriteDeclaration<AccountPreferencesPoolRow, PreferencesChange, ModelChoice, AgentDefaultAnswer> {
   return {
     kind: ACCOUNT_PREFERENCES,
     keys: () => readerRow(readerId),
@@ -208,9 +206,7 @@ export function agentDefaultWritten(
     }),
     send: (choice) =>
       Effect.map(send(choice), (answer) =>
-        "choice" in answer
-          ? { answer: carried<AgentDefaultAnswer>(answer), txid: answer.txid }
-          : { refused: carried<AgentDefaultAnswer>(answer) },
+        "choice" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 }
