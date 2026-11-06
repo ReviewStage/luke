@@ -26,7 +26,7 @@ import { trimmedText } from "./text-schema.js";
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
  *
  * A task is its owner's name for it and one current document: one free
- * Markdown text (`plan-document.ts`, `docs/TASKS.md`), answered as the
+ * Markdown text (`description-document.ts`, `docs/TASKS.md`), answered as the
  * document's `body` with no title line, since the name is its own, and an
  * empty `assumptions` list, since its assumptions are a section of the text;
  * the list stays on the wire because a desktop through v0.11.0 requires it.
@@ -179,21 +179,21 @@ export const workspaceIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(TASK_BOUNDS.MAX_WORKSPACE_ID_CHARS),
 );
 
-const planAssumptionSchema = EffectSchema.Struct({
+const descriptionAssumptionSchema = EffectSchema.Struct({
   /** The assumption as one plain sentence. */
   text: trimmedText(TASK_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
 /** The one saved document of a task, replaced whole by every save. */
-const planDocumentSchema = EffectSchema.Struct({
+const descriptionDocumentSchema = EffectSchema.Struct({
   /** The plan's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
-  assumptions: EffectSchema.Array(planAssumptionSchema).check(
+  assumptions: EffectSchema.Array(descriptionAssumptionSchema).check(
     EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ASSUMPTIONS),
   ),
 });
 
-export type PlanDocument = typeof planDocumentSchema.Type;
+export type DescriptionDocument = typeof descriptionDocumentSchema.Type;
 
 /** A task's repository as a request names it: a full name, or null for none. */
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
@@ -320,7 +320,7 @@ function relationsEachOnce(request: {
  * and the account's first workspace where none is; the document starts
  * empty, and `planning` false is a task started without its planning phase,
  * whose window opens no call on it. A name left out, or nothing but whitespace, starts the plan as
- * `UNTITLED_PLAN_NAME` until it is renamed. An `agent` starts a coding
+ * `UNTITLED_DESCRIPTION_NAME` until it is renamed. An `agent` starts a coding
  * agent on the task in the same request, as the agent's own Start would
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
  * refused, and the service refuses it without a repository, as it refuses
@@ -599,17 +599,17 @@ export const TASK_LIST_ARCHIVED = {
  * revision a plan from before history starts with, nobody the service can
  * name.
  */
-export const PLAN_ACTOR = {
+export const DESCRIPTION_ACTOR = {
   DEVELOPER: "developer",
   NOTETAKER: "notetaker",
   AGENT: "agent",
   EARLIER: "earlier",
 } as const;
 
-export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
+export type DescriptionActor = (typeof DESCRIPTION_ACTOR)[keyof typeof DESCRIPTION_ACTOR];
 
 /** Who made a task: its member by hand, the app on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
-export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
+export type TaskCreatorActor = Exclude<DescriptionActor, typeof DESCRIPTION_ACTOR.EARLIER>;
 
 /**
  * Who made a task where its member did not make it by hand: the app on their
@@ -618,7 +618,7 @@ export type TaskCreatorActor = Exclude<PlanActor, typeof PLAN_ACTOR.EARLIER>;
  * from among the agents it already lists.
  */
 const taskOriginSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals([PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+  actor: EffectSchema.Literals([DESCRIPTION_ACTOR.NOTETAKER, DESCRIPTION_ACTOR.AGENT]),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
@@ -895,15 +895,15 @@ const agentEditLineSchema = EffectSchema.Struct({
  * name it holds now, a member who has since left the workspace among them.
  * The window calls the member You only where the id is its own account's.
  */
-export const planEditorSchema = memberRefSchema;
+export const descriptionEditorSchema = memberRefSchema;
 
-export type PlanEditor = typeof planEditorSchema.Type;
+export type DescriptionEditor = typeof descriptionEditorSchema.Type;
 
 /** The newest revision of a plan, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
-export const planLastEditSchema = EffectSchema.Struct({
-  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+export const descriptionLastEditSchema = EffectSchema.Struct({
+  actor: EffectSchema.Literals(Object.values(DESCRIPTION_ACTOR)),
   /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
-  by: EffectSchema.optionalKey(planEditorSchema),
+  by: EffectSchema.optionalKey(descriptionEditorSchema),
   /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
   /** The coding agent that wrote it, which the window finds among the task's agents; absent for any other writer and from a service before it. */
@@ -914,10 +914,10 @@ export const planLastEditSchema = EffectSchema.Struct({
   duringCall: EffectSchema.Boolean,
 });
 
-export type PlanLastEdit = typeof planLastEditSchema.Type;
+export type DescriptionLastEdit = typeof descriptionLastEditSchema.Type;
 
 /** Bounds on the sections of a plan that is one document, as the window reads who last changed each. */
-export const PLAN_SECTION_BOUNDS = {
+export const DESCRIPTION_SECTION_BOUNDS = {
   /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
   MAX_HEADING_CHARS: 1_000,
   /** The most sections a plan names a last save for. */
@@ -930,29 +930,29 @@ export const PLAN_SECTION_BOUNDS = {
  * heading's words, and a heading renamed with nothing beneath it changed
  * keeps the revision that last changed them.
  */
-const planSectionEditSchema = EffectSchema.Struct({
+const descriptionSectionEditSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(
-    EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+    EffectSchema.isMaxLength(DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS),
   ),
-  ...planLastEditSchema.fields,
+  ...descriptionLastEditSchema.fields,
 });
 
-export type PlanSectionEdit = typeof planSectionEditSchema.Type;
+export type DescriptionSectionEdit = typeof descriptionSectionEditSchema.Type;
 
 /** One task with its saved document, its newest revision, who last changed each section, the saves coding agents made on it, oldest first, and the tasks it waits on and that wait on it. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
-  document: planDocumentSchema,
+  document: descriptionDocumentSchema,
   /** Optional on the wire so a task from a service without the journal still reads; none is no edits. */
   agentEdits: EffectSchema.optionalKey(
     EffectSchema.Array(agentEditLineSchema).check(EffectSchema.isMaxLength(MAX_AGENT_EDITS)),
   ),
   /** Absent for a task nobody has written since history began, and from a service before it. */
-  lastEdit: EffectSchema.optionalKey(planLastEditSchema),
+  lastEdit: EffectSchema.optionalKey(descriptionLastEditSchema),
   /** The save that last changed each section, for the sections a save has changed; absent from a service before documents. */
   sectionEdits: EffectSchema.optionalKey(
-    EffectSchema.Array(planSectionEditSchema).check(
-      EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),
+    EffectSchema.Array(descriptionSectionEditSchema).check(
+      EffectSchema.isMaxLength(DESCRIPTION_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
   /** The tasks this one waits on, by id, the earliest added first, each one the reader reaches; absent from a service before blocks. */
@@ -1059,13 +1059,15 @@ export const taskDeleteAnswerSchema = EffectSchema.Struct({
 export const UNKNOWN_AGENT_LABEL = "an agent";
 
 /** How a plan's history is read: the newest revisions first, a page at a time. */
-export const PLAN_HISTORY_BOUNDS = {
+export const DESCRIPTION_HISTORY_BOUNDS = {
   /** The most revisions one read of the history carries. */
   PAGE: 50,
 } as const;
 
 /** A revision's number within its plan, from one. */
-export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+export const descriptionRevisionSeqSchema = EffectSchema.Int.check(
+  EffectSchema.isGreaterThanOrEqualTo(1),
+);
 
 /**
  * One revision as the version history lists it: its number, who wrote it and
@@ -1073,34 +1075,34 @@ export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreat
  * of an earlier revision, which one it brought back and that revision's
  * latest save.
  */
-const planRevisionLineSchema = EffectSchema.Struct({
-  seq: planRevisionSeqSchema,
-  lastEdit: planLastEditSchema,
+const descriptionRevisionLineSchema = EffectSchema.Struct({
+  seq: descriptionRevisionSeqSchema,
+  lastEdit: descriptionLastEditSchema,
   /** The coding agent that wrote it; absent for any other writer, once the agent's row is gone, and from a service before it. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's first save. */
   startedAt: countedNumber,
   changes: countedNumber,
   restoredFrom: EffectSchema.optionalKey(
-    EffectSchema.Struct({ seq: planRevisionSeqSchema, at: countedNumber }),
+    EffectSchema.Struct({ seq: descriptionRevisionSeqSchema, at: countedNumber }),
   ),
 });
 
-export type PlanRevisionLine = typeof planRevisionLineSchema.Type;
+export type DescriptionRevisionLine = typeof descriptionRevisionLineSchema.Type;
 
 /**
  * A page of a plan's history (GET `/api/plans/{id}/revisions`), the newest
  * first, before the revision the `before` query names where it names one;
  * `earlier` is what the next older page is read before, absent on the oldest.
  */
-export const planRevisionsAnswerSchema = EffectSchema.Struct({
-  revisions: EffectSchema.Array(planRevisionLineSchema).check(
-    EffectSchema.isMaxLength(PLAN_HISTORY_BOUNDS.PAGE),
+export const descriptionRevisionsAnswerSchema = EffectSchema.Struct({
+  revisions: EffectSchema.Array(descriptionRevisionLineSchema).check(
+    EffectSchema.isMaxLength(DESCRIPTION_HISTORY_BOUNDS.PAGE),
   ),
-  earlier: EffectSchema.optionalKey(planRevisionSeqSchema),
+  earlier: EffectSchema.optionalKey(descriptionRevisionSeqSchema),
 });
 
-export type PlanRevisionsAnswer = typeof planRevisionsAnswerSchema.Type;
+export type DescriptionRevisionsAnswer = typeof descriptionRevisionsAnswerSchema.Type;
 
 /**
  * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the plan
@@ -1108,15 +1110,15 @@ export type PlanRevisionsAnswer = typeof planRevisionsAnswerSchema.Type;
  * first, each formatted under the task's name as it stands now, so a rename
  * since is no difference between them.
  */
-export const planRevisionAnswerSchema = EffectSchema.Struct({
+export const descriptionRevisionAnswerSchema = EffectSchema.Struct({
   revision: EffectSchema.Struct({
-    seq: planRevisionSeqSchema,
-    document: planDocumentSchema,
-    previous: EffectSchema.NullOr(planDocumentSchema),
+    seq: descriptionRevisionSeqSchema,
+    document: descriptionDocumentSchema,
+    previous: EffectSchema.NullOr(descriptionDocumentSchema),
   }),
 });
 
-export type PlanRevisionAnswer = typeof planRevisionAnswerSchema.Type;
+export type DescriptionRevisionAnswer = typeof descriptionRevisionAnswerSchema.Type;
 
 /** The most lines one code reference points at; a reference is a passage, not a file. */
 const CODE_REF_MAX_LINES = 200;

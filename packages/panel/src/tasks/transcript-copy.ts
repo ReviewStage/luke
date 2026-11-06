@@ -362,7 +362,7 @@ export function agentTranscript(input: {
       ? BRIEF_LABEL.SUBAGENT_TASK
       : brief === AGENT_BRIEF.PROMPT
         ? BRIEF_LABEL.PROMPT
-        : BRIEF_LABEL.PLAN;
+        : BRIEF_LABEL.DESCRIPTION;
   const speaker = task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT;
   // An agent started from another opens on its brief, the replay, and the note, each copied apart.
   const opening = first === undefined || task !== undefined ? undefined : replayOpening(first);

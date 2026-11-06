@@ -11,7 +11,7 @@ import { test } from "vitest";
 import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 
 /** An agent on a repository, handed what the test names, started by hand on no task. */
-function agentHanded(handed: Pick<Agent, "planSnapshot" | "prompt">): Agent {
+function agentHanded(handed: Pick<Agent, "descriptionSnapshot" | "prompt">): Agent {
   return {
     id: "agent-1",
     userId: "user-1",
@@ -46,31 +46,31 @@ const CONTEXT = {
   authorship: undefined,
   workspace: "acme",
   memoryOn: false,
-  plansOn: true,
+  descriptionsOn: true,
 } as const;
 
-const PLAN_JOB = "implement the plan given as the first message";
+const DESCRIPTION_JOB = "implement the plan given as the first message";
 const BLANK_JOB = "do what the developer asks of you in this conversation";
 
 test("an agent started with neither a plan nor a prompt is told to do what the developer asks, on every harness", () => {
-  const blank = agentHanded({ planSnapshot: null, prompt: null });
+  const blank = agentHanded({ descriptionSnapshot: null, prompt: null });
   for (const harness of Object.values(CODER_HARNESS)) {
     const instructions = agentCoderInstructions(blank, { ...CONTEXT, harness });
     assert.ok(instructions.includes(BLANK_JOB), harness);
-    assert.ok(!instructions.includes(PLAN_JOB), harness);
+    assert.ok(!instructions.includes(DESCRIPTION_JOB), harness);
   }
 });
 
 test("an agent handed a plan is told to implement it, on every harness", () => {
-  const planned = agentHanded({ planSnapshot: "# Plan", prompt: null });
+  const planned = agentHanded({ descriptionSnapshot: "# Plan", prompt: null });
   for (const harness of Object.values(CODER_HARNESS)) {
     const instructions = agentCoderInstructions(planned, { ...CONTEXT, harness });
-    assert.ok(instructions.includes(PLAN_JOB), harness);
+    assert.ok(instructions.includes(DESCRIPTION_JOB), harness);
   }
 });
 
 test("an agent in several repositories is told where each of the others is checked out, and on which branch", () => {
-  const planned = agentHanded({ planSnapshot: "# Plan", prompt: null });
+  const planned = agentHanded({ descriptionSnapshot: "# Plan", prompt: null });
   const instructions = agentCoderInstructions(planned, {
     ...CONTEXT,
     harness: CODER_HARNESS.CLAUDE_CODE,

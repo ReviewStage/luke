@@ -1,0 +1,252 @@
+import { randomUUID } from "node:crypto";
+import {
+  isVideoPicture,
+  PICTURE_MEDIA_TYPE,
+  type Picture,
+  pictureMediaTypeSchema,
+} from "@repo/features/picture-wire";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
+import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/sql";
+import { Database } from "../core/query.js";
+import { attachment, ownedByTaskAlone } from "../schemas/attachment.js";
+import { task } from "../schemas/task.js";
+import type { TaskStoreEffect } from "./task-store.js";
+import { reachableTask, taskReachableBy } from "./workspace-store.js";
+
+/**
+ * description-attachments.ts -- a plan's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
+ *
+ * A picture, or a video an agent recorded, is kept under the plan row's own
+ * lock, so the counts it is held to, every picture's and every video's,
+ * cannot be crossed by a second upload. Every read names the account beside the
+ * plan and gates on its membership of the plan's workspace, so a member
+ * reads a picture a teammate pasted and a plan of a workspace the account is
+ * not in reads as no plan, exactly as in `plan-store.ts`. A save stamps the
+ * pictures its text names (`saveDescriptionText`), and the sweep deletes a day-old
+ * picture no save ever stamped, a sweep's worth at a time.
+ */
+
+/** What keeping a picture came to: kept under its new id, refused for the plan's count of pictures or of videos, or no plan to keep it on. */
+export const DESCRIPTION_ATTACHMENT_KEEP = {
+  KEPT: "kept",
+  TOO_MANY: "too-many",
+  TOO_MANY_VIDEOS: "too-many-videos",
+  NO_TASK: "no-plan",
+} as const;
+
+export type DescriptionAttachmentKeep =
+  | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.KEPT; readonly id: string }
+  | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY }
+  | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY_VIDEOS }
+  | { readonly status: typeof DESCRIPTION_ATTACHMENT_KEEP.NO_TASK };
+
+/** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
+const PURGE_BATCH = 200;
+
+/** A plan's pictures among every attachment: the ones its task owns alone. */
+const descriptionPicture = ownedByTaskAlone(attachment);
+
+/** The plan's id and workspace under its row's lock, where the account reaches it; nothing otherwise. */
+const lockOpenTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: task.id, organizationId: task.organizationId })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .for("update"),
+    ),
+});
+
+/** How many pictures the plan holds, and how many of them are videos. */
+const countPictures = SqlSchema.findOne({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ count: Schema.Number, videos: Schema.Number }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          count: sql<number>`count(*)::int`,
+          videos: sql<number>`(count(*) filter (where ${eq(attachment.contentType, PICTURE_MEDIA_TYPE.WEBM)}))::int`,
+        })
+        .from(attachment)
+        .where(and(eq(attachment.taskId, taskId), descriptionPicture)),
+    ),
+});
+
+const insertPicture = SqlSchema.void({
+  Request: Schema.Struct({
+    id: Schema.String,
+    taskId: Schema.String,
+    organizationId: Schema.String,
+    userId: Schema.String,
+    contentType: pictureMediaTypeSchema,
+    byteCount: Schema.Number,
+    bytes: Schema.Uint8Array,
+    createdAt: Schema.Date,
+  }),
+  execute: (row) => Database.use((db) => db.insert(attachment).values(row)),
+});
+
+const findPicture = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    taskId: Schema.String,
+    attachmentId: Schema.String,
+  }),
+  Result: Schema.Struct({ contentType: pictureMediaTypeSchema, bytes: Schema.Uint8Array }),
+  execute: ({ userId, taskId, attachmentId }) =>
+    Database.use((db) =>
+      db
+        .select({ contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(task, eq(task.id, attachment.taskId))
+        .where(
+          and(
+            eq(attachment.taskId, taskId),
+            eq(attachment.id, attachmentId),
+            descriptionPicture,
+            taskReachableBy(userId),
+          ),
+        ),
+    ),
+});
+
+const stampSaved = SqlSchema.void({
+  Request: Schema.Struct({
+    taskId: Schema.String,
+    ids: Schema.Array(Schema.String),
+    now: Schema.Date,
+  }),
+  execute: ({ taskId, ids, now }) =>
+    Database.use((db) =>
+      db
+        .update(attachment)
+        .set({ savedAt: now })
+        .where(
+          and(
+            eq(attachment.taskId, taskId),
+            inArray(attachment.id, [...ids]),
+            descriptionPicture,
+            isNull(attachment.savedAt),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The oldest unsaved pictures uploaded before the cutoff, a sweep's worth,
+ * their plans locked until the transaction ends. Note that a plan a save
+ * holds locked is skipped, because the save may be stamping one of them
+ * this moment; the next sweep reads it again.
+ */
+const lockUnsaved = SqlSchema.findAll({
+  Request: Schema.Struct({ before: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ before }) =>
+    Database.use((db) =>
+      db
+        .select({ id: attachment.id })
+        .from(attachment)
+        .innerJoin(task, eq(task.id, attachment.taskId))
+        .where(
+          and(descriptionPicture, isNull(attachment.savedAt), lt(attachment.createdAt, before)),
+        )
+        .orderBy(asc(attachment.createdAt))
+        .limit(PURGE_BATCH)
+        .for("update", { of: task, skipLocked: true }),
+    ),
+});
+
+const deletePictures = SqlSchema.void({
+  Request: Schema.Struct({ ids: Schema.Array(Schema.String) }),
+  execute: ({ ids }) =>
+    Database.use((db) =>
+      db.delete(attachment).where(and(inArray(attachment.id, [...ids]), descriptionPicture)),
+    ),
+});
+
+/**
+ * Keeps one picture or video on the plan, uploaded by the account, under a
+ * new id; refused where the plan already holds its bound of pictures, or a
+ * video where it holds its bound of videos, and nothing where the account
+ * reaches no such plan.
+ */
+export function keepDescriptionAttachment(
+  userId: string,
+  taskId: string,
+  picture: Picture,
+): TaskStoreEffect<DescriptionAttachmentKeep> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockOpenTask({ userId, taskId });
+        if (Option.isNone(locked)) return { status: DESCRIPTION_ATTACHMENT_KEEP.NO_TASK } as const;
+        // A count that returned no row is the database breaking its own contract, not an outcome.
+        const { count, videos } = yield* countPictures({ taskId }).pipe(
+          Effect.catchTag("NoSuchElementError", Effect.die),
+        );
+        if (count >= DESCRIPTION_ATTACHMENT_BOUNDS.MAX_PER_DESCRIPTION) {
+          return { status: DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY } as const;
+        }
+        if (
+          isVideoPicture(picture) &&
+          videos >= DESCRIPTION_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_DESCRIPTION
+        ) {
+          return { status: DESCRIPTION_ATTACHMENT_KEEP.TOO_MANY_VIDEOS } as const;
+        }
+        const id = randomUUID();
+        yield* insertPicture({
+          id,
+          taskId,
+          organizationId: locked.value.organizationId,
+          userId,
+          contentType: picture.contentType,
+          byteCount: picture.bytes.length,
+          bytes: picture.bytes,
+          createdAt: yield* DateTime.nowAsDate,
+        });
+        return { status: DESCRIPTION_ATTACHMENT_KEEP.KEPT, id } as const;
+      }),
+    ),
+  );
+}
+
+/** One picture or video of the plan, its type and bytes; nothing where the account reaches no such plan or the plan no such picture. */
+export function readDescriptionAttachment(
+  userId: string,
+  taskId: string,
+  attachmentId: string,
+): TaskStoreEffect<Option.Option<Picture>> {
+  return findPicture({ userId, taskId, attachmentId });
+}
+
+/** Stamps the plan's pictures the saved text names as saved, the ones no save stamped before; nothing where it names none. */
+export function stampSavedAttachments(
+  taskId: string,
+  ids: readonly string[],
+): TaskStoreEffect<void> {
+  if (ids.length === 0) return Effect.void;
+  return Effect.flatMap(DateTime.nowAsDate, (now) => stampSaved({ taskId, ids, now }));
+}
+
+/**
+ * The scheduled sweep's delete of the pictures no save named, uploaded
+ * before `before`, a sweep's worth, under their plans' locks, so a save
+ * stamping one cannot cross it; how many went.
+ */
+export function purgeUnsavedAttachments(before: Date): TaskStoreEffect<number> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const ids = (yield* lockUnsaved({ before })).map((row) => row.id);
+        if (ids.length > 0) yield* deletePictures({ ids });
+        return ids.length;
+      }),
+    ),
+  );
+}

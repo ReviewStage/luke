@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HISTORY_READ, type PlanHistoryControl } from "../tasks/use-plan-history.js";
+import { HISTORY_READ, type DescriptionHistoryControl } from "../tasks/use-description-history.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -39,7 +39,10 @@ afterEach(() => {
 });
 
 /** The plan's version history over the window, its list as `list` says. */
-function drawn(list: PlanHistoryControl["list"], room: ShellRoom = SHELL_ROOM.WIDE): HTMLElement {
+function drawn(
+  list: DescriptionHistoryControl["list"],
+  room: ShellRoom = SHELL_ROOM.WIDE,
+): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,

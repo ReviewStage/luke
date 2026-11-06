@@ -9,7 +9,7 @@ import {
   type InboxReplyKind,
   inboxFormValueSchema,
 } from "@repo/features/inbox-wire";
-import { PLAN_COMMENT_SCOPE } from "@repo/features/plan-comment-wire";
+import { DESCRIPTION_COMMENT_SCOPE } from "@repo/features/description-comment-wire";
 import { Duration, Effect, Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -25,7 +25,7 @@ import { rendererRuntime } from "./renderer-runtime.js";
  * draft agent its first message per plan, New task its words per workspace
  * the task starts in, a plan's comment its words per
  * thread being started, per thread answered, and per comment edited
- * (`plan-comments.tsx`), a line comment in Files changed its words per
+ * (`description-comments.tsx`), a line comment in Files changed its words per
  * agent, pull request, file, side, and last line (`comment-drafts.ts`), an agent's line
  * written again its words and files per agent and line
  * (`edit-composer.tsx`), and an inbox card its answer
@@ -78,7 +78,7 @@ export const DRAFT_PLACE = {
   INBOX: "inbox",
   NEW_TASK: "newTask",
   NEW_AUTOMATION: "newAutomation",
-  PLAN_COMMENT: "planComment",
+  DESCRIPTION_COMMENT: "descriptionComment",
   LINE_COMMENT: "lineComment",
   EDIT: "edit",
 } as const;
@@ -125,7 +125,7 @@ const draftPlaceSchema = Schema.Union([
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
-    kind: Schema.Literal(DRAFT_PLACE.PLAN_COMMENT),
+    kind: Schema.Literal(DRAFT_PLACE.DESCRIPTION_COMMENT),
     /** The plan the comment is on, which the sidebar marks. */
     planId: Schema.String,
     /**
@@ -139,7 +139,7 @@ const draftPlaceSchema = Schema.Union([
       Schema.Struct({ threadId: Schema.String }),
       Schema.Struct({
         quote: Schema.String,
-        scope: Schema.Literals(Object.values(PLAN_COMMENT_SCOPE)),
+        scope: Schema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
       }),
     ]),
   }),
@@ -288,7 +288,10 @@ export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_A
 export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
 
 /** A plan comment's place: a thread being started, answered, or one of its comments edited. */
-export type PlanCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.PLAN_COMMENT }>;
+export type DescriptionCommentPlace = Extract<
+  DraftPlace,
+  { kind: typeof DRAFT_PLACE.DESCRIPTION_COMMENT }
+>;
 
 /** A line comment in Files changed: the agent, the file, and the side and last line it stands under. */
 export type LineCommentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.LINE_COMMENT }>;
@@ -1184,7 +1187,7 @@ export function useDraftWriter(): DraftWriter {
 }
 
 /** Whether a plan holds a draft: one of its agents', its draft agent's, an inbox card's, or a comment's. */
-export function usePlanDrafted(taskId: string): boolean {
+export function useDescriptionDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
 

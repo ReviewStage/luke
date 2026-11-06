@@ -142,7 +142,7 @@ const openTask = Effect.gen(function* () {
     Effect.map(
       createAgent(starter, {
         taskId,
-        planSnapshot: "# Checkout",
+        descriptionSnapshot: "# Checkout",
         prompt: null,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",
@@ -553,7 +553,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           yield* createAgent(starter, {
             taskId: null,
             organizationId: workspace,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: "Sign in to the side project.",
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",

@@ -138,7 +138,7 @@ const WORKSPACE_TOOL_WORDS = {
     group: WORKSPACE_TOOL_GROUP.AUTOMATIONS,
     summary: "Runs an automation now",
   },
-  [AGENT_TOOL.EDIT_PLAN]: {
+  [AGENT_TOOL.EDIT_DESCRIPTION]: {
     group: WORKSPACE_TOOL_GROUP.PLAN,
     summary: "Takes notes in its task's description",
   },

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { Task } from "@repo/features/task-wire";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
@@ -25,11 +25,11 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 import { planEditMutation } from "./plan-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import { HISTORY_READ } from "./use-plan-history.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { VersionView } from "./version-view.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -136,7 +136,7 @@ function Version(): ReactNode {
     viewing: {
       line: {
         seq: 2,
-        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: false },
+        lastEdit: { actor: DESCRIPTION_ACTOR.NOTETAKER, at: 2, duringCall: false },
         startedAt: 1,
         changes: 1,
       },
@@ -149,7 +149,7 @@ function Version(): ReactNode {
 
 test("the plan and a version draw a link they have no chip for as one plain link, a bare address cut short", () => {
   const surfaces = [
-    drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS })),
+    drawn(createElement(DescriptionBody, { task: TASK, sectionLinks: SECTION_LINKS })),
     drawn(createElement(Version)),
   ];
 
@@ -172,7 +172,7 @@ test("a transcript draws a bare address as the plan does, cut short, and opens i
 
 test("the plan's editor draws a plain link as every place does, whole", async () => {
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: TASK,
       edit: planEditMutation(TASK.id, () =>
         Promise.reject(new Error("Nothing is saved in this test.")),
@@ -186,14 +186,14 @@ test("the plan's editor draws a plain link as every place does, whole", async ()
   await act(async () => undefined);
 
   assert.deepEqual(
-    [...container.querySelectorAll(".plan-document-text a")].map((link) => link.textContent),
+    [...container.querySelectorAll(".description-document-text a")].map((link) => link.textContent),
     ["the rollout", "the store", "the docs", BARE],
   );
 });
 
 test("a plain link pressed in the plan opens in the browser and opens no editor", async () => {
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: TASK,
       edit: planEditMutation(TASK.id, () =>
         Promise.reject(new Error("Nothing is saved in this test.")),
@@ -211,7 +211,7 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
     { kind: ACT_KIND.WEB_OPEN, payload: { url: DOCS } },
     { kind: ACT_KIND.WEB_OPEN, payload: { url: BARE } },
   ]);
-  assert.equal(container.querySelector(".plan-document-text"), null);
+  assert.equal(container.querySelector(".description-document-text"), null);
 });
 
 test("a plain link pressed in a version opens in the browser", () => {
@@ -248,7 +248,7 @@ test("a bare address a change marks inside is drawn whole, its marks where they 
 test("a plain link to an address the window refuses to open is drawn going nowhere", () => {
   const long = `https://example.com/${"a".repeat(2_100)}`;
   const container = drawn(
-    createElement(PlanBody, {
+    createElement(DescriptionBody, {
       task: {
         ...TASK,
         document: { body: `## Rollout\n\n[the long page](${long})`, assumptions: [] },

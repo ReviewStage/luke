@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { listPages, readPageVersion, writePage } from "@repo/database/models/plan-pages";
+import { listPages, readPageVersion, writePage } from "@repo/database/models/task-pages";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";

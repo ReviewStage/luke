@@ -45,13 +45,17 @@ import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
-import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
 import type { PortForwarding } from "@repo/features/port-forward-acts";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
-import type { PlanRevisionsAnswer } from "@repo/features/task-wire";
-import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
+import type { DescriptionRevisionsAnswer } from "@repo/features/task-wire";
+import {
+  COMMENT_SUBJECT,
+  type HeldDescriptionDocument,
+  type TasksView,
+} from "@repo/features/tasks-view";
 import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
@@ -677,7 +681,7 @@ export type AppInstalledSkills = AppHeldById<readonly InstalledSkillSummary[]>;
  * tasks a window opened, and the few it opened lately, by the task's id,
  * each as its read and the writes since stand.
  */
-export type AppPlanDocuments = AppHeldById<HeldPlanDocument>;
+export type AppDescriptionDocuments = AppHeldById<HeldDescriptionDocument>;
 
 /**
  * Each task's plan history the host holds for the windows
@@ -685,7 +689,7 @@ export type AppPlanDocuments = AppHeldById<HeldPlanDocument>;
  * the few it showed lately, by the task's id, each its newest page as its
  * read stands and the older pages read past it laid after it.
  */
-export type AppHistories = AppHeldById<PlanRevisionsAnswer>;
+export type AppHistories = AppHeldById<DescriptionRevisionsAnswer>;
 
 /** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
 export type AppAutomationReads = Pick<
@@ -705,22 +709,22 @@ export type AppPullRequestParts = Pick<
 type CommentSubjectKind = (typeof COMMENT_SUBJECT)[keyof typeof COMMENT_SUBJECT];
 
 /** One subject's comment threads, as the host's read of them stands: every thread, the oldest started first, resolved ones among them, once it answered, with the windows' writes laid over them until the read holds them. */
-type AppSubjectComments = AppHostRead<readonly PlanCommentThread[]>;
+type AppSubjectComments = AppHostRead<readonly DescriptionCommentThread[]>;
 
 /**
  * Each task's comments the host holds for the windows
- * (`plan-comment-reads.ts`): a plan's own threads by its task's id, and a
+ * (`description-comment-reads.ts`): a plan's own threads by its task's id, and a
  * page's by the page's id, never its version, those a window chose and the
  * few let go lately, each as its own read stands. One absent is held by
  * nobody.
  */
-export type AppPlanComments = {
+export type AppDescriptionComments = {
   readonly [Kind in CommentSubjectKind]: Readonly<Record<string, AppSubjectComments>>;
 };
 
 /** No comments held, as the host stands before any window shows a plan or a page and after the session ends. */
-export const NO_PLAN_COMMENTS: AppPlanComments = {
-  [COMMENT_SUBJECT.PLAN]: {},
+export const NO_DESCRIPTION_COMMENTS: AppDescriptionComments = {
+  [COMMENT_SUBJECT.DESCRIPTION]: {},
   [COMMENT_SUBJECT.PAGE]: {},
 };
 
@@ -763,9 +767,9 @@ export interface AppHostReads {
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
-  [LIVE_READ.PLAN_COMMENTS]: readonly PlanCommentThread[];
-  [LIVE_READ.HISTORY]: PlanRevisionsAnswer;
-  [LIVE_READ.PLAN_DOCUMENT]: HeldPlanDocument;
+  [LIVE_READ.DESCRIPTION_COMMENTS]: readonly DescriptionCommentThread[];
+  [LIVE_READ.HISTORY]: DescriptionRevisionsAnswer;
+  [LIVE_READ.DESCRIPTION_DOCUMENT]: HeldDescriptionDocument;
 }
 
 /**
@@ -863,7 +867,7 @@ export interface AppState {
   /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list and the one active task, whose plan is held apart
-   * (`LIVE_READ.PLAN_DOCUMENT`). Only the panel's Tasks tab draws it.
+   * (`LIVE_READ.DESCRIPTION_DOCUMENT`). Only the panel's Tasks tab draws it.
    */
   tasks: TasksView;
   agents: AppAgentsSlice;
@@ -943,11 +947,11 @@ export interface AppState {
   /** Each automation's runs the windows chose, by the automation, newest fired first, held as the automations are: what its editor and an agent its run started read. */
   [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
   /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
-  [LIVE_READ.PLAN_COMMENTS]: AppPlanComments;
+  [LIVE_READ.DESCRIPTION_COMMENTS]: AppDescriptionComments;
   /** Each task's plan history the windows showed, held while a version history shows it and a while after: what the version history lists. */
   [LIVE_READ.HISTORY]: AppHistories;
   /** Each task's plan the windows opened, held while a window has it open and a while after: what the task's page, a section's chip, and a mention's saved text draw. */
-  [LIVE_READ.PLAN_DOCUMENT]: AppPlanDocuments;
+  [LIVE_READ.DESCRIPTION_DOCUMENT]: AppDescriptionDocuments;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -1101,10 +1105,10 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.PULL_REQUEST_PUBLISHED]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_VIEWED]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.REVIEW_OPTIONS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
-  [LIVE_READ.PLAN_COMMENTS]: {
+  [LIVE_READ.DESCRIPTION_COMMENTS]: {
     keys: READ_KEYS.TWO,
     on: KEYS_ON.SLICE,
-    rowId: "id" satisfies keyof PlanCommentThread,
+    rowId: "id" satisfies keyof DescriptionCommentThread,
   },
   // Note that a history crosses whole, since each save lands a newest page that replaces its head.
   [LIVE_READ.HISTORY]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
@@ -1159,7 +1163,7 @@ export const HOST_READ_SLICE = {
     rowId: "id" satisfies keyof AutomationRunSummary,
   },
   // Note that a plan crosses whole, since each save replaces it.
-  [LIVE_READ.PLAN_DOCUMENT]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.DESCRIPTION_DOCUMENT]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 
 /** A slice `HOST_READ_SLICE` declares. */

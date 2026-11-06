@@ -1,19 +1,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanCommentActionRequest } from "@repo/features/plan-comment-wire";
+import type { DescriptionCommentActionRequest } from "@repo/features/description-comment-wire";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_BOUNDS,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentThread,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_BOUNDS,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import type { Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
+import {
+  type DescriptionCommentsControl,
+  DescriptionCommentsProvider,
+} from "@repo/ui/description-comments";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,8 +27,8 @@ import { registryWith } from "../testing/app-state.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { PlanBody } from "./plan-body.js";
-import { CommentFocusScope } from "./plan-comments.js";
+import { DescriptionBody } from "./description-body.js";
+import { CommentFocusScope } from "./description-comments.js";
 
 /**
  * A plan comment the service refuses goes back to its box above whatever
@@ -37,19 +40,19 @@ import { CommentFocusScope } from "./plan-comments.js";
 
 const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
 
-const THREAD: PlanCommentThread = {
+const THREAD: DescriptionCommentThread = {
   id: THREAD_ID,
-  scope: PLAN_COMMENT_SCOPE.WORDS,
+  scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
   quote: "single-use link",
   anchor: { from: 0, to: 15 },
   section: "Goal",
-  status: PLAN_COMMENT_STATUS.OPEN,
+  status: DESCRIPTION_COMMENT_STATUS.OPEN,
   entries: [
     {
       id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0baaaa",
-      kind: PLAN_COMMENT_ENTRY.COMMENT,
+      kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
       writer: {
-        actor: PLAN_COMMENT_ACTOR.MEMBER,
+        actor: DESCRIPTION_COMMENT_ACTOR.MEMBER,
         by: { userId: "u-charles", name: "Charles Pan" },
       },
       words: "Should this be a setting?",
@@ -104,11 +107,11 @@ function SignedIn({ account }: { account: Identity }): null {
 /** The Comments tab over the one open thread, whose reply the service answers with `landing`, as `account` reads it. */
 function drawn(
   landing: () => Promise<boolean>,
-  asked: PlanCommentActionRequest[] = [],
+  asked: DescriptionCommentActionRequest[] = [],
   registry: AtomRegistry.AtomRegistry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   account: Identity = DEAN,
 ): HTMLElement {
-  const control: PlanCommentsControl = {
+  const control: DescriptionCommentsControl = {
     planId: "plan-1",
     threads: [THREAD],
     read: true,
@@ -127,7 +130,7 @@ function drawn(
   roots.push(root);
   const draw = (reader: Identity) => {
     // Note that the thread is drawn whole, its reply field open, in the plan's comments list.
-    const tab = createElement(PlanBody, {
+    const tab = createElement(DescriptionBody, {
       task: PLAN,
       reader: { readerId: reader.id },
       sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
@@ -137,7 +140,7 @@ function drawn(
       null,
       createElement(SignedIn, { account: reader }),
       createElement(
-        PlanCommentsProvider,
+        DescriptionCommentsProvider,
         { value: control },
         createElement(CommentFocusScope, { reveal: undefined, children: tab }),
       ),
@@ -222,7 +225,7 @@ test("a refused reply's files go back before the files pasted while it was out",
 /** Draws the thread, sends `refused`, types `newer` while it is out, and has the service refuse it; later sends land. */
 async function refusedBesideNewer(refused: string, newer: string, account: Identity = DEAN) {
   const answer = Promise.withResolvers<boolean>();
-  const asked: PlanCommentActionRequest[] = [];
+  const asked: DescriptionCommentActionRequest[] = [];
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
   const card = drawn(landing, asked, registry, account);
@@ -242,13 +245,13 @@ async function refusedBesideNewer(refused: string, newer: string, account: Ident
 }
 
 /** The key each comment was sent under, in order. */
-function keys(asked: readonly PlanCommentActionRequest[]): (string | undefined)[] {
+function keys(asked: readonly DescriptionCommentActionRequest[]): (string | undefined)[] {
   return asked.map((each) => ("clientKey" in each ? each.clientKey : undefined));
 }
 
 const TOO_LONG = {
   REFUSED: `Not for v1. ${"a".repeat(5_000)}`,
-  NEWER: "b".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS - 1_000),
+  NEWER: "b".repeat(DESCRIPTION_COMMENT_BOUNDS.MAX_WORDS_CHARS - 1_000),
 } as const;
 
 test("a refused reply too long to go back beside the newer words stands apart as not sent, outlasting its field, its Retry sending it under its key", async () => {
@@ -312,7 +315,7 @@ test("words written again after a not-sent reply is discarded go under a new key
 
 test("a reply refused while only the reader's address was known stands with its picture and its Retry once their identity learns its id", async () => {
   const answer = Promise.withResolvers<boolean>();
-  const asked: PlanCommentActionRequest[] = [];
+  const asked: DescriptionCommentActionRequest[] = [];
   const landing = () => (asked.length === 1 ? answer.promise : Promise.resolve(true));
   const card = drawn(landing, asked, registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), {
     email: DEAN.email,

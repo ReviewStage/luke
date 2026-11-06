@@ -23,10 +23,10 @@ import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import { pagePlaceId } from "@repo/features/page-wire";
 import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import {
-  PLAN_COMMENT_ACTION,
-  PLAN_COMMENT_REFUSAL,
-  PLAN_COMMENT_SCOPE,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTION,
+  DESCRIPTION_COMMENT_REFUSAL,
+  DESCRIPTION_COMMENT_SCOPE,
+} from "@repo/features/description-comment-wire";
 import { READ_MARK } from "@repo/features/read-mark";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@repo/features/task-wire";
@@ -126,7 +126,7 @@ const COMMENT_START = {
   ...PLAN,
   start: {
     clientKey: "comment-1",
-    scope: PLAN_COMMENT_SCOPE.WORDS,
+    scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
     quote: "Invites",
     anchor: { from: 0, to: 7 },
     text: "Invites expire.",
@@ -136,7 +136,7 @@ const COMMENT_START = {
 const COMMENT_ACT = {
   ...PLAN,
   threadId: THREAD_ID,
-  action: { action: PLAN_COMMENT_ACTION.RESOLVE },
+  action: { action: DESCRIPTION_COMMENT_ACTION.RESOLVE },
 };
 
 /** One Browser tab in a coding agent's browser on the task. */
@@ -379,7 +379,7 @@ function windowPort(
     tasksCommentsUnfollow: (scope) => ask(`comments-unfollow:${scope.taskId}`, () => undefined),
     tasksCommentsRetry: (scope) => ask(`comments-retry:${scope.taskId}`, () => undefined),
     tasksCommentStart: (params) =>
-      ask(`comment:${params.planId}`, () => ({ refused: PLAN_COMMENT_REFUSAL.TOO_MANY })),
+      ask(`comment:${params.planId}`, () => ({ refused: DESCRIPTION_COMMENT_REFUSAL.TOO_MANY })),
     tasksCommentAct: (params) =>
       ask(`act:${params.threadId}:${params.action.action}`, () => ({ deleted: params.threadId })),
     tasksPicture: (params) =>
@@ -754,7 +754,7 @@ it("what a task holds is read through the host from a panel, and answers what it
   });
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_RESTORE, { ...TASK, seq: 3 }), { answer: true });
   assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_COMMENT_START, COMMENT_START), {
-    answer: { refused: PLAN_COMMENT_REFUSAL.TOO_MANY },
+    answer: { refused: DESCRIPTION_COMMENT_REFUSAL.TOO_MANY },
   });
 
   assert.deepEqual(asked, [

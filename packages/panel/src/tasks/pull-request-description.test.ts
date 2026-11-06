@@ -114,7 +114,8 @@ let changeHeld: Promise<void> | undefined;
 beforeAll(async () => {
   bundles = await Effect.runPromise(
     landedBundles({
-      planEditor: () => import("../plan-editor/index.js").then((entry) => entry.planEditor),
+      descriptionEditor: () =>
+        import("../description-editor/index.js").then((entry) => entry.descriptionEditor),
     }),
   );
   await Effect.runPromise(markdownHtmlParserLanded);
@@ -363,7 +364,8 @@ test("a description changed on GitHub keeps the draft open and says so, and Relo
   const kept = editorIn(container) ?? assert.fail("the editor stays open");
   assert.match(kept.textContent ?? "", /seven days\. Mine\./u, "the draft stays");
   const alert =
-    description(container).querySelector(".plan-editor-note") ?? assert.fail("a refusal is said");
+    description(container).querySelector(".description-editor-note") ??
+    assert.fail("a refusal is said");
   assert.match(alert.textContent ?? "", /changed on GitHub/u);
   assert.match(announcedAsAlert(), /changed on GitHub/u, "and announced as an alert");
 

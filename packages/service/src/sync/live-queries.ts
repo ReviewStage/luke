@@ -61,10 +61,10 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
-  planCommentSync,
-  planCommentThreadSync,
-  planPageVersionSync,
-  planRevisionSync,
+  descriptionCommentSync,
+  descriptionCommentThreadSync,
+  taskPageVersionSync,
+  descriptionRevisionSync,
   pullRequestChaptersSync,
   repositoryPinSync,
   slackChannelRepositorySync,
@@ -101,7 +101,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
-import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
+import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -448,7 +448,7 @@ export const workspaceMembersLive = defineLiveQuery({
     taskSync,
     agentSync,
     automationSync,
-    planRevisionSync,
+    descriptionRevisionSync,
     inboxItemSync,
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
@@ -632,7 +632,7 @@ export const taskRecordLive = defineLiveQuery({
   params: ["userId", "taskId"],
   reads: [
     taskSync,
-    planPageVersionSync,
+    taskPageVersionSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -651,7 +651,7 @@ export const taskPagesLive = defineLiveQuery({
   params: ["userId", "taskId"],
   reads: [
     taskSync,
-    planPageVersionSync,
+    taskPageVersionSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -671,7 +671,7 @@ export const agentPagesLive = defineLiveQuery({
   reads: [
     agentSync,
     taskSync,
-    planPageVersionSync,
+    taskPageVersionSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -722,7 +722,7 @@ export const taskHistoryLive = defineLiveQuery({
   name: LIVE_READ.HISTORY,
   params: ["userId", "taskId"],
   reads: [
-    planRevisionSync,
+    descriptionRevisionSync,
     taskSync,
     agentSync,
     userSync,
@@ -739,22 +739,22 @@ export const taskHistoryLive = defineLiveQuery({
 });
 
 /** The page a comments read's param names where it names none: the plan's own threads (`taskCommentsLive`). */
-export const PLAN_THREADS = "";
+export const DESCRIPTION_THREADS = "";
 
 /**
  * One subject of a task's comments, its plan's own threads where it names
- * no page (`PLAN_THREADS`) or one page's on every version, woken by a
+ * no page (`DESCRIPTION_THREADS`) or one page's on every version, woken by a
  * thread or an entry written, a file kept on a comment, and the task
  * itself, all of which name the task. Note that a writer's own name, read
  * beside each entry, wakes no comments, as the history's editor's wakes no
  * history: one shows at the hold's end.
  */
 export const taskCommentsLive = defineLiveQuery({
-  name: LIVE_READ.PLAN_COMMENTS,
+  name: LIVE_READ.DESCRIPTION_COMMENTS,
   params: ["userId", "taskId", "pageId"],
   reads: [
-    planCommentThreadSync,
-    planCommentSync,
+    descriptionCommentThreadSync,
+    descriptionCommentSync,
     attachmentSync,
     userSync,
     taskSync,
@@ -767,7 +767,10 @@ export const taskCommentsLive = defineLiveQuery({
     [TOPIC.ACCOUNT, userId],
   ],
   statements: ({ userId, taskId, pageId }) =>
-    taskCommentsLiveStatements(userId, pageId === PLAN_THREADS ? { taskId } : { taskId, pageId }),
+    taskCommentsLiveStatements(
+      userId,
+      pageId === DESCRIPTION_THREADS ? { taskId } : { taskId, pageId },
+    ),
   mode: LIVE_MODE.SNAPSHOT,
 });
 

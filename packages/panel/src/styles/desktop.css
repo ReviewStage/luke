@@ -23,7 +23,7 @@
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;
   /* The margin a comment thread stands in beside the reading width, and the
-     gap between them (`tasks/plan-comments.tsx`, which mirrors both). */
+     gap between them (`tasks/description-comments.tsx`, which mirrors both). */
   --comment-card-width: 288px;
   --comment-margin-gap: var(--ui-space-48);
   --comment-margin-room: calc(var(--comment-margin-gap) + var(--comment-card-width));
@@ -695,7 +695,7 @@ body,
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
    card folded or open spans all of it, the frame around a card whose head
    holds a control beside it among them. */
-.agent-origin > :is([data-origin-plan], [data-replay-card], :has(> [data-replay-card])) {
+.agent-origin > :is([data-origin-description], [data-replay-card], :has(> [data-replay-card])) {
   width: 100%;
 }
 
@@ -733,12 +733,12 @@ body,
 
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
-.desktop-document .plan-unit.version-added {
+.desktop-document .description-unit.version-added {
   padding-left: var(--ui-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--ui-color-complete) 70%, transparent);
 }
 
-.desktop-document .plan-unit.version-removed {
+.desktop-document .description-unit.version-removed {
   padding-left: var(--ui-list-inset);
   border-left: 2px solid color-mix(in srgb, var(--ui-color-danger) 60%, transparent);
   color: var(--ui-color-text-muted);
@@ -751,7 +751,7 @@ body,
    their own), and a stable gutter, so where macOS draws a bar that takes
    room the column does not shift sideways on the line the app writes that
    first makes it scroll. This is the block inside it. */
-.desktop-document .plan-document-body {
+.desktop-document .description-document-body {
   padding: var(--ui-page-inset);
   /* Room for the last line to scroll clear of what floats over the column's foot. */
   padding-bottom: 140px; /* off-scale */
@@ -771,28 +771,28 @@ body,
   --comment-gutter: calc(var(--ui-touch-target) + 2 * var(--ui-space-2));
 }
 
-[data-ui-profile="web"] .desktop-document .plan-document-body {
+[data-ui-profile="web"] .desktop-document .description-document-body {
   padding-right: var(--comment-gutter);
 }
 
 /* Under 480px of room the document gives back half its inset at its start,
    as every page does (`CollectionPage`, `DetailPage`, `SettingsPage`), and
    keeps its end's, which holds the comment gutter, as the web's does. */
-@container plan-document (width < 480px) {
-  .desktop-document .plan-document-body {
+@container description-document (width < 480px) {
+  .desktop-document .description-document-body {
     padding-left: var(--ui-page-inset-narrow);
   }
 }
 
-.desktop-document .plan-body,
-.desktop-document .plan-changed-note,
+.desktop-document .description-body,
+.desktop-document .description-changed-note,
 .desktop-document .version-note {
   max-width: var(--ui-page-measure);
   margin-right: auto;
   margin-left: auto;
 }
 
-.desktop-document .plan-body {
+.desktop-document .description-body {
   color: var(--ui-color-text-body);
   font-size: var(--ui-type-reading-size);
   line-height: var(--ui-type-reading-leading);
@@ -802,19 +802,19 @@ body,
    blocks, and the sections of a text drawn inside one block, stand a
    section's gap apart, wherever it is drawn, the side panel's plan tab
    included. Note that the gap is the body's children's rather than
-   `.plan-unit`'s own, because a unit is drawn inside a wrapper where it
+   `.description-unit`'s own, because a unit is drawn inside a wrapper where it
    carries a byline. */
-.desktop-document .plan-body > * + * {
+.desktop-document .description-body > * + * {
   margin-top: 1.5em;
 }
 
 /* A task's key stands tight over its title, and its status and priority
    chips close under it, as one head rather than three blocks. */
-.desktop-document .plan-body > .plan-task-key + * {
+.desktop-document .description-body > .plan-task-key + * {
   margin-top: var(--ui-list-gap);
 }
 
-.desktop-document .plan-body > .plan-task-standing {
+.desktop-document .description-body > .plan-task-standing {
   margin-top: var(--ui-block-gap);
 }
 
@@ -1173,7 +1173,7 @@ body,
 }
 
 /* Nothing stands below a version, so it needs no room under its last line. */
-.version-page .desktop-document .plan-document-body {
+.version-page .desktop-document .description-document-body {
   padding-bottom: var(--ui-page-inset);
 }
 

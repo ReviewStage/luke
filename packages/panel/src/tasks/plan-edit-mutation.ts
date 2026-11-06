@@ -9,13 +9,13 @@
  * not; how it is sent is its family's (`useTasksTab`'s `planEdit`).
  */
 
-import type { PlanEditRequest } from "@repo/features/plan-edit";
+import type { DescriptionEditRequest } from "@repo/features/description-edit";
 import type { TasksEditAnswer } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import { mutationOptions } from "@tanstack/react-query";
 
 /** How a plan's write is sent: the request, answered as the service answers it. */
-export type PlanEditSend = (request: PlanEditRequest) => Promise<TasksEditAnswer>;
+export type PlanEditSend = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
 /** Every write to `taskId`'s words, sent through `send`, in the order asked. */
 export function planEditMutation(taskId: string, send: PlanEditSend) {

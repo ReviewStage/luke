@@ -5,7 +5,7 @@ import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import type { ComposerTrigger } from "../plan-editor/contract.js";
+import type { ComposerTrigger } from "../description-editor/contract.js";
 import {
   type SkillPicker,
   type SkillSource,

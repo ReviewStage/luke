@@ -18,13 +18,13 @@ import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import { pageFrameAnswerSchema } from "../page-frame.js";
-import { planPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
+import { taskPageVersionAnswerSchema, taskPagesAnswerSchema } from "../page-wire.js";
 import { PICTURE_BOUNDS } from "../picture-wire.js";
 import {
-  PLAN_ATTACHMENT_STATUS,
-  planAttachmentAnswerSchema,
-  planAttachmentRequestSchema,
-} from "../plan-attachment-wire.js";
+  DESCRIPTION_ATTACHMENT_STATUS,
+  descriptionAttachmentAnswerSchema,
+  descriptionAttachmentRequestSchema,
+} from "../description-attachment-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
   taskFileAnswerSchema,
@@ -78,8 +78,8 @@ const taskPageVersionSchema = EffectSchema.Struct({
 
 /** What keeping a picture answers: its status beside the wire's answer. */
 const pictureKeptSchema = EffectSchema.Struct({
-  status: EffectSchema.Literals(Object.values(PLAN_ATTACHMENT_STATUS)),
-  body: planAttachmentAnswerSchema,
+  status: EffectSchema.Literals(Object.values(DESCRIPTION_ATTACHMENT_STATUS)),
+  body: descriptionAttachmentAnswerSchema,
 });
 
 const TASK_PATH = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
@@ -107,7 +107,7 @@ export const taskFilesContract = {
         outputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(taskInputSchema, planAttachmentRequestSchema))
+    .input(exactBodyInput(taskInputSchema, descriptionAttachmentRequestSchema))
     .output(EffectSchema.flip(pictureKeptSchema)),
   pages: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${TASK_PATH}/pages` }))
@@ -121,7 +121,7 @@ export const taskFilesContract = {
       }),
     )
     .input(taskPageVersionSchema)
-    .output(EffectSchema.flip(planPageVersionAnswerSchema)),
+    .output(EffectSchema.flip(taskPageVersionAnswerSchema)),
   /** One version of one page as a browser's frame loads it: sent on to its short-lived link on the sandbox's own site, or to the page saying pages open in the Mac app where the deployment has no sandbox. */
   pageFrame: hostedProcedure
     .meta(

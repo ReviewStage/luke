@@ -195,7 +195,7 @@ export function tabLook(subject: TabSubject): KindLook {
   switch (subject.kind) {
     case TAB_KIND.PANEL: {
       const { tab, plan } = subject;
-      if (tab === SIDE_PANEL_TAB.PLAN && plan !== undefined) {
+      if (tab === SIDE_PANEL_TAB.DESCRIPTION && plan !== undefined) {
         return { icon: <PlanGlyph status={plan.status} />, label: plan.name };
       }
       if (tab === SIDE_PANEL_TAB.INBOX && subject.thread === true) {

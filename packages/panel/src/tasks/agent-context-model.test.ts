@@ -92,7 +92,7 @@ test("an agent handed a prompt names its brief so; once eve compacted, the brief
     compactedAt: NOW - 120_000,
   };
   assert.deepEqual(
-    contextRows(compacted, AGENT_BRIEF.PLAN).map((row) => [row.label, rowCount(row)]),
+    contextRows(compacted, AGENT_BRIEF.DESCRIPTION).map((row) => [row.label, rowCount(row)]),
     [
       ["System prompt", "~1.2K"],
       ["Tool definitions", "~2.8K"],

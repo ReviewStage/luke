@@ -19,7 +19,7 @@ import { readExperiments } from "../testing/app-state.js";
 import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
-import { PlanBody, type SectionLinks } from "./plan-body.js";
+import { DescriptionBody, type SectionLinks } from "./description-body.js";
 import { planEditMutation } from "./plan-edit-mutation.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -61,7 +61,7 @@ const TASK: Task = {
 };
 
 /** A Copy link button of a unit, a section's or the title's. */
-const UNIT_LINK = '.plan-unit-more button[aria-label^="Copy link"]';
+const UNIT_LINK = '.description-unit-more button[aria-label^="Copy link"]';
 
 /** The sections' Copy link buttons, the title's left out. */
 function sectionLinks(container: HTMLElement): HTMLButtonElement[] {
@@ -101,7 +101,9 @@ function drawn(links: Partial<SectionLinks> = {}) {
     reveal: undefined,
     ...links,
   };
-  act(() => root.render(withQueryClient(createElement(PlanBody, { task: TASK, sectionLinks }))));
+  act(() =>
+    root.render(withQueryClient(createElement(DescriptionBody, { task: TASK, sectionLinks }))),
+  );
   return { container, opened };
 }
 
@@ -136,11 +138,11 @@ test("a mention of a heading the plan no longer holds is struck through, and a p
 test("a section's Copy link button, named for its heading, copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
   const { container } = drawn();
 
-  const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
+  const rollout = [...container.querySelectorAll<HTMLElement>(".description-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
   const more = rollout?.querySelector<HTMLButtonElement>(
-    '.plan-unit-more button[aria-label="Copy link to Rollout"]',
+    '.description-unit-more button[aria-label="Copy link to Rollout"]',
   );
   assert.ok(more, "the Rollout section has a Copy link button named for it");
   await act(async () => more.click());
@@ -150,9 +152,11 @@ test("a section's Copy link button, named for its heading, copies the section's 
 
 test("an ask to show a section scrolls the document to it, and an ask for one it no longer holds to its top", () => {
   const { container } = drawn();
-  const scroller = container.querySelector<HTMLElement>(".plan-document-body")?.parentElement;
+  const scroller = container.querySelector<HTMLElement>(
+    ".description-document-body",
+  )?.parentElement;
   assert.ok(scroller);
-  const units = container.querySelectorAll<HTMLElement>(".plan-unit");
+  const units = container.querySelectorAll<HTMLElement>(".description-unit");
   // The layout jsdom has none of: the document's top at 100, the Rollout section's at 700.
   vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ y: 100 }));
   const rollout = units[1];
@@ -161,7 +165,9 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   const root = roots[0];
   assert.ok(root);
   const render = (sectionLinks: SectionLinks) =>
-    act(() => root.render(withQueryClient(createElement(PlanBody, { task: TASK, sectionLinks }))));
+    act(() =>
+      root.render(withQueryClient(createElement(DescriptionBody, { task: TASK, sectionLinks }))),
+    );
   const onOpen = () => undefined;
 
   const revealed: number[] = [];
@@ -196,10 +202,10 @@ test("off a plan's own page a mention stays its words", () => {
   const root = createRoot(container);
   roots.push(root);
 
-  act(() => root.render(withQueryClient(createElement(PlanBody, { task: TASK }))));
+  act(() => root.render(withQueryClient(createElement(DescriptionBody, { task: TASK }))));
 
   assert.equal(container.querySelector("[data-mention-ref]"), null);
-  assert.equal(container.querySelector(".plan-unit-more"), null);
+  assert.equal(container.querySelector(".description-unit-more"), null);
   assert.match(container.textContent ?? "", /Ship as @Rollout says/u);
 });
 
@@ -221,7 +227,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   act(() =>
     root.render(
       withQueryClient(
-        createElement(PlanBody, {
+        createElement(DescriptionBody, {
           task,
           sectionLinks: {
             workspace: WORKSPACE,
@@ -252,7 +258,7 @@ function drawnEditable(): HTMLElement {
       withQueryClient(
         onSideBundles(
           unlandedBundles(),
-          createElement(PlanBody, {
+          createElement(DescriptionBody, {
             task: TASK,
             edit: planEditMutation(TASK.id, () =>
               Promise.reject(new Error("Nothing is saved in this test.")),
@@ -268,14 +274,14 @@ function drawnEditable(): HTMLElement {
 
 test("copying a section's link from its button opens no editor, as a click into its words does", async () => {
   const container = drawnEditable();
-  const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
+  const rollout = [...container.querySelectorAll<HTMLElement>(".description-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
   const more = rollout?.querySelector<HTMLButtonElement>(UNIT_LINK);
   assert.ok(more);
 
   await act(async () => more.click());
-  const afterCopy = container.querySelector(".plan-document-editor");
+  const afterCopy = container.querySelector(".description-document-editor");
   act(() =>
     rollout
       ?.querySelector("p:not(.ui-markdown-heading)")
@@ -283,15 +289,15 @@ test("copying a section's link from its button opens no editor, as a click into 
   );
 
   assert.equal(afterCopy, null);
-  assert.notEqual(container.querySelector(".plan-document-editor"), null);
+  assert.notEqual(container.querySelector(".description-document-editor"), null);
 });
 
 test("only the Copy link button beside the document's one Tab stop is a Tab stop", () => {
   const container = drawnEditable();
 
-  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more button")].filter(
-    (more) => more.tabIndex === 0,
-  );
+  const stops = [
+    ...container.querySelectorAll<HTMLElement>(".description-unit-more button"),
+  ].filter((more) => more.tabIndex === 0);
 
   assert.ok(stops.length <= 1, `${stops.length} of the buttons are Tab stops`);
 });
@@ -325,7 +331,7 @@ function drawnFiles(
   act(() =>
     root.render(
       withQueryClient(
-        createElement(PlanBody, {
+        createElement(DescriptionBody, {
           task,
           sectionLinks: {
             workspace: WORKSPACE,
@@ -396,7 +402,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   act(() =>
     root.render(
       withQueryClient(
-        createElement(PlanBody, {
+        createElement(DescriptionBody, {
           task,
           sectionLinks: {
             workspace: WORKSPACE,
@@ -442,7 +448,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   act(() =>
     root.render(
       withQueryClient(
-        createElement(PlanBody, {
+        createElement(DescriptionBody, {
           task: FILES_TASK,
           edit: planEditMutation(FILES_TASK.id, () =>
             Promise.reject(new Error("Nothing is saved in this test.")),
@@ -464,7 +470,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
 
   act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
-  assert.equal(container.querySelector(".plan-document-editor"), null);
+  assert.equal(container.querySelector(".description-document-editor"), null);
 });
 
 /** The task's page drawn as a task's own page is, its title editable. */
@@ -475,7 +481,7 @@ function drawnTitled() {
   roots.push(root);
   function TitledPlan(): React.JSX.Element {
     const [asks, setAsks] = useState(0);
-    return createElement(PlanBody, {
+    return createElement(DescriptionBody, {
       task: TASK,
       edit: planEditMutation(TASK.id, () =>
         Promise.reject(new Error("Nothing is saved in this test.")),
@@ -496,7 +502,7 @@ function drawnTitled() {
 test("the title's Copy link button ends the title's line, shown while the keyboard is on the title, the Tab stop after it, and copies the plan's link", async () => {
   const { block, more } = drawnTitled();
   // The unit whose hover or focus shows the button, as a section's does.
-  const unit = more.closest(".plan-unit-attributed");
+  const unit = more.closest(".description-unit-attributed");
   assert.ok(unit, "the button stands in a unit");
   assert.ok(unit.contains(block), "the button stands in the title's unit");
   // Note that focus is read once, because jsdom's selector engine holds a `:focus-within` answer.

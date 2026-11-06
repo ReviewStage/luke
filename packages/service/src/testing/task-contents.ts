@@ -1,4 +1,4 @@
-import { NOTE_KIND, type PlanNote } from "@repo/features/plan-notes";
+import { NOTE_KIND, type DescriptionNote } from "@repo/features/description-notes";
 
 /**
  * task-contents.ts -- the notes a notetaker would take, as a test writes them.
@@ -9,6 +9,6 @@ import { NOTE_KIND, type PlanNote } from "@repo/features/plan-notes";
  */
 
 /** A note adding one point under a heading. */
-export function added(section: string, text: string): PlanNote {
+export function added(section: string, text: string): DescriptionNote {
   return { kind: NOTE_KIND.ADD, section, text };
 }

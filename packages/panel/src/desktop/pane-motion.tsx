@@ -44,7 +44,7 @@ import { Component, type RefObject, useLayoutEffect, useRef, useState } from "re
 const GLIDERS = [
   ".ui-toolbar-heading",
   ".ui-toolbar-actions",
-  ".desktop-document .plan-body",
+  ".desktop-document .description-body",
   ".desktop-agent > *",
   ".desktop-empty-region > *",
   ".automation-editor",

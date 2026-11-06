@@ -5,10 +5,10 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import {
-  keepPlanAttachment,
-  PLAN_ATTACHMENT_KEEP,
-  readPlanAttachment,
-} from "@repo/database/models/plan-attachments";
+  keepDescriptionAttachment,
+  DESCRIPTION_ATTACHMENT_KEEP,
+  readDescriptionAttachment,
+} from "@repo/database/models/description-attachments";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -19,9 +19,9 @@ import {
   PICTURE_TYPE,
   type Picture,
 } from "@repo/features/picture-wire";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
-import { PLAN_ATTACHMENT_BOUNDS } from "@repo/features/plan-attachment-wire";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
+import { DESCRIPTION_ATTACHMENT_BOUNDS } from "@repo/features/description-attachment-wire";
+import { descriptionSections } from "@repo/features/description-document";
 import { unparsedWire } from "@repo/wire";
 import { paddedTo, webmBytes } from "@repo/wire/testing";
 import { Effect, Option } from "effect";
@@ -30,14 +30,14 @@ import { ACTION_RESULT_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
-  PLAN_EDIT_REFUSAL,
-  planEditRejected,
-  recordPlanEdit,
+  DESCRIPTION_EDIT_REFUSAL,
+  descriptionEditRejected,
+  recordDescriptionEdit,
   TASK_PICTURE_FILE_REFUSAL,
-} from "./plan-edit.js";
+} from "./description-edit.js";
 
 /**
- * A coding agent's `edit_plan` adding a screenshot from its sandbox to its
+ * A coding agent's `edit_description` adding a screenshot from its sandbox to its
  * plan, through the tool's public function against a real dialect: the
  * picture is kept as one of the plan's pictures, which every member of the
  * plan's workspace reads and nobody else does, and its line lands under its
@@ -99,7 +99,7 @@ const openAgentTask = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/relay",
-    planSnapshot: "# Invites\n",
+    descriptionSnapshot: "# Invites\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   });
@@ -122,7 +122,7 @@ function pictureCall(path: string) {
   };
 }
 
-it.layer(getTestDB())("edit_plan's pictures", (it) => {
+it.layer(getTestDB())("edit_description's pictures", (it) => {
   it.effect(
     "a screenshot lands as its line under its section, kept as a picture every member reads and nobody else does, in a save that is the agent's, and the answer carries none of its bytes",
     () =>
@@ -134,7 +134,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           notes: [{ kind: "add", section: "Approach", text: "- The members page lists invites." }],
         };
 
-        const answer = yield* recordPlanEdit(
+        const answer = yield* recordDescriptionEdit(
           { userId: owner, taskId },
           { agentId },
           unparsedWire(input),
@@ -145,7 +145,9 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
         assert.equal(JSON.stringify(answer).includes(Base64.encode(SCREENSHOT)), false);
         const stored = Option.getOrThrow(yield* readTask(owner, taskId));
-        const approach = planSections(stored.text).find(({ heading }) => heading === "Approach");
+        const approach = descriptionSections(stored.text).find(
+          ({ heading }) => heading === "Approach",
+        );
         const line = approach?.text.split("\n").at(-1) ?? "";
         const [, address] =
           /^!\[Members page with two pending invites\]\((\S+) "Pending invites sit in the list"\)$/u.exec(
@@ -153,11 +155,11 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           ) ?? [];
         assert.ok(address, line);
         assert.ok(approach?.text.includes("- The members page lists invites.\n\n![Members page"));
-        const named = planAttachmentOf(address);
+        const named = descriptionAttachmentOf(address);
         assert.equal(named?.taskId, taskId);
         if (named === undefined) return;
         for (const member of [owner, teammate]) {
-          const read: Option.Option<Picture> = yield* readPlanAttachment(
+          const read: Option.Option<Picture> = yield* readDescriptionAttachment(
             member,
             taskId,
             named.attachmentId,
@@ -171,7 +173,9 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
             Option.some([...SCREENSHOT]),
           );
         }
-        assert.ok(Option.isNone(yield* readPlanAttachment(outsider, taskId, named.attachmentId)));
+        assert.ok(
+          Option.isNone(yield* readDescriptionAttachment(outsider, taskId, named.attachmentId)),
+        );
         // The save is journaled as the agent's, the picture among the notes it took.
         assert.deepEqual(
           stored.agentEdits.map((edit) => [edit.agentId, edit.notes.length]),
@@ -194,14 +198,14 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           "shots/members.png": SCREENSHOT,
         });
         // One place left, which a call adding two takes with its first before its second is refused.
-        for (let kept = 1; kept < PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN; kept += 1) {
+        for (let kept = 1; kept < DESCRIPTION_ATTACHMENT_BOUNDS.MAX_PER_DESCRIPTION; kept += 1) {
           const picture = { contentType: PICTURE_TYPE.PNG, bytes: SCREENSHOT };
-          const answer = yield* keepPlanAttachment(full.owner, full.taskId, picture);
-          assert.equal(answer.status, PLAN_ATTACHMENT_KEEP.KEPT);
+          const answer = yield* keepDescriptionAttachment(full.owner, full.taskId, picture);
+          assert.equal(answer.status, DESCRIPTION_ATTACHMENT_KEEP.KEPT);
         }
         const before = Option.getOrThrow(yield* readTask(owner, taskId)).text;
         const edit = (at: { owner: string; taskId: string; agentId: string }, ...paths: string[]) =>
-          recordPlanEdit(
+          recordDescriptionEdit(
             { userId: at.owner, taskId: at.taskId },
             { agentId: at.agentId },
             unparsedWire({
@@ -222,10 +226,10 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         const lastPlace = yield* edit(full, "shots/members.png");
 
         assert.deepEqual(answers, [
-          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NO_FILE} shots/missing.png`),
-          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} notes.txt`),
-          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} huge.png`),
-          planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES),
+          descriptionEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NO_FILE} shots/missing.png`),
+          descriptionEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} notes.txt`),
+          descriptionEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} huge.png`),
+          descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.TOO_MANY_PICTURES),
         ]);
         assert.equal(Option.getOrThrow(yield* readTask(owner, taskId)).text, before);
         assert.deepEqual(lastPlace, {
@@ -247,13 +251,17 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           "videos/long.webm": paddedTo(recording, PICTURE_BOUNDS.MAX_VIDEO_BYTES + 1),
           "videos/sizeless.webm": paddedTo(webmBytes(1280, 800).subarray(0, 24), 64),
         });
-        for (let kept = 0; kept < PLAN_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_PLAN; kept += 1) {
+        for (
+          let kept = 0;
+          kept < DESCRIPTION_ATTACHMENT_BOUNDS.MAX_VIDEOS_PER_DESCRIPTION;
+          kept += 1
+        ) {
           const video = { contentType: PICTURE_MEDIA_TYPE.WEBM, bytes: webmBytes(640, 400) };
-          const answer = yield* keepPlanAttachment(full.owner, full.taskId, video);
-          assert.equal(answer.status, PLAN_ATTACHMENT_KEEP.KEPT);
+          const answer = yield* keepDescriptionAttachment(full.owner, full.taskId, video);
+          assert.equal(answer.status, DESCRIPTION_ATTACHMENT_KEEP.KEPT);
         }
         const edit = (at: { owner: string; taskId: string; agentId: string }, path: string) =>
-          recordPlanEdit(
+          recordDescriptionEdit(
             { userId: at.owner, taskId: at.taskId },
             { agentId: at.agentId },
             unparsedWire(pictureCall(path)),
@@ -270,16 +278,16 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         ];
 
         assert.deepEqual(answers, [
-          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} videos/long.webm`),
-          planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} videos/sizeless.webm`),
-          planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY_VIDEOS),
+          descriptionEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} videos/long.webm`),
+          descriptionEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} videos/sizeless.webm`),
+          descriptionEditRejected(DESCRIPTION_EDIT_REFUSAL.TOO_MANY_VIDEOS),
           { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 },
         ]);
         const stored = Option.getOrThrow(yield* readTask(owner, taskId));
         const [, address] = /\]\((\S+) "/u.exec(stored.text) ?? [];
-        const named = address === undefined ? undefined : planAttachmentOf(address);
+        const named = address === undefined ? undefined : descriptionAttachmentOf(address);
         assert.ok(named, stored.text);
-        const read = yield* readPlanAttachment(teammate, taskId, named.attachmentId);
+        const read = yield* readDescriptionAttachment(teammate, taskId, named.attachmentId);
         assert.deepEqual(
           Option.map(read, ({ contentType }) => contentType),
           Option.some(PICTURE_MEDIA_TYPE.WEBM),

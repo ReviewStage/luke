@@ -39,7 +39,7 @@ const openStarted = () =>
     yield* db.insert(user).values({ id: member, name: "Test User", email: `${member}@app.test` });
     yield* connectAgentApiKeys(member);
     const organizationId = yield* openWorkspace(member);
-    const start = { taskId: null, organizationId, planSnapshot: null, repository: null };
+    const start = { taskId: null, organizationId, descriptionSnapshot: null, repository: null };
     const choice = {
       model: "anthropic/claude-opus-5.5",
       effort: "high",

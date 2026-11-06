@@ -5,7 +5,7 @@
  * drop, duplicate, or leave behind an element that should be gone, as the
  * plan's head once kept every earlier task's title. React says so only
  * through `console.error`, which fails nothing, and a key may cross a
- * component's edge (a slot such as `PlanBody`'s `head`) where no lint can
+ * component's edge (a slot such as `DescriptionBody`'s `head`) where no lint can
  * follow it. The `vitest.config.ts` of every React suite (the panel, `@repo/ui`,
  * and the web, catalog, and desktop apps) runs this before each of its files,
  * by a relative path since vitest resolves a setup file by path: it records React's message as it is printed and fails

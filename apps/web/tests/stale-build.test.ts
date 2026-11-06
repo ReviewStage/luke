@@ -73,7 +73,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = tabWith();
-      tab.leave.unsavedPlanWords(true);
+      tab.leave.unsavedDescriptionWords(true);
 
       yield* tab.answer();
       tab.seen.asks[0]?.();

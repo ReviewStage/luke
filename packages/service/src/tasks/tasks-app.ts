@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readPlanAttachment } from "@repo/database/models/plan-attachments";
-import { readPlanCommentFile } from "@repo/database/models/plan-comments";
+import { readDescriptionAttachment } from "@repo/database/models/description-attachments";
+import { readDescriptionCommentFile } from "@repo/database/models/description-comments";
 import { HTTP_METHOD } from "@repo/wire";
 import { Effect, Layer, Option, type Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -56,29 +56,33 @@ type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest | Sc
  * of its comments carries, under the type it traveled as. An attachment of a plan the
  * account does not reach, or of another plan, is not found, as a plan is.
  */
-const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint")(function* (
-  seams: TasksAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const taskId = yield* uuidOf(request, TASK_ID_QUERY);
-  const attachmentId = yield* uuidOf(request, ATTACHMENT_QUERY);
-  const userId = yield* resolvedUserId(seams, request);
-  const picture = yield* hostedStoreOrUnavailable(readPlanAttachment(userId, taskId, attachmentId));
-  const found: Option.Option<{ readonly contentType: string; readonly bytes: Uint8Array }> =
-    Option.isSome(picture)
-      ? picture
-      : yield* hostedStoreOrUnavailable(readPlanCommentFile(userId, taskId, attachmentId));
-  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return HttpServerResponse.uint8Array(found.value.bytes, {
-    status: HOSTED_HTTP_STATUS.OK,
-    contentType: found.value.contentType,
-    headers: HOSTED_BYTES_HEADERS,
-  });
-});
+const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/descriptionAttachmentEndpoint")(
+  function* (
+    seams: TasksAppSeams,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.GET) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const taskId = yield* uuidOf(request, TASK_ID_QUERY);
+    const attachmentId = yield* uuidOf(request, ATTACHMENT_QUERY);
+    const userId = yield* resolvedUserId(seams, request);
+    const picture = yield* hostedStoreOrUnavailable(
+      readDescriptionAttachment(userId, taskId, attachmentId),
+    );
+    const found: Option.Option<{ readonly contentType: string; readonly bytes: Uint8Array }> =
+      Option.isSome(picture)
+        ? picture
+        : yield* hostedStoreOrUnavailable(readDescriptionCommentFile(userId, taskId, attachmentId));
+    if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return HttpServerResponse.uint8Array(found.value.bytes, {
+      status: HOSTED_HTTP_STATUS.OK,
+      contentType: found.value.contentType,
+      headers: HOSTED_BYTES_HEADERS,
+    });
+  },
+);
 
 /** The group: the task paths, and the hosted vocabulary's own refusal for any other. */
 export function tasksApp(seams: TasksAppSeams): WebRoutes<TasksAppServices> {

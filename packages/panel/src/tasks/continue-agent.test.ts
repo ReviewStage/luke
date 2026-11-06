@@ -97,7 +97,7 @@ function agentOf(id: string, overrides: Partial<AgentSummary> = {}): AgentSummar
     createdAt: 1_000,
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
     ...overrides,
   };
 }

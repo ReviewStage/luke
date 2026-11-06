@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useRef } from "react";
-import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { freshAccount } from "../tasks/fresh-account.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 

@@ -67,7 +67,7 @@ const openTask = Effect.gen(function* () {
 
 /** What a Start hands the agent where the test names nothing: the plan's text. */
 const TASK_BRIEF: AgentBriefText = {
-  planSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
+  descriptionSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
   prompt: null,
 };
 
@@ -139,12 +139,12 @@ const LARGE_TEXT = "Any member may invite a teammate by email, and the invite ex
 );
 
 /** What a list reads of an agent: its row without the text it was handed, whether that was a prompt, and its automation's name. */
-function listedLine({ planSnapshot, prompt, automationOrigin, ...row }: Agent) {
+function listedLine({ descriptionSnapshot, prompt, automationOrigin, ...row }: Agent) {
   const brief =
     prompt !== null
       ? AGENT_BRIEF.PROMPT
-      : planSnapshot !== null
-        ? AGENT_BRIEF.PLAN
+      : descriptionSnapshot !== null
+        ? AGENT_BRIEF.DESCRIPTION
         : AGENT_BRIEF.BLANK;
   return { ...row, automationName: automationOrigin?.name ?? null, brief };
 }
@@ -202,7 +202,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
             createAgent(userId, {
               taskId: null,
               organizationId: workspaceId,
-              planSnapshot: null,
+              descriptionSnapshot: null,
               prompt: "Sweep the copy.",
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
@@ -354,7 +354,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.equal(agent.taskId, taskId);
       assert.equal(agent.model, asked.model);
       assert.equal(agent.effort, asked.effort);
-      assert.equal(agent.planSnapshot, asked.planSnapshot);
+      assert.equal(agent.descriptionSnapshot, asked.descriptionSnapshot);
       assert.equal(agent.prompt, null);
       assert.equal(agent.repository, asked.repository);
       assert.deepEqual(yield* conversationKind(agent.conversationId), {
@@ -446,7 +446,11 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
         const snapshotted = started(
           yield* createAgent(
             userId,
-            start(taskId, { title: "Invite emails" }, { planSnapshot: LARGE_TEXT, prompt: null }),
+            start(
+              taskId,
+              { title: "Invite emails" },
+              { descriptionSnapshot: LARGE_TEXT, prompt: null },
+            ),
           ),
         );
         yield* TestClock.adjust("1 minute");
@@ -454,7 +458,11 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
         const continued = started(
           yield* createAgent(
             userId,
-            start(taskId, { startedFrom: source }, { planSnapshot: null, prompt: LARGE_TEXT }),
+            start(
+              taskId,
+              { startedFrom: source },
+              { descriptionSnapshot: null, prompt: LARGE_TEXT },
+            ),
           ),
         );
         yield* TestClock.adjust("1 minute");
@@ -463,7 +471,7 @@ it.layer(getTestDB())("the plan list's agent lines", (it) => {
           yield* createAgent(userId, {
             taskId: null,
             organizationId: workspaceId,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: LARGE_TEXT,
             automationOrigin: {
               name: "Nightly triage",

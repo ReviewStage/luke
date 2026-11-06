@@ -1,21 +1,21 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { readPlanAttachment } from "@repo/database/models/plan-attachments";
+import { readDescriptionAttachment } from "@repo/database/models/description-attachments";
 import { LINK_ORIGIN } from "@repo/features/link-home";
 import { type Picture, type PictureType, pictureTypeSchema } from "@repo/features/picture-wire";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import { type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import type { PlanDocumentBinding } from "./plan-notes.js";
+import type { DescriptionDocumentBinding } from "./description-notes.js";
 
 /**
  * picture-look.ts -- `look_at_picture`, a model's eyes on one of the plan's pictures: the picture its text names, handed back as an image.
  *
  * A picture stands in a plan's text as `![alt](<address> "caption")`
- * (`@repo/features/plan-attachment-link`), so every model that reads the
+ * (`@repo/features/description-attachment-link`), so every model that reads the
  * plan, the planning model's turn and a coding agent's brief alike, already
  * reads what each picture shows in its alt text and caption. Most never need
  * more, and a picture is a large cost in a model's context, so the picture
@@ -23,7 +23,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * the words are not enough.
  *
  * The picture is read as the account the turn runs as, through the plan's
- * membership gate (`readPlanAttachment`), and only under the plan the call
+ * membership gate (`readDescriptionAttachment`), and only under the plan the call
  * is bound to: an address of another plan, or of a picture that plan does
  * not hold, is refused alike. A coding agent's door binds a call to the
  * plan its address names (`lookedTaskOf`), once that plan stands in the
@@ -96,7 +96,9 @@ export const LOOK_AT_PICTURE_TOOL = {
 /** The plan a call's address names, whose picture it looks at; nothing where the call names no picture's address. */
 export function lookedTaskOf(input: UnparsedWireValue): string | undefined {
   const read = readInput(input);
-  return Result.isSuccess(read) ? planAttachmentOf(read.success.address.trim())?.taskId : undefined;
+  return Result.isSuccess(read)
+    ? descriptionAttachmentOf(read.success.address.trim())?.taskId
+    : undefined;
 }
 
 /** A call that showed nothing, and why. */
@@ -124,17 +126,17 @@ function looked(picture: Picture): PictureLookResult {
  * `not-looked` and why otherwise, a video among them.
  */
 export function runLookAtPicture(
-  plan: PlanDocumentBinding,
+  plan: DescriptionDocumentBinding,
   input: UnparsedWireValue,
 ): Effect.Effect<PictureLookResult, never, DatabaseServices> {
   const read = readInput(input);
   if (Result.isFailure(read))
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE));
-  const named = planAttachmentOf(read.success.address.trim());
+  const named = descriptionAttachmentOf(read.success.address.trim());
   if (named === undefined || named.taskId !== plan.taskId) {
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
   }
-  return readPlanAttachment(plan.userId, plan.taskId, named.attachmentId).pipe(
+  return readDescriptionAttachment(plan.userId, plan.taskId, named.attachmentId).pipe(
     Effect.map((picture) =>
       Option.isNone(picture)
         ? pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE)

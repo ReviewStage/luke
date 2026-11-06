@@ -22,7 +22,7 @@ import { handState, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry, settledWrites } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 import { planEditMutation } from "./plan-edit-mutation.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
@@ -90,7 +90,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   roots.push(root);
   const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   registries.push(registry);
-  const body = createElement(PlanBody, {
+  const body = createElement(DescriptionBody, {
     task: task,
     edit: planEditMutation(task.id, () =>
       Promise.reject(new Error("Nothing is saved in this test.")),
@@ -115,7 +115,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   // Opened by Enter on its block, which places the caret by section rather than by a point jsdom cannot lay out.
   act(() => rollout.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
   await act(async () => undefined);
-  const element = container.querySelector<TiptapEditorHTMLElement>(".plan-document-text");
+  const element = container.querySelector<TiptapEditorHTMLElement>(".description-document-text");
   const editor = element?.editor;
   assert.ok(element && editor, "the plan's editor is open");
   /** The words typed at the end of the text, as the editor's own input inserts them. */
@@ -202,7 +202,9 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
   task.press("Enter");
   await act(async () => undefined);
 
-  const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
+  const chips = [
+    ...task.container.querySelectorAll(".description-document-text [data-mention-ref]"),
+  ];
   assert.deepEqual(
     chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Rollout"],
@@ -220,7 +222,9 @@ test("words after an @ that read as a time on a day, up to six of them, offer it
     task.press("Enter");
     await act(async () => undefined);
 
-    const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
+    const chips = [
+      ...task.container.querySelectorAll(".description-document-text [data-mention-ref]"),
+    ];
     assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
     assert.deepEqual(
       chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
@@ -238,7 +242,7 @@ test("Escape closes the list and leaves the editor open", async () => {
   task.press("Escape");
 
   assert.equal(task.container.querySelector(".mention-menu"), null);
-  assert.notEqual(task.container.querySelector(".plan-document-text"), null);
+  assert.notEqual(task.container.querySelector(".description-document-text"), null);
 });
 
 test("words typed past a space that match nothing close the list, and words that match keep it", async () => {
@@ -368,7 +372,9 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
   await plan.typeAtEnd(" See ");
   await plan.pasteAtEnd(goal);
 
-  const chips = [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
+  const chips = [
+    ...plan.container.querySelectorAll(".description-document-text [data-mention-ref]"),
+  ];
   assert.deepEqual(
     chips.map((chip) => chip.querySelector(".ui-inline-ref-label")?.textContent),
     ["Goal"],
@@ -397,7 +403,9 @@ test("a section's address naming its task by its number, pasted whole into the p
   await plan.pasteAtEnd("https://vespin.dev/acme/task/42#goal");
 
   const chips = [
-    ...plan.container.querySelectorAll<HTMLElement>(".plan-document-text [data-mention-ref]"),
+    ...plan.container.querySelectorAll<HTMLElement>(
+      ".description-document-text [data-mention-ref]",
+    ),
   ];
   assert.deepEqual(
     chips.map((chip) => [
@@ -449,7 +457,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   assert.deepEqual(inWeb, ["apps/web", [["apps/web", ["web/", "rollout-store.ts"]]]]);
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
+    [...plan.container.querySelectorAll(".description-document-text [data-mention-ref]")].map(
       (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
     ),
     ["web/"],
@@ -502,7 +510,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
 
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
+    [...plan.container.querySelectorAll(".description-document-text [data-mention-ref]")].map(
       (chip) => chip.querySelector(".ui-inline-ref-label")?.textContent,
     ),
     ["#3059"],

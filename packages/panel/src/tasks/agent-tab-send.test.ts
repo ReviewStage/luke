@@ -59,7 +59,7 @@ const AGENT_SUMMARY: AgentSummary = {
   createdAt: 1_000,
   status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.DESCRIPTION,
 };
 
 const MESSAGES: readonly AgentTranscriptMessage[] = [

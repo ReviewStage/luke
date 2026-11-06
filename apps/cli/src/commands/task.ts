@@ -30,7 +30,7 @@ import { askService, session } from "../session.js";
 import { resolveTaskId, signedInMemberId } from "../tasks.js";
 import { resolveWorkspace } from "../workspace.js";
 import { agentLines, startAgent, startedLines } from "./agent.js";
-import { writePlan } from "./plan.js";
+import { writeDescription } from "./plan.js";
 
 /** What `--assignee` takes to assign the task to nobody, and to the signed-in member. */
 const ASSIGNEE_WORD = { NONE: "none", ME: "me" } as const;
@@ -243,10 +243,10 @@ const createCommand = Command.make(
           message: "Only one of -F and --prompt may read stdin.",
         });
       }
-      const planText = fileSource === undefined ? undefined : yield* readInput(fileSource);
+      const descriptionText = fileSource === undefined ? undefined : yield* readInput(fileSource);
       const promptText = promptSource === undefined ? undefined : yield* readInput(promptSource);
       const starting = start || promptText !== undefined;
-      if (starting && planText === undefined && promptText === undefined) {
+      if (starting && descriptionText === undefined && promptText === undefined) {
         return yield* new CommandFailed({
           exit: CLI_EXIT.USAGE,
           message:
@@ -257,7 +257,7 @@ const createCommand = Command.make(
       const { workspace } = yield* resolveWorkspace;
       const { hosted } = yield* session;
       // Note that an agent goes in the create's own request only where no plan is written first, since it would read the plan empty.
-      const together = starting && planText === undefined;
+      const together = starting && descriptionText === undefined;
       const created = yield* askService(
         hosted.plans.create,
         {
@@ -276,8 +276,8 @@ const createCommand = Command.make(
         together ? HOSTED_DEADLINE.START : HOSTED_DEADLINE.USUAL,
       );
       const task = taskJson(created.body.plan, workspace.name);
-      if (planText !== undefined) {
-        yield* writePlan(task.id, created.body.plan.document.body, planText);
+      if (descriptionText !== undefined) {
+        yield* writeDescription(task.id, created.body.plan.document.body, descriptionText);
       }
       const agent =
         starting && !together

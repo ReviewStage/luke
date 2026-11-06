@@ -20,8 +20,8 @@
 
 import { createHash } from "node:crypto";
 import type { StoredTask } from "@repo/database/models/task-store";
-import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
-import type { PlanRevisionLine } from "@repo/features/task-wire";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import type { DescriptionRevisionLine } from "@repo/features/task-wire";
 import { Schema } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -70,13 +70,13 @@ function contentKey(text: string): string {
  */
 export function taskKey(
   stored: StoredTask,
-  comments: readonly PlanCommentThread[],
-  plansOn = true,
+  comments: readonly DescriptionCommentThread[],
+  descriptionsOn = true,
 ): string {
   const { name } = stored.task;
   const handed = [name, stored.brief ?? null, openThreadsText(comments)];
   // Note that a key with Plans on reads as it did before Plans was gated, so no session hands its task again for it.
-  return contentKey(JSON.stringify(plansOn ? handed : [...handed, { plansOn }]));
+  return contentKey(JSON.stringify(descriptionsOn ? handed : [...handed, { descriptionsOn }]));
 }
 
 /** The line a turn opens with after a spoken one, whose call's words still stand in the history. */
@@ -104,7 +104,7 @@ export function turnKindWords(handed: TurnHanded): string | undefined {
  * a page of them were saved during it.
  */
 export function savedByAnotherSince(
-  revisions: readonly PlanRevisionLine[],
+  revisions: readonly DescriptionRevisionLine[],
   since: number,
   agentId: string,
 ): boolean {

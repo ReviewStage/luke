@@ -2,9 +2,9 @@ import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { sectionAnchors } from "@repo/features/mention-link";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import type { PlanRevisionLine } from "@repo/features/task-wire";
+import type { DescriptionRevisionLine } from "@repo/features/task-wire";
 import { readFailedWords, readingWords } from "@repo/features/words";
 import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -80,15 +80,15 @@ import {
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
-} from "../tasks/plan-history-model.js";
+} from "../tasks/description-history-model.js";
 import type { MentionedTask } from "../tasks/task-mentions.js";
 import { useNumberedPlace } from "../tasks/use-link-standing.js";
 import {
   HISTORY_READ,
   type OpenedSections,
-  type PlanHistoryControl,
+  type DescriptionHistoryControl,
   type ViewedVersion,
-} from "../tasks/use-plan-history.js";
+} from "../tasks/use-description-history.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useVersionRestore,
@@ -163,12 +163,12 @@ const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-rea
  * to its versions.
  */
 export interface VersionSubject {
-  readonly versions: PlanHistoryControl;
+  readonly versions: DescriptionHistoryControl;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
   readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
-  readonly summary: (line: PlanRevisionLine) => string;
+  readonly summary: (line: DescriptionRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
   /** The workspace whose members wrote the revisions, whose pictures their rows wear; none where the task's is not listed. */
@@ -251,7 +251,7 @@ function RevisionRow({
   copyLink,
   summary,
 }: {
-  line: PlanRevisionLine;
+  line: DescriptionRevisionLine;
   author: Actor;
   selected: boolean;
   now: number;
@@ -489,7 +489,10 @@ function EarlierRow({
   return (
     <div className="version-earlier mx-0 mt-control-gap mb-0 px-row-inset py-row-inset text-caption text-muted-foreground">
       {failed ? (
-        <FailureNote failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_OLDER_READ)} onRetry={read}>
+        <FailureNote
+          failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_HISTORY_OLDER_READ)}
+          onRetry={read}
+        >
           Could not read older versions.
         </FailureNote>
       ) : (
@@ -679,7 +682,7 @@ function VersionPage({
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.PLAN_HISTORY_READ)}
+            failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_HISTORY_READ)}
             onRetry={versions.onRetry}
             placement={ERROR_STATE_PLACEMENT.CENTERED}
           >
@@ -714,7 +717,9 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
             taskId: task.id,
             place: { workspace: workspace?.slug ?? task.workspaceId, repository: task.repository },
             anchors: new Set(
-              sectionAnchors(planSections(task.document.body).map((section) => section.heading)),
+              sectionAnchors(
+                descriptionSections(task.document.body).map((section) => section.heading),
+              ),
             ),
           },
     versions: tasks.history,
@@ -818,7 +823,7 @@ export function DesktopVersionHistory({
   const restore = useVersionRestore(versions, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const failed = sectionsFailed(versions.viewing, opened);
-  const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
+  const sourceOf = (line: DescriptionRevisionLine, author: Actor): SourceDoor | undefined => {
     const source = revisionSource(line);
     const { onShowSource } = subject;
     if (source === undefined || onShowSource === undefined) return undefined;
@@ -835,7 +840,7 @@ export function DesktopVersionHistory({
       ? undefined
       : sourceOf(openedLine, openedAuthor);
   const openSections = versions.onOpenSections;
-  const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
+  const restoreOf = (line: DescriptionRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
     if (line.seq === newest) return undefined;
     return () => restore.onRestore(line.seq);
@@ -1017,7 +1022,7 @@ export function DesktopVersionHistory({
                     />
                     {failed ? (
                       <ErrorState
-                        failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)}
+                        failure={unreadShown(FAILURE_SURFACE.DESCRIPTION_VERSION_READ)}
                         onRetry={versions.onRetryVersion}
                         placement={ERROR_STATE_PLACEMENT.ROWS}
                       >
