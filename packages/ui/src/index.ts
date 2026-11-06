@@ -133,6 +133,7 @@ export * from "./components/retry-button/retry-button.js";
 export * from "./components/reveal/reveal.js";
 export * from "./components/rolling-number/rolling-number.js";
 export * from "./components/roving-keys/roving-keys.js";
+export * from "./components/row-count/row-count.js";
 export * from "./components/row-mark/row-mark.js";
 export * from "./components/row-menu/row-menu.js";
 export * from "./components/saved-tick/saved-tick.js";

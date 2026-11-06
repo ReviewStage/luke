@@ -968,18 +968,11 @@ export function heardOf(ids: string | null): string {
     .join(" ");
 }
 
-/**
- * What marks a row as needing the developer: `*` where it says "Needs you"
- * to a reader and draws no attention mark, which its card says instead,
- * nothing where it does neither, and `?` where it draws the mark, so a mark
- * drawn on every open row again fails every listing.
- */
+/** What marks a row as needing the developer: `*` where it says "Needs you" to a reader, nothing where it does not. */
 export function needsYouMark(row: HTMLElement): string {
-  const mark = row.querySelector(".ui-list-row-meta .attention-mark") !== null;
   const said = [...row.querySelectorAll(".ui-list-row-meta .ui-visually-hidden")].some(
     (each) => each.textContent === "Needs you",
   );
-  if (mark) return "?";
   return said ? "*" : "";
 }
 

@@ -3,8 +3,8 @@
  *
  * The Inbox's own list draws an item as a row of its agent's tile, its
  * title, the last word in its thread, and at its end the teammate's face
- * whose agent asks it, the Draft pencil, the attention mark, its task's
- * status and how long ago it changed (`InboxItemEnd`), with the item's card
+ * whose agent asks it, the Draft pencil, its task's status and how long ago
+ * it changed (`InboxItemEnd`), with the item's card
  * hung beside the row (`InboxItemCard`). ⌘K, the person page, the Next row,
  * and a chip of an item draw those same pieces, so an item reads alike
  * wherever it stands; the list itself composes them in `inbox-list.tsx`.
@@ -19,7 +19,6 @@ import {
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
 import {
-  AttentionMark,
   cn,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -75,14 +74,6 @@ import { PlanGlyph } from "./tab-look.js";
 import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 import { cardTitle } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
-
-/**
- * An item that needs the developer wears the attention mark before its time,
- * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge
- * reads at the time's height.
- */
-const INBOX_ROW_ATTENTION =
-  "inbox-row-attention inline-flex [&_.attention-mark]:size-ui-12 [&_.attention-mark_svg]:size-attention-glyph-small";
 
 /**
  * An item put away until a reminder says when it comes back in its age's
@@ -499,7 +490,7 @@ interface InboxItemEndProps {
   open?: boolean;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the end draws the attention mark and the task's status, which a row saying them elsewhere leaves to a reader's ears. */
+  /** Whether the end draws the task's status, which a row saying it elsewhere leaves to a reader's ears. */
   standing?: boolean;
   /** Whether a reader hears Needs you where the item needs them, which a row under a name already saying it leaves out. */
   needsYouSaid?: boolean;
@@ -512,11 +503,12 @@ interface InboxItemEndProps {
  * The marks at an item row's end, in the Inbox's own order: the face of the
  * teammate whose agent asks it, the Draft pencil where an answer or message
  * waits unsent in its box and that box is not the one open beside the list,
- * the attention mark where it needs the reader, its task's status, and how
- * long ago it changed. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
+ * its task's status, and how long ago it changed; where it needs the reader,
+ * a reader hears Needs you, the eye reading it from the list's Open scope
+ * and the counts that lead there rather than from a mark on every row. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
  * A row that says where its item stands on a line of its own (`standing`
- * off), the Inbox's own, draws neither the attention mark nor the status at
- * its end, a reader still hearing both there.
+ * off), the Inbox's own, draws no status at its end, a reader still hearing
+ * it there.
  */
 export function InboxItemEnd(props: InboxItemEndProps): React.JSX.Element {
   return <InboxItemMarks {...props} drafted={useInboxItemDrafted(props.listed.item)} />;
@@ -552,15 +544,7 @@ export function InboxItemMarks({
         <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
       )}
       {drafted && !open ? <DraftMark /> : null}
-      {needsYou && standing ? (
-        <span className={INBOX_ROW_ATTENTION}>
-          <AttentionMark />
-          {needsYouSaid ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
-        </span>
-      ) : null}
-      {needsYou && !standing && needsYouSaid ? (
-        <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
-      ) : null}
+      {needsYou && needsYouSaid ? <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden> : null}
       <TaskStatusChip holder={holder} drawn={standing} />
       {/* Note that an item put away until a reminder says when it comes back in its age's place, as Mail's Remind Me list does. */}
       {item.remindAt === undefined ? (

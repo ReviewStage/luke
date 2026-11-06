@@ -36,6 +36,7 @@ import {
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
+  RowCount,
   RowHint,
   RowHintOptions,
   SCROLL_SIZE,
@@ -186,7 +187,7 @@ import {
 import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { useFileTreeWidth } from "./folded-groups.js";
-import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
+import { AgentMenuTab } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming, pastRightEdge } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.js";
@@ -1573,9 +1574,7 @@ export function ActivityList({
                           {entry.look.detailTone === undefined ? (
                             entry.look.detail
                           ) : (
-                            <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
-                              {entry.look.detail}
-                            </span>
+                            <RowCount value={entry.look.detail} tone={entry.look.detailTone} />
                           )}
                         </ReplayWords>
                       )

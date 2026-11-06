@@ -127,7 +127,7 @@ function scopes(page: HTMLElement): string[] {
   return [headTitle(page) ?? "", ...words];
 }
 
-test("the list holds every task's items in one run, the latest changed first, each wearing the attention mark while it needs you, none chosen", async () => {
+test("the list holds every task's items in one run, the latest changed first, each saying while it needs you, none chosen", async () => {
   const { page } = mount();
   await settle();
   assert.deepEqual(listed(page), [
@@ -1043,7 +1043,7 @@ test("an item's row reads as its task line and time, then its title, over the la
   ]);
 });
 
-test("no row draws the attention mark, which an open item nearly always would: the reader's own open item says to a reader before its time that it needs them, its card showing it; a teammate's open item wears their face there with no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
+test("the reader's own open item says to a reader before its time that it needs them, its card showing it; a teammate's open item wears their face there with no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
@@ -1051,7 +1051,6 @@ test("no row draws the attention mark, which an open item nearly always would: t
     const row = rowNamed(page, title);
     const meta = row.querySelector(".ui-list-row-meta");
     return {
-      mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
       said: meta?.querySelector(".ui-visually-hidden")?.textContent,
       dot: row.querySelector(".ui-unread-dot") !== null,
@@ -1059,21 +1058,18 @@ test("no row draws the attention mark, which an open item nearly always would: t
     };
   };
   assert.deepEqual(ends("Expire after 7 days?"), {
-    mark: false,
     face: undefined,
     said: "Needs you",
     dot: false,
     unread: false,
   });
   assert.deepEqual(ends("Alert at 80%?"), {
-    mark: false,
     face: "person",
     said: "Waiting on Charles Pan",
     dot: false,
     unread: false,
   });
   assert.deepEqual(ends("How is a failed email retried?"), {
-    mark: false,
     face: undefined,
     said: undefined,
     dot: false,
@@ -1270,7 +1266,7 @@ test("a mark the service refuses is let go, and the dot stands as the reads hold
   assert.equal(unreadOf(page, "How is a failed email retried?"), false);
 });
 
-test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as read marks every unread item of the listed workspace read and clears the dots alone, the attention marks standing; with nothing unread ⌘K offers it no more", async () => {
+test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as read marks every unread item of the listed workspace read and clears the dots alone, what needs you still saying so; with nothing unread ⌘K offers it no more", async () => {
   world.listedWorkspace = ACME;
   // Note that the unread answered item is a teammate's, so the item standing chosen is the one that needs you, and nothing is read before the mark.
   world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);

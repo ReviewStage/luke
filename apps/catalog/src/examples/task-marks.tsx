@@ -100,7 +100,7 @@ function TaskMarks(): React.JSX.Element {
           ))}
         </Inline>
       </CatalogSection>
-      <CatalogSection id="status-marks" title="A question waiting on you, and a failure">
+      <CatalogSection id="status-marks" title="Something wanting your hand, and a failure">
         <Inline gap={GAP.SECTION}>
           <Inline gap={GAP.CONTROL}>
             <AttentionMark />
