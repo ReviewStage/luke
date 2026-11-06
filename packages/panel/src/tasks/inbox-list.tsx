@@ -1146,6 +1146,7 @@ function ListHead({
           lead={all ?? head.lead}
           title={barTitle}
           titleReplayUnmasked
+          quiet={head.lead !== undefined}
           actions={actions}
           end={TOOLBAR_INSET.COLUMN}
         />
@@ -1332,7 +1333,10 @@ export interface InboxListHead {
   readonly task?: InboxTaskHead | undefined;
   /**
    * What leads the head's title: an agent's card's way back to its
-   * transcript (`agent-threads.tsx`); none on the window's Inbox. Note that
+   * transcript (`agent-threads.tsx`), beside which the Inbox's name takes a
+   * bar title's type rather than a page's (`Toolbar`'s `quiet`), since the
+   * list stands inside the card, under the window's own bar; none on the
+   * window's Inbox. Note that
    * select-all stands in its place while rows are chosen, because a list as
    * narrow as the Inbox's has no room for both beside the selection's acts,
    * and choosing is a passing mode its × and Escape end.

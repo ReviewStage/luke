@@ -8,11 +8,7 @@ import type {
   AutomationRunsLiveRows,
   AutomationsLiveRows,
 } from "@repo/features/automation-live";
-import {
-  AUTOMATION_CALL_FAILURE,
-  AUTOMATION_FOLLOW,
-  automationViewSchema,
-} from "@repo/features/automation-view";
+import { AUTOMATION_CALL_FAILURE, AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -31,10 +27,9 @@ import {
   type GatewayMethod,
 } from "@repo/gateway";
 import { entityPool } from "@repo/sync";
-import { unparsedWire, type WireRecord, type WireValue } from "@repo/wire";
-import { readEither } from "@repo/wire/effect";
+import type { WireRecord, WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Deferred, Duration, Effect, Fiber, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import type { AppAutomationReads } from "./app-state.js";
@@ -304,6 +299,8 @@ function subject(
       });
     return {
       call,
+      /** The composer's declared acts, each handed its input as the port reads it. */
+      acts: composer.acts,
       asked: service.asked,
       live: service.live,
       replies: service.replies,
@@ -323,10 +320,10 @@ const RUNS = { kind: AUTOMATION_FOLLOW.RUNS, id: AUTOMATION_ID } as const;
 it.effect("behind a closed account gate, or on a run that sends nothing, nothing is asked", () =>
   Effect.gen(function* () {
     for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
-      const { call, asked, told } = yield* subject(options);
+      const { call, acts, asked, told } = yield* subject(options);
       assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE), {});
       yield* settled;
-      assert.deepEqual(yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE), {
+      assert.deepEqual(yield* acts.AUTOMATIONS_CREATE(CREATE), {
         failure: AUTOMATION_CALL_FAILURE.UNANSWERED,
       });
       assert.deepEqual(asked, []);
@@ -339,17 +336,17 @@ it.effect(
   "a write's params reach the service as the window named them, a new automation under the id the host minted, and the window hears the answer whole",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { acts, asked } = yield* subject();
       const named = { automationId: AUTOMATION_ID };
       const change = { ...named, change: { enabled: false } };
 
-      const made = yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE);
-      const changed = yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, change);
-      const ran = yield* call(GATEWAY_METHOD.AUTOMATIONS_RUN, {
+      const made = yield* acts.AUTOMATIONS_CREATE(CREATE);
+      const changed = yield* acts.AUTOMATIONS_CHANGE(change);
+      const ran = yield* acts.AUTOMATIONS_RUN({
         ...named,
         idempotencyKey: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
       });
-      const deleted = yield* call(GATEWAY_METHOD.AUTOMATIONS_DELETE, named);
+      const deleted = yield* acts.AUTOMATIONS_DELETE(named);
 
       assert.deepEqual(made, { automation: SUMMARY });
       assert.deepEqual(changed, { automation: SUMMARY });
@@ -362,24 +359,11 @@ it.effect(
     }),
 );
 
-it.effect("params of the wrong shape are refused before anything travels", () =>
-  Effect.gen(function* () {
-    const { call, asked } = yield* subject();
-
-    const refused = yield* Effect.flip(
-      call(GATEWAY_METHOD.AUTOMATIONS_RUN, { automationId: "not-an-id", idempotencyKey: "key" }),
-    );
-
-    assert.equal(refused._tag, "InvalidParamsRefusal");
-    assert.deepEqual(asked, []);
-  }),
-);
-
 it.effect(
   "a new webhook secret is minted here, only its hash is sent to the service, and the secret is answered to the window that asked, as a webhook's made or changed to is, never on app state; a refused replacement answers no secret",
   () =>
     Effect.gen(function* () {
-      const { call, asked, live, replies, told } = yield* subject();
+      const { call, acts, asked, live, replies, told } = yield* subject();
       const refusing = yield* subject({ replaceRefused: true });
       const closed = yield* subject({ signedIn: false });
       const named = { automationId: AUTOMATION_ID };
@@ -393,23 +377,19 @@ it.effect(
       };
       replies.change = { automation: webhook, webhookSecret: "secret-a-change-made" };
 
-      const created = yield* call(GATEWAY_METHOD.AUTOMATIONS_CREATE, {
+      const created = yield* acts.AUTOMATIONS_CREATE({
         ...CREATE,
         trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
       });
-      const changed = yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, {
+      const changed = yield* acts.AUTOMATIONS_CHANGE({
         ...named,
         change: { trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
       });
-      const made = yield* call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
-      const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
-      const unasked = yield* closed.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
+      const made = yield* acts.AUTOMATIONS_NEW_WEBHOOK_SECRET(named);
+      const refused = yield* refusing.acts.AUTOMATIONS_NEW_WEBHOOK_SECRET(named);
+      const unasked = yield* closed.acts.AUTOMATIONS_NEW_WEBHOOK_SECRET(named);
 
-      const read = readEither(automationViewSchema)(unparsedWire(made));
-      const secret =
-        Result.isSuccess(read) && "webhookSecret" in read.success
-          ? (read.success.webhookSecret ?? "")
-          : "";
+      const secret = "webhookSecret" in made ? (made.webhookSecret ?? "") : "";
       assert.match(
         secret,
         /^[A-Za-z0-9_-]{43}$/,
@@ -442,12 +422,12 @@ it.effect(
   "a webhook secret Web Crypto cannot hash is never sent, and the window hears the call unanswered",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { acts, asked } = yield* subject();
       vi.spyOn(crypto.subtle, "digest").mockRejectedValue(
         new DOMException("The operation is insecure.", "SecurityError"),
       );
 
-      const answered = yield* call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, {
+      const answered = yield* acts.AUTOMATIONS_NEW_WEBHOOK_SECRET({
         automationId: AUTOMATION_ID,
       });
 
@@ -545,7 +525,7 @@ it.effect(
   "a switch turned stands from the press until the held list carries its transaction, through an answer from before it, and a refused one is put back",
   () =>
     Effect.gen(function* () {
-      const { call, live, replies, listed } = yield* subject();
+      const { call, acts, live, replies, listed } = yield* subject();
       live.list.set({ automations: [ROW] });
       yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
@@ -556,7 +536,7 @@ it.effect(
       replies.change = { automation: { ...SUMMARY, enabled: false }, txid: "2" };
       const from = listed().length;
       const off = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, {
+        acts.AUTOMATIONS_CHANGE({
           automationId: AUTOMATION_ID,
           change: { enabled: false },
         }),
@@ -580,7 +560,7 @@ it.effect(
 
       replies.change = { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED };
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, {
+        yield* acts.AUTOMATIONS_CHANGE({
           automationId: AUTOMATION_ID,
           change: { enabled: true },
         }),
@@ -594,14 +574,14 @@ it.effect(
   "a new automation stands on its held list from the press, before the service answers, and one the service refused is taken back",
   () =>
     Effect.gen(function* () {
-      const { call, listed, replies } = yield* subject();
+      const { call, acts, listed, replies } = yield* subject();
       yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
       yield* settled;
       const answered = yield* Deferred.make<void>();
       replies.createAnswered = Deferred.await(answered);
       replies.create = { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND };
 
-      const create = yield* Effect.forkChild(call(GATEWAY_METHOD.AUTOMATIONS_CREATE, CREATE));
+      const create = yield* Effect.forkChild(acts.AUTOMATIONS_CREATE(CREATE));
       yield* settled;
       const drawn = listed().at(-1);
       yield* Deferred.succeed(answered, undefined);
@@ -615,7 +595,7 @@ it.effect(
 
 it.effect("a Run now answers once its workspace's held runs carry it, as its list does", () =>
   Effect.gen(function* () {
-    const { call, live, replies } = yield* subject();
+    const { call, acts, live, replies } = yield* subject();
     live.list.set({ automations: [ROW] });
     yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, WORKSPACE);
     yield* call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, {
@@ -631,16 +611,18 @@ it.effect("a Run now answers once its workspace's held runs carry it, as its lis
     replies.run = { run: RUN, txid: "2" };
     let answered = false;
     const run = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.AUTOMATIONS_RUN, {
-        automationId: AUTOMATION_ID,
-        idempotencyKey: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
-      }).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            answered = true;
-          }),
+      acts
+        .AUTOMATIONS_RUN({
+          automationId: AUTOMATION_ID,
+          idempotencyKey: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
+        })
+        .pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              answered = true;
+            }),
+          ),
         ),
-      ),
     );
     yield* settled;
     live.list.set({ automations: [{ ...ROW, runId: RUN.id }] }, ["2"]);

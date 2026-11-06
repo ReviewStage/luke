@@ -794,6 +794,26 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* Where a bar of theirs starts on the card's edge, the list's and a
+   thread's standing alone in its place, its way back stands where the
+   task's details stand theirs (`.task-details-back`), rather than on the
+   edge the column's own bars start on. */
+.agent-threads {
+  --ui-toolbar-start-at: var(--ui-space-8);
+}
+
+.agent-threads > .inbox-view[data-columns="item"] > .inbox-view-items {
+  --ui-toolbar-start-at: var(--ui-space-8);
+}
+
+/* The list's name stands centered over the list, between its way back and
+   the list's far edge, each kept as far in as the other, as the window's
+   Inbox centers it over its list while the sidebar is folded. */
+.agent-threads .inbox-tasks {
+  --ui-toolbar-center: on;
+  --ui-toolbar-end-at: var(--ui-space-8);
+}
+
 /* A unit only one side holds is drawn whole: one written in on the green
    wash's edge, one struck out struck and dimmed, as its words would be. */
 .desktop-document .description-unit.version-added {

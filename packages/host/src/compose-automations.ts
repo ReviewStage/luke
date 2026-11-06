@@ -16,24 +16,18 @@ import {
   type AutomationDeletedView,
   type AutomationFollow,
   type AutomationIdParams,
-  type AutomationRunView,
   type AutomationView,
-  automationChangeParamsSchema,
-  automationCreateParamsSchema,
   automationFollowSchema,
-  automationIdParamsSchema,
-  automationRunParamsSchema,
 } from "@repo/features/automation-view";
 import { LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
-  declaredMethod,
+  declaredWrite,
   type EntityPool,
   type FieldChange,
   ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireRecord, WireValue } from "@repo/wire";
 import { Data, Effect, FiberMap, Result, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
@@ -51,8 +45,10 @@ import {
 import { followAutomationRead, historyAtEdges } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { AUTOMATION_ACTS } from "./contract/index.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import type { HostMethodTable } from "./gateway-door.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
@@ -109,6 +105,8 @@ export interface AutomationsDependencies {
 }
 
 export interface AutomationsComposer extends Composer {
+  /** The automations' plain asks, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof AUTOMATION_ACTS>;
   /** Every held read followed anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Every follow let go and no read laid, as a sign-out lets them go; the windows' holds stand. */
@@ -422,7 +420,7 @@ function composed(
       readonly request: AutomationCreateParams & { readonly id: string };
       readonly row: AutomationRow | undefined;
     },
-    WireValue
+    AutomationView
   > = {
     kind: AUTOMATION,
     keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
@@ -431,12 +429,8 @@ function composed(
     send: ({ request }) =>
       Effect.map(asked(client.create(request)), (answer) =>
         "automation" in answer
-          ? {
-              answer: carried<AutomationView>(answer),
-              txid: answer.txid,
-              taken: { made: answeredRow(answer.automation) },
-            }
-          : { refused: carried<AutomationView>(answer) },
+          ? { answer, txid: answer.txid, taken: { made: answeredRow(answer.automation) } }
+          : { refused: answer },
       ),
   };
 
@@ -449,7 +443,7 @@ function composed(
     AutomationRow,
     FieldChange<AutomationRow>,
     AutomationChangeParams,
-    WireValue
+    AutomationView
   > = {
     kind: AUTOMATION,
     keys: (change) => [change.automationId],
@@ -457,12 +451,8 @@ function composed(
     send: (change) =>
       Effect.map(asked(client.change(change)), (answer) =>
         "automation" in answer
-          ? {
-              answer: carried<AutomationView>(answer),
-              txid: answer.txid,
-              taken: () => writtenFields(answer.automation),
-            }
-          : { refused: carried<AutomationView>(answer) },
+          ? { answer, txid: answer.txid, taken: () => writtenFields(answer.automation) }
+          : { refused: answer },
       ),
   };
 
@@ -475,101 +465,71 @@ function composed(
     AutomationRow,
     FieldChange<AutomationRow>,
     AutomationIdParams,
-    WireValue
+    AutomationDeletedView
   > = {
     kind: AUTOMATION,
     keys: (named) => [named.automationId],
     change: () => () => ROW_GONE,
     send: (named) =>
       Effect.map(asked(client.remove(named)), (answer) =>
-        "deleted" in answer
-          ? { answer: carried<AutomationDeletedView>(answer), txid: answer.txid }
-          : { refused: carried<AutomationDeletedView>(answer) },
+        "deleted" in answer ? { answer, txid: answer.txid } : { refused: answer },
       ),
   };
 
-  const methods: HostMethodTable = {
-    [GATEWAY_METHOD.AUTOMATIONS_CREATE]: declaredMethod(
-      dependencies.pool,
-      made,
-      (params: WireRecord) =>
-        Effect.map(
-          readParams(
-            automationCreateParamsSchema,
-            params,
-            "an automation names where it stands, a name, a trigger, and an action",
-          ),
-          (asked) => {
-            const request = { ...asked, id: asked.id ?? kernel.createId() };
-            const userId = dependencies.accountId();
-            // Note that a create behind a closed gate, or for nobody, draws nothing, since it never reaches the service.
-            return {
-              request,
-              row:
-                gate() && userId !== undefined
-                  ? askedRow(request, { userId, at: kernel.now() })
-                  : undefined,
-            };
-          },
-        ),
-    ),
-    [GATEWAY_METHOD.AUTOMATIONS_CHANGE]: declaredMethod(
-      dependencies.pool,
-      changed,
-      (params: WireRecord) =>
-        readParams(
-          automationChangeParamsSchema,
-          params,
-          "a change names an automation and what changes",
-        ),
-    ),
-    [GATEWAY_METHOD.AUTOMATIONS_DELETE]: declaredMethod(
-      dependencies.pool,
-      deleted,
-      (params: WireRecord) =>
-        readParams(automationIdParamsSchema, params, "a delete names an automation"),
-    ),
-    [GATEWAY_METHOD.AUTOMATIONS_RUN]: (params) =>
+  /** The automations' plain asks, answered as the panel's port asks them (`AUTOMATION_ACTS`). */
+  const acts: HostActTable<typeof AUTOMATION_ACTS> = {
+    AUTOMATIONS_CREATE: declaredWrite(dependencies.pool, made, {
+      read: (asked: AutomationCreateParams) =>
+        Effect.sync(() => {
+          const request = { ...asked, id: asked.id ?? kernel.createId() };
+          const userId = dependencies.accountId();
+          // Note that a create behind a closed gate, or for nobody, draws nothing, since it never reaches the service.
+          return {
+            request,
+            row:
+              gate() && userId !== undefined
+                ? askedRow(request, { userId, at: kernel.now() })
+                : undefined,
+          };
+        }),
+    }),
+    AUTOMATIONS_CHANGE: declaredWrite(dependencies.pool, changed),
+    AUTOMATIONS_DELETE: declaredWrite(dependencies.pool, deleted),
+    AUTOMATIONS_RUN: (run) =>
       Effect.gen(function* () {
-        const run = yield* readParams(
-          automationRunParamsSchema,
-          params,
-          "a run names an automation and a key",
-        );
         const answer = yield* asked(client.runNow(run));
         // A run stands in its automation's held runs, in its workspace's held runs, and as the last run on a held list; with none of them held it answers at once.
         if ("run" in answer) {
           yield* confirmed(answer.txid, waitsShowing(run.automationId, undefined, true));
         }
-        return carried<AutomationRunView>(answer);
+        return answer;
       }),
-    [GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET]: (params) =>
+    // A webhook trigger's secret is minted again here, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out).
+    AUTOMATIONS_NEW_WEBHOOK_SECRET: (named) =>
       Effect.gen(function* () {
-        const named = yield* readParams(
-          automationIdParamsSchema,
-          params,
-          "a new secret names an automation",
-        );
-        if (!gate()) return carried<AutomationView>(UNANSWERED);
+        if (!gate()) return UNANSWERED;
         // Note that the secret is minted here and only its hash leaves for the service, so the
         // service never holds it, and the window that asked is the one place it is answered.
         const secret = mintedWebhookSecret();
         // A secret that cannot be hashed is never sent, and the call is answered as unanswered.
         const hashed = yield* Effect.result(webhookSecretHash(secret));
-        if (Result.isFailure(hashed)) return carried<AutomationView>(UNANSWERED);
+        if (Result.isFailure(hashed)) return UNANSWERED;
         const replaced = yield* asked(
           client.replaceWebhookSecret({
             automationId: named.automationId,
             webhookSecretHash: hashed.success,
           }),
         );
-        if ("failure" in replaced) return carried<AutomationView>(replaced);
+        if ("failure" in replaced) return replaced;
         yield* confirmed(
           replaced.txid,
           waitsShowing(replaced.automation.id, replaced.automation.workspaceId, false),
         );
-        return carried<AutomationView>({ automation: replaced.automation, webhookSecret: secret });
+        return { automation: replaced.automation, webhookSecret: secret };
       }),
+  };
+
+  const methods: HostMethodTable = {
     // Note that the windows' hold on a key is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AUTOMATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -613,5 +573,5 @@ function composed(
   const reset = Effect.forEach(kinds, (kind) => slices[kind].end, { discard: true });
   const open = Effect.forEach(kinds, (kind) => slices[kind].open, { discard: true });
 
-  return { methods, lifetime: Effect.void, open, reset };
+  return { methods, acts, lifetime: Effect.void, open, reset };
 }

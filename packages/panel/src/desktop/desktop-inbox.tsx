@@ -16,9 +16,8 @@ import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
 import {
   agentTab,
   changesTab,
-  isAgentTab,
-  isTranscriptTab,
   pageTab,
+  STRIP_TAB_KIND,
   type StripTab,
   sameTab,
   transcriptTab,
@@ -467,7 +466,10 @@ export const DesktopInbox = memo(function DesktopInbox({
   });
   // ⌘O opens what holds the keys in its full place: the agent the panel shows while it holds them, in its task; else the item shown, in its task, or on its agent's page where it has none.
   const panelAgent =
-    sideFocused && sidePanel.tab !== undefined && isTranscriptTab(sidePanel.tab)
+    sideFocused &&
+    sidePanel.tab !== undefined &&
+    typeof sidePanel.tab !== "string" &&
+    sidePanel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
       ? sidePanel.tab.transcript
       : undefined;
   const openInTask = (): (() => void) | undefined => {
@@ -895,7 +897,11 @@ function InboxSidePanel({
     agents,
     held: views.held,
     chosen: (opened) =>
-      isAgentTab(opened) && panel.tab !== undefined && isTranscriptTab(panel.tab)
+      typeof opened !== "string" &&
+      opened.kind === STRIP_TAB_KIND.AGENT &&
+      panel.tab !== undefined &&
+      typeof panel.tab !== "string" &&
+      panel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
         ? panel.tab.transcript === opened.agent
         : panel.tab !== undefined && sameTab(opened, panel.tab),
     pages: taskId === undefined ? undefined : { taskId },

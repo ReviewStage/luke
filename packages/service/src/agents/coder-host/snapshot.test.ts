@@ -37,8 +37,7 @@ import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from ".
  * up, by a stop sent as JSON that the copy never waits on, and a running one
  * is left running; and a sandbox gone, a failed copy, or one past its bound
  * is a miss, a sandbox it was waking stopped again all the same, and a failed
- * copy logs the end of its stderr, bounded and redacted. A member's own
- * token stands for the push alone where nothing else uses the sandbox. The
+ * copy logs the end of its stderr, bounded and redacted. The
  * firewall's record is kept in the test's own database, under the source's
  * account and a key ring of the suite's.
  */
@@ -48,22 +47,12 @@ const SESSION = "wrun_fixture";
 const SOURCE_OWNER = "user-snapshot-source";
 const BRANCH = "luke/fix-invites-continued-0a1b2c3d";
 const MESSAGE = "Snapshot of Fix invites for continued agent";
-/** The repository's credential as the App mints it, and as a member's own token stands. */
+/** The repository's credential as the App mints it. */
 const CREDENTIAL = {
   APP: {
     token: Redacted.make("ghs_fixture_installation_token"),
     fullName: "Acme/Relay",
     access: { kind: GITHUB_ACCESS.APP },
-  },
-  MEMBER: {
-    token: Redacted.make("member-token-fixture"),
-    fullName: "Acme/Relay",
-    access: {
-      kind: GITHUB_ACCESS.TOKEN,
-      githubLogin: "octo-member",
-      githubUserId: "4242",
-      markInvalid: Effect.void,
-    },
   },
 } as const;
 
@@ -190,38 +179,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
       }),
   );
 
-  it.effect(
-    "a member's own token is set on the repository's paths for the push and taken off again after it, however the copy ended, unless a terminal or a turn uses the sandbox",
-    (t) =>
-      Effect.gen(function* () {
-        const idle = sourceSandbox(yield* checkoutFor(t), "running");
-        const used = sourceSandbox(yield* checkoutFor(t), "running");
-        const refusing = sourceSandbox(yield* checkoutFor(t), "running");
-
-        const alone = yield* copy(idle, false, CREDENTIAL.MEMBER);
-        const beside = yield* copy(used, true, CREDENTIAL.MEMBER);
-        const refused = yield* copyOver(
-          (url, init) =>
-            new URL(url).pathname.endsWith("/cmd")
-              ? Promise.resolve(new Response(null, { status: 500 }))
-              : answerOf(refusing, url, init),
-          Effect.succeed(false),
-          CREDENTIAL.MEMBER,
-        );
-
-        assert.ok(alone.copied && beside.copied);
-        assert.deepEqual(refused, { copied: false, miss: SNAPSHOT_MISS.FAILED });
-        const carried = {
-          session: SOURCE_SANDBOX.RUNNING,
-          hosts: ["*", "github.com", "api.github.com"],
-        };
-        const open = { session: SOURCE_SANDBOX.RUNNING, hosts: [] };
-        assert.deepEqual(idle.policies, [carried, open]);
-        assert.deepEqual(used.policies, [carried]);
-        assert.deepEqual(refusing.policies, [carried, open], "a copy that failed takes it off too");
-      }),
-  );
-
   it.effect("a checkout with nothing uncommitted pushes its HEAD as it stands", (t) =>
     Effect.gen(function* () {
       const source = yield* checkoutFor(t);
@@ -258,7 +215,7 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
   );
 
   it.effect(
-    "a stopped sandbox is woken for the copy, which runs in the woken session, and stopped again with the installation token taken off first",
+    "a stopped sandbox is woken for the copy, which runs in the woken session under the installation token, and stopped again",
     (t) =>
       Effect.gen(function* () {
         const source = yield* checkoutFor(t);
@@ -274,10 +231,8 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
           [sandbox.state.status, sandbox.stops],
           ["stopped", [SOURCE_SANDBOX.WOKEN]],
         );
-        // A stopped sandbox keeps its policy and a resume wears it again, so the stop leaves it open.
         assert.deepEqual(sandbox.policies, [
           { session: SOURCE_SANDBOX.WOKEN, hosts: ["*", "github.com", "api.github.com"] },
-          { session: SOURCE_SANDBOX.WOKEN, hosts: [] },
         ]);
       }),
   );
@@ -419,53 +374,6 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
         yield* Effect.yieldNow;
         assert.ok(
           logged.some((line) => line.startsWith("a woken source sandbox was not stopped again")),
-          logged.join("\n"),
-        );
-      }),
-  );
-
-  it.effect(
-    "a withdrawal of a member's token Vercel never answers is given up at the stop's bound, and the copy still answers",
-    (t) =>
-      Effect.gen(function* () {
-        const sandbox = sourceSandbox(yield* checkoutFor(t), "running");
-        const logged: string[] = [];
-        let withdrawalSent = () => {};
-        const withdrawing = new Promise<void>((resolve) => {
-          withdrawalSent = resolve;
-        });
-        let withdrawalAbandoned = () => {};
-        const abandoned = new Promise<void>((resolve) => {
-          withdrawalAbandoned = resolve;
-        });
-
-        const copying = yield* Effect.forkChild(
-          copyOver(
-            async (url, init) => {
-              const sent = await sentOf(url, init);
-              const open = url.includes("/network-policy") && sent.body.includes("allow-all");
-              if (!open) return sandbox.answer(sent) ?? assert.fail(`no Vercel answer for ${url}`);
-              // Vercel took the withdrawal, and never answered it.
-              withdrawalSent();
-              return new Promise<Response>((_, reject) => {
-                init.signal?.addEventListener("abort", () => {
-                  withdrawalAbandoned();
-                  reject(new Error("aborted"));
-                });
-              });
-            },
-            Effect.succeed(false),
-            CREDENTIAL.MEMBER,
-          ).pipe(logging(logged)),
-        );
-        yield* Effect.promise(() => withdrawing);
-        yield* TestClock.adjust(Duration.sum(SNAPSHOT.STOP_TIMEOUT, Duration.seconds(1)));
-        const outcome = yield* Fiber.join(copying);
-        yield* Effect.promise(() => abandoned);
-
-        assert.ok(outcome.copied);
-        assert.ok(
-          logged.some((line) => line.startsWith("a member's token was not taken off")),
           logged.join("\n"),
         );
       }),

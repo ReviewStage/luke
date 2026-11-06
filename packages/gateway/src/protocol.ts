@@ -267,12 +267,6 @@ export const GATEWAY_METHOD = {
   AGENTS_ORIGIN_UNFOLLOW: "agents.originUnfollow",
   /** One agent's held origin read again at once, as Try again asks; never answered. */
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
-  AUTOMATIONS_CREATE: "automations.create",
-  AUTOMATIONS_CHANGE: "automations.change",
-  AUTOMATIONS_DELETE: "automations.delete",
-  AUTOMATIONS_RUN: "automations.run",
-  /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
-  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   /**
    * A workspace's automations, a workspace's runs, or an automation's runs
    * held followed for the windows from now until let go, and a while after
@@ -297,14 +291,6 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_UNFOLLOW: "installedSkills.unfollow",
   /** One workspace's held skills read again at once, as Try again asks; answered once the ask has landed. */
   INSTALLED_SKILLS_RETRY: "installedSkills.retry",
-  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
-  INSTALLED_SKILLS_READ: "installedSkills.read",
-  /** What a pasted GitHub source or skill text would install, read by the service; nothing is written. */
-  INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
-  /** The skills a paste makes, installed for the account or its workspace, all or none, drawn over every held read whose scope they are in once the service answers; or why none were. */
-  INSTALLED_SKILLS_INSTALL: "installedSkills.install",
-  /** One installed skill removed with its files, drawn gone at once over the held skills; or why it stands. */
-  INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   /**
    * One part of one agent's pull request as its Pull request tab draws it,
    * by the part, the agent, and the pull request's number, or no number for
@@ -333,8 +319,6 @@ export const GATEWAY_METHOD = {
   AGENTS_CHAPTERS_UNFOLLOW: "agents.chaptersUnfollow",
   /** One agent's pull request's held chapters read again at once, as Try again asks; never answered. */
   AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
-  /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
-  AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
@@ -409,8 +393,6 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_UNFOLLOW: "integrations.unfollow",
   /** The account's held integrations read again at once, as Try again asks. */
   INTEGRATIONS_RETRY: "integrations.retry",
-  /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
-  INTEGRATIONS_CONNECT: "integrations.connect",
   /**
    * The tools one account's server offers the account's agents, held for a
    * window from now until it is let go, asked of the service at once and
@@ -423,12 +405,6 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_TOOLS_UNFOLLOW: "integrations.toolsUnfollow",
   /** One server's held tools asked again at once, as Try again asks; answered once the ask has landed. */
   INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
-  /** The account's sign-in to one account at a provider under way ended on the service, revoking nothing; where it then stands. */
-  INTEGRATIONS_CANCEL: "integrations.cancel",
-  /** The account's connection to one account at a provider ended on the service; where it then stands. */
-  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
-  INTEGRATIONS_RENAME: "integrations.rename",
   /**
    * The outside MCP clients the account allowed, held for the windows from
    * now until let go, under the account signed in: read from the service as
@@ -440,8 +416,6 @@ export const GATEWAY_METHOD = {
   MCP_CLIENTS_UNFOLLOW: "mcpClients.unfollow",
   /** The outside MCP clients the windows hold read again now, as Try again asks; answered once the read has landed. */
   MCP_CLIENTS_RETRY: "mcpClients.retry",
-  /** One outside MCP client revoked on the service under the Mac's session; the clients as they then stand. */
-  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
   /**
    * What waits on the developer across the account, followed from now until
    * it is let go or the account signs out: every open inbox item, heard as

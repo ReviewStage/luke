@@ -840,7 +840,7 @@ function treeAt(path: string): readonly TaskTreeEntry[] {
 /** The file the File profile opens, read from the agent's branch. */
 const OPENED_FILE = "src/members/invite.ts";
 
-/** How a profile stages the agent's cloud terminal: its sandbox stopped or starting, a shell it refuses, an attach no port answers, or a port that says how the connection stands. */
+/** How a profile stages the agent's cloud terminal: its sandbox not yet open, a shell it refuses, an attach no port answers, or a port that says how the connection stands. */
 const TERMINAL_STAGE = {
   SANDBOX: "sandbox",
   REFUSED: "refused",
@@ -903,10 +903,6 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   [
     RUN_PROFILE.AGENT_TERMINAL_EXITED,
     { terminal: { kind: TERMINAL_STAGE.PORT, after: TERMINAL_CONNECTION.EXITED, code: 0 } },
-  ],
-  [
-    RUN_PROFILE.AGENT_TERMINAL_STOPPED,
-    { terminal: { kind: TERMINAL_STAGE.SANDBOX, sandbox: SANDBOX_STATE.STOPPED } },
   ],
   [
     RUN_PROFILE.AGENT_TERMINAL_STARTING,

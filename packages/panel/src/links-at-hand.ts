@@ -10,7 +10,7 @@ import type { PagePlace } from "@repo/features/page-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
 import type { SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { isAgentTab } from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
 import type { AdminView } from "./admin/routing.js";
@@ -190,7 +190,10 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   };
   // Note that the column's Overview is the task itself, so it adds no link past the task's.
   const shown = tasks.mainTabs.tab;
-  const agentId = shown !== undefined && isAgentTab(shown) ? shown.agent : undefined;
+  const agentId =
+    shown !== undefined && typeof shown !== "string" && shown.kind === STRIP_TAB_KIND.AGENT
+      ? shown.agent
+      : undefined;
   const agent: LinkAtHand | undefined =
     agentId === undefined
       ? undefined
