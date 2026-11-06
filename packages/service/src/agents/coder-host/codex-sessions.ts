@@ -59,13 +59,15 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
-import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
+import { type Agent, readAgent, readAgentRouting } from "@repo/database/models/agent-store";
 import {
+  type FirewallOwner,
   type KeyRing,
   openProviderKey,
   parseKeyRing,
 } from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
+import { recordedRuntimeSession } from "@repo/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
@@ -91,8 +93,9 @@ import {
   type PlaceholderSwap,
   placeholderSwap,
   renewedSwap,
-  type SandboxFirewall,
+  sandboxFirewall,
 } from "../sandbox-firewall.js";
+import type { VercelSandboxApi } from "../vercel-sandbox-api.js";
 import { firewallSourcesOfAgent } from "./checkout.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
@@ -464,6 +467,30 @@ export const PLAN_RENEWAL = {
 } as const;
 
 /**
+ * The firewall session a kept launch runs in, its sandbox found by name the
+ * way an agent's sandbox is found: the agent the launch named, the session
+ * its conversation records, the sandboxes tagged with it, and among them the
+ * one still running the launch's session. None where any of them no longer
+ * stands, as for a row its session outlived, or one kept before launches
+ * named their agent.
+ */
+const launchSession = (api: VercelSandboxApi, owner: FirewallOwner, agentId: string | undefined) =>
+  Effect.gen(function* () {
+    if (agentId === undefined) return undefined;
+    const agent = yield* readAgent(owner.userId, agentId);
+    if (Option.isNone(agent)) return undefined;
+    const runtime = yield* recordedRuntimeSession({
+      userId: owner.userId,
+      conversationId: agent.value.conversationId,
+    });
+    if (runtime === undefined) return undefined;
+    const sandboxes = yield* api.listTagged(runtime);
+    const sandbox = sandboxes.find((each) => each.currentSessionId === owner.sandboxSessionId);
+    if (sandbox === undefined) return undefined;
+    return { ...owner, name: sandbox.name } satisfies FirewallSession;
+  });
+
+/**
  * The plan's token behind a sandbox session's standing swap renewed, where
  * the launch kept for the session still holds one: the account's token as
  * it stands, renewed first where less than the token margin is left of it,
@@ -474,15 +501,17 @@ export const PLAN_RENEWAL = {
  * credential that could not be minted, leaves the swap as it stands, which
  * OpenAI refuses once its token lapses, as the route refused a Mac's command.
  * So does a swap a launch on the retired third-party sign-in set on another
- * host, which the plan's token is never sent to.
+ * host, which the plan's token is never sent to. A launch whose sandbox no
+ * longer runs its session is left (`launchSession`), for the sweep's drop.
  */
-export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSession, ring: KeyRing) =>
+export const renewPlanSwap = (api: VercelSandboxApi, owner: FirewallOwner, ring: KeyRing) =>
   Effect.gen(function* () {
-    const launch = yield* firewall.launchOf(session);
+    const firewall = sandboxFirewall(api);
+    const launch = yield* firewall.launchOf(owner);
     const standing = launch?.swaps.get(LAUNCH_SWAP.OPENAI_PLAN);
     if (launch === undefined || standing === undefined) return PLAN_RENEWAL.LEFT;
     const next = yield* Effect.gen(function* () {
-      const access = yield* refreshChatGptAccess(session.userId, ring, CODEX_TOKEN_MARGIN);
+      const access = yield* refreshChatGptAccess(owner.userId, ring, CODEX_TOKEN_MARGIN);
       if (access.outcome !== CHATGPT_ACCESS.READY) {
         yield* Effect.logWarning(
           `a Codex plan's swap was not renewed: ChatGPT sign-in ${access.outcome}`,
@@ -497,7 +526,13 @@ export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSessio
       }
       const entry = renewedSwap(standing, bearerOf(Redacted.value(access.accessToken)));
       if (entry === undefined) return PLAN_RENEWAL.LEFT;
-      return { entry, sources: yield* firewallSourcesOfAgent(session.userId, launch.agentId) };
+      const session = yield* launchSession(api, owner, launch.agentId);
+      if (session === undefined) return PLAN_RENEWAL.LEFT;
+      return {
+        session,
+        entry,
+        sources: yield* firewallSourcesOfAgent(owner.userId, launch.agentId),
+      };
     }).pipe(
       Effect.catch((failure) =>
         Effect.as(
@@ -507,7 +542,7 @@ export const renewPlanSwap = (firewall: SandboxFirewall, session: FirewallSessio
       ),
     );
     if (typeof next === "string") return next;
-    yield* firewall.renew(session, launch, LAUNCH_SWAP.OPENAI_PLAN, next.entry, next.sources);
+    yield* firewall.renew(next.session, launch, LAUNCH_SWAP.OPENAI_PLAN, next.entry, next.sources);
     return PLAN_RENEWAL.RENEWED;
   });
 

@@ -62,7 +62,9 @@ import { ptyLinesOf, SandboxPty, type SandboxPtyService, sandboxPtyLayer } from 
 import {
   deploymentOidcToken,
   SANDBOX_STATUS,
+  type SandboxSessionApi,
   type SandboxUnavailable,
+  type SessionRef,
   snapshotGone,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -433,13 +435,14 @@ export function browserSessionOf(session: {
   return session.parent?.rootSessionId ?? session.id;
 }
 
-/** The calls of Vercel Sandbox's API the browser makes: a sandbox found, resumed, run in, and its PTY minted. */
-export type BrowserSandboxApi = Pick<
-  VercelSandboxApi,
-  "listTagged" | "resume" | "run" | "openInteractive"
->;
+/** The calls of Vercel Sandbox's API the browser makes: a sandbox found and resumed, and its session run in and its PTY minted. */
+export interface BrowserSandboxApi extends Pick<VercelSandboxApi, "listTagged" | "resume"> {
+  readonly session: (
+    ref: SessionRef,
+  ) => Effect.Effect<Pick<SandboxSessionApi, "run" | "openInteractive">, SandboxUnavailable>;
+}
 
-/** The service over the REST calls the API makes and the PTY the sandbox serves. */
+/** The service over the calls `vercel-sandbox-api.ts` makes and the PTY the sandbox serves. */
 export function agentBrowserOver(
   api: BrowserSandboxApi,
   pty: SandboxPtyService,
@@ -450,7 +453,7 @@ export function agentBrowserOver(
       const [sandbox] = yield* api.listTagged(sessionId).pipe(Effect.mapError(sandboxUnavailable));
       if (sandbox === undefined) return yield* unreachable(BROWSER_UNREACHABLE.NOT_OPENED);
       if (sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined) {
-        return sandbox.currentSessionId;
+        return { name: sandbox.name, sessionId: sandbox.currentSessionId };
       }
       // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
@@ -463,8 +466,8 @@ export function agentBrowserOver(
             : sandboxUnavailable(error),
         ),
         Effect.flatMap((found) =>
-          found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId !== undefined
-            ? Effect.succeed(found.currentSessionId)
+          found.status === SANDBOX_STATUS.RUNNING
+            ? Effect.succeed({ name: found.name, sessionId: found.currentSessionId })
             : Effect.fail(unreachable(BROWSER_UNREACHABLE.NOT_RESUMED)),
         ),
       );
@@ -477,14 +480,19 @@ export function agentBrowserOver(
       );
     });
 
-  const ensure = (sessionId: string) =>
+  /** The browser made sure of, and the running session it is in, held for the caller's calls after. */
+  const ensured = (sessionId: string) =>
     Effect.gen(function* () {
-      const sandboxSessionId = yield* runningSession(sessionId);
-      const run = yield* api
-        .run(sandboxSessionId, startBrowser())
-        .pipe(Effect.mapError(sandboxUnavailable));
+      const running = yield* runningSession(sessionId);
+      const session = yield* api.session(running).pipe(Effect.mapError(sandboxUnavailable));
+      const run = yield* session.run(startBrowser()).pipe(Effect.mapError(sandboxUnavailable));
       const start = browserStartOf(run);
-      if (start.ok) return { sandboxSessionId, started: start.started };
+      if (start.ok) {
+        return {
+          standing: { sandboxSessionId: running.sessionId, started: start.started },
+          session,
+        };
+      }
       return yield* unreachable(
         start.exitCode === BROWSER_START_EXIT.NO_CHROMIUM
           ? BROWSER_UNREACHABLE.NO_CHROMIUM
@@ -492,25 +500,26 @@ export function agentBrowserOver(
       );
     });
 
+  const ensure = (sessionId: string) =>
+    Effect.map(ensured(sessionId), ({ standing }): BrowserStanding => standing);
+
   const startRecordingIn = (sessionId: string, maxSeconds: number, maxBytes: number) =>
     Effect.gen(function* () {
-      const { sandboxSessionId } = yield* ensure(sessionId);
-      const run = yield* api
-        .run(sandboxSessionId, startRecording(maxSeconds, maxBytes))
+      const { session } = yield* ensured(sessionId);
+      const run = yield* session
+        .run(startRecording(maxSeconds, maxBytes))
         .pipe(Effect.mapError(sandboxUnavailable));
       return recordingStartOf(run);
     });
 
   const stopRecordingIn = (sessionId: string, maxBytes: number) =>
     Effect.gen(function* () {
-      const { sandboxSessionId } = yield* ensure(sessionId);
-      const run = yield* api
-        .run(sandboxSessionId, stopRecording())
-        .pipe(Effect.mapError(sandboxUnavailable));
+      const { session } = yield* ensured(sessionId);
+      const run = yield* session.run(stopRecording()).pipe(Effect.mapError(sandboxUnavailable));
       const stopped = recordingStopOf(run);
       if (!stopped.ok) return stopped;
-      const read = yield* api
-        .run(sandboxSessionId, readRecording(maxBytes))
+      const read = yield* session
+        .run(readRecording(maxBytes))
         .pipe(Effect.mapError(sandboxUnavailable));
       const file = recordingBytesOf(read, maxBytes);
       if (file === undefined) {
@@ -530,10 +539,10 @@ export function agentBrowserOver(
         ensure(sessionId),
         ownScope(
           Effect.gen(function* () {
-            const { sandboxSessionId } = yield* ensure(sessionId);
+            const { session } = yield* ensured(sessionId);
             // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
-            const shell = yield* api
-              .openInteractive(sandboxSessionId)
+            const shell = yield* session
+              .openInteractive()
               .pipe(Effect.mapError(sandboxUnavailable));
             const socket = yield* pty
               .connect(shell)

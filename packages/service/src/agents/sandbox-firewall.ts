@@ -35,7 +35,9 @@
  * takes it off, though the clone goes on under the agent's own credential
  * that writer carries, minted afresh, which reaches every repository the
  * agent clones. A clear is made ahead of a stop, so whether to write is the
- * caller's to read.
+ * caller's to read. Every send reaches the session through its sandbox's
+ * name (`VercelSandboxApi`'s `session`), so a write to a session its sandbox
+ * no longer runs is refused, as Vercel refuses one to a session gone.
  *
  * A placeholder swap is how a secret leaves the sandbox: the process that
  * needs it is handed a random placeholder minted for its launch
@@ -53,6 +55,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
+  type FirewallOwner,
   type KeyRing,
   openFirewallEntries,
   parseKeyRing,
@@ -75,6 +78,7 @@ import {
   OPEN_INTERNET_POLICY,
   SANDBOX_CALL,
   SandboxUnavailable,
+  type SessionRef,
   type VercelSandboxApi,
 } from "./vercel-sandbox-api.js";
 
@@ -122,10 +126,9 @@ export interface FirewallEntry {
   readonly rules: Redacted.Redacted<readonly HostRules[]>;
 }
 
-/** Whose sandbox session a write is to: the account whose agent it is, which every read of its launch is scoped to, and the session. */
-export interface FirewallSession {
-  readonly userId: string;
-  readonly sandboxSessionId: string;
+/** Whose sandbox session a write is to: the account whose agent it is, which every read of its launch is scoped to, the sandbox by its name, and the session. */
+export interface FirewallSession extends FirewallOwner {
+  readonly name: string;
 }
 
 /**
@@ -184,9 +187,9 @@ export interface SandboxFirewall {
     session: FirewallSession,
     sources: FirewallSources,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
-  /** The launch kept for the session; none where none is. */
+  /** The launch kept for the account's session; none where none is. Note that the read is the store's alone, so it names no sandbox. */
   readonly launchOf: (
-    session: FirewallSession,
+    owner: FirewallOwner,
   ) => Effect.Effect<KeptLaunch | undefined, SandboxUnavailable, DatabaseServices>;
   /**
    * The swap given set in place of the launch's own of its kind, the swaps
@@ -202,7 +205,7 @@ export interface SandboxFirewall {
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
   /** Every credential taken off the session's firewall ahead of its stop, which is left the open internet, its launch deleted. */
   readonly clear: (
-    sandboxSessionId: string,
+    session: SessionRef,
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
 }
 
@@ -411,7 +414,7 @@ export function composePolicy(sources: FirewallSources, swaps: LaunchSwaps): Net
 }
 
 /** The swaps sealed for the session's row. */
-function sealed(ring: KeyRing, session: FirewallSession, swaps: LaunchSwaps): string {
+function sealed(ring: KeyRing, session: FirewallOwner, swaps: LaunchSwaps): string {
   const kinds = [...swaps].map(([slot, entry]) => ({ slot, rules: Redacted.value(entry.rules) }));
   return sealFirewallEntries(ring, session, Redacted.make(encodeSwaps(kinds)));
 }
@@ -422,7 +425,7 @@ function sealed(ring: KeyRing, session: FirewallSession, swaps: LaunchSwaps): st
  * sealed when each writer kept its own credential there opens as its
  * launch's swaps alone.
  */
-function opened(ring: KeyRing, session: FirewallSession, column: string): LaunchSwaps | undefined {
+function opened(ring: KeyRing, session: FirewallOwner, column: string): LaunchSwaps | undefined {
   const secret = openFirewallEntries(ring, session, column);
   if (Result.isFailure(secret)) return undefined;
   const read = decodeSwaps(Redacted.value(secret.success));
@@ -446,8 +449,8 @@ const keyRing = Effect.gen(function* () {
   return parsed.success;
 });
 
-/** The launch kept for the session, opened; a row that will not open reads as none, which the next launch replaces. */
-const launchKept = (session: FirewallSession) =>
+/** The launch kept for the account's session, opened; a row that will not open reads as none, which the next launch replaces. */
+const launchKept = (session: FirewallOwner) =>
   Effect.gen(function* () {
     const row = yield* readFirewallLaunch(session);
     if (row === undefined) return undefined;
@@ -467,8 +470,14 @@ const storeUnavailable = (detail: string) =>
 
 /** The firewall over the API given: every write composed whole from its sources and the launch kept for its session. */
 export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
+  /** The policy given sent to the session, looked up by its sandbox's name for this one write. */
+  const policySent = (session: SessionRef, policy: NetworkPolicy) =>
+    Effect.flatMap(api.session(session), (running) => running.updateNetworkPolicy(policy));
   const sent = (session: FirewallSession, sources: FirewallSources, swaps: LaunchSwaps) =>
-    api.updateNetworkPolicy(session.sandboxSessionId, composePolicy(sources, swaps));
+    policySent(
+      { name: session.name, sessionId: session.sandboxSessionId },
+      composePolicy(sources, swaps),
+    );
 
   return {
     write: (session, sources) =>
@@ -514,12 +523,12 @@ export function sandboxFirewall(api: VercelSandboxApi): SandboxFirewall {
       }),
     // Note that a launch that would not go is logged and the open internet sent anyway, because the
     // stop it goes ahead of must not wait on the store, and the sweep drops the row once its session is gone.
-    clear: (sandboxSessionId) =>
+    clear: (session) =>
       Effect.andThen(
-        clearStandingFirewall(sandboxSessionId).pipe(
+        clearStandingFirewall(session.sessionId).pipe(
           Effect.catch(() => Effect.logWarning("a sandbox firewall's launch was not deleted")),
         ),
-        api.updateNetworkPolicy(sandboxSessionId, OPEN_INTERNET_POLICY),
+        policySent(session, OPEN_INTERNET_POLICY),
       ),
   };
 }

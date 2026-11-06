@@ -6,18 +6,25 @@ import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { SANDBOX_STATE } from "@repo/features/terminal-wire";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { LOCAL_AGENT_ENVIRONMENT } from "../../testing/local-agent.js";
-import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
+import {
+  commandRunStreamed,
+  fixtureToken,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+  sessionAnswered,
+} from "../../testing/vercel-sandbox-fake.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
 
 /**
- * A coding agent's sandbox as its Terminal tab reaches it, over Vercel
- * Sandbox's REST API answering from a script: a stopped sandbox lists no
+ * A coding agent's sandbox as its Terminal tab reaches it, through
+ * `@vercel/sandbox` over a fake of Vercel answering from a script: a stopped sandbox lists no
  * shells and is never woken by a list or a start, a running one's shells are
  * read from tmux in its running session, a shell starts under the id given
  * and is read back, one tmux does not hold is not found, a list tmux could
@@ -25,8 +32,8 @@ import { TMUX_EXIT } from "./tmux.js";
  * name. A GitHub credential is set at the firewall in its shape: an
  * installation's on GitHub's two hosts, a member's own on its repository's
  * paths alone, its record kept in the test's own database under a key ring
- * of the suite's. The token is a synthetic one the
- * environment carries, unexpired, so nothing refreshes it.
+ * of the suite's. The token is a synthetic one, unexpired, so nothing
+ * refreshes it.
  */
 
 const SESSION = "wrun_fixture";
@@ -36,42 +43,28 @@ const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const REPOSITORY = "Acme/Relay";
 const MEMBER_TOKEN = "member-token-fixture";
 
-/** An unsigned token naming a fixture project and team, a year from expiring. */
-function fixtureToken(): string {
-  const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: "prj_fixture", owner_id: "team_fixture", exp }),
-  ).toString("base64url");
-  return `${header}.${payload}.`;
-}
-
 interface Asked {
   readonly method: string;
   readonly url: URL;
   readonly args?: readonly string[];
 }
 
-/** A sandbox session of its own, under an account of its own, whose firewall a credential is set at. */
+/** The running session of the fixture's sandbox, under an account of its own, whose firewall a credential is set at. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
-  return { userId, sandboxSessionId: `sbs_${randomUUID()}` };
+  return { userId, name: SANDBOX, sandboxSessionId: RUNNING_SESSION };
 });
 
-/** A command's stream as Vercel answers a waited run: the command, what it printed, and its end. */
-function commandStream(exitCode: number, stdout = ""): Response {
-  const lines = [
-    { command: { id: "cmd_1", exitCode: null } },
-    ...(stdout === "" ? [] : [{ stream: "stdout", data: stdout }]),
-    { command: { id: "cmd_1", exitCode } },
-  ];
-  return new Response(lines.map((line) => JSON.stringify(line)).join("\n"), {
-    headers: { "content-type": "application/x-ndjson" },
-  });
-}
+/** A command's stream as Vercel answers a waited run in the running session: the command, what it printed, and its end. */
+const commandStream = (exitCode: number, stdout = "") =>
+  commandRunStreamed({ id: "cmd_1", sessionId: RUNNING_SESSION }, { exitCode, stdout, stderr: "" });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /**
  * Vercel as the scenario has it: the session's sandbox in the status given,
@@ -85,13 +78,15 @@ function vercel(
   interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
   shellCheckExit: number = TMUX_EXIT.NO_SESSION,
 ) {
+  // The layer asks under the deployment's own token, read where the platform hands it.
+  vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
   const asked: Asked[] = [];
   const policies: unknown[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
     Layer.merge(
       LOCAL_AGENT_ENVIRONMENT,
-      fakeHttpClientLayer(async (url, init) => {
+      sandboxFetchOver(async (url, init) => {
         const parsed = new URL(url);
         const method = init.method ?? "GET";
         if (parsed.pathname.endsWith("/cmd")) {
@@ -115,22 +110,25 @@ function vercel(
         }
         if (parsed.pathname.endsWith("/network-policy")) {
           policies.push(JSON.parse(await new Response(init.body).text()));
-          return Response.json({});
+          return Response.json(sessionAnswered({ id: RUNNING_SESSION, status: "running" }));
         }
+        const listed = {
+          name: SANDBOX,
+          status: status ?? "stopped",
+          currentSessionId: RUNNING_SESSION,
+          createdAt: 0,
+        };
         if (parsed.searchParams.get("resume") === "true") {
-          return Response.json({
-            sandbox: { name: SANDBOX, status: "stopped" },
-            session: { id: "sbs_resumed", status: "running" },
-          });
+          return Response.json(
+            sandboxFound({ ...listed, status: "running", currentSessionId: "sbs_resumed" }),
+          );
+        }
+        if (parsed.pathname === `/api/v2/sandboxes/${SANDBOX}`) {
+          return Response.json(sandboxFound(listed));
         }
         return (
           sandboxListRefusal(parsed) ??
-          Response.json({
-            sandboxes:
-              status === undefined
-                ? []
-                : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
-          })
+          Response.json(sandboxesListed(status === undefined ? [] : [listed]))
         );
       }),
     ),
@@ -144,16 +142,11 @@ const field = (value: string) => Buffer.from(`${value}\n`).toString("base64");
 const listedShell = (id: string, title: string, command: string) =>
   [`terminal-${id}`, "100", field(title), field(command), field("/workspace/repository")].join(" ");
 
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
-
 it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   it.effect(
     "a stopped sandbox lists no shells and no ports, and is never woken by a list or a start",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel("stopped");
 
         const { listed, ports, started } = yield* Effect.gen(function* () {
@@ -171,7 +164,7 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
           started,
           Result.fail({ kind: SHELL_REFUSAL.NOT_RUNNING, sandbox: SANDBOX_STATE.STOPPED }),
         );
-        assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") === null));
+        assert.ok(api.asked.every((call) => call.url.searchParams.get("resume") !== "true"));
         assert.ok(api.asked.every((call) => !call.url.pathname.endsWith("/cmd")));
       }),
   );
@@ -180,13 +173,12 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a running sandbox's shells are read from tmux in its running session, and one never opened is starting",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel("running", [listedShell(SHELL, "dev server", "node")]);
-        const never = vercel(undefined);
 
         const listed = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
           sandbox.terminals(SESSION),
         ).pipe(Effect.provide(api.layer));
+        const never = vercel(undefined);
         const unopened = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
           sandbox.terminals(SESSION),
         ).pipe(Effect.provide(never.layer));
@@ -213,7 +205,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a running sandbox's ports are the ones its servers listen on, each once, never root's or the browser's, and tables it could not read are an outage",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         // The kernel's tables as `cat` prints them, by hand: the sandbox's init on 23456 as root,
         // the browser's DevTools on 9333, a dev server on 3000 over both families with a connection
         // to it, and a server on 5173.
@@ -250,7 +241,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a shell starts in the running sandbox under the id given and is read back, and one tmux does not hold is not found",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel("running", [listedShell(SHELL, "", "bash")]);
         const other = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 
@@ -278,7 +268,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
 
   it.effect("a list tmux could not give is an outage, never a sandbox with no shells", () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel("running", [], 1);
 
       const listed = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
@@ -291,7 +280,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
 
   it.effect("a resume wakes the stopped sandbox by its name and answers it running", () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel("stopped");
 
       const resumed = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
@@ -306,7 +294,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
 
   it.effect("an attach mints the running session's PTY and never wakes a stopped sandbox", () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const running = vercel("running");
       const stopped = vercel("stopped");
 
@@ -322,7 +309,7 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
       const mint = running.asked.find((call) => call.url.pathname.endsWith("/interactive"));
       assert.equal(mint?.url.pathname, `/api/v2/sandboxes/sessions/${RUNNING_SESSION}/interactive`);
       assert.deepEqual(refused, { state: SANDBOX_STATE.STOPPED });
-      assert.ok(stopped.asked.every((call) => call.url.searchParams.get("resume") === null));
+      assert.ok(stopped.asked.every((call) => call.url.searchParams.get("resume") !== "true"));
       assert.ok(stopped.asked.every((call) => !call.url.pathname.endsWith("/interactive")));
     }),
   );
@@ -331,7 +318,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a minted PTY address off Vercel's sandbox domain is refused, its token never handed on",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const addresses = [
           "wss://pty.attacker.test/ws",
           "wss://vercel.run.attacker.test/ws",
@@ -351,7 +337,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
 
   it.effect("an attach to a shell tmux does not hold is gone, and no PTY is minted for it", () =>
     Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel("running");
       const unknown = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 
@@ -368,7 +353,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a tmux that could not be asked is an outage the tab may retry, never a shell gone",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel("running", [], 0, undefined, 1);
         const unknown = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
 
@@ -384,7 +368,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "an installation's token is set at the firewall on GitHub's two hosts alone, every other host left open",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel("running");
         const session = yield* ownSession;
 
@@ -408,7 +391,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
     "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else, then taken off whole",
     () =>
       Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel("running");
         const session = yield* ownSession;
 

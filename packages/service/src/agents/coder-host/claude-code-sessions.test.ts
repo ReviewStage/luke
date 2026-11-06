@@ -82,14 +82,13 @@ import {
   type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import {
-  fixtureToken,
   launchBearer,
   launchLines,
   runnerSandboxApi,
   runnerTook,
   swappedBearer,
 } from "../../testing/runner-sandbox-fake.js";
-import { sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
+import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -1930,7 +1929,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Again."));
-        assert.deepEqual(canceled, { outcome: "failed", status: 503 });
+        // The fake refuses the read with a 400, a status `@vercel/sandbox` never tries again.
+        assert.deepEqual(canceled, { outcome: "failed", status: 400 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
         assert.equal((yield* launchLines(api.commands[0])).length, before);

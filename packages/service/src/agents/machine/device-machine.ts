@@ -172,7 +172,12 @@ const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchS
 
 /** A local agent's place on its Mac, under our session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
+  return {
+    machine: AGENT_MACHINE.DEVICE,
+    session,
+    name: nameOfAgent(agentId),
+    running: runningOfAgent(agentId),
+  };
 }
 
 /** The line that writes the text given to a runner's stdin, as a message or a Stop is written and later looked for. */

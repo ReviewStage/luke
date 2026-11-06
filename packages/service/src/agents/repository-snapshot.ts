@@ -42,6 +42,8 @@ import { CODER } from "./coder-host/bounds.js";
 import { cloneRepository, type RepositorySandbox, snapshotRecordOf } from "./repository-shell.js";
 import {
   type ListedSandbox,
+  NAME_TAKEN,
+  type OpenedSandbox,
   SANDBOX_STATUS,
   SandboxUnavailable,
   type VercelSandboxApi,
@@ -200,7 +202,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
   api: VercelSandboxApi,
   of: RepositorySnapshotOf,
   credential: RepositorySnapshotCredential,
-  open: (running: string) => RepositorySandbox,
+  open: (sandbox: { readonly name: string; readonly running: string }) => RepositorySandbox,
 ) {
   const name = repositorySnapshotName(of);
   const wanted = readOf(yield* api.getNamed(name), yield* Clock.currentTimeMillis);
@@ -220,21 +222,22 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
         deleteEvicted: true,
       },
       env: {},
+      // Note that a name another build holds is refused, because it is this build's lock.
+      whenNameTaken: NAME_TAKEN.REFUSE,
     })
     .pipe(
       Effect.map(Option.some),
       Effect.catchIf(
         (failure) => failure.status === CONFLICT_STATUS,
-        () => Effect.succeed(Option.none<ListedSandbox>()),
+        () => Effect.succeed(Option.none<OpenedSandbox>()),
       ),
     );
   if (Option.isNone(created)) return;
   yield* Effect.gen(function* () {
     const running = created.value.currentSessionId;
-    if (running === undefined) return yield* new SandboxUnavailable({});
     yield* api.createUser(name, AGENT_USER, AGENT_HOME_FOLDERS);
     yield* cloneRepository(
-      open(running),
+      open({ name, running }),
       {
         fullName: of.fullName,
         defaultBranch: of.defaultBranch,
@@ -246,7 +249,7 @@ export const buildRepositorySnapshot = Effect.fn("web/buildRepositorySnapshot")(
     // The mark goes up before the snapshot, so the snapshot it leaves is known for a whole checkout.
     const now = yield* Clock.currentTimeMillis;
     yield* api.updateTags(name, { [SNAPSHOT_TAG.KEY]: key, [SNAPSHOT_TAG.BUILT]: String(now) });
-    yield* api.snapshot(running, SNAPSHOT_LAPSE);
+    yield* (yield* api.session({ name, sessionId: running })).snapshot(SNAPSHOT_LAPSE);
     yield* Effect.logInfo(`the repository snapshot ${name} is ready`);
   }).pipe(
     Effect.timeoutOrElse({

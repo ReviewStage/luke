@@ -6,7 +6,7 @@ import { Database } from "@repo/database/core/query";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { fakeHttpClientLayer, temporaryDirectory } from "@repo/wire/testing";
+import { temporaryDirectory } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber, Layer, Logger, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import type { TestContext } from "vitest";
@@ -20,6 +20,7 @@ import {
   sourceCheckout,
   sourceSandbox,
 } from "../../testing/source-sandbox.js";
+import { commandRunStreamed, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import type { RepositoryCredential } from "../sandbox-firewall.js";
 import { vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { SNAPSHOT, SNAPSHOT_MISS, type SnapshotOutcome, snapshotSource } from "./snapshot.js";
@@ -81,7 +82,7 @@ function standing({ checkout, sh }: SourceCheckout) {
 
 /** The copy asked of the sandbox over the responder given, through the credential given, the sandbox left up where `keepUp` says so. */
 function copyOver(
-  respond: Parameters<typeof fakeHttpClientLayer>[0],
+  respond: Parameters<typeof sandboxFetchOver>[0],
   keepUp: Effect.Effect<boolean> = Effect.succeed(false),
   credential: RepositoryCredential = CREDENTIAL.APP,
 ) {
@@ -101,7 +102,7 @@ function copyOver(
       credential: Effect.succeed(credential),
       keepUp,
     });
-  }).pipe(Effect.provide(Layer.merge(fakeHttpClientLayer(respond), LOCAL_AGENT_ENVIRONMENT)));
+  }).pipe(Effect.provide(Layer.merge(sandboxFetchOver(respond), LOCAL_AGENT_ENVIRONMENT)));
 }
 
 /** A request as the double reads it. */
@@ -367,14 +368,9 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
 
         const outcome = yield* copyOver(async (url, init) =>
           new URL(url).pathname.endsWith("/cmd")
-            ? new Response(
-                [
-                  { command: { id: "cmd_1", exitCode: null } },
-                  { stream: "stderr", data: stderr },
-                  { command: { id: "cmd_1", exitCode: 1 } },
-                ]
-                  .map((line) => JSON.stringify(line))
-                  .join("\n"),
+            ? commandRunStreamed(
+                { id: "cmd_1", sessionId: SOURCE_SANDBOX.RUNNING },
+                { exitCode: 1, stdout: "", stderr },
               )
             : answerOf(sandbox, url, init),
         ).pipe(logging(logged));

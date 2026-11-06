@@ -7,7 +7,8 @@ import { it } from "@effect/vitest";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Duration, Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
-import { fixtureToken, runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
+import { runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
+import { fixtureToken } from "../testing/vercel-sandbox-fake.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import type { RepositorySandbox } from "./repository-shell.js";
 import {
@@ -20,7 +21,12 @@ import {
   repositorySnapshotName,
 } from "./repository-snapshot.js";
 import { composePolicy } from "./sandbox-firewall.js";
-import { type VercelSandboxApi, vercelSandboxApi } from "./vercel-sandbox-api.js";
+import {
+  NAME_TAKEN,
+  sessionOnFirstUse,
+  type VercelSandboxApi,
+  vercelSandboxApi,
+} from "./vercel-sandbox-api.js";
 
 const IMAGE = "agent-image:fixture";
 const TOKEN = "ghs_fixtureRepositorySnapshotToken";
@@ -41,19 +47,25 @@ const fixture = Effect.gen(function* () {
 
 /** The build's sandbox as the clone reaches it: each run straight to the API, and each policy composed from the sources its write names. */
 function opener(api: VercelSandboxApi) {
-  return (running: string): RepositorySandbox => {
+  return ({ name, running }: { name: string; running: string }): RepositorySandbox => {
+    const session = sessionOnFirstUse(api, { name, sessionId: running });
     return {
       run: (ask) =>
         Effect.runPromise(
-          api.run(running, {
-            command: "bash",
-            args: ["-c", ask.command],
-            ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
-            ...(ask.env === undefined ? undefined : { env: ask.env }),
-          }),
+          Effect.flatMap(session, (held) =>
+            held.run({
+              command: "bash",
+              args: ["-c", ask.command],
+              ...(ask.workingDirectory === undefined ? undefined : { cwd: ask.workingDirectory }),
+              ...(ask.env === undefined ? undefined : { env: ask.env }),
+            }),
+          ),
         ),
       firewall: {
-        write: (sources) => api.updateNetworkPolicy(running, composePolicy(sources, new Map())),
+        write: (sources) =>
+          Effect.flatMap(session, (held) =>
+            held.updateNetworkPolicy(composePolicy(sources, new Map())),
+          ),
       },
     };
   };
@@ -182,6 +194,7 @@ it.effect(
         vcpus: 4,
         keepLastSnapshots: { count: 1, expiration: 60_000, deleteEvicted: true },
         env: {},
+        whenNameTaken: NAME_TAKEN.REFUSE,
       });
 
       const within = yield* readRepositorySnapshot(api, RELAY);

@@ -93,8 +93,9 @@ const SANDBOX_ENDING = {
 
 type SandboxEnding = (typeof SANDBOX_ENDING)[keyof typeof SANDBOX_ENDING];
 
-/** A running sandbox we opened for a native agent: the session we minted for it, the sandbox session it runs, and the agent its tag names. */
+/** A running sandbox we opened for a native agent: its name, the session we minted for it, the sandbox session it runs, and the agent its tag names. */
 interface NativeSandbox {
+  readonly name: string;
   readonly sessionId: string;
   readonly running: string;
   readonly agentId: string;
@@ -112,7 +113,7 @@ function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
   const agentId = runnerTag(sandbox.tags, "AGENT");
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (agentId === undefined || sessionId === undefined) return undefined;
-  return { sessionId, running: sandbox.currentSessionId, agentId };
+  return { name: sandbox.name, sessionId, running: sandbox.currentSessionId, agentId };
 }
 
 /** A runner that exited: its command, and its exit code, or gone where Vercel no longer knows the command. */
@@ -136,7 +137,8 @@ const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     }
     const runner = taggedRunner(fresh);
     if (runner === undefined || runner.sandboxSessionId !== sandbox.running) return undefined;
-    const exit = yield* api.commandExit(runner.sandboxSessionId, runner.commandId);
+    const session = yield* api.session({ name: fresh.name, sessionId: runner.sandboxSessionId });
+    const exit = yield* session.commandExit(runner.commandId);
     return exit === null ? undefined : { commandId: runner.commandId, exit };
   }).pipe(Effect.orElseSucceed(() => undefined));
 
@@ -148,18 +150,17 @@ const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
  * kept all the same.
  */
 const lostRunnerStderr = (api: VercelSandboxApi, sandbox: NativeSandbox, commandId: string) =>
-  api
-    .commandStderrTail(sandbox.running, commandId)
-    .pipe(
-      Effect.catch((unavailable) =>
-        Effect.as(
-          Effect.logWarning(`a lost runner's stderr was not read: ${unavailable.message}`).pipe(
-            Effect.annotateLogs({ agentId: sandbox.agentId, sandboxSessionId: sandbox.running }),
-          ),
-          undefined,
+  api.session({ name: sandbox.name, sessionId: sandbox.running }).pipe(
+    Effect.flatMap((session) => session.commandStderrTail(commandId)),
+    Effect.catch((unavailable) =>
+      Effect.as(
+        Effect.logWarning(`a lost runner's stderr was not read: ${unavailable.message}`).pipe(
+          Effect.annotateLogs({ agentId: sandbox.agentId, sandboxSessionId: sandbox.running }),
         ),
+        undefined,
       ),
-    );
+    ),
+  );
 
 /** A lost runner's turn's failure detail: the fixed sentence the status words match on, then how the runner ended, redacted and bounded as a runner's own failure is. */
 function runnerLostDetail(exit: ExitedRunner["exit"], stderr: string | undefined): string {
@@ -302,7 +303,7 @@ const endSandbox = (
         // Note that the credentials come off as at any turn's end, because the sandbox then stops on its
         // timeout with its policy saved, and a later resume would wear them again.
         yield* sandboxFirewall(api)
-          .clear(sandbox.running)
+          .clear({ name: sandbox.name, sessionId: sandbox.running })
           .pipe(
             Effect.catch((failure) =>
               Effect.logWarning(

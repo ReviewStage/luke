@@ -9,13 +9,21 @@ import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
-import { fakeHttpClientLayer } from "@repo/wire/testing";
+import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
-import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
+import {
+  commandLogsStreamed,
+  fixtureToken,
+  sandboxesListed,
+  sandboxFetchOver,
+  sandboxFound,
+  sandboxListRefusal,
+  sessionAnswered,
+} from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 
 /**
@@ -35,22 +43,18 @@ const minutesBefore = (minutes: number) => new Date(NOW.getTime() - minutes * 60
 /** The page the fake answers a list in: the API's widest, as the sweep asks for. */
 const PAGE = 50;
 
-/** An unsigned token naming the fixture's project and team, a year from expiring. */
-function fixtureToken(): string {
-  const exp = Math.floor(Date.UTC(2027, 9, 14) / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({ project_id: PROJECT, owner_id: TEAM, exp }),
-  ).toString("base64url");
-  return `${header}.${payload}.`;
-}
-
 interface FakeSandbox {
   readonly name: string;
   status: string;
   readonly currentSessionId: string;
   tags: Record<string, string>;
 }
+
+/** A sandbox of the fake's as Vercel names it, created at the epoch. */
+const listedOf = (sandbox: FakeSandbox) => ({ ...sandbox, createdAt: 0 });
+
+/** Vercel's refusal of a call, as one `@vercel/sandbox` never tries again, which it would a 5xx on a real timer. */
+const refusal = () => Response.json({ error: { code: "bad_request" } }, { status: 400 });
 
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
 function vercel(
@@ -72,40 +76,55 @@ function vercel(
       const tag = parsed.searchParams.get("tags");
       if (tag !== null) {
         const [key = "", value] = tag.split(":");
-        return Response.json({ sandboxes: sandboxes.filter((each) => each.tags[key] === value) });
+        return Response.json(
+          sandboxesListed(sandboxes.filter((each) => each.tags[key] === value).map(listedOf)),
+        );
       }
-      if (options.refuseList === true) return new Response(null, { status: 503 });
+      if (options.refuseList === true) return refusal();
       assert.equal(parsed.searchParams.get("project"), PROJECT);
       const status = parsed.searchParams.get("status");
       const order = parsed.searchParams.get("sortOrder");
       pagesListed.push({ status, sortBy: parsed.searchParams.get("sortBy"), order });
-      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) {
-        return new Response(null, { status: 503 });
-      }
+      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) return refusal();
       const from = Number(parsed.searchParams.get("cursor") ?? "0");
       const matching = sandboxes.filter((each) => status === null || each.status === status);
       if (order === "desc") matching.reverse();
       const page = matching.slice(from, from + PAGE);
       const next = from + PAGE < matching.length ? String(from + PAGE) : null;
-      return Response.json({ sandboxes: page, pagination: { count: page.length, next } });
+      return Response.json(sandboxesListed(page.map(listedOf), next));
+    }
+    const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(parsed.pathname);
+    if (named !== null) {
+      const sandbox = sandboxes.find((each) => each.name === decodeURIComponent(named[1] ?? ""));
+      if (sandbox === undefined) {
+        return Response.json({ error: { code: "not_found" } }, { status: 404 });
+      }
+      return Response.json(sandboxFound(listedOf(sandbox)));
     }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
     const [, sessionId = "", rest = ""] = session;
     if (rest === "network-policy") {
       policies.push({ session: sessionId, policy: JSON.parse(String(init.body)) });
-      return Response.json({});
+      return Response.json(sessionAnswered({ id: sessionId, status: "running" }));
     }
     const command = /^cmd\/([^/]+)(\/logs)?$/u.exec(rest);
     assert.ok(command !== null, `an unexpected call: ${method} ${parsed.pathname}`);
     const found = commands.get(command[1] ?? "");
-    if (found === undefined) return new Response(null, { status: 404 });
+    if (found === undefined) {
+      return Response.json({ error: { code: "not_found" } }, { status: 404 });
+    }
     if (command[2] === undefined) return commandRead(found, parsed, init, false);
-    const line =
-      found.stderr === undefined ? "" : JSON.stringify({ stream: "stderr", data: found.stderr });
-    return new Response(`${line}\n`, { headers: { "content-type": "application/x-ndjson" } });
+    return commandLogsStreamed(found.stderr ?? "");
   };
-  return { layer: fakeHttpClientLayer(respond), sandboxes, commands, pagesListed, policies };
+  return {
+    // The sweep's settle of a lost runner reaches GitHub's client, which no test here sends on.
+    layer: Layer.merge(sandboxFetchOver(respond), noNetwork),
+    sandboxes,
+    commands,
+    pagesListed,
+    policies,
+  };
 }
 
 /** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */

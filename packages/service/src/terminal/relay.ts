@@ -62,7 +62,7 @@ import {
   Stream,
 } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import type { RepositoryCredential } from "../agents/sandbox-firewall.js";
+import type { FirewallSession, RepositoryCredential } from "../agents/sandbox-firewall.js";
 import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
@@ -176,10 +176,10 @@ function heldFrom(instant: Date): Date {
 function setCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
-  sandboxSessionId: string,
+  session: FirewallSession,
 ): Effect.Effect<void, unknown> {
   return Effect.flatMap(agent.repositoryCredential, (credential) =>
-    deps.sandbox.setCredential({ userId: agent.userId, sandboxSessionId }, credential),
+    deps.sandbox.setCredential(session, credential),
   );
 }
 
@@ -187,11 +187,11 @@ function setCredential(
 function withdrawCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
-  sandboxSessionId: string,
+  session: FirewallSession,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     if (yield* agent.turnUnderWay) return;
-    yield* deps.sandbox.withdrawCredential({ userId: agent.userId, sandboxSessionId });
+    yield* deps.sandbox.withdrawCredential(session);
   }).pipe(
     Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not taken off")),
   );
@@ -201,11 +201,12 @@ function withdrawCredential(
 function renewCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
-  sandboxSessionId: string,
+  session: FirewallSession,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
+    const { sandboxSessionId } = session;
     if (agent.memberToken) {
-      return yield* setCredential(deps, agent, sandboxSessionId).pipe(
+      return yield* setCredential(deps, agent, session).pipe(
         Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not set")),
       );
     }
@@ -218,7 +219,7 @@ function renewCredential(
       renewedBefore,
     );
     if (!claimed) return;
-    yield* setCredential(deps, agent, sandboxSessionId).pipe(
+    yield* setCredential(deps, agent, session).pipe(
       // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
       Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),
       Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
@@ -373,14 +374,19 @@ export function relayTerminal(
     const overheld = yield* Deferred.make<void>();
     const deviceLeft = yield* Effect.forkScoped(readDevice(device, fromDevice, held, overheld));
     // Note that the withdrawal is added ahead of the renewal's fork, so the scope ends the renewal first.
+    const session: FirewallSession = {
+      userId: agent.userId,
+      name: sandbox.sandboxName,
+      sandboxSessionId: sandbox.sandboxSessionId,
+    };
     if (agent.memberToken) {
-      yield* Effect.addFinalizer(() => withdrawCredential(deps, agent, sandbox.sandboxSessionId));
+      yield* Effect.addFinalizer(() => withdrawCredential(deps, agent, session));
     }
     const firstRenewed = yield* Deferred.make<void>();
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.andThen(
-          renewCredential(deps, agent, sandbox.sandboxSessionId),
+          renewCredential(deps, agent, session),
           Deferred.succeed(firstRenewed, undefined),
         ),
         { schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_CHECK_EVERY) },

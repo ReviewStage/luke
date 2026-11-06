@@ -102,6 +102,7 @@ import {
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
+import { sandboxFetchOver } from "../testing/vercel-sandbox-fake.js";
 import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 
 export const ORIGIN = "https://app.test";
@@ -428,6 +429,8 @@ export const standing = (
       Layer.succeed(HostedEnvironment, NO_KEYS),
       scriptedHarnessLayer((account) => eve.eve(harnessFor(account))),
       github.layer,
+      // A sandbox's calls reach the same fake as GitHub's, through the `fetch` `@vercel/sandbox` sends on.
+      sandboxFetchOver(github.respond),
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       Layer.succeed(SentryApp, sentryAppService(undefined, [])),
