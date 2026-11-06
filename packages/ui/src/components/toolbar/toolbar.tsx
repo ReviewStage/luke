@@ -72,7 +72,6 @@
  */
 
 import { type ReactNode, useRef } from "react";
-import { ChevronDownIcon } from "../../face/glyphs.js";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
 import { ReplayMask, ReplayWords } from "../../session-replay-marks.js";
 import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
@@ -127,9 +126,9 @@ const DETAIL = "ui-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-mute
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
 const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
 
-/** A title that opens what it names: its words and a chevron in one press, filled on hover and while what it opens stands, the chevron turned. */
+/** A title that opens what it names: a page title at rest, its mark and words filled as one press on hover and while what it opens stands, as a page's title is in Notion. */
 const TITLE_PRESS =
-  "ui-toolbar-title-press -ml-ui-6 inline-flex max-w-full items-center gap-ui-6 rounded-control px-ui-6 hover:bg-fill-selected aria-expanded:bg-fill-selected [&[aria-expanded=true]>svg]:rotate-180";
+  "ui-toolbar-title-press -ml-ui-6 inline-flex max-w-full items-center gap-ui-6 rounded-control px-ui-6 hover:bg-fill-selected aria-expanded:bg-fill-selected";
 
 /** Where a bar's heading stands its title on one row: the page's own name, its last words. */
 const HEADING_SEAT: TitleSeat = {
@@ -233,7 +232,6 @@ function ToolbarTitle({
             <OneLine className="min-w-0" words={title}>
               <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
             </OneLine>
-            <ChevronDownIcon />
           </button>
         </Tooltip>
       </h1>
