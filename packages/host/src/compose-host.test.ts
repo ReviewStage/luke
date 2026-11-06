@@ -142,6 +142,7 @@ describe("the host's platform concerns", () => {
             Layer.succeed(LoopbackListener, () => Effect.succeed(undefined)),
             Layer.succeed(MirrorPlatform, {
               folder: stateRoot,
+              prefetchScript: () => "exit 1",
               worktreeScript: () => "exit 1",
               listScript: () => "exit 1",
               removeScript: () => "exit 1",
