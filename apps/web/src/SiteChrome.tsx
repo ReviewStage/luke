@@ -140,7 +140,7 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
 export function SiteDownload(): React.JSX.Element {
   return (
     <ButtonLink
-      variant={BUTTON_VARIANT.INK}
+      variant={BUTTON_VARIANT.PRIMARY}
       href={DMG_URL}
       onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
     >
@@ -158,7 +158,7 @@ export function SiteDownload(): React.JSX.Element {
 export function SiteBarDownload(): React.JSX.Element {
   return (
     <ButtonLink
-      variant={BUTTON_VARIANT.INK}
+      variant={BUTTON_VARIANT.PRIMARY}
       shape={BUTTON_SHAPE.ROUND}
       href={DMG_URL}
       label="Download for macOS"

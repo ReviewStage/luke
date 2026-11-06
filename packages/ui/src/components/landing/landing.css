@@ -18,7 +18,7 @@
     min-height: 100dvh;
     container-type: inline-size;
     overflow-x: clip;
-    background: var(--ui-color-sidebar);
+    background: var(--ui-color-ground);
     color: var(--ui-color-text);
     font-family: var(--ui-font-sans);
   }
@@ -332,9 +332,9 @@
     margin-top: 56px;
     padding: 56px 6%;
     overflow: hidden;
-    border: 1px solid var(--ui-color-border);
-    border-radius: var(--ui-radius-14);
-    background: var(--ui-color-surface);
+    border: 1px solid var(--ui-display-landing-rule);
+    border-radius: var(--ui-display-landing-stage-radius);
+    background: var(--ui-color-overlay);
     box-shadow: var(--ui-display-landing-edge);
   }
 
@@ -346,15 +346,15 @@
     margin-bottom: -56px;
   }
 
-  /* The foot's wordmark in dots, in a gray a step past the rules rather
-     than the accent, so it closes the page quietly. */
+  /* The foot's wordmark in dots, pressed faintly in the muted words' warm
+     gray rather than the accent, so it closes the page quietly. */
   .ui-landing-wordmark {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    color: var(--ui-color-border-selected);
-    opacity: 0.22;
+    color: var(--ui-color-text-muted);
+    opacity: 0.3;
   }
 
   .ui-landing-scene {
