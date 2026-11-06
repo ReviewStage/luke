@@ -19,6 +19,7 @@ import {
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { timeRuntime } from "@repo/ui";
 import type { LocalStripTab, ViewedAt } from "@repo/ui/tab-strip-model";
+import { localTab } from "@repo/ui/tab-strip-model";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -296,7 +297,7 @@ async function mount(
     findable
       ? createElement(FindScope, {
           active: true,
-          subject: { task: TASK, tab: { local: AGENT.id, shell, title: "Local 1" } },
+          subject: { task: TASK, tab: localTab(AGENT.id, shell, "Local 1") },
           children: tab,
         })
       : tab;
@@ -304,7 +305,7 @@ async function mount(
   let handed = onPhone(null).handed;
   const render = (on: boolean) => {
     const tab = createElement(TerminalTab, {
-      tab: { local: AGENT.id, shell, title: "Local 1" },
+      tab: localTab(AGENT.id, shell, "Local 1"),
       agents,
       shown: on,
       onOpenAgent: () => {
@@ -640,13 +641,13 @@ test("a new terminal asked for from the + or ⌘K opens a tab of its own, named 
   const [made] = kept().slice(2);
   assert.ok(made);
   assert.equal(made.title, "Local 3");
-  assert.deepEqual(doors.chosen, [{ local: AGENT.id, shell: made.shell, title: "Local 3" }]);
+  assert.deepEqual(doors.chosen, [localTab(AGENT.id, made.shell, "Local 3")]);
   assert.deepEqual(main.sent, []);
 });
 
 test("Show local goes to the agent's Local tab viewed last, and with none open, as after a reload, opens a tab for each terminal the window still holds, the newest last", async () => {
-  const first = { local: AGENT.id, shell: FIRST, title: "Local 1" };
-  const second = { local: AGENT.id, shell: SECOND, title: "Local 2" };
+  const first = localTab(AGENT.id, FIRST, "Local 1");
+  const second = localTab(AGENT.id, SECOND, "Local 2");
   const open = localDoors(
     [first, second],
     [
@@ -667,7 +668,7 @@ test("closing a Local tab ends its terminal: out of the window's list, its port 
   const tab = await mount();
   const port = main.post(MADE);
   const doors = localDoors([], [], tab.registry);
-  await doors.end({ local: AGENT.id, shell: FIRST, title: "Local 1" });
+  await doors.end(localTab(AGENT.id, FIRST, "Local 1"));
   assert.deepEqual(
     kept().map((each) => each.shell),
     [SECOND],
@@ -759,7 +760,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   const tab = createElement(TerminalTab, {
-    tab: { local: AGENT.id, shell: FIRST, title: "Local 1" },
+    tab: localTab(AGENT.id, FIRST, "Local 1"),
     agents,
     shown: true,
     onOpenAgent: () => undefined,
@@ -775,7 +776,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
             FITTED,
             createElement(FindScope, {
               active: true,
-              subject: { task: TASK, tab: { local: AGENT.id, shell: FIRST, title: "Local 1" } },
+              subject: { task: TASK, tab: localTab(AGENT.id, FIRST, "Local 1") },
               children: createElement(OpenLinkProvider, { value: () => undefined }, tab),
             }),
           ),

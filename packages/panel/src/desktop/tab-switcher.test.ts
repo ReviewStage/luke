@@ -5,7 +5,7 @@ import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@repo/featu
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { isAgentTab } from "@repo/ui/tab-strip-model";
+import { agentTab, fileTab, isAgentTab } from "@repo/ui/tab-strip-model";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -51,9 +51,9 @@ beforeAll(() => {
 
 const TASK = DOCUMENT_TASK.id;
 /** A File tab of the task, the side panel's first. */
-const README = { file: "README.md" };
+const README = fileTab("README.md");
 /** A second File tab of the task, beside the first. */
-const NOTES = { file: "docs/notes.md" };
+const NOTES = fileTab("docs/notes.md");
 
 /** A still as main answers one, synthetic. */
 const STILL = "data:image/jpeg;base64,AAAA";
@@ -200,7 +200,7 @@ test("arriving on a task is one screen, the tabs that arrive with it taking it i
   await window.draw(onTask(NOTES, told, { inboxView: inboxOpen() }));
   press();
   await window.draw(onTask(NOTES, told));
-  await window.draw(onTask(README, told, {}, { agent: "x" }));
+  await window.draw(onTask(README, told, {}, agentTab("x")));
 
   tab();
   letGo();
@@ -227,14 +227,14 @@ test("a screen picked restores both its panes, the task opened once", async () =
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  await window.draw(onTask(README, told, {}, { agent: "x" }));
+  await window.draw(onTask(README, told, {}, agentTab("x")));
   press();
   await window.draw(onTask(README, told, { inboxView: inboxOpen() }));
 
   tab();
   letGo();
   assert.deepEqual(told.shown, [
-    'column the task: {"agent":"x"}',
+    `column the task: ${JSON.stringify(agentTab("x"))}`,
     `panel beside the task: ${JSON.stringify(README)}`,
   ]);
 });
@@ -352,7 +352,7 @@ test("a task's card says the task and its agent's tab by the names they go by no
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();
   const window = await mounted();
-  const column = { agent: "agent-token" };
+  const column = agentTab("agent-token");
   const agent = (title: string): AgentSummary => ({
     id: column.agent,
     planId: TASK,
@@ -632,7 +632,7 @@ test("a screen picked past unsaved work is restored only once the leave is confi
         asks.push(() => leave(...args)),
   };
   const window = await mounted();
-  await window.draw(onTask(README, told, { leaveGuard: guarded }, { agent: "x" }));
+  await window.draw(onTask(README, told, { leaveGuard: guarded }, agentTab("x")));
   press();
   await window.draw(onTask(README, told, { inboxView: inboxOpen(), leaveGuard: guarded }));
 
@@ -651,7 +651,7 @@ test("a screen picked past unsaved work is restored only once the leave is confi
   letGo();
   asks[0]?.();
   assert.deepEqual(told.shown, [
-    'column the task: {"agent":"x"}',
+    `column the task: ${JSON.stringify(agentTab("x"))}`,
     `panel beside the task: ${JSON.stringify(README)}`,
   ]);
 });
@@ -694,10 +694,10 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
     },
   });
   const window = await mounted();
-  const shut = onTask(NOTES, told, {}, { agent: "x" });
+  const shut = onTask(NOTES, told, {}, agentTab("x"));
   await window.draw(doors({ ...shut, sidePanel: { ...shut.sidePanel, open: false } }));
   press();
-  const filled = onTask(README, told, {}, { agent: "x" });
+  const filled = onTask(README, told, {}, agentTab("x"));
   await window.draw(doors({ ...filled, sidePanel: { ...filled.sidePanel, fullScreen: true } }));
   press();
   await window.draw(doors(onTask(NOTES, told, { inboxView: inboxOpen() })));
@@ -720,7 +720,7 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
   letGo();
   assert.deepEqual(told.shown, [
     `panel the task: ${JSON.stringify(README)}`,
-    'column the task: {"agent":"x"}',
+    `column the task: ${JSON.stringify(agentTab("x"))}`,
   ]);
   assert.deepEqual(panel, ["full screen turned", "shut"]);
 });

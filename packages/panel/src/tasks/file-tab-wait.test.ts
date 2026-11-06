@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
+import { fileTab } from "@repo/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -100,7 +101,7 @@ test("a File tab says it is reading the file until its lines are drawn, never st
         AtomRegistry.make(),
         createElement(
           FindScope,
-          { active: true, subject: { task: "task-1", tab: { file: PATH } } },
+          { active: true, subject: { task: "task-1", tab: fileTab(PATH) } },
           createElement(FileTab, {
             place: { taskId: "task-1" },
             file: { path: PATH, range: undefined, opened: 1 },

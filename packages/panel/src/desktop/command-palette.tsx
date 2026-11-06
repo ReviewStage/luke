@@ -136,7 +136,7 @@ import {
 } from "@repo/ui/search-score";
 import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@repo/ui/search-tokens";
 import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
-import { inTaskOrder } from "@repo/ui/tab-strip-model";
+import { fileTab, inTaskOrder } from "@repo/ui/tab-strip-model";
 import {
   agentRow,
   orderTaskRows,
@@ -572,7 +572,7 @@ function filesAtHand(
   taskId: string | undefined,
 ): readonly string[] {
   const drawn = panel.files.filter((file) => file.browsedOn === taskId);
-  const placed = inTaskOrder(drawn, panel.order, (file) => ({ file: file.path }));
+  const placed = inTaskOrder(drawn, panel.order, (file) => fileTab(file.path));
   return [...new Set(placed.map((file) => file.path))];
 }
 

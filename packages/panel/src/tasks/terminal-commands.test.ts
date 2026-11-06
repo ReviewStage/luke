@@ -6,7 +6,7 @@ import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { isTerminalTab, type StripTab } from "@repo/ui/tab-strip-model";
+import { agentTab, isTerminalTab, type StripTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -112,7 +112,7 @@ async function mount(input: {
   const shown: StripTab[] = [];
   const base = tasksControl();
   const listed = input.agents ?? [];
-  const agentTabs = listed.map((each) => ({ agent: each.id }));
+  const agentTabs = listed.map((each) => agentTab(each.id));
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [SUMMARY],
@@ -204,7 +204,7 @@ test("on a plan with one agent, ⌘J shows its cloud terminal and New terminal o
 test("from an agent's own tab, both mean that agent, whatever else is on the plan", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
-    main: { agent: DONE.id },
+    main: agentTab(DONE.id),
     lastTerminal: WORKING.id,
   });
   await task.run(APP_COMMAND.SHOW_TERMINAL);
@@ -317,7 +317,7 @@ function rightClickTab(name: string): void {
 test("an agent's tab offers Show terminal on its right-click, which opens that agent's own terminal, and its composer wears no Terminal chip", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
     lastTerminal: DONE.id,
   });
   assert.ok(document.querySelector(".agent-composer"), "the agent's composer is drawn");
@@ -361,7 +361,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
     each !== HOST_CAPABILITY.TERMINALS && each !== HOST_CAPABILITY.MAC_TERMINAL;
   await mountOn(DESKTOP_CAPABILITIES, {
     agents: [WORKING],
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
   });
   rightClickTab("Invite flow");
   const onDesktop = menuLabels();
@@ -369,7 +369,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
 
   await mountOn(DESKTOP_CAPABILITIES.filter(offered), {
     agents: [WORKING],
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
     side: SIDE_PANEL_TAB.COMMENTS,
   });
   rightClickTab("Invite flow");

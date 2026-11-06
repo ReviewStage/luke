@@ -13,7 +13,7 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { useChangesPeople } from "../tasks/changes-people.js";
@@ -121,7 +121,7 @@ function PlanAgentRow({
 }): React.JSX.Element {
   const { row, endMark, card } = entry;
   const agentId = row.id;
-  const chosen = tab !== undefined && sameTab({ agent: agentId }, tab);
+  const chosen = tab !== undefined && sameTab(agentTab(agentId), tab);
   const changesPeople = useChangesPeople(pullRequest === undefined ? undefined : agentId);
   const people = pullRequest === undefined ? undefined : peopleOf(changesPeople, pullRequest);
   return (

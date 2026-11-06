@@ -90,6 +90,7 @@ import {
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@repo/host/fixture-stage";
+import { agentTab, changesTab, fileTab, pageTab, terminalTab } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
 import { longRunHold, longRunPicture, longRunTranscript } from "./agent-long-run-fixture.js";
 import { MAIN_TAB, type MainTab } from "./use-main-tabs.js";
@@ -1104,7 +1105,7 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
 }
 
 /** The fixture agent's tab, one object across draws, as a tab staged must be. */
-const FIXTURE_AGENT_TAB: MainTab = { agent: FIXTURE_AGENT_ID };
+const FIXTURE_AGENT_TAB: MainTab = agentTab(FIXTURE_AGENT_ID);
 
 /**
  * The tab the task's column opens on under an agent profile: the agent's,
@@ -1250,7 +1251,7 @@ export function agentSidePanel(
   const stage = AGENT_STAGES.get(profile);
   if (stage === undefined) return undefined;
   if ("view" in stage) {
-    const pullRequest = { changes: FIXTURE_AGENT_ID };
+    const pullRequest = changesTab(FIXTURE_AGENT_ID);
     return {
       ...panel,
       tasks: { [taskId]: { opened: [], closed: [], changes: [pullRequest] } },
@@ -1261,17 +1262,17 @@ export function agentSidePanel(
   if ("file" in stage) {
     return {
       ...panel,
-      tab: { file: stage.file },
+      tab: fileTab(stage.file),
       files: [{ path: stage.file, range: undefined, opened: 1, browsedOn: taskId }],
     };
   }
   if ("page" in stage) {
-    const page = { page: stage.page };
+    const page = pageTab(stage.page);
     return { ...panel, tab: page, pages: [page] };
   }
   // The description stands in the column's Overview, so the panel beside it is shut (`agentColumnTab`).
   if ("description" in stage) return { ...panel, open: false, tab: undefined };
-  const terminal = { terminal: FIXTURE_AGENT_ID, shell: FIXTURE_TERMINAL_TAB, title: "Cloud 1" };
+  const terminal = terminalTab(FIXTURE_AGENT_ID, FIXTURE_TERMINAL_TAB, "Cloud 1");
   return { ...panel, tab: terminal, terminals: [terminal] };
 }
 

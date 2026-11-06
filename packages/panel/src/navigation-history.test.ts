@@ -5,7 +5,15 @@ import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { isAgentTab, isDraftTab, isFileTab, isPageTab } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  fileTab,
+  isAgentTab,
+  isDraftTab,
+  isFileTab,
+  isPageTab,
+  pageTab,
+} from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { createMemoryHistory } from "@tanstack/react-router";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -868,9 +876,9 @@ function press(): void {
   });
 }
 
-const AGENT_A = { agent: "agent-a" };
-const AGENT_B = { agent: "agent-b" };
-const AGENT_C = { agent: "agent-c" };
+const AGENT_A = agentTab("agent-a");
+const AGENT_B = agentTab("agent-b");
+const AGENT_C = agentTab("agent-c");
 
 /** The task open on the column's tab and the side panel's tab given, or the panel shut, its strips holding `agents`, every tab each strip is asked to show recorded in `shown`, and the panel shut as `side:shut`; `opened` counts the things a link opened in the panel. */
 function onTabs(input: {
@@ -975,7 +983,7 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
 });
 
 test("Back's list names a renamed agent's tab by its name now beside a page's tab named as the window called it there, whose page is read only while its task is open", () => {
-  const page = { page: "page-notes" };
+  const page = pageTab("page-notes");
   const open = onTabs({ column: AGENT_A, side: page });
   const window = mount(
     {
@@ -1039,7 +1047,7 @@ test("Back's list names a person's page by the name the workspace's members give
 
 test("a tab chosen in the task's column by a press is a step of its own, which Back goes back to on that tab, while one chosen in the side panel's strip takes the standing step in place", () => {
   const shown: string[] = [];
-  const notes = { file: "docs/notes.md" };
+  const notes = fileTab("docs/notes.md");
   const beside = (column: typeof AGENT_A, side: SidePanelTab) => {
     const tasks = onTabs({ column, side, shown });
     return { ...tasks, sidePanel: { ...tasks.sidePanel, strip: [SIDE_PANEL_TAB.COMMENTS, notes] } };
@@ -1059,7 +1067,7 @@ test("a tab chosen in the task's column by a press is a step of its own, which B
 
 test("a page a link opens in the side panel is one step, which Back undoes, shutting the panel it opened, and Forward opens again", () => {
   const shown: string[] = [];
-  const notes = { file: "docs/notes.md" };
+  const notes = fileTab("docs/notes.md");
   const window = mount(onTabs({ column: AGENT_A, shown }));
   press();
   window.stand(onTabs({ column: AGENT_A, side: notes, opened: 1, shown }));
@@ -1074,7 +1082,7 @@ test("a page a link opens in the side panel is one step, which Back undoes, shut
 test("an Inbox item's step holds the panel beside it, so Back from the next item opens it again on what a link opened there, and Back again stands the item shut", () => {
   const OTHER_TASK = "7e8f9a0b-0000-4000-8000-0000000000c3";
   const done: string[] = [];
-  const page = { page: "page-plan" };
+  const page = pageTab("page-plan");
   const onItem = (taskId: string, itemId: string, side: SidePanelTab | undefined, opened = 0) => {
     const base = tasksControl();
     return tasksControl({
@@ -1178,7 +1186,7 @@ test("the side panel's tabs a link opens are steps though the task's agents are 
   };
   const window = mount(unread(SIDE_PANEL_TAB.COMMENTS, 0));
   press();
-  window.stand(unread({ file: "docs/notes.md" }, 1));
+  window.stand(unread(fileTab("docs/notes.md"), 1));
   assert.equal(window.addresses().length, 2);
 
   act(() => window.history().onBack());
@@ -1299,7 +1307,7 @@ test("each surface the window opens is counted once, by its kind and layout alon
     recordSurfaceEvent: (name, properties) => counted.push([name, properties]),
   });
   const opened = (surface: string) => ["surface:open", { surface, layout: "wide" }];
-  const file = { file: "src/relay.ts" };
+  const file = fileTab("src/relay.ts");
   const window = mount(onTabs({ column: undefined }));
   assert.deepEqual(counted, [opened("task")]);
 

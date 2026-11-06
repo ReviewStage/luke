@@ -24,7 +24,7 @@ import {
   usePressAway,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { Schema } from "effect";
 import { ChevronsLeftIcon, ChevronsRightIcon } from "lucide-react";
@@ -324,7 +324,7 @@ function withCards(
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;
-      const chosen = sameTab({ agent: offer.agent.id }, mainTabs.tab);
+      const chosen = sameTab(agentTab(offer.agent.id), mainTabs.tab);
       return card(entry, {
         kind: TAB_KIND.CHANGES,
         subject: agentSubject(agents, offer.agent.id, held, chosen),

@@ -26,6 +26,7 @@ import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { NO_EXPERIMENTS } from "@repo/settings";
+import { changesTab, pageTab } from "@repo/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -384,7 +385,7 @@ test("a pull request, a page, and a file the item names open one after another i
   const chip = notice?.querySelector<HTMLElement>("p [data-inline-ref], p button, p a");
   assert.ok(chip, "the task named by its chip");
   act(() => chip.click());
-  const went = `${OTHER_TASK} ${JSON.stringify({ page: FUNNEL.id })}`;
+  const went = `${OTHER_TASK} ${JSON.stringify(pageTab(FUNNEL.id))}`;
   assert.deepEqual(left.went, [went, went]);
 });
 
@@ -425,7 +426,7 @@ test("a page the item names before its plan's pages are read is still the panel'
 test("an archived agent's Pull request tab stands beside the Inbox as any other, and closing the last tab drawn shuts the panel, as on a task's page", async () => {
   const { container, panel } = await inbox();
   // The archived agent's tab, as one opened on the task's page before the agent was archived, which still draws its pull request.
-  act(() => panel().onChoose({ changes: ARCHIVED.id }));
+  act(() => panel().onChoose(changesTab(ARCHIVED.id)));
   await settle();
   await pressChip(container, "relay#42");
   assert.equal(panelTabs(container)?.[0], "▸ #42 Send invitations in batches");

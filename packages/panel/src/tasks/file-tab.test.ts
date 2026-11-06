@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { TASK_FILE_REFUSAL, type TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { fileTab } from "@repo/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -112,7 +113,7 @@ function drawTab(file: OpenFile, read: ReadFileWindow): HTMLElement {
         AtomRegistry.make(),
         createElement(
           FindScope,
-          { active: true, subject: { task: "task-1", tab: { file: PATH } } },
+          { active: true, subject: { task: "task-1", tab: fileTab(PATH) } },
           createElement(FileTab, { place: { taskId: "task-1" }, file, onRead: () => undefined }),
         ),
       ),

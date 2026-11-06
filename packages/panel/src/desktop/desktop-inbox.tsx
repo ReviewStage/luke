@@ -13,7 +13,16 @@ import { backToWords, readFailedWords } from "@repo/features/words";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
-import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  changesTab,
+  isAgentTab,
+  isTranscriptTab,
+  pageTab,
+  type StripTab,
+  sameTab,
+  transcriptTab,
+} from "@repo/ui/tab-strip-model";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
@@ -346,13 +355,13 @@ export const DesktopInbox = memo(function DesktopInbox({
       case THING.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move;
         // another task's, a subtask's among them, opens here too, read on that task, so the reader stays on the item.
-        sidePanel.onPreview({ page: thing.pageId }, thing.place);
+        sidePanel.onPreview(pageTab(thing.pageId), thing.place);
         return true;
       case THING.CHANGES:
-        sidePanel.onPreview({ changes: thing.agentId });
+        sidePanel.onPreview(changesTab(thing.agentId));
         return true;
       case THING.TRANSCRIPT:
-        sidePanel.onPreview({ transcript: thing.agentId });
+        sidePanel.onPreview(transcriptTab(thing.agentId));
         // A message is brought into view as the transcript beside the item lands, as its tab on the task brings it.
         if (thing.messageId !== undefined) {
           tasks.onRevealMessage({
@@ -852,7 +861,7 @@ function InboxSidePanel({
   const openTarget = (target: ToolTarget) => {
     switch (target.kind) {
       case TOOL_TARGET.PAGE:
-        return panel.onPreview({ page: target.page });
+        return panel.onPreview(pageTab(target.page));
       case TOOL_TARGET.TASK:
         return openPlace(placeOfTaskTarget(target), () =>
           target.agent === undefined
@@ -905,7 +914,7 @@ function InboxSidePanel({
       <AgentPane
         label={agent === undefined ? undefined : agentName(agent, agents.models)}
         tabbed={false}
-        tab={{ agent: agentId }}
+        tab={agentTab(agentId)}
         agents={agents}
         shown={tasks.shown}
         views={views}

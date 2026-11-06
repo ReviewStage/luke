@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
+import { agentTab, draftTab } from "@repo/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -59,8 +60,8 @@ async function mount(asked = false): Promise<{ chosen: MainTab[]; opened: string
   });
   const main = {
     ...base.mainTabs,
-    tabs: [{ agent: OPEN.id }],
-    tab: { agent: OPEN.id },
+    tabs: [agentTab(OPEN.id)],
+    tab: agentTab(OPEN.id),
     openAgents: [OPEN.id],
     onChoose: (tab: MainTab) => chosen.push(tab),
     newTabAsked: asked,
@@ -107,14 +108,14 @@ test("the column's + opens a New agent at once, with no menu between", async () 
   const { chosen } = await mount();
   await act(async () => button("New agent").click());
 
-  assert.deepEqual(chosen, [{ draft: "draft-1" }]);
+  assert.deepEqual(chosen, [draftTab("draft-1")]);
   assert.equal(document.querySelector('[role="listbox"], [role="menu"]'), null);
 });
 
 test("⌘T's ask opens a New agent as the + does, once the column has the keys", async () => {
   const { chosen } = await mount(true);
 
-  assert.deepEqual(chosen, [{ draft: "draft-1" }]);
+  assert.deepEqual(chosen, [draftTab("draft-1")]);
 });
 
 test("History lists the closed and the archived agents but not one whose tab is open, and a row's press opens its agent", async () => {

@@ -24,7 +24,15 @@ import {
   useMenu,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  draftTab,
+  inTaskOrder,
+  isDraftTab,
+  type StripTab,
+  sameTab,
+  tabKey,
+} from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useEffect, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
@@ -295,7 +303,7 @@ function agentTabs(input: {
   });
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
-    const tab = { agent: agent.id };
+    const tab = agentTab(agent.id);
     const label = agentName(agent, agents.models);
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     // A message to it that did not go wears the failed mark in the pencil's place.
@@ -320,7 +328,7 @@ function agentTabs(input: {
   });
   // A Start still making its agent stands as that agent's tab under the press's key, which nothing closes but its answer.
   const pending = agents.start.pending;
-  const startingTab = pending === undefined ? undefined : { agent: pending.key };
+  const startingTab = pending === undefined ? undefined : agentTab(pending.key);
   const starting =
     startingTab === undefined || main.openAgents?.includes(startingTab.agent) !== true
       ? []
@@ -347,17 +355,14 @@ function agentTabs(input: {
       ? []
       : [
           {
-            tab: { draft },
-            look: look(
-              { draft },
-              {
-                ...tabLook({ kind: TAB_KIND.DRAFT }),
-                labelReplayUnmasked: true,
-                endMark: draftHolds && !chosen({ draft }) ? <DraftMark /> : undefined,
-              },
-            ),
+            tab: draftTab(draft),
+            look: look(draftTab(draft), {
+              ...tabLook({ kind: TAB_KIND.DRAFT }),
+              labelReplayUnmasked: true,
+              endMark: draftHolds && !chosen(draftTab(draft)) ? <DraftMark /> : undefined,
+            }),
             close: () => {
-              main.onClose({ draft });
+              main.onClose(draftTab(draft));
               agents.onDiscardDraft(draft);
             },
           },
@@ -380,7 +385,7 @@ export function agentEntries(
 ): AddEntry[] {
   return (agents.agents ?? []).map((agent) => {
     const label = agentName(agent, agents.models);
-    const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
+    const chosen = main.tab !== undefined && sameTab(agentTab(agent.id), main.tab);
     return {
       row: {
         id: agent.id,
@@ -398,7 +403,7 @@ export function agentEntries(
             read={agentCardReading(agent, label, held, chosen, agents)}
           />
         ),
-      onPick: () => main.onChoose({ agent: agent.id }),
+      onPick: () => main.onChoose(agentTab(agent.id)),
       agent,
     };
   });
@@ -445,7 +450,7 @@ export function newAgentStarts(main: MainTabsControl, agents: AgentsControl): Me
       label: tabLook({ kind: TAB_KIND.DRAFT }).label,
       detail: reason,
       disabled: reason !== undefined,
-      onSelect: () => main.onChoose({ draft: agents.onNewDraft() }),
+      onSelect: () => main.onChoose(draftTab(agents.onNewDraft())),
     },
   ];
 }
