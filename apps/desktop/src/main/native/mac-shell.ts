@@ -25,6 +25,11 @@ const TERMINAL_NAME = "xterm-256color";
 /** The locale a shell gets where the app was launched without one, as Finder launches it, so a shell reads and writes UTF-8. */
 const FALLBACK_LANG = "en_US.UTF-8";
 
+/** A failure's code alone, which a log line may carry: its message may name a path in the developer's home. */
+function failureCode(cause: unknown): string {
+  return cause instanceof Error && "code" in cause ? String(cause.code) : "no code";
+}
+
 /** The size a shell opens at, before its first attach tells it the tab's. */
 const OPENING_SIZE = { cols: 80, rows: 24 } as const;
 
@@ -36,7 +41,8 @@ function loadedNodePty(): typeof NodePty | null {
   try {
     const loaded: typeof NodePty = createRequire(__filename)(nativeHelperPath("node-pty"));
     nodePty = loaded;
-  } catch {
+  } catch (cause) {
+    console.error(`node-pty did not load (${failureCode(cause)}), so no shell opens on this Mac.`);
     nodePty = null;
   }
   return nodePty;
@@ -69,7 +75,8 @@ export function spawnMacShell(folder: string): MacShell | undefined {
         LANG: process.env.LANG || FALLBACK_LANG,
       },
     });
-  } catch {
+  } catch (cause) {
+    console.error(`A shell did not start on this Mac (${failureCode(cause)}).`);
     return undefined;
   }
   const encoder = new TextEncoder();
