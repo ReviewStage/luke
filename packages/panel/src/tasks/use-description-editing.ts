@@ -23,17 +23,31 @@ import {
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TasksEditAnswer } from "@repo/features/tasks-view";
 import { STATUS_TONE } from "@repo/ui";
-import { MutationObserver, useMutation, useQueryClient } from "@tanstack/react-query";
+import { MutationObserver, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { DescriptionEditorPlacement } from "../description-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type ToastNotice, useToast, useWithdrawToast } from "../toast.js";
-import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
+import {
+  appStateQuery,
+  type SignedInAccount,
+  sameAccount,
+  selectSignedIn,
+} from "../use-app-state.js";
 import type { DescriptionEditMutation } from "./description-edit-mutation.js";
+import { type ConflictWords, conflictWords, type EditPlace } from "./edit-ref.js";
 
 /**
  * use-description-editing.ts -- the open task's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.
@@ -48,7 +62,9 @@ import type { DescriptionEditMutation } from "./description-edit-mutation.js";
  * lost: a toast that stands until it is dismissed says so, its action saving
  * them through that task's door, and coming back to the task opens the
  * editor on them again. Unsaved words live in this window's memory alone and
- * are never written to disk. The editor itself is `description-document-editor.tsx`.
+ * are never written to disk, and are the account's that wrote them: another
+ * signing in lets go of them (`useDescriptionWordsOwner`), so no Retry or
+ * return saves them as an account that did not write them. The editor itself is `description-document-editor.tsx`.
  */
 
 /** How long the developer pauses before what they typed is saved. */
@@ -64,6 +80,9 @@ type LeftSave = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
 /** The words each task was left with that did not save, by the task's id, until they save or the developer comes back to them. */
 const leftUnsavedAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, DocumentEditor>>(new Map()));
+
+/** The account signed in as the window's owner hook last drew it, whose change lets go of the words tasks were left with. */
+const wordsOwnerAtom = Atom.keepAlive(Atom.make<SignedInAccount | undefined>(undefined));
 
 /** The tasks whose open editor holds words the service does not hold yet, while it does. */
 const openUnsavedAtom = Atom.keepAlive(Atom.make<readonly string[]>([]));
@@ -101,9 +120,11 @@ const LEFT_UNSAVED = {
   KEEP_MINE: "Keep mine",
 } as const;
 
-/** What a task's words are saved through once it is left: its id, its save, who its conflict is named for, and where they are kept and said. */
+/** What a task's words are saved through once it is left: its id, the account that wrote them and the one signed in as it asks, its save, who its conflict is named for, and where they are kept and said. */
 interface LeftTask {
   readonly taskId: string;
+  readonly owner: SignedInAccount | undefined;
+  readonly signedIn: () => SignedInAccount | undefined;
   readonly save: LeftSave;
   readonly place: EditPlace;
   readonly registry: AtomRegistry.AtomRegistry;
@@ -135,6 +156,13 @@ function failureOf(answered: object): object | undefined {
  */
 function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: unknown): void {
   const { taskId, registry } = left;
+  // Note that a save answered after another account signed in keeps nothing
+  // and lets go of nothing kept, because its words are no longer the account's
+  // signed in and what is kept for the task now is the next account's.
+  if (!sameAccount(left.signedIn(), left.owner)) {
+    mark(registry, savingLeftAtom, saving, false);
+    return;
+  }
   const kept = editorLeft(now);
   const held = new Map(registry.get(leftUnsavedAtom));
   if (kept === undefined) held.delete(taskId);
@@ -188,6 +216,11 @@ function saveLeft(
   saving = Symbol(left.taskId),
   cause?: unknown,
 ): void {
+  // Note that words are never sent once another account has signed in, because they would save as it.
+  if (!sameAccount(left.signedIn(), left.owner)) {
+    mark(left.registry, savingLeftAtom, saving, false);
+    return;
+  }
   mark(left.registry, savingLeftAtom, saving, true);
   const request = leavingSave(now);
   if (request === undefined) {
@@ -252,6 +285,26 @@ export function useDescriptionWordsUnsaved(): boolean {
 }
 
 /**
+ * Tells the descriptions' words which account is signed in: once another
+ * signs in, the words its tasks were left with go, and the toasts over them,
+ * because they are the words of the account that wrote them and a Retry or a
+ * return would save them as the next. The window calls it once; it reads
+ * the account from main's document.
+ */
+export function useDescriptionWordsOwner(): void {
+  const account = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
+  const registry = useContext(RegistryContext);
+  const withdrawToast = useWithdrawToast();
+  useLayoutEffect(() => {
+    const held = registry.get(wordsOwnerAtom);
+    registry.set(wordsOwnerAtom, account);
+    if (sameAccount(held, account)) return;
+    for (const taskId of registry.get(leftUnsavedAtom).keys()) withdrawToast(taskId);
+    registry.set(leftUnsavedAtom, new Map());
+  }, [registry, withdrawToast, account]);
+}
+
+/**
  * Marks a title's words as unsaved work, or not, for as long as the title
  * stands and after: words typed stay unsaved until the rename they ask for
  * answers, which may be after the title has gone.
@@ -288,6 +341,12 @@ export function useDescriptionEditing(
   // Whether the open editor holds words typed since its last hand-over.
   const [holding, setHolding] = useState(false);
   const registry = useContext(RegistryContext);
+  const owner = useQuery({ ...appStateQuery, select: selectSignedIn }).data;
+  // Note that whose words are sent is read from main's document as it stands
+  // at the send, never as a render drew it, so no order of draws sends them as another.
+  const signedInNow = () => selectSignedIn(queryClient.getQueryData(appStateQuery.queryKey));
+  // The account signed in as the open editor opened, whose words it holds.
+  const wroteAs = useRef(owner);
   const toast = useToast();
   const withdrawToast = useWithdrawToast();
   // The open editor's words not yet handed over, which a task leaving must save too.
@@ -314,7 +373,7 @@ export function useDescriptionEditing(
   // so a pause and a close landing in one flush start one save, not two.
   const send = () => {
     const held = latest.current;
-    if (held === undefined) return;
+    if (held === undefined || !sameAccount(signedInNow(), wroteAs.current)) return;
     const request = pendingSave(held);
     if (request === undefined) return;
     const sentFrom = opening.current;
@@ -352,6 +411,21 @@ export function useDescriptionEditing(
     return () => mark(registry, openUnsavedAtom, taskId, false);
   }, [registry, taskId, unsaved]);
 
+  // Another account signing in closes an editor open on the last one's words,
+  // which are never saved as it; a save's answer still out lands on no editor.
+  // The same account read anew, its id among it, is what the editor holds.
+  useEffect(() => {
+    if (sameAccount(wroteAs.current, owner)) {
+      wroteAs.current = owner;
+      return;
+    }
+    if (latest.current === undefined) return;
+    opening.current += 1;
+    latest.current = undefined;
+    setEditor(undefined);
+    setHolding(false);
+  }, [owner]);
+
   // A pause that ran out on the newest keystroke saves what stands.
   useEffect(() => {
     if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) send();
@@ -373,6 +447,7 @@ export function useDescriptionEditing(
     opening.current += 1;
     const kept = text === undefined ? undefined : takeLeft(registry, taskId);
     if (kept !== undefined) withdrawToast(taskId);
+    wroteAs.current = signedInNow();
     latest.current = kept;
     setEditor(kept);
     setSelecting(undefined);
@@ -385,6 +460,8 @@ export function useDescriptionEditing(
       const leaving = new MutationObserver(queryClient, writes.current);
       const left: LeftTask = {
         taskId,
+        owner: wroteAs.current,
+        signedIn: signedInNow,
         save: (request) => leaving.mutate(request),
         place: drawnPlace.current,
         registry,
@@ -412,6 +489,7 @@ export function useDescriptionEditing(
       if (text === undefined) return;
       if (editor !== undefined && !editorCloses(editorCloseAsked(editor))) return;
       opening.current += 1;
+      wroteAs.current = signedInNow();
       setEditor(editorOpened(text));
       setPlacement(place);
       setSelecting(undefined);
