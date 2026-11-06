@@ -124,6 +124,7 @@ import { agentSummary, summaryAccounts, summaryDevices } from "./status.js";
 import { agentLineSender } from "./steer.js";
 import { summaryOf } from "./stop.js";
 import {
+  type Inherited,
   landedInheriting,
   openedTakingOver,
   type ReplayFitter,
@@ -132,6 +133,7 @@ import {
   type Takeover,
   type TakeoverRules,
   takeoverOf,
+  takeoverRules,
   whereOf,
 } from "./takeover.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -938,11 +940,11 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   // source read, because its task may run elsewhere since, its device be away, or its source be gone.
   const taken = yield* takeoverOf(userId, ask);
   if (taken.made !== undefined) return { agent: taken.made, created: false };
-  const { inherited } = taken;
-  const { rules } = inherited;
+  const rules = takeoverRules(taken.from, ask);
+  const inherited: Inherited = { from: taken.from, rules };
   // An agent started from another runs on that agent's choice unless the Start names one, and is
   // landed with that agent's replay fitted to the choice's window.
-  const { read, landing, carried } = yield* landedInheriting(
+  const { read, landing, carried, pilotStarter } = yield* landedInheriting(
     userId,
     ask,
     inherited,
@@ -1011,7 +1013,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       automationRunId: ask.automationRunId,
       startedFrom: landing.startedFrom,
       source: sourceOf(ask.carried),
-      startedByAgentId: ask.startedBy?.id ?? inherited.pilotStarter,
+      startedByAgentId: ask.startedBy?.id ?? pilotStarter,
       takesOverFrom: rules.takesOver?.id,
       title: rules.title,
       idempotencyKey: ask.idempotencyKey,

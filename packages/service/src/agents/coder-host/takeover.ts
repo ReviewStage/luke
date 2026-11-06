@@ -115,9 +115,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * The rules are decided once, from the source and the ask, with no read
  * (`takeoverRules`), so `start.ts` reads what a Start inherits rather than
  * asking which kind of Start it is; a fresh Start's rules are the ask's own
- * values. Every Start reads what it inherits first (`takeoverOf`), which
- * answers a retry under its key before any source is read, then fits the
- * source's replay once its choice is accepted (`landedInheriting`), and
+ * values. Every Start reads its source first (`takeoverOf`), which answers
+ * a retry under its key before any source is read, decides its rules from
+ * that source and its ask, then fits the source's replay once its choice is
+ * accepted (`landedInheriting`), and
  * opens its agent through `openedTakingOver`, which copies a carried
  * transcript before the open and stops the source only after it.
  */
@@ -205,18 +206,16 @@ export interface ReplayFitter {
   ) => Effect.Effect<FittedReplay, never, DatabaseServices>;
 }
 
-/** What a Start inherits: the source as read, none for a fresh Start, its rules, and the pilot it reports to as its source did. */
+/** What a Start inherits: the source as read, none for a fresh Start, and the rules `takeoverRules` decides of it. */
 export interface Inherited {
   readonly from: StartFrom | undefined;
   readonly rules: TakeoverRules;
-  /** The pilot that started the source, for a member's continue of an agent a pilot started; none otherwise. */
-  readonly pilotStarter: string | undefined;
 }
 
-/** What `takeoverOf` answers: the agent a retry's key already made, or what a new Start inherits. */
+/** What `takeoverOf` answers: the agent a retry's key already made, or the source a new Start is from, none for a fresh one. */
 export type TakeoverRead =
   | { readonly made: Agent }
-  | { readonly made: undefined; readonly inherited: Inherited };
+  | { readonly made: undefined; readonly from: StartFrom | undefined };
 
 /** A choice as the catalog accepted it, with the account's stored credentials it was checked against. */
 interface AcceptedRead {
@@ -556,14 +555,12 @@ const pilotStarterOf = (userId: string, source: Agent) =>
       );
 
 /**
- * What a Start inherits, read before anything it makes: the agent its key
- * already made where it is a retry of this Start, a fresh one's in the
- * place asked and one from another agent's before its source is read,
+ * What a Start takes over from, read before anything it makes: the agent
+ * its key already made where it is a retry of this Start, a fresh one's in
+ * the place asked and one from another agent's before its source is read,
  * which may be gone since; a key that names another Start's agent refused
  * as invalid. Otherwise the source read against the place asked, one not of
- * it refused, never dropped (`startFromOf`), held to its plan's policy for a
- * continue, and the pilot its source reported to; nothing for a fresh Start
- * but its rules.
+ * it refused, never dropped (`startFromOf`); none for a fresh Start.
  */
 export const takeoverOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -575,8 +572,7 @@ export const takeoverOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (Option.isSome(made) && (yield* madeInPlace(userId, made.value, whereOf(ask)))) {
       return { made: made.value };
     }
-    const rules = takeoverRules(undefined, ask);
-    return { made: undefined, inherited: { from: undefined, rules, pilotStarter: undefined } };
+    return { made: undefined, from: undefined };
   }
   const made = yield* startedFromBefore(userId, ask.idempotencyKey, asked, ask);
   if (Option.isSome(made)) return { made: made.value };
@@ -590,12 +586,7 @@ export const takeoverOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ask.attachments ?? [],
     ask.idempotencyKey,
   );
-  const rules = takeoverRules(from, ask);
-  if (rules.checksPlanWriter) yield* admitsPlanWriter(userId, from.source);
-  const pilotStarter = rules.readsPilotStarter
-    ? yield* pilotStarterOf(userId, from.source)
-    : undefined;
-  return { made: undefined, inherited: { from, rules, pilotStarter } };
+  return { made: undefined, from };
 });
 
 /**
@@ -759,7 +750,9 @@ const carriedExtrasOf = Effect.fnUntraced(function* (
 /**
  * A Start's accepted choice and its landing, with what it inherits fitted
  * to them: a fresh Start's landing does not wait on its choice, so the two
- * are read together; one from another agent fits that agent's replay to the
+ * are read together; one from another agent is first held to its source's
+ * plan's policy where it stops that source and reads the pilot its source
+ * reported to where its rules say, then fits that agent's replay to the
  * choice's window, its transcript carried whole in place of its replayed
  * steps where the service keeps it on the harness `runtimeOf` decides, so
  * its landing waits on it, and once landed carries the repositories its
@@ -790,6 +783,8 @@ export const landedInheriting = <
     readonly read: A;
     readonly landing: L;
     readonly carried: readonly AgentAlsoRepository[] | undefined;
+    /** The pilot that started the source, for a member's continue of an agent a pilot started; none otherwise. */
+    readonly pilotStarter: string | undefined;
   },
   E1 | E2 | HostedRefusal,
   R1 | R2 | DatabaseServices | ModelCatalog
@@ -800,9 +795,14 @@ export const landedInheriting = <
       read,
       landing,
       carried: undefined,
+      pilotStarter: undefined,
     }));
   }
   return Effect.gen(function* () {
+    if (rules.checksPlanWriter) yield* admitsPlanWriter(userId, from.source);
+    const pilotStarter = rules.readsPilotStarter
+      ? yield* pilotStarterOf(userId, from.source)
+      : undefined;
     const read = yield* accepted;
     const session = yield* carriedSessionOf(ask, from, runtimeOf(read.choice.model, read.keys));
     const handedFrom = session === undefined ? from : carryingTranscript(from, session);
@@ -818,7 +818,7 @@ export const landedInheriting = <
     const carried = rules.carriesExtras
       ? yield* carriedExtrasOf(userId, from.source, landing.repository)
       : undefined;
-    return { read, landing, carried };
+    return { read, landing, carried, pilotStarter };
   });
 };
 
