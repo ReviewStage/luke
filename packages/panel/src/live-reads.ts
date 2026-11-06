@@ -236,7 +236,8 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
   [LIVE_READ.WORKSPACE_TOOLS]: ([agentId = ""]) =>
     askAct(ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: String(agentId) }),
   [LIVE_READ.MCP_CLIENTS]: () => askAct(ACT_KIND.MCP_CLIENTS_FOLLOW),
-  [LIVE_READ.MEMORIES]: ([workspaceId = ""]) => askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId: String(workspaceId) }),
+  [LIVE_READ.MEMORIES]: ([workspaceId = ""]) =>
+    askAct(ACT_KIND.MEMORIES_FOLLOW, { workspaceId: String(workspaceId) }),
   [LIVE_READ.REPOSITORY_LISTS]: ([workspace = ""]) =>
     askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, repositoryScope(String(workspace))),
   [LIVE_READ.SLACK_CHANNELS]: ([workspaceId = ""]) =>
