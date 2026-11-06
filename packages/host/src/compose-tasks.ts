@@ -1817,7 +1817,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const read = githubRead;
     githubAskedAt = yield* Clock.currentTimeMillis;
     const status = yield* served(client.github.status());
-    if (read === githubRead && status.ok) write({ github: status.answer });
+    if (read === githubRead && !("failure" in status)) write({ github: status });
   });
 
   /** Reads the connection where none was asked for since a sign-out, or the last ask is older than its bound. */
@@ -3266,7 +3266,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return GITHUB_PAGE_UNANSWERED;
         const page = yield* served(client.github.connect());
         githubAskedAt = undefined;
-        return page.ok ? { url: page.answer.url } : GITHUB_PAGE_UNANSWERED;
+        return "failure" in page ? GITHUB_PAGE_UNANSWERED : { url: page.url };
       }),
     // The view takes the connection the service answers at once, so Settings
     // reads disconnected without waiting for the next read of it. Note that
@@ -3278,7 +3278,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         githubAskedAt = undefined;
         // Note that GitHub's standing as an integration is asked again before the answer, so the window draws it from the held read as the answer lands.
         yield* dependencies.githubMoved;
-        if (!disconnected.ok) {
+        if ("failure" in disconnected) {
           return yield* new ActRefused(
             disconnected.failure === GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED
               ? { sentence: GITHUB_LAST_SIGN_IN_REFUSAL }
@@ -3288,7 +3288,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // Note that a read started before the answer is made stale, because
         // the status it read may predate the unlink.
         githubRead += 1;
-        write({ github: disconnected.answer });
+        write({ github: disconnected });
       }),
     // An admin read is answered to the caller as the service answered it and
     // held nowhere, since it is other accounts' data, which no view keeps.
