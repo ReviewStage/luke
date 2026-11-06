@@ -14,8 +14,10 @@ import { TASK_STATUS } from "@repo/features/task-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxTask, AppInboxTaskHolding } from "@repo/host/app-state";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { TimeTicks } from "@repo/ui";
 import { Effect } from "effect";
-import { act } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { beforeAll, onTestFinished, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
@@ -1724,4 +1726,29 @@ test("the list's search stands under the Inbox's head, its name and buttons neve
     "▸ *Alert at 80%?",
   ]);
   assert.equal(document.activeElement, input, "the caret stays in the field");
+});
+
+test("an item whose reminder came due since the window's minute last read the clock lists at once, at the top, as an Undo of Remind me brings it back the moment it is canceled", async () => {
+  const minuteRead = Date.UTC(2026, 10, 6, 18, 38);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(minuteRead);
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  // The window's minute, read once as the panel's root reads it and not again within the test.
+  const ticks = createRoot(document.createElement("div"));
+  act(() => ticks.render(createElement(TimeTicks)));
+  onTestFinished(() => act(() => ticks.unmount()));
+  const { page } = mount();
+  await settle();
+  const canceled = minuteRead + 20_000;
+  vi.setSystemTime(canceled);
+  world.inboxes.set(BILLING.id, [{ ...THRESHOLD, remindAt: canceled }, RETRY]);
+  pushAgain();
+  await settle();
+  assert.deepEqual(listed(page), [
+    "*Alert at 80%?",
+    "How is a failed email retried?",
+    "*Expire after 7 days?",
+  ]);
 });

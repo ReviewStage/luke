@@ -1718,6 +1718,19 @@ function remindsLater(item: Pick<InboxItem, "remindAt">, now: number): boolean {
 }
 
 /**
+ * The time the reader's reminders are weighed at: the window's minute, or
+ * the clock as the items are weighed where that is later. Note that the
+ * minute lags the clock by up to a minute, and a reminder canceled comes due
+ * the moment it is canceled (`@repo/host`'s `remindAtAfter`, and the
+ * service's answer after it), which the minute alone reads as still ahead,
+ * so an Undo of Remind me would list the item under Reminders as due now
+ * rather than back where it was.
+ */
+export function reminderClock(minute: number): number {
+  return Math.max(minute, Date.now());
+}
+
+/**
  * An item as it stands for the reader at `now`: put away while its reminder is
  * ahead, read or unread alike; and back where it has passed, as changed
  * then, so it lists at the top, read or unread as it was. A change ends a

@@ -44,6 +44,7 @@ import {
   type InboxNote,
   inboxBoard,
   inboxThreadSend,
+  reminderClock,
 } from "./inbox-model.js";
 
 /**
@@ -792,8 +793,11 @@ export function useHeldTaskInbox(input: {
   }, [held.items, ids]);
 
   // Note that the clock moves with the minute, so a thread whose reminder comes due counts again without a read.
-  const now = useMinute();
-  const board = useMemo(() => inboxBoard(held.items, readerId, now), [held.items, readerId, now]);
+  const minute = useMinute();
+  const board = useMemo(
+    () => inboxBoard(held.items, readerId, reminderClock(minute)),
+    [held.items, readerId, minute],
+  );
 
   return {
     board,
