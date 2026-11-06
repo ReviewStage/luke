@@ -196,7 +196,7 @@ import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
-import { taskTreeQueryOptions } from "../tasks/repository-reads.js";
+import { refusedAnswer, taskTreeQueryOptions } from "../tasks/repository-reads.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/task-menu-items.js";
 import { TaskKey } from "../tasks/task-standing.js";
@@ -619,7 +619,7 @@ function paletteFilesQueryOptions(taskId: string | undefined) {
 /** The files as the palette holds them: none before they are asked for, and reading while a read is out, a Retry's among them. */
 function filesHeld(files: UseQueryResult<TasksTreeAnswer>): FilesRead | undefined {
   if (files.isFetching) return { read: FILES_READ.READING };
-  if (files.isError) return { read: FILES_READ.FAILED };
+  if (files.isError) return filesOf(refusedAnswer(files.error));
   return files.data === undefined ? undefined : filesOf(files.data);
 }
 

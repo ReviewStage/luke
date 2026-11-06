@@ -142,7 +142,7 @@ import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import type { PullRequestSource } from "./pull-request-source.js";
 import { PullRequestWriteNote, type ReadAgain } from "./pull-request-writes.js";
-import { taskFileQueryOptions } from "./repository-reads.js";
+import { refusedAnswer, taskFileQueryOptions } from "./repository-reads.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
@@ -1484,13 +1484,16 @@ function useFileTexts(
           (answer) =>
             "text" in answer
               ? { text: answer.text.text }
-              : {
-                  refused:
-                    "refusal" in answer
-                      ? expansionRefusalOf(answer.refusal)
-                      : EXPANSION_REFUSAL.UNAVAILABLE,
-                },
-          () => ({ refused: EXPANSION_REFUSAL.UNAVAILABLE }),
+              : { refused: EXPANSION_REFUSAL.UNAVAILABLE },
+          (error: unknown) => {
+            const refused = refusedAnswer(error);
+            return {
+              refused:
+                "refusal" in refused
+                  ? expansionRefusalOf(refused.refusal)
+                  : EXPANSION_REFUSAL.UNAVAILABLE,
+            };
+          },
         );
     const textsAt = async (file: AgentChangedFile): Promise<TextsRead> => {
       if (!tooLargeToDiff(file)) {
