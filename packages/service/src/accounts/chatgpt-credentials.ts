@@ -64,12 +64,15 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
  * The flow a seal names: Codex's device-code login, the one way a plan is
- * connected. A seal that names none, or the retired third-party sign-in's
- * `third_party`, holds credentials that can no longer renew. Note that it
- * is still written, because a deployment from before the retirement reads a
- * seal without it as the third party's.
+ * connected, or the retired third-party sign-in, whose seals, and those from
+ * before flows were named, can no longer renew. Note that the device-code
+ * flow is still written, because a deployment from before the retirement
+ * reads a seal without it as the third party's.
  */
-const CODEX_DEVICE_FLOW = "codex_device";
+const CHATGPT_FLOW = {
+  CODEX_DEVICE: "codex_device",
+  RETIRED_THIRD_PARTY: "third_party",
+} as const;
 
 /** OpenAI's authorization server and where its published keys and revocation endpoint are read from. */
 export const CHATGPT_OAUTH = {
@@ -139,7 +142,7 @@ const HTTP_STATUS = { OK: 200, BAD_REQUEST: 400, SERVER_ERROR: 500 } as const;
  * reads.
  */
 const SealedCredentialsSchema = Schema.Struct({
-  flow: Schema.Literal(CODEX_DEVICE_FLOW),
+  flow: Schema.Literal(CHATGPT_FLOW.CODEX_DEVICE),
   clientId: Schema.String,
   accountId: Schema.String,
   accessToken: Schema.String,
@@ -155,7 +158,7 @@ const SealedCredentialsJson = Schema.fromJsonString(SealedCredentialsSchema);
 
 /** The retired third-party sign-in's seal, as far as it is told apart: it names no flow, or `third_party`. */
 const RetiredSealJson = Schema.fromJsonString(
-  Schema.Struct({ flow: Schema.optionalKey(Schema.Literal("third_party")) }),
+  Schema.Struct({ flow: Schema.optionalKey(Schema.Literal(CHATGPT_FLOW.RETIRED_THIRD_PARTY)) }),
 );
 
 /**
@@ -405,7 +408,7 @@ export function sealCodexDeviceCredentials(
   tokens: CodexDeviceTokens,
 ) {
   const sealed = sealCredentials(ring, userId, {
-    flow: CODEX_DEVICE_FLOW,
+    flow: CHATGPT_FLOW.CODEX_DEVICE,
     clientId: CODEX_DEVICE_OAUTH.CLIENT_ID,
     accountId: tokens.accountId,
     accessToken: tokens.accessToken,
