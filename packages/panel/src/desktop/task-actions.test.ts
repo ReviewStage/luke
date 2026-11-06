@@ -169,8 +169,8 @@ function mountPlanTab(
     tasks,
   });
   const container = mount(registry === undefined ? page : onRegistry(registry, page));
-  const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
-  assert.ok(more instanceof HTMLButtonElement, "the Plan tab's ⋯ stands in the panel's bar");
+  const more = container.querySelector('.task-topbar button[aria-label$=" actions"]');
+  assert.ok(more instanceof HTMLButtonElement, "the task's ⋯ stands in its topbar");
   return more;
 }
 
@@ -304,7 +304,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
       ),
     );
   draw(tasks);
-  const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
+  const more = container.querySelector('.task-topbar button[aria-label$=" actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   openMenu(more);
   choose("Permanently delete");

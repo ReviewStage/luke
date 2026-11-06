@@ -404,6 +404,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     mainTabs: {
       tabs: [MAIN_TAB.OVERVIEW],
       tab: MAIN_TAB.OVERVIEW,
+      returnTab: undefined,
       openAgents: undefined,
       newTabAsked: false,
       onChoose: ignore,

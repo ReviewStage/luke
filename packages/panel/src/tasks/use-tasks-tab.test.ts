@@ -49,6 +49,7 @@ import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settin
 import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
 import { timeRuntime } from "@repo/ui";
 import { memoryHistory } from "@repo/ui/history-adapter";
+import { isAgentTab, isDraftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -698,30 +699,30 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("a task none of whose tabs was viewed shows its Overview, keeps the tab chosen across a launch, and shows Overview alone once its last agent's tab closes", async () => {
+test("a task none of whose tabs was viewed shows its agents' last tab, keeps the tab chosen across a launch, and shows the tab viewed before its last agent's once that closes", async () => {
   const listed = withAgents([RUNNING_AGENT]);
   const tab = mount({ shown: true, tasks: listed });
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agent], "Overview leads the strip");
-  assert.equal(column().tab, MAIN_TAB.OVERVIEW, "a task never shown on a tab shows its Overview");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agent], "the details lead the order");
+  assert.deepEqual(column().tab, agent, "a task never shown on a tab shows its agent");
   assert.equal(tab.control().agents.draft, undefined, "and opens no draft beside it");
-  assert.equal(panelOf(tab).open, false, "the plan opens no side panel beside it");
+  assert.equal(panelOf(tab).open, false, "the task opens no side panel beside it");
 
   act(() => column().onClose(MAIN_TAB.OVERVIEW));
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agent], "Overview never closes");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, agent], "the details never close");
 
-  act(() => column().onChoose(agent));
-  assert.deepEqual(column().tab, agent);
+  act(() => column().onChoose(MAIN_TAB.OVERVIEW));
+  assert.deepEqual(column().returnTab, agent, "the details go back to the agent");
 
   const launched = mount({ shown: true, tasks: listed });
   await settle();
   const again = () => launched.control().mainTabs;
-  assert.deepEqual(again().tab, agent, "a launch opens the task on the agent it last showed");
+  assert.equal(again().tab, MAIN_TAB.OVERVIEW, "a launch opens the task on what it last showed");
 
+  act(() => again().onChoose(agent));
   act(() => again().onClose(agent));
-  await settle();
   assert.deepEqual(again().tabs, [MAIN_TAB.OVERVIEW]);
   assert.equal(again().tab, MAIN_TAB.OVERVIEW, "the tab viewed before it is shown");
 });
@@ -746,7 +747,7 @@ function namingRow(lines: readonly string[], total: number) {
   };
 }
 
-test("a task whose row settles its tab shows that agent's before its agents are read, one with none viewed its Overview, and one whose row cannot say shows none until they are", async () => {
+test("a task whose row settles its tab shows that agent's before its agents are read, and one with none viewed or whose row cannot say shows none until they are", async () => {
   const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
   // The list carries none of the task's agents yet, so whatever the column shows, the row chose.
@@ -776,8 +777,8 @@ test("a task whose row settles its tab shows that agent's before its agents are 
   );
   assert.equal(
     await shownOn([AGENT_ID], 1, undefined),
-    MAIN_TAB.OVERVIEW,
-    "its Overview, where none was viewed",
+    undefined,
+    "none viewed waits on the agents, which it opens on",
   );
   assert.deepEqual(
     await shownOn([AGENT_ID, OLDER], 2, [OLDER, UNNAMED]),
@@ -791,8 +792,8 @@ test("a task whose row settles its tab shows that agent's before its agents are 
   );
   assert.equal(
     await shownOn([AGENT_ID, OLDER], 2, undefined),
-    MAIN_TAB.OVERVIEW,
-    "of two agents none viewed, its Overview too",
+    undefined,
+    "of two agents none viewed, it waits too",
   );
 });
 
@@ -839,7 +840,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it, and a s
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.COMMENTS });
 });
 
-test("a column whose last agent is archived shows its Overview alone", async () => {
+test("a column whose last agent is archived opens a new agent's draft in its place", async () => {
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
@@ -854,8 +855,9 @@ test("a column whose last agent is archived shows its Overview alone", async () 
   tab.stand({ tasks: withAgents([archived]) });
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
-  assert.equal(column().tab, MAIN_TAB.OVERVIEW);
+  const shown = column().tab;
+  assert.ok(shown !== undefined && isDraftTab(shown), "a draft, as a task with no agent opens on");
+  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, shown]);
 });
 
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
@@ -901,7 +903,7 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
   }
 });
 
-test("a task opened from a list or a chip naming it opens on its plan, and one gone back to from the sidebar on the agent waiting on the developer, past the one at work", () => {
+test("a task opened from a list or gone back to from the sidebar opens on the agent waiting on the developer, past the one at work, and a chip naming it on its details", () => {
   const WAITING = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   // The row names one agent at work and one resting, the resting one's thread waiting on the developer.
   const named = namingRow([AGENT_ID, WAITING], 2);
@@ -936,12 +938,16 @@ test("a task opened from a list or a chip naming it opens on its plan, and one g
 
   act(() => tab.control().onSelect(TASK.id));
   tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "from a list, its plan");
+  assert.deepEqual(
+    tab.control().mainTabs.tab,
+    { agent: WAITING },
+    "from a list, the agent waiting",
+  );
 
   tab.stand({ tasks: elsewhere([waitingRow]) });
   act(() => tab.control().onShowMention({ kind: MENTION_KIND.TASK, taskId: TASK.id }));
   tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "from a chip, its plan");
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "from a chip, its details");
 
   tab.stand({ tasks: elsewhere([waitingRow]) });
   act(() => tab.control().onResume(TASK.id));
@@ -3244,7 +3250,10 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
   });
   tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
   await settle();
-  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.OVERVIEW], "the agent leaves at once");
+  assert.ok(
+    !tab.control().mainTabs.tabs.some((each) => isAgentTab(each)),
+    "the agent leaves at once",
+  );
 
   tab.stand({ tasks: withAgents([RUNNING_AGENT]) });
   await act(async () => archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
@@ -3572,14 +3581,12 @@ function openDraft(tab: ReturnType<typeof mount>) {
   return tab.control().agents.draft ?? assert.fail("no draft opened");
 }
 
-test('a task with no agent shows its Overview alone, and a draft the "+" opens closes once left holding nothing, while one holding words stays', async () => {
+test("a task with no agent opens on a new agent's draft, which closes once left holding nothing, while one holding words stays", async () => {
   const tab = mount({ shown: true, tasks: withAgents([]) });
   await settle();
   const column = () => tab.control().mainTabs;
-  assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW], "no draft opens by itself");
-  assert.equal(column().tab, MAIN_TAB.OVERVIEW);
-
-  const empty = openDraft(tab);
+  const empty = tab.control().agents.draft;
+  assert.ok(empty, "a draft opens by itself");
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, { draft: empty.id }]);
   assert.deepEqual(column().tab, { draft: empty.id });
   act(() => column().onChoose(MAIN_TAB.OVERVIEW));
@@ -3587,7 +3594,7 @@ test('a task with no agent shows its Overview alone, and a draft the "+" opens c
   assert.equal(tab.control().agents.draft, undefined, "the empty draft left is let go");
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW]);
 
-  // One left for another task is let go too, so coming back finds Overview alone.
+  // One left for another task is let go too, so coming back finds the details it was left from.
   openDraft(tab);
   tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
   await settle();

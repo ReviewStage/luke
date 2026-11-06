@@ -482,7 +482,6 @@ export function DoorsTab({
   editor,
   tabRef,
   slot,
-  slotAlways = false,
   onShown,
 }: {
   look: TabLook;
@@ -490,8 +489,6 @@ export function DoorsTab({
   editor?: React.ReactNode;
   tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   slot?: HTMLElement | null | undefined;
-  /** Whether its ⋯ stands in the slot whichever tab is chosen: the task's tab's, alone in its topbar, whose menu is the task's own. */
-  slotAlways?: boolean | undefined;
   /** Hears the tab while it is the one shown, and nothing once it is not; none where no phone's header asks. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
@@ -507,10 +504,7 @@ export function DoorsTab({
         groups={tabActionGroups(doors)}
         ends={doors.document}
       />
-      {(look.selected || slotAlways) &&
-      content.length > 0 &&
-      slot !== undefined &&
-      slot !== null ? (
+      {look.selected && content.length > 0 && slot !== undefined && slot !== null ? (
         <ToolbarTabActions
           label={look.label}
           groups={content}

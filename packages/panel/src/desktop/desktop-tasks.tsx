@@ -91,7 +91,7 @@ import {
   mainTabLabel,
   newAgentStarts,
   phoneAgentStarts,
-  TaskAgentsBar,
+  TaskTopbar,
 } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
@@ -146,17 +146,18 @@ import {
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * The column has two bars. The task's topbar names the task whichever tab
- * is chosen, by its status mark and name, a tab that opens its Overview,
- * whose head draws the task's path over its title: its repository, the task
- * it is a child of, and its key; the task's ⋯ and the summary's button stand
- * at its end. The agents' bar under it holds their tabs, the "+", and the
- * chosen agent's ⋯ (`main-tabs.tsx`). A phone heads the task with its own
- * row instead (`TaskHead`).
+ * A task opens on its agents. Its topbar spans the page, over the column
+ * and the side panel: the task's status mark and name, Details, and the
+ * task's ⋯ (`main-tabs.tsx`'s `TaskTopbar`). Under it, on one row of the
+ * frame, the column's bar holds the agents' tabs, the "+", and the chosen
+ * agent's ⋯, and the side panel's its own. Details opens the task's details,
+ * its Overview, in the column's place: its path over its title (its
+ * repository, the task it is a child of, and its key), its chips, its
+ * relations, its agents, and its plan; the column's bar then holds the way
+ * back to the agents. A phone heads the task with its own row instead (`TaskHead`).
  *
- * The column's summary stands at its right, under the bars, listing what
- * both "+" menus open, with its button last in the
- * topbar, after the ⋯ menu (`task-summary.tsx`).
+ * The column's summary stands at its right, under the column's bar, listing what
+ * both "+" menus open, with its button last in that bar (`task-summary.tsx`).
  *
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
@@ -257,18 +258,16 @@ function TaskPageSkeleton({
   return (
     <>
       {head}
+      {/* Note that the bars stand empty, never in blocks for the words, tabs, and actions they land with, and a phone, whose page hides them, draws none. */}
+      {head === undefined ? <Toolbar measure /> : null}
       <TaskPage
         columnRef={onColumn}
         panelOpen={panel !== undefined}
         fullScreen={panel?.fullScreen === true}
         column={
           <>
-            {/* Note that the bars stand empty, never in blocks for the tabs and actions they land with, and a phone, whose page hides them, draws none. */}
             {head === undefined ? (
-              <>
-                <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
-                <TaskAgentsBar />
-              </>
+              <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
             ) : null}
             <TaskBody>
               <Fill className="desktop-task-column">
@@ -565,6 +564,20 @@ function PlanDocument({
   };
   // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
+  // The task's details go back to the agent's tab they were opened over, or the agents' last, or
+  // a new agent's draft where no agent's tab stands, as a task with none opens on.
+  const leaveDetails = () => {
+    const { returnTab } = mainTabs;
+    if (returnTab !== undefined) {
+      openColumnTab(returnTab);
+      return;
+    }
+    const [start] = newAgentStarts(mainTabs, agents);
+    if (start !== undefined && start.disabled !== true) start.onSelect();
+  };
+  // Details opens the task's details in the column's place, and pressed again goes back to the agents.
+  const toggleDetails = () =>
+    tab !== undefined && isOverviewTab(tab) ? leaveDetails() : openOverview();
   // A row that opens the comments, which stand in the side panel, shows the
   // panel on them and hands it the keys, as a terminal shown does.
   const openPanelTab = (opened: SidePanelTab) => {
@@ -1215,6 +1228,54 @@ function PlanDocument({
                     hand={taskMenuHand}
                   />
                   {head}
+                  {/* On a phone no bar stands, its head naming the task instead, the bars drawn hidden so the chords they hold still answer. */}
+                  <div className={phone ? "task-topbar" : "task-topbar contents"} hidden={phone}>
+                    <TaskTopbar
+                      task={listed}
+                      // A phone's head offers the task's menu and its details itself (`TaskHead`).
+                      details={
+                        phone ? undefined : { shown: overviewShown, onToggle: toggleDetails }
+                      }
+                      planMenu={phone ? undefined : planMenu}
+                      shown={tasks.shown}
+                      actions={
+                        <>
+                          {rename.refused ? (
+                            <FailureNote
+                              failure={failureShown({
+                                surface: FAILURE_SURFACE.TASK_RENAME,
+                                cause: FAILURE_CONDITION.REFUSED,
+                                refused: true,
+                              })}
+                            >
+                              {RENAME_FAILED_NOTE}
+                            </FailureNote>
+                          ) : null}
+                          <CopyChord copy={tasks.copy} />
+                          {terminalDoors.terminals ? (
+                            <TerminalCommands
+                              here={terminalHere}
+                              agents={agents}
+                              sidePanel={sidePanel}
+                              onShown={showSide}
+                            />
+                          ) : null}
+                          {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+                          {tasks.history.viewing === undefined ? (
+                            <NewTabChord
+                              onNewTab={
+                                phone
+                                  ? newAgentOnPhone
+                                  : sideFocused
+                                    ? sidePanel.onNewTab
+                                    : mainTabs.onNewTab
+                              }
+                            />
+                          ) : null}
+                        </>
+                      }
+                    />
+                  </div>
                   {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
@@ -1225,7 +1286,7 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        {/* On a phone no bar stands, Overview listing the agents instead, the bars drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
+                        {/* On a phone no strip stands, its details listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
                         <div className={phone ? undefined : "contents"} hidden={phone}>
                           <MainTabBars
                             task={listed}
@@ -1244,45 +1305,9 @@ function PlanDocument({
                             onOpenBrowser={phone ? openBrowser : undefined}
                             slots={!phone}
                             onShown={phone ? setShownAgentTab : undefined}
-                            planMenu={planMenu}
                             waiting={waitingOf}
-                            taskActions={
-                              <>
-                                {rename.refused ? (
-                                  <FailureNote
-                                    failure={failureShown({
-                                      surface: FAILURE_SURFACE.TASK_RENAME,
-                                      cause: FAILURE_CONDITION.REFUSED,
-                                      refused: true,
-                                    })}
-                                  >
-                                    {RENAME_FAILED_NOTE}
-                                  </FailureNote>
-                                ) : null}
-                                <CopyChord copy={tasks.copy} />
-                                {terminalDoors.terminals ? (
-                                  <TerminalCommands
-                                    here={terminalHere}
-                                    agents={agents}
-                                    sidePanel={sidePanel}
-                                    onShown={showSide}
-                                  />
-                                ) : null}
-                                {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
-                                {tasks.history.viewing === undefined ? (
-                                  <NewTabChord
-                                    onNewTab={
-                                      phone
-                                        ? newAgentOnPhone
-                                        : sideFocused
-                                          ? sidePanel.onNewTab
-                                          : mainTabs.onNewTab
-                                    }
-                                  />
-                                ) : null}
-                                <SummaryButton layout={summaryLayout} cardId={summaryCard} />
-                              </>
-                            }
+                            onBack={leaveDetails}
+                            actions={<SummaryButton layout={summaryLayout} cardId={summaryCard} />}
                           />
                         </div>
                         {/* The plan's banner is the whole plan's, so it stands over every

@@ -247,7 +247,7 @@ test("a task with no agent tab draws a new agent's draft", () => {
   assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
 });
 
-test("a wide plan with no agent offers New agent at its head, which opens the draft the + menu's New agent opens", async () => {
+test("a wide task's details with no agent offer New agent at their head, which opens a draft as the way back to the agents does", async () => {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
   fakeActPort({});
@@ -282,11 +282,12 @@ test("a wide plan with no agent offers New agent at its head, which opens the dr
     ) ?? assert.fail("New agent is offered");
 
   act(() => newAgent(container.querySelector(".plan-agents [aria-label='Agents']")).click());
-  const plus =
-    container.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]') ??
-    assert.fail("the + stands");
-  await act(async () => plus.click());
-  act(() => newAgent(container.querySelector(".ui-searchable-menu")).click());
+  const back =
+    [
+      ...container.querySelectorAll<HTMLButtonElement>(".desktop-task-main .ui-toolbar button"),
+    ].find((each) => each.textContent === "Agents") ??
+    assert.fail("the way back to the agents stands");
+  act(() => back.click());
 
   assert.deepEqual(chosen, [{ draft: "draft" }, { draft: "draft" }], "both open a draft alike");
   act(() => root.unmount());

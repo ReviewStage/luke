@@ -143,6 +143,7 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
+  startsOwnAgents,
 } from "./agent-model.js";
 import {
   CLOSED_TAB_STRIP,
@@ -1569,6 +1570,26 @@ export function useTasksTab(input: {
     agents.draft?.id,
   );
   mainRef.current = mainTabs;
+  // A task opens on its agents, so one with no agent's tab standing, once its agents are read,
+  // opens a new agent's draft, its composer ready; one that starts none of its own, an archived
+  // task's or a pilot's, and any in a narrow room, shows its details instead. Note that the draft
+  // is not chosen but stands as the column's last tab, which it falls to, so it is not counted
+  // viewed: an agent coming back, as a refused archive brings it, is shown again over it.
+  const columnEmpty =
+    viewed.activeTaskId !== undefined &&
+    agents.agentIds !== undefined &&
+    mainTabs.tab === undefined;
+  const opensDraft =
+    input.room !== SHELL_ROOM.NARROW &&
+    agents.onUnarchive === undefined &&
+    startsOwnAgents(agents.mode);
+  const fillColumn = useSteadyDoor(() => {
+    if (opensDraft) agents.onNewDraft();
+    else mainTabs.onChoose(MAIN_TAB.OVERVIEW);
+  });
+  useEffect(() => {
+    if (columnEmpty) fillColumn();
+  }, [columnEmpty, fillColumn]);
   // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
   // among them, so its page draws them from where they stand, and a page's tab is held to them.
   const taskPages = useHostRead(
@@ -2627,21 +2648,29 @@ export function useTasksTab(input: {
     setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
     select(taskId);
   };
-  // A task pressed anywhere opens on its plan, its Overview, whose head lists its agents, the one
-  // waiting on the developer first; in a narrow room the panel shuts over it, so the plan is the screen.
-  const selectListed = (taskId: string) => {
-    openUnpinned(taskId);
-    if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
-    mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
-  };
   // One the developer goes back to work on, from a sidebar row, ⌘K, or Recent, lands on its
-  // agent (`resumingAgentOf`), else its plan; in a narrow room the agent stands as a screen
-  // over the plan, which its header's Back, named for the task, returns to.
+  // agent (`resumingAgentOf`); one with none, on the tab its column falls to, a new agent's draft
+  // where no agent's stands. In a narrow room the panel shuts over it, and the agent stands as a
+  // screen over the task's details, which its header's Back, named for the task, returns to, a
+  // task with no agent opening on its details.
   const resumeListed = (taskId: string) => {
     openUnpinned(taskId);
-    if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
+    const narrow = input.room === SHELL_ROOM.NARROW;
+    if (narrow) sidePanel.onSetOpen(false);
     const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
-    mainTabs.onShow(taskId, agentId === undefined ? MAIN_TAB.OVERVIEW : { agent: agentId });
+    if (agentId !== undefined) mainTabs.onShow(taskId, { agent: agentId });
+    else if (narrow) mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
+  };
+  // A task pressed anywhere opens on its agents, as one gone back to does; in a narrow room on
+  // its details, whose head lists its agents, the one waiting on the developer first.
+  const selectListed = (taskId: string) => {
+    if (input.room !== SHELL_ROOM.NARROW) {
+      resumeListed(taskId);
+      return;
+    }
+    openUnpinned(taskId);
+    sidePanel.onSetOpen(false);
+    mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind

@@ -519,26 +519,23 @@ body,
   --ui-toolbar-end-at: 0px;
 }
 
-/* On the frame the plan's first tab starts on one line with its sheet's
-   edge below it, as the side panel's does (`.side-panel-bar`); with the
-   sidebar folded it starts past the title bar's buttons, measured from the
-   sheet's edge, a gap in from the window's. A bar further in the column, a
-   task's Inbox tab's, sets its own start. */
+/* A task's page stands its topbar across the work, clear of the title bar's
+   buttons at either end (`main-tabs.tsx`'s `TaskTopbar`), and its column's
+   tabs and its side panel's on one row under it, on the frame: each starts
+   and ends on one line with its sheet's edge below it, however the sidebar
+   stands and whether or not the panel is open. */
 :where(:root):not([data-ui-room="narrow"]) .desktop-shell > .desktop-main .desktop-task-main {
   --ui-toolbar-start-at: 0px;
+  --ui-toolbar-end-at: 0px;
 }
 
 :where(:root):not([data-ui-room="narrow"])
-  .desktop-shell[data-sidebar-collapsed="true"]
-  > .desktop-main
-  .desktop-task-main {
-  --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
-}
-
-/* The task's agents' bar stands under its topbar, clear of the title bar's
-   buttons, so it starts at the sheet's edge however the sidebar stands. */
-.desktop-task-main .task-agents-bar {
-  --ui-toolbar-start-at: 0px;
+  .desktop-shell
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .side-panel-bar {
+  padding-right: 0;
+  padding-left: 0;
 }
 
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its

@@ -216,7 +216,7 @@ function rightClickChosen(strip: HTMLElement): string[] {
   return readAndClose();
 }
 
-/** The bars of the task's page: the task's topbar, its column's agents' bar under it, and the side panel's. */
+/** The bars of the task's page: the task's topbar, and under it its column's agents' bar and the side panel's. */
 interface Bars {
   task: HTMLElement;
   main: HTMLElement;
@@ -225,10 +225,8 @@ interface Bars {
 
 /** The bars of the task's page, as it draws them. */
 function bars(container: HTMLElement): Bars {
-  const task = container.querySelector<HTMLElement>(".desktop-task-main .ui-toolbar");
-  const main = container.querySelector<HTMLElement>(
-    ".desktop-task-main .task-agents-bar .ui-toolbar",
-  );
+  const task = container.querySelector<HTMLElement>(".task-topbar .ui-toolbar");
+  const main = container.querySelector<HTMLElement>(".desktop-task-main .ui-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(task && main && side, "the page draws its bars");
   return { task, main, side };
@@ -312,11 +310,16 @@ test("the agents' bar draws the chosen agent's ⋯ alone, none on the draft's ta
   }
 });
 
-test("the topbar's ⋯ and Overview's right-click offer the task's own document menu, which pins the task rather than the tab, leaves out Mark done and Cancel task, and keeps Change repository, while an agent's ⋯ stays the agent's", async () => {
-  const container = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
-  const { task } = bars(container);
-  const fromMore = pressBarMore(task);
-  assert.deepEqual(fromMore, [
+test("the topbar's ⋯ offers the task's own document menu, which pins the task, leaves out Mark done and Cancel task, and keeps Change repository, on the task's details and an agent's tab alike, while the agents' bar's ⋯ stays the agent's", async () => {
+  const taskMore = (bar: HTMLElement) => {
+    const more = bar.querySelector<HTMLButtonElement>('button[aria-label$=" actions"]');
+    assert.ok(more, "the topbar shows the task's ⋯");
+    act(() => more.click());
+    return readAndClose();
+  };
+  const details = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
+  const fromDetails = taskMore(bars(details).task);
+  assert.deepEqual(fromDetails, [
     "Copy plan",
     "Copy link",
     "Rename",
@@ -328,18 +331,11 @@ test("the topbar's ⋯ and Overview's right-click offer the task's own document 
     "Change repository",
     "Permanently delete",
   ]);
-  // The right-click leads with the tab's keeping, which holds no Close nor Pin tab: Overview always stands, and the one Pin is the task's, among its own.
-  const fromRightClick = rightClickChosen(task);
-  const keeping = fromRightClick.slice(0, fromRightClick.indexOf("Copy plan"));
-  assert.ok(
-    !keeping.includes("Close") && !keeping.includes("Pin"),
-    `keeping: ${keeping.join(", ")}`,
-  );
-  assert.deepEqual(fromRightClick.slice(keeping.length), fromMore);
   act(() => roots.pop()?.unmount());
-  container.remove();
+  details.remove();
 
   const agent = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX });
+  assert.deepEqual(taskMore(bars(agent).task), fromDetails, "the same menu over an agent's tab");
   const agentMore = pressBarMore(bars(agent).main);
   assert.ok(
     !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
@@ -433,7 +429,7 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or Overview's, the task's own", async () => {
+test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', or a page's", async () => {
   const copied = installClipboard();
   const task = `https://vespin.dev/workspace-personal/task/${TASK.id}`;
   const agent = `https://vespin.dev/workspace-personal/agent/${AGENT.id}`;
@@ -442,7 +438,6 @@ test("each tab whose thing has a link offers Copy link in its right-click and it
     [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
     [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
-    [{ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX }, "task", task],
   ];
   for (const [chosen, column] of cases) {
     const container = await mountEveryTab(chosen);
