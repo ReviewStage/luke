@@ -203,23 +203,6 @@ export function experimentsIn(
 }
 
 /**
- * Every experiment on in any of an account's workspaces, beside the account's
- * choice of its own: what a surface that cannot know which workspace a window
- * lists offers, as the menu bar does, each command gated again where it runs.
- */
-export function experimentsAnywhere(
-  account: ExperimentChoices,
-  workspaces: readonly WorkspaceExperimentChoices[],
-): ExperimentChoices {
-  const anywhere = Object.fromEntries(
-    WORKSPACE_EXPERIMENT_LIST.filter((experiment) =>
-      workspaces.some((workspace) => workspace[experiment] === true),
-    ).map((experiment) => [experiment, true]),
-  );
-  return experimentsIn(account, anywhere);
-}
-
-/**
  * Whether a choice has an experiment on. Note that the experiment is one the
  * choice can hold, so an account's choices refuse a workspace experiment at
  * compile time rather than reading it as off.
