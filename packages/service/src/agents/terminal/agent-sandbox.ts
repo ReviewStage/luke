@@ -235,8 +235,9 @@ function agentSandboxOver(
         if (running === undefined) return { started: false };
         const ports = listeningPortsOf(yield* api.run(running, readSocketTables()));
         if (ports === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
+        if (ports.length > 0) return { started: false };
         const command = runCommandOf(yield* api.run(running, readRunConfig()));
-        if (ports.length > 0 || command === undefined) return { started: false };
+        if (command === undefined) return { started: false };
         yield* api.start(running, { ...startRunCommand(command), sudo: false });
         return { started: true };
       }),
