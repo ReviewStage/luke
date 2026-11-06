@@ -1174,6 +1174,11 @@ export function threadsWaitingWords(waiting: number): string {
     : `${waiting} threads ${NEEDS_YOU.COUNT.many}`;
 }
 
+/** What a line of threads none of which waits on the developer says: "1 thread", "4 threads". */
+export function threadsWords(count: number): string {
+  return count === 1 ? "1 thread" : `${count} threads`;
+}
+
 /** The items given that wait on the developer, by the agent that posted each, in their order. */
 export function waitingByAgent(
   waiting: readonly InboxItem[],

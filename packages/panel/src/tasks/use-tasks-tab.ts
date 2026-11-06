@@ -744,6 +744,8 @@ export interface TasksControl {
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the task's place, the task chosen in it, and its presses. */
   inboxView: InboxViewControl;
+  /** Says which agent's card in the column shows its threads in its transcript's place (`agent-threads.tsx`), none while it shows its transcript, so main is not told that transcript is on screen. */
+  onThreadsShown: (agentId: string | undefined) => void;
   /** One agent's page: which agent's stands in the task's place, if any, and its presses. */
   agentView: AgentViewControl;
   /** One person's page: whose stands in the plan's place, if anyone's, and its presses (`person-page.tsx`). */
@@ -2002,6 +2004,8 @@ export function useTasksTab(input: {
       discardDraftNow.current(blankDraft);
     }
   }, [draftInView, blankDraft, columnSettled]);
+  // The agent whose card in the column shows its threads rather than its transcript, as the task's page says.
+  const [threadsShown, setThreadsShown] = useState<string | undefined>(undefined);
   // An agent's page stands in the task's place, showing its agent as its tab would.
   // An agent's transcript beside the Inbox shows its agent the same way, while the panel stands open on it.
   const inboxTranscript =
@@ -2013,12 +2017,16 @@ export function useTasksTab(input: {
     isTranscriptTab(sidePanel.tab)
       ? sidePanel.tab.transcript
       : undefined;
+  // Note that an agent's card showing its threads keeps its transcript out of sight, so its end is still unseen.
   const shownAgent =
     stateShown && fixture === undefined && agentView !== undefined
       ? agentView.agentId
       : inboxTranscript !== undefined
         ? inboxTranscript
-        : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
+        : columnShown &&
+            mainTabs.tab !== undefined &&
+            isAgentTab(mainTabs.tab) &&
+            mainTabs.tab.agent !== threadsShown
           ? mainTabs.tab.agent
           : null;
   const shownInbox =
@@ -4162,6 +4170,7 @@ export function useTasksTab(input: {
     inboxTaskless: input.inboxTaskless,
     inboxAgents: input.inboxAgents,
     failedRuns: input.failedRuns,
+    onThreadsShown: setThreadsShown,
     // The window's Inbox stands over the task's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,

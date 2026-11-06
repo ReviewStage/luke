@@ -41,11 +41,9 @@ import {
   useState,
 } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { rowDrafted, useInboxRowDrafts } from "../composer-drafts.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { useChangesPeopleOf } from "../tasks/changes-people.js";
-import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { openPlanStanding, TAB_KIND } from "../tasks/tab-look.js";
 import type { AgentsControl, HeldPeople } from "../tasks/use-agents.js";
@@ -55,7 +53,7 @@ import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { ArchivedAgents, SUMMARY_GLYPH } from "./agent-archive.js";
-import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
+import { AGENTS_SECTION, agentEntries } from "./main-tabs.js";
 import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
 import { type CountNoun, foldedCount, sidebarFold } from "./sidebar-fold.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
@@ -65,10 +63,9 @@ import { type CardSubject, tabCard } from "./tab-card.js";
  * task-summary.tsx -- the open task's summary at its column's right: everything the task's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
  *
  * The summary lists what the side panel's "+" and the task's column's "+"
- * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
- * `agentEntries`), under quiet headings: the task's Inbox, counting what
- * waits on the developer, and the panel's kinds the task has used, its
- * coding agents, and each agent's pull request whose Changes tab the panel
+ * open, in their rows' words and glyphs (`panelEntries`, `agentEntries`),
+ * under quiet headings: the panel's kinds the task has used, its coding
+ * agents, and each agent's pull request whose Changes tab the panel
  * opens. An agent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
  * beside the row to say it. A row
@@ -318,7 +315,7 @@ interface SummarySection<Entry extends AddEntry = SummaryEntry> {
  * The card each row hangs, the one its tab hangs where it has one: an
  * agent's its tab's card, read from what its tab last held; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
- * version; the Inbox's what waits; the plan's the task's card. Each is
+ * version; the plan's the task's card. Each is
  * the card its tab hangs (`tab-card.tsx`), so the row and the tab never
  * say different things; the panel's other kinds hang none, as their tabs
  * hang none, since their names say all there is.
@@ -327,7 +324,6 @@ function withCards(
   entries: readonly AddEntry[],
   input: {
     tasks: TasksControl;
-    inbox: InboxBoardView;
     held: HeldTranscripts;
     changes: readonly ChangesOffer[];
     /** Who each agent's pull request names, as its Changes tab last read them. */
@@ -336,7 +332,7 @@ function withCards(
     onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
-  const { tasks, inbox, held, changes, people, onOpenAgent } = input;
+  const { tasks, held, changes, people, onOpenAgent } = input;
   const { agents, mainTabs } = tasks;
   const models = agents.models ?? [];
   const card = (entry: AddEntry, subject: CardSubject) => ({
@@ -350,7 +346,6 @@ function withCards(
       const subject = agentSubject(agents, agent.id, held, chosen);
       return card(entry, { kind: TAB_KIND.AGENT, subject, models });
     }
-    if (row.id === INBOX_ROW) return card(entry, { kind: TAB_KIND.INBOX, inbox });
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
@@ -378,22 +373,15 @@ function withCards(
 }
 
 /**
- * The rows the summary lists, before their cards: the plan's Inbox leads,
- * counting what waits on the developer and wearing the Draft pencil where
- * one of its items' boxes holds a draft (`inboxDrafted`), while it holds an
- * item, waiting or settled, and opens the window's Inbox narrowed to the
- * plan; then the panel's kinds and what they hold, then the agents.
+ * The rows the summary lists, before their cards: the panel's kinds and
+ * what they hold, then the agents. Note that the task's Inbox has no row:
+ * an agent's threads open in its card, from the dock over its box
+ * (`agent-threads.tsx`).
  */
-function summaryRows(tasks: TasksControl, inbox: InboxBoardView, inboxDrafted = false) {
+function summaryRows(tasks: TasksControl) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
-  const taskId = tasks.activeTaskId;
-  const inboxRow =
-    taskId !== undefined && inbox.open.length + inbox.settled.length > 0
-      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length, inboxDrafted)]
-      : [];
   const rows = [
-    ...inboxRow,
     ...panelEntries({
       panel: sidePanel,
       kinds: sidePanel.used,
@@ -423,25 +411,23 @@ function sectionsOf<Entry extends AddEntry>(
 /** What the summary lists, under its headings in their order, each row with the card it hangs. */
 function summarySections(
   tasks: TasksControl,
-  inbox: InboxBoardView,
   held: HeldTranscripts,
   onOpenAgent: (agentId: string) => void,
-  inboxDrafted: boolean,
   people: ReadonlyMap<string, HeldPeople>,
 ): SummarySection[] {
-  const { rows, changes } = summaryRows(tasks, inbox, inboxDrafted);
-  const entries = withCards(rows, { tasks, inbox, held, changes, people, onOpenAgent });
+  const { rows, changes } = summaryRows(tasks);
+  const entries = withCards(rows, { tasks, held, changes, people, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
 
 /** Whether the plan's summary lists anything, which is whether it is drawn at all. */
-export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolean {
-  return sectionsOf(summaryRows(tasks, inbox).rows, tasks.agents).length > 0;
+export function summaryHolds(tasks: TasksControl): boolean {
+  return sectionsOf(summaryRows(tasks).rows, tasks.agents).length > 0;
 }
 
 /**
  * A row of the column or the card: its glyph, its label, and what tells it
- * apart, as its "+" row says it, after the label on its line, then a failed agent's mark or the Inbox's count. A row with a card
+ * apart, as its "+" row says it, after the label on its line, then a failed agent's mark. A row with a card
  * hangs it on hover beside the row, before its start where the window ends
  * past it, as the sidebar's rows hang theirs.
  */
@@ -844,33 +830,23 @@ export function TaskSummary({
   tasks,
   layout,
   cardId,
-  inbox,
   held,
   onOpenAgent,
 }: {
   tasks: TasksControl;
   layout: SummaryLayout;
   cardId: string;
-  /** The task's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
-  inbox: InboxBoardView;
   /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const rowDrafts = useInboxRowDrafts();
-  // Note that a draft is read as its item's row reads it, so picks made on an ask since changed mark nothing.
-  const inboxDrafted = [...inbox.open, ...inbox.settled].some((item) =>
-    rowDrafted(rowDrafts.get(item.id), item),
-  );
   // Note that the pull requests offered are the agents', whose people their Changes tabs read.
   const pullRequests = tasks.agents.pullRequests;
   const people = useChangesPeopleOf(useMemo(() => [...pullRequests.keys()], [pullRequests]));
-  const sections = summarySections(tasks, inbox, held, onOpenAgent, inboxDrafted, people);
-  // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
-  const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
-    (entry) => entry.row.id !== INBOX_ROW,
-  );
+  const sections = summarySections(tasks, held, onOpenAgent, people);
+  // The rail draws the panel's kinds.
+  const kinds = sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? [];
   // The card is drawn through its exit, from the control that last hung it.
   const [hungFrom, setHungFrom] = useState(layout.card);
   if (layout.card !== undefined && layout.card !== hungFrom) setHungFrom(layout.card);
