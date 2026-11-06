@@ -112,10 +112,11 @@ const RELAY_INSTALLATION: InstallationFixture = {
 const launched = (opened: Effect.Success<ReturnType<typeof openLocalAgent>>) =>
   Effect.gen(function* () {
     const machine = yield* deviceMachine;
-    const [found] = yield* machine.findPlaces(opened.session);
+    const [found] = yield* machine.findPlaces(opened.userId, opened.session);
     assert.ok(found?.running !== undefined, "a local agent's place always stands");
     return yield* machine.launchRunner(found.running, {
       env: ENV,
+      userId: opened.userId,
       agentId: opened.agent.id,
       name: found.name,
       ready: Effect.void,

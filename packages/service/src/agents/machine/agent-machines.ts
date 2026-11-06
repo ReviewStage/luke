@@ -19,11 +19,7 @@ import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import { Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
-import {
-  deploymentOidcToken,
-  type SandboxUnavailable,
-  vercelSandboxApi,
-} from "../vercel-sandbox-api.js";
+import { deploymentOidcToken, vercelSandboxApi } from "../vercel-sandbox-api.js";
 import { AgentMachine, type AgentMachineService, type MachineLifecycle } from "./agent-machine.js";
 import { type DeviceMachineService, deviceMachine } from "./device-machine.js";
 import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./vercel-machine.js";
@@ -32,12 +28,13 @@ import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./ver
 function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
   const of = (machine: AgentMachineKind): MachineLifecycle =>
     machine === AGENT_MACHINE.DEVICE ? mac : cloud;
-  const bySession = <A>(
+  const bySession = <A, E, R>(
     session: string,
-    call: (machine: MachineLifecycle) => Effect.Effect<A, SandboxUnavailable>,
+    call: (machine: MachineLifecycle) => Effect.Effect<A, E, R>,
   ) => Effect.flatMap(mac.owns(session), (owned) => call(owned ? mac : cloud));
   return {
-    findPlaces: (session) => bySession(session, (machine) => machine.findPlaces(session)),
+    findPlaces: (userId, session) =>
+      bySession(session, (machine) => machine.findPlaces(userId, session)),
     recordRunner: (place, record) => of(place.machine).recordRunner(place, record),
     firewall: {
       write: (place, userId, sources) => of(place.machine).firewall.write(place, userId, sources),

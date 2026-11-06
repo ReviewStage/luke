@@ -69,6 +69,7 @@
     "./models/sandbox-terminal-lease": "./src/models/sandbox-terminal-lease.js",
     "./models/token-pull-request-poll": "./src/models/token-pull-request-poll.js",
     "./models/agent-runner-lease": "./src/models/agent-runner-lease.js",
+    "./models/agent-runner-record": "./src/models/agent-runner-record.js",
     "./models/agent-wakeups": "./src/models/agent-wakeups.js",
     "./models/conversation-rewind": "./src/models/conversation-rewind.js",
     "./models/session-sandbox-cleanup": "./src/models/session-sandbox-cleanup.js",

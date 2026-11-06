@@ -47,6 +47,7 @@ const DECLARED_TABLES = [
   "agent_read",
   "agent_repository",
   "agent_runner_lease",
+  "agent_runner_record",
   "agent_section_entry",
   "agent_wakeup",
   "attachment",
