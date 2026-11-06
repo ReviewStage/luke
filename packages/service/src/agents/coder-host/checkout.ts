@@ -57,11 +57,11 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * confirmed to reach it and a read token minted for that one repository,
  * set at the sandbox's firewall for the clone alone and withdrawn after it.
  * The clone is whole, since a branch and a pull request are cut from the
- * history, or is no clone at all where its drive was forked from its
- * workspace's repository's base drive, whose whole checkout is fetched up
- * to the branch instead (`refreshAgentCheckout`, `../agent-drive.ts`), or
- * kept from an earlier sandbox of its session, whose checkout stands as the
- * agent left it. The launch then finishes it (`finishCheckoutWith`): a
+ * history, or is no clone at all where its sandbox was created from its
+ * workspace's repository's base snapshot, whose whole checkout is fetched
+ * up to the branch instead (`refreshAgentCheckout`, `../base-snapshot.ts`),
+ * or from the snapshot of the agent it was started from, whose checkout
+ * stands as that agent left it. The launch then finishes it (`finishCheckoutWith`): a
  * write token is minted, carrying contents and pull requests write, since
  * the agent pushes a branch and opens a pull request from it, and set at the
  * firewall; the commit identity is set; and the token is handed back for
@@ -647,7 +647,7 @@ export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRep
 );
 
 /**
- * The checkout a fork of the repository's base drive holds brought up to
+ * The checkout the repository's base snapshot holds brought up to
  * the repository's default branch, on the read the caller made of it, the token
  * at the firewall for the fetch alone, and recorded under the name the
  * agent's row holds; refused, in git's words, where the sandbox holds no

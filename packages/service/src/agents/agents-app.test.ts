@@ -98,7 +98,7 @@ import {
   sourceCheckout,
   sourceSandbox,
 } from "../testing/source-sandbox.js";
-import { agentDriveName } from "./agent-drive.js";
+import { agentSandboxName } from "./agent-sandbox-open.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -521,7 +521,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   /** A source whose stopped sandbox holds a change it never committed, over a checkout and remote on disk, and a continue of it; GitHub answers its pull request's reads as `pull` does, where given. */
-  const copyScenario = (t: TestContext, pull?: RepositoryScript, onDrive = false) =>
+  const copyScenario = (t: TestContext, pull?: RepositoryScript, snapshotted = false) =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureOidcToken());
       const checkout = sourceCheckout(yield* Effect.promise(() => temporaryDirectory(t, "copy-")));
@@ -529,7 +529,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const sandbox = sourceSandbox(
         checkout,
         "stopped",
-        onDrive ? agentDriveName("wrun_source") : undefined,
+        snapshotted ? agentSandboxName("wrun_source") : undefined,
       );
       const opened = yield* sourceAgentOn(
         pull === undefined ? sandbox.answer : (sent) => sandbox.answer(sent) ?? pull(sent),
@@ -603,7 +603,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a continue of a source on a drive of its own wakes nothing and copies nothing, and tells the new agent its checkout is the source's own",
+    "a continue of a source whose sandbox stopped on a snapshot wakes nothing and copies nothing, and tells the new agent its checkout is the source's own",
     (t) =>
       Effect.gen(function* () {
         const { sandbox, continued } = yield* copyScenario(t, undefined, true);
@@ -619,7 +619,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             .from(agentTable)
             .where(eq(agentTable.id, started.id)),
         );
-        assert.equal(row[0]?.startedFrom?.drive, agentDriveName("wrun_source"));
+        assert.equal(row[0]?.startedFrom?.sandbox, agentSandboxName("wrun_source"));
       }),
   );
 

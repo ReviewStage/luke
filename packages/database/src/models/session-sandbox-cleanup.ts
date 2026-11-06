@@ -1,10 +1,9 @@
 /**
  * session-sandbox-cleanup.ts -- the queue of agents' sessions whose Vercel Sandbox the sweep still has to delete.
  *
- * Whatever lets go of a session for good queues it here: the purge of a
- * deleted task's conversations and the deletion of an account, each in the
- * transaction that lets go of it, and a session's retire once its places
- * are discarded, for the drive they leave. The sweep takes the queue a bounded batch at a
+ * Whatever lets go of a session for good queues it here in the transaction
+ * that lets go of it: the purge of a deleted task's conversations, and the
+ * deletion of an account. The sweep takes the queue a bounded batch at a
  * time, the sessions never tried first and then the ones tried longest
  * ago, so a few Vercel will not delete cannot hold up the rest; a session
  * whose sandbox went is removed from the queue, and one whose delete was

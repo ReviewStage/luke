@@ -1,23 +1,25 @@
 /**
  * vercel-machine.ts -- the agent machine over Vercel Sandbox: a sandbox booted from the agents' image, the runner started in it as the SDK's own user for the agent, and our doors read through it.
  *
- * `open` opens the session's sandbox from the agents' image
- * (`../coder-host/agent-image.ts`), which carries the runner and every tool
- * the harnesses run, with its session's drive mounted at the workspace
- * (`../agent-drive.ts`), through `Sandbox.getOrCreate` under a name of the
- * session's own (`../agent-sandbox-open.ts`), as Vercel's persistent sandboxes are
- * opened: the one standing under it is resumed, one is created where none
- * stands, and one whose snapshot is gone is deleted and created again under
- * the same name, on the same drive. A sandbox the call created is set up in
- * its `onCreate`, as Vercel's examples set one up: the `agent` user made in
- * it as the SDK does, and the checkout made. The checkout stands on the drive:
- * kept as the agent left it where an earlier sandbox of the session made it;
- * as the source left it on a fork of the drive of the agent it was continued
- * or forked from (`../agent-drive.ts`); on a fork of its workspace's repository's base drive, fetched up to the
- * default branch and installed again, which fills in only what landed since;
- * or cloned whole onto an empty drive (`../coder-host/checkout.ts`, the
- * token at the firewall for the clone alone), the base drive filled past the
- * answer where none was. Every write the checkout makes is the group's
+ * `open` opens the session's sandbox through `Sandbox.getOrCreate` under a
+ * name of the session's own (`../agent-sandbox-open.ts`), as Vercel's
+ * persistent sandboxes are opened: the one standing under it is resumed, and
+ * one is created where none stands, or where the one standing can never
+ * resume, its snapshot gone. A sandbox the call creates is created from the
+ * first of these that stands, and set up in its `onCreate`, as Vercel's
+ * examples set one up: from the latest snapshot of the sandbox of the agent
+ * it was continued or forked from, its checkout as that agent left it at its
+ * last stop; from its workspace's repository's base snapshot
+ * (`../base-snapshot.ts`), its checkout fetched up to the default branch and
+ * installed again, which fills in only what landed since; or from the agents'
+ * image (`../coder-host/agent-image.ts`), which carries the runner and every
+ * tool the harnesses run, the repository cloned whole
+ * (`../coder-host/checkout.ts`, the token at the firewall for the clone
+ * alone). A snapshot found gone at the create is passed by for the next, and
+ * the base snapshot is filled past the answer where it was missing, gone, out
+ * of date, or behind a lockfile the fast-forward moved. The `agent` user is
+ * made in a sandbox created from the image or the base snapshot, as the SDK
+ * makes one. Every write the checkout makes is the group's
  * (`../repository-shell.ts`'s `GROUP_WRITES`), so the `agent` user writes
  * it too. A create Vercel answers `image_not_ready` is asked again once the
  * registry has had time to prepare the image, as Vercel's docs say. The
@@ -57,11 +59,13 @@
  * session and its agent, as the sandbox is created. The
  * firewall is the sandbox session's network policy, composed whole at each
  * write from its sources and the swaps its launch keeps
- * (`../sandbox-firewall.ts`), and a stop is the session's. A resume of a
+ * (`../sandbox-firewall.ts`), and a stop is the session's, which a snapshot
+ * of another agent's sandbox carries none of. A resume of a
  * sandbox under its session's name is the same `getOrCreate`, which makes
- * it anew on the session's drive where its snapshot expired, set up as a new
- * one is, and says so, since the harness's own session went with the old
- * disk. A sandbox opened before `getOrCreate`, under a UUID, resumes from its
+ * it anew from the image where its snapshot expired, its checkout cloned
+ * again before the relaunch, and says so, since the harness's own session
+ * and whatever the agent never pushed went with the old disk. A sandbox
+ * opened before `getOrCreate`, under a UUID, resumes from its
  * last snapshot and is a place gone once that expired; the one opened in
  * its place is the session's own.
  */
@@ -96,20 +100,22 @@ import { Brand, type Context, Duration, Effect, Layer, Option, Redacted, Result 
 import type { HttpClient } from "effect/http";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
-  AGENT_DRIVE_FROM,
-  type AgentDrive,
-  type AgentDriveFrom,
-  agentDrive,
-  agentDriveName,
-} from "../agent-drive.js";
-import {
   AGENT_TAG,
+  type AgentSnapshotSource,
   agentSandboxName,
   agentSandboxTags,
   openAgentSandbox,
   SANDBOX_ENV,
 } from "../agent-sandbox-open.js";
-import { type BaseDriveOf, fillBaseDrive, installDependencies } from "../base-drive.js";
+import {
+  BASE_STATE,
+  type BaseSnapshotOf,
+  checkoutCommit,
+  fillBaseSnapshot,
+  installDependencies,
+  lockfileMoved,
+  readBaseSnapshot,
+} from "../base-snapshot.js";
 import { AgentImage } from "../coder-host/agent-image.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
@@ -129,7 +135,12 @@ import {
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
 import { NATIVE_SKILLS_PATH } from "../coder-host/native-skills.js";
-import type { RepositoryFirewall, RepositorySandbox } from "../repository-shell.js";
+import {
+  REPOSITORY_REFUSAL,
+  type RepositoryFirewall,
+  type RepositorySandbox,
+  runInSandbox,
+} from "../repository-shell.js";
 import {
   type FirewallEntry,
   type FirewallSession,
@@ -143,6 +154,7 @@ import {
 } from "../sandbox-firewall.js";
 import {
   type ListedSandbox,
+  NOT_FOUND_STATUS,
   type OidcTokenRead,
   type OpenedSandbox,
   SANDBOX_STATUS,
@@ -344,6 +356,32 @@ function vercelPlace(session: string, name: string, sandboxSessionId: string): M
 interface OpenedPlace {
   readonly name: string;
   readonly running: string;
+}
+
+/**
+ * What a created sandbox was created from, which says how its checkout is
+ * made: a snapshot of the sandbox of the agent it was started from, its
+ * repository's base snapshot, or the image.
+ */
+const CREATED_FROM = { SOURCE: "source", BASE: "base", IMAGE: "image" } as const;
+
+type CreatedFrom = (typeof CREATED_FROM)[keyof typeof CREATED_FROM];
+
+/** One way the agent's sandbox may be created: what from, and the snapshot where it is one. */
+interface CreateAttempt {
+  readonly from: CreatedFrom;
+  readonly snapshot: AgentSnapshotSource | undefined;
+}
+
+/** The image, which every open falls back to. */
+const FROM_IMAGE: CreateAttempt = { from: CREATED_FROM.IMAGE, snapshot: undefined };
+
+/** Whether a create failed because the snapshot it named is gone, expired or deleted, so the next way is tried. */
+function snapshotUnusable(failure: { readonly _tag: string }): boolean {
+  return (
+    snapshotGone(failure) ||
+    (failure instanceof SandboxUnavailable && failure.status === NOT_FOUND_STATUS)
+  );
 }
 
 /** What an agent with a repository is checked out from as its sandbox is created: the agent, and the reads the open made of its repositories. */
@@ -743,15 +781,15 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   });
 
   /**
-   * The base drive the agent's own may be forked from: its workspace's, of
-   * the repository's default branch; none for an agent started on another
-   * branch, or on its starter's own token, whose access is not the
-   * workspace's.
+   * The base snapshot the agent's sandbox may be created from: its
+   * workspace's, of the repository's default branch; none for an agent
+   * started on another branch, or on its starter's own token, whose access
+   * is not the workspace's.
    */
-  const baseDriveOf = (
+  const baseSnapshotOf = (
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
-  ): Option.Option<BaseDriveOf> =>
+  ): Option.Option<BaseSnapshotOf> =>
     agent.startBranch === null && read.access.kind === GITHUB_ACCESS.APP
       ? Option.some({
           workspaceId: read.workspaceId,
@@ -761,77 +799,104 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       : Option.none();
 
   /**
-   * The workspace's repository's base drive filled past the request's
-   * answer where it has none (`base-drive.ts`), apart from the launch and
-   * its runner lease, so neither waits on it; nothing where no request's
-   * answer is being kept, as for a relaunch a message makes, which leaves
-   * the fill to the next Start.
+   * The workspace's repository's base snapshot filled past the request's
+   * answer where it wants one (`base-snapshot.ts`), or filled again in place
+   * of the snapshot `replacing` names, apart from the launch and its runner
+   * lease, so neither waits on it; nothing where no request's answer is
+   * being kept, as for a relaunch a message makes, which leaves the fill to
+   * the next Start.
    */
-  const fillBaseDriveInBackground = (
+  const fillBaseInBackground = (
     agent: Agent,
-    of: BaseDriveOf,
+    of: BaseSnapshotOf,
     image: string,
     read: AgentRepositoryRead,
+    replacing: string | undefined,
   ) =>
     Effect.gen(function* () {
       if (Option.isNone(yield* Effect.serviceOption(AfterResponse))) return;
       yield* afterResponse(
-        "A base drive's fill",
+        "A base snapshot's fill",
         Effect.flatMap(Effect.context<DatabaseServices>(), (context) =>
-          fillBaseDrive(api, of, image, read, (sandbox) =>
-            checkoutOver(context, sandbox, agent.userId),
+          fillBaseSnapshot(
+            api,
+            of,
+            image,
+            read,
+            (sandbox) => checkoutOver(context, sandbox, agent.userId),
+            replacing,
           ),
         ),
       );
     });
 
   /**
-   * The agent's checkout on its drive, as the drive came: one kept from an
-   * earlier sandbox of the session stands as the agent left it, as does one
-   * forked from the drive of the agent it was started from, as that agent
-   * left it; a fork of
-   * the base drive is brought up to the default branch and installed again,
-   * which fills in only what changed since the fill; an empty drive has the
-   * repository cloned onto it whole. An install that failed is said in the
-   * log and let be, since the agent installs for itself, as one did before
-   * drives.
+   * The agent's checkout in the sandbox just created, as it was created:
+   * from the source agent's snapshot it stands as that agent left it, and is
+   * cloned only where that snapshot holds none; from the base snapshot it is
+   * brought up to the default branch and installed again, which fills in only
+   * what changed since the fill, answering whether that moved a lockfile;
+   * from the image the repository is cloned whole. An install that failed is
+   * said in the log and let be, since the agent installs for itself.
    */
-  const checkedOutOnDrive = (
+  const checkedOutAs = (
     agent: WithRepository<Agent>,
     sandbox: RepositorySandbox,
     read: AgentRepositoryRead,
-    from: AgentDriveFrom,
+    from: CreatedFrom,
   ) =>
     Effect.gen(function* () {
-      if (from === AGENT_DRIVE_FROM.KEPT || from === AGENT_DRIVE_FROM.SOURCE) return;
-      if (from === AGENT_DRIVE_FROM.EMPTY) {
-        return yield* cloneAgentRepository(agent, sandbox, read);
+      if (from === CREATED_FROM.IMAGE) {
+        yield* cloneAgentRepository(agent, sandbox, read);
+        return false;
       }
+      if (from === CREATED_FROM.SOURCE) {
+        const holds = yield* runInSandbox(
+          sandbox,
+          { command: `test -d ${CHECKOUT_GIT_PATH}` },
+          REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+        ).pipe(
+          Effect.mapError(
+            (failure) => new CheckoutRefused({ reason: failure.reason, detail: failure.detail }),
+          ),
+        );
+        if (holds.exitCode !== 0) yield* cloneAgentRepository(agent, sandbox, read);
+        return false;
+      }
+      // Note that a lockfile read that failed reads as unmoved, since it only decides a refill.
+      const base = yield* Effect.orElseSucceed(checkoutCommit(sandbox), () => undefined);
       yield* refreshAgentCheckout(agent, sandbox, read);
+      const moved =
+        base === undefined
+          ? false
+          : yield* Effect.orElseSucceed(lockfileMoved(sandbox, base), () => false);
       yield* installDependencies(sandbox).pipe(
-        Effect.catch(() => Effect.logWarning("An agent's install on its forked drive failed")),
+        Effect.catch(() =>
+          Effect.logWarning("An agent's install on its repository's base snapshot failed"),
+        ),
       );
+      return moved;
     });
 
   /**
    * A sandbox `getOrCreate` created set up for a launch, in its `onCreate`
    * beside the `agent` user it makes (`../agent-sandbox-open.ts`): the
-   * agent's repository checked out on the drive (`checkedOutOnDrive`), on
+   * agent's repository checked out as it was created (`checkedOutAs`), on
    * the read the caller made of it, which confirmed its workspace still
    * reaches it before any sandbox opens on its code, and each repository it
-   * works in beside its own cloned whole into its folder
-   * (`cloneAgentExtras`), one already standing on a kept drive left as it is.
+   * works in beside its own cloned into its folder (`cloneAgentExtras`), one
+   * already standing in a source's snapshot left as it is. Answers whether
+   * the checkout moved a lockfile past the base snapshot's.
    */
   const checkedOutIn = (
     context: Context.Context<DatabaseServices>,
     checkout: AgentCheckoutReads,
-    drive: AgentDrive,
+    from: CreatedFrom,
     opened: OpenedPlace,
   ) =>
     Effect.suspend(() => {
       const sandbox = checkoutOver(context, opened, checkout.agent.userId);
-      return Effect.andThen(
-        checkedOutOnDrive(checkout.agent, sandbox, checkout.read, drive.from),
+      return Effect.tap(checkedOutAs(checkout.agent, sandbox, checkout.read, from), () =>
         cloneAgentExtras(sandbox, checkout.extras),
       );
     });
@@ -839,9 +904,10 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   /**
    * The session's sandbox opened through `getOrCreate`
    * (`../agent-sandbox-open.ts`) at the size the agent's repository asks
-   * for, with whether it was created, its checkout made in its `onCreate`
-   * where the agent has a repository and the sandbox was created
-   * (`checkedOutIn`). A setup that fails fails the open, and what it made is
+   * for, created as the attempt says where none stands, with whether it was
+   * created, its checkout made in its `onCreate` where the agent has a
+   * repository and the sandbox was created (`checkedOutIn`), and whether that
+   * moved a lockfile. A setup that fails fails the open, and what it made is
    * left as it stands. Note that the setup's own failure is the open's,
    * because the SDK hands `onCreate`'s rejection on as the call's, which
    * would read as Vercel's rather than in the checkout's words.
@@ -849,51 +915,115 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   const gotOn = (
     agent: Agent,
     sessionId: string,
-    drive: AgentDrive,
+    attempt: CreateAttempt,
     checkout: AgentCheckoutReads | undefined,
   ) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<DatabaseServices>();
       let refused: CheckoutRefused | undefined;
+      let moved = false;
       const { sandbox, created } = yield* openAgentSandbox(
         api,
         {
           sessionId,
           tags: agentSandboxTags(sessionId, agent.id),
           vcpus: sandboxVcpus(agent.repository),
+          ...(attempt.snapshot === undefined ? undefined : { snapshot: attempt.snapshot }),
         },
         checkout === undefined
           ? undefined
           : (opened) =>
               run(
-                checkedOutIn(context, checkout, drive, runningOf(opened)).pipe(
+                checkedOutIn(context, checkout, attempt.from, runningOf(opened)).pipe(
+                  Effect.tap((lockfile) =>
+                    Effect.sync(() => {
+                      moved = lockfile;
+                    }),
+                  ),
                   Effect.tapError((failure) =>
                     Effect.sync(() => {
                       refused = failure;
                     }),
                   ),
+                  Effect.asVoid,
                 ),
               ),
       ).pipe(Effect.mapError((failure) => refused ?? failure));
-      return { ...runningOf(sandbox), created };
+      return { ...runningOf(sandbox), created, lockfileMoved: moved };
     });
 
   /**
-   * The agent's sandbox opened from the image on its session's drive
-   * (`agent-drive.ts`) through `getOrCreate` (`gotOn`), its repository
-   * checked out on it where it has one and the sandbox was created. The
-   * image's reference and the repository are read at once, since neither
-   * waits on the other and both are read before any drive or sandbox is
-   * made. A Start on the repository's default branch fills its base drive
-   * past the answer where it has none, for the agents after it.
+   * The latest snapshot of the sandbox of the agent this one was started
+   * from, where the Start named one and it still holds one; none where it
+   * could not be read, which the open then passes by.
+   */
+  const sourceSnapshotOf = (agent: Agent) =>
+    Effect.gen(function* () {
+      const source = agent.startedFrom?.sandbox;
+      if (source === undefined) return undefined;
+      const found = yield* api.getNamed(source);
+      return found?.currentSnapshotId;
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(`A source agent's sandbox was not read: ${failure.message}`),
+          undefined,
+        ),
+      ),
+    );
+
+  /**
+   * The agent's sandbox opened from the first attempt whose snapshot stands
+   * (`gotOn`), each one found gone at the create logged and passed by, as
+   * the open ended, and the base snapshot to fill again in place of: the one this
+   * open named where it was gone, or where its fast-forward moved a lockfile.
+   */
+  const openedFromFirst = (
+    agent: Agent,
+    sessionId: string,
+    attempts: readonly CreateAttempt[],
+    checkout: AgentCheckoutReads | undefined,
+  ) =>
+    Effect.gen(function* () {
+      let replacing: string | undefined;
+      for (const attempt of attempts) {
+        const opened = yield* Effect.result(gotOn(agent, sessionId, attempt, checkout));
+        const gone =
+          Result.isFailure(opened) &&
+          attempt.snapshot !== undefined &&
+          snapshotUnusable(opened.failure);
+        const moved = Result.isSuccess(opened) && opened.success.lockfileMoved;
+        if ((gone || moved) && attempt.from === CREATED_FROM.BASE) {
+          replacing = attempt.snapshot?.snapshotId;
+        }
+        if (!gone) return { opened, replacing };
+        yield* Effect.logWarning(
+          `An agent's sandbox was not created from its ${attempt.from} snapshot, which was gone`,
+        );
+      }
+      // The image is always the last attempt, and is never passed by.
+      return yield* Effect.die(new Error("an agent's sandbox was opened from nothing"));
+    });
+
+  /**
+   * The agent's sandbox opened through `getOrCreate` (`gotOn`), its
+   * repository checked out where it has one and the sandbox was created:
+   * from its source's snapshot, else its repository's base snapshot where
+   * that is ready, else the image, each snapshot found gone at the create
+   * passed by for the next. The image's reference, the repository, and the
+   * source's snapshot are read at once, since none waits on another. A
+   * Start on the repository's default branch fills its base snapshot past
+   * the answer where it wants one, or where the one this open named was
+   * gone or its fast-forward moved a lockfile, for the agents after it.
    */
   const openedCheckout = (target: ConversationTarget, agent: Agent, sessionId: string) =>
     Effect.gen(function* () {
-      const [image, read, extras] = yield* Effect.all(
+      const [image, read, extras, source] = yield* Effect.all(
         [
           Effect.flatMap(AgentImage, (agentImage) => agentImage.reference),
           hasRepository(agent) ? agentRepositoryRead(target, agent) : Effect.succeed(undefined),
           hasRepository(agent) ? agentExtraReads(target, agent) : Effect.succeed([]),
+          hasRepository(agent) ? sourceSnapshotOf(agent) : Effect.succeed(undefined),
         ],
         { concurrency: "unbounded" },
       );
@@ -901,18 +1031,33 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         hasRepository(agent) && read !== undefined ? { agent, read, extras } : undefined;
       const base =
         checkout === undefined
-          ? Option.none<BaseDriveOf>()
-          : baseDriveOf(checkout.agent, checkout.read);
-      if (Option.isSome(base) && checkout !== undefined) {
-        yield* fillBaseDriveInBackground(agent, base.value, image, checkout.read);
-      }
-      const drive = yield* agentDrive(
-        api,
-        sessionId,
-        Option.getOrUndefined(base),
-        agent.startedFrom?.drive,
+          ? Option.none<BaseSnapshotOf>()
+          : baseSnapshotOf(checkout.agent, checkout.read);
+      // A base Vercel could not be asked about is passed by, and no fill is started on it.
+      const baseRead = Option.isSome(base)
+        ? yield* Effect.option(readBaseSnapshot(api, base.value, image))
+        : Option.none();
+      const baseReady = Option.flatMap(baseRead, (each) =>
+        each.state === BASE_STATE.READY ? Option.some(each.snapshotId) : Option.none(),
       );
-      return yield* gotOn(agent, sessionId, drive, checkout);
+      const attempts: readonly CreateAttempt[] = [
+        ...(source === undefined
+          ? []
+          : [{ from: CREATED_FROM.SOURCE, snapshot: { snapshotId: source, holdsUser: true } }]),
+        ...Option.match(baseReady, {
+          onNone: () => [],
+          onSome: (snapshotId) => [
+            { from: CREATED_FROM.BASE, snapshot: { snapshotId, holdsUser: false } },
+          ],
+        }),
+        FROM_IMAGE,
+      ];
+      const { opened, replacing } = yield* openedFromFirst(agent, sessionId, attempts, checkout);
+      if (Option.isSome(base) && Option.isSome(baseRead) && checkout !== undefined) {
+        yield* fillBaseInBackground(agent, base.value, image, checkout.read, replacing);
+      }
+      if (Result.isFailure(opened)) return yield* Effect.fail(opened.failure);
+      return opened.success;
     });
 
   /**
@@ -921,9 +1066,10 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * it (`finishCheckoutWith`) where it holds no commit identity, as after a
    * restore whose finish failed; nothing where it holds a finished one. Note
    * that a place can stand without one, because a launch whose checkout
-   * failed leaves its sandbox and its drive for the next message, which
-   * resumes them as kept and checks nothing out, so its runner would start
-   * in a folder that is not there.
+   * failed leaves its sandbox for the next message, which resumes it and
+   * checks nothing out, and a sandbox made anew in place of one whose
+   * snapshot lapsed holds none, so its runner would start in a folder that is
+   * not there.
    */
   const ownCheckoutRestored = (
     place: OpenedPlace,
@@ -1009,14 +1155,19 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
       }),
 
     // A sandbox under its session's name is run again as it was opened, through `getOrCreate`
-    // (`gotOn`): resumed where it stands, or made again on the session's drive where its snapshot is
-    // gone, set up with nothing to check out, since the drive holds the checkout. One opened before,
-    // under a UUID, resumes from its snapshot alone, and is gone once that lapsed.
+    // (`gotOn`): resumed where it stands, or made again from the image where its snapshot is gone,
+    // set up with nothing to check out, since the relaunch clones the checkout it finds missing
+    // (`ownCheckoutRestored`). One opened before, under a UUID, resumes from its snapshot alone, and
+    // is gone once that lapsed.
     resume: (found, agent) =>
       Effect.gen(function* () {
         if (found.name === agentSandboxName(found.session)) {
-          const drive = { name: agentDriveName(found.session), from: AGENT_DRIVE_FROM.KEPT };
-          const { name, running, created } = yield* gotOn(agent, found.session, drive, undefined);
+          const { name, running, created } = yield* gotOn(
+            agent,
+            found.session,
+            FROM_IMAGE,
+            undefined,
+          );
           return { place: vercelPlace(found.session, name, running), created };
         }
         const resumed = yield* Effect.result(api.resume(found.name));

@@ -333,14 +333,8 @@ it.effect(
       assert.deepEqual(ensured, { sandboxSessionId: FAKE_SANDBOX.CREATED_SESSION, started: true });
       const [created] = sandbox.creates;
       assert.deepEqual(
-        [
-          created?.name,
-          created?.tags,
-          created?.vcpus,
-          Object.keys(created?.mounts ?? {}),
-          created?.user?.name,
-        ],
-        [standing?.name, FAKE_SANDBOX.TAGS, 4, ["/workspace"], "agent"],
+        [created?.name, created?.tags, created?.vcpus, created?.user?.name],
+        [standing?.name, FAKE_SANDBOX.TAGS, 4, "agent"],
       );
     }),
 );

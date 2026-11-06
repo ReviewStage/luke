@@ -160,7 +160,7 @@ export const PLACE_RESUME = { GONE: "gone" } as const;
 /**
  * A found place running again: where it runs now, and whether it was made
  * anew in place of one whose disk was lost (`created`), which holds nothing
- * the place kept off its drive, the harness's own session among it.
+ * the place kept on its disk, the harness's own session among it.
  */
 export interface ResumedPlace {
   readonly place: MachinePlace;

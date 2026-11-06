@@ -130,7 +130,6 @@ import {
   withdrawRunnerLine,
 } from "@repo/database/models/runner-line-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
-import { queueSessionSandboxes } from "@repo/database/models/session-sandbox-cleanup";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
@@ -1417,7 +1416,7 @@ export const runnerSessions = <
         if (resumed === PLACE_RESUME.GONE) {
           // Note that the snapshot of a sandbox opened before `getOrCreate` expired
           // (`CODER.SANDBOX_SNAPSHOTS`), so it can never resume: the session goes on in a fresh one
-          // under the session's tag, on the session's drive. The harness's own session files went
+          // under the session's tag, its checkout cloned again. The harness's own session files went
           // with the old filesystem, so its session resumes from the transcript the service keeps
           // (`keptSessionOf`). The expired sandbox is deleted only once
           // the fresh one runs, so a launch that fails (a clone refused, say) leaves the session
@@ -1981,11 +1980,9 @@ export const runnerSessions = <
             yield* machine.discard(place);
           }
           // A session whose places are all another account's agents' is none of this account's to retire.
-          if (retired === 0) return { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
-          // Note that the session's drive goes through the delete queue rather than here, because a
-          // sandbox just deleted holds its drive a few seconds more, which the queue's next pass waits out.
-          yield* queueSessionSandboxes([sessionId]);
-          return { outcome: SESSION_RESET_OUTCOME.RESET } as const;
+          return retired === 0
+            ? ({ outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
+            : ({ outcome: SESSION_RESET_OUTCOME.RESET } as const);
         }).pipe(
           Effect.catch(unavailable("reset")),
           Effect.annotateLogs(agentLogIds({}, sessionId)),
