@@ -6,16 +6,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { FileViewBar } from "./file-view.js";
+import { FileGitHubButton } from "./file-view.js";
 
 /**
  * file-view-bar.test.ts -- a file's page on GitHub, opened from the bar of a
- * File tab or of a pull request's Files changed, is a link to that page that
+ * File tab, is a link to that page that
  * the window opens through its own door, and stands dimmed where no page is
  * known yet.
  */
 
-const PAGE = "https://github.com/acme/relay/pull/42/files";
+const PAGE = "https://github.com/acme/relay/blob/main/src/index.ts";
 
 const roots: Root[] = [];
 
@@ -24,18 +24,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws the bar over the GitHub page it is handed. */
+/** Draws the bar's GitHub button over the GitHub page it is handed. */
 function barOver(github: { href: string; open: (url: string) => void } | undefined): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(FileViewBar, { lead: null, github, menu: null }),
-      ),
-    ),
+    root.render(onRegistry(AtomRegistry.make(), createElement(FileGitHubButton, { github }))),
   );
   return container;
 }

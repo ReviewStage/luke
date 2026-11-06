@@ -118,6 +118,8 @@ import {
 } from "../vercel-sandbox-api.js";
 import {
   type AgentMachineService,
+  CREDENTIAL_RENEWAL,
+  type DeliveredCredentials,
   type FoundPlace,
   LaunchRefused,
   type MachineKept,
@@ -128,6 +130,7 @@ import {
   type MachineRunning,
   type OpenedPlace,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerLaunch,
 } from "./agent-machine.js";
@@ -221,6 +224,20 @@ function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFi
 function objectOf(value: object): DeviceAgentObject {
   // SAFETY: every payload is a struct's encoded form, a JSON object of string keys.
   return value as DeviceAgentObject;
+}
+
+/**
+ * A launch's credentials as a Mac's runner takes them, which no firewall of
+ * ours stands in front of: a fixed one's value in its variable, sealed with
+ * the launch, and a renewed one not at all, since the runner asks our token
+ * route for it.
+ */
+function handedOnMac(credentials: readonly RunnerCredential[]): DeliveredCredentials {
+  const fixed = credentials.filter((each) => each.renewal === CREDENTIAL_RENEWAL.FIXED);
+  return {
+    env: Object.fromEntries(fixed.map((each) => [each.variable, Redacted.value(each.value)])),
+    swaps: new Map(),
+  };
 }
 
 /**
@@ -396,6 +413,8 @@ function deviceMachineOver(
     owns: (session) => Effect.map(pinOfSession(session), Option.isSome),
 
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
+
+    deliverCredentials: (_agent, credentials) => handedOnMac(credentials),
 
     // The worktree is the device's to make of its shared clone as it takes the launch line, on the
     // agent's own GitHub token, or the device's own GitHub sign-in for an agent on its starter's

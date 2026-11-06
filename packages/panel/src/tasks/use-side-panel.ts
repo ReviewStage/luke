@@ -40,12 +40,18 @@ import { Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { fileName } from "./file-ref-model.js";
 import {
   type ByPullRequestTab,
   ofPullRequestTab,
   withPullRequestTab,
 } from "./pull-request-number.js";
+import {
+  stripTabKept,
+  stripTabPin,
+  stripTabPreviews,
+  TAB_PIN,
+  untitledStripTab,
+} from "./strip-tab-kinds.js";
 
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
@@ -951,9 +957,9 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, a file's, or an agent's Changes. A coding agent's own tab is pinned as the agent, on the account. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of (`stripTabPin`): a fixed one, a file's, or an agent's Changes. A coding agent's own tab is pinned as the agent, on the account. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return FIXED_TABS.has(tab) || isFileTab(tab) || isChangesTab(tab);
+  return stripTabPin(tab) === TAB_PIN.SIDEBAR;
 }
 
 /** Whether the pin is of the holder's tab. */
@@ -1567,14 +1573,6 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
   return { ...kept, tab: replacement };
 }
 
-/**
- * Whether a tab may stand as a preview: one a link opens, as against the
- * fixed kinds, which stand as the task's own and are only ever chosen.
- */
-function previewable(tab: SidePanelTab): boolean {
-  return !isFixedTab(tab);
-}
-
 /** The task's preview tab, while its strip still draws it. */
 function previewOf(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
   const taskId = drawn.task.id;
@@ -1621,7 +1619,7 @@ function withPreview(
   const preview = previewOf(held, drawn);
   const standing = stripOf(held, drawn).some((each) => sameTab(each, tab));
   const isPreview = preview !== undefined && sameTab(preview, tab);
-  if (taskId === undefined || !previewable(tab) || (standing && !isPreview)) return open(held);
+  if (taskId === undefined || !stripTabPreviews(tab) || (standing && !isPreview)) return open(held);
   const cleared = preview === undefined || isPreview ? held : withoutTab(held, preview, drawn);
   const opened = open(cleared);
   return { ...opened, previews: { ...opened.previews, [taskId]: tab } };
@@ -1729,9 +1727,9 @@ function current<T>(tab: T): tab is Exclude<T, RetiredSidePanelTab> {
   return !RETIRED_TABS.has(tab);
 }
 
-/** Whether a kept choice of tab is one of this panel's today: a fixed kind not retired, or an agent's Changes, never an agent's own, which the task's column holds now. */
+/** Whether a kept choice of tab is one of this panel's today: of a kind the panel keeps (`stripTabKept`) and not retired, so never an agent's own, which the task's column holds now. */
 function panelChoice(tab: typeof anyTabSchema.Type): tab is FixedSidePanelTab | ChangesStripTab {
-  return !isAgentTab(tab) && current(tab);
+  return stripTabKept(tab).sidePanel && current(tab);
 }
 
 /** Each task's kept choices without the kinds retired since they were kept, nor an agent's, nor the strip pins `stripPins` reads. */
@@ -1759,11 +1757,9 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
   );
 }
 
-/** The name a pin read from the strip's own carries until its task is next open: a fixed tab's kind, a file's name, any Changes tab's, or any agent's. */
-function stripPinLabel(tab: PinnableTab | AgentStripTab): string {
-  if (isFileTab(tab)) return fileName(tab.file);
-  if (isChangesTab(tab)) return TAB_WORDS.PULL_REQUEST;
-  return isAgentTab(tab) ? TAB_WORDS.AGENT : SIDE_PANEL_TAB_KIND[tab].label;
+/** Whether a tab an earlier version pinned in its strip is of a kind pinned today, to the sidebar or as its agent on the account, never a subagent's. */
+function pinnedKind(tab: typeof stripPinSchema.Type): tab is PinnableTab | AgentStripTab {
+  return stripTabPin(tab) !== TAB_PIN.NONE;
 }
 
 /** Whether a kept pin opens a tab this version has: any but a retired fixed kind's, the Call's among them. */
@@ -1782,9 +1778,7 @@ function stripPins(
 ): readonly (typeof taskPinSchema.Type)[] {
   const pinned = Object.entries(tasks).flatMap(([task, { pinned = [] }]) =>
     pinned.flatMap((tab) =>
-      (isPinnable(tab) || isAgentTab(tab)) && currentPin(tab)
-        ? [{ task, tab, label: stripPinLabel(tab) }]
-        : [],
+      pinnedKind(tab) && currentPin(tab) ? [{ task, tab, label: untitledStripTab(tab) }] : [],
     ),
   );
   return pinned.map((pin, place) => ({ ...pin, at: -place }));
@@ -1792,7 +1786,7 @@ function stripPins(
 
 /** Whether a kept pin is of an agent's tab, which the account pins now. */
 function carriedPin(pin: KeptPin): pin is CarriedPin {
-  return "task" in pin && isAgentTab(pin.tab);
+  return "task" in pin && stripTabPin(pin.tab) === TAB_PIN.ACCOUNT;
 }
 
 /**
@@ -1802,7 +1796,7 @@ function carriedPin(pin: KeptPin): pin is CarriedPin {
  */
 function heldPin(pin: KeptPin): PinnedTab[] {
   const { tab } = pin;
-  if (isAgentTab(tab) || !currentPin(tab) || retiredKind(tab)) return [];
+  if (!isPinnable(tab) || !currentPin(tab) || retiredKind(tab)) return [];
   const { label, at, position } = pin;
   const fields = position === undefined ? { tab, label, at } : { tab, label, at, position };
   return ["task" in pin ? { ...fields, task: pin.task } : { ...fields, agent: pin.agent }];
@@ -1859,9 +1853,9 @@ function stagedHeld(staged: StagedSidePanel): HeldState {
   return { ...held, ...(opened ? { tab } : undefined), files, pages, terminals, pullRequestViews };
 }
 
-/** Whether a chosen or viewed tab is kept across a launch: a fixed tab or a Changes tab, the kinds that stand again after it. */
+/** Whether a chosen or viewed tab is kept across a launch (`stripTabKept`): a fixed tab or a Changes tab, the kinds that stand again after it. */
 function keptChoice(tab: SidePanelTab): tab is FixedSidePanelTab | ChangesStripTab {
-  return isFixedTab(tab) || isChangesTab(tab);
+  return stripTabKept(tab).sidePanel;
 }
 
 /** Each task's choices as they are kept: its tabs viewed and its order as `keptChoice` keeps them, its open Changes tabs, and none of them where it has none. */
