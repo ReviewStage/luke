@@ -73,6 +73,7 @@ import {
   pullRequestReviewOptions,
   readCommits,
 } from "../github/pull-requests.js";
+import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -421,8 +422,9 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /** The agent as its own page, an agent with no task as much as one on a task. */
     read: signedIn.read.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.id);
-      // An open of the agent settles a turn whose runner stopped posting, which every reader already reads lost.
-      yield* settleLapsedRunner(agent);
+      // An open of the agent settles a turn whose runner stopped posting past its answer, which never
+      // waits on the machine it asks, since every reader already reads that turn lost.
+      yield* afterResponse("a lapsed runner's settle", settleLapsedRunner(agent));
       const standing = yield* standingsOf([agent.conversationId]);
       const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
       const continuedBy = yield* continuedByOf(userId, [agent.id]);

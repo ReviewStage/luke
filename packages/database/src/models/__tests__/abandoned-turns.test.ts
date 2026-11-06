@@ -274,7 +274,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
   );
 
   it.effect(
-    "a turn's lease runs from its queueing, a runner's post pushes it on, a turn queued behind the running one's with it, and only a turn still open past it reads as lapsed, as does one with no lease queued a lease ago",
+    "a turn's lease runs from its queueing, a runner's post pushes it on, a turn queued behind the running one's with it, and only a turn still open past it reads as lapsed, as does one with no lease queued a lease ago and one whose Stop went unconfirmed",
     () =>
       Effect.gen(function* () {
         const writer = yield* storeWriter({ tools: {} });
@@ -300,6 +300,10 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           .set({ leaseUntil: null })
           .where(eq(turns.id, leaseless));
 
+        // A turn whose runner beats on but never ended it on its Stop, its lease far ahead.
+        const stopping = yield* openAgentConversation;
+        const unconfirmed = yield* turnIn(writer, stopping, TURN_STATUS.RUNNING);
+        yield* writer.requestTurnCancel(stopping, { turnId: unconfirmed, at: new Date(0) });
         const fresh = yield* renewTurnLease(target.conversationId, 60_000);
         const pushed = yield* renewTurnLease(target.conversationId, 10 * 60_000);
         const past = TURN_LEASE.MS + 1;
@@ -317,6 +321,15 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         );
         assert.deepEqual(yield* lapsedTurnIds(unleased.conversationId, TURN_LEASE.MS), []);
         assert.deepEqual(yield* lapsedTurnIds(unleased.conversationId, past), [leaseless]);
+        assert.deepEqual(
+          yield* lapsedTurnIds(stopping.conversationId, LOST_TURNS.STOP_CONFIRM_MS),
+          [],
+        );
+        assert.deepEqual(
+          yield* lapsedTurnIds(stopping.conversationId, LOST_TURNS.STOP_CONFIRM_MS + 1),
+          [unconfirmed],
+          "a Stop unconfirmed past its bound lapses whatever the lease",
+        );
       }),
   );
 

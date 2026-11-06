@@ -31,6 +31,13 @@ import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
  */
 
 export const LOST_TURNS = {
+  /**
+   * How long a turn may stand open after a Stop was asked of it before it is
+   * read as lapsed whatever its lease: a runner ends a turn within seconds of
+   * its Stop, and the Stop's own force ends it ten seconds on, so one still
+   * open this long has a runner that heard neither, even one still beating.
+   */
+  STOP_CONFIRM_MS: 5 * 60 * 1000,
   /** The most turns one read of an ended session takes; reads go on until none is left. */
   LIMIT: 50,
 } as const;
@@ -64,13 +71,17 @@ const TURN_CONVERSATION = eq(conversations.id, turns.conversationId);
  * ran out before the instant, oldest first. Note that a turn with no lease,
  * which a writer from before the lease may still queue while a deploy rolls
  * out, is read as though its lease ran from its queueing, because a runner
- * still posting gives it one at its next post (`turn-lease.ts`).
+ * still posting gives it one at its next post (`turn-lease.ts`); and a turn
+ * whose Stop went unconfirmed past `LOST_TURNS.STOP_CONFIRM_MS` is read as
+ * lapsed whatever its lease, since a runner that heard neither the Stop nor
+ * its force may beat on for good.
  */
 const findLapsedTurns = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
     before: Schema.Date,
     queuedBefore: Schema.Date,
+    stoppedBefore: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (request) =>
@@ -85,6 +96,7 @@ const findLapsedTurns = SqlSchema.findAll({
             or(
               lt(turns.leaseUntil, request.before),
               and(isNull(turns.leaseUntil), lt(turns.queuedAt, request.queuedBefore)),
+              lt(turns.cancelRequestedAt, request.stoppedBefore),
             ),
           ),
         )
@@ -208,6 +220,7 @@ export function lapsedTurnIds(
     conversationId,
     before: new Date(now),
     queuedBefore: new Date(now - TURN_LEASE.MS),
+    stoppedBefore: new Date(now - LOST_TURNS.STOP_CONFIRM_MS),
   };
   return Effect.map(findLapsedTurns(lapsed), (rows) => rows.map((row) => row.id));
 }
