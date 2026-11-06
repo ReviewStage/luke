@@ -7,10 +7,12 @@
  * (`packages/service/src/orpc/base.ts`).
  *
  * Each declares its own refusals (`declaredProcedure`): the list and the
- * presence refuse only as any procedure may, the store among them; a
- * remove refuses a host the account does not hold as not found; and a
- * pairing's read, approve, or deny refuses a code no pending pairing has as
- * not found and an account past its guesses as held, with until when.
+ * presence refuse as not found only where the service answers before any
+ * procedure matches, an older one without their path, which the window
+ * has always read as not found; a remove refuses a host the account does
+ * not hold as not found; and a pairing's read, approve, or deny refuses a
+ * code no pending pairing has as not found and an account past its guesses
+ * as held, with until when.
  */
 
 import { openapi } from "@orpc/openapi";
@@ -34,9 +36,11 @@ const BODY_BYTES = 1_024;
 
 export const hostsContract = {
   list: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.HOSTS }))
     .output(EffectSchema.flip(hostsAnswerSchema)),
   presence: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_PRESENCE }))
     .output(EffectSchema.flip(devicePresenceAnswerSchema)),
   remove: declaredProcedure
