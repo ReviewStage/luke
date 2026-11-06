@@ -19,7 +19,7 @@ import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js
 /**
  * A thread an agent posts, written by our Slack bot to the member it waits
  * on, over a real store and a fake Slack: the DM goes to that member's
- * Slack user and says the thread's title; the post is the first reply
+ * Slack user and says the thread's title over a link to the thread; the post is the first reply
  * in its Slack thread, the agent's Markdown in a `markdown` block, a mention
  * chip as a plain link, and a link to the thread, the post's picture shared
  * under it, and the title DM then says the open ask under the title; a
@@ -144,9 +144,17 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         assert.equal(title?.args.channel, `U-${email}`);
         assert.equal(title?.args.thread_ts, undefined);
         assert.equal(title?.args.text, "📥 Require a review on main");
-        assert.deepEqual(blocksOf(title), [
-          { type: "header", text: { type: "plain_text", text: "📥 Require a review on main" } },
-        ]);
+        const header = {
+          type: "header",
+          text: { type: "plain_text", text: "📥 Require a review on main" },
+        };
+        const open = {
+          type: "actions",
+          elements: [
+            { type: "button", text: { type: "plain_text", text: "Open in Vespin" }, url: link },
+          ],
+        };
+        assert.deepEqual(blocksOf(title), [header, open]);
         assert.equal(reply?.args.channel, "D0001");
         assert.equal(reply?.args.thread_ts, "1700000000.000101");
         assert.equal(later?.args.channel, "D0001");
@@ -188,19 +196,15 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         yield* settleThreadDms(item.id);
         yield* settleThreadDms(item.id);
 
-        const header = {
-          type: "header",
-          text: { type: "plain_text", text: "📥 Require a review on main" },
-        };
         const [asking, answered, untitled, ...again] = calls.filter(
           (call) => call.method === "chat.update",
         );
         assert.deepEqual(again, []);
         // The title DM says the open ask while it waits, and the title alone once it is answered.
         assert.equal(asking?.args.ts, "1700000000.000101");
-        assert.deepEqual(blocksOf(asking), [header, words]);
+        assert.deepEqual(blocksOf(asking), [header, words, open]);
         assert.equal(untitled?.args.ts, "1700000000.000101");
-        assert.deepEqual(blocksOf(untitled), [header]);
+        assert.deepEqual(blocksOf(untitled), [header, open]);
         assert.equal(answered?.args.channel, "D0001");
         assert.equal(answered?.args.ts, "1700000000.000102");
         assert.equal(answered?.args.text, "Require a review on main · Answered in Vespin");
@@ -217,7 +221,7 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
     () => {
       const calls: SlackCall[] = [];
       return Effect.gen(function* () {
-        const { agent, organizationId } = yield* openConnectedAgent;
+        const { agent, organizationId, slug } = yield* openConnectedAgent;
         const ask = {
           key: "invite-expiry",
           title: "How long should an invitation last?",
@@ -252,6 +256,16 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
                   text: { type: "plain_text", text: "📥 How long should an invitation last?" },
                 },
                 { type: "markdown", text: "Or a month?" },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "Open in Vespin" },
+                      url: `https://vespin.dev/${slug}/inbox/${item.id}`,
+                    },
+                  ],
+                },
               ],
             ],
           ],
