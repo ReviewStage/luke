@@ -263,16 +263,11 @@ function pickerRepositories(
 }
 
 /**
- * The token repositories as setup picks them, in the repository chip that
- * checks several (`CheckedRepositoryChip`): every repository the reader's
- * token reaches, each added one checked, or Add repositories while none is.
- * A press adds or removes its row, its check turning at once, ahead of the
- * service's answer, which a refusal turns back and says under the chip;
- * only a row's latest press settles it, so an earlier answer landing late
- * neither clears a later check nor says its refusal. Note that a removal
- * here asks nothing, unlike Settings' Remove, because a check just set is
- * taken back in the menu that set it; one a teammate added, which the
- * reader may not remove, stands checked and says so.
+ * The token repositories as setup picks them (`CheckedRepositoryChip`), each
+ * added one checked. A press's check turns at once, and only a row's latest
+ * press settles it, so a late answer neither clears a later check nor says
+ * its refusal. Note that a removal here asks nothing, unlike Settings'
+ * Remove, because a check just set is taken back in the menu that set it.
  */
 export function TokenRepositoryPicker({
   workspaceId,
@@ -288,7 +283,7 @@ export function TokenRepositoryPicker({
   const { mutate: retry } = useMutation(repositoryListsRetryMutation());
   // Note that a press's check is held here, keyed as no case spells the name, until the service answers it.
   const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(new Map());
-  const presses = useRef({ count: 0, latest: new Map<string, number>() });
+  const presses = useRef(new Map<string, number>());
   const listed = new Map(repositories.listed.map((one) => [one.fullName.toLowerCase(), one]));
   const isOn = (fullName: string) =>
     pending.get(fullName.toLowerCase()) ?? listed.has(fullName.toLowerCase());
@@ -307,10 +302,9 @@ export function TokenRepositoryPicker({
   const toggle = (fullName: string) => {
     const key = fullName.toLowerCase();
     const added = !isOn(fullName);
-    presses.current.count += 1;
-    const press = presses.current.count;
-    presses.current.latest.set(key, press);
-    const latest = () => presses.current.latest.get(key) === press;
+    const press = (presses.current.get(key) ?? 0) + 1;
+    presses.current.set(key, press);
+    const latest = () => presses.current.get(key) === press;
     setPending((was) => new Map(was).set(key, added));
     onRefused(undefined);
     repositories.change(fullName, added).then(

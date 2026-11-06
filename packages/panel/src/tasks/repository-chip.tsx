@@ -299,13 +299,7 @@ export interface SeveralPicks {
   readonly standIn?: boolean | undefined;
 }
 
-/**
- * Where a repository's menu stands, whatever it lists: whether it is open,
- * drawn through its fade, its id, the room it hangs in, the press that opens
- * and shuts it from its opener, and closing, which hands focus back to that
- * opener, as a native menu returns it to its trigger, because closing takes
- * the focused field away with it.
- */
+/** Where a repository's menu stands, whatever it lists; closing hands focus back to its opener, as a native menu returns it to its trigger. */
 function useMenuPlace() {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -317,7 +311,6 @@ function useMenuPlace() {
     drawn,
     menuId,
     room,
-    /** Opens the menu as asked from elsewhere, from whatever holds focus. */
     ask: () => {
       opener.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -339,26 +332,18 @@ function useMenuPlace() {
 
 type MenuPlace = ReturnType<typeof useMenuPlace>;
 
-/**
- * The searched menu over the rows a repository's opener lists, while it is
- * drawn: one chosen, or each picked checked where picks turn rows on and
- * off. Note that every row names a repository and its owner, so each stays
- * masked, and the note, which can name the workspace, is left unmarked.
- */
+type SearchableMenuProps = React.ComponentProps<typeof SearchableMenu>;
+
+/** The searched menu a repository's opener drops, over the rows it lists. Note that every row names a repository and its owner, so each stays masked, and the note, which can name the workspace, is left unmarked. */
 function repositoryMenu(
   place: MenuPlace,
-  menu: {
-    rows: readonly MenuRow[];
-    value: string | undefined;
-    checked: ReadonlySet<string> | undefined;
-    note: React.ReactNode;
+  menu: Pick<SearchableMenuProps, "rows" | "value" | "checked" | "note" | "onPick" | "foot"> & {
     align: PopoverAlign;
-    onPick: (repository: string) => void;
-    foot?: React.ComponentProps<typeof SearchableMenu>["foot"];
   },
 ): React.ReactNode {
   return place.drawn.mounted ? (
     <SearchableMenu
+      {...menu}
       leaving={place.drawn.leaving}
       ref={place.drawn.ref}
       id={place.menuId}
@@ -366,13 +351,7 @@ function repositoryMenu(
       placeholder="Search repositories"
       replayUnmasked
       rows={menu.rows.map((row) => ({ ...row, replayMasked: true }))}
-      value={menu.value}
-      checked={menu.checked}
-      note={menu.note}
       noMatch={NO_MATCH}
-      align={menu.align}
-      onPick={menu.onPick}
-      foot={menu.foot}
       onClose={place.close}
       onLeave={place.leave}
     />
@@ -554,8 +533,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     ) : undefined;
 
   return {
-    open: place.open,
-    menuId: place.menuId,
+    ...place,
     label,
     hint: value === null ? undefined : picked.join(", "),
     glyph:
@@ -572,8 +550,6 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
       value === null || picked.length > 1 || place.open ? undefined : (
         <RepositoryCard repository={value} pictures={chooser.pictures} />
       ),
-    press: place.press,
-    room: place.room,
     menu: repositoryMenu(place, {
       rows,
       value: several === undefined ? (value ?? undefined) : undefined,
@@ -599,147 +575,98 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   };
 }
 
-export function RepositoryChip(
-  props: RepositoryMenuProps & {
-    place: ChipPlace;
-    /** A form row's chip: how wide it stands, its words' own width where none is named. */
-    width?: ChipWidth | undefined;
-    /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
-    describedBy?: string | undefined;
-    /** A form row's chip: whether the row says its value is refused. */
-    invalid?: true | undefined;
-    /** Why the repository is held to `value` and takes no pick, said on hover; none where it may be changed. */
-    held?: string | undefined;
-  },
-): React.JSX.Element {
-  const menu = useRepositoryMenu(props);
-  return (
-    <div className="repository-chip relative min-w-0" data-place={props.place} ref={menu.room}>
-      <RepositoryMenuChip
-        place={props.place}
-        width={props.width}
-        describedBy={props.describedBy}
-        invalid={props.invalid}
-        held={props.held}
-        open={menu.open}
-        menuId={menu.menuId}
-        hint={menu.hint}
-        card={menu.card}
-        glyph={menu.glyph}
-        label={menu.label}
-        named={props.value !== null}
-        onPress={menu.press}
-      />
-      {menu.menu}
-    </div>
-  );
-}
-
-/**
- * A form row's repository chip over the rows its caller lists, as setup's
- * token card lists the repositories its token reaches: each picked row
- * checked, a press checking or unchecking it while the menu stands open,
- * and the chip naming the picks as New task's several-pick chip does, or
- * `empty` while none is.
- */
-export function CheckedRepositoryChip(props: {
-  rows: readonly MenuRow[];
-  /** The repositories picked, in the order the chip names them. */
-  picked: readonly string[];
-  pictures: boolean;
-  /** The chip's words while nothing is picked. */
-  empty: string;
-  note: React.ReactNode;
-  onToggle: (repository: string) => void;
-  /** Hears the menu opening, as a read that failed is asked again. */
-  onOpen?: (() => void) | undefined;
-}): React.JSX.Element {
-  const place = useMenuPlace();
-  const first = props.picked[0];
-  return (
-    <div
-      className="repository-chip relative min-w-0"
-      data-place={CHIP_PLACE.FIELD}
-      ref={place.room}
-    >
-      <RepositoryMenuChip
-        place={CHIP_PLACE.FIELD}
-        open={place.open}
-        menuId={place.menuId}
-        hint={first === undefined ? undefined : props.picked.join(", ")}
-        glyph={first === undefined ? <GLYPH.ADD /> : firstPicture(first, props.pictures)}
-        label={first === undefined ? props.empty : pickedRepositoriesWords(props.picked)}
-        named={first !== undefined}
-        onPress={(from) => {
-          if (!place.open) props.onOpen?.();
-          place.press(from);
-        }}
-      />
-      {repositoryMenu(place, {
-        rows: props.rows,
-        value: undefined,
-        checked: checkedAmong(props.rows, props.picked),
-        note: props.note,
-        align: POPOVER_ALIGN.START,
-        onPick: props.onToggle,
-      })}
-    </div>
-  );
-}
-
-/**
- * The chip a repository's menu drops from, in its place's look: the first
- * pick's owner picture, or the glyph standing for none, and its words,
- * masked in a screen recording where they name a repository; a press opens
- * and shuts the menu from it, and its hint names every pick while the menu
- * is shut. Note that a held chip is `aria-disabled` rather than disabled,
- * because a disabled button hears no pointer, and its hint says why.
- */
-function RepositoryMenuChip(props: {
+/** Where a repository chip stands and what its row says of it. */
+interface ChipStanding {
   place: ChipPlace;
   /** A form row's chip: how wide it stands, its words' own width where none is named. */
   width?: ChipWidth | undefined;
-  /** A form row's chip: the ids of the row's words that describe it. */
+  /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
   describedBy?: string | undefined;
   /** A form row's chip: whether the row says its value is refused. */
   invalid?: true | undefined;
-  /** Why the chip takes no pick, said on hover; none where it may be changed. */
+  /** Why the repository is held to `value` and takes no pick, said on hover; none where it may be changed. */
   held?: string | undefined;
-  open: boolean;
-  menuId: string;
-  /** What the hint names while the menu is shut: every pick, whole. */
-  hint?: string | undefined;
-  /** The card hung while the pointer rests on the chip. */
-  card?: React.ReactNode;
-  glyph: React.JSX.Element;
-  label: string;
-  /** Whether the words name a repository rather than the pick waited on. */
-  named: boolean;
-  onPress: (opener: HTMLElement) => void;
+}
+
+export function RepositoryChip(props: RepositoryMenuProps & ChipStanding): React.JSX.Element {
+  return <MenuChip {...props} menu={useRepositoryMenu(props)} named={props.value !== null} />;
+}
+
+/** A form row's repository chip over rows its caller lists, as setup's token card does, each pick checked and the menu standing open between presses. */
+export function CheckedRepositoryChip(props: {
+  rows: readonly MenuRow[];
+  picked: readonly string[];
+  pictures: boolean;
+  empty: string;
+  note: React.ReactNode;
+  onToggle: (repository: string) => void;
+  onOpen: () => void;
 }): React.JSX.Element {
-  const { held } = props;
+  const place = useMenuPlace();
+  const first = props.picked[0];
+  const menu: RepositoryMenu = {
+    ...place,
+    label: first === undefined ? props.empty : pickedRepositoriesWords(props.picked),
+    hint: first === undefined ? undefined : props.picked.join(", "),
+    glyph: first === undefined ? <GLYPH.ADD /> : firstPicture(first, props.pictures),
+    card: undefined,
+    press: (from) => {
+      if (!place.open) props.onOpen();
+      place.press(from);
+    },
+    menu: repositoryMenu(place, {
+      rows: props.rows,
+      value: undefined,
+      checked: checkedAmong(props.rows, props.picked),
+      note: props.note,
+      align: POPOVER_ALIGN.START,
+      onPick: props.onToggle,
+    }),
+  };
+  return <MenuChip place={CHIP_PLACE.FIELD} menu={menu} named={first !== undefined} />;
+}
+
+/**
+ * The chip a repository's menu drops from, in its place's look, and the
+ * menu itself: the first pick's owner picture, or the glyph standing for
+ * none, and its words, masked in a screen recording where they name a
+ * repository; its hint names every pick while the menu is shut. Note that a
+ * held chip is `aria-disabled` rather than disabled, because a disabled
+ * button hears no pointer, and its hint says why.
+ */
+function MenuChip(
+  props: ChipStanding & {
+    menu: RepositoryMenu;
+    /** Whether the words name a repository rather than the pick waited on. */
+    named: boolean;
+  },
+): React.JSX.Element {
+  const { held, menu } = props;
   return (
-    <Tooltip
-      label={held ?? (props.open ? undefined : props.hint)}
-      card={held === undefined ? props.card : undefined}
-    >
-      <Chip
-        look={PLACE_LOOK[props.place]}
-        width={props.width}
-        chevron={props.place === CHIP_PLACE.FIELD}
-        aria-describedby={props.describedBy}
-        aria-invalid={props.invalid}
-        aria-disabled={held === undefined ? undefined : true}
-        aria-haspopup="dialog"
-        aria-expanded={props.open}
-        aria-controls={props.open ? props.menuId : undefined}
-        onClick={(event) => {
-          if (held === undefined) props.onPress(event.currentTarget);
-        }}
+    <div className="repository-chip relative min-w-0" data-place={props.place} ref={menu.room}>
+      <Tooltip
+        label={held ?? (menu.open ? undefined : menu.hint)}
+        card={held === undefined ? menu.card : undefined}
       >
-        {props.glyph}
-        <ChipName>{props.named ? <ReplayMask>{props.label}</ReplayMask> : props.label}</ChipName>
-      </Chip>
-    </Tooltip>
+        <Chip
+          look={PLACE_LOOK[props.place]}
+          width={props.width}
+          chevron={props.place === CHIP_PLACE.FIELD}
+          aria-describedby={props.describedBy}
+          aria-invalid={props.invalid}
+          aria-disabled={held === undefined ? undefined : true}
+          aria-haspopup="dialog"
+          aria-expanded={menu.open}
+          aria-controls={menu.open ? menu.menuId : undefined}
+          onClick={(event) => {
+            if (held === undefined) menu.press(event.currentTarget);
+          }}
+        >
+          {menu.glyph}
+          <ChipName>{props.named ? <ReplayMask>{menu.label}</ReplayMask> : menu.label}</ChipName>
+        </Chip>
+      </Tooltip>
+      {menu.menu}
+    </div>
   );
 }
