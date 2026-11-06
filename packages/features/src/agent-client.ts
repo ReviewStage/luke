@@ -101,11 +101,9 @@ import type { FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import type { HostsLiveAnswer } from "./host-live.js";
 import {
-  HOST_PAIRING_CALL_FAILURE,
+  HOST_PAIRING_RENAMES,
   type HostPairingApproveView,
-  type HostPairingCallFailure,
   type HostPairingDenyView,
-  type HostPairingFailed,
   type HostPairingView,
 } from "./host-pairing-view.js";
 import { hostedCall } from "./hosted-call.js";
@@ -297,31 +295,6 @@ const CHOOSE_REFUSALS = {
   ...ROW_REFUSALS,
   ...DEFAULT_REFUSALS,
 } satisfies NamedRefusals;
-
-/** The refusals a pairing's read, approve, or deny can answer with; a code refused by its shape is one no pending pairing has. */
-const PAIRING_REFUSALS: Readonly<Partial<Record<HostedApiError, HostPairingCallFailure>>> = {
-  [HOSTED_API_ERROR.NOT_FOUND]: HOST_PAIRING_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.INVALID_REQUEST]: HOST_PAIRING_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOST_PAIRING_CALL_FAILURE.HELD,
-};
-
-/** A pairing procedure's answer, or the refusal it failed with where the approve screen draws it, with when a held member is taken again where the service said; unanswered for everything else. */
-function pairingAnswer<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<Answer | HostPairingFailed, never, HttpClient.HttpClient> {
-  return Effect.catch(asked, (failed): Effect.Effect<HostPairingFailed> => {
-    const failure = failed._tag === "HostedRefused" ? PAIRING_REFUSALS[failed.refusal] : undefined;
-    if (failed._tag !== "HostedRefused" || failure === undefined) {
-      return Effect.succeed({ failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED });
-    }
-    const heldUntil = failed.data?.heldUntil;
-    return Effect.succeed(
-      failure === HOST_PAIRING_CALL_FAILURE.HELD && heldUntil !== undefined
-        ? { failure, heldUntil }
-        : { failure },
-    );
-  });
-}
 
 /** The chapters failures a refusal may stand for, by the service's own word for each. */
 type ChaptersRefusals = Readonly<
@@ -544,12 +517,12 @@ export class HostedAgentClient {
 
   /** The account's hosts, as Settings lists them. */
   hosts(): Effect.Effect<HostsAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.hosts.list, undefined), ROW_REFUSALS);
+    return hostedCall(this.#hosted.hosts.list, undefined);
   }
 
   /** How long ago the account's own devices last beat, and nothing else of them. */
   devicePresence(): Effect.Effect<DevicePresenceAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.hosts.presence, undefined), ROW_REFUSALS);
+    return hostedCall(this.#hosted.hosts.presence, undefined);
   }
 
   /**
@@ -577,24 +550,24 @@ export class HostedAgentClient {
 
   /** One of the account's hosts removed, its secret refused at once, answering the transaction it was removed in. */
   removeHost(id: string): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
+    return hostedCall(this.#hosted.hosts.remove, { id });
   }
 
   /** A box's pending pairing by the code its link named, as the approve screen shows it: the box and the address its start came from. */
   readHostPairing(code: string): Effect.Effect<HostPairingView, never, HttpClient.HttpClient> {
-    return pairingAnswer(askHosted(this.#hosted.hosts.readPairing, { code }));
+    return hostedCall(this.#hosted.hosts.readPairing, { code }, { as: HOST_PAIRING_RENAMES });
   }
 
   /** A box's pending pairing approved by its code, which makes the account's host at once; its box collects its secret on its next poll. */
   approveHostPairing(
     code: string,
   ): Effect.Effect<HostPairingApproveView, never, HttpClient.HttpClient> {
-    return pairingAnswer(askHosted(this.#hosted.hosts.approvePairing, { code }));
+    return hostedCall(this.#hosted.hosts.approvePairing, { code }, { as: HOST_PAIRING_RENAMES });
   }
 
   /** A box's pending pairing denied by its code, so its box is answered denied. */
   denyHostPairing(code: string): Effect.Effect<HostPairingDenyView, never, HttpClient.HttpClient> {
-    return pairingAnswer(askHosted(this.#hosted.hosts.denyPairing, { code }));
+    return hostedCall(this.#hosted.hosts.denyPairing, { code }, { as: HOST_PAIRING_RENAMES });
   }
 
   /**

@@ -322,7 +322,7 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
       await new Promise((done) => setTimeout(done, 0));
       hosts = [kept, removed];
       lay();
-      return { failure: AGENT_CALL_FAILURE.NOT_PERMITTED };
+      return { failure: AGENT_CALL_FAILURE.NOT_FOUND };
     },
   });
   await settle();
