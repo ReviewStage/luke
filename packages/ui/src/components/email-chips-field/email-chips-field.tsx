@@ -1,8 +1,10 @@
 import { type ClipboardEvent, type KeyboardEvent, type Ref, useId, useRef } from "react";
+import { cn } from "../../cn.js";
 import { isComposingKey } from "../../composing-key.js";
 import { CheckIcon } from "../../face/glyphs.js";
 import { AlertIcon } from "../../icons/lucide-glyphs.js";
 import { joinRefs } from "../../join-refs.js";
+import { INPUT_CONTROL } from "../../shadcn/input.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { AVATAR_SIZE, Avatar } from "../avatar/avatar.js";
 import { CHIP_LOOK, CHIP_SIZE, Chip, ChipName, StaticChip } from "../chip/chip.js";
@@ -84,9 +86,16 @@ function pastedList(pasted: string): boolean {
   return [" ", "\t", "\n", ",", ";"].some((mark) => kept.includes(mark));
 }
 
-/** The field's well: a control's, holding its chips in lines up to a grown note's height and scrolling past it, lighting while it holds the caret. */
-const WELL =
-  "ui-email-chips flex flex-wrap items-center content-start gap-chip-tight min-h-control max-h-text-area-grow-max overflow-y-auto box-border w-full min-w-0 rounded-control border border-border-strong bg-field px-ui-4 py-ui-4 cursor-text transition-[border-color,background-color] duration-(--ui-duration-hover) ease-plain focus-within:bg-field-focus aria-disabled:cursor-default aria-disabled:opacity-disabled";
+/**
+ * The field's well: the text field's own input box (`INPUT_CONTROL`), let
+ * grow to hold its chips in lines up to a grown note's height and scroll past
+ * it, its room a chip's rather than a word's, lighting while its words hold
+ * the caret.
+ */
+const WELL = cn(
+  INPUT_CONTROL,
+  "ui-email-chips flex flex-wrap items-center content-start gap-chip-tight h-auto min-h-control max-h-text-area-grow-max overflow-y-auto box-border w-full min-w-0 px-ui-4 py-ui-4 cursor-text transition-[border-color,background-color] duration-(--ui-duration-hover) ease-plain focus-within:bg-field-focus aria-disabled:cursor-default aria-disabled:opacity-disabled",
+);
 
 /** The words being typed, after the chips, taking the rest of the line. */
 const TYPING =
