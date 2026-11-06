@@ -76,7 +76,7 @@ const readRemember = Schema.decodeUnknownResult(REMEMBER_INPUT);
 const readRecall = Schema.decodeUnknownResult(RECALL_INPUT);
 
 /** Why a memory call did nothing, in words the model can act on. */
-const MEMORY_REFUSAL = {
+export const MEMORY_REFUSAL = {
   UNREADABLE_REMEMBER: `Not remembered: give the memory as text of at most ${MEMORY_BOUNDS.MAX_CHARS} characters.`,
   UNREADABLE_RECALL: `Not recalled: give the query as text of at most ${MEMORY_BOUNDS.MAX_QUERY_CHARS} characters.`,
   CREDENTIAL:
@@ -215,7 +215,7 @@ export function runRecall(
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
  * workspace cannot be read for its starter now keeps and recalls nothing, and
  * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
- * and our MCP server (`workspace-mcp/tools.ts`) list neither tool to such an
+ * and our MCP server (`tool-catalog/catalog.ts`) list neither tool to such an
  * agent, but a harness may still call a tool it was not listed, or Memory
  * may go off mid-run, so the refusal stands here as well.
  */

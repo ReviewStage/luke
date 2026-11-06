@@ -39,11 +39,17 @@ import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
-import { type Brand, Context, Data, type Duration, type Effect } from "effect";
+import { type Brand, Context, Data, type Duration, type Effect, type Redacted } from "effect";
 import type { AgentImage, AgentImageMissing } from "../coder-host/agent-image.js";
 import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
 import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
-import type { FirewallLaunch, FirewallSources } from "../sandbox-firewall.js";
+import type {
+  FirewallLaunch,
+  FirewallSources,
+  LaunchSwapKind,
+  LaunchSwaps,
+  PlaceholderSwap,
+} from "../sandbox-firewall.js";
 import type { CommandExit, SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
 /** Where a session runs now, as its machine names it: a Vercel sandbox's running session, or a local agent's id on its Mac. Opaque to every caller but the machine. */
@@ -180,6 +186,40 @@ interface MachineFirewall {
   ) => Effect.Effect<void, SandboxUnavailable, DatabaseServices>;
 }
 
+/** Whether the service renews a runner's credential while its launch stands. */
+export const CREDENTIAL_RENEWAL = {
+  /** Fixed for its launch: a Mac hands it to the runner, and a sandbox holds it at its firewall. */
+  FIXED: "fixed",
+  /** Renewed by the service: a Mac hands nothing, its runner asking our token route for each, and a sandbox holds it at its firewall, which the sweep renews. */
+  RENEWED: "renewed",
+} as const;
+
+export type CredentialRenewal = (typeof CREDENTIAL_RENEWAL)[keyof typeof CREDENTIAL_RENEWAL];
+
+/**
+ * A credential a launch declares for its runner, which the machine decides
+ * how to hand over (`deliverCredentials`): the variable the runner reads it
+ * in, its value, without its scheme, where the runner sends it (the domain,
+ * and the path prefix where one is named), in which header, named in lower
+ * case, behind which scheme (`Bearer ` or nothing), the slot a firewall
+ * holds it in, and whether the service renews it.
+ */
+export interface RunnerCredential {
+  readonly variable: string;
+  readonly value: Redacted.Redacted<string>;
+  readonly target: Pick<PlaceholderSwap, "domain" | "path">;
+  readonly header: string;
+  readonly scheme: string;
+  readonly slot: LaunchSwapKind;
+  readonly renewal: CredentialRenewal;
+}
+
+/** Credentials as a machine hands them over: the variables the runner is started with, every one secret, and the swaps its place's firewall keeps for the launch, none on a machine with no firewall of ours. */
+export interface DeliveredCredentials {
+  readonly env: Readonly<Record<string, string>>;
+  readonly swaps: LaunchSwaps;
+}
+
 /** A runner launched in a place: the place, and the machine's own id for the runner's process. */
 export interface RunnerHandle extends MachinePlace {
   readonly command: string;
@@ -263,6 +303,17 @@ export interface AgentMachineService {
   readonly layout: (
     agent: Agent,
   ) => Effect.Effect<MachineLayout, LaunchRefused | { readonly _tag: string }>;
+  /**
+   * The credentials a launch of the agent's runner declares, as the machine
+   * hands them over: in a sandbox, each held at its firewall behind a
+   * placeholder minted for the launch, which the variable carries in its
+   * place, so no value enters the machine; on a Mac, which has no firewall
+   * of ours, a fixed one in its variable and a renewed one not at all.
+   */
+  readonly deliverCredentials: (
+    agent: Agent,
+    credentials: readonly RunnerCredential[],
+  ) => DeliveredCredentials;
   /**
    * The agent's place opened under the session, its repository checked out
    * there where it has one, and handed to `use`; a place `use` fails in is
@@ -387,10 +438,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what it clones beside the agent's own, and launching a runner in it. */
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what it clones beside the agent's own, handing a runner its credentials, and launching a runner in it. */
 export type MachineLifecycle = Omit<
   AgentMachineService,
-  "layout" | "open" | "resume" | "checkOutExtras" | "launchRunner"
+  "layout" | "open" | "resume" | "checkOutExtras" | "deliverCredentials" | "launchRunner"
 >;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(

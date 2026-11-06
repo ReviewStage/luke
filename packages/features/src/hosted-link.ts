@@ -286,15 +286,22 @@ function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
   return new HostedRefused({ refusal, ...(carried ? { data } : undefined) });
 }
 
+/** What the link's own error for a refusal carries beside it: the status the refusal came under. */
+const isRefusedStatus = Schema.is(Schema.Struct({ status: Schema.Number }));
+
 /**
  * A procedure's failure, a refusal its contract does not declare read as no
- * answer, its slug kept as the code.
+ * answer, kept with the status it came under and its slug as the code.
  */
 function declaredOnly(path: readonly string[], error: unknown): unknown {
   if (!(error instanceof ORPCError) || !(error.cause instanceof HostedRefused)) return error;
   const { refusal } = error.cause;
   if (refusalDeclared(path, refusal)) return error;
-  return new HostedUnanswered({ code: refusal });
+  const status = isRefusedStatus(error.data) ? error.data.status : undefined;
+  return new HostedUnanswered({
+    code: refusal,
+    ...(status === undefined ? undefined : { status }),
+  });
 }
 
 /** A body's text, read to its end. */
@@ -394,8 +401,12 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
     customErrorResponseBodyDecoder: (body, response) => {
       // SAFETY: the link's serializer read the body out of the response's JSON text.
       const refused = refusalOf(body as UnparsedWireValue);
+      // Note that the status rides as the link's own error's data, which only `declaredOnly` reads, since oRPC's error carries no status.
       if (refused !== undefined) {
-        return new ORPCError(refused.refusal, { cause: refused });
+        return new ORPCError(refused.refusal, {
+          cause: refused,
+          data: { status: response.status },
+        });
       }
       // Note that an error the service declares no refusal for, a server error among them, keeps its status and oRPC code, since oRPC's own error carries no status.
       const code = isORPCErrorJson(body) ? body.code : undefined;

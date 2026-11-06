@@ -27,16 +27,15 @@ import {
   type ConnectionDoorServices,
   nativeAgentConnections,
 } from "../../integrations/connection-door.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import type { SandboxRunner } from "../machine/vercel-machine.js";
-import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_LINES_PATH } from "../native-events/runner-lines-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { RUNNER_TRANSCRIPTS_PATH } from "../native-events/runner-transcripts-app.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
+import { standingOfAgent } from "../tool-catalog/gates.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { WORKSPACE_MCP_PATH, workspaceIntegrationMcpUrl } from "../workspace-mcp/app.js";
 import { workspaceStepOf } from "../written-mentions.js";
@@ -94,7 +93,7 @@ const agentExtraCheckouts = (userId: string, agent: Agent) =>
  * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
  * its token reads the repository's CI, whose its commits are and the
  * co-author trailer where its starter's choice credits one, the workspace its links are written under, the number
- * its task goes by there, and whether its starter turned Memory and Descriptions on.
+ * its task goes by there, and where it stands against our tools' gates, read once (`standingOfAgent`).
  */
 const nativeCoderInstructions = (
   userId: string,
@@ -111,16 +110,14 @@ const nativeCoderInstructions = (
       Effect.orElseSucceed(() => agent.organizationId),
     );
     const taskNumber = yield* agentTaskNumber(userId, agent);
-    const memoryOn = yield* memoryOnFor(userId);
-    const descriptionsOn = yield* descriptionsOnFor(userId, agent.kind);
+    const standing = yield* standingOfAgent(Option.some(agent));
     const extraRepositories = hasRepository(agent) ? yield* agentExtraCheckouts(userId, agent) : [];
     return agentCoderInstructions(agent, {
       ciReadable,
       authorship,
       workspace,
       taskNumber,
-      memoryOn,
-      descriptionsOn,
+      standing,
       harness,
       place,
       ...(extraRepositories.length === 0 ? undefined : { extraRepositories }),

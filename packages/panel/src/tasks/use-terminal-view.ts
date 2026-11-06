@@ -1,13 +1,21 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { useAtomMount, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
   TERMINAL_STATE,
   type TerminalAction,
   type TerminalState,
 } from "@repo/features/terminal-model";
-import { Option } from "effect";
+import { Duration, Effect, Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSideBundles } from "../bundle-loader.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind } from "../terminal/contract.js";
 import type { TerminalSession } from "./terminal-session.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -17,8 +25,14 @@ import { useOpenLink } from "./use-open-link.js";
  *
  * The session outlives the tab's drawing (`terminal-session.ts`), so a tab
  * hidden takes the screen out of its box and nothing more, and one shown
- * again puts the same screen back.
+ * again puts the same screen back. While the tab is shown, its window's page
+ * visible and focused, the session says so every minute, which holds a
+ * cloud sandbox past the host's idle bound for someone reading a quiet
+ * shell; a tab behind others, or in a window nobody is using, says nothing.
  */
+
+/** How often a shown tab says it is shown: well inside the host's ten idle minutes. */
+const SAY_SHOWN_EVERY = Duration.minutes(1);
 
 /** A terminal as its tab draws it. */
 export interface TerminalView {
@@ -39,6 +53,14 @@ const HEARS_NOTHING = () => () => undefined;
 
 /** Where a tab with no terminal yet stands. */
 const NO_TERMINAL: TerminalState = { kind: TERMINAL_STATE.CONNECTING };
+
+/** Says the session's tab is shown every minute it stands in a page visible and focused. */
+function sayingShown(session: TerminalSession): Effect.Effect<never> {
+  const say = Effect.sync(() => {
+    if (document.visibilityState === "visible" && document.hasFocus()) session.sayShown();
+  });
+  return Effect.forever(Effect.andThen(Effect.sleep(SAY_SHOWN_EVERY), say));
+}
 
 export function useTerminalView(
   session: TerminalSession | undefined,
@@ -70,6 +92,14 @@ export function useTerminalView(
     setFind(session.screen?.find);
     return () => session.hide();
   }, [session, shown, module, element]);
+
+  // Note that the beat is an atom on the renderer's runtime, so it ends with the tab hidden or let go.
+  const beat = useMemo(
+    () =>
+      rendererRuntime.atom(session === undefined || !shown ? Effect.never : sayingShown(session)),
+    [session, shown],
+  );
+  useAtomMount(beat);
 
   const onAction = useCallback((action: TerminalAction) => session?.act(action), [session]);
 

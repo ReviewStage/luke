@@ -1,5 +1,5 @@
 /**
- * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
+ * agent-inbox.ts -- the Inbox's asks of the host, declared, and the procedures of the holds beside them.
  *
  * What a task's coding agents need of the developer: a task's or an agent's
  * inbox held followed, and read again, and every item the account reaches read again; one item answered,
@@ -15,10 +15,18 @@
  * unbranded `{ type: string }` swallows the union every reader narrows. The
  * output check still runs each view's checks and leaves out a key the view
  * does not name.
+ *
+ * Only a panel draws the Inbox, so every act is the panel's alone, and a
+ * refusal or a defect of the host's is drawn as the coding-agent calls'
+ * unanswered failure, as every one was before it was declared, or, for a
+ * held close let go, as one no longer held. The hold, and each Try again,
+ * stays a procedure of its own (`act-port/agent-inbox-procedures.ts`): a
+ * live read, not a plain act.
  */
 
 import { eventIterator, type } from "@orpc/contract";
 import {
+  AGENT_CALL_FAILURE,
   agentInboxAnsweredViewSchema,
   agentInboxAnswerParamsSchema,
   agentInboxAttachmentParamsSchema,
@@ -39,11 +47,110 @@ import {
   agentInboxStartParamsSchema,
   agentPictureParamsSchema,
 } from "@repo/features/agent-view";
+import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
+import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
 
+/** What the window draws for an act the host could not answer. */
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** The Inbox's plain acts, each answered by the agents' composer. */
+export const AGENT_INBOX_ACTS = declaredActs({
+  AGENTS_INBOX_ANSWER: hostAct({
+    input: agentInboxAnswerParamsSchema,
+    output: EffectSchema.toType(agentInboxAnsweredViewSchema),
+    refusal: "Could not acknowledge the inbox item on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_CLOSE: hostAct({
+    input: agentInboxCloseParamsSchema,
+    output: EffectSchema.toType(agentInboxAnsweredViewSchema),
+    refusal: "Could not close the inbox item on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  // Note that a release the host could not answer reads as a close no longer held, as it did before it was declared.
+  AGENTS_INBOX_CLOSE_RELEASE: hostAct({
+    input: agentInboxCloseReleaseParamsSchema,
+    output: agentInboxCloseReleasedViewSchema,
+    refusal: "Could not undo resolving the inbox item on this system.",
+    panelOnly: true,
+    door: ACT.LOCAL_WRITE,
+    unanswered: { held: false },
+  }),
+  AGENTS_INBOX_MESSAGE: hostAct({
+    input: agentInboxMessageParamsSchema,
+    output: EffectSchema.toType(agentInboxMessagedViewSchema),
+    refusal: "Could not send the message on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_START: hostAct({
+    input: agentInboxStartParamsSchema,
+    output: EffectSchema.toType(agentInboxMessagedViewSchema),
+    refusal: "Could not start the thread on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_READ_STATE: hostAct({
+    input: agentInboxReadStateParamsSchema,
+    output: EffectSchema.toType(agentInboxReadStateViewSchema),
+    refusal: "Could not mark the inbox item on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_REMIND: hostAct({
+    input: agentInboxRemindParamsSchema,
+    output: EffectSchema.toType(agentInboxReadStateViewSchema),
+    refusal: "Could not set the inbox item's reminder on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_ITEM_HOME: hostAct({
+    input: agentInboxItemHomeParamsSchema,
+    output: EffectSchema.toType(agentInboxItemHomeViewSchema),
+    refusal: "Could not find the inbox item on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_READ_ALL: hostAct({
+    input: agentInboxReadAllParamsSchema,
+    output: EffectSchema.toType(agentInboxReadAllViewSchema),
+    refusal: "Could not mark the inbox read on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_INBOX_ATTACHMENT: hostAct({
+    input: agentInboxAttachmentParamsSchema,
+    output: EffectSchema.toType(agentInboxAttachmentViewSchema),
+    refusal: "Could not read the inbox item's image on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+  AGENTS_PICTURE: hostAct({
+    input: agentPictureParamsSchema,
+    output: EffectSchema.toType(agentInboxAttachmentViewSchema),
+    refusal: "Could not read the agent's picture on this system.",
+    panelOnly: true,
+    door: ACT.READ,
+    unanswered: UNANSWERED,
+  }),
+});
+
 export const agentInboxActsContract = {
+  ...contractOf(AGENT_INBOX_ACTS),
   // Note that the hold's stream carries nothing: the held inbox reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actProcedure(
     "Could not follow the inbox on this system.",
@@ -60,59 +167,4 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]: actProcedure(
-    "Could not acknowledge the inbox item on this system.",
-  )
-    .input(exactInput(agentInboxAnswerParamsSchema))
-    .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: actProcedure(
-    "Could not close the inbox item on this system.",
-  )
-    .input(exactInput(agentInboxCloseParamsSchema))
-    .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE]: actProcedure(
-    "Could not undo resolving the inbox item on this system.",
-  )
-    .input(exactInput(agentInboxCloseReleaseParamsSchema))
-    .output(agentInboxCloseReleasedViewSchema),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: actProcedure(
-    "Could not send the message on this system.",
-  )
-    .input(exactInput(agentInboxMessageParamsSchema))
-    .output(EffectSchema.toType(agentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_START]: actProcedure(
-    "Could not start the thread on this system.",
-  )
-    .input(exactInput(agentInboxStartParamsSchema))
-    .output(EffectSchema.toType(agentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: actProcedure(
-    "Could not mark the inbox item on this system.",
-  )
-    .input(exactInput(agentInboxReadStateParamsSchema))
-    .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_REMIND]: actProcedure(
-    "Could not set the inbox item's reminder on this system.",
-  )
-    .input(exactInput(agentInboxRemindParamsSchema))
-    .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: actProcedure(
-    "Could not find the inbox item on this system.",
-  )
-    .input(exactInput(agentInboxItemHomeParamsSchema))
-    .output(EffectSchema.toType(agentInboxItemHomeViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: actProcedure(
-    "Could not mark the inbox read on this system.",
-  )
-    .input(exactInput(agentInboxReadAllParamsSchema))
-    .output(EffectSchema.toType(agentInboxReadAllViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]: actProcedure(
-    "Could not read the inbox item's image on this system.",
-  )
-    .input(exactInput(agentInboxAttachmentParamsSchema))
-    .output(EffectSchema.toType(agentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: actProcedure(
-    "Could not read the agent's picture on this system.",
-  )
-    .input(exactInput(agentPictureParamsSchema))
-    .output(EffectSchema.toType(agentInboxAttachmentViewSchema)),
 };

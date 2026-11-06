@@ -1,36 +1,24 @@
 /**
- * agent-inbox-procedures.test.ts -- the Inbox's acts, through the act port.
+ * agent-inbox-procedures.test.ts -- the Inbox's acts and hold, through the act port.
  *
- * What a task's coding agents need of the developer, through the act port
- * as a window calls them: only a panel of this build's own renderer asks;
- * any other window, and a frame this build does not trust, are
- * refused in each kind's own words before the host is asked; a panel's ask
- * reaches the host with its payload as the panel sent it, and what the host
- * answers is the panel's; a host that fails answers the kind's own
- * sentence; and a panel's inbox stream follows the inbox at the host while
- * any stream of it stands.
+ * Every declared act of the Inbox is the panel's alone, refused to any other
+ * window in its own sentence before the service is asked; and a panel's
+ * inbox stream follows the inbox at the host while any stream of it stands,
+ * and any other window is refused one. What the relay does for every act
+ * is `declared-acts.test.ts`'s, and what each handler does is its
+ * composer's (`compose-agents.test.ts`).
  */
 
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
-import {
-  AGENT_CALL_FAILURE,
-  type AgentInboxScope,
-  INBOX_SCOPE_KIND,
-} from "@repo/features/agent-view";
-import {
-  INBOX_ASK_STATUS,
-  INBOX_IMAGE_TYPE,
-  INBOX_MESSAGE_AUTHOR,
-  INBOX_REPLY,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-  type InboxItem,
-} from "@repo/features/inbox-wire";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { type AgentInboxScope, INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import { INBOX_REPLY } from "@repo/features/inbox-wire";
 import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
-import { AGENT_INBOX_ACT_KIND, type PortActKind } from "../contract/index.js";
+import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
+import { hostActPort } from "../testing/host-act-port.js";
 import {
   type AgentInboxProceduresDependencies,
   agentInboxProcedures,
@@ -46,89 +34,80 @@ const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-const WORKSPACE_ID = "2a9c4e6f-1b3d-4f5a-8c7e-9d0b1a2c3e4f";
-const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
+const ITEM_ID = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
 
-const ITEM: InboxItem = {
-  id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
-  agentId: AGENT_ID,
-  key: "push-access",
-  revision: 2,
-  version: INBOX_WIRE_VERSION,
-  title: "Push to the release branch?",
-  needsReply: true,
-  status: INBOX_STATUS.OPEN,
-  postedAt: 1_800_000_000_000,
-  updatedAt: 1_800_000_060_000,
-};
-
-const PICTURE = { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
-
-const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
-
-/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
-const REFUSAL = {
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]:
-    "Could not acknowledge the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: "Could not close the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: "Could not mark the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME]: "Could not find the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: "Could not mark the inbox read on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]:
-    "Could not read the inbox item's image on this system.",
-  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: "Could not read the agent's picture on this system.",
+/** The account the host stands signed in to, so an act a panel asked would reach the service. */
+const SIGNED_IN = {
+  status: ACCOUNT_STATUS.SIGNED_IN,
+  id: "user-dana",
+  email: "dana@example.com",
+  provider: ACCOUNT_PROVIDER.GITHUB,
 } as const;
 
-type HostAsk = AgentInboxProceduresDependencies["host"];
-
-/** Every kind, each with a payload its schema admits and the host ask it reaches. */
-const ACTS: readonly {
-  kind: keyof typeof REFUSAL;
-  payload: WireBoundaryInput;
-  ask: keyof HostAsk;
+/** Every declared act of the Inbox, with a payload its schema takes and the sentence the window drew for its refusal before it was declared. */
+const DECLARED: readonly {
+  readonly kind: (typeof AGENT_INBOX_ACT_KIND)[keyof typeof AGENT_INBOX_ACT_KIND];
+  readonly payload: WireBoundaryInput;
+  readonly refusal: string;
 }[] = [
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER,
-    payload: { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
-    ask: "agentInboxAnswer",
+    payload: { itemId: ITEM_ID, revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
+    refusal: "Could not acknowledge the inbox item on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE,
-    payload: { itemId: ITEM.id, revision: 2, clientKey: "close-1" },
-    ask: "agentInboxClose",
+    payload: { itemId: ITEM_ID, revision: 2, clientKey: "close-1" },
+    refusal: "Could not close the inbox item on this system.",
+  },
+  {
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE_RELEASE,
+    payload: { clientKey: "close-1", send: false },
+    refusal: "Could not undo resolving the inbox item on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE,
-    payload: { itemId: ITEM.id, text: "Also page on-call.", clientKey: "message-1" },
-    ask: "agentInboxMessage",
+    payload: { itemId: ITEM_ID, text: "Also page on-call.", clientKey: "message-1" },
+    refusal: "Could not send the message on this system.",
+  },
+  {
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_START,
+    payload: { agentId: AGENT_ID, text: "Draft it.", clientKey: "start-1" },
+    refusal: "Could not start the thread on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE,
-    payload: { itemId: ITEM.id, unread: true },
-    ask: "agentInboxReadState",
+    payload: { itemId: ITEM_ID, unread: true },
+    refusal: "Could not mark the inbox item on this system.",
+  },
+  {
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_REMIND,
+    payload: { itemId: ITEM_ID, until: 5_000 },
+    refusal: "Could not set the inbox item's reminder on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEM_HOME,
-    payload: { itemId: ITEM.id },
-    ask: "agentInboxItemHome",
+    payload: { itemId: ITEM_ID },
+    refusal: "Could not find the inbox item on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL,
-    payload: { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] },
-    ask: "agentInboxReadAll",
+    payload: { itemIds: [ITEM_ID] },
+    refusal: "Could not mark the inbox read on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT,
-    payload: { itemId: ITEM.id, attachmentId: "attachment-1" },
-    ask: "agentInboxAttachment",
+    payload: { itemId: ITEM_ID, attachmentId: "attachment-1" },
+    refusal: "Could not read the inbox item's image on this system.",
   },
   {
     kind: AGENT_INBOX_ACT_KIND.AGENTS_PICTURE,
-    payload: { agentId: AGENT_ID, pictureId: PICTURE_ID },
-    ask: "agentPicture",
+    payload: { agentId: AGENT_ID, pictureId: "4fb17055-c16e-4293-bea5-7a8b9cadbec5" },
+    refusal: "Could not read the agent's picture on this system.",
   },
 ];
+
+type HostAsk = AgentInboxProceduresDependencies["host"];
 
 const ports: TestActPort<unknown>[] = [];
 
@@ -136,274 +115,21 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** What the host is asked to answer, by its ask, where a test answers one otherwise than unanswered. */
-type Answers = Partial<Record<keyof HostAsk, () => Effect.Effect<unknown>>>;
+it.effect.each(DECLARED)(
+  "$kind is refused to a window that is not a panel in its own sentence, and the service is not asked",
+  (act) =>
+    Effect.gen(function* () {
+      const { port, requests } = yield* hostActPort({ account: SIGNED_IN });
 
-/**
- * A window's act port, opened as the bridge opens one: the host answering
- * each ask unanswered unless `answers` says otherwise, and the window
- * standing as `actor`.
- */
-function windowPort(
-  actor: ActSender,
-  options: { trusted?: boolean; answers?: Answers; fallback?: () => Effect.Effect<unknown> } = {},
-) {
-  const asked: unknown[] = [];
-  const ask =
-    (name: keyof HostAsk) =>
-    (...params: unknown[]) =>
-      Effect.suspend(() => {
-        asked.push([name, params[0]]);
-        const answer =
-          options.answers?.[name] ?? options.fallback ?? (() => Effect.succeed(UNANSWERED));
-        return answer();
-      });
-  // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
-  const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as unknown as HostAsk;
-  const port = testActPort(agentInboxProcedures({ host }));
-  ports.push(port);
-  const trusted = options.trusted ?? true;
-  /** One kind called as this window, settled to its answer or the sentence of its refusal. */
-  const call = (kind: PortActKind, payload: WireBoundaryInput) =>
-    port.call(actor, kind, payload, { trusted });
-  return { call, asked };
-}
+      const refused = yield* port.perform(act, OTHER_WINDOW);
 
-it("a window that is not a panel is refused every inbox act in the kind's own words, and the host is not asked", async () => {
-  const { call, asked } = windowPort(OTHER_WINDOW);
-  for (const act of ACTS) {
-    assert.deepEqual(await call(act.kind, act.payload), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("a frame this build does not trust is refused every inbox act, even as a panel, and the host is not asked", async () => {
-  const { call, asked } = windowPort(PANEL, { trusted: false });
-  for (const act of ACTS) {
-    assert.deepEqual(await call(act.kind, act.payload), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("a panel's ask reaches the host once with its payload, and the host's answer is the panel's", async () => {
-  const { call, asked } = windowPort(PANEL);
-  for (const act of ACTS) {
-    assert.deepEqual(await call(act.kind, act.payload), { answer: UNANSWERED });
-  }
-  assert.deepEqual(
-    asked,
-    ACTS.map((act) => [act.ask, act.payload]),
-  );
-});
-
-it("a panel answers, closes, and messages on an item, and hears the item as it then stands", async () => {
-  const { call, asked } = windowPort(PANEL, {
-    answers: {
-      agentInboxAnswer: () =>
-        Effect.succeed({ item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true }),
-      agentInboxClose: () =>
-        Effect.succeed({ item: { ...ITEM, status: INBOX_STATUS.CLOSED }, taken: true }),
-      agentInboxMessage: () => Effect.succeed({ item: ITEM }),
-    },
-  });
-  const message = {
-    itemId: ITEM.id,
-    text: "Also page on-call.",
-    attachments: [{ name: "pager.txt", mediaType: "text/plain", data: "b24tY2FsbA==" }],
-    clientKey: "message-1",
-  };
-  const answer = {
-    itemId: ITEM.id,
-    revision: 2,
-    reply: INBOX_REPLY.ACKNOWLEDGED,
-    clientKey: "a-1",
-  };
-  const close = { itemId: ITEM.id, revision: 2, clientKey: "close-1" };
-
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER, answer), {
-    answer: { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true },
-  });
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE, close), {
-    answer: { item: { ...ITEM, status: INBOX_STATUS.CLOSED }, taken: true },
-  });
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, message), {
-    answer: { item: ITEM },
-  });
-  assert.deepEqual(asked, [
-    ["agentInboxAnswer", answer],
-    ["agentInboxClose", close],
-    ["agentInboxMessage", message],
-  ]);
-});
-
-it("a panel's reply that answers the open ask reaches the host with the answer, words or none; an answer naming no message is refused in the kind's own words, and the host is not asked", async () => {
-  const { call, asked } = windowPort(PANEL, {
-    answers: { agentInboxMessage: () => Effect.succeed({ item: ITEM }) },
-  });
-  const answers = {
-    ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
-    reply: INBOX_REPLY.CHOSE,
-    choices: ["Ship it"],
-  };
-  const answering = { itemId: ITEM.id, text: "", clientKey: "answer-1", answers };
-
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, answering), {
-    answer: { item: ITEM },
-  });
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, {
-      ...answering,
-      answers: { ...answers, ask: "the deploy question" },
+      assert.deepEqual(refused, { refused: act.refusal });
+      assert.deepEqual(
+        requests.filter((request) => request.method !== "GET"),
+        [],
+      );
     }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE] },
-  );
-  assert.deepEqual(asked, [["agentInboxMessage", answering]]);
-});
-
-it("a panel marks an inbox item read or unread, or its whole Inbox read in one workspace or all, and hears the read state", async () => {
-  const { call, asked } = windowPort(PANEL, {
-    answers: {
-      agentInboxReadState: () => Effect.succeed({ id: ITEM.id, unread: true }),
-      agentInboxReadAll: () => Effect.succeed({ marked: 3 }),
-    },
-  });
-
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE, {
-      itemId: ITEM.id,
-      unread: true,
-    }),
-    { answer: { id: ITEM.id, unread: true } },
-  );
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL, {
-      workspaceId: WORKSPACE_ID,
-      itemIds: [ITEM.id],
-    }),
-    { answer: { marked: 3 } },
-  );
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }), {
-    answer: { marked: 3 },
-  });
-  assert.deepEqual(asked, [
-    ["agentInboxReadState", { itemId: ITEM.id, unread: true }],
-    ["agentInboxReadAll", { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] }],
-    ["agentInboxReadAll", { itemIds: [] }],
-  ]);
-});
-
-it("a panel's read of an inbox image, or an agent's or a worker's picture, reaches the host as asked and hears its bytes", async () => {
-  const picture = () => Effect.succeed(PICTURE);
-  const { call, asked } = windowPort(PANEL, {
-    answers: {
-      agentInboxAttachment: picture,
-      agentPicture: picture,
-    },
-  });
-  const reads = [
-    [
-      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT,
-      { itemId: ITEM.id, attachmentId: "attachment-1" },
-    ],
-    [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE, { agentId: AGENT_ID, pictureId: PICTURE_ID }],
-    [
-      AGENT_INBOX_ACT_KIND.AGENTS_PICTURE,
-      { agentId: AGENT_ID, pictureId: PICTURE_ID, callId: "call-worker" },
-    ],
-  ] as const;
-
-  for (const [kind, payload] of reads) {
-    assert.deepEqual(await call(kind, payload), { answer: PICTURE });
-  }
-  assert.deepEqual(asked, [
-    ["agentInboxAttachment", reads[0][1]],
-    ["agentPicture", reads[1][1]],
-    ["agentPicture", reads[2][1]],
-  ]);
-});
-
-it("a host that dies, or answers what the kind cannot carry, is refused in the kind's own words", async () => {
-  const died = windowPort(PANEL, { fallback: () => Effect.die(new Error("secret detail")) });
-  const malformed = windowPort(PANEL, { fallback: () => Effect.succeed({ items: "none" }) });
-  for (const { call } of [died, malformed]) {
-    for (const act of ACTS) {
-      assert.deepEqual(await call(act.kind, act.payload), { refused: REFUSAL[act.kind] });
-    }
-  }
-});
-
-it("an answer's key its kind's view schema does not name is left out of what the panel hears", async () => {
-  const { call } = windowPort(PANEL, {
-    answers: {
-      agentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
-      agentInboxMessage: () => Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
-    },
-  });
-
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }), {
-    answer: { marked: 3 },
-  });
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, {
-      itemId: ITEM.id,
-      text: "Also page on-call.",
-      clientKey: "message-2",
-    }),
-    { answer: { item: ITEM } },
-  );
-});
-
-it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
-  const { call, asked } = windowPort(PANEL);
-  for (const act of ACTS) {
-    // SAFETY: every payload above is an object, which the stray key is added beside.
-    const payload = { ...(act.payload as Record<string, WireBoundaryInput>), stray: true };
-    assert.deepEqual(await call(act.kind, payload), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("a payload its kind's schema refuses, or none where the kind takes one, is refused in the kind's own words, and the host is not asked", async () => {
-  const { call, asked } = windowPort(PANEL);
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE, {
-      itemId: ITEM.id,
-      unread: "yes",
-    }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE] },
-  );
-  for (const act of ACTS) {
-    assert.deepEqual(await call(act.kind, undefined), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("an item whose thread carries an ask of a type this build does not know reaches the panel unchanged, so it draws it as a newer Vespin's", async () => {
-  const newer = {
-    ...ITEM,
-    thread: [
-      {
-        id: "7a1c3e5b-2d4f-4a6c-8e0b-1d3f5a7c9e2b",
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-        text: "Ship it?",
-        ask: { type: "signature", status: INBOX_ASK_STATUS.OPEN },
-        createdAt: 1_800_000_000_000,
-      },
-    ],
-  };
-  const { call } = windowPort(PANEL, {
-    answers: { agentInboxMessage: () => Effect.succeed({ item: newer }) },
-  });
-
-  assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, {
-      itemId: ITEM.id,
-      text: "Ship it.",
-      clientKey: "message-3",
-    }),
-    { answer: { item: newer } },
-  );
-});
+);
 
 /** Turns the event loop until `ready` holds, as a page waits on its port. */
 async function until(ready: () => boolean): Promise<void> {

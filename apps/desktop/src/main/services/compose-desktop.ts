@@ -240,6 +240,7 @@ export function composeDesktop(
       const operator = yield* createOperatorClient({
         report: config.report,
         gateway: host.gateway,
+        acts: host.acts,
         nodes: host.nodes,
         node: native.capabilities,
         state,

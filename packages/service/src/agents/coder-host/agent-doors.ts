@@ -3,7 +3,7 @@
  *
  * eve's tool files reach them through the coder host (`host.ts`), and a
  * native harness's runner through our MCP server
- * (`../workspace-mcp/tools.ts`), so both run one implementation, as the inbox's
+ * (`../tool-catalog/catalog.ts`), so both run one implementation, as the inbox's
  * own door does (`inbox-door.ts`). Nothing here imports eve's runtime,
  * because the web function that serves the MCP server bundles no sandbox:
  * a door that reads a file the agent names is handed the door to its
@@ -20,8 +20,8 @@ import {
 } from "@repo/database/models/agent-store";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import type { StoreWriter } from "@repo/database/models/writer";
-import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
+import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
@@ -65,21 +65,21 @@ import {
   runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { runMessageAgent } from "./agent-message.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
-  editedTaskOf,
   DESCRIPTION_EDIT_REFUSAL,
   type DescriptionEditResult,
   descriptionEditRejected,
+  editedTaskOf,
   recordDescriptionEdit,
 } from "./description-edit.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
   openPullRequest,
   PULL_REQUEST_UNAVAILABLE,
@@ -261,7 +261,7 @@ export function runAgentOpenPullRequest(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pullRequestRejected(found.failure);
-    // Note that eve offers the tool to no agent with no repository (`repositoryToolsOf`); a harness may call it anyway, and this refuses it.
+    // Note that the catalog offers the tool to no agent with no repository (`../tool-catalog/gates.ts`'s `REPOSITORY`); a harness may call it anyway, and this refuses it.
     if (!hasRepository(found.success)) return pullRequestRejected(CODER_REFUSAL.NO_REPOSITORY);
     return yield* openPullRequest(admitted.target, found.success, input);
   }).pipe(

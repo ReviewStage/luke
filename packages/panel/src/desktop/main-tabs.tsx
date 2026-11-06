@@ -48,17 +48,13 @@ import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { useFailedAgents } from "../tasks/failed-lines.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
+import { stripTabTitle, UNREAD_TAB_NAMES } from "../tasks/strip-tab-kinds.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { AgentThreads } from "../tasks/threads-dock.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import {
-  isOverviewTab,
-  type MAIN_TAB,
-  type MainTab,
-  type MainTabsControl,
-} from "../tasks/use-main-tabs.js";
+import type { MAIN_TAB, MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
@@ -768,10 +764,13 @@ export function MainTabBars({
 
 /** What a tab of the column is called to a reader of it. */
 export function mainTabLabel(tab: MainTab, agents: AgentsControl): string | undefined {
-  if (isOverviewTab(tab)) return tabLook({ kind: TAB_KIND.OVERVIEW }).label;
-  if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
-  const agent = agents.agents?.find((each) => each.id === tab.agent);
-  return agent === undefined ? undefined : agentName(agent, agents.models);
+  return stripTabTitle(tab, {
+    ...UNREAD_TAB_NAMES,
+    agent: (agentId) => {
+      const agent = agents.agents?.find((each) => each.id === agentId);
+      return agent === undefined ? undefined : agentName(agent, agents.models);
+    },
+  });
 }
 
 /**

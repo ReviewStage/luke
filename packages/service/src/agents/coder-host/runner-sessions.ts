@@ -33,11 +33,12 @@
  * (`../sandbox-firewall.ts`); it stays there, with every other credential,
  * until the place stops or the next launch writes its own, a place a
  * launch's end leaves up, for a Terminal or for the launch that hands its
- * lines on, included. In a sandbox the bearer goes no further than its firewall either: the
- * runner is handed a placeholder for it, which the firewall swaps for the
- * bearer on requests to our host (`heldBearer`), kept and let go on the same
- * terms. The config line and the first message are its first lines.
- * The machine records the runner and the first event number of its launch
+ * lines on, included. The launch declares the bearer as a credential its
+ * machine hands over (`AgentMachineService`'s `deliverCredentials`): in a
+ * sandbox it goes no further than its firewall either, the runner handed a
+ * placeholder for it, which the firewall swaps for the bearer on requests to
+ * our host, kept on the same terms. The config line and the first message
+ * are its first lines. The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
  * A message's words go as text and its images as image blocks; any other
@@ -170,6 +171,7 @@ import {
 import {
   AgentMachine,
   type AgentMachineService,
+  CREDENTIAL_RENEWAL,
   type FoundPlace,
   LaunchRefused,
   type MachineLayout,
@@ -179,6 +181,7 @@ import {
   PLACE_RESUME,
   type RecordedRunner,
   RUNNER_RECORD,
+  type RunnerCredential,
   type RunnerHandle,
   type RunnerMark,
 } from "../machine/agent-machine.js";
@@ -190,8 +193,6 @@ import {
   LAUNCH_SWAP,
   type LaunchSwapKind,
   type LaunchSwaps,
-  newPlaceholder,
-  placeholderSwap,
 } from "../sandbox-firewall.js";
 import {
   COMMAND_GONE,
@@ -223,7 +224,7 @@ export interface RunnerSessionsOptions {
    * Where the runner posts its events: the events route, which the composing
    * edge names. Every address the runner reaches us at is under its origin
    * (`native-agent-sessions.ts`), whose host a sandbox's firewall swaps the
-   * runner's bearer in on (`heldBearer`).
+   * runner's bearer in on (`runnerBearer`).
    */
   readonly eventsUrl: string;
   /** Where a runner on a machine that has it read its lines reads them (`RUNNER_LINES`), which the composing edge names. */
@@ -333,41 +334,31 @@ const BEARER_BYTES = 32;
 /** The header the runner presents its bearer in, named in lower case as the firewall matches it. */
 const BEARER_HEADER = "authorization";
 
-/** The bearer as a launch hands it to its runner, and the swap its machine's firewall carries for it, where it carries one. */
-interface HeldBearer {
-  readonly handed: string;
-  readonly swap: FirewallEntry | undefined;
-}
-
 /**
- * The runner's bearer as its launch holds it. In a sandbox, whose firewall
- * holds a launch's secrets, the runner is handed a placeholder minted for
- * the launch, and the firewall sets the bearer in its place on requests to
- * our host that present it, so the bearer's bytes never enter the machine.
- * Note that the swap matches the placeholder and not our host alone, because
- * every process in the sandbox reaches us through that firewall, a
- * Terminal's shell and a page in the agent's browser among them, and only
- * one that reads the placeholder, the runner's own user, may act as the
- * agent. A Mac has no firewall of ours, and its runner is handed the bearer
- * itself.
+ * The runner's bearer as its launch declares it: presented to our host in
+ * the authorization header as a bearer, and fixed for the launch. Its
+ * machine hands it over (`AgentMachineService`'s `deliverCredentials`): a
+ * sandbox holds it at its firewall behind a placeholder, so its bytes never
+ * enter the machine, and a Mac, which has no firewall of ours, hands the
+ * runner the bearer itself.
  */
-function heldBearer(bearer: string, agent: Agent, host: string): HeldBearer {
-  if (agent.machine === AGENT_MACHINE.DEVICE) return { handed: bearer, swap: undefined };
-  const placeholder = Redacted.value(newPlaceholder());
-  const swap = placeholderSwap({
-    domain: host,
+function runnerBearer(bearer: string, host: string): RunnerCredential {
+  return {
+    variable: RUNNER_ENV.BEARER,
+    value: Redacted.make(bearer),
+    target: { domain: host },
     header: BEARER_HEADER,
-    placeholder: Redacted.make(`${BEARER_PREFIX}${placeholder}`),
-    value: Redacted.make(`${BEARER_PREFIX}${bearer}`),
-  });
-  return { handed: placeholder, swap };
+    scheme: BEARER_PREFIX,
+    slot: LAUNCH_SWAP.RUNNER,
+    renewal: CREDENTIAL_RENEWAL.FIXED,
+  };
 }
 
-/** The swaps a launch holds at its place's firewall: its harness's credential's where it holds one there, and its bearer's; none on a machine with no firewall of ours. */
-function launchSwaps(credential: HarnessLaunch, bearer: HeldBearer): LaunchSwaps {
+/** The swaps a launch holds at its place's firewall: its harness's credential's where it holds one there, then those its machine keeps for what it delivered; none on a machine with no firewall of ours. */
+function launchSwaps(credential: HarnessLaunch, delivered: LaunchSwaps): LaunchSwaps {
   const swaps = new Map<LaunchSwapKind, FirewallEntry>();
   if (credential.held !== undefined) swaps.set(credential.held.kind, credential.held.entry);
-  if (bearer.swap !== undefined) swaps.set(LAUNCH_SWAP.RUNNER, bearer.swap);
+  for (const [kind, entry] of delivered) swaps.set(kind, entry);
   return swaps;
 }
 
@@ -789,7 +780,7 @@ export const runnerSessions = <
 
     /**
      * One launch of the runner in the running place: its swaps kept at the
-     * place's firewall where its machine holds them there (`heldBearer`,
+     * place's firewall where its machine holds them there (`runnerBearer`,
      * `HarnessLaunch`'s `held`), ahead of every write that composes the
      * place's policy; then a fresh bearer recorded, the launch's record
      * written, its config read, the caller's own steps (`alongside`) run,
@@ -826,8 +817,8 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
-        const runnerBearer = heldBearer(bearer, agent, serviceHost);
-        const swaps = launchSwaps(credential, runnerBearer);
+        const delivered = machine.deliverCredentials(agent, [runnerBearer(bearer, serviceHost)]);
+        const swaps = launchSwaps(credential, delivered.swaps);
         // Kept before any write of this launch's, so the checkout's finish and the launch's own each send them.
         if (swaps.size > 0) {
           yield* machine.firewall.keepLaunch(place.running, agent.userId, {
@@ -922,7 +913,7 @@ export const runnerSessions = <
           env: {
             ...credential.env,
             ...credential.held?.env,
-            [RUNNER_ENV.BEARER]: runnerBearer.handed,
+            ...delivered.env,
           },
           userId,
           agentId: agent.id,

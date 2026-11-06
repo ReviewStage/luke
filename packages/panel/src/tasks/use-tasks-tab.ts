@@ -68,14 +68,8 @@ import {
   changesTab,
   draftTab,
   isAgentTab,
-  isChangesTab,
-  isCloudBrowserTab,
   isDraftTab,
   isFileTab,
-  isLocalTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
   isTranscriptTab,
   pageTab,
   pullRequestLabelOf,
@@ -196,6 +190,14 @@ import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import type { NewTaskRelation } from "./new-task-relation.js";
 import type { RepositoryChooser } from "./repository-chip.js";
+import {
+  stripTabClosesIdle,
+  stripTabDrawsAgain,
+  stripTabEndsSession,
+  stripTabPin,
+  stripTabReopens,
+  TAB_PIN,
+} from "./strip-tab-kinds.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import type { ComposerNote } from "./use-agent-composer.js";
@@ -224,9 +226,6 @@ import {
 } from "./use-main-tabs.js";
 import {
   DRAWN_KINDS,
-  drawsChanges,
-  drawsSubagent,
-  isPinnable,
   SIDE_PANEL_TAB,
   type SidebarPin,
   type SidePanelControl,
@@ -3603,6 +3602,17 @@ export function useTasksTab(input: {
    * slug, which may name a workspace by a slug it has since given up.
    */
   const openInboxItemById = (place: InboxItemPlace) => {
+    // Note that the item the Inbox already stands on, once asked after, stands again at once, so the door keeps it standing rather than waiting on the service while the window leaves it;
+    // one the service did not find is asked after again below, as a link to it always asks.
+    const standing = inboxView?.chosen;
+    const asked =
+      standing !== undefined &&
+      ("taskId" in standing || "agentId" in standing || standing.opened === true);
+    if (inboxView?.standingIn !== undefined && asked && standing.itemId === place.itemId) {
+      const at = { workspace: inboxView.standingIn, narrowed: inboxView.narrowed };
+      standInbox(at, { ...standing, opened: true });
+      if ("taskId" in standing || "agentId" in standing) return;
+    }
     const mine = navigations.current;
     readInboxItemHome(queryClient, place.itemId).then((home) => {
       if (navigations.current !== mine) return;
@@ -3832,7 +3842,7 @@ export function useTasksTab(input: {
         .filter((each) => !isOverviewTab(each))
         .findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !isDraftTab(tab)) {
+      if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
@@ -3861,11 +3871,10 @@ export function useTasksTab(input: {
   // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
-      const terminal = isTerminalTab(tab) || isLocalTab(tab);
-      if (terminal) endTerminal(tab);
+      if (stripTabEndsSession(tab)) endTerminal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !terminal) {
+      if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
@@ -3894,20 +3903,13 @@ export function useTasksTab(input: {
     closed.strip !== CLOSED_TAB_STRIP.SIDE_PANEL ||
     typeof closed.tab !== "string" ||
     DRAWN_KINDS.some((kind) => kind === closed.tab);
-  const drawsAgain = (closed: ClosedTab): boolean => {
-    const { tab } = closed;
-    const agentIds = agents.agentIds;
-    if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
-      return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
-    }
-    if (typeof tab === "string") return drawsOnAnyTask(closed);
-    if (isSubagentTab(tab))
-      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
-    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
-    // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
-    if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
-    return true;
-  };
+  const drawsAgain = (closed: ClosedTab): boolean =>
+    stripTabDrawsAgain(closed.tab, {
+      agents: agents.agentIds,
+      openAgents: mainTabs.openAgents,
+      taskAgents: agents.heldIds,
+      pages: taskPages === undefined ? undefined : pages,
+    });
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
 
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
@@ -3931,14 +3933,18 @@ export function useTasksTab(input: {
   // A strip's tab is viewed only while the task's page is on screen, nothing standing over it.
   const taskOnScreen =
     stateShown && page === TASKS_PAGE.DOCUMENT && !overPlan && !historyRoute.open;
-  const pinnedHere = (tab: StripTab) =>
-    isAgentTab(tab)
-      ? taskAgentPins.some((pin) => pin.agentId === tab.agent)
-      : isPinnable(tab) &&
-        viewed.activeTaskId !== undefined &&
-        sidePanel.pins.some(
-          (pin) => "task" in pin && pin.task === viewed.activeTaskId && sameTab(pin.tab, tab),
-        );
+  const pinnedHere = (tab: StripTab) => {
+    const pin = stripTabPin(tab);
+    if (pin === TAB_PIN.ACCOUNT)
+      return taskAgentPins.some((each) => sameTab(agentTab(each.agentId), tab));
+    return (
+      pin === TAB_PIN.SIDEBAR &&
+      viewed.activeTaskId !== undefined &&
+      sidePanel.pins.some(
+        (each) => "task" in each && each.task === viewed.activeTaskId && sameTab(each.tab, tab),
+      )
+    );
+  };
   useIdleTabs({
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     column:
@@ -3951,11 +3957,10 @@ export function useTasksTab(input: {
             onViewedAt: mainTabs.onViewedAt,
             onIdle: dozeColumnTab,
             keeps: (tab) =>
-              isOverviewTab(tab) ||
-              isDraftTab(tab) ||
+              !stripTabClosesIdle(tab) ||
               pinnedHere(tab) ||
-              awakeAgents.includes(tab.agent) ||
-              input.unseenAgents.includes(tab.agent),
+              (isAgentTab(tab) &&
+                (awakeAgents.includes(tab.agent) || input.unseenAgents.includes(tab.agent))),
           },
     panel:
       inboxView !== undefined || pageAgents !== undefined
@@ -3966,12 +3971,7 @@ export function useTasksTab(input: {
             viewedAt: sidePanel.viewedAt,
             onViewedAt: sidePanel.onViewedAt,
             onIdle: closeSidePanelTab,
-            keeps: (tab) =>
-              typeof tab === "string" ||
-              isCloudBrowserTab(tab) ||
-              isTerminalTab(tab) ||
-              isLocalTab(tab) ||
-              pinnedHere(tab),
+            keeps: (tab) => !stripTabClosesIdle(tab) || pinnedHere(tab),
           },
     awake: awakeAgents,
     onWake: mainTabs.onWake,

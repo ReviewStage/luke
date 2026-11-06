@@ -283,6 +283,7 @@ function mount(
         onClose: automations.onClose,
       },
     };
+    const routed = useRoutedStanding();
     const copyLink = useCopyLink(
       tasks,
       settings.standing
@@ -291,11 +292,12 @@ function mount(
       true,
       room,
       admin.open ? admin.view : undefined,
+      routed?.place,
     );
     history = useWindowHistory({
       known: true,
       link: copyLink.placed,
-      routed: useRoutedStanding(),
+      routed,
       settingsList: settings.listAddress,
       onSettingsList: settings.list,
       automations,

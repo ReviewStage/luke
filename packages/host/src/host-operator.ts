@@ -20,24 +20,7 @@ import {
   type AgentDeleteAnswerView,
   type AgentGitHubImageParams,
   type AgentGitHubImageView,
-  type AgentInboxAnsweredView,
-  type AgentInboxAnswerParams,
-  type AgentInboxAttachmentParams,
-  type AgentInboxAttachmentView,
-  type AgentInboxCloseParams,
-  type AgentInboxCloseReleasedView,
-  type AgentInboxCloseReleaseParams,
-  type AgentInboxItemHomeParams,
-  type AgentInboxItemHomeView,
-  type AgentInboxMessagedView,
-  type AgentInboxMessageParams,
-  type AgentInboxReadAllParams,
-  type AgentInboxReadAllView,
-  type AgentInboxReadStateParams,
-  type AgentInboxReadStateView,
-  type AgentInboxRemindParams,
   type AgentInboxScope,
-  type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
   type AgentMarkReadParams,
@@ -48,7 +31,6 @@ import {
   type AgentPageParams,
   type AgentPartParams,
   type AgentPartView,
-  type AgentPictureParams,
   type AgentPinParams,
   type AgentPullRequestActionParams,
   type AgentPullRequestParams,
@@ -71,13 +53,6 @@ import {
   agentDefaultAnswerViewSchema,
   agentDeleteAnswerViewSchema,
   agentGitHubImageViewSchema,
-  agentInboxAnsweredViewSchema,
-  agentInboxAttachmentViewSchema,
-  agentInboxCloseReleasedViewSchema,
-  agentInboxItemHomeViewSchema,
-  agentInboxMessagedViewSchema,
-  agentInboxReadAllViewSchema,
-  agentInboxReadStateViewSchema,
   agentListAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentPageAnswerViewSchema,
@@ -85,30 +60,10 @@ import {
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptOlderAnswerSchema,
-  type ChatGptDeviceLoginParams,
-  type ChatGptDevicePollAnswerView,
-  type ChatGptDeviceStartAnswerView,
-  type ChatGptDeviceWaitParams,
-  chatGptDevicePollAnswerViewSchema,
-  chatGptDeviceStartAnswerViewSchema,
-  type DictationTranscribeAnswerView,
-  type DictationTranscribeParams,
-  dictationTranscribeAnswerViewSchema,
-  type GitHubTokenAnswerView,
-  type GitHubTokenSaveParams,
-  githubTokenAnswerViewSchema,
   type HostDoneAnswerView,
   hostDoneAnswerViewSchema,
-  type MemoriesAnswerView,
   type MemoriesFollowParams,
-  type MemoryForgetParams,
-  memoriesAnswerViewSchema,
-  type ProviderKeyForAgentsParams,
-  type ProviderKeyRemoveParams,
-  type ProviderKeySaveParams,
-  type ProviderKeysAnswerView,
   type PullRequestPartParams,
-  providerKeysAnswerViewSchema,
   type ThisMacHostSetParams,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
@@ -877,18 +832,6 @@ export interface HostOperator {
   providerKeysRetry(): Effect.Effect<void>;
   /** The account's provider keys the host holds for the windows, whole, each time any of them moves. */
   onProviderKeysChanged(listener: (held: AppProviderKeys) => void): () => void;
-  /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
-  providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
-  providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** A connected plan's default for the account's coding agents turned on or off; the keys as they then stand. */
-  providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses, or why there is none. Never a token. */
-  chatGptDeviceStart(): Effect.Effect<ChatGptDeviceStartAnswerView>;
-  /** A device-code login waited on until it settles or an ask after it goes unanswered; the keys as they then stand once it connected. */
-  chatGptDeviceWait(params: ChatGptDeviceWaitParams): Effect.Effect<ChatGptDevicePollAnswerView>;
-  /** A device-code login withdrawn; how it then stands. */
-  chatGptDeviceCancel(params: ChatGptDeviceLoginParams): Effect.Effect<ChatGptDevicePollAnswerView>;
   /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
   githubTokenFollow(): Effect.Effect<void>;
   /** The member's GitHub token let go by the windows. */
@@ -897,10 +840,6 @@ export interface HostOperator {
   githubTokenRetry(): Effect.Effect<void>;
   /** The member's GitHub token the host holds for the windows, whole, each time it moves. */
   onGitHubTokenChanged(listener: (held: AppGitHubTokens) => void): () => void;
-  /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
-  githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
-  /** The member's GitHub token removed; none then stands. */
-  githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
   /** The memories our agents kept in a workspace, held for the windows from now until let go and followed live; what they hold is heard through `onMemoriesChanged`. */
   memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
   /** A workspace's memories let go by the windows. */
@@ -909,12 +848,6 @@ export interface HostOperator {
   memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
   /** Every workspace's memories the host holds for the windows, whole, each time any of them moves. */
   onMemoriesChanged(listener: (held: AppMemories) => void): () => void;
-  /** One memory forgotten for good, drawn gone at once over the held memories; the workspace's memories as they then stand, or why they are unchanged. */
-  memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
-  /** One dictated clip, carried once; its words, or why there are none. */
-  dictationTranscribe(
-    params: DictationTranscribeParams,
-  ): Effect.Effect<DictationTranscribeAnswerView>;
   /** One task's or agent's inbox held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onHolderInboxesChanged`. */
   agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
   /** One task's or agent's inbox let go by the windows: it stays followed among those let go lately until later ones push it out. */
@@ -923,25 +856,6 @@ export interface HostOperator {
   agentInboxRetry(scope: AgentInboxScope): Effect.Effect<void>;
   /** Every task's or agent's inbox the host holds for the windows, whole, each time any of them moves. */
   onHolderInboxesChanged(listener: (held: AppHolderInboxes) => void): () => void;
-  /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
-  /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
-  agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
-  /** A held close let go by its key, sent or taken back as its Undo asks; whether it was still held, or not where there is no answer. */
-  agentInboxCloseRelease(
-    params: AgentInboxCloseReleaseParams,
-  ): Effect.Effect<AgentInboxCloseReleasedView>;
-  /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
-  /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
-  agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
-  /** One item marked read or unread for the account; its read state, or why there is no answer. */
-  agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
-  agentInboxRemind(params: AgentInboxRemindParams): Effect.Effect<AgentInboxReadStateView>;
-  /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
-  agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
-  /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
-  agentInboxReadAll(params: AgentInboxReadAllParams): Effect.Effect<AgentInboxReadAllView>;
   /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
   agentAccountInboxFollow(): Effect.Effect<void>;
   /** The account inbox let go: nothing more is heard of it until it is followed again. */
@@ -956,7 +870,6 @@ export interface HostOperator {
   agentPreferencesRetry(): Effect.Effect<void>;
   /** The account's preferences row, whole, each time the host's read of it for the session moves or a write is drawn over it. */
   onAccountPreferencesChanged(listener: (held: AppAccountPreferences) => void): () => void;
-  /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's or worker's transcript held followed for the windows from now until let go, and kept a while after among those let go lately, following no longer; what it holds is heard through `onTranscriptsChanged`. */
   transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
   /** One held transcript let go by the window that held it. */
@@ -967,9 +880,6 @@ export interface HostOperator {
   transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
   /** Every transcript the host holds for the windows, whole, each time any of them moves. */
   onTranscriptsChanged(listener: (held: AppTranscripts) => void): () => void;
-  agentInboxAttachment(params: AgentInboxAttachmentParams): Effect.Effect<AgentInboxAttachmentView>;
-  /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
-  agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
   agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
@@ -1008,6 +918,8 @@ export interface HostOperator {
   terminalInput(params: { connectionId: string; data: string }): Effect.Effect<void>;
   terminalResize(params: { connectionId: string; cols: number; rows: number }): Effect.Effect<void>;
   terminalAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
+  /** The connection's tab is shown in the window the developer is using, which moves its idle bound on. */
+  terminalShown(params: { connectionId: string }): Effect.Effect<void>;
   terminalDisconnect(params: { connectionId: string }): Effect.Effect<void>;
   /** Every waiting connection opened again now, as after the Mac woke. */
   terminalWake(): Effect.Effect<void>;
@@ -2340,50 +2252,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) => (isRecord(payload) ? answered<AppProviderKeys>(payload) : undefined),
         listener,
       ),
-    providerKeySave: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
-          provider: params.provider,
-          ...(params.kind === undefined ? undefined : { kind: params.kind }),
-          key: params.key,
-        }),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    providerKeyRemove: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
-          provider: params.provider,
-          ...(params.kind === undefined ? undefined : { kind: params.kind }),
-        }),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    providerKeyForAgents: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS, {
-          provider: params.provider,
-          kind: params.kind,
-          forAgents: params.forAgents,
-        }),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptDeviceStart: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_START),
-        answerOf(chatGptDeviceStartAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptDeviceWait: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_WAIT, {
-          loginId: params.loginId,
-          intervalSeconds: params.intervalSeconds,
-        }),
-        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chatGptDeviceCancel: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHATGPT_DEVICE_CANCEL, { loginId: params.loginId }),
-        answerOf(chatGptDevicePollAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
     githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
     githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
@@ -2393,16 +2261,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held token is the host's own, handed over in this process, so it is passed on as built, as the held keys are.
         (payload) => (isRecord(payload) ? answered<AppGitHubTokens>(payload) : undefined),
         listener,
-      ),
-    githubTokenSave: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: params.token }),
-        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    githubTokenRemove: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
-        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
     memoriesFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: params.workspaceId })),
@@ -2416,23 +2274,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held memories are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppMemories>(payload) : undefined),
         listener,
-      ),
-    memoryForget: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MEMORIES_FORGET, {
-          workspaceId: params.workspaceId,
-          id: params.id,
-        }),
-        answerOf(memoriesAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    dictationTranscribe: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
-          audio: params.audio,
-          durationMs: params.durationMs,
-          keywords: [...params.keywords],
-        }),
-        answerOf(dictationTranscribeAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentInboxFollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id })),
@@ -2451,88 +2292,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held inboxes are the host's own, handed over in this process, so they are passed on as built, as the account's items are.
         (payload) => (isRecord(payload) ? answered<AppHolderInboxes>(payload) : undefined),
         listener,
-      ),
-    agentInboxAnswer: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_ANSWER, {
-          itemId: params.itemId,
-          revision: params.revision,
-          reply: params.reply,
-          clientKey: params.clientKey,
-        }),
-        answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxClose: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
-          itemId: params.itemId,
-          revision: params.revision,
-          clientKey: params.clientKey,
-          ...(params.text === undefined ? undefined : { text: params.text }),
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          ...(params.held === undefined ? undefined : { held: params.held }),
-        }),
-        answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxCloseRelease: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
-          clientKey: params.clientKey,
-          send: params.send,
-        }),
-        answerOf(agentInboxCloseReleasedViewSchema, { held: false }),
-      ),
-    agentInboxMessage: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
-          itemId: params.itemId,
-          text: params.text,
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          clientKey: params.clientKey,
-          ...(params.answers === undefined ? undefined : { answers: params.answers }),
-          ...(params.revision === undefined ? undefined : { revision: params.revision }),
-        }),
-        answerOf(agentInboxMessagedViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxStart: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_START, {
-          agentId: params.agentId,
-          ...(params.title === undefined ? undefined : { title: params.title }),
-          text: params.text,
-          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
-          clientKey: params.clientKey,
-        }),
-        answerOf(agentInboxMessagedViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxReadState: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
-          itemId: params.itemId,
-          unread: params.unread,
-        }),
-        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxRemind: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_REMIND, {
-          itemId: params.itemId,
-          until: params.until,
-        }),
-        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxItemHome: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME, { itemId: params.itemId }),
-        answerOf(agentInboxItemHomeViewSchema, AGENT_UNANSWERED),
-      ),
-    agentInboxReadAll: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_ALL, {
-          ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
-          itemIds: params.itemIds,
-        }),
-        answerOf(agentInboxReadAllViewSchema, AGENT_UNANSWERED),
       ),
     agentAccountInboxFollow: () =>
       fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
@@ -2584,19 +2343,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held transcripts are the host's own, handed over in this process, so they are passed on as built, as the held origins are.
         (payload) => (isRecord(payload) ? answered<AppTranscripts>(payload) : undefined),
         listener,
-      ),
-    agentInboxAttachment: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT, {
-          itemId: params.itemId,
-          attachmentId: params.attachmentId,
-        }),
-        answerOf(agentInboxAttachmentViewSchema, AGENT_UNANSWERED),
-      ),
-    agentPicture: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PICTURE, params),
-        answerOf(agentInboxAttachmentViewSchema, AGENT_UNANSWERED),
       ),
     agentPart: (params) =>
       Effect.map(
@@ -2730,6 +2476,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           bytes: params.bytes,
         }),
       ),
+    terminalShown: (params) =>
+      fire(client.call(GATEWAY_METHOD.TERMINALS_SHOWN, { connectionId: params.connectionId })),
     terminalDisconnect: (params) =>
       fire(client.call(GATEWAY_METHOD.TERMINALS_DISCONNECT, { connectionId: params.connectionId })),
     terminalWake: () => fire(client.call(GATEWAY_METHOD.TERMINALS_WAKE)),
