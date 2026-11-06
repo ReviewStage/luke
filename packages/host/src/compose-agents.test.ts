@@ -1035,6 +1035,7 @@ function subject(
     sendsNetwork?: boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
+    repositoriesMoved?: Effect.Effect<void>;
     pool?: EntityPool;
   } = {},
 ) {
@@ -1054,6 +1055,9 @@ function subject(
       focus: yield* windowFocus,
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
+      ...(options.repositoriesMoved === undefined
+        ? undefined
+        : { repositoriesMoved: options.repositoriesMoved }),
       pool: options.pool ?? (yield* entityPool()),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -1591,10 +1595,16 @@ it.effect(
 );
 
 it.effect(
-  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held, and a save the schema refuses is refused in words that hold no token",
+  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held once the repository lists moved, and a save the schema refuses is refused in words that hold no token",
   () =>
     Effect.gen(function* () {
-      const { call, asked, githubToken } = yield* subject();
+      // The token the windows held as each write asked the repository lists again.
+      const movedUnder: unknown[] = [];
+      let held: () => unknown[] = () => [];
+      const { call, asked, githubToken } = yield* subject({
+        repositoriesMoved: Effect.sync(() => void movedUnder.push(held().at(-1))),
+      });
+      held = githubToken;
 
       yield* call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW);
       yield* settled;
@@ -1615,6 +1625,7 @@ it.effect(
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
       assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
+      assert.deepEqual(movedUnder, [read, afterSave], "each write's lists move before its token");
     }),
 );
 
