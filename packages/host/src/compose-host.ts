@@ -58,6 +58,7 @@ import {
   type ThisMacHost,
 } from "./effect/seams.js";
 import { type EntityStore, forgetEntityStore, openEntityStore } from "./entity-store.js";
+import { entityDatabaseChosen } from "./entity-store-rollout.js";
 import {
   HOST_CONCERN,
   HOST_PLATFORM_CONCERN,
@@ -71,6 +72,7 @@ import { shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { liveSocketClient } from "./live-socket.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { offlineRefusedCount } from "./queued-writes.js";
+import { openSealedEntityStore } from "./sealed-entity-store.js";
 import { createGatewayService } from "./service.js";
 import { windowFocus } from "./window-focus.js";
 
@@ -421,30 +423,48 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     /**
      * The signed-in account's store opened where none stands: only where the
-     * account source seals with a cipher the system can use and the shell
-     * hands a SQLite driver, and the run needs an account, so neither a
-     * browser tab nor a fixture run keeps one, and only once the account is
-     * signed in, so the Keychain is never read before the tokens' own read. A
-     * database that cannot be had leaves the lists in memory alone, as a
-     * browser tab keeps them.
+     * account source seals with a cipher the system can use, and the run
+     * needs an account, so neither a browser tab nor a fixture run keeps one,
+     * and only once the account is signed in, so the Keychain is never read
+     * before the tokens' own read. It is the encrypted SQLite store where the
+     * shell hands a driver and the deployment's rollout keeps it on for the
+     * account, read afresh before it opens (`entity-store-rollout.ts`), and
+     * the sealed file's store otherwise, as it is too where the database
+     * cannot be had.
      */
     const openEntities = Effect.gen(function* () {
       const signedInId = account.signedIn() ? accountId() : undefined;
       if (entities !== undefined || signedInId === undefined) return;
       if (tokenCipher === undefined || !tokenCipher.isAvailable()) return;
-      if (Option.isNone(sqliteDriver) || !kernel.runMode.requiresAccount) return;
+      if (!kernel.runMode.requiresAccount) return;
+      const directory = kernel.stateRoot;
+      const driver = Option.getOrUndefined(sqliteDriver);
+      const databaseOn =
+        driver !== undefined &&
+        (yield* entityDatabaseChosen({
+          directory,
+          accountId: signedInId,
+          read: account.readEntityDatabase,
+        }).pipe(Effect.provideContext(fileSystemContext)));
       const scope = yield* Scope.make();
-      const store = yield* openEntityStore({
-        directory: kernel.stateRoot,
+      const options = {
+        directory,
         cipher: tokenCipher,
-        driver: sqliteDriver.value,
         accountId: signedInId,
         queued: pool.queued,
-      }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
-      if (store === undefined) {
-        yield* Scope.close(scope, Exit.void);
-        return;
-      }
+      };
+      const database = databaseOn
+        ? yield* openEntityStore({ ...options, driver }).pipe(
+            Scope.provide(scope),
+            Effect.provideContext(fileSystemContext),
+          )
+        : undefined;
+      const store =
+        database ??
+        (yield* openSealedEntityStore(options).pipe(
+          Scope.provide(scope),
+          Effect.provideContext(fileSystemContext),
+        ));
       entities = { store, scope };
       // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.
       yield* pool.requeue(store.queue, [...tasks.queueable, ...agents.queueable]);

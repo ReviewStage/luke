@@ -68,7 +68,7 @@ import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.
 import { accountModelChoices } from "../agents/coder-host/start.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { standingSupportAccess } from "../auth/auth-policy.js";
-import { HostedEnvironment } from "../environment.js";
+import { ENTITY_DATABASE_ROLLOUT, HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -260,15 +260,21 @@ export function accountProcedures(seams: AccountProcedureSeams) {
 
     /**
      * Whether the caller's own account is an admin, any role but the admin
-     * role not; and when its member's grant of support access runs out, null
-     * where none stands or it has run out.
+     * role not; when its member's grant of support access runs out, null
+     * where none stands or it has run out; and whether the deployment's
+     * rollout keeps its desktop's lists in the encrypted SQLite store.
      */
     access: signedIn.access.effect(function* ({ context }) {
       const access = yield* hostedStoreOrUnavailable(seams.readAccess(context.userId));
       const now = yield* Clock.currentTimeMillis;
+      const { entityDatabaseRollout } = yield* HostedEnvironment;
+      const admin = isAdminRole(access.role);
       return {
-        admin: isAdminRole(access.role),
+        admin,
         supportAccessUntil: standingSupportAccess(access.supportAccessUntil, now),
+        entityDatabase:
+          entityDatabaseRollout === ENTITY_DATABASE_ROLLOUT.ALL ||
+          (entityDatabaseRollout === ENTITY_DATABASE_ROLLOUT.ADMINS && admin),
       };
     }),
 

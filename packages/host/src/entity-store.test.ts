@@ -220,36 +220,56 @@ it.effect("the writes waiting at the last launch stay on disk until the pool tak
   }).pipe(Effect.provide(files)),
 );
 
+/** This build's row shapes, by the hash a database it made names them by. */
+const thisBuildsShapes = Effect.gen(function* () {
+  const earlier = yield* temporaryDirectoryScoped("entity-store-");
+  yield* Effect.flatMap(opened(earlier, DANA), (store) => store.closed);
+  const meta = (yield* database(earlier))
+    .prepare("SELECT value FROM meta WHERE name = ?")
+    .get("shapesHash");
+  return (meta as { value: string }).value;
+});
+
+/** The sealed file under `directory` written as the sealed store keeps it, for `accountId` at `hash`; its path. */
+const sealedFileOf = (
+  directory: string,
+  kept: { hash: string; accountId: string; list: KeptRows[typeof KEPT_READ.TASK_LIST] },
+) =>
+  Effect.gen(function* () {
+    const file = (yield* Path.Path).join(directory, ENTITY_SEALED_FILE_NAME);
+    const sealed = {
+      hash: kept.hash,
+      accountId: kept.accountId,
+      reads: { [KEPT_READ.TASK_LIST]: kept.list },
+      queue: [RENAME],
+    };
+    yield* Effect.flatMap(FileSystem.FileSystem, (fileSystem) =>
+      fileSystem.writeFileString(file, Base64.encode(testCipher().encrypt(JSON.stringify(sealed)))),
+    );
+    return file;
+  });
+
 it.effect.each([
   { sealedFor: "this account at these row shapes", accountId: DANA, otherShapes: false },
   { sealedFor: "this account at other row shapes", accountId: DANA, otherShapes: true },
   { sealedFor: "another account", accountId: RAVI, otherShapes: false },
-])("a sealed file a build before kept for $sealedFor", ({ accountId, otherShapes }) =>
+])("a sealed file the sealed store kept for $sealedFor", ({ accountId, otherShapes }) =>
   Effect.gen(function* () {
-    // The shapes this build keeps at, as a database it made names them.
-    const earlier = yield* temporaryDirectoryScoped("entity-store-");
-    yield* Effect.flatMap(opened(earlier, DANA), (store) => store.closed);
-    const meta = (yield* database(earlier))
-      .prepare("SELECT value FROM meta WHERE name = ?")
-      .get("shapesHash");
-    const hash = otherShapes ? "another build's" : (meta as { value: string }).value;
+    const hash = otherShapes ? "another build's" : yield* thisBuildsShapes;
     const directory = yield* temporaryDirectoryScoped("entity-store-");
-    const fileSystem = yield* FileSystem.FileSystem;
-    const sealedFile = (yield* Path.Path).join(directory, ENTITY_SEALED_FILE_NAME);
-    const kept = { hash, accountId, reads: { [KEPT_READ.TASK_LIST]: LIST }, queue: [RENAME] };
-    yield* fileSystem.writeFileString(
-      sealedFile,
-      Base64.encode(testCipher().encrypt(JSON.stringify(kept))),
-    );
+    const file = yield* sealedFileOf(directory, { hash, accountId, list: LIST });
 
     const first = yield* opened(directory, DANA);
-    const stays = yield* fileSystem.exists(sealedFile);
+    const stays = yield* Effect.flatMap(FileSystem.FileSystem, (fileSystem) =>
+      fileSystem.exists(file),
+    );
     yield* first.closed;
     const reopened = yield* opened(directory, DANA);
 
     const ours = accountId === DANA;
     const rows = ours && !otherShapes ? LIST : undefined;
-    assert.equal(stays, false);
+    // Note that the account's own file stays beside the database for a launch back on the sealed store, and another account's goes at once.
+    assert.equal(stays, ours);
     assert.deepEqual(
       [first.store.stored(KEPT_READ.TASK_LIST), reopened.store.stored(KEPT_READ.TASK_LIST)],
       [rows, rows],
@@ -259,6 +279,46 @@ it.effect.each([
       ours ? [[RENAME], [RENAME]] : [[], []],
     );
   }).pipe(Effect.provide(files)),
+);
+
+it.effect(
+  "a sealed file the database took stays through three launches untaken, goes at the fourth, and one written again is taken again",
+  () =>
+    Effect.gen(function* () {
+      const hash = yield* thisBuildsShapes;
+      const directory = yield* temporaryDirectoryScoped("entity-store-");
+      const file = yield* sealedFileOf(directory, { hash, accountId: DANA, list: LIST });
+      const newer = { ...LIST, at: "8" };
+      const fileSystem = yield* FileSystem.FileSystem;
+      const launches: { list: unknown; stays: boolean }[] = [];
+      /** One launch over the folder: what it drew, and whether the sealed file stood once it opened, keeping `keep` before it quits. */
+      const launch = (keep?: KeptRows[typeof KEPT_READ.TASK_LIST]) =>
+        Effect.gen(function* () {
+          const { store, closed } = yield* opened(directory, DANA);
+          launches.push({
+            list: store.stored(KEPT_READ.TASK_LIST),
+            stays: yield* fileSystem.exists(file),
+          });
+          if (keep !== undefined) yield* store.keep(KEPT_READ.TASK_LIST, keep);
+          yield* closed;
+        });
+
+      yield* launch(newer);
+      yield* launch();
+      yield* launch();
+      yield* launch();
+      // The rollout turned off, and the sealed store kept the lists again.
+      yield* sealedFileOf(directory, { hash, accountId: DANA, list: { ...LIST, at: "9" } });
+      yield* launch();
+
+      assert.deepEqual(launches, [
+        { list: LIST, stays: true },
+        { list: newer, stays: true },
+        { list: newer, stays: true },
+        { list: newer, stays: false },
+        { list: { ...LIST, at: "9" }, stays: true },
+      ]);
+    }).pipe(Effect.provide(files)),
 );
 
 it.effect("a database that is no database is made again, empty", () =>

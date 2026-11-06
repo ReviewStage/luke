@@ -80,4 +80,11 @@ export const accountAccessAnswerSchema = EffectSchema.Struct({
    * service older than it.
    */
   supportAccessUntil: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Number)),
+  /**
+   * Whether the desktop keeps the account's lists in the encrypted SQLite
+   * store rather than the sealed file, as the deployment's rollout decides
+   * for this account. Absent from a service older than it, which reads as
+   * not.
+   */
+  entityDatabase: EffectSchema.optionalKey(EffectSchema.Boolean),
 });

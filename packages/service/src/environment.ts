@@ -15,6 +15,33 @@ const TITLE_MODEL_ENVIRONMENT = {
   ANTHROPIC_API_KEY: "TITLE_ANTHROPIC_API_KEY",
 } as const;
 
+/** The variable the entity database's rollout is read from (`ENTITY_DATABASE_ROLLOUT`). */
+const ENTITY_DATABASE_ENVIRONMENT = {
+  ROLLOUT: "ENTITY_DATABASE_ROLLOUT",
+} as const;
+
+/**
+ * Who the desktop keeps its lists in the encrypted SQLite store for, rather
+ * than the sealed file it kept them in before (`@repo/host`'s
+ * `entity-store.ts`): no one, the admins alone, or everyone.
+ */
+export const ENTITY_DATABASE_ROLLOUT = {
+  OFF: "off",
+  ADMINS: "admins",
+  ALL: "all",
+} as const;
+
+export type EntityDatabaseRollout =
+  (typeof ENTITY_DATABASE_ROLLOUT)[keyof typeof ENTITY_DATABASE_ROLLOUT];
+
+/** The rollout a value names; off for none, and for one it does not name. */
+function entityDatabaseRolloutOf(value: string | undefined): EntityDatabaseRollout {
+  return (
+    Object.values(ENTITY_DATABASE_ROLLOUT).find((each) => each === value) ??
+    ENTITY_DATABASE_ROLLOUT.OFF
+  );
+}
+
 /** The variables a Preview's stand-in API keys are read from, one per provider; no other deployment reads them. */
 const PREVIEW_API_KEY_ENVIRONMENT = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "PREVIEW_ANTHROPIC_API_KEY",
@@ -64,6 +91,8 @@ export interface HostedEnvironmentValues {
    * production and a local run never spend one, set or not.
    */
   readonly previewApiKeys: PreviewApiKeys;
+  /** Who the desktop keeps its lists in the encrypted SQLite store for (`ENTITY_DATABASE_ROLLOUT`); absent is off, as an unset or unknown value reads. */
+  readonly entityDatabaseRollout?: EntityDatabaseRollout;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -130,6 +159,7 @@ export const hostedEnvironment = Layer.effect(
         Config.Redacted(TITLE_MODEL_ENVIRONMENT.ANTHROPIC_API_KEY),
       ),
       deployment: Config.option(Config.String(AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT)),
+      entityDatabaseRollout: Config.option(Config.String(ENTITY_DATABASE_ENVIRONMENT.ROLLOUT)),
       previewApiKeys: Config.all({
         [PROVIDER_KEY_PROVIDER.ANTHROPIC]: Config.option(
           Config.Redacted(PREVIEW_API_KEY_ENVIRONMENT[PROVIDER_KEY_PROVIDER.ANTHROPIC]),
@@ -152,6 +182,7 @@ export const hostedEnvironment = Layer.effect(
         providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
         titleAnthropicApiKey: presentRedacted(read.titleAnthropicApiKey),
         previewApiKeys: previewApiKeysOf(present(read.deployment), read.previewApiKeys),
+        entityDatabaseRollout: entityDatabaseRolloutOf(present(read.entityDatabaseRollout)?.trim()),
       };
       return Effect.succeed(values);
     },

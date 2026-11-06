@@ -1591,6 +1591,27 @@ is passed over rather than refused, because it is an older or newer build's
 experiment, and only a value that is not a record at all is
 `invalid-request`.
 
+### The entity database's rollout
+
+The access answer carries `entityDatabase`: whether this account's desktop
+keeps its lists in the encrypted SQLite store (`@repo/host`'s
+`entity-store.ts`) rather than the sealed file it kept them in before
+(`sealed-entity-store.ts`). The deployment decides it for every account at
+once through `ENTITY_DATABASE_ROLLOUT`, read through `HostedEnvironment`:
+`off` for no one, `admins` for accounts holding the admin role, and `all` for
+everyone. Unset, blank, or any other value reads as `off`. The desktop reads it
+fresh as each sign-in opens its store, giving up after a few seconds in favor
+of the answer it last kept for that account, so turning it off reaches a Mac
+at its next launch. To set it:
+
+```
+vercel env add ENTITY_DATABASE_ROLLOUT production   # value: off, admins, or all
+vercel env rm ENTITY_DATABASE_ROLLOUT production    # back to off
+```
+
+A change takes effect at the deployment's next build, as every environment
+variable does on Vercel (redeploy production to apply it at once).
+
 ### Workspace memory
 
 Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), read for

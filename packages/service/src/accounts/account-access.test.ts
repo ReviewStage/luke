@@ -18,7 +18,11 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { USER_ROLE } from "../admin/admin-access.js";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
-import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import {
+  ENTITY_DATABASE_ROLLOUT,
+  HostedEnvironment,
+  type HostedEnvironmentValues,
+} from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
@@ -130,10 +134,14 @@ function request(bearer: string | undefined, query = "") {
   });
 }
 
-const granted = (admin: boolean, supportAccessUntil: number | null = null): Answer => ({
+const granted = (
+  admin: boolean,
+  supportAccessUntil: number | null = null,
+  entityDatabase = false,
+): Answer => ({
   status: HOSTED_HTTP_STATUS.OK,
   cacheControl: "private, no-store",
-  body: { admin, supportAccessUntil },
+  body: { admin, supportAccessUntil, entityDatabase },
 });
 
 it.layer(getTestDB())("the account's access", (it) => {
@@ -178,6 +186,26 @@ it.layer(getTestDB())("the account's access", (it) => {
 
         yield* TestClock.adjust(Duration.days(8));
         assert.deepEqual(yield* ask(request(member)), granted(false));
+      }),
+  );
+
+  it.effect.each([
+    { rollout: undefined, forAdmin: false, forMember: false },
+    { rollout: ENTITY_DATABASE_ROLLOUT.OFF, forAdmin: false, forMember: false },
+    { rollout: ENTITY_DATABASE_ROLLOUT.ADMINS, forAdmin: true, forMember: false },
+    { rollout: ENTITY_DATABASE_ROLLOUT.ALL, forAdmin: true, forMember: true },
+  ])(
+    "the entity database's rollout at $rollout keeps the lists in it for whom it names",
+    ({ rollout, forAdmin, forMember }) =>
+      Effect.gen(function* () {
+        const { admin, member, ask } = yield* openAccounts();
+        const environment = {
+          ...NO_ENVIRONMENT,
+          ...(rollout === undefined ? undefined : { entityDatabaseRollout: rollout }),
+        };
+
+        assert.deepEqual(yield* ask(request(admin), environment), granted(true, null, forAdmin));
+        assert.deepEqual(yield* ask(request(member), environment), granted(false, null, forMember));
       }),
   );
 

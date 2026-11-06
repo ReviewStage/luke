@@ -71,6 +71,21 @@ export class AccountAccessClient {
     );
   }
 
+  /**
+   * Whether the deployment's rollout keeps the signed-in account's lists in
+   * the encrypted SQLite store (`entity-store-rollout.ts`): what the service
+   * answered, a service older than the switch answering no; none where the
+   * read failed, so the caller falls back on what it last kept rather than
+   * taking a failure for no.
+   */
+  readEntityDatabase(): Effect.Effect<boolean | undefined> {
+    return askHosted(this.#hosted.account.access, undefined).pipe(
+      Effect.map((answer): boolean | undefined => answer.entityDatabase === true),
+      Effect.orElseSucceed((): boolean | undefined => undefined),
+      Effect.provide(this.#client),
+    );
+  }
+
   /** Grants support access for seven days, or revokes it: the grant as it then stands. */
   writeSupportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire, HostedFailure> {
     const write = grant

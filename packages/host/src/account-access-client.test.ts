@@ -242,6 +242,18 @@ it.effect("a read that fails, or answers no flag, is no admin", () =>
   }),
 );
 
+it.effect.each([
+  { answered: "on", answer: json({ admin: false, entityDatabase: true }), read: true },
+  { answered: "off", answer: json({ admin: false, entityDatabase: false }), read: false },
+  { answered: "nothing of it, as an older service", answer: json({ admin: false }), read: false },
+  { answered: "a failure", answer: json({ error: "unavailable" }, 503), read: undefined },
+])("the entity database's rollout answering $answered reads as $read", ({ answer, read }) =>
+  Effect.gen(function* () {
+    // Note that a failure reads as none rather than off, so the launch falls back on the answer it last kept.
+    assert.equal(yield* service([answer]).client.readEntityDatabase(), read);
+  }),
+);
+
 it.effect("nobody signed in asks the service nothing", () =>
   Effect.gen(function* () {
     const { requests, client } = service([json({ admin: true })]);

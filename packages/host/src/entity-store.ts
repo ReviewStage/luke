@@ -30,7 +30,9 @@
  * it, and one of another build's shapes loses its rows; one that will not
  * open with its key, or is no database, is deleted and made again, and every
  * read reads whole. One the driver cannot open at all is left as it stands,
- * reported by its kind, and the host keeps its lists in memory alone.
+ * reported by its kind, and the host keeps its lists in the sealed file's
+ * store instead (`sealed-entity-store.ts`). Which of the two opens is the
+ * deployment's rollout's to say (`entity-store-rollout.ts`).
  *
  * A store writes at most every `FLUSH_EVERY`, in one transaction, only the
  * rows that moved since it last wrote: a kept read is laid against what was
@@ -54,12 +56,17 @@
  * account's own, so they outlast a build of other row shapes where they still
  * read, and leave with the database at a sign-out.
  *
- * A build before this one kept the same in one sealed file,
- * `entities.sealed`, which the first store opened reads once: its rows,
- * where it is this account's at these shapes, and its waiting writes, where
- * it is this account's, are written in one transaction, and the file is
- * deleted only once that commits; one that is another account's or will not
- * open is deleted as it was.
+ * The sealed store kept the same in one file, `entities.sealed`
+ * (`sealed-entity-store.ts`), as every build before this one did and as a Mac
+ * still does while the deployment's rollout leaves this store off
+ * (`entity-store-rollout.ts`). This store takes that file once for each
+ * content it holds, as its SHA-256 names it in `meta`: its rows, where it is
+ * this account's at these shapes, and its waiting writes, where it is this
+ * account's, in one transaction, which a launch takes again where it does not
+ * commit. The file is kept beside the database through
+ * `SEALED_KEPT_LAUNCHES`, so a Mac the rollout turns back off reads its lists
+ * where it left them, and deleted after; one that is another account's or
+ * will not open is deleted at once, as the sealed store deletes it.
  */
 
 import { automationsLiveRowsSchema } from "@repo/features/automation-live";
@@ -101,8 +108,11 @@ export const ENTITY_DATABASE_FILE_NAME = "entities.db";
 /** The database's key, sealed by the account source's cipher, beside it. */
 export const ENTITY_KEY_FILE_NAME = "entities.key";
 
-/** The sealed file a build before the database kept the lists in, read once and deleted. */
+/** The sealed file the sealed store keeps the lists in (`sealed-entity-store.ts`), which this store takes and deletes after `SEALED_KEPT_LAUNCHES`. */
 export const ENTITY_SEALED_FILE_NAME = "entities.sealed";
+
+/** Whether the rollout last kept this store on, and for which account (`entity-store-rollout.ts`), beside the database. */
+export const ENTITY_ROLLOUT_FILE_NAME = "entities.rollout";
 
 /** The files SQLite keeps beside the database in write-ahead mode. */
 const DATABASE_SIDE_FILES = ["-wal", "-shm"] as const;
@@ -143,11 +153,20 @@ CREATE TABLE queued_write (
 ) WITHOUT ROWID;
 `;
 
-/** What `meta` names. */
+/** What `meta` names: whose the database is, the shapes it keeps, and the sealed file it took, by its SHA-256, and through how many launches it has kept it since. */
 const META = {
   ACCOUNT_ID: "accountId",
   SHAPES_HASH: "shapesHash",
+  SEALED_HASH: "sealedHash",
+  SEALED_LAUNCHES: "sealedLaunches",
 } as const;
+
+/**
+ * How many launches a sealed file the database took is kept beside it before
+ * it is deleted, so a Mac the rollout turns back off finds its lists where the
+ * sealed store reads them.
+ */
+const SEALED_KEPT_LAUNCHES = 3;
 
 /** The reads whose rows are kept on disk, and the only ones: a read not named here stays in memory. */
 export const KEPT_READ = {
@@ -162,7 +181,7 @@ export const KEPT_READ = {
 export type KeptRead = (typeof KEPT_READ)[keyof typeof KEPT_READ];
 
 /** The kept reads held per workspace, each workspace's rows under its id. */
-type KeptByWorkspace =
+export type KeptByWorkspace =
   | typeof KEPT_READ.MEMBERS
   | typeof KEPT_READ.INVITATIONS
   | typeof KEPT_READ.AUTOMATIONS;
@@ -212,14 +231,14 @@ const keptRowsSchema = Schema.Struct({
 export type KeptRows = typeof keptRowsSchema.Type;
 
 /** A row write waiting for the service, as the engine hands it out: its name, its key, and its input in its declaration's kept form. */
-const queuedEntrySchema = Schema.Struct({
+export const queuedEntrySchema = Schema.Struct({
   name: Schema.String,
   key: Schema.String,
   input: Schema.Unknown,
 });
 
 /** Every read's rows, each optional, since a read that never answered keeps nothing. */
-const keptReadsSchema = Schema.Struct({
+export const keptReadsSchema = Schema.Struct({
   [KEPT_READ.TASK_LIST]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.TASK_LIST]),
   [KEPT_READ.SIDEBAR]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.SIDEBAR]),
   [KEPT_READ.WORKSPACES]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.WORKSPACES]),
@@ -389,6 +408,7 @@ interface WrittenScope {
 interface Statements {
   readonly meta: SqliteStatement;
   readonly setMeta: SqliteStatement;
+  readonly deleteMeta: SqliteStatement;
   readonly allReads: SqliteStatement;
   readonly allRows: SqliteStatement;
   readonly allQueued: SqliteStatement;
@@ -414,19 +434,21 @@ class UnknownSchema extends Data.TaggedError("UnknownSchema")<{ readonly version
 const UNREADABLE_CODES: ReadonlySet<string> = new Set(["SQLITE_NOTADB", "SQLITE_CORRUPT"]);
 
 /** The SHA-256, in hex, of every kept row shape's JSON Schema, which a build that changes any of them changes. */
-const shapesHash: Effect.Effect<string> = Effect.map(
-  Effect.promise(() =>
-    crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(JSON.stringify(Schema.toJsonSchemaDocument(keptRowsSchema))),
-    ),
-  ),
-  (digest) => hexOf(new Uint8Array(digest)),
+export const shapesHash: Effect.Effect<string> = Effect.suspend(() =>
+  digestOf(JSON.stringify(Schema.toJsonSchemaDocument(keptRowsSchema))),
 );
 
 /** `bytes` written as lowercase hex. */
 function hexOf(bytes: Uint8Array): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** The SHA-256 of `text`, in hex. */
+function digestOf(text: string): Effect.Effect<string> {
+  return Effect.map(
+    Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))),
+    (digest) => hexOf(new Uint8Array(digest)),
+  );
 }
 
 /** A part's rows written by `schema`, each by the id `id` reads. */
@@ -576,7 +598,7 @@ const LAYOUTS: { readonly [Read in KeptRead]: ReadLayout<KeptRows[Read]> } = {
 const KEPT_READS: readonly KeptRead[] = Object.values(KEPT_READ);
 
 /** The record of each workspace's rows `read` holds in `reads`; none where it holds none. */
-function byWorkspaceOf<Read extends KeptByWorkspace>(
+export function byWorkspaceOf<Read extends KeptByWorkspace>(
   reads: Partial<KeptRows>,
   read: Read,
 ): Readonly<Record<string, KeptRows[Read][string]>> | undefined {
@@ -585,7 +607,7 @@ function byWorkspaceOf<Read extends KeptByWorkspace>(
 }
 
 /** `reads` with every read kept per workspace cut to the workspaces the kept list names, where it names any. */
-function withinWorkspaces(reads: Partial<KeptRows>): Partial<KeptRows> {
+export function withinWorkspaces(reads: Partial<KeptRows>): Partial<KeptRows> {
   const listed = reads[KEPT_READ.WORKSPACES];
   if (listed === undefined) return reads;
   const named = new Set(listed.map((workspace) => workspace.id));
@@ -718,6 +740,7 @@ function prepared(database: SqliteDatabase): Statements {
   return {
     meta: database.prepare("SELECT value FROM meta WHERE name = ?"),
     setMeta: database.prepare("INSERT OR REPLACE INTO meta (name, value) VALUES (?, ?)"),
+    deleteMeta: database.prepare("DELETE FROM meta WHERE name = ?"),
     allReads: database.prepare("SELECT read, scope, fields FROM kept_read"),
     allRows: database.prepare(
       "SELECT read, scope, part, id, ord, row FROM kept_row ORDER BY read, scope, part, ord",
@@ -791,7 +814,7 @@ function unreadable(cause: unknown): boolean {
 }
 
 /** The sealed file's text opened and read as far as its account and its waiting writes, or none where it will not open or is not a store's. */
-function openedSealed(cipher: SecretCipher, text: string): Envelope | undefined {
+export function openedSealed(cipher: SecretCipher, text: string): Envelope | undefined {
   const plain = Result.flatMap(Base64.decode(text.trim()), (bytes) =>
     Result.try(() => cipher.decrypt(bytes)),
   );
@@ -818,7 +841,7 @@ const sealedRemoved = Effect.fn("host/entitySealedRemoved")(function* (directory
   yield* Effect.ignore(fileSystem.remove(`${file}.tmp`, { force: true }));
 });
 
-/** Deletes every file the store keeps: the database, its key, and a sealed file left by a build before it. */
+/** Deletes every file the store keeps: the database, its key, the rollout's last answer, and the sealed store's file. */
 const removed = Effect.fn("host/entityStoreRemoved")(function* (directory: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -826,6 +849,9 @@ const removed = Effect.fn("host/entityStoreRemoved")(function* (directory: strin
   yield* databaseRemoved(directory);
   yield* Effect.ignore(fileSystem.remove(key, { force: true }));
   yield* Effect.ignore(fileSystem.remove(`${key}.tmp`, { force: true }));
+  yield* Effect.ignore(
+    fileSystem.remove(path.join(directory, ENTITY_ROLLOUT_FILE_NAME), { force: true }),
+  );
   yield* sealedRemoved(directory);
 });
 
@@ -1040,7 +1066,11 @@ function standing(
       // Note that a database of another account is emptied before anything reads it, so no other account's rows or writes are ever drawn or sent.
       if (keptFor !== accountId || keptAt !== hash) {
         database.exec("DELETE FROM kept_row; DELETE FROM kept_read;");
-        if (keptFor !== accountId) statements.deleteAllQueued.run();
+        if (keptFor !== accountId) {
+          statements.deleteAllQueued.run();
+          statements.deleteMeta.run(META.SEALED_HASH);
+          statements.deleteMeta.run(META.SEALED_LAUNCHES);
+        }
       }
       statements.setMeta.run(META.ACCOUNT_ID, accountId);
       statements.setMeta.run(META.SHAPES_HASH, hash);
@@ -1177,42 +1207,62 @@ export function openEntityStore(
         ),
       );
 
-    // A sealed file a build before the database kept is written into it once, and deleted only once that commits.
+    // A sealed file the sealed store kept is written into the database once for each content it holds, and kept beside it for `SEALED_KEPT_LAUNCHES`.
     const sealedText = yield* Effect.orElseSucceed(
       readSettingsFileText(directory, ENTITY_SEALED_FILE_NAME),
       () => undefined,
     );
     if (sealedText !== undefined) {
-      const envelope = openedSealed(cipher, sealedText);
-      const ours = envelope !== undefined && envelope.accountId === accountId;
-      const kept =
-        ours && envelope.hash === hash
-          ? Result.getOrUndefined(decodeReads(envelope.reads))
-          : undefined;
-      // Note that the account's own waiting writes outlast other row shapes, and another account's are never sent.
-      const sealedQueue: readonly QueuedEntry[] = ours ? (envelope.queue ?? []) : [];
-      const steps: Step[] = [];
-      for (const read of KEPT_READS) {
-        const value = kept?.[read];
-        if (value === undefined) continue;
-        written.delete(read);
-        steps.push(...planned(read, value));
-      }
-      const importedQueue = [
-        ...queue,
-        ...sealedQueue.filter((entry) => !queue.some((each) => each.key === entry.key)),
-      ];
-      steps.push(...queueWrites(importedQueue));
-      const imported = steps.length === 0 || (yield* committed(steps));
-      if (imported) {
-        stored = { ...stored, ...kept };
-        queue = importedQueue;
+      const sealedHash = yield* digestOf(sealedText);
+      const meta = (name: string) =>
+        Result.getOrUndefined(decodeMetaRow(statements.meta.get(name)))?.value;
+      const taken = meta(META.SEALED_HASH) === sealedHash;
+      const envelope = taken ? undefined : openedSealed(cipher, sealedText);
+      if (taken) {
+        // Note that a file the database took already is not taken again, since what moved since it is newer; it is counted through each launch, and deleted once it has stood through its last.
+        const launches = Number(meta(META.SEALED_LAUNCHES) ?? 0) + 1;
+        const done = launches > SEALED_KEPT_LAUNCHES;
+        const counted = yield* committed([
+          done
+            ? (each) => {
+                each.deleteMeta.run(META.SEALED_HASH);
+                each.deleteMeta.run(META.SEALED_LAUNCHES);
+              }
+            : (each) => each.setMeta.run(META.SEALED_LAUNCHES, String(launches)),
+        ]);
+        if (counted && done) yield* Effect.provideContext(sealedRemoved(directory), services);
+      } else if (envelope === undefined || envelope.accountId !== accountId) {
+        // Note that a file that will not open, or is another account's, is deleted as the sealed store deletes it, and nothing of it is taken.
         yield* Effect.provideContext(sealedRemoved(directory), services);
       } else {
-        // Note that a file that was not written into the database is kept, and written at the next launch.
-        for (const read of KEPT_READS) if (kept?.[read] !== undefined) written.delete(read);
-        writtenQueue = undefined;
-        yield* reportUnexpected("The entity store did not take the sealed file", {});
+        const kept =
+          envelope.hash === hash ? Result.getOrUndefined(decodeReads(envelope.reads)) : undefined;
+        // Note that the account's own waiting writes outlast other row shapes.
+        const sealedQueue: readonly QueuedEntry[] = envelope.queue ?? [];
+        const steps: Step[] = [];
+        for (const read of KEPT_READS) {
+          const value = kept?.[read];
+          if (value === undefined) continue;
+          written.delete(read);
+          steps.push(...planned(read, value));
+        }
+        const importedQueue = [
+          ...queue,
+          ...sealedQueue.filter((entry) => !queue.some((each) => each.key === entry.key)),
+        ];
+        steps.push(...queueWrites(importedQueue), (each) => {
+          each.setMeta.run(META.SEALED_HASH, sealedHash);
+          each.setMeta.run(META.SEALED_LAUNCHES, "1");
+        });
+        if (yield* committed(steps)) {
+          stored = { ...stored, ...kept };
+          queue = importedQueue;
+        } else {
+          // Note that a file that was not written into the database is taken at the next launch.
+          for (const read of KEPT_READS) if (kept?.[read] !== undefined) written.delete(read);
+          writtenQueue = undefined;
+          yield* reportUnexpected("The entity store did not take the sealed file", {});
+        }
       }
     }
 

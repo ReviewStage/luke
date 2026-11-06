@@ -67,6 +67,8 @@ export interface AccountComposer extends Composer {
   refreshAccess: Effect.Effect<void>;
   /** Forgets the access read, and any read still out, as the gate closes; no admin until the next read. */
   forgetAccess: Effect.Effect<void>;
+  /** Whether the deployment's rollout keeps the signed-in account's lists in the encrypted SQLite store, read afresh; none where the read failed. */
+  readEntityDatabase: Effect.Effect<boolean | undefined>;
   link: (links: AccountLinks) => Effect.Effect<void>;
 }
 
@@ -379,6 +381,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     accessState: Effect.sync(access.current),
     refreshAccess: Effect.asVoid(FiberSet.run(accessReads, access.refresh)),
     forgetAccess: access.forget,
+    readEntityDatabase: Effect.suspend(() => accessClient.readEntityDatabase()),
     link: (next) => Effect.asVoid(late.set(next)),
     // The session holds no timer this host started beyond its own
     // subscription: what a sign-in began is stopped by the capabilities it
