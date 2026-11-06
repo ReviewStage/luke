@@ -513,7 +513,7 @@ const StartedFromColumnSchema = Schema.NullOr(
     steps: Schema.Number,
     totalSteps: Schema.Number,
     branch: Schema.optionalKey(Schema.String),
-    drive: Schema.optionalKey(Schema.String),
+    sandbox: Schema.optionalKey(Schema.String),
     session: Schema.optionalKey(Schema.String),
   }),
 );

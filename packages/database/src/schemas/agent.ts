@@ -93,8 +93,9 @@ import { task } from "./task.js";
  * `started_from` is the agent of the same plan this one was started from
  * (`StoredStartedFrom`): the one it continues, or forks at one of its
  * messages, with how many of that agent's steps its first message replayed
- * of how many there were, and the drive that agent's work stood on, or the
- * branch it was copied to for it where it had none; null for an agent started afresh. The source is
+ * of how many there were, and the sandbox whose latest snapshot this one's
+ * is created from, or the branch that agent's work was copied to for it
+ * where it handed none; null for an agent started afresh. The source is
  * named by id and held to nothing, so an agent outlives a source discarded
  * after it.
  * `started_by_agent_id` is the coding agent whose `start_agent` started this
@@ -176,9 +177,10 @@ export interface StoredAutomationOrigin {
  * message's steps, and of the last of them how many words and calls, the
  * fork kept where it was a reply still being written,
  * how many of the source's steps the replay kept of how many there were,
- * and the drive its work stood on, which this agent's own drive is forked
- * from, or, for a source from before drives, the branch its work was
- * copied to where it could be.
+ * and the sandbox its work stood in, whose latest snapshot this agent's own
+ * sandbox is created from, or, for a source whose sandbox was not stopped
+ * on a snapshot of its own, the branch its work was copied to where it
+ * could be.
  */
 export interface StoredStartedFrom {
   readonly agentId: string;
@@ -189,10 +191,10 @@ export interface StoredStartedFrom {
   readonly messageStepParts?: number;
   readonly steps: number;
   readonly totalSteps: number;
-  /** The branch the source's work was copied to for this agent, what it had not pushed included; absent where it could not be copied, or stood on a drive. */
+  /** The branch the source's work was copied to for this agent, what it had not pushed included; absent where it could not be copied, or stood in a snapshot. */
   readonly branch?: string;
-  /** The drive the source's work stood on as this agent was started, which this agent's own drive is forked from at its first open; absent for a source with no drive of its own. */
-  readonly drive?: string;
+  /** The source's sandbox, stopped on a snapshot as this agent was started, whose latest snapshot this agent's own sandbox is created from at its first open; absent for a source handed no such sandbox. */
+  readonly sandbox?: string;
   /** The source's CLI session, whose transcript the Start copied to this agent's and which its first open forks as its own; absent where it was handed a replay instead. */
   readonly session?: string;
 }
