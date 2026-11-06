@@ -57,7 +57,7 @@ export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export { browserLiveProcedures } from "./browser-live-procedures.js";
-export { declaredActProcedures } from "./declared-acts.js";
+export { declaredActProcedures, declaredAnswer } from "./declared-acts.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
 export { type MacShell, macShellProcedures } from "./mac-shell-procedures.js";
 export { portForwardProcedures } from "./port-forward-procedures.js";

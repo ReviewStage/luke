@@ -11,7 +11,7 @@
  */
 
 import type { ACT, DeclaredHandler } from "@repo/sync";
-import type { Effect } from "effect";
+import { Data, type Effect } from "effect";
 import type {
   ActInput,
   ActOutput,
@@ -20,7 +20,16 @@ import type {
   HOST_ACTS,
 } from "./contract/index.js";
 
-/** An act's handler: its input, read whole by the port, answered. A failure of any kind is drawn as the act declares. */
+/**
+ * A handler's refusal in words of its own: the window hears `sentence`, or
+ * the act's own refusal where none is given, and never the act's
+ * `unanswered`. It is an answer, not a failure, so nothing logs it.
+ */
+export class ActRefused extends Data.TaggedError("ActRefused")<{
+  readonly sentence?: string;
+}> {}
+
+/** An act's handler: its input, read whole by the port, answered. `ActRefused` is refused as it says; any other failure is drawn as the act declares. */
 export type ActHandler<Declaration extends AnyHostActDeclaration> = (
   input: ActInput<Declaration>,
 ) => Effect.Effect<ActOutput<Declaration>, unknown>;

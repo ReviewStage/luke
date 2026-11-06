@@ -58,12 +58,41 @@ export function declaredMethod<Params, Context, Input, Refusal, Row extends obje
   return handler as DeclaredHandler<typeof handler>;
 }
 
-/** A row write's handler for a caller that hands it the write's input already read: that input written on `pool`, answering what the write answers. */
-export function declaredWrite<Row extends object, Change, Input, Answer>(
+/**
+ * A row write's handler for a caller that hands it its input already read:
+ * that input written on `pool`, answering what the write answers. Where the
+ * write's own input is made from it, as an id minted or a row built,
+ * `read` makes it first; where the caller answers other than the write
+ * does, `answered` makes that of the write's answer. A refusal of either
+ * step's is the handler's.
+ */
+export function declaredWrite<
+  Row extends object,
+  Change,
+  WriteInput,
+  Answer,
+  Input = WriteInput,
+  Output = Answer,
+  ReadRefusal = never,
+  AnswerRefusal = never,
+>(
   pool: EntityPool,
-  declaration: WriteDeclaration<Row, Change, Input, Answer>,
-): DeclaredHandler<(input: Input) => Effect.Effect<Answer>> {
-  const handler = (input: Input) => pool.write(declaration, input);
+  declaration: WriteDeclaration<Row, Change, WriteInput, Answer>,
+  steps: {
+    readonly read?: (input: Input) => Effect.Effect<WriteInput, ReadRefusal>;
+    readonly answered?: (answer: Answer) => Effect.Effect<Output, AnswerRefusal>;
+  } = {},
+): DeclaredHandler<(input: Input) => Effect.Effect<Output, ReadRefusal | AnswerRefusal>> {
+  // SAFETY: with no `read`, `Input` is the write's own input, by its default.
+  const read = steps.read ?? ((input: Input) => Effect.succeed(input as unknown as WriteInput));
+  // SAFETY: with no `answered`, `Output` is the write's own answer, by its default.
+  const answered =
+    steps.answered ?? ((answer: Answer) => Effect.succeed(answer as unknown as Output));
+  const handler = (input: Input) =>
+    read(input).pipe(
+      Effect.flatMap((written) => pool.write(declaration, written)),
+      Effect.flatMap(answered),
+    );
   // SAFETY: the brand is a type no value carries, and it is given only here and in `declaredMethod`, each to a handler built from a write declaration.
   return handler as DeclaredHandler<typeof handler>;
 }

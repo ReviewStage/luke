@@ -20,6 +20,7 @@ import {
   declaredActs,
   hostAct,
 } from "../contract/index.js";
+import { ActRefused } from "../host-acts.js";
 import { hostActPort } from "../testing/host-act-port.js";
 import type { ActSender } from "./base.js";
 import { declaredActProcedures } from "./declared-acts.js";
@@ -148,14 +149,14 @@ it.effect(
 );
 
 it.effect(
-  "a payload its ask's schema refuses, one carrying a key the schema does not name, and one sent to an ask that carries none, are refused in the ask's own words, and the service is not asked",
+  "a payload its ask's schema refuses, one carrying a key the schema does not name, and one sent to an ask that carries none, are refused in the ask's own words that hold no provider key, and the service is not asked",
   () =>
     Effect.gen(function* () {
       const { port, requests } = yield* hostActPort({ account: SIGNED_IN });
       const sent = [
         {
           kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE,
-          payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: "short" },
+          payload: { provider: "google", key: PROVIDER_KEY },
         },
         {
           kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET,
@@ -177,6 +178,7 @@ it.effect(
         refused,
         sent.map((ask) => ({ refused: REFUSAL[ask.kind] })),
       );
+      assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
       assert.deepEqual(asksSent(requests), []);
     }),
 );
@@ -255,3 +257,55 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "a handler's own refusal is refused in its sentence, or the act's where it gives none, and never drawn as the act's unanswered",
+  () =>
+    Effect.gen(function* () {
+      const port = testActPort(
+        declaredActProcedures(ACCOUNT_ASK_ACTS, {
+          PROVIDER_KEYS_REMOVE: () =>
+            Effect.fail(new ActRefused({ sentence: "That key is in use." })),
+          GITHUB_TOKEN_REMOVE: () => Effect.fail(new ActRefused({})),
+        }),
+      );
+      ports.push(port);
+
+      const removed = [
+        yield* port.perform(
+          {
+            kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE,
+            payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI },
+          },
+          PANEL,
+        ),
+        yield* port.perform({ kind: ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE }, PANEL),
+      ];
+
+      assert.deepEqual(removed, [
+        { refused: "That key is in use." },
+        { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE] },
+      ]);
+    }),
+);
+
+it("an act written by hand is given no relayed procedure, so its own answers the window", () => {
+  const acts = declaredActs({
+    DICTATION_TRANSCRIBE: hostAct({
+      input: dictationTranscribeParamsSchema,
+      output: dictationTranscribeAnswerViewSchema,
+      refusal: REFUSAL[ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE],
+      panelOnly: true,
+      door: ACT.REMOTE_WORK,
+      byHand: true,
+    }),
+    PROVIDER_KEYS_REMOVE: ACCOUNT_ASK_ACTS.PROVIDER_KEYS_REMOVE,
+  });
+
+  const relayed = declaredActProcedures(acts, {
+    DICTATION_TRANSCRIBE: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    PROVIDER_KEYS_REMOVE: () => Effect.succeed({ keys: [] }),
+  });
+
+  assert.deepEqual(Object.keys(relayed), [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]);
+});
