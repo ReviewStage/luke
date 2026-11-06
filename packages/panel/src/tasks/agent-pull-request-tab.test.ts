@@ -11,6 +11,7 @@ import {
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestWriteAnswerView,
   PULL_REQUEST_PART,
+  type PullRequestPart,
 } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
@@ -439,15 +440,45 @@ let drawnParts: PullRequestPartAnswers = {};
 /** A part the control drawn last does not answer, held unanswered. */
 const unanswering = () => new Promise<never>(() => undefined);
 
+/** The header's parts the host has answered with what it read since the tab was last drawn. */
+let answeredParts = new Set<PullRequestPart>();
+
+/** What the header says while each of its parts is read, which a draw waits out once the host has answered the part. */
+const READING_OF: Partial<Record<PullRequestPart, readonly string[]>> = {
+  [PULL_REQUEST_PART.PULL_REQUEST]: ["Reading pull request", "Reading description"],
+  [PULL_REQUEST_PART.CHECKS]: ["Reading checks"],
+  [PULL_REQUEST_PART.CONVERSATION]: ["Reading conversation"],
+};
+
+/** `read`, its part counted as answered once it lands with what it read; a failure still draws beside its region's wait, so it is not counted. */
+function answering<A>(part: PullRequestPart, read: Promise<A>): Promise<A> {
+  return read.then((answer) => {
+    if (typeof answer !== "object" || answer === null || !("failure" in answer)) {
+      answeredParts.add(part);
+    }
+    return answer;
+  });
+}
+
 /** The host's holds on the tab's parts, answered as the control made or drawn last says, so a control made anew as a tab draws again answers alike. */
 function holdDrawnParts(): void {
+  answeredParts = new Set();
   holdPullRequestParts(handHostReads({}).deliverParts, {
     [PULL_REQUEST_PART.PULL_REQUEST]: (agentId, number) =>
-      (drawnParts[PULL_REQUEST_PART.PULL_REQUEST] ?? unanswering)(agentId, number),
+      answering(
+        PULL_REQUEST_PART.PULL_REQUEST,
+        (drawnParts[PULL_REQUEST_PART.PULL_REQUEST] ?? unanswering)(agentId, number),
+      ),
     [PULL_REQUEST_PART.CHECKS]: (agentId, number) =>
-      (drawnParts[PULL_REQUEST_PART.CHECKS] ?? unanswering)(agentId, number),
+      answering(
+        PULL_REQUEST_PART.CHECKS,
+        (drawnParts[PULL_REQUEST_PART.CHECKS] ?? unanswering)(agentId, number),
+      ),
     [PULL_REQUEST_PART.CONVERSATION]: (agentId, number) =>
-      (drawnParts[PULL_REQUEST_PART.CONVERSATION] ?? unanswering)(agentId, number),
+      answering(
+        PULL_REQUEST_PART.CONVERSATION,
+        (drawnParts[PULL_REQUEST_PART.CONVERSATION] ?? unanswering)(agentId, number),
+      ),
     [PULL_REQUEST_PART.REVIEW_OPTIONS]: (agentId, number) =>
       (drawnParts[PULL_REQUEST_PART.REVIEW_OPTIONS] ?? unanswering)(agentId, number),
     [PULL_REQUEST_PART.VIEWED]: (agentId, number) =>
@@ -626,6 +657,15 @@ async function drawn(
     ),
   );
   await settle();
+  // Note that a part the host answered draws a notify tick after its answer reaches its query, so the draw waits until no answered part still reads.
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      waiting(container).filter((words) =>
+        [...answeredParts].some((part) => READING_OF[part]?.includes(words) === true),
+      ),
+      [],
+    ),
+  );
   return container;
 }
 
@@ -761,8 +801,8 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "GitHub's heading stands, as words and no heading element",
   );
   assert.equal(
-    description.querySelector("a.anchor, [href='#summary']"),
-    null,
+    description.querySelector("a.anchor, [href='#summary']") === null,
+    true,
     "its permalink does not",
   );
   assert.equal(description.querySelector('[data-streamdown="strong"]')?.textContent, "seven days");
@@ -784,7 +824,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   );
   assert.equal(description.querySelectorAll(".ui-code-card").length, 1, "inline code stays inline");
   assert.match(description.textContent ?? "", /Run pnpm test first\./u);
-  assert.equal(description.querySelector("script"), null, "a script never stands");
+  assert.equal(description.querySelector("script") === null, true, "a script never stands");
   assert.ok(!("stolen" in window), "nor does it run");
   await settle();
   assert.deepEqual(
@@ -792,21 +832,23 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     [UPLOAD, BADGE, SCREENSHOT],
     "only an image GitHub serves is asked for, through the service",
   );
-  const upload =
-    description.querySelector<HTMLImageElement>('img[alt="before and after"]') ??
-    assert.fail("the upload is drawn");
+  const upload = await vi.waitFor(
+    () =>
+      description.querySelector<HTMLImageElement>('img[alt="before and after"]') ??
+      assert.fail("the upload is drawn"),
+  );
   await vi.waitFor(() =>
     assert.equal(upload.src, `data:${PIXEL.contentType};base64,${PIXEL.base64}`),
   );
   assert.equal(
-    description.querySelector('img[alt="pixel"]'),
-    null,
+    description.querySelector('img[alt="pixel"]') === null,
+    true,
     "an image elsewhere is not drawn",
   );
   assert.match(description.textContent ?? "", /pixel/u, "it stands as its link");
   assert.equal(
-    description.querySelector("source"),
-    null,
+    description.querySelector("source") === null,
+    true,
     "a themed badge names no address the window would read itself",
   );
   for (const alt of ["Request review", "Overview"]) {
@@ -827,8 +869,8 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "a comment GitHub sent no rendering of stands as its markdown",
   );
   assert.equal(
-    tab.querySelector(".pull-request-earlier button"),
-    null,
+    tab.querySelector(".pull-request-earlier button") === null,
+    true,
     "nothing was left on GitHub",
   );
 
@@ -933,15 +975,15 @@ test("a picture GitHub linked to itself opens over the window rather than in the
     assert.equal(description.querySelector('img[alt="before and after"]') === null, false),
   );
   assert.equal(
-    description.querySelector('img[alt="before and after"]')?.closest("a"),
-    null,
+    description.querySelector('img[alt="before and after"]')?.closest("a") === null,
+    true,
     "GitHub's link to the picture itself is gone",
   );
   assert.ok(
     description.querySelector('a[href^="https://review.example.com"] img[alt="Request review"]'),
     "a badge linked elsewhere keeps its link",
   );
-  assert.equal(description.querySelector('[aria-label="Enlarge Request review"]'), null);
+  assert.equal(description.querySelector('[aria-label="Enlarge Request review"]') === null, true);
 
   const enlarge =
     description.querySelector<HTMLButtonElement>('[aria-label="Enlarge before and after"]') ??
@@ -989,7 +1031,7 @@ test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to,
   await settle();
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
-  assert.equal(description.querySelector('[aria-label="Enlarge Overview"]'), null);
+  assert.equal(description.querySelector('[aria-label="Enlarge Overview"]') === null, true);
   await vi.waitFor(() =>
     assert.equal(description.querySelector('[aria-label="Enlarge upload"]') === null, false),
   );
@@ -1060,7 +1102,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
   act(() => root?.unmount());
   const none = await draw(controlAnswering());
   await choose(none, "Checks");
-  assert.equal(none.querySelector('[aria-label="Deployments"]'), null);
+  assert.equal(none.querySelector('[aria-label="Deployments"]') === null, true);
 });
 
 test("the header offers Preview once the checks land, before their tab is shown: one deployment serving an address opens at a press, several drop a menu of their environments, and one still deploying or naming no address offers none", async () => {
@@ -1325,7 +1367,11 @@ test("a review that only left line comments draws each thread under it: its file
     /src\/old\.tsL9/u,
     "an outdated thread names the line it was made on, folded too",
   );
-  assert.equal(folded.querySelector(".pull-request-thread-comment"), null, "folded closed");
+  assert.equal(
+    folded.querySelector(".pull-request-thread-comment") === null,
+    true,
+    "folded closed",
+  );
   act(() => head.click());
   await settle();
   assert.match(
@@ -1584,7 +1630,7 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Rate limited." };
   const rocket = choices[6] ?? assert.fail("the row offers Rocket");
   act(() => rocket.click());
-  assert.equal(entry.querySelector('[role="toolbar"]'), null, "a pick closes the row");
+  assert.equal(entry.querySelector('[role="toolbar"]') === null, true, "a pick closes the row");
   await vi.waitFor(() =>
     assert.deepEqual(changes.at(-1), [
       AGENT.id,
@@ -1895,12 +1941,12 @@ test("the Description and the Conversation each fold under a heading pressed acr
 
   act(() => description.click());
   assert.equal(description.getAttribute("aria-expanded"), "false");
-  assert.equal(tab.querySelector('[aria-label="Description"] .pull-request-words'), null);
+  assert.equal(tab.querySelector('[aria-label="Description"] .pull-request-words') === null, true);
   assert.ok(tab.querySelector(".pull-request-entry"), "the Conversation stays open");
 
   act(() => conversation.click());
   assert.equal(conversation.getAttribute("aria-expanded"), "false");
-  assert.equal(tab.querySelector(".pull-request-entry"), null);
+  assert.equal(tab.querySelector(".pull-request-entry") === null, true);
   assert.equal(
     tab.querySelector('[aria-label="Conversation"] .pull-request-count')?.textContent,
     "2",
@@ -2021,7 +2067,11 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
   act(() => {
     picture.dispatchEvent(new Event("load"));
   });
-  assert.equal(face.querySelector(".lucide-bot"), null, "the logo stands in the robot's place");
+  assert.equal(
+    face.querySelector(".lucide-bot") === null,
+    true,
+    "the logo stands in the robot's place",
+  );
 
   const opener =
     header.querySelector(
@@ -2145,7 +2195,7 @@ test("a merged pull request says so on its pill, as its overview read it, says n
     ),
   );
   assert.equal(standing(tab), "Merged");
-  assert.equal(mergeControl(tab), null, "a merged pull request has no merge control");
+  assert.equal(mergeControl(tab) === null, true, "a merged pull request has no merge control");
   await choose(tab, "Checks");
   assert.deepEqual(words(tab, ".pull-request-none"), [
     "No description provided.",
@@ -2162,13 +2212,14 @@ test("where what the agent published is not read, the header still says where th
   const tab = await draw(control);
   assert.equal(standing(tab), "Open");
   assert.equal(
-    tab.querySelector('.pull-request-tab button[aria-label="Open on GitHub"]'),
-    null,
+    tab.querySelector('.pull-request-tab button[aria-label="Open on GitHub"]') === null,
+    true,
     "GitHub is no button of its own",
   );
   assert.equal(
-    tab.querySelector(".pull-request-header [aria-haspopup='menu'][aria-label$='actions']"),
-    null,
+    tab.querySelector(".pull-request-header [aria-haspopup='menu'][aria-label$='actions']") ===
+      null,
+    true,
     "the header holds no ⋯",
   );
   assert.deepEqual(toolbarItems(tab), ["Copy GitHub link", "Open on GitHub", "Refresh"]);
@@ -2345,7 +2396,7 @@ test("an agent with no pull request yet says so, and the toolbar's ⋯ offers no
     }),
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
-  assert.equal(none.querySelector("[aria-label='Pull request conversation']"), null);
+  assert.equal(none.querySelector("[aria-label='Pull request conversation']") === null, true);
   assert.deepEqual(toolbarItems(none), []);
 });
 
@@ -2541,10 +2592,14 @@ test("where nothing of the pull request is held and its reads fail, each part sa
     ) ?? assert.fail("the part offers a retry");
   const header =
     tab.querySelector(".pull-request-header") ?? assert.fail("the header stands, failed");
-  assert.match(header.textContent ?? "", /The pull request could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(header.textContent ?? "", /The pull request could not be read\./u),
+  );
   const conversation =
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
-  assert.match(conversation.textContent ?? "", /The conversation could not be read\./u);
+  await vi.waitFor(() =>
+    assert.match(conversation.textContent ?? "", /The conversation could not be read\./u),
+  );
   assert.deepEqual(
     reported.map((attributes) => [
       attributes["failure.surface"],
@@ -2647,7 +2702,7 @@ test("a draft's pill offers Ready for review, and Close pull request in red, whi
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW }]]);
   assert.equal(pill(tab).textContent, "Open");
   assert.deepEqual(offered(tab), ["Convert to draft", "Close pull request"]);
-  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(tab.querySelector(".pull-request-write-note") === null, true);
 });
 
 test("a member GitHub would not take as signed in is offered to sign in with GitHub again, and a merged pull request's pill offers nothing", async () => {
@@ -2690,8 +2745,9 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
     }),
   );
+  // Note that the open pull request the draw before read stands in the cache until this draw's read lands.
+  await vi.waitFor(() => assert.equal(standing(merged), "Merged"));
   assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
-  assert.equal(standing(merged), "Merged");
 });
 
 test("a change refused for a repository out of the workspace's reach says where access is given, and Open Settings opens the GitHub of the agent's task's workspace", async () => {
@@ -2817,9 +2873,12 @@ function mergeShown(tab: HTMLElement) {
 
 /** The merge control's press of the words given, pressed. */
 async function pressBox(tab: HTMLElement, label: string): Promise<void> {
-  const press =
-    mergePresses(tab).find((each) => each.textContent === label) ??
-    assert.fail(`the merge control offers ${label}`);
+  // Note that the merge control offers its press once the pull request's merge read reaches its query.
+  const press = await vi.waitFor(
+    () =>
+      mergePresses(tab).find((each) => each.textContent === label) ??
+      assert.fail(`the merge control offers ${label}`),
+  );
   act(() => press.click());
   await settle();
 }
@@ -2987,8 +3046,8 @@ test("a pull request ready to merge offers the first method the repository allow
   assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept");
   await pressBox(again, "Rebase and merge");
   assert.equal(
-    document.querySelector('[role="dialog"], [role="alertdialog"]'),
-    null,
+    document.querySelector('[role="dialog"], [role="alertdialog"]') === null,
+    true,
     "a merge asks nothing first",
   );
   assert.deepEqual(changes, [
@@ -3207,7 +3266,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
     ],
   ]);
   assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
-  assert.equal(tab.querySelector('[role="dialog"]'), null, "the panel closes");
+  assert.equal(tab.querySelector('[role="dialog"]') === null, true, "the panel closes");
   const reopened = openReview(tab);
   assert.equal(boxWords(reopened), "", "the submitted words are let go");
   assert.equal(
@@ -3262,7 +3321,7 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
     panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
     "GitHub refused this change.\nGitHub said: “Review Can not approve your own pull request”",
   );
-  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(tab.querySelector(".pull-request-write-note") === null, true);
   assert.equal(boxWords(panel), "LGTM");
 });
 
@@ -3317,7 +3376,7 @@ test("a press outside the review panel closes it, its words kept, and one on a s
       document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     });
 
-    assert.equal(tab.querySelector('[role="dialog"]'), null);
+    assert.equal(tab.querySelector('[role="dialog"]') === null, true);
     assert.equal(boxWords(openReview(tab)), "Half a thought");
   } finally {
     vi.restoreAllMocks();
@@ -3339,7 +3398,7 @@ test("a pull request with no labels spends no line on them: its label picker sta
       (button) => button.getAttribute("aria-label"),
     );
 
-  assert.equal(tab.querySelector(".pull-request-header .pull-request-labels"), null);
+  assert.equal(tab.querySelector(".pull-request-header .pull-request-labels") === null, true);
   assert.deepEqual(pickers(), ["Reviewer", "Label"]);
 
   labels = [{ name: "bug", color: "d73a4a" }];
@@ -3457,6 +3516,7 @@ test("who opened it reads as one phrase with when: opened a while ago, or, once 
       PULL_REQUEST_STATE.MERGED,
     ),
   );
+  await vi.waitFor(() => assert.match(String(opened(merged)[1]), /^opened · merged \S/u));
   const [, mergedSaid, mergedAt] = opened(merged);
   assert.match(String(mergedSaid), /^opened · merged \S/u);
   assert.deepEqual(
@@ -3646,7 +3706,7 @@ test("a pull request in no stack draws no stack", async () => {
   await vi.waitFor(() =>
     assert.ok(tab.querySelector(".pull-request-header .pull-request-branches") !== null),
   );
-  assert.equal(tab.querySelector(".pull-request-stack"), null);
+  assert.equal(tab.querySelector(".pull-request-stack") === null, true);
 });
 
 /** The items of the menu standing open, by their words and whether each is checked. */
@@ -3831,7 +3891,11 @@ test("a picker's choice shows its button busy once the change has waited the set
 
     answer.resolve();
     await settle();
-    assert.equal(picker("Updating labels"), null, "the button is named for what it adds again");
+    assert.equal(
+      picker("Updating labels") === null,
+      true,
+      "the button is named for what it adds again",
+    );
     assert.equal(labels()?.getAttribute("aria-busy"), null);
   } finally {
     vi.useRealTimers();
@@ -3864,7 +3928,7 @@ test("the label picker lists the repository's labels, those on the pull request 
       PULL_REQUEST_STATE.MERGED,
     ),
   );
-  assert.equal(tab.querySelector('[aria-label="Reviewer"]'), null);
+  assert.equal(tab.querySelector('[aria-label="Reviewer"]') === null, true);
   const picker =
     tab.querySelector<HTMLButtonElement>('.pull-request-reviewers [aria-label="Label"]') ??
     assert.fail("the label picker stands beside the reviewers");
@@ -3967,7 +4031,7 @@ test("a label chosen stands under the title before GitHub answers, in the color 
   answer.resolve();
   await settle();
   assert.deepEqual(labels(), [["docs", "#0075ca"]]);
-  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(tab.querySelector(".pull-request-write-note") === null, true);
 });
 
 test("a picker whose repository could not be read offers Retry in its menu, which reads it again and lists what it finds", async () => {
@@ -4077,7 +4141,7 @@ test("a thread is replied on, resolved, and opened again from under its comments
   writeReply(card(), "Renamed in the next push.");
   act(() => threadPress(card(), "Reply").click());
   await settle();
-  assert.equal(boxWordsElement(card()), null, "the field closes once GitHub took it");
+  assert.equal(boxWordsElement(card()) === null, true, "the field closes once GitHub took it");
   assert.match(
     card().querySelector(".annotation-comments")?.textContent ?? "",
     /Renamed in the next push\./u,
@@ -4162,7 +4226,7 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
     "GitHub refused this change.\nGitHub said: “Pull request review thread is locked”",
   );
   assert.equal(boxWords(withId), "Done.");
-  assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
+  assert.equal(withoutId.querySelector(".pull-request-thread-actions") === null, true);
 });
 
 test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines and files, and changes it rather than the agent's own", async () => {
@@ -4494,7 +4558,7 @@ test("the title is edited in place: Enter keeps new words trimmed, and Escape, o
   window.addEventListener("keydown", hear);
   await key(escaped, "Escape");
   window.removeEventListener("keydown", hear);
-  assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null);
+  assert.equal(tab.querySelector('[aria-label="Pull request title"]') === null, true);
   assert.deepEqual(heard, [], "the field's own Escape never reaches the window");
 
   const unchanged = editTitle(tab);
@@ -4512,8 +4576,8 @@ test("the title is edited in place: Enter keeps new words trimmed, and Escape, o
     ],
   ]);
   assert.equal(
-    tab.querySelector('[aria-label="Pull request title"]'),
-    null,
+    tab.querySelector('[aria-label="Pull request title"]') === null,
+    true,
     "the field closes once GitHub answered",
   );
 });
@@ -4527,7 +4591,11 @@ test("the title's edit is kept as the focus leaves its field, as it is on Enter"
   assert.deepEqual(changes, [
     [AGENT.id, { action: PULL_REQUEST_ACTION.EDIT_TITLE, title: "Expire invitations after a day" }],
   ]);
-  assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null, "the field closes");
+  assert.equal(
+    tab.querySelector('[aria-label="Pull request title"]') === null,
+    true,
+    "the field closes",
+  );
 });
 
 test("Refresh, the one its screen offers, reads Files changed again once the view was shown", async () => {
@@ -4621,8 +4689,8 @@ test("Files changed draws each review thread under its line, its comments throug
     assert.fail("a chip stands");
   assert.equal(chip.getAttribute("aria-label"), "1 comment by Charles Pan · 1 open, show");
   assert.equal(
-    note.querySelector(".pull-request-thread-comment"),
-    null,
+    note.querySelector(".pull-request-thread-comment") === null,
+    true,
     "minimized, no thread is drawn",
   );
   act(() => chip.click());
@@ -5214,7 +5282,7 @@ test("code selected as text on lines GitHub takes a comment on is offered a Comm
       rect,
     }),
   );
-  assert.equal(offer(), null, "lines no hunk holds are offered nothing");
+  assert.equal(offer() === null, true, "lines no hunk holds are offered nothing");
 
   const selection = {
     start: 12,
@@ -5225,12 +5293,12 @@ test("code selected as text on lines GitHub takes a comment on is offered a Comm
   act(() => tellText({ picked: { path: INVITE_FILE.path, selection }, rect }));
   assert.equal(offer()?.getAttribute("aria-label"), "Comment on lines 12–13");
   act(() => tellText(undefined));
-  assert.equal(offer(), null, "a selection let go takes its offer with it");
+  assert.equal(offer() === null, true, "a selection let go takes its offer with it");
 
   act(() => tellText({ picked: { path: INVITE_FILE.path, selection }, rect }));
   act(() => offer()?.click());
   await settle();
-  assert.equal(offer(), null);
+  assert.equal(offer() === null, true);
   assert.deepEqual(
     commentNotes().map((note) => note.element.querySelector(".line-comment-head")?.textContent),
     ["Comment on lines 12–13"],
@@ -5310,7 +5378,7 @@ test("a comment on the head's lines offers a Suggestion in its / menu and over i
   await typeOnNewLine(old, "/");
   assert.ok(slashRows(old).includes("Code block"), "the / menu stands");
   assert.ok(!slashRows(old).includes("Suggestion"), "the old side's lines take no suggestion");
-  assert.equal(old.querySelector('button[aria-label="Add a suggestion"]'), null);
+  assert.equal(old.querySelector('button[aria-label="Add a suggestion"]') === null, true);
 
   await act(async () => option(tab, "Conversation").click());
   await settle();
@@ -5449,10 +5517,10 @@ test("Remove from queue's question goes once a read finds the pull request out o
     }),
   );
   await pressBox(tab, "Remove from queue");
-  assert.notEqual(question(), null, "leaving the queue is asked about");
+  assert.equal(question() !== null, true, "leaving the queue is asked about");
   await pressToolbar(tab, "Refresh");
   await settle();
-  assert.equal(question(), null, "out of the queue, the question goes");
+  assert.equal(question() === null, true, "out of the queue, the question goes");
   assert.deepEqual(changes, []);
   act(() => root?.unmount());
   root = undefined;
@@ -5728,7 +5796,11 @@ test("a link to a thread opens a folded Conversation to land on it, centering it
     createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),
   );
   assert.equal(sectionHead(tab, "Conversation").getAttribute("aria-expanded"), "false");
-  assert.equal(tab.querySelector(".pull-request-thread"), null, "a folded Conversation draws none");
+  assert.equal(
+    tab.querySelector(".pull-request-thread") === null,
+    true,
+    "a folded Conversation draws none",
+  );
 
   // The scroller jsdom lays out none for: 400px tall over a long run, clearing 58px at its top for its heading and fade.
   const scroller =
@@ -5855,7 +5927,11 @@ test("every review thread's head leads with its chevron and ends with its ⋯, i
         ?.lastElementChild?.querySelector(".pull-request-thread-menu") ??
       assert.fail(`on ${where}, the ⋯ ends the head's row`);
     assert.equal(head.contains(menu), false, `on ${where}, the ⋯ stands beside the head`);
-    assert.equal(head.querySelector("button"), null, `on ${where}, no control stands in the head`);
+    assert.equal(
+      head.querySelector("button") === null,
+      true,
+      `on ${where}, no control stands in the head`,
+    );
     assert.equal(head.getAttribute("aria-expanded"), "true");
     act(() => head.click());
     assert.equal(head.getAttribute("aria-expanded"), "false", `on ${where}, the row folds it`);
@@ -5876,7 +5952,11 @@ test("a thread's ⋯ in Files changed shows it in the Conversation through the s
   await choose(tab, "Conversation");
   act(() => filter(tab, "Hide resolved").click());
   await settle();
-  assert.equal(tab.querySelector(".pull-request-thread"), null, "Hide resolved leaves it out");
+  assert.equal(
+    tab.querySelector(".pull-request-thread") === null,
+    true,
+    "Hide resolved leaves it out",
+  );
   await choose(tab, "Files changed");
   const note = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
     INVITE_FILE.path,
@@ -6164,7 +6244,7 @@ test("the header counts the lines published until Files changed is first opened;
 test("ticking a file's Viewed box counts it at once, before GitHub answers, and one GitHub refuses counts again as its mark goes back", async () => {
   const { control } = viewing(["a.ts"]);
   const tab = await draw(control, PULL_REQUEST_VIEW.FILES);
-  assert.equal(headerLines(tab), "+50 −5 left");
+  await vi.waitFor(() => assert.equal(headerLines(tab), "+50 −5 left"));
 
   const { promise, resolve } = Promise.withResolvers<void>();
   changeHeld = promise;
@@ -6197,7 +6277,10 @@ test("with every file viewed, or none, the header counts the whole and hints not
   ] as const) {
     const tab = await draw(viewing(marked).control, PULL_REQUEST_VIEW.FILES);
     assert.equal(headerLines(tab), "+60 −7", `${marked.length} viewed`);
-    assert.equal(tab.querySelector(".pull-request-lines")?.getAttribute("aria-owns"), null);
+    assert.equal(
+      tab.querySelector(".pull-request-lines")?.getAttribute("aria-owns") === null,
+      true,
+    );
     await vi.waitFor(() => assert.equal(tabCount(tab, "Files changed"), files));
     act(() => root?.unmount());
     root = undefined;
@@ -6228,7 +6311,7 @@ test("where the read stopped short of every file, the whole is what was publishe
       .control,
     PULL_REQUEST_VIEW.FILES,
   );
-  assert.equal(headerLines(tab), "+40 −13 left");
+  await vi.waitFor(() => assert.equal(headerLines(tab), "+40 −13 left"));
   assert.equal(await linesHint(tab), "+100 −20 total");
   assert.equal(tabCount(tab, "Files changed"), "3/5 viewed");
 });
@@ -6238,7 +6321,7 @@ test("where the read stopped short of more files than were published, Files chan
     viewing(["a.ts", "b.ts"], { changedFiles: 1, truncated: true }).control,
     PULL_REQUEST_VIEW.FILES,
   );
-  assert.equal(tabCount(tab, "Files changed"), "2/3 viewed");
+  await vi.waitFor(() => assert.equal(tabCount(tab, "Files changed"), "2/3 viewed"));
 });
 
 /** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
@@ -6362,7 +6445,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   act(() => commentOffer(card, "Edit").click());
   typeInto(card, "Pending comment", "Thrown away");
   act(() => commentOffer(card, "Cancel").click());
-  assert.equal(boxWordsElement(card), null);
+  assert.equal(boxWordsElement(card) === null, true);
   act(() => commentOffer(card, "Edit").click());
   assert.equal(boxWords(card), "Why four?", "the edit opens on the comment's own words");
   typeInto(card, "Pending comment", "Why **five**?");
@@ -6429,7 +6512,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   assert.ok(document.querySelector('[role="alertdialog"]'), "Delete asks first");
   await act(async () => option(tab, "Conversation").click());
   await settle();
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.equal(document.querySelector('[role="alertdialog"]') === null, true);
 });
 
 test("on a phone no Preview stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
@@ -6496,7 +6579,7 @@ test("on a phone no Preview stands beside the title, and Files changed draws no 
   assert.deepEqual(opened, ["https://web-git-expiry.vercel.app"]);
 
   await choose(tab, "Files changed");
-  assert.equal(tab.querySelector(".file-view-bar"), null, "Files changed draws no bar");
+  assert.equal(tab.querySelector(".file-view-bar") === null, true, "Files changed draws no bar");
   assert.deepEqual(toolbarItems(tab), [
     "Copy GitHub link",
     "Open on GitHub",
