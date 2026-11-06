@@ -77,7 +77,6 @@ import {
 import { installShownFailureReporter } from "../failure-report.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
-import { MemberDirectory } from "../member-directory.js";
 import { EDITOR_ROOT_SELECTOR } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -100,6 +99,7 @@ import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -639,10 +639,9 @@ async function drawn(
           bundles,
           createElement(GitHubConnectProvider, {
             value: github,
-            children: createElement(MemberDirectory, {
-              workspace: { id: "workspace-acme", memberCount: 2 },
-              readerId: "user-dana",
-              children: createElement(
+            children: withPeopleRead(
+              { workspace: { id: "workspace-acme", memberCount: 2 }, readerId: "user-dana" },
+              createElement(
                 Fragment,
                 null,
                 createElement(ToastHost),
@@ -650,7 +649,7 @@ async function drawn(
                   ? tab
                   : createElement(OpenLinkProvider, { value: openPlace, children: tab }),
               ),
-            }),
+            ),
           }),
         ),
       ),
@@ -666,6 +665,8 @@ async function drawn(
       [],
     ),
   );
+  // Note that the tab draws who opened and reviewed once the workspace's people reach their query.
+  await peopleRead();
   return container;
 }
 
@@ -4723,7 +4724,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
       }),
     ],
   } as const;
-  handSettings();
+  handSettings({}, { [LIVE_READ.WORKSPACE_MEMBERS]: HELD_PEOPLE });
   const tab = await draw(
     controlAnswering(
       {
@@ -5680,7 +5681,7 @@ async function threadMenuItem(card: Element, label: string): Promise<void> {
 }
 
 test("a thread's file and lines in the Conversation take it to Files changed through the window's route for its link: its collapsed file opened, its minimized chip shown, the list scrolled to its line, its lines lit, the thread ringed and focused, and the lines let go as the ring ends", async () => {
-  handSettings();
+  handSettings({}, { [LIVE_READ.WORKSPACE_MEMBERS]: HELD_PEOPLE });
   const heard: ReadLink[] = [];
   const tab = await drawn(
     createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),
