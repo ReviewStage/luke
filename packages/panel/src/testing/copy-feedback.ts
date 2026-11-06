@@ -28,14 +28,15 @@ afterEach(() => {
   testQueryClient.clear();
 });
 
+/** `element` under the test's Query client alone, for a surface that reads the renderer's own registry. */
+export function withQueryClient(element: ReactElement): ReactElement {
+  return createElement(QueryClientProvider, { client: testQueryClient }, element);
+}
+
 /** `element` under `registry` and the test's Query client, as the window's root provides its own. */
 export function onRegistry(
   registry: AtomRegistry.AtomRegistry,
   element: ReactElement,
 ): ReactElement {
-  return createElement(
-    RegistryContext.Provider,
-    { value: registry },
-    createElement(QueryClientProvider, { client: testQueryClient }, element),
-  );
+  return createElement(RegistryContext.Provider, { value: registry }, withQueryClient(element));
 }

@@ -242,6 +242,12 @@ test("words typed past a space that match nothing close the list, and words that
   const task = await opened();
 
   await task.typeAtEnd(" See @zzq");
+  await vi.waitFor(() =>
+    assert.match(
+      task.container.querySelector(".mention-menu")?.textContent ?? "",
+      /No results match/u,
+    ),
+  );
   const oneWord = task.container.querySelector(".mention-menu")?.textContent ?? "";
   await task.typeAtEnd(" later");
   const proseClosed = task.container.querySelector(".mention-menu") === null;

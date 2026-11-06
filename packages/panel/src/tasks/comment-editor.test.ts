@@ -12,6 +12,7 @@ import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { CommentEditor } from "./comment-editor.js";
 
 /**
@@ -113,7 +114,9 @@ function mount(
   const holder = pane.appendChild(document.createElement("div"));
   const root = createRoot(holder);
   roots.push(root);
-  act(() => root.render(createElement(Owner, { start, heard, answers, suggestion })));
+  act(() =>
+    root.render(withQueryClient(createElement(Owner, { start, heard, answers, suggestion }))),
+  );
   const element =
     holder.querySelector<TiptapEditorHTMLElement>('.ProseMirror[aria-label="Comment"]') ??
     assert.fail("the box's editor is mounted");
