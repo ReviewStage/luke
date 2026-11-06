@@ -137,6 +137,17 @@ test("a replay with no note and no fork reads back without either", () => {
     brief: "Fix it.",
     replay: continued,
   });
+  const carried: Replay = {
+    agentId: SOURCE,
+    carried: true,
+    preamble: "Go on.",
+    steps: [],
+    totalSteps: 0,
+  };
+  assert.deepEqual(firstMessageParts(firstMessageText("Fix it.", carried, undefined)), {
+    brief: "Fix it.",
+    replay: carried,
+  });
 });
 
 test("a brief that quotes a replay's heading is still the brief, and the real replay after it is read", () => {

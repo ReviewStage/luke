@@ -552,7 +552,8 @@ function fullTurn(turn: CopiedTurn): string[] {
 
 /** The replay as a copy reads it: its heading, how many steps were left out, and each step, one line in the concise copy and its words fenced in the full one. */
 function replaySaid(replay: Replay, copy: TranscriptCopy): string[] {
-  const heading = `## ${replayVerb(replay)} ${REPLAY_SOURCE_WORDS} · ${replayCount(replay)}`;
+  const count = replayCount(replay);
+  const heading = `## ${replayVerb(replay)} ${REPLAY_SOURCE_WORDS}${count === undefined ? "" : ` · ${count}`}`;
   const left = leftOutLine(replay);
   const steps = replay.steps.map((step) => {
     const { who, line } = stepLine(step);

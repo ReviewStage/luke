@@ -27,6 +27,7 @@ import {
   type ConnectionDoorServices,
   nativeAgentConnections,
 } from "../../integrations/connection-door.js";
+import { descriptionsOnFor } from "../descriptions-on.js";
 import type { AgentMachine, MachineLayout } from "../machine/agent-machine.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
 import type { SandboxRunner } from "../machine/vercel-machine.js";
@@ -34,7 +35,7 @@ import { memoryOnFor } from "../memory-tools.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_LINES_PATH } from "../native-events/runner-lines-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
-import { descriptionsOnFor } from "../descriptions-on.js";
+import { RUNNER_TRANSCRIPTS_PATH } from "../native-events/runner-transcripts-app.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { WORKSPACE_MCP_PATH, workspaceIntegrationMcpUrl } from "../workspace-mcp/app.js";
@@ -161,6 +162,7 @@ export function nativeAgentSessionsLayer(
         eventsUrl: new URL(RUNNER_EVENTS_PATH, origin).href,
         linesUrl: new URL(RUNNER_LINES_PATH, origin).href,
         mcpUrl: new URL(WORKSPACE_MCP_PATH, origin).href,
+        transcriptsUrl: new URL(RUNNER_TRANSCRIPTS_PATH, origin).href,
         integrations: (agent) =>
           nativeIntegrations(account, agent, origin).pipe(Effect.provideContext(context)),
         instructions: (agent, place) =>

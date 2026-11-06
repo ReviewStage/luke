@@ -110,6 +110,12 @@ import type {
   UserInput,
 } from "./codex-protocol/v2/index.js";
 import {
+  mirrorRollout,
+  openRolloutMirror,
+  type RolloutMirror,
+  restoreRollouts,
+} from "./codex-rollout.js";
+import {
   installedSkillsPath,
   type LaunchContext,
   type LaunchOutcome,
@@ -136,6 +142,7 @@ import {
   RUNNER_WARM,
   type RunnerEnd,
 } from "./protocol.js";
+import { transcriptStore } from "./transcripts.js";
 
 /**
  * OpenAI's documented provider for a ChatGPT plan's token
@@ -215,6 +222,7 @@ const METHOD = {
   SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
+  THREAD_FORK: "thread/fork",
   THREAD_TURNS_LIST: "thread/turns/list",
   THREAD_REVERT: "thread/revert",
   TURN_START: "turn/start",
@@ -263,7 +271,12 @@ interface Outgoing {
 }
 
 /** The fields of an answer the controller reads. */
-const ThreadAnswerSchema = Schema.Struct({ thread: Schema.Struct({ id: Schema.String }) });
+const ThreadAnswerSchema = Schema.Struct({
+  thread: Schema.Struct({
+    id: Schema.String,
+    path: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
+});
 const TurnAnswerSchema = Schema.Struct({ turn: Schema.Struct({ id: Schema.String }) });
 /** A page of a thread's turns as the rewind reads it: each turn's id and its user messages' client ids. */
 const TurnsPageSchema = Schema.Struct({
@@ -611,6 +624,8 @@ interface CodexLaunch {
   stopping: boolean;
   /** Whether the launch is warm: its turn completed with nothing left, an IDLE posted, and no message taken since. */
   warm: boolean;
+  /** The thread's rollout as the store mirrors it, where the config names the store. */
+  readonly mirror: RolloutMirror | undefined;
 }
 
 /**
@@ -668,18 +683,25 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
 
 /**
  * Starts app-server in a scope of its own and opens the thread on it:
- * `thread/resume` where there is a thread to continue, `thread/start`
- * otherwise. Answers the server, its scope, and the thread's id.
+ * `thread/fork` where the thread is another agent's, `thread/resume` where
+ * there is a thread to continue, `thread/start` otherwise. Answers the
+ * server, its scope, the thread's id, and its rollout's path where
+ * app-server named one.
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth">,
   threadId: string | undefined,
+  fork: boolean,
 ) {
   const { config, env } = launch.context;
   const serverScope = yield* Scope.make();
   // Note that the listener reads the thread's id from here, because a new
   // thread's notifications arrive before `thread/start` answers.
-  const seen: ThreadSeen = { context: launch.context, signals: launch.signals, threadId };
+  const seen: ThreadSeen = {
+    context: launch.context,
+    signals: launch.signals,
+    threadId: fork ? undefined : threadId,
+  };
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
@@ -714,7 +736,13 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
     const answer =
       threadId === undefined
         ? yield* server.request(METHOD.THREAD_START, thread)
-        : yield* server.request(METHOD.THREAD_RESUME, { ...thread, threadId, excludeTurns: true });
+        : fork
+          ? yield* server.request(METHOD.THREAD_FORK, { ...thread, threadId, excludeTurns: true })
+          : yield* server.request(METHOD.THREAD_RESUME, {
+              ...thread,
+              threadId,
+              excludeTurns: true,
+            });
     const opened = decodeThreadAnswer(answer);
     if (Option.isNone(opened)) {
       return yield* new AppServerError({
@@ -723,12 +751,12 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       });
     }
     seen.threadId = opened.value.thread.id;
-    return opened.value.thread.id;
+    return opened.value.thread;
   });
   const openedThread = yield* opened.pipe(
     Effect.tapError(() => Scope.close(serverScope, Exit.void)),
   );
-  return { server, serverScope, threadId: openedThread };
+  return { server, serverScope, threadId: openedThread.id, path: openedThread.path ?? undefined };
 });
 
 /** How many turns a page of the rewind's read back from the thread's end holds. */
@@ -909,6 +937,14 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
   }
 });
 
+/** The rollout's new lines sent to the store, where the launch mirrors it; one the store did not take goes with the next. */
+function mirrored(launch: Pick<CodexLaunch, "mirror">) {
+  if (launch.mirror === undefined) return Effect.void;
+  return mirrorRollout(launch.mirror).pipe(
+    Effect.catch(() => Effect.logWarning("agent-runner: the rollout was not mirrored")),
+  );
+}
+
 /** The turn this launch ran completed: the launch ends, or its unanswered messages start the next turn. */
 const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(function* (
   launch: CodexLaunch,
@@ -916,6 +952,7 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
 ) {
   if (signal.turnId !== launch.turnId) return undefined;
   launch.turnId = undefined;
+  yield* mirrored(launch);
   if (launch.stopping) return ended(RUNNER_END.STOPPED);
   if (signal.status === "failed")
     return ended(RUNNER_END.FAILED, signal.error ?? "the turn failed");
@@ -1055,13 +1092,36 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
     Effect.forkScoped,
   );
+  // A thread resumed or forked has its rollout written back where the sandbox no longer holds it.
+  const codexHome = context.env.CODEX_HOME;
+  const store =
+    config.transcriptsUrl === undefined || codexHome === undefined
+      ? undefined
+      : { store: transcriptStore(config.transcriptsUrl, context.bearer), codexHome };
+  if (store !== undefined && config.threadId !== undefined) {
+    const restored = yield* restoreRollouts(store.store, store.codexHome, config.threadId).pipe(
+      Effect.result,
+    );
+    if (restored._tag === "Failure") {
+      return ended(RUNNER_END.FAILED, "the thread's rollout could not be read from the service");
+    }
+  }
   const opened = yield* openAppServer(
     { context, signals, model: config.model, auth },
     config.threadId,
+    config.fork === true,
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
     return ended(RUNNER_END.FAILED, `${opened.failure.method}: ${opened.failure.detail}`);
   }
+  const { path, ...server } = opened.success;
+  const mirror =
+    store === undefined || path === undefined
+      ? undefined
+      : yield* openRolloutMirror(store.store, store.codexHome, server.threadId, path).pipe(
+          Effect.option,
+          Effect.map(Option.getOrUndefined),
+        );
   if (config.threadId !== undefined && config.rewindBefore !== undefined) {
     yield* revertedBefore(opened.success.server, opened.success.threadId, config.rewindBefore).pipe(
       Effect.catch((error) =>
@@ -1072,7 +1132,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   const launch: CodexLaunch = {
     context,
     signals,
-    ...opened.success,
+    ...server,
     turnId: undefined,
     sent: new Map(),
     waiting: [],
@@ -1083,6 +1143,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     tier: serviceTierOf(config.fast, config.ultrafast),
     stopping: false,
     warm: false,
+    mirror,
   };
 
   // The service's lines join the signals in a loop of their own, so a line is
@@ -1112,5 +1173,6 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   // App-server ends before the launch's last event, so nothing it emits on
   // the way down is numbered after it.
   yield* Scope.close(launch.serverScope, Exit.void);
+  yield* mirrored(launch);
   return outcome;
 });
