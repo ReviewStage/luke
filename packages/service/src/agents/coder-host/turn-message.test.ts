@@ -38,6 +38,9 @@ import { coderTurnMessage } from "./turn-message.js";
 
 const DESCRIPTION_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
+/** What a turn is told of a description last edited before Task descriptions was last turned on. */
+const STALE_WORDS = "before the most recent work; check it against the code before relying on it.";
+
 /** When the agent's first turn starts, which a test reads against its own clock, which starts at nothing. */
 const TURN_STARTS_AT = 10 * 60_000;
 
@@ -123,7 +126,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
   );
 
   it.effect(
-    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the description after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its workspace turned Task descriptions off",
+    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the description after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its workspace turned Task descriptions off, and says so where its last edit predates Task descriptions going back on",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent;
@@ -191,6 +194,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         );
         const changed = (yield* typedAt(nextTurn)) ?? "";
         assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
+        assert.ok(!changed.includes(STALE_WORDS), changed);
         assert.ok(!changed.includes("## This turn is spoken"), changed);
 
         // With Task descriptions off a save hands nothing, and the description is never what a turn reads.
@@ -206,6 +210,8 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         yield* experimentInTestWorkspace(userId, EXPERIMENT.DESCRIPTIONS);
         const back = (yield* typedAt(randomUUID())) ?? "";
         assert.ok(back.includes("Only admins withdraw invites."), back);
+        // Its last edit came while Task descriptions was off, so it is said to predate the work since.
+        assert.ok(back.includes(STALE_WORDS), back);
       }),
   );
 });

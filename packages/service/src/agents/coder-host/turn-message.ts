@@ -27,7 +27,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
-import { experimentOnIn } from "../workspace-experiment-on.js";
+import { experimentOnSinceIn } from "../workspace-experiment-on.js";
 import {
   handedAfterCompaction,
   savedByAnotherSince,
@@ -97,7 +97,11 @@ const taskOf = (
   Effect.gen(function* () {
     const { taskId } = agent;
     if (taskId === null) return undefined;
-    const descriptionsOn = yield* experimentOnIn(agent.organizationId, EXPERIMENT.DESCRIPTIONS);
+    const descriptionsSince = yield* experimentOnSinceIn(
+      agent.organizationId,
+      EXPERIMENT.DESCRIPTIONS,
+    );
+    const descriptionsOn = Option.isSome(descriptionsSince);
     const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
@@ -128,7 +132,15 @@ const taskOf = (
       return { key: opening ? handed.task : key, text: undefined };
     }
     const clock = { now, timeZone: admitted.timeZone };
-    const text = taskWithLead(standingContext(stored.value, clock, threads, descriptionsOn));
+    const text = taskWithLead(
+      standingContext(
+        stored.value,
+        clock,
+        threads,
+        descriptionsOn,
+        Option.getOrUndefined(descriptionsSince),
+      ),
+    );
     return { key, text };
   }).pipe(
     Effect.tapError(logStoreFailure),

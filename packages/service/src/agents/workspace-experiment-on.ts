@@ -18,7 +18,7 @@ import {
   workspaceExperimentsOf,
 } from "@repo/database/models/workspace-experiment-store";
 import { EXPERIMENT, type WorkspaceExperiment } from "@repo/settings";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
@@ -32,6 +32,26 @@ export function experimentOnIn(
   return workspaceExperimentOn(workspaceId, experiment).pipe(
     Effect.tapError(logStoreFailure),
     Effect.orElseSucceed(() => false),
+  );
+}
+
+/**
+ * When the workspace last turned the experiment on, in epoch milliseconds,
+ * where it stands on; none where it is off. Where it cannot be read, it is
+ * off, logged for the operator.
+ */
+export function experimentOnSinceIn(
+  workspaceId: string,
+  experiment: WorkspaceExperiment,
+): Effect.Effect<Option.Option<number>, never, DatabaseServices> {
+  return workspaceExperimentsOf(workspaceId).pipe(
+    Effect.map((standings) =>
+      Option.fromUndefinedOr(
+        standings.find((standing) => standing.experiment === experiment && standing.on),
+      ).pipe(Option.map((standing) => standing.changedAt.getTime())),
+    ),
+    Effect.tapError(logStoreFailure),
+    Effect.orElseSucceed(() => Option.none()),
   );
 }
 
