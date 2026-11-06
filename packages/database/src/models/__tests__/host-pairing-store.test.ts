@@ -18,7 +18,7 @@ import {
   pollHostPairing,
   readHostPairing,
 } from "../host-pairing-store.js";
-import { enrollOwnDevice, hostBySecret, hostsOf } from "../host-store.js";
+import { enrollOwnDevice, hostBySecret, hostsOf, removeHost } from "../host-store.js";
 
 /**
  * A box's pairings, over a real dialect: once one account approved or
@@ -28,7 +28,9 @@ import { enrollOwnDevice, hostBySecret, hostsOf } from "../host-store.js";
  * grace is handed no secret; and a start deletes a lapsed pairing, the
  * address it kept with it, a host whose box never collected its secret, and
  * a guess window that ended, while a keyed host, a live pairing, the host
- * it approved, and a window still open stay.
+ * it approved, and a window still open stay; and a host whose box never
+ * collected its secret leaves the list as its pairing lapses, before any
+ * start deletes it.
  * Synthetic accounts, codes, hashes, addresses, and boxes throughout.
  */
 
@@ -118,6 +120,31 @@ it.layer(getTestDB())("a box's pairings", (it) => {
       assert.equal((yield* readHostPairing(owner, pairing.userCode)).guess, "found");
       assert.deepEqual(yield* hostsOf(owner), []);
     }),
+  );
+
+  it.effect(
+    "a host whose box never collected its secret is listed until its pairing lapses, with no start, and is not removed after",
+    () =>
+      Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        const collected = yield* opened;
+        const uncollected = yield* opened;
+        const [collectedId, uncollectedId] = [randomUUID(), randomUUID()];
+        yield* approveHostPairing(owner, collected.userCode, collectedId);
+        yield* approveHostPairing(owner, uncollected.userCode, uncollectedId);
+        yield* pollHostPairing(collected.pollSecretHash, `secret-${randomUUID()}`);
+
+        yield* TestClock.adjust("9 minutes");
+        const beforeLapse = (yield* hostsOf(owner)).map((host) => host.id).sort();
+        yield* TestClock.adjust("1 minute");
+
+        assert.deepEqual(beforeLapse, [collectedId, uncollectedId].sort());
+        assert.deepEqual(
+          (yield* hostsOf(owner)).map((host) => host.id),
+          [collectedId],
+        );
+        assert.equal(yield* removeHost(owner, uncollectedId), undefined);
+      }),
   );
 
   it.effect(
