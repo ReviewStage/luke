@@ -263,7 +263,7 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
           "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid";
         const listener =
           "   0: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002";
-        /** Vercel with the session's sandbox in the status given, its tables printing the rows given, and the checkout's `.vespin.json` naming `pnpm dev`. */
+        /** Vercel with the session's sandbox in the status given, its tables printing the rows given, and the checkout's `.vespin.json` naming `pnpm dev` where no row listens. */
         const forwarding = (status: string, rows: readonly string[]) => {
           const started: { readonly url: URL; readonly body: Record<string, unknown> }[] = [];
           const resumed: URL[] = [];
@@ -280,9 +280,13 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
                     return Response.json({ command: { id: "cmd_run", exitCode: null } });
                   }
                   const [file] = body.args;
-                  return file === "/workspace/repository/.vespin.json"
-                    ? commandStream(0, '{ "run": "pnpm dev" }')
-                    : commandStream(0, [header, ...rows].join("\n"));
+                  if (file !== "/workspace/repository/.vespin.json") {
+                    return commandStream(0, [header, ...rows].join("\n"));
+                  }
+                  // Where a port listens the file is never read, so a read there fails the call.
+                  return rows.length > 0
+                    ? new Response(null, { status: 503 })
+                    : commandStream(0, '{ "run": "pnpm dev" }');
                 }
                 if (init.method === "PATCH") return Response.json({ sandbox: { name: SANDBOX } });
                 if (parsed.searchParams.get("resume") === "true") {
