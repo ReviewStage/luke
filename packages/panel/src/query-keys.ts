@@ -35,6 +35,7 @@ export const QUERY_ROOT = {
   TASK_FILE: "task-file",
   TASK_TREE: "task-tree",
   PAGE_SOURCE: "page-source",
+  CODE_COLORING: "code-coloring",
   /** The one-off reads asked as a reader acts (`tasks/agent-reads.ts`). */
   AGENT_PAGE: "agent-page",
   INBOX_ITEM_HOME: "inbox-item-home",
