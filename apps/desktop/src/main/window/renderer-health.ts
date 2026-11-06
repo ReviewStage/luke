@@ -293,34 +293,36 @@ export function sampleProcessCpu(
       windowStates = new Map();
       agentRungs = new Map();
     };
-    const sample = Effect.map(Clock.currentTimeMillis, (at) => {
-      const cpuSeconds = new Map<number, number>();
-      const byKind = new Map<ProcessKind, number>();
-      for (const metric of app.getAppMetrics()) {
-        const kind = KIND_OF_PROCESS_TYPE[metric.type];
-        const seconds = metric.cpu.cumulativeCPUUsage;
-        if (kind === undefined || seconds === undefined) continue;
-        cpuSeconds.set(metric.pid, seconds);
-        const before = last?.cpuSeconds.get(metric.pid);
-        if (last === undefined || before === undefined || at <= last.at) continue;
-        const percent = (100 * Math.max(0, seconds - before) * 1000) / (at - last.at);
-        byKind.set(kind, (byKind.get(kind) ?? 0) + percent);
-      }
-      if (last !== undefined) {
-        for (const [kind, percent] of byKind) {
-          const samples = percents.get(kind) ?? [];
-          samples.push(percent);
-          percents.set(kind, samples);
+    const sample = Effect.flatMap(Clock.currentTimeMillis, (at) =>
+      Effect.sync(() => {
+        const cpuSeconds = new Map<number, number>();
+        const byKind = new Map<ProcessKind, number>();
+        for (const metric of app.getAppMetrics()) {
+          const kind = KIND_OF_PROCESS_TYPE[metric.type];
+          const seconds = metric.cpu.cumulativeCPUUsage;
+          if (kind === undefined || seconds === undefined) continue;
+          cpuSeconds.set(metric.pid, seconds);
+          const before = last?.cpuSeconds.get(metric.pid);
+          if (last === undefined || before === undefined || at <= last.at) continue;
+          const percent = (100 * Math.max(0, seconds - before) * 1000) / (at - last.at);
+          byKind.set(kind, (byKind.get(kind) ?? 0) + percent);
         }
-        count(windowStates, windowStateNow());
-        count(agentRungs, workingAgentsRung(workingAgents()));
-      }
-      last = { at, cpuSeconds };
-      spanStart ??= at;
-      if (at - spanStart < Duration.toMillis(CPU_SUMMARY_SPAN)) return;
-      summarize();
-      spanStart = at;
-    });
+        if (last !== undefined) {
+          for (const [kind, percent] of byKind) {
+            const samples = percents.get(kind) ?? [];
+            samples.push(percent);
+            percents.set(kind, samples);
+          }
+          count(windowStates, windowStateNow());
+          count(agentRungs, workingAgentsRung(workingAgents()));
+        }
+        last = { at, cpuSeconds };
+        spanStart ??= at;
+        if (at - spanStart < Duration.toMillis(CPU_SUMMARY_SPAN)) return;
+        summarize();
+        spanStart = at;
+      }),
+    );
     return Effect.asVoid(Effect.repeat(sample, Schedule.spaced(CPU_SAMPLE_INTERVAL)));
   });
 }
