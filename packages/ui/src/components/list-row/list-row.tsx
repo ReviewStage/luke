@@ -973,7 +973,8 @@ export function ListRow({
         data-depth={depth === 0 ? undefined : depth}
         onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(rowMenu.doors, {})}
-        style={rowProperties(depth)}
+        // Note that the row stands where its run places it (`VirtualRows`), its depth's own property beside that.
+        style={{ ...place?.style, ...rowProperties(depth) }}
       >
         {row}
       </li>
