@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -27,6 +26,7 @@ import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
+import { onRegistry } from "./testing/copy-feedback.js";
 import { appStateFirstRead } from "./use-app-state.js";
 
 /**
@@ -116,11 +116,7 @@ function drawWindow(profile: string): Effect.Effect<void> {
     yield* Effect.orDie(appStateFirstRead);
     yield* Effect.promise(loadTasksFixture);
     root = createRoot(document.body.appendChild(document.createElement("div")));
-    act(() =>
-      root?.render(
-        createElement(RegistryContext.Provider, { value: rendererRegistry }, createElement(App)),
-      ),
-    );
+    act(() => root?.render(onRegistry(rendererRegistry, createElement(App))));
     yield* Effect.promise(settle);
   });
 }
