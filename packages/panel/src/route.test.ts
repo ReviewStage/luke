@@ -5,11 +5,13 @@ import {
   addressOf,
   HERE,
   type Here,
+  type Listed,
   ROUTE,
   type Route,
   route,
   THING,
   type Thing,
+  withListedAgent,
 } from "./route.js";
 
 /**
@@ -22,6 +24,8 @@ import {
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
+const SUBTASK = "1d3f5b7a-9c2e-4f6a-8b0d-3e5a7c9b1d4f";
+const SUBTASK_AGENT = "9e1b3d5f-7a2c-4e8b-a0d2-4f6b8d0a2c5e";
 const PAGE = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
 const CALL = "toolu_01";
 const THREAD = "PRRT_kwDOA1";
@@ -52,15 +56,19 @@ const TASKLESS_ITEM: Here = {
 const ON_TASK: Here = { kind: HERE.TASK, taskId: TASK, ...HOLDING };
 const ON_AGENT: Here = { kind: HERE.AGENT, agentId: AGENT, ...HOLDING };
 
-/** The window, listing the task, and an agent on no task, which opened the pull request numbered 43. */
-const WINDOW: Here = {
-  kind: HERE.WINDOW,
-  opensPlaces: true,
-  listed: {
-    tasks: [{ taskId: TASK, pullRequests: [{ url: PR, agentId: AGENT }] }],
-    agents: [{ id: OTHER, pullRequest: { url: "https://github.com/acme/relay/pull/43" } }],
-  },
+/** What the window lists, which names every address pressed: the task; its subtask, whose agent opened the pull request numbered 44; and an agent on no task, which opened the one numbered 43. */
+const LISTED: Listed = {
+  tasks: [
+    { taskId: TASK, pullRequests: [{ url: PR, agentId: AGENT }] },
+    {
+      taskId: SUBTASK,
+      pullRequests: [{ url: "https://github.com/acme/relay/pull/44", agentId: SUBTASK_AGENT }],
+    },
+  ],
+  agents: [{ id: OTHER, pullRequest: { url: "https://github.com/acme/relay/pull/43" } }],
 };
+
+const WINDOW: Here = { kind: HERE.WINDOW, opensPlaces: true };
 
 /** The Tasks tab showing the task with nothing over its plan. */
 const STANDING: Here = { kind: HERE.TASKS_TAB, taskId: TASK };
@@ -273,6 +281,12 @@ it.each<[string, string, Here, Route]>([
     preview({ kind: THING.PULL_REQUEST, agentId: AGENT, number: 41 }),
   ],
   [
+    "a task: its subtask's pull request, as that task's row names it, the window's, which opens it in that task's agent's tab",
+    "https://github.com/acme/relay/pull/44",
+    ON_TASK,
+    NOTHING,
+  ],
+  [
     "a task: a pull request of another repository, the window's",
     "https://github.com/acme/other/pull/41",
     ON_TASK,
@@ -366,7 +380,7 @@ it.each<[string, string, Here, Route]>([
   [
     "outside the window: an app link, to the browser",
     `${APP}/agent/${AGENT}`,
-    { kind: HERE.WINDOW, opensPlaces: false, listed: undefined },
+    { kind: HERE.WINDOW, opensPlaces: false },
     { kind: ROUTE.EXTERNAL, href: `${APP}/agent/${AGENT}` },
   ],
   [
@@ -427,5 +441,5 @@ it.each<[string, string, Here, Route]>([
     go({ workspace: "acme", place: { kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT } }),
   ],
 ])("%s", (_, href, here, expected) => {
-  assert.deepEqual(route(addressOf(href), here), expected);
+  assert.deepEqual(route(withListedAgent(addressOf(href), LISTED), here), expected);
 });
