@@ -8,10 +8,6 @@ import type { AgentDefaultAnswer } from "@repo/features/agent-view";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import type {
-  ChaptersModelAnswerView,
-  ChaptersModelWriteParams,
-} from "@repo/features/pull-request-chapters-view";
-import type {
   TasksWorkspaceSlackBotAnswer,
   TasksWorkspaceSlackBotNotificationsParams,
 } from "@repo/features/tasks-view";
@@ -215,29 +211,6 @@ export function agentDefaultWritten(
         "choice" in answer
           ? { answer: carried<AgentDefaultAnswer>(answer), txid: answer.txid }
           : { refused: carried<AgentDefaultAnswer>(answer) },
-      ),
-  };
-}
-
-/** The account's chapters model drawn at once over its row, sent as `send` asks, standing until the read carries the transaction it committed in. */
-export function chaptersModelWritten(
-  send: (write: ChaptersModelWriteParams) => Effect.Effect<ChaptersModelAnswerView>,
-  readerId: () => string | undefined,
-): WriteDeclaration<
-  AccountPreferencesPoolRow,
-  PreferencesChange,
-  ChaptersModelWriteParams,
-  WireValue
-> {
-  return {
-    kind: ACCOUNT_PREFERENCES,
-    keys: () => readerRow(readerId),
-    change: (write) => () => ({ chaptersModel: write.model }),
-    send: (write) =>
-      Effect.map(send(write), (answer) =>
-        "model" in answer
-          ? { answer: carried<ChaptersModelAnswerView>(answer), txid: answer.txid }
-          : { refused: carried<ChaptersModelAnswerView>(answer) },
       ),
   };
 }
