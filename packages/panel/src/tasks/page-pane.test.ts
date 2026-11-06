@@ -1,18 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { LINK_ORIGIN } from "@repo/features/link-home";
-import type { pageFindAnswerSchema } from "@repo/features/page-find";
-import { pageFrameUrl } from "@repo/features/page-frame";
-import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@repo/features/page-pick";
-import type { PageLine, PagePlace } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTOR,
   DESCRIPTION_COMMENT_ENTRY,
   DESCRIPTION_COMMENT_SCOPE,
   DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentStart,
   type DescriptionCommentThread,
 } from "@repo/features/description-comment-wire";
+import { LINK_ORIGIN } from "@repo/features/link-home";
+import type { pageFindAnswerSchema } from "@repo/features/page-find";
+import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@repo/features/page-pick";
+import type { PageLine, PagePlace } from "@repo/features/page-wire";
 import {
   type CodeLines,
   TASK_CALL_FAILURE,
@@ -21,17 +22,21 @@ import {
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
+import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { useDraftsOwner } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { EDITOR_ROOT_SELECTOR } from "../description-editor/contract.js";
 import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane } from "./page-pane.js";
@@ -81,6 +86,12 @@ function answerSources(read: ReadPageSource): void {
   fakeActPort({ [ACT_KIND.TASKS_PAGE_SOURCE]: (payload) => read(payload.version) });
 }
 
+/** The account signed in to the window, as the panel's root hands it what the window keeps for it, a review's held comments among it. */
+function SignedIn(): null {
+  useDraftsOwner({ id: "u-dean", email: "dean@example.com" });
+  return null;
+}
+
 /** Mounts the pane over the page as the task lists it, its links written under `acme`, answering what it draws and a way to list it again. */
 function mount(
   page: PageLine,
@@ -117,6 +128,7 @@ function mount(
                   held = actions;
                 },
               },
+              createElement(SignedIn),
               createElement(PagePane, {
                 place,
                 page: listed,
@@ -585,3 +597,165 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   );
   assert.ok(standing === null, "the comment being started goes");
 });
+
+test("a comment held in a review stands in the Review panel under its element's words, never in the comments column; Send review starts it held, then the summary naming it along, and a summary refused leaves the comment posted fixed, so Retry sends the summary alone and closes the panel", async () => {
+  const starts: DescriptionCommentStart[] = [];
+  // Note that the service refuses the summary the first time it is sent.
+  let refusals = 1;
+  const control: DescriptionCommentsControl = {
+    planId: TASK,
+    threads: [],
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async (start) => {
+      starts.push(start);
+      if (start.words === "Ship it once these are in." && refusals > 0) {
+        refusals -= 1;
+        return { note: "The service is unavailable." };
+      }
+      return {
+        thread: {
+          id: start.id ?? start.clientKey,
+          scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
+          quote: "Totals",
+          section: "",
+          status: DESCRIPTION_COMMENT_STATUS.OPEN,
+          entries: [],
+          createdAt: 1,
+          updatedAt: 1,
+          revision: 1,
+        },
+      };
+    },
+    act: async () => true,
+  };
+  const { container, frame, press } = mount(
+    FUNNEL,
+    readSource,
+    true,
+    { taskId: TASK },
+    {
+      control,
+      doors: { agents: undefined, me: "u-dean" },
+    },
+  );
+  const box = { left: 10, top: 20, right: 200, bottom: 40 };
+  act(() => {
+    frame().dispatchEvent(new Event("load"));
+  });
+  await press("Comment on the page");
+  // Note that the summary's editor reads the platform off the navigator, so the stand-in keeps it.
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    platform: navigator.platform,
+    userAgent: navigator.userAgent,
+    userActivation: { isActive: true },
+  });
+  postFrom(frame().contentWindow, {
+    type: PAGE_PICK_TYPE,
+    picked: { path: "body > h2:nth-of-type(1)", quote: "Totals", section: "", box },
+  });
+  const field = container.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Add a comment"]',
+  );
+  assert.ok(field, "the comment is started by the element");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      field,
+      "Per week?",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => buttonNamed(container, "Start a review").click());
+
+  await press("Show comments");
+  const column = container.querySelector(".page-comments-column");
+  assert.ok(column, "the comments column stands");
+  assert.doesNotMatch(
+    column.textContent ?? "",
+    /Per week\?/,
+    "the column lists posted threads alone",
+  );
+
+  await press("Review, 1 pending comment");
+  const panel = document.querySelector<HTMLElement>('[role="dialog"]');
+  assert.ok(panel, "Review opens its panel");
+  const held = panel.querySelector("ol");
+  assert.ok(held, "the panel lists the held comment");
+  assert.match(held.textContent ?? "", /Totals/, "under its element's words");
+  assert.match(held.textContent ?? "", /Per week\?/);
+  // The summary's editor stands once its bundle has loaded, a turn after the panel opens.
+  const summary = await vi.waitFor(
+    () =>
+      panel.querySelector<TiptapEditorHTMLElement>(
+        `${EDITOR_ROOT_SELECTOR}[aria-label="Review comment"]`,
+      )?.editor ?? assert.fail("the panel takes a summary"),
+  );
+  act(() => {
+    summary.commands.setContent("Ship it once these are in.", { contentType: "markdown" });
+  });
+  // An edit standing open holds the review back until it is saved or canceled.
+  await act(async () =>
+    (
+      held.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      assert.fail("the held comment offers its ⋯")
+    ).click(),
+  );
+  chooseMenuItem("Edit");
+  assert.equal(buttonNamed(panel, "Send review").disabled, true, "Send waits on the edit");
+  await act(async () => buttonNamed(held, "Cancel").click());
+  assert.equal(buttonNamed(panel, "Send review").disabled, false, "Send stands once it is let go");
+  await act(async () => buttonNamed(panel, "Send review").click());
+  // Note that each start waits on the one before, so the summary goes once the held comment has landed.
+  await vi.waitFor(() => assert.equal(starts.length, 2));
+  await vi.waitFor(() => assert.match(panel.textContent ?? "", /could not be sent/u));
+  // Note that the refused summary now stands held after it, editable as any comment not yet sent.
+  const posted = held.querySelector("li");
+  assert.match(posted?.textContent ?? "", /Per week\?/u);
+  assert.equal(
+    posted?.querySelector('button[aria-label="Comment actions"]') === null,
+    true,
+    "the comment posted already is neither edited nor deleted",
+  );
+
+  await act(async () => buttonNamed(panel, "Retry").click());
+  await vi.waitFor(() => assert.equal(starts.length, 3));
+
+  assert.deepEqual(
+    starts.map((start) => ({
+      element: "element" in start ? start.element?.path : undefined,
+      words: start.words,
+      held: "held" in start ? start.held : undefined,
+      along: "along" in start ? start.along : undefined,
+    })),
+    [
+      { element: "body > h2:nth-of-type(1)", words: "Per week?", held: true, along: undefined },
+      {
+        element: undefined,
+        words: "Ship it once these are in.",
+        held: undefined,
+        along: [starts[0]?.clientKey],
+      },
+      {
+        element: undefined,
+        words: "Ship it once these are in.",
+        held: undefined,
+        along: [starts[0]?.clientKey],
+      },
+    ],
+  );
+  assert.equal(starts[2]?.clientKey, starts[1]?.clientKey, "the summary goes again under its key");
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('[role="dialog"]'), null, "the panel closes"),
+  );
+});
+
+/** The button inside `within` whose words are `words`. */
+function buttonNamed(within: ParentNode, words: string): HTMLButtonElement {
+  const found = [...within.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent?.trim() === words,
+  );
+  return found ?? assert.fail(`a button named ${words}`);
+}
