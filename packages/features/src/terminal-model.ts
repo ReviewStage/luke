@@ -26,10 +26,8 @@ export const TERMINAL_STATE = {
   RECONNECTING: "reconnecting",
   /** Ended after ten minutes with nothing typed, printed, or shown, or by the host as a sign-out ends it; a key reconnects. */
   IDLE: "idle",
-  /** The sandbox is stopped; only the developer's click resumes it. */
+  /** The sandbox is stopped; the tab resumes it once it is shown. */
   STOPPED: "stopped",
-  /** Resume was asked for and has not answered. */
-  RESUMING: "resuming",
   /** The agent has not opened its sandbox yet. */
   STARTING: "starting",
   /** The shell ended; a key opens a new one. */
@@ -64,29 +62,22 @@ export type TerminalState =
   | {
       readonly kind: Exclude<
         TerminalStateKind,
-        | typeof TERMINAL_STATE.EXITED
-        | typeof TERMINAL_STATE.RESUMING
-        | typeof TERMINAL_STATE.UNREACHABLE
+        typeof TERMINAL_STATE.EXITED | typeof TERMINAL_STATE.UNREACHABLE
       >;
     }
   | { readonly kind: typeof TERMINAL_STATE.EXITED; readonly code: number | undefined }
-  | { readonly kind: typeof TERMINAL_STATE.RESUMING; readonly since: number }
   | { readonly kind: typeof TERMINAL_STATE.UNREACHABLE; readonly why: TerminalUnreached };
 
 /** What the bar's one action does. */
 export const TERMINAL_ACTION = {
   RETRY: "retry",
-  RESUME: "resume",
 } as const;
 
 export type TerminalAction = (typeof TERMINAL_ACTION)[keyof typeof TERMINAL_ACTION];
 
-/** The slim bar over the screen: its words, a note after them, its one action, and whether it is waiting on something. */
+/** The slim bar over the screen: its words, its one action, and whether it is waiting on something. */
 export interface TerminalBar {
   readonly words: string;
-  readonly note?: string | undefined;
-  /** When what the bar waits on began, which its note counts from in place of words. */
-  readonly since?: number | undefined;
   readonly action?: { readonly kind: TerminalAction; readonly label: string } | undefined;
   readonly busy: boolean;
   /** Whether it shows only once the state has held a second, so a blip that heals at once is never seen. */
@@ -102,11 +93,7 @@ export interface TerminalLook {
   readonly dim: boolean;
 }
 
-/** About how long a stopped sandbox takes to resume from its snapshot, which the stopped bar says before the click. */
-const RESUME_TAKES = "~5 s";
-
 const RETRY = { kind: TERMINAL_ACTION.RETRY, label: "Retry now" } as const;
-const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as const;
 
 /** What the unreachable bar says, by why. */
 const UNREACHED_WORDS = {
@@ -167,27 +154,10 @@ export function terminalLook(state: TerminalState): TerminalLook {
         dim: true,
       };
     case TERMINAL_STATE.STOPPED:
+      // Note that it draws no bar, because a tab shown is resuming it already, and a hidden tab draws nothing.
       return {
         words: "sandbox stopped",
-        bar: {
-          words: "Sandbox stopped.",
-          note: RESUME_TAKES,
-          action: RESUME,
-          busy: false,
-          late: false,
-        },
-        phoneBar: undefined,
-        dim: true,
-      };
-    case TERMINAL_STATE.RESUMING:
-      return {
-        words: "resuming…",
-        bar: {
-          words: "Resuming sandbox… restoring snapshot",
-          since: state.since,
-          busy: true,
-          late: false,
-        },
+        bar: undefined,
         phoneBar: undefined,
         dim: true,
       };

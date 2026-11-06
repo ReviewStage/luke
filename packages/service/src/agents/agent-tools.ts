@@ -21,8 +21,8 @@ import {
   type StoredMessageRecord,
   turnStoppedUnderReached,
 } from "@repo/database/models/message-reads";
-import { readPageById } from "@repo/database/models/task-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
+import { readPageById } from "@repo/database/models/task-pages";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
   deleteTask,
@@ -579,10 +579,17 @@ export const AGENT_CALLER = {
  * said: a coding agent, acting for the member who started it, on its own
  * task; or a member, as an outside agent acts for them through the member
  * MCP server (`../member-mcp/`) on a token minted to an OAuth client, in the
- * one workspace the call is about, on no task and as no agent.
+ * one workspace the call is about, on no task and as no agent. A coding
+ * agent carries whether it reaches tasks' descriptions, read once with the
+ * rest of its standing by the catalog (`tool-catalog/gates.ts`); a member's
+ * own Task descriptions are read where a tool needs them.
  */
 export type AgentCaller =
-  | { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: Agent }
+  | {
+      readonly kind: typeof AGENT_CALLER.AGENT;
+      readonly agent: Agent;
+      readonly descriptionsOn: boolean;
+    }
   | {
       readonly kind: typeof AGENT_CALLER.MEMBER;
       readonly userId: string;

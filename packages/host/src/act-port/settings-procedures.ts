@@ -8,9 +8,17 @@ import {
 import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect, Option } from "effect";
-import { SETTINGS_ACT_KIND } from "../contract/index.js";
+import {
+  type ActInput,
+  type ActOutput,
+  type AnyHostAct,
+  SETTINGS_ACT_KIND,
+  SETTINGS_ACTS,
+} from "../contract/index.js";
+import { type ActHandler, ActReporter, type HostActTable } from "../host-acts.js";
 import type { HostOperator } from "../host-operator.js";
 import { type ActSender, actPort } from "./base.js";
+import { declaredAnswer } from "./declared-acts.js";
 
 /** What one client-side effect is handed: the snapshot. */
 interface ClientSettingSideEffectContext {
@@ -32,16 +40,16 @@ export type ClientSettingSideEffects = Readonly<
 /**
  * settings-procedures.ts -- the settings writes as a client answers them.
  *
- * Each write is carried to the host, which stores it, applies its own side
- * effects, counts it, and tells every other window; and then applied through
- * the client's own side effects, the ones only it has hands on (the
- * desktop's login item).
+ * Each write is answered by its declared handler (`contract/settings.ts`)
+ * under the reporter naming the window that asked: the host stores it,
+ * applies its own side effects, counts it, and tells every other window;
+ * and then it is applied through the client's own side effects, the ones
+ * only it has hands on (the desktop's login item).
  */
 export interface SettingsProceduresDependencies {
-  host: Pick<
-    HostOperator,
-    "settingsSnapshot" | "updateSetting" | "resetSettings" | "setExperiment"
-  >;
+  host: Pick<HostOperator, "settingsSnapshot">;
+  /** The settings writes' handlers, which these procedures answer around. */
+  acts: Pick<HostActTable, "SETTING_UPDATE" | "SETTINGS_RESET" | "EXPERIMENT_SET">;
   /**
    * The opaque token naming the window that asked, so the host's change
    * event is not echoed back to it; undefined for a sender the platform does
@@ -58,7 +66,7 @@ export interface SettingsProceduresDependencies {
 type Refused = (options?: { message?: string }) => ORPCError<string, unknown>;
 
 export function settingsProcedures(dependencies: SettingsProceduresDependencies) {
-  const { host, reporterOf, lastSettings, sideEffects } = dependencies;
+  const { host, acts, reporterOf, lastSettings, sideEffects } = dependencies;
 
   /**
    * A refusal decided here rather than by the host: the settings as they
@@ -94,7 +102,7 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
    */
   const write = (
     refused: Refused,
-    save: Effect.Effect<SettingsUpdateResult>,
+    save: Effect.Effect<SettingsUpdateResult, unknown>,
     apply?: (result: SettingsUpdateResult) => Effect.Effect<void, unknown>,
   ): Effect.Effect<SettingsUpdateResult, ORPCError<string, unknown>> =>
     save.pipe(
@@ -116,6 +124,15 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
     return reporter === undefined ? Effect.fail(refused()) : Effect.succeed(reporter);
   };
 
+  /** One write's declared answer, asked under the reporter naming the window that asked. */
+  const asked = <Act extends AnyHostAct>(
+    act: Act,
+    handler: ActHandler<Act>,
+    input: ActInput<Act>,
+    reporter: string,
+  ): Effect.Effect<ActOutput<Act>, unknown> =>
+    Effect.provideService(declaredAnswer(act, handler, input), ActReporter, reporter);
+
   /** The side effects the client has hands on; the host applied its own before answering. A row of the table answers a value or a promise, settled by one door. */
   function applyClientSettingSideEffect(
     field: AppSettingField,
@@ -133,8 +150,7 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
         const reporter = yield* reporterFor(context.actor, errors.REFUSED);
         return yield* write(
           errors.REFUSED,
-          // SAFETY: the procedure's own input schema parsed this value for this field.
-          host.updateSetting(input.field, input.value as never, reporter),
+          asked(SETTINGS_ACTS.SETTING_UPDATE, acts.SETTING_UPDATE, input, reporter),
           (result) =>
             result.reason
               ? Effect.void
@@ -148,7 +164,7 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
         const reporter = yield* reporterFor(context.actor, errors.REFUSED);
         return yield* write(
           errors.REFUSED,
-          host.setExperiment(input.experiment, input.on, reporter),
+          asked(SETTINGS_ACTS.EXPERIMENT_SET, acts.EXPERIMENT_SET, input, reporter),
         );
       },
     ),
@@ -157,7 +173,7 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
         const reporter = yield* reporterFor(context.actor, errors.REFUSED);
         return yield* write(
           errors.REFUSED,
-          host.resetSettings(input.scope, input.kept, reporter),
+          asked(SETTINGS_ACTS.SETTINGS_RESET, acts.SETTINGS_RESET, input, reporter),
           (result) =>
             result.reason
               ? Effect.void

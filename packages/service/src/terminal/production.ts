@@ -24,7 +24,6 @@ import { HttpClient } from "effect/http";
 import { controlsAgent } from "../agents/agent-reach.js";
 import type { AgentImage } from "../agents/coder-host/agent-image.js";
 import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
-import { agentTurnUnderWay } from "../agents/coder-host/snapshot.js";
 import { connectPty } from "../agents/sandbox-pty.js";
 import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
@@ -66,7 +65,6 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
               sessionId: session?.sessionId,
               repositoryCredential: run(agentRepositoryToken(target, agent)),
               memberToken: agent.githubAccess === GITHUB_ACCESS.TOKEN,
-              turnUnderWay: run(agentTurnUnderWay(agent.conversationId)),
             });
           }),
         ),

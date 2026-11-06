@@ -332,6 +332,8 @@ export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
 
 export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
 
+export type ServerAgentStartKind = Values<typeof SERVER_AGENT_START_KIND>;
+
 export type ServerSkillAction = Values<typeof SERVER_SKILL_ACTION>;
 
 export type ServerAgentTool = Values<typeof SERVER_AGENT_TOOL>;

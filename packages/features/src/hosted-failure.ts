@@ -29,7 +29,7 @@ import {
 import { Schema } from "effect";
 import { ANY_PROCEDURE_REFUSALS } from "./contract/base.js";
 import { HOSTED_REFUSAL_DATA, refusalCarriesData } from "./contract/errors.js";
-import { procedureOutputWire } from "./contract/output-schema.js";
+import { procedureOutputWire } from "./contract/output-wire.js";
 import { type FailureFacts, failureFactsSchema } from "./failure-facts.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import type { HostedApiError } from "./service-wire.js";

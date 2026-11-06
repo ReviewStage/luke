@@ -16,7 +16,6 @@ import {
   integrationLabelUnread,
 } from "@repo/features/integration-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { carried } from "@repo/gateway";
 import {
   type EntityPool,
   type FieldChange,
@@ -24,7 +23,6 @@ import {
   type HeldRows,
   type WriteDeclaration,
 } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Duration, Effect, Queue, Schedule, Schema, type Scope, Stream } from "effect";
 import { type AppIntegrations, NO_KEYS_HELD } from "./app-state.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -368,7 +366,7 @@ export function integrationRename(
   IntegrationLiveRow,
   FieldChange<IntegrationLiveRow>,
   IntegrationRename,
-  WireValue
+  IntegrationAccountView
 > {
   return {
     kind: INTEGRATION,
@@ -376,10 +374,10 @@ export function integrationRename(
     change: (rename) => () => ({ label: rename.label }),
     send: (rename) =>
       Effect.map(send(rename), (answer) => {
-        if ("failure" in answer) return { refused: carried<IntegrationAccountView>(answer) };
+        if ("failure" in answer) return { refused: answer };
         const kept = answer.account.label;
         return {
-          answer: carried<IntegrationAccountView>(answer),
+          answer,
           txid: carries(rename, kept) ? undefined : answer.txid,
           ...(kept === undefined ? undefined : { standsAs: () => ({ label: kept }) }),
         };

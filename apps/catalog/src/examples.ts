@@ -142,6 +142,7 @@ import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLBARS_EXAMPLE } from "./examples/toolbars";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
+import { TURN_ENDS_EXAMPLE } from "./examples/turn-ends";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 import { VIDEO_PLAYER_EXAMPLE } from "./examples/video-player";
 import { WRITING_GLYPHS_EXAMPLE } from "./examples/writing-glyphs";
@@ -219,6 +220,7 @@ export const EXAMPLES: readonly Example[] = [
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
   FAILURE_NOTES_EXAMPLE,
+  TURN_ENDS_EXAMPLE,
   FILE_PICKERS_EXAMPLE,
   FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,

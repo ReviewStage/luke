@@ -151,11 +151,15 @@ const TASKS = [
   task(35, "Migrate auth SDK", TASK_STATUS.DONE, TASK_PRIORITY.HIGH),
 ];
 
+/** When a reminder set for later comes due: long after any run of these tests. */
+const REMIND_AT = Date.UTC(2100, 0, 1);
+
 /**
  * Main's read of the open items that wait on the reader: two questions on
  * the invitations' task; on Safari's a notice, beside a question of
  * Charles's agent that waits on him alone, so main lists it nowhere and
- * counts it only among the task's items; and one question on billing's.
+ * counts it only among the task's items; and one question on billing's,
+ * which Dean set a reminder on for later.
  */
 const WAITING: readonly AppInboxTask[] = [
   {
@@ -178,15 +182,22 @@ const WAITING: readonly AppInboxTask[] = [
   {
     taskId: "t-40",
     items: [
-      { id: "i-5", agentId: "a-4", title: "Refund the difference?", postedAt: 1, asking: true },
+      {
+        id: "i-5",
+        agentId: "a-4",
+        title: "Refund the difference?",
+        postedAt: 1,
+        asking: true,
+        remindAt: REMIND_AT,
+      },
     ],
   },
 ];
 
-/** What main counts on each of those tasks as Dean's to do. */
+/** What main counts on each of those tasks as Dean's to do, a reminder set for later among it, since main's count cannot read the clock. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [
   { taskId: "t-44", items: 2, toDo: 2, updatedAt: 3 },
-  { taskId: "t-42", items: 2, toDo: 0, updatedAt: 1 },
+  { taskId: "t-42", items: 2, toDo: 1, updatedAt: 1 },
   { taskId: "t-40", items: 1, toDo: 1, updatedAt: 1 },
 ];
 
@@ -305,7 +316,7 @@ test("a refresh that failed after the tasks were read keeps the rows drawn under
   assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
-test("a row and a card count the questions waiting on the reader, a notice and a teammate's question counting nowhere, while the sidebar counts the notice too, as Needs you lists it", async () => {
+test("a row and a card count the threads waiting on the reader, as the sidebar counts them: a notice counts, and a teammate's question and one reminded for later count nowhere", async () => {
   const page = await mountPage();
   const sidebar = { count: -1 };
   function Sidebar() {
@@ -327,8 +338,8 @@ test("a row and a card count the questions waiting on the reader, a notice and a
   };
   const listSays = (key: string) => says(rowOf(page, key));
 
-  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 0, 1]);
-  assert.equal(sidebar.count, 4);
+  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(listSays), [2, 1, 0]);
+  assert.equal(sidebar.count, 3);
 
   act(() => buttonNamed(page, "Columns").click());
   const cardSays = (key: string) =>
@@ -337,7 +348,7 @@ test("a row and a card count the questions waiting on the reader, a notice and a
         (card) => card.querySelector("[data-task-key]")?.textContent === key,
       ),
     );
-  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(cardSays), [2, 0, 1]);
+  assert.deepEqual(["ACME-44", "ACME-42", "ACME-40"].map(cardSays), [2, 1, 0]);
 });
 
 test("a press on a row opens its task", async () => {

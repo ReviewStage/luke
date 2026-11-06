@@ -100,6 +100,7 @@ import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
+import { chooseMenuItem } from "../testing/phone-head.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
@@ -5096,6 +5097,17 @@ function commentOffer(comment: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
+/** Chooses `label` in the ⋯ of the first pending comment in `comment`, as the member would. */
+function pendingAct(comment: HTMLElement, label: string): void {
+  act(() =>
+    (
+      comment.querySelector<HTMLButtonElement>('button[aria-label="Comment actions"]') ??
+      assert.fail("the pending comment offers its ⋯")
+    ).click(),
+  );
+  chooseMenuItem(label);
+}
+
 /** Whether the files' last draw stands a comment under a line. */
 function commentDrawn(): boolean {
   return commentNotes().length > 0;
@@ -6415,7 +6427,14 @@ test("a pending comment edited and saved untouched sends its Markdown back byte 
     "PRRC_start",
   );
 
-  act(() => commentOffer(card, "Edit").click());
+  // Note that the card folded closed opens for its ⋯'s Edit, so the field it opens is in view.
+  act(() =>
+    (card.querySelector<HTMLElement>(".annotation-card-fold > summary") ?? assert.fail()).click(),
+  );
+  await settle();
+  assert.equal(card.querySelector(".pull-request-thread-comment") === null, true, "folded closed");
+  pendingAct(card, "Edit");
+  await settle();
   assert.ok(card.querySelector("pre > code.language-suggestion"), "the edit opens on its Markdown");
   act(() => commentOffer(card, "Save").click());
   await settle();
@@ -6485,18 +6504,18 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
 
   // Edit opens the words in place; Cancel keeps nothing, Save sends the new words.
-  act(() => commentOffer(card, "Edit").click());
+  pendingAct(card, "Edit");
   typeInto(card, "Pending comment", "Thrown away");
   act(() => commentOffer(card, "Cancel").click());
   assert.equal(boxWordsElement(card) === null, true);
-  act(() => commentOffer(card, "Edit").click());
+  pendingAct(card, "Edit");
   assert.equal(boxWords(card), "Why four?", "the edit opens on the comment's own words");
   typeInto(card, "Pending comment", "Why **five**?");
   act(() => commentOffer(card, "Save").click());
   await settle();
 
   // Delete asks first, since it cannot be undone.
-  act(() => commentOffer(comments[1] ?? assert.fail(), "Delete").click());
+  pendingAct(comments[1] ?? assert.fail(), "Delete");
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Delete asks first");
   act(() => commentOffer(question, "Delete comment").click());
@@ -6534,7 +6553,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
 
   // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
   const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();
-  act(() => commentOffer(entry, "Edit").click());
+  pendingAct(entry, "Edit");
   typeInto(entry, "Pending comment", "Still once, really?");
   pressInBox(entry, { key: "Enter", metaKey: true }, "Pending comment");
   await settle();
@@ -6551,7 +6570,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
   act(() => commentOffer(panel, "Cancel").click());
 
   // A Delete asked in Files changed goes as another view of the tab is chosen.
-  act(() => commentOffer(card, "Delete").click());
+  pendingAct(card, "Delete");
   assert.ok(document.querySelector('[role="alertdialog"]'), "Delete asks first");
   await act(async () => option(tab, "Conversation").click());
   await settle();

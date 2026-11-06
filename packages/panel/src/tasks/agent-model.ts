@@ -570,6 +570,9 @@ export const CONTINUE_LABEL = "Continue in new agent";
 /** What that press says once another agent continued the agent, in the same place on the failed end line. */
 export const CONTINUE_AGAIN_LABEL = "Continue again";
 
+/** What the press that sends a failed agent a line again says, on the failed end line where a message carries it on (`endLineOffersTryAgain`). */
+export const TRY_AGAIN_LABEL = "Try again";
+
 /** What the line naming the agents that continued another says before their chips. */
 export const CONTINUED_IN = "Continued in";
 
@@ -647,6 +650,40 @@ export function endLineOffersContinue(input: {
 }
 
 /**
+ * The failures a message sent again would only meet again, since what mends
+ * them is a choice the line's words name: a teammate's key, which only they
+ * replace, or Fast, which a model chosen with it off mends.
+ */
+const MENDED_BY_CHOICE: ReadonlySet<AgentFailure> = new Set([
+  AGENT_FAILURE.PROVIDER_KEY,
+  AGENT_FAILURE.FAST_ON_OWN_KEY,
+  AGENT_FAILURE.FAST_NOT_ENABLED,
+]);
+
+/**
+ * Whether the failed end line's row ends on Try again, which sends the
+ * agent a line of the developer's own (`RETRY_LINE`), as the GitHub sign-in
+ * card's Retry does: where a message carries the agent on, its box stands
+ * open to send it, and nothing else ends the row. So never where Continue
+ * does (`endLineOffersContinue`), on a key the reader mends in Settings, or
+ * on a failure a choice mends (`MENDED_BY_CHOICE`). Note that the line
+ * hands on, beside its own words, every message the failed launch never
+ * took, so the prompt is never typed again.
+ */
+export function endLineOffersTryAgain(input: {
+  readonly status: AgentStatus;
+  readonly endReason: FailureReason;
+  readonly failure: AgentFailure | undefined;
+  readonly continued: boolean;
+  readonly boxClosed: boolean;
+}): boolean {
+  if (!endLineContinues(input.status, input.endReason)) return false;
+  if (input.continued || input.boxClosed) return false;
+  if (input.failure === undefined) return true;
+  return !mendedByNewAgent(input.failure) && !MENDED_BY_CHOICE.has(input.failure);
+}
+
+/**
  * Whether the developer starts agents of their own on a task worked in this
  * mode: New agent, the draft a task with no tab opens, and a Fork. A pilot
  * task offers none, because its pilot starts every agent on it; a task read
@@ -680,6 +717,8 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case AGENT_CALL_FAILURE.UNANSWERED:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.QUOTA_EXHAUSTED:
+    case AGENT_CALL_FAILURE.UPSTREAM_ERROR:
     case AGENT_CALL_FAILURE.NO_REPOSITORY:
     case AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
@@ -1201,9 +1240,11 @@ function startFailureWords(failure: AgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This task no longer exists.";
-    // Note that only a dictated clip is refused for want of an OpenAI key, so a Start never hears it.
+    // Note that only a dictated clip is refused for want of an OpenAI key, and only a ChatGPT sign-in braked or given no code, so a Start never hears them.
     case AGENT_CALL_FAILURE.UNANSWERED:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.QUOTA_EXHAUSTED:
+    case AGENT_CALL_FAILURE.UPSTREAM_ERROR:
       return "The agent could not be started.";
     case AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
@@ -1316,11 +1357,13 @@ export function messageFailureWords(failure: AgentCallFailure): string {
   switch (failure) {
     case AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    // A message names no repository, no model, and no clip, so none of these refusals is its own.
+    // A message names no repository, no model, no clip, and no sign-in, so none of these refusals is its own.
     case AGENT_CALL_FAILURE.NO_REPOSITORY:
     case AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED:
     case AGENT_CALL_FAILURE.INVALID_CHOICE:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
+    case AGENT_CALL_FAILURE.QUOTA_EXHAUSTED:
+    case AGENT_CALL_FAILURE.UPSTREAM_ERROR:
       return `${MESSAGE_NOT_SENT} Try again.`;
     // A message is refused by a device only while it is away, in the words a Start on it is.
     case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:

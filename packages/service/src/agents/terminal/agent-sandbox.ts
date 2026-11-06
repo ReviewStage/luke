@@ -24,8 +24,7 @@
  * the shape its own session and a copy of its work set it
  * (`../sandbox-firewall.ts`): an installation token on GitHub's two hosts,
  * or a member's own classic token on the agent's one repository's git and
- * REST paths alone, which is taken off again whenever nobody is using it.
- * The swaps of a launch running there stay, since every write composes the
+ * REST paths alone. The swaps of a launch running there stay, since every write composes the
  * session's whole policy with them.
  */
 
@@ -140,10 +139,6 @@ export interface AgentSandboxService {
   readonly setCredential: (
     session: FirewallSession,
     credential: RepositoryCredential,
-  ) => Effect.Effect<void, SandboxUnavailable>;
-  /** The GitHub credential taken off the running sandbox session's firewall, the swaps of a launch running there staying. */
-  readonly withdrawCredential: (
-    session: FirewallSession,
   ) => Effect.Effect<void, SandboxUnavailable>;
 }
 
@@ -274,7 +269,6 @@ function agentSandboxOver(
       }),
     setCredential: (session, credential) =>
       Effect.provideContext(firewall.write(session, { github: credential }), context),
-    withdrawCredential: (session) => Effect.provideContext(firewall.write(session, {}), context),
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);
