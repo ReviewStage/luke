@@ -443,7 +443,7 @@ it.effect(
 );
 
 it.effect(
-  "a picture kept answers its id, a plan at its bound of pictures or of videos answers so, and one the account may not write answers not found",
+  "a picture kept answers its id, a description at its bound of pictures or of videos answers so, and one the account may not write answers not found",
   () =>
     Effect.gen(function* () {
       const picture = "data:image/png;base64,iVBORw0KGgo=";

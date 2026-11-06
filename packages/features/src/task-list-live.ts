@@ -144,8 +144,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** Whether the agent is its task's pilot; absent from a statement before pilots. */
   pilot: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Whether the agent was handed a prompt rather than its plan. */
-  /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
+  /** Whether the agent was handed a prompt rather than its description. */
+  /** What the agent was handed as its first message: the description, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),
   /** The repository the agent works in; null for one that works in none. */
   repository: EffectSchema.NullOr(EffectSchema.String),

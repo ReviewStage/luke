@@ -26,9 +26,9 @@ import { trimmedText } from "./text-schema.js";
  * agent-wire.ts -- a task's coding agents, as the desktop starts, lists, reads, messages, and stops them.
  *
  * A coding agent is one cloud session the service runs over a task: it
- * checks the task's repository out, implements the plan, and decides on a
+ * checks the task's repository out, implements the description, and decides on a
  * pull request. Or, where the developer started it with words of their own,
- * it is handed those as its prompt in the plan's place, and never the plan.
+ * it is handed those as its prompt in the description's place, and never the description.
  * The desktop starts one with a key of its own, so a retry of the same
  * Start is the same agent, and names the model and effort it runs on or
  * leaves both to the account's default. What comes back is the
@@ -80,9 +80,9 @@ export const AGENT_BOUNDS = {
   MAX_MESSAGE_CHARS: 16_000,
   /**
    * The most characters a `start_agent` call's prompt may spell, trimmed, and its note apart:
-   * room for an orchestrator's brief to a worker on a long plan, quoted whole. Both together,
+   * room for an orchestrator's brief to a worker on a long description, quoted whole. Both together,
    * with the headings around them, stay under a task's own bound (`TASK_BOUNDS.MAX_BODY_CHARS`),
-   * which a start on the plan already hands an agent whole as its first message.
+   * which a start on the description already hands an agent whole as its first message.
    */
   MAX_START_WORDS_CHARS: 64_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
@@ -685,9 +685,9 @@ export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositor
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
  * window beside them where it is the standard one. A prompt, where the
- * developer wrote one, is the agent's first message in the plan's place,
+ * developer wrote one, is the agent's first message in the description's place,
  * bounded as a message is: its words, the files the developer attached to
- * it, or both. With none, the agent is handed the plan, and files go only
+ * it, or both. With none, the agent is handed the description, and files go only
  * with a prompt. The MCP servers its draft switched off go with it, and none
  * is off where the Start names none. A Start `from` another agent of the
  * plan is handed that agent's brief and its transcript replayed after it,
@@ -695,7 +695,7 @@ export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositor
  * servers where it names none. A note, bounded as a message is, goes only
  * beside such a source, written after the replay as the developer's, and
  * files go with it there as they go with a prompt. A Start `blank` hands the
- * agent nothing at all, neither the plan nor a prompt, so it names no
+ * agent nothing at all, neither the description nor a prompt, so it names no
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
@@ -1180,9 +1180,9 @@ export const agentSummarySchema = EffectSchema.Struct({
   stoppable: EffectSchema.optionalKey(EffectSchema.Literal(false)),
   /**
    * What the agent was handed as its first message, so its tab draws a
-   * plan as the plan's card, a task as the developer's own message, and,
+   * description as the description's card, a task as the developer's own message, and,
    * for an agent started blank, its first line as any other line. Absent
-   * from a service older than the task, which handed every agent the plan.
+   * from a service older than the task, which handed every agent the description.
    */
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
@@ -2201,7 +2201,7 @@ export const agentCallIdSchema = trimmedText(AGENT_BOUNDS.MAX_CALL_ID_CHARS);
  * carries in the transcript (`tool-write_todos`). Each call carries the
  * whole list, so the newest call's input is the list as it stands, and a
  * tab draws each call where it landed with the older ones folded. Named
- * to-dos rather than a plan, because the plan is the app's own document.
+ * to-dos rather than a plan, so it is never taken for the task's description.
  */
 export const AGENT_TODOS_TOOL = "write_todos";
 
@@ -2516,7 +2516,7 @@ export type AgentUsage = typeof agentUsageSchema.Type;
  * against it. Beside the counts, the estimates of what the step read that
  * no provider counts apart, each made from the text the service composed
  * at about four bytes a token, which is eve's own estimate: the
- * instructions, the tool definitions, and the plan or task the agent was
+ * instructions, the tool definitions, and the description or task the agent was
  * handed, which is absent once eve has compacted the conversation, since
  * a compaction's summary may have folded it in. When that step ended, and
  * when eve last compacted the conversation, where it has.

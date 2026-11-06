@@ -19,7 +19,7 @@
  * bound, but the trace a hosted call traveled under, read only in a trace
  * id's shape, which the service's log lines for that call carry. There is
  * no field for what
- * a person typed, a transcript, a plan, or a file. Note that a cause's
+ * a person typed, a transcript, a description, or a file. Note that a cause's
  * message is the error's own words, as an error's words already reach
  * Sentry (root `AGENTS.md`), and a refusal's is the sentence the service or
  * the host drew for it.

@@ -375,7 +375,7 @@ export class HostedTaskClient {
     });
   }
 
-  /** A thread started on the plan, or one of its task's pages, with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
+  /** A thread started on the description, or one of its task's pages, with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
   startComment(
     planId: string,
     request: DescriptionCommentStart,
@@ -395,7 +395,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** One thing done to one thread of the plan, answered with the thread as it stands, its deletion, or why not. */
+  /** One thing done to one thread of the description, answered with the thread as it stands, its deletion, or why not. */
   actOnComment(
     planId: string,
     threadId: string,
@@ -625,7 +625,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Where one task's plan and pages stand, sealed for following over Neon
+   * Where one task's description and pages stand, sealed for following over Neon
    * Realtime, or with `poll` their rows inline, for a reader polling while
    * Realtime fails them, for the account `userId` names: not found where the
    * account reaches no such task, signed out where the session is another's,
@@ -692,7 +692,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task's comments, its plan's own threads or one page's where `subject` names one, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  /** One task's comments, its description's own threads or one page's where `subject` names one, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
   commentsLive(
     subject: TasksCommentsFollow,
     userId: string,
@@ -715,7 +715,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task's newest page of plan history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
+  /** One task's newest page of description history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
   historyLive(
     taskId: string,
     userId: string,
@@ -873,7 +873,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */
+  /** A page of one description's history, the newest or the one before a revision; nothing where the service did not answer it. */
   readRevisions(
     taskId: string,
     before?: number,
@@ -886,7 +886,7 @@ export class HostedTaskClient {
     );
   }
 
-  /** One revision of one plan beside the one before it; nothing where the service did not answer it, or holds no such revision. */
+  /** One revision of one description beside the one before it; nothing where the service did not answer it, or holds no such revision. */
   readRevision(
     taskId: string,
     seq: number,
@@ -904,9 +904,9 @@ export class HostedTaskClient {
   }
 
   /**
-   * One attachment of one plan, a picture its text names or a file one of
+   * One attachment of one description, a picture its text names or a file one of
    * its comments carries, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with a type a plan's
+   * under its media type, where the service answered with a type a description's
    * attachment may be (`DESCRIPTION_ATTACHMENT_TYPE`), a video among them; not found where the plan is not one the account
    * reaches or holds no such attachment; unanswered for anything else,
    * another media type included, so nothing a window draws is a type it did
@@ -933,9 +933,9 @@ export class HostedTaskClient {
   }
 
   /**
-   * One picture or video kept on one plan, sent as the `data:` URL the Mac
-   * made of it: the id the plan's text then names it by; too many where the
-   * plan holds its bound of pictures, or of videos for a video; not found where the plan is not one the account may
+   * One picture or video kept on one description, sent as the `data:` URL the Mac
+   * made of it: the id the description's text then names it by; too many where the
+   * description holds its bound of pictures, or of videos for a video; not found where the plan is not one the account may
    * write, an archived one among them; unanswered for anything else.
    */
   keepPicture(
@@ -976,7 +976,7 @@ export class HostedTaskClient {
     return Effect.map(orNothing(asked), (answer) => answer?.page);
   }
 
-  /** Puts one revision of a plan back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
+  /** Puts one revision of a description back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
   restore(
     taskId: string,
     seq: number,
@@ -1135,7 +1135,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Starts a task with an empty plan, on the repository the
+   * Starts a task with an empty description, on the repository the
    * request names where it names one, and the agent it names on it where it
    * names one, under the idempotency key given where one is; a request the
    * service would refuse by shape is refused here without traveling at all,

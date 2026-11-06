@@ -10,10 +10,10 @@ import { type DescriptionLastEdit, TASK_BOUNDS } from "./task-wire.js";
 import { TASK_CALL_FAILURE, type TasksEditAnswer, type TasksEditFailure } from "./tasks-view.js";
 
 /**
- * description-edit-model.ts -- the open plan's text in its editor: what the developer typed, what the service holds of theirs, and when to save.
+ * description-edit-model.ts -- the open description's text in its editor: what the developer typed, what the service holds of theirs, and when to save.
  *
- * The developer edits a plan whole, as one document. An editor opens on the
- * text as the plan holds it, which is the edit's base: what the developer's
+ * The developer edits a description whole, as one document. An editor opens on the
+ * text as the description holds it, which is the edit's base: what the developer's
  * words were written from. Each save sends that base and the words, and the
  * service lays the change over whatever anyone else wrote meanwhile
  * (`@repo/features/description-edit`). Each save that lands moves the base to what
@@ -52,7 +52,7 @@ type DocumentEditorState =
     }
   | { readonly kind: typeof DOCUMENT_EDITOR_STATE.FAILED; readonly note: string };
 
-/** The open plan's text in its editor. */
+/** The open description's text in its editor. */
 export interface DocumentEditor {
   /** The words in the editor. */
   readonly draft: string;
@@ -182,7 +182,7 @@ function currentOr(base: string, current: DescriptionEditValue): string {
   return isText(current) ? current : base;
 }
 
-/** An editor opened on the plan's text as it stands. */
+/** An editor opened on the description's text as it stands. */
 export function editorOpened(text: string): DocumentEditor {
   return {
     draft: text,

@@ -48,7 +48,7 @@ export const MESSAGE_AUTHOR = {
 /**
  * How a developer's ask arrived, or what else carried a line steered into a
  * coding agent: another coding agent's message, a thread's reply, answer or
- * close, a plan comment thread a member sent it, the brief a Start opened it
+ * close, a description comment thread a member sent it, the brief a Start opened it
  * with, GitHub's word on its pull request, a line the service sent, an
  * automation's run, or a member's message to the Slack bot.
  */
@@ -72,7 +72,7 @@ export const THREAD_LINE_EVENT = {
   CLOSE: "close",
 } as const;
 
-/** What a Start handed a new agent as its first line: the developer's prompt, the plan, or another agent it continues or forks. */
+/** What a Start handed a new agent as its first line: the developer's prompt, the description, or another agent it continues or forks. */
 export const START_LINE_BRIEF = {
   PROMPT: "prompt",
   PLAN: "plan",
@@ -211,7 +211,7 @@ const spanInstant = nonNegativeInteger;
  * A user row is one of these things, and the shape says which: the
  * developer's typed ask, a spoken ask cut from a voice session, a line
  * steered into a coding agent by what carried it (another coding agent's
- * message, a thread, a plan comment, a Start, GitHub, the service, or an
+ * message, a thread, a description comment, a Start, GitHub, the service, or an
  * automation), or a note the runtime wrote down. A struct each rather than one
  * with every field optional, so a note carrying a channel has no shape to
  * arrive in. Only a spoken ask says who wrote it, since a call carries both
@@ -281,10 +281,10 @@ const THREAD_LINE_METADATA = EffectSchema.Struct({
 export type ThreadLineMetadata = EffectSchema.Schema.Type<typeof THREAD_LINE_METADATA>;
 
 /**
- * A comment line is a comment thread on a plan, or on one of its task's
+ * A comment line is a comment thread on a description, or on one of its task's
  * pages, that reached the agent: the thread it hands over, and, so a window
  * draws the line from these rather than from the text the model reads, the
- * task it is on, what it is on (the plan's words, a page's element, or a
+ * task it is on, what it is on (the description's words, a page's element, or a
  * page as a whole), the page by its id and title where it is on one, and
  * the member's own words. Each of these is absent from a line kept before
  * it was said.

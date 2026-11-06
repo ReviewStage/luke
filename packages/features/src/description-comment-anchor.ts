@@ -1,9 +1,9 @@
 import { diffChars, diffLines, diffWordsWithSpace } from "diff";
 
 /**
- * description-comment-anchor.ts -- where a comment's anchored words stand in a plan's text, carried through each change of the text.
+ * description-comment-anchor.ts -- where a comment's anchored words stand in a description's text, carried through each change of the text.
  *
- * A comment thread is anchored to a stretch of the plan's Markdown, kept by
+ * A comment thread is anchored to a stretch of the description's Markdown, kept by
  * the service as offsets beside the thread rather than written into the
  * text, so the text every reader, model, and copy sees holds no comment's
  * markup. Every save of the text moves each anchor with its words: the words
@@ -14,14 +14,14 @@ import { diffChars, diffLines, diffWordsWithSpace } from "diff";
  *
  * The change is read line by line first, then word by word inside the lines
  * it changed, then letter by letter inside the words it replaced, so a long
- * plan with a small change costs a small diff and a typo fixed inside an
+ * description with a small change costs a small diff and a typo fixed inside an
  * anchored word keeps the word anchored. A word kept by coincidence between
  * two rewritten phrases holds nothing on, so a sentence rewritten whole takes
  * its anchor with it. A changed stretch too long to read finely is taken as
  * replaced whole.
  */
 
-/** A stretch of a plan's text, from one offset up to another. */
+/** A stretch of a description's text, from one offset up to another. */
 export interface CommentSpan {
   readonly from: number;
   readonly to: number;
@@ -181,7 +181,7 @@ function keptRuns(before: string, after: string): readonly KeptRun[] {
 }
 
 /**
- * A change of a plan's text, read once, that moves any number of anchors: an
+ * A change of a description's text, read once, that moves any number of anchors: an
  * anchor answers where its kept words stand now, from the first of them to
  * the last, or nothing where the change took out every one.
  */

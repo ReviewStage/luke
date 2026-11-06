@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { type CommentSpan, spanWithin, textChange } from "./description-comment-anchor.js";
 
-const PLAN =
+const DESCRIPTION =
   "## Goal\n\nAn admin invites a teammate by email, and the invite lands as a single-use link that expires in seven days.\n\n## Approach\n\nThe invite email follows the mock Lee shared.\n";
 
 /** The span of the first place `words` stands in `text`. */
@@ -18,71 +18,74 @@ function wordsAt(text: string, span: CommentSpan | undefined): string | undefine
 }
 
 test("an anchor moves with its words when a change writes in above them", () => {
-  const after = PLAN.replace(
+  const after = DESCRIPTION.replace(
     "## Goal\n\n",
     "## Context\n\nOnly an admin can add someone.\n\n## Goal\n\n",
   );
-  const moved = textChange(PLAN, after)(spanOf(PLAN, "single-use link"));
+  const moved = textChange(DESCRIPTION, after)(spanOf(DESCRIPTION, "single-use link"));
 
   assert.equal(wordsAt(after, moved), "single-use link");
 });
 
 test("words written between an anchor's words join it, and words written at its edges do not", () => {
-  const after = PLAN.replace("single-use link", "short, single-use invite link").replace(
+  const after = DESCRIPTION.replace("single-use link", "short, single-use invite link").replace(
     "expires in",
     "expires after",
   );
-  const moved = textChange(PLAN, after)(spanOf(PLAN, "single-use link"));
+  const moved = textChange(DESCRIPTION, after)(spanOf(DESCRIPTION, "single-use link"));
 
   assert.equal(wordsAt(after, moved), "single-use invite link");
 });
 
 test("an anchor shrinks to the words a change kept of it", () => {
-  const after = PLAN.replace("single-use link that expires", "link that expires");
-  const moved = textChange(PLAN, after)(spanOf(PLAN, "single-use link that expires"));
+  const after = DESCRIPTION.replace("single-use link that expires", "link that expires");
+  const moved = textChange(DESCRIPTION, after)(spanOf(DESCRIPTION, "single-use link that expires"));
 
   assert.equal(wordsAt(after, moved), "link that expires");
 });
 
 test("an anchor whose every word a change took out stands nowhere", () => {
-  const after = PLAN.replace("The invite email follows the mock Lee shared.\n", "");
-  const moved = textChange(PLAN, after)(spanOf(PLAN, "follows the mock Lee shared"));
+  const after = DESCRIPTION.replace("The invite email follows the mock Lee shared.\n", "");
+  const moved = textChange(DESCRIPTION, after)(spanOf(DESCRIPTION, "follows the mock Lee shared"));
 
   assert.equal(moved, undefined);
 });
 
 test("an anchor whose sentence a change rewrote whole stands nowhere, though a word or two recur", () => {
-  const after = PLAN.replace(
+  const after = DESCRIPTION.replace(
     "The invite email follows the mock Lee shared.",
     "Every message reuses the shared template.",
   );
-  const change = textChange(PLAN, after);
+  const change = textChange(DESCRIPTION, after);
 
-  assert.equal(change(spanOf(PLAN, "follows the mock Lee shared")), undefined);
-  assert.equal(wordsAt(after, change(spanOf(PLAN, "seven days"))), "seven days");
+  assert.equal(change(spanOf(DESCRIPTION, "follows the mock Lee shared")), undefined);
+  assert.equal(wordsAt(after, change(spanOf(DESCRIPTION, "seven days"))), "seven days");
 });
 
 test("an anchored word keeps its anchor through a typo fixed inside it", () => {
-  const typo = PLAN.replace("teammate", "temate");
-  const after = PLAN;
+  const typo = DESCRIPTION.replace("teammate", "temate");
+  const after = DESCRIPTION;
 
   assert.equal(wordsAt(after, textChange(typo, after)(spanOf(typo, "temate"))), "teammate");
 });
 
 test("an anchor moves with its section when a change moves the section below another", () => {
-  const goal = PLAN.slice(0, PLAN.indexOf("## Approach"));
-  const approach = PLAN.slice(PLAN.indexOf("## Approach"));
+  const goal = DESCRIPTION.slice(0, DESCRIPTION.indexOf("## Approach"));
+  const approach = DESCRIPTION.slice(DESCRIPTION.indexOf("## Approach"));
   const after = `${approach}\n${goal}`;
-  const change = textChange(PLAN, after);
+  const change = textChange(DESCRIPTION, after);
 
-  assert.equal(wordsAt(after, change(spanOf(PLAN, "single-use link"))), "single-use link");
-  assert.equal(wordsAt(after, change(spanOf(PLAN, "the mock Lee shared"))), "the mock Lee shared");
+  assert.equal(wordsAt(after, change(spanOf(DESCRIPTION, "single-use link"))), "single-use link");
+  assert.equal(
+    wordsAt(after, change(spanOf(DESCRIPTION, "the mock Lee shared"))),
+    "the mock Lee shared",
+  );
 });
 
 test("a change that moves nothing leaves every anchor where it was", () => {
-  const span = spanOf(PLAN, "teammate");
+  const span = spanOf(DESCRIPTION, "teammate");
 
-  assert.deepEqual(textChange(PLAN, PLAN)(span), span);
+  assert.deepEqual(textChange(DESCRIPTION, DESCRIPTION)(span), span);
 });
 
 test("a span is within a text only where it holds at least one of its letters", () => {
