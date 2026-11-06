@@ -279,7 +279,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
         }
       >
         {forming ? (
-          <TeamForm form={teamForm} />
+          <TeamForm form={teamForm} disabled={teamForm.busy} />
         ) : (
           <>
             <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>

@@ -382,7 +382,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     workspace: undefined,
     onChooseWorkspace: ignore,
     onLeftWorkspace: ignore,
-    onCreateWorkspace: () => Promise.resolve(undefined),
+    newWorkspace: { open: false, onOpen: ignore, onClose: ignore },
     onOpenWorkspaceSettings: ignore,
     onOpenWorkspaceGitHub: ignore,
     onMoveTask: () => Promise.resolve(false),
