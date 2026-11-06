@@ -15,7 +15,9 @@ import { useSelectionKeys } from "./selection-keys.js";
  * pressed to do it on every chosen row, or dropping its menu of choices
  * under it (a reminder's times); then ×, which chooses none, as Esc does.
  * It draws nothing while no row is chosen. Its keys, focus, and
- * announcement are every selection toolbar's (`selection-keys.ts`), and it
+ * announcement are every selection toolbar's (`selection-keys.ts`), its glyphs
+ * spaced as a toolbar's own actions are, so the head's buttons keep their
+ * places as it stands in for them, and it
  * is named by the count, which the head draws.
  */
 
@@ -72,7 +74,7 @@ export function SelectionToolbar({
       {...keys}
       role="toolbar"
       aria-label={selectedWords(count)}
-      className="ui-selection-toolbar flex flex-none items-center gap-tight-gap"
+      className="ui-selection-toolbar flex flex-none items-center gap-control-gap"
     >
       {acts.map((act) =>
         act.menu === undefined ? (
