@@ -75,7 +75,7 @@
  * account sees there, the workspace's and its own, each with whether it may
  * manage it, on the same membership check; woken by one of them installed,
  * changed, shared, or removed, and by the reader's membership moving
- * (`installedSkillsLive`).
+ * (`installedSkillsRead`).
  * `GET /api/live/workspace-integrations?workspaceId=` answers its active
  * Sentry installations, its Slack bot, and each Slack channel's repository
  * as three, to a member of it, so a workspace it is not in is not found,
@@ -219,7 +219,6 @@ import {
   DESCRIPTION_THREADS,
   inboxItemsLive,
   inboxLive,
-  installedSkillsLive,
   integrationStatusesLive,
   macCommandsLive,
   pullRequestChaptersLive,
@@ -249,6 +248,7 @@ import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { accountPreferencesRead } from "./reads/account-preferences.js";
 import { hostsRead } from "./reads/hosts.js";
+import { installedSkillsRead } from "./reads/installed-skills.js";
 import { workspaceMemoriesRead } from "./reads/workspace-memories.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
@@ -1132,18 +1132,8 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     hosts: signedIn.hosts.effect(answerBoundRead(hostsRead)),
     workspaceMemories: signedIn.workspaceMemories.effect(answerBoundRead(workspaceMemoriesRead)),
-    installedSkills: signedIn.installedSkills.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const member = yield* hostedStoreOrUnavailable(
-        isWorkspaceMember(context.userId, input.workspaceId),
-      );
-      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        installedSkillsLive,
-        { userId: context.userId, workspaceId: input.workspaceId },
-        input,
-      );
-    }),
+    installedSkills: signedIn.installedSkills.effect(answerBoundRead(installedSkillsRead)),
+
     workspaceIntegrations: signedIn.workspaceIntegrations.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const member = yield* hostedStoreOrUnavailable(

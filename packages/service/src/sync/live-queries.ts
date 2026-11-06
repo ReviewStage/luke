@@ -11,7 +11,6 @@
  */
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
@@ -53,7 +52,6 @@ import {
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
-  installedSkillSync,
   integrationConnectionSync,
   integrationInstallationSync,
   invitationSync,
@@ -103,6 +101,7 @@ import { integrationStatusesLiveStatement } from "../integrations/integration-st
 import type { AnyBoundRead } from "../live/live-read-binding.js";
 import { accountPreferencesRead } from "../live/reads/account-preferences.js";
 import { hostsRead } from "../live/reads/hosts.js";
+import { installedSkillsRead } from "../live/reads/installed-skills.js";
 import { workspaceMemoriesRead } from "../live/reads/workspace-memories.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
@@ -438,28 +437,6 @@ export const workspaceMembersLive = defineLiveQuery({
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
   statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
-  mode: LIVE_MODE.SNAPSHOT,
-});
-
-/**
- * The skills the account sees in a workspace, the workspace's and its own,
- * each with whether it may manage them, woken on the workspace's skills
- * topic by one of the workspace's skills installed, changed, shared into
- * it, or removed, on the account's own skills topic by one of its personal
- * skills, and on the account's topic by its membership made, ended, or
- * given another role, which decides what it reads and may manage.
- */
-export const installedSkillsLive = defineLiveQuery({
-  name: LIVE_READ.INSTALLED_SKILLS,
-  params: ["userId", "workspaceId"],
-  reads: [installedSkillSync, memberSync],
-  topics: ({ userId, workspaceId }) => [
-    [TOPIC.WORKSPACE_SKILLS, workspaceId],
-    [TOPIC.ACCOUNT_SKILLS, userId],
-    [TOPIC.ACCOUNT, userId],
-  ],
-  statements: ({ userId, workspaceId }) =>
-    Option.map(installedSkillsLiveStatement(userId, workspaceId), (skills) => ({ skills })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -896,6 +873,8 @@ export const agentTranscriptLive = defineLiveQuery({
 
 /** Every read declared once and bound (`../live/live-read-binding.ts`), each a live read Sync wakes beside the definitions. */
 export const BOUND_READS: readonly AnyBoundRead[] = [
+  installedSkillsRead,
+
   hostsRead,
   accountPreferencesRead,
   workspaceMemoriesRead,
@@ -913,7 +892,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentInboxLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
-  installedSkillsLive,
   workspaceIntegrationsLive,
   automationsLive,
   automationWorkspaceRunsLive,

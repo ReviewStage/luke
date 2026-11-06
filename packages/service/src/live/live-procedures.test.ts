@@ -54,8 +54,7 @@ import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOSTS_READ, hostsOfLiveRows } from "@repo/features/host-live";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
-  installedSkillsLiveAnswerSchema,
-  installedSkillsLiveRowsSchema,
+  INSTALLED_SKILLS_READ,
   installedSkillsOfLiveRows,
 } from "@repo/features/installed-skill-live";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
@@ -1663,9 +1662,9 @@ it.layer(getTestDB())("the installed skills' live read", (it) => {
           Effect.gen(function* () {
             const polled = yield* ask({ bearer, path });
             assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
-            const answer = Schema.decodeUnknownSync(installedSkillsLiveAnswerSchema)(polled.body);
+            const answer = Schema.decodeUnknownSync(INSTALLED_SKILLS_READ.answer)(polled.body);
             assert.equal(answer.url, LIVE_POLL_URL);
-            const { skills } = Schema.decodeUnknownSync(installedSkillsLiveRowsSchema)({
+            const { skills } = Schema.decodeUnknownSync(INSTALLED_SKILLS_READ.rows)({
               skills: answer.queries.skills.rows,
             });
             return installedSkillsOfLiveRows(skills).map((skill) => [

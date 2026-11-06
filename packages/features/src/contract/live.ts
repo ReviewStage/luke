@@ -54,7 +54,7 @@ import {
 } from "../automation-live.js";
 import { taskCommentsLiveAnswerSchema } from "../description-comment-live.js";
 import { HOSTS_READ } from "../host-live.js";
-import { installedSkillsLiveAnswerSchema } from "../installed-skill-live.js";
+import { INSTALLED_SKILLS_READ } from "../installed-skill-live.js";
 import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
 import { liveProcedure } from "../live-read.js";
 import {
@@ -306,10 +306,7 @@ export const liveContract = {
     .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
   [HOSTS_READ.name]: liveProcedure(HOSTS_READ),
   [WORKSPACE_MEMORIES_READ.name]: liveProcedure(WORKSPACE_MEMORIES_READ),
-  installedSkills: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INSTALLED_SKILLS }))
-    .input(liveWorkspaceSchema)
-    .output(EffectSchema.flip(installedSkillsLiveAnswerSchema)),
+  [INSTALLED_SKILLS_READ.name]: liveProcedure(INSTALLED_SKILLS_READ),
   workspaceIntegrations: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS }),
