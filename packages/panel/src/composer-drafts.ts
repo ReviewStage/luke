@@ -729,8 +729,7 @@ const keptRevisionAtom = Atom.keepAlive(Atom.make(0));
  * does, that also outlast a reload and a relaunch on this Mac: storage is
  * where they stand, each kept as `toKept` makes it, with its account's id,
  * and read back for that account alone. What storage cannot hold, a line's
- * files, stays in the window that attached them, by the line, so a line
- * moving from an account's address to its id keeps them. Note that a write
+ * files, stays in the window that attached them, by the line. Note that a write
  * starts from what storage holds, because another window keeps its lines
  * there too: it changes the lines it changed, adds the ones it added, and
  * lets go of the ones it let go, so a line another window let go is never
@@ -754,13 +753,6 @@ export function keptLines<Line, Kept>(spec: KeptLines<Line, Kept>): Atom.Writabl
               ? was
               : spec.fromKept(kept);
           });
-  ADOPTERS.push((ctx, address, accountId) => {
-    const moved = readKept(spec.key, stored, []).map((entry) =>
-      entry.accountId === address ? { ...entry, accountId } : entry,
-    );
-    writeKept(spec.key, stored, moved);
-    ctx.set(keptRevisionAtom, ctx.get(keptRevisionAtom) + 1);
-  });
   const self: Atom.Writable<readonly Line[]> = Atom.keepAlive(
     Atom.writable(
       (get) => {

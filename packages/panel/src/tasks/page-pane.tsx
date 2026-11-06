@@ -1006,21 +1006,17 @@ export function PagePane({
                   onStarted={commenting.started}
                   onCancel={commenting.dismiss}
                   // Note that a phone draws no bar for the review's press, so its comments post at once.
-                  review={
-                    phone
-                      ? undefined
-                      : {
-                          // Note that holding a comment opens the column, where the review it joins is listed.
-                          control: {
-                            ...review,
-                            hold: (comment) => {
-                              review.hold(comment);
-                              commenting.showColumn();
-                            },
-                          },
-                          onOpen: commenting.showColumn,
-                        }
-                  }
+                  review={{
+                    // Note that holding a comment opens the column, where the review it joins is listed.
+                    control: {
+                      ...review,
+                      hold: (comment) => {
+                        review.hold(comment);
+                        commenting.showColumn();
+                      },
+                    },
+                    onOpen: commenting.showColumn,
+                  }}
                 />
               )}
             </PageFrame>

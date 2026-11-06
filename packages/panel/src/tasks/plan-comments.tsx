@@ -863,7 +863,7 @@ function CommentEntry({
 }
 
 /** A comment's words as Markdown, its mentions drawn as their chips, as a message's are. */
-export function CommentWords({ words }: { words: string }): React.JSX.Element {
+function CommentWords({ words }: { words: string }): React.JSX.Element {
   const link = useMentionLink();
   const openLink = useOpenLink();
   return (
@@ -3155,9 +3155,7 @@ export function HeldCommentCard({
           nameRef={<ActorRef actor={reader} nameOnly />}
           trailing={
             <QuietWords>
-              <ReplayUnmask>
-                {comment.posted ? PAGE_REVIEW_WORDS.POSTED : PAGE_REVIEW_WORDS.PENDING}
-              </ReplayUnmask>
+              <ReplayUnmask>{PAGE_REVIEW_WORDS.PENDING}</ReplayUnmask>
             </QuietWords>
           }
         >
