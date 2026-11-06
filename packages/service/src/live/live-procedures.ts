@@ -211,13 +211,13 @@ import {
   automationRunsLive,
   automationsLive,
   automationWorkspaceRunsLive,
+  DESCRIPTION_THREADS,
   hostsLive,
   inboxItemsLive,
   inboxLive,
   installedSkillsLive,
   integrationStatusesLive,
   macCommandsLive,
-  DESCRIPTION_THREADS,
   pullRequestChaptersLive,
   sidebarLive,
   taskBrowserTabsLive,
@@ -1131,7 +1131,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       const { agent } = yield* reachedAgentById(context.userId, input.id);
       // Note that an agent with no repository is answered as its rows stand, none, as it keeps no chapters.
-      const { generatable } = yield* agentChaptersAdmission(context.userId, agent);
+      const { runsOn } = yield* agentChaptersAdmission(context.userId, agent);
       const sealed = yield* liveQueryParts(
         pullRequestChaptersLive,
         {
@@ -1142,7 +1142,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         },
         input,
       );
-      return { ...sealed, generatable };
+      return {
+        ...sealed,
+        generatable: runsOn !== undefined,
+        ...(runsOn === undefined ? {} : { runsOn }),
+      };
     }),
     integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
