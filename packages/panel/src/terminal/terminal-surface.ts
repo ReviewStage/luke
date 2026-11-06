@@ -220,8 +220,9 @@ export function createTerminal(props: TerminalProps): TerminalHandle {
   let fitted = false;
   const heard = [
     terminal.onData(props.onInput),
-    terminal.onResize((size) => {
-      if (fitted) props.onResize(size);
+    // Note that the size is handed on as columns and rows alone, because xterm's event carries more, and an act that takes the size refuses a key it does not name.
+    terminal.onResize(({ cols, rows }) => {
+      if (fitted) props.onResize({ cols, rows });
     }),
   ];
   const fitNow = () => {
