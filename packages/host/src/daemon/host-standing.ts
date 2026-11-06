@@ -2,7 +2,17 @@ import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
 import { HOST_WIRE, hostUpgradeCommand } from "@repo/features/host-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { HTTP_METHOD, HTTP_STATUS } from "@repo/wire";
-import { Clock, Deferred, Duration, Effect, Option, Ref, Schema } from "effect";
+import {
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Option,
+  Ref,
+  Schema,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -17,7 +27,9 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  * ours. The same client hears each answer's status. A 426 is the service
  * refusing a daemon below its floor: said once, in words a person at the box
  * can act on, and the daemon goes quiet for `QUIET` before it asks again,
- * rather than exiting for systemd to start it over every few seconds.
+ * rather than exiting for systemd to start it over every few seconds. Its
+ * quiet spell is told as it starts and as it passes (`asking`), the end by
+ * one wait until the instant it ends, so nothing reads it in between.
  *
  * A 401 is not taken as the host removed by itself, since anything on the
  * origin may answer one: a deployment's protection, one route's bug. The
@@ -77,8 +89,8 @@ function refusalReport(
 
 /** The host's standing with the service, as its calls heard it, and the client every call of its goes through. */
 interface HostServiceStanding {
-  /** Whether the daemon may ask the service now: it was not refused as below the floor, or its quiet spell has passed. */
-  readonly asking: Effect.Effect<boolean>;
+  /** Whether the daemon may ask the service, as it stands now and each time it changes: it was not refused as below the floor, or its quiet spell has passed. */
+  readonly asking: Stream.Stream<boolean>;
   /** Waits until the service has settled the box's secret as refused: the host was removed, and nothing it asks is answered again. */
   readonly secretRefused: Effect.Effect<void>;
   /** The client given, every request to the service's origin with the version on it and its answer heard. */
@@ -94,7 +106,10 @@ export interface HostStandingOptions {
 
 /** A host's standing with the service, standing until its first refusal. */
 export const hostServiceStanding = Effect.fnUntraced(function* (options: HostStandingOptions) {
-  const standing = yield* Ref.make<{ readonly kind: HostStanding; readonly until: number }>({
+  const standing = yield* SubscriptionRef.make<{
+    readonly kind: HostStanding;
+    readonly until: number;
+  }>({
     kind: HOST_STANDING.STANDING,
     until: 0,
   });
@@ -114,10 +129,10 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
   const heard = (status: number, removedSaid: boolean) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const before = yield* Ref.get(standing);
+      const before = yield* SubscriptionRef.get(standing);
       if (before.kind === HOST_STANDING.SECRET_REFUSED) return;
       if (status === HTTP_STATUS.UPGRADE_REQUIRED) {
-        yield* Ref.set(standing, {
+        yield* SubscriptionRef.set(standing, {
           kind: HOST_STANDING.UPGRADE_NEEDED,
           until: now + Duration.toMillis(QUIET),
         });
@@ -128,7 +143,10 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
       }
       if (status === HTTP_STATUS.UNAUTHORIZED) {
         if (removedSaid) {
-          yield* Ref.set(standing, { kind: HOST_STANDING.SECRET_REFUSED, until: before.until });
+          yield* SubscriptionRef.set(standing, {
+            kind: HOST_STANDING.SECRET_REFUSED,
+            until: before.until,
+          });
           yield* Deferred.succeed(refused, undefined);
           options.report(refusalReport(HOST_STANDING.SECRET_REFUSED, options.serviceOrigin));
           return;
@@ -139,17 +157,41 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
       if (status < 200 || status >= 300) return;
       const callsTaken = yield* Ref.getAndSet(callsRefused, false);
       if (before.kind !== HOST_STANDING.STANDING) {
-        yield* Ref.set(standing, { kind: HOST_STANDING.STANDING, until: 0 });
+        yield* SubscriptionRef.set(standing, { kind: HOST_STANDING.STANDING, until: 0 });
       }
       if (before.kind !== HOST_STANDING.STANDING || callsTaken) {
         options.report(`${PRODUCT_NAME} host: ${PRODUCT_NAME} took this box's calls again.`);
       }
     });
 
-  const asking = Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    return now >= (yield* Ref.get(standing)).until;
+  /**
+   * Waits until the quiet spell standing now has passed: one wait until the
+   * instant it ends, made again only where a refusal heard meanwhile moved
+   * that instant later.
+   */
+  const quietPassed = Effect.gen(function* () {
+    for (;;) {
+      const left = (yield* SubscriptionRef.get(standing)).until - (yield* Clock.currentTimeMillis);
+      if (left <= 0) return true;
+      yield* Effect.sleep(Duration.millis(left));
+    }
   });
+
+  /** Asking as each refusal leaves it: shut as a quiet spell starts, and open again once it has passed. */
+  const asking = SubscriptionRef.changes(standing).pipe(
+    Stream.map((heard) => heard.until),
+    Stream.changes,
+    Stream.flatMap((until) =>
+      Stream.unwrap(
+        Effect.map(Clock.currentTimeMillis, (now) =>
+          now >= until
+            ? Stream.make(true)
+            : Stream.concat(Stream.make(false), Stream.fromEffect(quietPassed)),
+        ),
+      ),
+    ),
+    Stream.changes,
+  );
 
   /** The first register the service took, said once, which is what a person following its log waits to read. */
   const registered = (request: HttpClientRequest.HttpClientRequest, status: number) =>

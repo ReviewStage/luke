@@ -16,7 +16,7 @@ import { GATEWAY_EVENT, type GatewayEventKind } from "@repo/gateway";
 import { MAC_COMMAND_MODE, type MacCommandMode } from "@repo/settings";
 import { isRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { ConfigProvider, Duration, Effect, Layer } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, PubSub, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { composeMacCommands, type MacCommandClient } from "./compose-mac-commands.js";
 import { Environment, reporterLayer } from "./effect/seams.js";
@@ -185,7 +185,9 @@ interface Gate {
 /**
  * The concern composed over the scripted service, the gate as `gate` holds
  * it, with the asks it tells, as the panel would hear them, the modes the
- * prompt's Allow all commands wrote, and one ask answered as the panel answers it.
+ * prompt's Allow all commands wrote, one ask answered as the panel answers it,
+ * and `moved`, which tells it the gate changed, as a setting written or an
+ * account switched does.
  */
 const subject = (
   service: ReturnType<typeof scriptedService>,
@@ -206,12 +208,14 @@ const subject = (
       ),
     );
   };
-  return Effect.map(
-    composeMacCommands({
+  return Effect.gen(function* () {
+    const moves = yield* PubSub.unbounded<void>();
+    const composer = yield* composeMacCommands({
       kernel: { runMode: { sendsNetwork: true }, now: () => NOW, emit },
       account: { capabilitiesActive: () => gate.signedIn },
       accountId: () => gate.account ?? ACCOUNT,
       mode: Effect.sync(() => gate.mode),
+      changed: Effect.map(PubSub.subscribe(moves), Stream.fromSubscription),
       allowAlways: Effect.sync(() => {
         if (gate.saveFails === true) return false;
         written.push(MAC_COMMAND_MODE.ALWAYS);
@@ -219,18 +223,19 @@ const subject = (
         return true;
       }),
       client: service.client,
-    }).pipe(Effect.provide(machine(spawner, reported))),
-    (composer) => ({
+    }).pipe(Effect.provide(machine(spawner, reported)));
+    return {
       composer,
       told,
       written,
       reported,
+      moved: Effect.asVoid(PubSub.publish(moves, undefined)),
       /** The asks waiting as last told. */
       asks: () => told.at(-1) ?? [],
       answer: (id: string, decision: MacCommandDecision) =>
         composer.acts.MAC_COMMAND_ANSWER({ id, decision }),
-    }),
-  );
+    };
+  });
 };
 
 it.effect("with the setting on Never, or no account signed in, the service is never read", () =>
@@ -302,7 +307,7 @@ it.effect(
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
       const service = scriptedService();
       const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true };
-      const { composer } = yield* subject(service, spawner, gate);
+      const { composer, moved } = yield* subject(service, spawner, gate);
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -315,7 +320,7 @@ it.effect(
           for (const kinds of service.beats) assert.deepEqual(kinds, [MAC_COMMAND_KIND.SHELL]);
 
           gate.mode = MAC_COMMAND_MODE.NEVER;
-          yield* TestClock.adjust("15 seconds");
+          yield* moved;
           yield* settled;
           const reads = service.reads.length;
           yield* TestClock.adjust("1 minute");
@@ -418,16 +423,14 @@ it.effect(
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
       const service = scriptedService();
       const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true, account: ACCOUNT };
-      const { composer } = yield* subject(service, spawner, gate);
+      const { composer, moved } = yield* subject(service, spawner, gate);
 
       yield* Effect.scoped(
         Effect.gen(function* () {
           yield* composer.lifetime;
           yield* settled;
           gate.account = "user-other";
-          yield* TestClock.adjust("15 seconds");
-          yield* settled;
-          yield* TestClock.adjust("5 seconds");
+          yield* moved;
           yield* settled;
         }),
       );
@@ -650,8 +653,8 @@ it.effect(
           const built = yield* askedFor(service, spawner, [COMMAND], gate);
           assert.equal(built.asks().length, 1);
           gate.account = "user-other";
-          // The beat ends the follow, and the next turn lets the ask go.
-          yield* TestClock.adjust("15 seconds");
+          // The change ends the follow, and the next turn lets the ask go.
+          yield* built.moved;
           yield* settled;
           assert.deepEqual(built.asks(), []);
           yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);

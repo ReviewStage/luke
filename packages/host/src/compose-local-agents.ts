@@ -49,6 +49,7 @@ import {
   Scope,
   Semaphore,
   Stream,
+  SubscriptionRef,
 } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -204,10 +205,25 @@ import { forgetOwnedAgent, keepOwnedAgent, ownedAgents } from "./local-agent-sta
  * folder alone (`local-agent-requests.ts`). The service refusing the
  * host's version shuts the gate: the reads end, and every runner is
  * stopped, as the quit stops them.
+ *
+ * The gate is a value that changes rather than one read again on a timer
+ * (`LocalAgentsDependencies.switchedOn`): a gate shut waits for it to
+ * open, asking the service nothing, and the follow and its beats end the
+ * moment it shuts. A turn that died, or whose register the service did not
+ * take, is tried again after `RETRY`, longer each time it fails in a row.
  */
 
-/** How long the follow rests while the gate is shut, and how often an open gate is read again. */
-const IDLE = Duration.seconds(5);
+/** How soon a turn that died, or whose register failed, is tried again: from `FIRST`, twice as long each time, never longer than `LONGEST`. */
+const RETRY_AFTER = {
+  FIRST: Duration.seconds(5),
+  LONGEST: Duration.minutes(5),
+} as const;
+
+const RETRY = Schedule.exponential(RETRY_AFTER.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, RETRY_AFTER.LONGEST)),
+  ),
+);
 /** How long a device whose setup failed waits before it tries again. */
 const SETUP_RETRY = Duration.minutes(1);
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
@@ -282,8 +298,8 @@ export interface LocalAgentsDependencies {
   kernel: Pick<HostKernel, "stateRoot" | "createId">;
   /** The device id the host enrolled under. */
   deviceId: string;
-  /** Whether the device may ask the service now, shut while the service refuses it, read every `IDLE` while the gate is open. */
-  switchedOn: Effect.Effect<boolean>;
+  /** Whether the device may ask the service, as it stands now and each time it changes: shut while the service refuses it. */
+  switchedOn: Stream.Stream<boolean>;
   client: LocalAgentClient;
   /** The host's update of itself, where it runs from an account install's releases; none where it takes no notice of a newer release. */
   update?: LocalAgentsUpdate | undefined;
@@ -382,8 +398,15 @@ export function composeLocalAgents(
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideContext(call, services);
 
-    /** Whether this device runs local agents now: a home folder, and its switch on. */
-    const gateOpen = Effect.map(switchedOn, (on) => on && Option.isSome(home));
+    /** Whether this device runs local agents, as `switchedOn` last said; shut until it first says. */
+    const gate = yield* SubscriptionRef.make(false);
+    /** Waits until the gate stands as `open` says, at once where it already does. */
+    const gateStands = (open: boolean) =>
+      SubscriptionRef.changes(gate).pipe(
+        Stream.filter((now) => now === open),
+        Stream.runHead,
+        Effect.asVoid,
+      );
 
     /** A beat, saying where the host's update stands while one is under way. */
     const beat = Effect.flatMap(
@@ -405,12 +428,9 @@ export function composeLocalAgents(
     const presence = (beaten: Effect.Effect<unknown> = timedBeat(beat)) =>
       Effect.scoped(
         Effect.gen(function* () {
-          if (!(yield* gateOpen)) return;
+          if (!(yield* SubscriptionRef.get(gate))) return;
           yield* Effect.forkScoped(Effect.repeat(beaten, Schedule.fixed(BEAT_EVERY)));
-          for (;;) {
-            yield* Effect.sleep(IDLE);
-            if (!(yield* gateOpen)) return;
-          }
+          yield* gateStands(false);
         }),
       );
 
@@ -1269,20 +1289,7 @@ export function composeLocalAgents(
         yield* Effect.raceFirst(presence(told), Effect.provideContext(reconciling, services));
       });
 
-    /**
-     * One turn of the loop: with the gate shut, a rest; with it open, the
-     * device registered, the turn of every agent this machine made let go
-     * of, and its agents followed until the gate shuts, when the follow's
-     * scope closes and every runner it started is stopped with its group.
-     */
-    const turn = Effect.gen(function* () {
-      if (!(yield* gateOpen) || Option.isNone(home)) {
-        return yield* Effect.sleep(IDLE);
-      }
-      yield* openTurn(home.value);
-    });
-
-    /** An open gate's turn, from its home folder: the device readied and registered, the turns the run before left let go of, and its agents followed. */
+    /** An open gate's turn, from its home folder: the device readied and registered, the turns the run before left let go of, and its agents followed; false where its register was not taken. */
     const openTurn = (folder: string) =>
       Effect.gen(function* () {
         const { tools } = platform;
@@ -1300,11 +1307,9 @@ export function composeLocalAgents(
             ...setup,
           });
         // Note that the device registers as ready only once it has what its agents run on, so Start never takes one that cannot run an agent.
-        if (!(yield* readyForOpening(registered))) {
-          return yield* Effect.sleep(IDLE);
-        }
+        if (!(yield* readyForOpening(registered))) return true;
         const shellVariables = yield* shellEnvironment;
-        if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
+        if (!(yield* asked(registered({})))) return false;
         // Note that the device beats from its register on while it lets go of what the run before left, so a restart on a busy box never reads as away; the follow's own beats take over as it starts.
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -1316,17 +1321,36 @@ export function composeLocalAgents(
           }),
         );
         yield* Effect.scoped(follow(folder, shellVariables));
+        return true;
       });
 
+    /**
+     * One turn of the loop: a wait for the gate to open; then the device
+     * registered, the turn of every agent this machine made let go of, and
+     * its agents followed until the gate shuts, when the follow's scope
+     * closes and every runner it started is stopped with its group. It
+     * answers whether it went as it should: false where the service did not
+     * take its register. A device that names no home folder never opens.
+     */
+    const turn = Option.match(home, {
+      onNone: () => Effect.never,
+      onSome: (folder) => Effect.andThen(gateStands(true), openTurn(folder)),
+    });
+
     const lifetime = Effect.gen(function* () {
-      // A turn that died is reported and the follow rests before the next, as a shut gate does.
+      yield* Effect.forkScoped(
+        Stream.runForEach(switchedOn, (on) => SubscriptionRef.set(gate, on)),
+      );
+      // A turn that died is reported and, as one whose register failed, tried again after `RETRY`; one that went as it should starts the backoff afresh.
       const guarded = Effect.catchDefect(Effect.provideContext(turn, services), () =>
-        Effect.andThen(
+        Effect.as(
           Effect.sync(() => report("the local agents' follow failed")),
-          Effect.sleep(IDLE),
+          false,
         ),
       );
-      yield* Effect.forkScoped(Effect.forever(guarded));
+      yield* Effect.forkScoped(
+        Effect.forever(Effect.repeat(guarded, { schedule: RETRY, until: (went) => went })),
+      );
     });
 
     // Note that the follower answers nothing itself: the panel asks This Mac's vespin-host (`compose-this-mac-host.ts`).
