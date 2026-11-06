@@ -22,6 +22,7 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Option } from "effect";
 import { HttpClient } from "effect/http";
 import { controlsAgent } from "../agents/agent-reach.js";
+import type { AgentImage } from "../agents/coder-host/agent-image.js";
 import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
 import { agentTurnUnderWay } from "../agents/coder-host/snapshot.js";
 import { connectPty } from "../agents/sandbox-pty.js";
@@ -30,8 +31,8 @@ import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbo
 import type { GitHubApp } from "../github/github-app.js";
 import type { RelayDependencies } from "./relay.js";
 
-/** What the relay's dependencies answer over. */
-export type RelayServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
+/** What the relay's dependencies answer over: the agents' image among it, which a sandbox is made again from. */
+export type RelayServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | AgentImage;
 
 /** The relay's dependencies over the services the runtime holds now. */
 export const relayDependencies: Effect.Effect<RelayDependencies, never, RelayServices> = Effect.gen(

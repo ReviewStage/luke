@@ -7,6 +7,7 @@ import {
   Inline,
   QUIET_MARK,
   QuietWords,
+  RowCount,
   SETTINGS_ROW_INDENT,
   SettingsRow,
   SettingsSection,
@@ -26,9 +27,9 @@ import { CatalogSection } from "../section";
  * label in a narrow column, and a short badge beside a long row name in a
  * settings column at a page's measure and narrower, where the name gives way
  * and the badge stays whole; and where a state is a note rather than a
- * call to act, its quiet words in place of a badge, alone, after the
- * attention mark as a count named by its whole words, and after the failure
- * glyph.
+ * call to act, its quiet words in place of a badge, alone and after the
+ * failure glyph; and a count at a row's end, a tally in the muted ink and
+ * what waits on the reader in the attention tone.
  */
 
 const SAYS = {
@@ -82,10 +83,14 @@ function Badges(): React.JSX.Element {
         <Inline gap={GAP.CONTROL}>
           <QuietWords>Waiting on a teammate</QuietWords>
           <QuietWords>Pending</QuietWords>
-          <QuietWords mark={QUIET_MARK.ATTENTION} label="2 need you">
-            2
-          </QuietWords>
           <QuietWords mark={QUIET_MARK.FAILED}>Destructive</QuietWords>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="row-count" title="A count at a row's end">
+        <Inline gap={GAP.CONTROL}>
+          <RowCount value={4} noun="agents" />
+          <RowCount value={2} noun="need you" tone={STATUS_TONE.ATTENTION} />
+          <RowCount value={0} noun="need you" tone={STATUS_TONE.ATTENTION} />
         </Inline>
       </CatalogSection>
       <CatalogSection id="badge-swatch" title="A provider's colors">

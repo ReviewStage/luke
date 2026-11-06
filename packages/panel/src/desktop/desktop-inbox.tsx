@@ -229,7 +229,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     reading,
     choose,
     clear,
-    closeItem,
+    resolveItems,
     onRetry,
   } = useInboxListing(tasks, narrowedTask);
   const unread = useMemo(() => anyUnread(standing), [standing]);
@@ -532,7 +532,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   openPlace: openPlaceHere,
                 }),
                 onMark: markItem,
-                onClose: closeItem,
+                onClose: resolveItems,
                 onRemind: marks.onRemind,
               }}
             />
@@ -603,7 +603,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                   columns={columns.shown}
                   rows={columns.rows}
                   head={{
-                    shown: tasks.shown,
+                    // Note that a panel filling the window covers the list, so H and E stand down under it.
+                    shown: tasks.shown && !sidePanel.fullScreen,
                     // Note that a task's items are listed whole, so its Inbox offers no view's menu.
                     view: narrowedTask === undefined ? choices : undefined,
                     search,
@@ -647,7 +648,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   }
                   onChoose={open}
                   onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                  onClose={closeItem}
+                  onClose={resolveItems}
                   onRemind={marks.onRemind}
                   onPointing={onPointing}
                 />

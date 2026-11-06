@@ -4,7 +4,7 @@ import { BackButton, FILL_ELEMENT, Fill, Toolbar, useMinute } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useCallback, useMemo, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { useInboxCloser } from "../tasks/inbox-close.js";
+import { useInboxResolver } from "../tasks/inbox-close.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -187,7 +187,7 @@ export function AgentThreads({
   const pager = useInboxPager(steps, list, chosen, step, { shown: active });
   useAppCommand(APP_COMMAND.EXIT_AGENT_THREADS, active ? onBack : undefined);
   const marks = useInboxReadMarks({ workspaceId: tasks.workspace?.id });
-  const closeItem = useInboxCloser();
+  const resolveItems = useInboxResolver();
   // The item shown is read as it opens, as the Inbox reads it, only while the card holds the keys.
   const opened = active && columns.shown !== INBOX_COLUMNS.LIST ? listed : undefined;
   useReadOnOpen({
@@ -235,7 +235,7 @@ export function AgentThreads({
           }
           onChoose={choose}
           onMark={(each, unread, saying) => marks.onMark(each.item, unread, saying)}
-          onClose={closeItem}
+          onClose={resolveItems}
           onRemind={marks.onRemind}
           onPointing={onPointing}
         />
@@ -263,7 +263,7 @@ export function AgentThreads({
             doors={{
               ...agentPaneDoors(tasks, listed, agentId, onBack),
               onMark: marks.onMark,
-              onClose: closeItem,
+              onClose: resolveItems,
               onRemind: marks.onRemind,
             }}
           />

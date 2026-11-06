@@ -104,6 +104,7 @@ import {
 } from "../../testing/runner-sandbox-fake.js";
 import { fixtureToken, sandboxFetchOver } from "../../testing/vercel-sandbox-fake.js";
 import { AGENT_DRIVE, agentDriveName } from "../agent-drive.js";
+import { AGENT_TAG, SANDBOX_NAME } from "../agent-sandbox-open.js";
 import { BASE_DRIVE } from "../base-drive.js";
 import { claimedDeviceAgentLine } from "../device-agent.js";
 import {
@@ -114,7 +115,7 @@ import {
   PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
 import { agentMachinesLayer } from "../machine/agent-machines.js";
-import { AGENT_TAG, SANDBOX_NAME, vercelMachineLayer } from "../machine/vercel-machine.js";
+import { vercelMachineLayer } from "../machine/vercel-machine.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";

@@ -3044,13 +3044,13 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.ok(needs, "the item that needs you is listed");
   assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
-  assert.ok(needs.querySelector(".ui-combobox-option-hint .inbox-row-attention"), "it needs you");
-  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
-  assert.equal(
-    answered?.querySelector(".inbox-row-attention"),
-    null,
-    "an answered item needs no one",
+  assert.match(
+    needs.querySelector(".ui-combobox-option-hint")?.textContent ?? "",
+    /Needs you/u,
+    "it needs you",
   );
+  assert.ok(needs.querySelector(".ui-combobox-option-hint time"), "its time stands at its end");
+  assert.doesNotMatch(answered?.textContent ?? "", /Needs you/u, "an answered item needs no one");
 
   restOn(needs);
   const card = document.querySelector(".ui-tooltip-card [data-inbox-item-card]");
