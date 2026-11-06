@@ -8,7 +8,6 @@ import { AUTOMATION_FIRING, AUTOMATION_RUN_STATUS } from "./automation-wire.js";
 const NOW = 1_700_000_000_000;
 const HOUR = 3_600_000;
 
-/** A scheduled run fired `hoursAgo` that went to `agentId`, whose newest turn is still running. */
 function runTo(id: string, agentId: string, hoursAgo: number) {
   const firedAt = NOW - hoursAgo * HOUR;
   return {

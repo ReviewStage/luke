@@ -31,17 +31,10 @@ import {
   validLineRefs,
 } from "./pull-request-chapters.js";
 
-/**
- * pull-request-chapters.test.ts -- a model's chapters held to the diff they tell: every hunk in exactly one chapter, key changes on their own chapter's lines, each chapter drawing its own hunks with the threads on them, and the files a reader reads past left to "Other changes".
- */
-
-/** The first hunk of `src/seats.ts`: old lines 1–3, new lines 1–4. */
 const SEATS_FIRST = ["@@ -1,3 +1,4 @@ function seats()", " one", "+two", " three", " four"];
 
-/** The second hunk of `src/seats.ts`: old lines 10–11, new lines 11–12. */
 const SEATS_SECOND = ["@@ -10,2 +11,2 @@", " ten", "-eleven", "+ELEVEN"];
 
-/** A changed file, modified with the patch given unless told otherwise. */
 function changed(
   path: string,
   patch: string | null,
@@ -79,7 +72,6 @@ const MOVED = changed("src/moved.ts", "", {
 const FILES = [SEATS, ADDED, LOGO, MOVED];
 const HUNKS = chapterHunks(FILES);
 
-/** A story chapter holding the hunks named. */
 function story(title: string, hunkRefs: readonly HunkRef[], rest: Partial<Chapter> = {}): Chapter {
   return {
     kind: CHAPTER_KIND.STORY,
@@ -95,7 +87,6 @@ function story(title: string, hunkRefs: readonly HunkRef[], rest: Partial<Chapte
 
 const seatsFirst = { path: "src/seats.ts", oldStart: 1 };
 const seatsSecond = { path: "src/seats.ts", oldStart: 10 };
-// A hunk adding a file starts at 0 on the old side, as a file with no hunks is named.
 const added = { path: "src/invite.ts", oldStart: 0 };
 const logo = { path: "assets/logo.png", oldStart: HEADER_ONLY_OLD_START };
 const moved = { path: "src/moved.ts", oldStart: HEADER_ONLY_OLD_START };
@@ -183,7 +174,6 @@ test("what no chapter holds closes the story as Other changes, which weighs no c
   assert.deepEqual(last?.hunkRefs, [seatsSecond, added, logo, moved]);
 });
 
-/** A line reference to the lines given. */
 function lines(path: string, side: LineRef["side"], startLine: number, endLine: number): LineRef {
   return { path, side, startLine, endLine };
 }
@@ -199,9 +189,7 @@ test("a key change keeps only references wholly inside one of its chapter's own 
           inFirst,
           inFirst,
           removed,
-          // Spans two hunks' new sides, wholly inside neither.
           lines("src/seats.ts", LINE_REF_SIDE.ADDITIONS, 4, 11),
-          // Past the first hunk's new side.
           lines("src/seats.ts", LINE_REF_SIDE.ADDITIONS, 3, 5),
           lines("src/seats.ts", LINE_REF_SIDE.DELETIONS, 0, 2),
           lines("src/seats.ts", LINE_REF_SIDE.ADDITIONS, 3, 2),
@@ -209,7 +197,6 @@ test("a key change keeps only references wholly inside one of its chapter's own 
       },
       {
         content: "Does the invite export both?",
-        // A file another chapter holds.
         lineRefs: [lines("src/invite.ts", LINE_REF_SIDE.ADDITIONS, 1, 2)],
       },
     ],
@@ -281,7 +268,6 @@ test("a chapter holding one hunk of a file draws that hunk alone, and one naming
   assert.deepEqual(chapterPatches(story("Wrong start", [{ ...logo, oldStart: 3 }]), FILES), []);
 });
 
-/** A review thread on `src/seats.ts`, on the new side's line given unless told otherwise. */
 function thread(rest: Partial<ReviewThread>): ReviewThread {
   return {
     path: "src/seats.ts",
@@ -305,7 +291,6 @@ test("a thread stands in a chapter where one of its hunks counts the thread's li
   const second = story("Second", [seatsSecond]);
   const where = (each: ReviewThread) =>
     [first, second].filter((chapter) => threadInChapter(each, chapter, HUNKS)).map((c) => c.title);
-  // New line 4 is the first hunk's last; new line 11 the second's first.
   assert.deepEqual(where(thread({ line: 4 })), ["First"]);
   assert.deepEqual(where(thread({ line: 11 })), ["Second"]);
   assert.deepEqual(where(thread({ line: 11, side: DIFF_SIDE.LEFT })), ["Second"]);

@@ -7,12 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useLinkOpener } from "./held-link.js";
 
-/**
- * An app link handed while sign-in stands opens once the account is signed
- * in, the latest one only, and one handed after opens at once. Synthetic
- * tasks.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -21,7 +15,6 @@ afterEach(() => {
 
 const task = (taskId: string): DescriptionMention => ({ kind: MENTION_KIND.TASK, taskId });
 
-/** The opener drawn behind a gate that `stand` moves, every task it opened kept; `arriving` is handed in the commit the gate moves in, before its effects run. */
 function opener() {
   const opened: string[] = [];
   let handTo: ((mention: DescriptionMention) => void) | undefined;

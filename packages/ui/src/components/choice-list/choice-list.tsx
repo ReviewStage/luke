@@ -14,72 +14,6 @@ import {
   useRovingKeys,
 } from "../roving-keys/roving-keys.js";
 
-/**
- * choice-list.tsx -- a list of options a reader picks from, each a row the width of its column holding a label, a line of detail, and a badge: one of them, or any that apply, and once settled, what was offered with what was picked.
- *
- * Picking one is a radio group: the group is named by its legend, each row
- * is a radio checked while its value is, Tab lands on the checked row (the
- * first open one while none is) and leaves the group in one press, and the
- * arrow keys move along the open rows and choose as they go, wrapping at
- * either end. A press on the checked row does nothing, unless the list is
- * `clearable`, where it takes the choice back. Picking several is a group of
- * checkboxes in a fieldset, each its own Tab stop, toggled by a press or
- * Space, the arrow keys moving the keyboard along them without toggling.
- * Enter presses a row as a button's Enter does, unless what holds the list
- * takes the key first, as the Inbox does for its send. A row may be
- * unavailable on its own, saying why in its detail, and the keyboard steps
- * past it.
- *
- * A `marked` list leads each row with the control it behaves as, a radio's
- * round mark or a checkbox's square, filled in the accent once checked, so
- * one pick or several reads before a word does. A `numbered` list wears each
- * of its first nine rows' number at the row's right, after the badge, and
- * says it to a reader as the row's key; the caller answers the keys, since
- * a number picks a row from wherever the caller lets it. A row's `tone`
- * fills its checked control with what picking it means, going ahead in the
- * complete green or holding back in the danger red, and a list may stand
- * its rows `across`, side by side, as a yes beside a no. A `pill` list
- * draws its options as pills that wrap onto as many lines as they need,
- * the picked one tinted in the accent with a check before its words, for
- * short options with no detail, a form's select.
- * A `card` list draws each option as a bordered card, ringed once picked: the
- * option's radio and label on its head, its `aside` at the head's end, and its
- * `below` under them, controls of its own that the card holds. The head alone
- * is the radio, so a key pressed in the controls under it is theirs. A card
- * whose option gives a detail steps back whole, as an unavailable one, its
- * detail saying why.
- *
- * A settled list is the record of a choice made: the same rows as a list a
- * reader cannot press, the picked ones in the checked look with a check and
- * the caller's words for whose pick it was, and the rest stepped back to an
- * outline. A badge (the agent's "Recommended") stands at the row's top
- * right however the label wraps, as plain words in the caption's type and
- * the muted ink rather than a chip, open or settled alike, so it never
- * reads as the pick.
- *
- * A read-only list is the record of a choice made in the look it was made
- * in: the open list's own rows, marks, pills, and flow, the picked ones
- * checked and the rest not, at full strength rather than faded as an
- * unavailable list is, so it reads as an answer given and not one waiting.
- * No press, key, or Tab reaches its rows.
- *
- * The list owns its rows' spacing, type, and states. The caller holds the
- * value and answers every change with the values it asks for.
- *
- * A pick-one list is Base UI's `RadioGroup` of `Radio`s, a pick-several one
- * its `CheckboxGroup` of `Checkbox`es, each row a native button
- * (`nativeButton`) holding its words, so the roles, the checked state, and
- * the `data-checked` a row is drawn by are Base UI's. What a press and a
- * key do stays our own: Base UI checks a radio as focus lands on it, refuses
- * Enter on a row, and has no press that takes a choice back or hears the
- * checked row again, so the list answers its rows' presses and its arrows
- * itself and stops Base UI's own handling of them
- * (`preventBaseUIHandler`). Its rows are drawn in Tailwind utilities over
- * `tailwind/theme.css`; `choice-list.css` keeps what must stay a sheet's,
- * its header saying why.
- */
-
-/** How many options a list takes: exactly one, or any that apply. */
 export const CHOICE_SELECT = {
   ONE: "one",
   MANY: "many",
@@ -87,7 +21,6 @@ export const CHOICE_SELECT = {
 
 export type ChoiceSelect = (typeof CHOICE_SELECT)[keyof typeof CHOICE_SELECT];
 
-/** How an open list's rows are drawn: rows of words alone, rows led by the radio or checkbox each behaves as, pills that wrap, a check in the picked one, or cards holding controls of their own. */
 export const CHOICE_LOOK = {
   PLAIN: "plain",
   MARKED: "marked",
@@ -97,7 +30,6 @@ export const CHOICE_LOOK = {
 
 export type ChoiceLook = (typeof CHOICE_LOOK)[keyof typeof CHOICE_LOOK];
 
-/** How an open list's rows stand: one under another, or side by side, sharing the width, as a yes and a no do. */
 export const CHOICE_FLOW = {
   DOWN: "down",
   ACROSS: "across",
@@ -105,14 +37,8 @@ export const CHOICE_FLOW = {
 
 export type ChoiceFlow = (typeof CHOICE_FLOW)[keyof typeof CHOICE_FLOW];
 
-/** How many of a numbered list's rows wear their number: the keys 1 to 9. */
 export const CHOICE_NUMBERED_ROWS = 9;
 
-/**
- * A list's box: a column of rows with no box of its own. Rows across stand
- * side by side, and pills wrap onto as many lines as they need, never
- * jumping between a line's end and the line under it. Each look names its own gap, so no two utilities set one.
- */
 const LIST = "ui-choice-list min-w-0 m-0 p-0 [border:0] list-none";
 
 const LIST_LOOK = {
@@ -122,25 +48,9 @@ const LIST_LOOK = {
   card: "flex gap-2",
 } as const satisfies Record<ChoiceLook, string>;
 
-/**
- * A row's box: a label, its detail, and what stands beside them in a line
- * the width of its column. Note that a row draws the keyboard's ring inside
- * itself, because the list scrolls in a dialog whose edge would cut a ring
- * drawn outside; and that its fill, edge, and ink are `choice-list.css`'s,
- * because a stepped-back region quiets them from the components layer,
- * where a utility would outrank it.
- */
 const ROW =
   "ui-choice flex items-center gap-3 min-w-0 m-0 py-row-inset px-list-inset [border:0] rounded-control outline-offset-[calc(-1*var(--ui-focus-ring-width))] font-ui text-body text-left cursor-press transition-[--ui-choice-fill,background-color] duration-(--ui-duration-hover) ease-motion-exit";
 
-/**
- * Each look's own row. A pill's corners are half its one-line height
- * rather than a full round, so a long option that wraps in a narrow column
- * stands as a rounded box instead of swelling into an ellipse, while a short
- * one is the same capsule as ever. A card's row is its head's radio and
- * words, the card wearing the box, and fills the head beside its aside, so
- * the badge stands at the head's right as a row's does.
- */
 const ROW_LOOK = {
   plain: "",
   marked: "",
@@ -148,25 +58,13 @@ const ROW_LOOK = {
   card: "p-0 flex-auto",
 } as const satisfies Record<ChoiceLook, string>;
 
-/** A row standing beside the others shares the width, each as tall as the tallest. */
 const ROW_ACROSS = "flex-[1_1_0] items-start";
 
-/**
- * A marked row's radio or checkbox, stood on the label's first line (in a
- * card's head, on its center): a ring at rest, filled once checked, a dot
- * in a radio and a tick in a box.
- */
 const CONTROL =
   "ui-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--ui-duration-hover) ease-motion-exit";
 
-/**
- * A checked control's fill: the accent, or what picking it means, going
- * ahead or holding back, its dot or tick in the ground's ink, which reads
- * on either.
- */
 const CONTROL_ACCENT_FILL = "border-accent-fill bg-accent-fill";
 
-/** A checked control's fill in its row's status tone (`tokens/status-tone.css`). */
 const CONTROL_TONE_FILL = "border-tone-ink bg-tone-ink";
 
 const CONTROL_MARK = {
@@ -179,11 +77,6 @@ const CONTROL_INK = {
   box: { accent: "after:border-on-accent", toned: "after:border-ground" },
 } as const;
 
-/**
- * A card holds its radio, what it says at the head's end, and controls of
- * its own under them, ringed once picked, and steps back whole while its
- * option is unavailable.
- */
 const CARD = "ui-choice-card flex flex-col gap-2 p-3 rounded-control";
 
 const CARD_RING = {
@@ -191,74 +84,48 @@ const CARD_RING = {
   picked: "[box-shadow:inset_0_0_0_1px_var(--ui-color-border-selected)]",
 } as const;
 
-/** One option: the value it chooses, its words, and what stands beside them. */
 export interface ChoiceOption<Value extends string> {
   value: Value;
   label: string;
-  /** A line under the label: what the option means, or why it is unavailable. */
   detail?: string | undefined;
-  /** A short word at the row's top right, in the muted ink: the agent's "Recommended". */
   badge?: string | undefined;
-  /** A picture before the words, a workspace's tile. */
   mark?: ReactNode;
-  /** What hangs after the label on its line, a connected credential's check. */
   after?: ReactNode;
-  /** A card list's word or link at the head's end, outside the radio. */
   aside?: ReactNode;
-  /** A card list's controls under its head, which the card holds. */
   below?: ReactNode;
-  /** Whether this option alone cannot be picked. */
   disabled?: boolean | undefined;
-  /** What a marked row's control fills with once checked; the accent where none is given. */
   tone?: StatusTone | undefined;
-  /** Whether its label and detail name a person's thing, a workspace's or a repository's name, kept masked in a screen recording even where the list stands under `ReplayUnmask`. */
   replayMasked?: boolean | undefined;
 }
 
 interface ChoiceListBase<Value extends string> {
-  /** The list's accessible name, which a sighted reader has from what stands over it. */
   legend: string;
   options: readonly ChoiceOption<Value>[];
-  /** The values picked, at most one where the list picks one. */
   value: readonly Value[];
 }
 
-/** A list a reader picks from. */
 export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Value> {
   settled?: false | undefined;
   select?: ChoiceSelect | undefined;
-  /** Whether a pick-one list's checked row, pressed again, takes the choice back. */
   clearable?: boolean | undefined;
   disabled?: boolean | undefined;
-  /** The id of the words that describe the whole group, a settings row's description. */
   describedBy?: string | undefined;
-  /** Whether the group's last write was refused. */
   invalid?: boolean | undefined;
-  /** Whether a pick is to be made, as a form's field that is not optional asks (`FormField`'s `aria-required`). */
   required?: boolean | undefined;
-  /** Whether a write is in flight, which rests the group without disabling it. */
   busy?: boolean | undefined;
-  /** Whether it records a choice made, drawn as it was open and taking nothing. */
   readOnly?: boolean | undefined;
-  /** Whether each row leads with its radio or its checkbox. */
   look?: ChoiceLook | undefined;
-  /** Whether each of the first nine rows wears its number, the key the caller picks it by. */
   numbered?: boolean | undefined;
-  /** Whether the rows stand one under another or side by side. */
   flow?: ChoiceFlow | undefined;
-  /** Held by the row the keyboard lands on, so a dialog can focus it as it opens. */
   focusRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   onChange: (value: readonly Value[]) => void;
 }
 
-/** The record of a choice made, which no press changes. */
 export interface ChoiceListSettled<Value extends string> extends ChoiceListBase<Value> {
   settled: true;
-  /** What stands beside a picked row's label after its check: "Your pick". */
   pickedNote: ReactNode;
 }
 
-/** The check before a picked row's note, or before a picked pill's words, in the ink around it. */
 function PickedCheck({ className }: { className: string }): React.JSX.Element {
   return (
     <svg
@@ -277,7 +144,6 @@ function PickedCheck({ className }: { className: string }): React.JSX.Element {
   );
 }
 
-/** The values a press on `pressed` leaves picked. */
 function afterPress<Value extends string>(
   props: ChoiceListOpen<Value>,
   pressed: Value,
@@ -291,26 +157,12 @@ function afterPress<Value extends string>(
   return props.clearable === true ? [] : undefined;
 }
 
-/** How a label shares its head with what stands at its end. */
 function labelFlex(option: ChoiceOption<string>, look: ChoiceLook | undefined): string {
-  // Note that a pill sizes to its words, and that only a badge asks a label for a measure, since a number alone stands beside any label.
   if (look === CHOICE_LOOK.PILL) return "flex-initial";
   if (option.badge === undefined) return "flex-[1_1_0]";
-  // A card's label is a name of a few words, so its badge keeps the head's right on a phone's width too.
   return look === CHOICE_LOOK.CARD ? "flex-[1_1_6em]" : "flex-[1_1_10em]";
 }
 
-/**
- * A row's words: its label with the badge at its top right, its number after that, and anything the caller hangs after the label, then its detail.
- *
- * The badge stands at the label's top right while the label keeps a
- * readable measure beside it; in a column too narrow for both, a side
- * panel's or a phone's, the badge and the number drop to a line of their
- * own under the label rather than squeezing it to a word a line. A word too
- * long for its line, a path or an identifier, still breaks anywhere rather
- * than pushing past the row's edge. Note that the detail's ink is
- * `choice-list.css`'s, which a stepped-back region quiets.
- */
 function ChoiceWords({
   option,
   look,
@@ -342,7 +194,6 @@ function ChoiceWords({
                 {option.badge}
               </span>
             )}
-            {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
             {number === undefined ? null : (
               <span
                 className="ui-choice-number min-w-[1ch] text-muted-foreground text-caption leading-body tabular-nums text-center"
@@ -363,7 +214,6 @@ function ChoiceWords({
   );
 }
 
-/** A marked row's radio or checkbox, filled in the accent, or in its tone, once checked. */
 function ChoiceControl({
   radio,
   checked,
@@ -376,14 +226,12 @@ function ChoiceControl({
   inCard: boolean;
 }): React.JSX.Element {
   const shape = radio ? "radio" : "box";
-  // Note that a neutral tone says nothing of what picking means, so its control fills in the accent.
   const toned = tone !== undefined && tone !== STATUS_TONE.NEUTRAL;
   return (
     <span
       className={cn(
         CONTROL,
         radio ? "rounded-[50%]" : "rounded-choice-box",
-        // Note that an unsaved credential's radio in a card cannot be picked, so its ring steps back while its label stays readable.
         inCard
           ? "mt-0 self-center [:disabled>&]:opacity-disabled"
           : "self-start mt-[calc((var(--ui-type-body-leading)-var(--ui-space-16))/2)]",
@@ -398,7 +246,6 @@ function ChoiceControl({
   );
 }
 
-/** What a row holds, by its look: a pill's check, a marked row's control, a mark, and its words. */
 function RowInside({
   radio,
   option,
@@ -438,7 +285,6 @@ function RowInside({
   );
 }
 
-/** One row a reader presses: a radio where the list picks one, a checkbox where it picks several. */
 function ChoiceRow({
   radio,
   option,
@@ -456,22 +302,12 @@ function ChoiceRow({
   radio: boolean;
   option: ChoiceOption<string>;
   checked: boolean;
-  /** Whether it is a Tab stop of its own, as each of a group of checkboxes is; a radio group's one stop is its keys' to keep. */
   tabStop: boolean;
   disabled: boolean;
-  /**
-   * Whether it records a pick rather than offering one: it takes no press
-   * and no Tab stop, as an unavailable row does, yet its words select, since
-   * it is read rather than pressed. Note that it refuses the press itself,
-   * through Base UI's `readOnly`, because a disabled row refuses the
-   * pointer too, which would keep a drag over its words from selecting.
-   */
   readOnly: boolean;
-  /** Whether an unavailable row fades, which a read-only list's and a card's do not. */
   dims: boolean;
   look: ChoiceLook;
   across: boolean;
-  /** The row's key, counted from one, where the list is numbered and the row among its first nine. */
   number: number | undefined;
   focusRef: React.RefObject<HTMLButtonElement | null> | undefined;
   onPress: () => void;
@@ -483,10 +319,8 @@ function ChoiceRow({
     nativeButton: true,
     value: option.value,
     "data-value": option.value,
-    // Note that the hidden input Base UI draws beside the row holds the option's value, which the screen recording must never read.
     inputRef: ignoredByReplay,
     ...rovingItem(),
-    // Note that a radio is drawn out of the tab order, which quiets the group's own roving stop, so the stop its keys keep is the only one.
     tabIndex: tabStop && !readOnly ? 0 : -1,
     className: cn(
       ROW,
@@ -498,23 +332,18 @@ function ChoiceRow({
     "data-tone": option.tone,
     disabled,
     readOnly,
-    // Note that a read-only row is announced unavailable, as a disabled one is, which the roving keys pass over too.
     "aria-disabled": readOnly || undefined,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
     onClick: (event: React.MouseEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
-      // Note that the list answers the press itself, because Base UI's own takes no choice back.
       event.preventBaseUIHandler();
       if (readOnly) return;
-      // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole.
       const control = event.currentTarget.querySelector<HTMLElement>(":scope > .ui-choice-control");
       pulsePress(control ?? event.currentTarget);
       onPress();
     },
-    // Note that Enter presses a row as a button's Enter does, which Base UI's radio and checkbox refuse.
     onKeyDown: (event: React.KeyboardEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
       if (event.key === "Enter") event.preventBaseUIHandler();
     },
-    // Note that focus landing on a radio chooses nothing, because the arrows choose for themselves.
     onFocus: (event: React.FocusEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
       event.preventBaseUIHandler();
     },
@@ -551,13 +380,11 @@ function ChoiceRow({
   );
 }
 
-/** The list's own box, by its look and flow. */
 function listClass(look: ChoiceLook, flow: ChoiceFlow): string {
   const down = look !== CHOICE_LOOK.PILL && flow === CHOICE_FLOW.DOWN;
   return cn(LIST, LIST_LOOK[look], down ? "flex-col" : "flex-row");
 }
 
-/** The rows as a radio group or a group of checkboxes. */
 function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.JSX.Element {
   const {
     legend,
@@ -579,11 +406,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const still = disabled || readOnly;
   const open = options.filter((option) => option.disabled !== true);
   const landing = open.find((option) => value.includes(option.value)) ?? open[0];
-  // An arrow, Home, or End takes the keyboard to an open row, wrapping at
-  // either end; along a pick-one list it chooses the row it lands on, and
-  // along a pick-several one it toggles nothing. Note that a pick-one
-  // list's one Tab stop is its checked row, and that each row of a
-  // pick-several one is a stop of its own, as a group of checkboxes is.
   const roving = useRovingKeys<HTMLElement>({
     orientation: ROVING_ORIENTATION.BOTH,
     stop: one ? ROVING_STOP.CHOSEN : ROVING_STOP.NONE,
@@ -599,7 +421,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     const next = afterPress(props, pressed);
     if (next !== undefined) props.onChange(next);
   };
-  // Note that Base UI's own arrows never run, so a key pressed in a card's controls stays theirs.
   const onKeyDown = (
     event: React.KeyboardEvent<HTMLElement> & { preventBaseUIHandler: () => void },
   ) => {
@@ -654,7 +475,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       readOnly={readOnly || undefined}
       {...roving}
       onKeyDown={onKeyDown}
-      // Note that focus landing in a card's own field keeps its caret, which Base UI's group would select across.
       onFocus={(event) => {
         event.preventBaseUIHandler();
         roving.onFocus(event);
@@ -665,7 +485,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   );
 }
 
-/** The rows as a list no press changes, the picked ones checked and noted. */
 function SettledChoices<Value extends string>({
   legend,
   options,
@@ -690,7 +509,6 @@ function SettledChoices<Value extends string>({
               option={option}
               after={
                 picked ? (
-                  // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's center.
                   <span className="ui-choice-picked ml-2 text-muted-foreground text-caption leading-body font-caption whitespace-nowrap">
                     <PickedCheck className="mr-0.5" />
                     {pickedNote}
@@ -705,7 +523,6 @@ function SettledChoices<Value extends string>({
   );
 }
 
-/** The options of a choice: picked from while open, recorded once settled. */
 export function ChoiceList<Value extends string>(
   props: ChoiceListOpen<Value> | ChoiceListSettled<Value>,
 ): React.JSX.Element {

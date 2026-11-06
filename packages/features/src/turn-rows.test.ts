@@ -9,7 +9,6 @@ import {
   turnRows,
 } from "./turn-rows.js";
 
-/** A block as a tab hands it to the fold: what it is to the fold, its name, and whether it still moves. */
 interface Block {
   readonly part: (typeof ROW_PART)[keyof typeof ROW_PART];
   readonly name: string;
@@ -29,7 +28,6 @@ const subagent = (name: string): Block => ({ part: ROW_PART.SUBAGENT, name });
 const agent = (name: string): Block => ({ part: ROW_PART.AGENT, name });
 const arrived = (name: string): Block => ({ part: ROW_PART.ARRIVED, name });
 
-/** A turn's rows as a reader scans them: each block by name, each group's line, what it holds, and whether it is open and running, each fold's line and what it holds. */
 function scanned(rows: readonly TurnRow<Block>[]): unknown[] {
   return rows.map((row) => {
     if (row.kind === TURN_ROW.BLOCK) return row.block.name;
@@ -44,7 +42,6 @@ function scanned(rows: readonly TurnRow<Block>[]): unknown[] {
   });
 }
 
-/** The rows of a turn of `blocks`, moving or finished. */
 function rowsOf(blocks: readonly Block[], moving: boolean) {
   return scanned(turnRows(blocks, READING, { key: "turn", moving, done: !moving }));
 }
@@ -120,7 +117,6 @@ test("a message that reached a turn while it ran stands where it arrived: betwee
     "c",
     "Fixed.",
   ]);
-  // A stretch with no call between two messages keeps its rows, as a lead with none does.
   assert.deepEqual(
     rowsOf(
       [call("a"), arrived("First."), thought("Read both."), arrived("Second."), words("Done.")],
@@ -145,7 +141,6 @@ test("a finished turn whose lead is one call alone draws that call on its own ro
   );
 });
 
-/** A value read otherwise: words with more, a flag flipped, a list one item shorter, a record with a key more. */
 function changed(value: unknown): unknown {
   if (typeof value === "string") return `${value} again`;
   if (typeof value === "boolean") return !value;

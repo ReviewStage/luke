@@ -10,14 +10,6 @@ import { Announcer } from "../announcer/announcer.js";
 import { TOAST_HOLD } from "../toast/toast.js";
 import { CopyButton } from "./copy-button.js";
 
-/**
- * copy-button.test.ts -- a copy button is named "Copy {what}", hands its
- * words to the copy act it is given, shows the check and says "Copied"
- * once the act lands, and is back to the copy glyph once the toast's short
- * hold has run out; a refused copy shows the alert and says it could not
- * copy; a second press starts the hold over. Synthetic words.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -42,7 +34,6 @@ function draw(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** The markup `Glyph` draws, to tell which glyph the button shows. */
 function drawing(Glyph: () => React.JSX.Element): string {
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -56,12 +47,10 @@ function button(): HTMLButtonElement {
   return document.querySelector("button") ?? expect.fail("No copy button");
 }
 
-/** The glyph the button shows now. */
 function shownGlyph(): string {
   return button().querySelector('[aria-hidden="true"]')?.innerHTML ?? "";
 }
 
-/** What the window's announcer says now in `role`'s region. */
 function said(role: "status" | "alert"): string {
   return document.querySelector(`[role="${role}"]`)?.textContent ?? "";
 }

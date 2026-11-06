@@ -1,19 +1,3 @@
-/**
- * task-files.ts -- what a plan's tabs read beside its text: its repository's files, folders and skills, the pages agents wrote, and a picture kept on it.
- *
- * Every procedure names its plan by the path's `{id}`. A File tab's window
- * and a tree's folder are queries, as the desktops already released send
- * them: the file's path is the `path` query and never a path segment, its
- * lines `first` and `last`, `raw=1` for its whole text, and `ref` for the
- * commit it is read at; a folder is `path` and `recursive=1`. The service
- * reads each into the wire's own request (`task-wire.ts`) and refuses one
- * that does not read as the invalid request it always did.
- *
- * Each output is its wire schema flipped (`packages/service/src/orpc/base.ts`).
- * A picture kept answers 201 with its id and one refused in band answers 200
- * with why, so that procedure answers its status beside its body.
- */
-
 import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
@@ -34,20 +18,16 @@ import {
 } from "../task-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
-/** An upload is one picture or video as a `data:` URL at the larger of their byte bounds, base64 being four characters for every three bytes, with room for its type and key. */
 const PICTURE_BODY_BYTES =
   Math.ceil(Math.max(PICTURE_BOUNDS.MAX_BYTES, PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES) / 3) * 4 +
   1_024;
 
-/** The value a query flag is set to, as a File tab's `raw` and a tree's `recursive` are; any other is refused. */
 export const TASK_FILE_QUERY_FLAG = "1";
 
 const QUERY_FLAG = EffectSchema.Literal(TASK_FILE_QUERY_FLAG);
 
-/** The plan the path names. */
 const taskInputSchema = EffectSchema.Struct({ id: EffectSchema.String });
 
-/** A window of one file, as the File tab queries it: the service reads it into the wire's own request. */
 export const taskFileQueryFields = {
   path: EffectSchema.optionalKey(EffectSchema.String),
   first: EffectSchema.optionalKey(EffectSchema.String),
@@ -56,27 +36,23 @@ export const taskFileQueryFields = {
   ref: EffectSchema.optionalKey(EffectSchema.String),
 };
 
-/** A window of one file of the plan's repository, as the File tab queries it. */
 const taskFileQuerySchema = EffectSchema.Struct({
   ...taskInputSchema.fields,
   ...taskFileQueryFields,
 });
 
-/** One folder of the plan's repository, as the File tab's tree queries it: the root where `path` is absent. */
 const taskTreeQuerySchema = EffectSchema.Struct({
   ...taskInputSchema.fields,
   path: EffectSchema.optionalKey(EffectSchema.String),
   recursive: EffectSchema.optionalKey(QUERY_FLAG),
 });
 
-/** One version of one page of the plan, as the path names it. */
 const taskPageVersionSchema = EffectSchema.Struct({
   ...taskInputSchema.fields,
   page: EffectSchema.String,
   version: EffectSchema.String,
 });
 
-/** What keeping a picture answers: its status beside the wire's answer. */
 const pictureKeptSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(DESCRIPTION_ATTACHMENT_STATUS)),
   body: descriptionAttachmentAnswerSchema,
@@ -122,7 +98,6 @@ export const taskFilesContract = {
     )
     .input(taskPageVersionSchema)
     .output(EffectSchema.flip(taskPageVersionAnswerSchema)),
-  /** One version of one page as a browser's frame loads it: sent on to its short-lived link on the sandbox's own site, or to the page saying pages open in the Mac app where the deployment has no sandbox. */
   pageFrame: hostedProcedure
     .meta(
       openapi({

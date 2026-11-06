@@ -11,16 +11,8 @@ import {
   type IntegrationProvider,
 } from "./integration-wire.js";
 
-/**
- * Where each provider and account stands as the live read's rows say, as
- * the statuses read that settles nothing answers it: each row below and
- * what it draws is worked out by hand from that read
- * (`integrations-procedures.ts`'s `statusesAnswer`).
- */
-
 const { GITHUB, GRANOLA, LINEAR, NOTION } = INTEGRATION_PROVIDER;
 
-/** One row as the statement delivers it. */
 function row(connection: string, provider: string, status: string, label?: string) {
   return { id: `id-${connection}`, connection, provider, label: label ?? null, status };
 }

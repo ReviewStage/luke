@@ -11,76 +11,12 @@ import { Skeleton } from "../skeleton/skeleton.js";
 import { TEXT_TONE, Text } from "../text/text.js";
 import { TOOLBAR_INSET, TOOLBAR_LOOK, Toolbar, type ToolbarLook } from "../toolbar/toolbar.js";
 
-/**
- * settings-page.tsx -- a settings page: its title and what acts on the whole page above its sections, in a column that scrolls.
- *
- * The page stands under the window's bar (`Toolbar`), which leads with what
- * its caller hands it (a way back) and is still above the page's scroll;
- * once the header has scrolled away, the bar picks up its name
- * (`useHeadingAway`), so the reader never loses which page they are on.
- * Under it the page is its own scroller and owns everything between its
- * edges and its sections: the inset around the column, which narrows when the page
- * does, the measure the column reads at, the title's place and size, the
- * room under the head, and the room between one section (`SettingsSection`)
- * and the next. Its column of sections is a reveal area (`RevealArea`), so
- * as a setting's rows unroll in (`Reveal`), the sections under them glide
- * down with the rows. A section owns its heading and card, and a row its padding,
- * so a caller sets no length anywhere on a settings page. The page heads
- * itself with a document's header (`PageHeader`): the title is the page's
- * `h1`, which each section's `h2` heads a part of. What acts on the whole
- * page, a quiet reset, ends the title's line flush with the cards' edge,
- * and one quiet line under the title says what holds for all of it, where
- * its settings are kept,
- * its words rather than its hover's pill standing in the column, and drops
- * below the title when the column is too narrow for both, rather than
- * breaking the title inside a word.
- *
- * A section whose read is still out stands as placeholder rows shaped as
- * its own (`SettingsRowsSkeleton`), and a page that has not yet read what
- * its sections are stands as placeholder sections
- * (`SettingsSectionsSkeleton`), so the page is never blank under its title
- * and what lands takes the place its blocks stood in. An empty state that is the
- * page's whole content fills the room under the title and stands in its
- * middle. Rows scrolled up dissolve into the page's top edge rather than
- * being sliced against it, and a page at rest at its top is left whole.
- *
- * A long list on a page draws only the rows near the view (`VirtualRows`),
- * in the page's own scroller, which the page hands its sections
- * (`usePageScroll`) with the column of sections, whose resizing
- * moves where such a list stands.
- *
- * A page whose name is not yet known, Settings while its chunk loads, stands
- * as a whole page of placeholders (`SettingsPageSkeleton`): the page itself,
- * a block for its title, and its sections' blocks.
- *
- * On a phone (`TOOLBAR_LOOK.PHONE`), the look a page standing alone in a
- * small window takes too, the bar is a phone's header: its way back in one
- * corner, what acts on the whole page in the other (a ⋯ the caller hands as
- * `actions`), and the page's title, its `h1`, centered between them, as a
- * phone heads every page. The page then draws no header of its own: it
- * opens on the quiet line saying what holds for all of it, a section's gap
- * under the bar's way back (`title-under-bar`), so no lone row of the way
- * back stands over an empty band before the title.
- *
- * It is drawn in Tailwind utilities over the theme with no shadcn/ui base,
- * since a page's frame, scroller, and column are a layout shadcn has no
- * component for. The top's fade on its scroll timeline, an empty state's
- * room, and the column's narrow inset stay in `settings-page.css`.
- */
-
-/**
- * How wide a placeholder title stands: a short page name's, five controls'
- * height across. Note that it is a length rather than a share, because the
- * title's line is only as wide as what it holds.
- */
 const SKELETON_TITLE_WIDTH = "calc(5 * var(--ui-control-height))";
 
-/** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** A column of `children`, one section each, under `title` and its `description`, beside them `actions`, or on a phone under a bar ending with them. */
 export function SettingsPage({
   title,
   description,
@@ -90,19 +26,12 @@ export function SettingsPage({
   titleReplayUnmasked = false,
   children,
 }: {
-  /** The page's name, its `h1`. */
   title: ReactNode;
-  /** Whether a title in words is the app's own, which a screen recording shows as it reads on a phone's bar (`Toolbar`'s `titleReplayUnmasked`); a page named for a workspace stays masked. */
   titleReplayUnmasked?: boolean | undefined;
-  /** One quiet line under the title that holds for the whole page: where its settings are kept. */
   description?: ReactNode;
-  /** What acts on the whole page, at the end of the title's line, or on a phone at the end of the bar. */
   actions?: ReactNode;
-  /** What leads the bar above the page: a way back, where the window gives one. */
   lead?: ReactNode;
-  /** How the bar lays its slots: the window's, or a phone's one control a corner. */
   look?: ToolbarLook | undefined;
-  /** The sections, a section's gap apart. */
   children: ReactNode;
 }): React.JSX.Element {
   const page = useRef<HTMLDivElement>(null);
@@ -169,20 +98,15 @@ export function SettingsPage({
   );
 }
 
-/** A page of placeholders while `label` is read, drawn by the page itself: a block for its title over sections of `sections`' shapes. */
 export function SettingsPageSkeleton({
   label,
   lead,
   look,
   sections,
 }: {
-  /** What is being read, said to a reader: "Reading Settings". */
   label: string;
-  /** What leads the bar above the page, as `SettingsPage` takes it. */
   lead?: ReactNode;
-  /** How the bar lays its slots, as `SettingsPage` takes it. */
   look?: ToolbarLook | undefined;
-  /** The sections likely to land, each in its shape. */
   sections: readonly SettingsSectionSkeletonShape[];
 }): React.JSX.Element {
   return (

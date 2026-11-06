@@ -2,13 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { agentName } from "./model-label.js";
 
-/**
- * An agent as every place names it, the window's and the service's alike:
- * its title, else the automation whose run
- * started it, whether the wire or the service's own row carries it, else
- * its model's name, never its bare id.
- */
-
 const MODEL = "anthropic/claude-opus-5.5";
 
 test("an untitled agent an automation's run started is named by its automation, as the wire or the row carries it", () => {

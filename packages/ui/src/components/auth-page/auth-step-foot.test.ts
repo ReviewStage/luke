@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { AuthStepFoot } from "./auth-step-foot.js";
 
-/**
- * auth-step-foot.test.ts -- a step's foot says where the step stands and
- * offers Back, Skip, and the way on only where each is given, each press
- * reaching its own act.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -18,7 +12,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -28,7 +21,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The words of every button drawn, in order. */
 function buttonWords(container: HTMLElement): string[] {
   return Array.from(container.querySelectorAll("button"), (each) => each.textContent ?? "");
 }

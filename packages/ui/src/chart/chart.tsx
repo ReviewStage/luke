@@ -1,18 +1,3 @@
-/**
- * shadcn/ui's chart primitives (registry `new-york-v4/ui/chart`, built for
- * recharts 3), vendored because no app here is shadcn-scaffolded: there is no
- * components.json for the CLI to install into, and the one shared utility the
- * registry file expects — `cn` from `@/lib/utils` — is this package's own
- * `cn`. Exported at `@repo/ui/chart` alone, so recharts rides into no bundle
- * behind the barrel. Its frame and tooltip are drawn by `chart.css` in the
- * shared `--ui-*` tokens, not the stock utilities, so the chart reads
- * alike whichever app mounts it; a caller's `className` on the container
- * sizes it and nothing more. The tooltip's indicator is the swatch alone,
- * stock's line and dashed variants having no caller. Series colors
- * arrive through `ChartConfig`, whose values this repository fixes at build
- * time, never from anything observed.
- */
-
 import { formatCount } from "@repo/features/number-format";
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
@@ -20,9 +5,6 @@ import * as RechartsPrimitive from "recharts";
 import { cn } from "../cn.js";
 import { isSafeChartCssColor, isSafeChartCssKey } from "./chart-css.js";
 
-// Format: { THEME_NAME: CSS_SELECTOR }
-// A dark series color applies where the page is drawn in the dark theme
-// (`data-ui-theme`, `@repo/ui`'s `tokens/surface.ts`).
 const THEMES = { light: "", dark: '[data-ui-theme="dark"]' } as const;
 
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const;
@@ -72,10 +54,6 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId();
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
-  // A series with one color rides the container's own style, which the DOM
-  // sets property by property, so it draws under a content security policy
-  // that refuses inline stylesheets (the app's `style-src 'self'`); only a
-  // series with a color per theme needs `ChartStyle`'s rules.
   const { style, ...rest } = props;
 
   return (
@@ -96,11 +74,6 @@ function ChartContainer({
   );
 }
 
-/**
- * Each single-color series' variable, as the container's own style holds it.
- * The same boundary as `ChartStyle`'s: a key or color that fails validation
- * is skipped, so it costs its series the variable, not the chart its render.
- */
 function singleColorVariables(config: ChartConfig): React.CSSProperties {
   const variables: Record<string, string> = {};
   for (const [key, itemConfig] of Object.entries(config)) {
@@ -111,14 +84,7 @@ function singleColorVariables(config: ChartConfig): React.CSSProperties {
   return variables;
 }
 
-/** The rules for each series with a color per theme, which no one style attribute can hold. */
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  // SAFETY: the interpolation below is raw CSS, so the boundary must sit here
-  // in the primitive rather than at call sites: every config funnels through
-  // this component, and a future call site feeding it anything observed would
-  // otherwise turn a key or color string into an injection point. An entry
-  // that fails validation is skipped, not thrown on, because one bad series
-  // color should cost that series its variable, not the chart its render.
   const colorConfig = Object.entries(config).filter(([key, itemConfig]) => {
     const colors = itemConfig.theme ? Object.values(itemConfig.theme) : [];
     return colors.length > 0 && isSafeChartCssKey(key) && colors.every(isSafeChartCssColor);
@@ -137,7 +103,6 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    // SAFETY: theme iterates Object.entries(THEMES), so it is a THEMES key.
     const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme];
     return color ? `  --color-${key}: ${color};` : null;
   })
@@ -153,7 +118,6 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
-/** One series' line of a tooltip: its swatch, or the icon its config names, then its name and value. */
 function ChartTooltipRow({
   indicator,
   name,
@@ -178,11 +142,6 @@ function ChartTooltipSwatch({ color }: { color: string | undefined }) {
   return <div className="ui-chart-tooltip-swatch" style={{ backgroundColor: color }} />;
 }
 
-/**
- * A tooltip for a chart that is not recharts', one it places itself: the
- * same floating card as `ChartTooltipContent`, over `label`, with one row per
- * series under it, each its color's swatch, its name, and its value.
- */
 function ChartTooltipFrame({
   label,
   rows,
@@ -228,7 +187,6 @@ function ChartTooltipContent({
   color?: string;
   nameKey?: string;
   labelKey?: string;
-  /** How a finite value is drawn, where the locale's plain number would misread it, as a share. */
   valueFormatter?: (value: number) => string;
 } & Omit<
     RechartsPrimitive.DefaultTooltipContentProps<TooltipValueType, TooltipNameType>,
@@ -244,8 +202,6 @@ function ChartTooltipContent({
     const [item] = payload;
     const key = `${labelKey ?? item?.dataKey ?? item?.name ?? "value"}`;
     const itemConfig = getPayloadConfigFromPayload(config, item, key);
-    // Recharts hands `label` over as a loose ReactNode, and a string is the
-    // only form that can name a ChartConfig entry — this check is the boundary.
     const value =
       !labelKey && typeof label === "string" ? (config[label]?.label ?? label) : itemConfig?.label;
 
@@ -310,13 +266,6 @@ function ChartTooltipContent({
   );
 }
 
-/**
- * Helper to extract item config from a payload.
- *
- * This is the boundary where recharts' untyped tooltip and legend payloads
- * are parsed: their shapes are recharts' own, carrying no contract this
- * repository could import, so the narrowing has to happen here at runtime.
- */
 function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key: string) {
   if (typeof payload !== "object" || payload === null) {
     return undefined;

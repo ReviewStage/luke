@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { githubRepositoryOfRemote } from "./cli-git-remote.js";
 
-// Note that the regression this catches is a remote form read as no repository, or as the wrong
-// one, so `vespin task create` files the task under another repository, or refuses a checkout.
 describe("githubRepositoryOfRemote", () => {
   it.each([
     ["git@github.com:acme/app.git", "acme/app"],

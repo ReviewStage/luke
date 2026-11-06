@@ -8,13 +8,6 @@ import {
   linkErrorWords,
 } from "./connect-github-step.js";
 
-/**
- * What the connect page reads off its address, and the words it draws for
- * Better Auth's refusals. Better Auth returns a refused link to the page's
- * `errorCallbackURL` with its own `error` code appended after the page's
- * `error=1`, so the code the page draws is the other value.
- */
-
 test("Better Auth's code is read past the page's own error flag and drawn in Vespin's words", () => {
   const step = connectStepFromSearch("?error=1&error=account_already_linked_to_different_user");
 
@@ -46,7 +39,6 @@ test("the address asks for a connect by its intent or a finished link, and nothi
     kind: CONNECT_STEP.CONNECT,
     intent: "opaque",
   });
-  // Disconnecting is the Mac's own, under its session: the page no longer reads it.
   assert.deepEqual(connectStepFromSearch("?disconnect=1"), { kind: CONNECT_STEP.NOTHING });
   assert.deepEqual(connectStepFromSearch("?done=1"), { kind: CONNECT_STEP.DONE });
   assert.deepEqual(connectStepFromSearch("?intent="), { kind: CONNECT_STEP.NOTHING });
@@ -54,7 +46,6 @@ test("the address asks for a connect by its intent or a finished link, and nothi
 });
 
 test("a link GitHub refused or the developer canceled comes back with its intent, which the page offers again", () => {
-  // Better Auth appends its own code to the error address the page handed it.
   const returned = new URL(
     `${failedLinkAddress("opaque/1")}&error=access_denied`,
     "https://app.test",

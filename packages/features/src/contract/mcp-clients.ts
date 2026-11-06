@@ -1,16 +1,3 @@
-/**
- * mcp-clients.ts -- the outside MCP clients the account allowed (`mcp-client-wire.ts`), as procedures: read on the account's bearer, one revoked under the Mac's session.
- *
- * A revoke deletes the client's Allow through Better Auth's own consent
- * endpoint, which takes a session, so the service reads its caller from
- * the session the request carries rather than the bearer; the read is the
- * account's like every other. The client rides in the revoke's query, since
- * a `DELETE` carries no body.
- *
- * The outputs are the wire schemas flipped, so oRPC's output check encodes
- * the handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
- */
-
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";

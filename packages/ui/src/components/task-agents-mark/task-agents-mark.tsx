@@ -10,22 +10,6 @@ import {
 import { FailedMark } from "../row-mark/row-mark.js";
 import { WorkingMark } from "../working-mark/working-mark.js";
 
-/**
- * task-agents-mark.tsx -- the one icon a task's row ends with: how its agents stand, most pressing first.
- *
- * An agent that failed wears the failed mark every failure wears; an
- * agent at work, the working mark; and else the pull request they left, in GitHub's
- * glyph and color for where it stands: open in the success green, a draft
- * in the muted ink, merged in the merged purple, closed in the danger red,
- * and an open one in the merge queue the merge's glyph in the attention
- * orange, as every other mark of a pull request draws it.
- * Which one stands is `taskAgentsStatus`'s answer, and a task with none of
- * them wears nothing. Every icon is named in a fixed phrase, so nothing a
- * task holds rides it, and is drawn in the one seat its `size` sets, so a
- * row moves nothing as its status changes.
- */
-
-/** The seat a task's icon is drawn in: the sidebar's caption size, or a page row's glyph size. */
 export const TASK_AGENTS_MARK_SIZE = {
   SMALL: "small",
   MEDIUM: "medium",
@@ -33,13 +17,11 @@ export const TASK_AGENTS_MARK_SIZE = {
 
 export type TaskAgentsMarkSize = (typeof TASK_AGENTS_MARK_SIZE)[keyof typeof TASK_AGENTS_MARK_SIZE];
 
-/** Each seat's box, which every mark inside it fills, the working mark through its own size. */
 const SEAT_CLASS = {
   [TASK_AGENTS_MARK_SIZE.SMALL]: "size-ui-12 [--ui-working-mark-size:var(--spacing-ui-12)]",
   [TASK_AGENTS_MARK_SIZE.MEDIUM]: "size-ui-16 [--ui-working-mark-size:var(--spacing-ui-16)]",
 } as const satisfies Record<TaskAgentsMarkSize, string>;
 
-/** What a pull request's status is called for where it stands. */
 const PULL_REQUEST_WORDS = {
   [PULL_REQUEST_STATE.OPEN]: "Pull request open",
   [PULL_REQUEST_STATE.DRAFT]: "Pull request draft",
@@ -48,7 +30,6 @@ const PULL_REQUEST_WORDS = {
   [PULL_REQUEST_MARK_QUEUED]: "Pull request queued",
 } as const satisfies Record<PullRequestMarkState, string>;
 
-/** GitHub's color for where a pull request stands. */
 const PULL_REQUEST_INK = {
   [PULL_REQUEST_STATE.OPEN]: "text-complete",
   [PULL_REQUEST_STATE.DRAFT]: "text-muted-foreground",
@@ -57,7 +38,6 @@ const PULL_REQUEST_INK = {
   [PULL_REQUEST_MARK_QUEUED]: "text-attention",
 } as const satisfies Record<PullRequestMarkState, string>;
 
-/** The icon at the end of a task's row for how its agents stand; nothing where none of them failed, works, or left a pull request. */
 export function TaskAgentsMark({
   agents,
   size = TASK_AGENTS_MARK_SIZE.SMALL,
@@ -71,7 +51,6 @@ export function TaskAgentsMark({
     case TASK_AGENTS_STATUS.NONE:
       return null;
     case TASK_AGENTS_STATUS.FAILED:
-      // Note that the failed mark names itself, as it does on an agent's tab.
       return (
         <span className={seat} data-task-agents={status.kind}>
           <FailedMark />

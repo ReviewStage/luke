@@ -5,11 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { PageThumb } from "../../index.js";
 
-/**
- * page-thumb.test.ts -- a thumb of a page holds its frame out of the tab
- * order and the reader's reading; a thumb of a glyph holds no frame.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -17,7 +12,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

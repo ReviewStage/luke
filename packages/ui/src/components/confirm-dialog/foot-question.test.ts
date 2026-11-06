@@ -11,21 +11,8 @@ import { Dialog } from "../dialog/dialog.js";
 import { DialogActions } from "../dialog/dialog-actions.js";
 import { CONFIRM_LOSS, FootQuestion, useConfirmDialog } from "./confirm-dialog.js";
 
-/** The failure beneath a refusal. */
 const { failure: FAILURE } = recordedFailure();
 
-/**
- * foot-question.test.ts -- a question asked inside a dialog about something
- * it holds stands at that dialog's foot, never in a card over it: its words
- * and Cancel and the act take the foot's own answers' place, Cancel takes
- * focus, and what the dialog holds stands still. Cancel, Escape, and a press
- * on the dimmed window take the question back and leave the dialog open,
- * focus going back to what asked; an answer under way stills the foot and
- * holds it against Escape; a refusal keeps the question up saying why; and
- * once the act lands the dialog's own answers come back.
- */
-
-/** The answers the owner's act is waiting on, settled by the test in the order they were asked. */
 type Answers = ((result: ActionResult) => void)[];
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -48,7 +35,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A key's dialog: the key with Delete key, which asks at the foot, and Done; the key goes once its deletion lands. */
 function KeyDialog({ answers, onDone }: { answers: Answers; onDone: () => void }) {
   const [key, setKey] = useState(true);
   const confirm = useConfirmDialog(
@@ -89,7 +75,6 @@ function KeyDialog({ answers, onDone }: { answers: Answers; onDone: () => void }
   });
 }
 
-/** The button whose accessible name is `name`, wherever it stands. */
 function button(name: string): HTMLButtonElement | undefined {
   return [...document.querySelectorAll("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
@@ -101,7 +86,6 @@ function press(name: string): void {
   act(() => target.click());
 }
 
-/** Presses Escape on whatever holds focus. */
 function pressEscape(): void {
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
@@ -110,24 +94,20 @@ function pressEscape(): void {
   });
 }
 
-/** The one card standing. */
 function card(): HTMLElement {
   const cards = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
   assert.equal(cards.length, 1, "one card stands");
   return cards[0] ?? assert.fail("no card");
 }
 
-/** The question at the card's foot, while it stands. */
 function question(): HTMLElement | null {
   return card().querySelector<HTMLElement>('[role="group"]');
 }
 
-/** Whether `element` holds the keyboard, compared by hand so a failure does not print both elements whole. */
 function holds(element: Element | null | undefined): boolean {
   return element !== null && element !== undefined && document.activeElement === element;
 }
 
-/** The dialog drawn and its question asked from Delete key, which keeps focus as a press would give it. */
 function asked() {
   const answers: Answers = [];
   const onDone = vi.fn();

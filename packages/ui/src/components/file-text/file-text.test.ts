@@ -5,11 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { FILE_TEXT_EXTENT, FileText } from "./file-text.js";
 
-/**
- * file-text.test.ts -- the file's words reach the page exactly as written,
- * a region named for a reader; the whole takes the keyboard to scroll, a peek does not.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -23,7 +18,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` on the page and hands back what it was drawn into. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

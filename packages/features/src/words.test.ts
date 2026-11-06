@@ -12,12 +12,6 @@ import {
   TERM,
 } from "./words.js";
 
-/**
- * words.test.ts -- a count takes its noun's one form at 1 alone, a list joins
- * with the Oxford comma from three names on, and each read phrase names its
- * thing in its one grammar.
- */
-
 test("a count says its noun's one form at 1 and the many form at 0, 2, and a fraction", () => {
   assert.deepEqual(
     [0, 1, 2, 1.5].map((count) => countWords(count, TERM.RESULT)),

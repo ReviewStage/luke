@@ -1,53 +1,18 @@
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 
-/**
- * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where they would not fit beside them.
- *
- * A notice comes in four looks: a slim strip across a column, its words held
- * to one line and fading out at its end where it cuts them short (a stranded
- * repository's); a card over a document, its glyph
- * in a disc (an archived plan's), or bare in its tone's ink as a failure
- * note's mark (a launch a Mac could not start); and a quiet row in the
- * frame its place draws around it (an archived agent's, in its composer's
- * place); and the strip's line set inside a card, with no fill or edge of
- * its own (a queued message being edited, at its composer's head). Each is
- * in one of a few tones, which tint the strip and the card and ink the inset
- * line.
- *
- * They share one layout, so they give way alike: the presses stand beside the
- * words wherever the words keep a readable width beside them, and only where
- * they would not do they leave the words' line for a line of their own, so a
- * word is never squeezed a letter to a line and a press never stands on the
- * words. It answers its own room rather than the window, because the same
- * strip stands in a narrow column beside a wide side panel and across a whole
- * window alike. A strip
- * is named by its own words, never an attribute, because a session
- * recording masks text and nothing else.
- *
- * Where a banner stands, how wide it is and the room around it, is its
- * place's; the banner takes no class or style. It is drawn by shadcn/ui's
- * alert (`../../shadcn/alert.tsx`), whose narrow rules stay in `banner.css`.
- */
-
 import { type ReactNode, useId } from "react";
 import { Alert, AlertAction, AlertDescription, AlertGlyph, AlertRow } from "../../shadcn/alert.js";
 import { useClipped } from "../../use-clipped.js";
 
-/** How a banner looks; its layout is the same for all four. */
 export const BANNER_LOOK = {
-  /** One slim line across a column, its words held to one line while there is room. */
   STRIP: "strip",
-  /** A card, its glyph in a disc. */
   CARD: "card",
-  /** A quiet row, framed by its place. */
   ROW: "row",
-  /** The strip's line inside a card, with no fill or edge of its own, so the card's corners stay its own; its tone inks its glyph and words. */
   INSET: "inset",
 } as const;
 
 export type BannerLook = (typeof BANNER_LOOK)[keyof typeof BANNER_LOOK];
 
-/** How a card's glyph stands: in a disc of its tone's tint, or as the bare mark a failure note wears, in its tone's ink beside the words' first line. */
 export const BANNER_GLYPH = {
   DISC: "disc",
   MARK: "mark",
@@ -55,7 +20,6 @@ export const BANNER_GLYPH = {
 
 export type BannerGlyph = (typeof BANNER_GLYPH)[keyof typeof BANNER_GLYPH];
 
-/** A notice: its look and tone, its glyph, its words, which name it to a reader, and the presses that answer it, if any. */
 export function Banner({
   look,
   tone = STATUS_TONE.NEUTRAL,
@@ -67,9 +31,7 @@ export function Banner({
   look: BannerLook;
   tone?: StatusTone;
   glyph: ReactNode;
-  /** How a card's glyph stands; every other look draws its glyph bare whatever this says. */
   glyphLook?: BannerGlyph;
-  /** The presses, in reading order; the last is the banner's primary one. */
   actions?: ReactNode;
   children: ReactNode;
 }): React.JSX.Element {

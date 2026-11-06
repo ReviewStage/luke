@@ -8,13 +8,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { BACK_BUTTON_LOOK, BackButton, type BackButtonLook, NO_BACK_KEY } from "./back-button.js";
 
-/**
- * back-button.test.ts -- a way back, in a bar or at the top of a column, is
- * one button named by its words that goes back when pressed, and its hint,
- * raised by the keyboard's focus, says where it leads and names the key
- * that goes there too. Synthetic places.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -25,7 +18,6 @@ const LOOKS = [BACK_BUTTON_LOOK.HEADER, BACK_BUTTON_LOOK.COLUMN] as const;
 
 const roots: Root[] = [];
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here. */
 class StillResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -43,7 +35,6 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
 });
 
-/** Draws `element` on a registry of its own, as an app's root provides one. */
 function draw(element: ReactElement): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -53,7 +44,6 @@ function draw(element: ReactElement): void {
   );
 }
 
-/** A way back to the inbox drawn in `look`, and how many times it went back. */
 function wayBack(
   look: BackButtonLook,
   keyed: Pick<Parameters<typeof BackButton>[0], "command" | "tabbable" | "keepFocus" | "name"> = {},
@@ -75,7 +65,6 @@ function wayBack(
   return { button, backs: () => backs };
 }
 
-/** The keyboard moving onto `button` and resting there past the hint's wait, on a faked clock. */
 function focusByKeyboard(button: HTMLButtonElement): void {
   document.documentElement.dataset.keyboard = "true";
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

@@ -1,22 +1,3 @@
-/**
- * agents.ts -- a coding agent as the desktop lists, starts, reads, changes, and stops it, its changes and review options, and its shells (`agent-wire.ts`, `terminal-wire.ts`).
- *
- * Every path names the task or the agent it is about as `{id}`, and a shell
- * as `{terminal}`, which the handler reads as an id: one that is no UUID
- * names no row and is answered not found, as the old groups answered it. A
- * procedure with a path and a JSON body reads them apart
- * (`inputStructure: "detailed"`), the body exactly. A Start answers 201
- * for the agent it made and 200 for the one a retry under the same key
- * already made, so it answers its status beside its body
- * (`outputStructure: "detailed"`). A Start from an agent is keyed by that
- * agent rather than a task (`POST /api/agents/{id}/agents`), so an agent with
- * no task is continued and forked as one on a task is; its body is a Start's,
- * whose `from` names the path's agent. A delete (`DELETE /api/agents/{id}`)
- * takes the agent for good, as a task's delete takes a task. No path starts
- * a fresh agent on no task. Outputs are the
- * wire schemas flipped (`packages/service/src/orpc/base.ts`).
- */
-
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
@@ -52,43 +33,29 @@ import {
 import { workspaceToolsAnswerSchema } from "../workspace-tools-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
-/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
 const CHOICE_BODY_BYTES = 4_096;
 
-/** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
 const TERMINAL_BODY_BYTES = 1_024;
 
-/** One agent's path, its id the `{id}` segment. */
 const AGENT_PATH = `${HOSTED_SERVICE_PATH.AGENTS}/{id}` as const;
 
-/** One agent's shells. */
 const TERMINALS_PATH = `${AGENT_PATH}/terminals` as const;
 
-/** The statuses a Start answers: the agent it made, or the one a retry under the same key already made. */
 export const AGENT_START_STATUS = { CREATED: 201, STARTED_BEFORE: 200 } as const;
 
-/** The task or the agent a path names, read as an id by the handler. */
 const idParams = EffectSchema.Struct({ id: EffectSchema.String });
 
-/** One shell of an agent a path names. */
 const terminalParams = EffectSchema.Struct({
   id: EffectSchema.String,
   terminal: EffectSchema.String,
 });
 
-/** How many of a workspace's agents a page passes over, as its query carries it: a whole number from zero. */
 const offsetQuery = EffectSchema.NumberFromString.pipe(
   EffectSchema.decodeTo(EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0))),
 );
 
-/** What a list's `archived` query may say, read as the old groups read it: `include`, or anything else for none. */
 const archivedQuery = EffectSchema.optionalKey(EffectSchema.String);
 
-/**
- * One change of an agent (PATCH): its title, its archive, its pin, the
- * reader's read mark, its MCP servers, a repository added beside its own,
- * or its model and effort, read in that order as the old group read them.
- */
 const agentChangeRequestSchema = EffectSchema.Union([
   agentRenameRequestSchema,
   agentArchiveRequestSchema,
@@ -99,17 +66,14 @@ const agentChangeRequestSchema = EffectSchema.Union([
   modelChoiceSchema,
 ]);
 
-/** A change as it travels. */
 export type AgentChangeRequest = typeof agentChangeRequestSchema.Encoded;
 
-/** A Start's answer: its status, and the agent. */
 const startAnswerSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(AGENT_START_STATUS)),
   body: agentAnswerSchema,
 });
 
 export const agentsContract = {
-  /** A page of a workspace's agents, newest started first, narrowed as the query asks, from its `offset`. */
   listOfWorkspace: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.AGENTS }))
     .input(
@@ -122,7 +86,6 @@ export const agentsContract = {
       }),
     )
     .output(EffectSchema.flip(agentWorkspaceListAnswerSchema)),
-  /** One task's agents with their status. */
   listOfTask: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.TASKS}/{id}/agents` }))
     .input(
@@ -132,7 +95,6 @@ export const agentsContract = {
       }),
     )
     .output(EffectSchema.flip(agentListAnswerSchema)),
-  /** An agent started on the task, or the one a retry under the same key already started. */
   start: hostedProcedure
     .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
     .meta(
@@ -145,7 +107,6 @@ export const agentsContract = {
     )
     .input(exactBodyInput(idParams, agentStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
-  /** An agent started from the one the path names, continuing it or forking it, in that agent's own place: its task, or its workspace and repository where it has no task. */
   startFrom: hostedProcedure
     .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
     .meta(
@@ -158,28 +119,23 @@ export const agentsContract = {
     )
     .input(exactBodyInput(idParams, agentStartRequestSchema))
     .output(EffectSchema.flip(startAnswerSchema)),
-  /** One agent as its own page. */
   read: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: AGENT_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(agentPageAnswerSchema)),
-  /** One change of an agent, answering it as it then stands. */
   change: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(idParams, agentChangeRequestSchema))
     .output(EffectSchema.flip(agentAnswerSchema)),
-  /** One agent deleted for good, stopped first where it still works. */
   delete: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: AGENT_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(agentDeleteAnswerSchema)),
-  /** One agent stopped. */
   stop: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))
     .input(idParams)
     .output(EffectSchema.flip(agentAnswerSchema)),
-  /** One agent taken back to just before one of the developer's lines, stopped first where it still works. */
   rewind: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(
@@ -191,7 +147,6 @@ export const agentsContract = {
     )
     .input(exactBodyInput(idParams, agentRewindRequestSchema))
     .output(EffectSchema.flip(agentAnswerSchema)),
-  /** One agent's changes, or those of the pull request of its repository the query numbers. */
   changes: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/changes` }))
     .input(
@@ -201,27 +156,22 @@ export const agentsContract = {
       }),
     )
     .output(EffectSchema.flip(agentChangesAnswerSchema)),
-  /** What the reviewer and label pickers of one agent's Pull request tab offer. */
   reviewOptions: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
-  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
   workspaceTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
     .input(idParams)
     .output(EffectSchema.flip(workspaceToolsAnswerSchema)),
-  /** One agent's stopped sandbox resumed, on the developer's click. */
   sandboxResume: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))
     .input(idParams)
     .output(EffectSchema.flip(sandboxResumedAnswerSchema)),
-  /** One agent's shells and where its sandbox stands. */
   terminals: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: TERMINALS_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(terminalsAnswerSchema)),
-  /** A shell started in one agent's sandbox. */
   openTerminal: hostedProcedure
     .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
@@ -234,7 +184,6 @@ export const agentsContract = {
     )
     .input(exactBodyInput(idParams, terminalCreateRequestSchema))
     .output(EffectSchema.flip(terminalCreatedAnswerSchema)),
-  /** One shell named anew, answering the shells as they stand after. */
   renameTerminal: hostedProcedure
     .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
@@ -246,7 +195,6 @@ export const agentsContract = {
     )
     .input(exactBodyInput(terminalParams, terminalRenameRequestSchema))
     .output(EffectSchema.flip(terminalsAnswerSchema)),
-  /** One shell ended, answering the shells as they stand after. */
   endTerminal: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: `${TERMINALS_PATH}/{terminal}` }))
     .input(terminalParams)

@@ -12,16 +12,6 @@ import {
   type VirtualRuns,
 } from "./virtual-rows.js";
 
-/**
- * virtual-rows.test.ts -- a run of rows is a list to a reader, and each row
- * drawn says how many rows the run holds and where it stands among them,
- * though the rows far from the view are not drawn at all; and a run read
- * from its top draws the rows its scroller shows, wherever in the scroller
- * the boxes around it place it, by the sizes it measured when it was last
- * drawn where it is handed them. A list of several runs answers every row's
- * key, in the order its runs stand.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +20,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks. */
 class StandInResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -77,9 +66,6 @@ test("the rows are the items of a list, each saying the run's size and its own p
 
 test("a run read from its top, placed by a box inside its scroller, draws the rows the scroll shows", () => {
   vi.stubGlobal("ResizeObserver", StandInResizeObserver);
-  // Note that jsdom lays nothing out, so the run stands at the top of a list's body that is itself
-  // placed 1,000px down the scroller's content, and the scroller is scrolled 2,000px down: rows
-  // 10 to 17 of 100px fill the window's 768px, and the four on either side are drawn with them.
   const box = (id: string) => document.getElementById(id);
   vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
     this: HTMLElement,
@@ -102,7 +88,6 @@ test("a run read from its top, placed by a box inside its scroller, draws the ro
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  // Note that the scroller stands before the run is drawn in it, as a list's does when it is narrowed to another scope.
   const frame = (run: boolean) =>
     createElement(
       "nav",
@@ -135,8 +120,6 @@ test("a run read from its top, placed by a box inside its scroller, draws the ro
 
 test("a run drawn again with what it measured lays its rows out by those sizes from its first draw", () => {
   vi.stubGlobal("ResizeObserver", StandInResizeObserver);
-  // Note that the run stands at the top of a body 1,000px down its scroller, scrolled 2,000px down, as above: by the
-  // 100px estimate rows 10 to 17 would show, but its first 20 rows measured 50px, so 1,000px into the run is row 20.
   const box = (id: string) => document.getElementById(id);
   vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
     this: HTMLElement,
@@ -167,7 +150,6 @@ test("a run drawn again with what it measured lays its rows out by those sizes f
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  // Note that the scroller stands before the run is drawn in it, as a page's does when its rows are drawn again.
   const frame = (run: boolean) =>
     createElement(
       "nav",
@@ -219,7 +201,6 @@ test("a row moved to another place, the run's length unchanged, is drawn under i
       }),
     );
   act(() => root.render(frame(["a", "b", "c", "d"])));
-  // Note that the thread that moved to the top of an Inbox is one row taken from the foot, so the run holds as many rows as before.
   act(() => root.render(frame(["d", "a", "b", "c"])));
   const drawn = [...container.querySelectorAll("p")].map((row) => row.textContent);
   assert.deepEqual(drawn, ["d", "a", "b", "c"]);
@@ -258,7 +239,6 @@ test("a list's runs answer every row's key, those left undrawn among them, in th
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  // Note that the run standing first is drawn last, so it is held after the one below it.
   act(() => root.render(createElement(List, { above: false })));
   act(() => root.render(createElement(List, { above: true })));
   assert.deepEqual(held.runs?.keys(), [...keysOf("a"), ...keysOf("b")]);

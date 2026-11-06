@@ -1,52 +1,13 @@
-/**
- * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online unless its call got no answer, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
- *
- * The panel hands every failure it shows here (`@repo/panel/failure-report`),
- * an error toast and a failure drawn in place of what could not be read
- * alike. Each becomes one Sentry log line, searchable by every attribute
- * below: at `warn` for a refusal something named, such as a limit or a
- * refusal the service or the host worded, or for any failure shown while the
- * machine had no network or of a call that got no answer, and at `error` for
- * anything else. One nothing named, shown while online and not of a call
- * that got no answer, becomes an issue besides, grouped by where it was
- * shown and its code rather than by its stack, since one surface shows the
- * same failure from many paths.
- *
- * What it carries is chosen here rather than read from the failure whole:
- * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
- * cause's own message, every string read from the cause with each
- * credential-shaped run replaced (`credential-redaction.ts`) and cut at a
- * bound, but the trace a hosted call traveled under, read only in a trace
- * id's shape, which the service's log lines for that call carry. There is
- * no field for what
- * a person typed, a transcript, a description, or a file. Note that a cause's
- * message is the error's own words, as an error's words already reach
- * Sentry (root `AGENTS.md`), and a refusal's is the sentence the service or
- * the host drew for it.
- *
- * The same facts are what a person copies from the failure they were shown
- * (`shownFailureDetails`), with the Sentry event id the issue was opened
- * under, the trace it was sent in, the time, and the app's version, so what
- * they send with a report of the problem names what Sentry and the logs hold
- * and nothing they do not.
- *
- * Written against the few calls it makes rather than one SDK's types, so the
- * desktop's `@sentry/electron` and the web's `@sentry/browser` each hand
- * their own, as `sentry-reporting.ts` takes them.
- */
-
 import { Predicate } from "effect";
 import { CALL_FAULT, DEADLINE_ERROR_NAME } from "./account-call.js";
 import { redactCredentials } from "./credential-redaction.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
-/** Where a failure was shown: the surface whose words said so. */
 export const FAILURE_SURFACE = {
   ACCOUNT_DELETE: "account.delete",
   ACCOUNT_SIGN_IN: "account.sign_in",
   ACCOUNT_SIGN_OUT: "account.sign_out",
   ACCOUNT_TOKEN_READ: "account_token.read",
-  /** An act a person pressed for, whose answer nothing else read (`pressAct`). */
   ACT: "act",
   ADMIN_GATE: "admin.gate",
   ADMIN_READ: "admin.read",
@@ -66,7 +27,6 @@ export const FAILURE_SURFACE = {
   AGENT_KEY_REMOVE: "agent_key.remove",
   AGENT_KEY_SAVE: "agent_key.save",
   AGENT_PIN: "agent.pin",
-  /** A change of an agent's queue the host drew and took back: a message queued, edited, held, steered, put in order, or the pause dropped. */
   AGENT_QUEUE_CHANGE: "agent_queue.change",
   AGENT_QUEUE_DELETE: "agent_queue.delete",
   AGENT_RENAME: "agent.rename",
@@ -86,7 +46,6 @@ export const FAILURE_SURFACE = {
   AUTOMATION_INTEGRATIONS_READ: "automation_integrations.read",
   AUTOMATION_LEAVE: "automation.leave",
   AUTOMATION_READ: "automation.read",
-  /** A file handed to a message box could not be read on this machine. */
   ATTACHMENT_READ: "attachment.read",
   AUTOMATION_RUN: "automation.run",
   AUTOMATION_RUNS_READ: "automation_runs.read",
@@ -222,52 +181,35 @@ export const FAILURE_SURFACE = {
 } as const;
 export type FailureSurface = (typeof FAILURE_SURFACE)[keyof typeof FAILURE_SURFACE];
 
-/**
- * What a failure shown with no cause at hand names in its place: the
- * condition its surface saw, sent as its code.
- */
 export const FAILURE_CONDITION = {
-  /** What it was about is no longer there. */
   GONE: "gone",
-  /** A read answered nothing to show, and nothing more. */
   UNREAD: "unread",
-  /** A write answered that it was not kept, and nothing more. */
   NOT_KEPT: "not-kept",
-  /** A refusal that said nothing more. */
   REFUSED: "refused",
-  /** Another write landed first. */
   CONFLICT: "conflict",
 } as const;
 
-/** Whether a failure was a refusal something named, which is expected, or anything else. */
 export const FAILURE_KIND = { REFUSED: "refused", UNEXPECTED: "unexpected" } as const;
 export type FailureKind = (typeof FAILURE_KIND)[keyof typeof FAILURE_KIND];
 
-/** The ids of what a failure was about, each where it is known. */
 export interface FailureAbout {
   readonly workspaceId?: string | undefined;
   readonly taskId?: string | undefined;
   readonly agentId?: string | undefined;
   readonly conversationId?: string | undefined;
   readonly turnId?: string | undefined;
-  /** The call that started the worker a failure is about, among its agent's workers. */
   readonly callId?: string | undefined;
   readonly inboxItemId?: string | undefined;
   readonly automationId?: string | undefined;
   readonly pullRequest?: number | undefined;
 }
 
-/** The app's state as a failure was shown. */
 interface FailureState {
-  /** Whether the machine had a network, as its platform last answered. */
   readonly online: boolean;
-  /** Where the account stood: signed in, signing in, or signed out. */
   readonly account: string;
-  /** The live stream's state, where one stands. */
   readonly live?: string | undefined;
 }
 
-/** A failure as it is reported: where it was shown, whether it was named, what failed, what it was about, by which act, and the app's state then. */
 export interface ShownFailureReport {
   readonly surface: FailureSurface;
   readonly kind: FailureKind;
@@ -277,13 +219,10 @@ export interface ShownFailureReport {
   readonly state: FailureState;
 }
 
-/** What a log line or an issue's context carries: names and values, never an object. */
 type FailureAttributes = Record<string, string | number | boolean>;
 
-/** The level a shown failure's issue is sent at. */
 const ISSUE_LEVEL = "error";
 
-/** What an issue tells Sentry beside its error: the path that caught it, and its level, grouping, tags, and context. */
 interface ShownFailureHint {
   readonly mechanism: { readonly type: string; readonly handled: boolean };
   readonly captureContext: {
@@ -294,14 +233,11 @@ interface ShownFailureHint {
   };
 }
 
-/** The calls of a Sentry SDK a shown failure is sent through, as `@sentry/electron/renderer` and `@sentry/browser` both export them, and the trace what it sends is part of. */
 export interface ShownFailureSentry {
   readonly captureException: (error: Error, hint: ShownFailureHint) => string;
-  /** The span standing now, whose trace a line or an issue sent now goes in. */
   readonly getActiveSpan: () =>
     | { readonly spanContext: () => { readonly traceId: string } }
     | undefined;
-  /** The scope standing now, whose trace a line or an issue goes in where no span stands. */
   readonly getCurrentScope: () => {
     readonly getPropagationContext: () => { readonly traceId: string };
   };
@@ -311,21 +247,17 @@ export interface ShownFailureSentry {
   };
 }
 
-/** What Sentry answered a shown failure with: the event id of the issue it opened, where it opened one, and the trace it was sent in. */
 export interface ShownFailureSent {
   readonly eventId?: string | undefined;
   readonly traceId?: string | undefined;
 }
 
-/** What a failure's copied details say beside its report: when it was shown, the app's version, and what Sentry answered, where a reporter sent it. */
 interface ShownFailureTold {
-  /** When it was shown, in milliseconds since the epoch. */
   readonly at: number;
   readonly version?: string | undefined;
   readonly sent?: ShownFailureSent | undefined;
 }
 
-/** What a cause says of itself, each where it says it. */
 interface CauseFacts {
   readonly name?: string | undefined;
   readonly tag?: string | undefined;
@@ -335,10 +267,8 @@ interface CauseFacts {
   readonly message?: string | undefined;
 }
 
-/** Every condition a failure may name in place of its cause, which a cause is read against. */
 const FAILURE_CONDITIONS: ReadonlySet<unknown> = new Set(Object.values(FAILURE_CONDITION));
 
-/** The attribute each id is sent under. */
 const ABOUT_ATTRIBUTE = {
   workspaceId: "workspace.id",
   taskId: "task.id",
@@ -351,7 +281,6 @@ const ABOUT_ATTRIBUTE = {
   pullRequest: "pull_request.number",
 } as const satisfies { readonly [Key in keyof Required<FailureAbout>]: string };
 
-/** The attribute each fact of the cause the panel saw is sent under. */
 const ERROR_ATTRIBUTE = {
   name: "error.name",
   tag: "error.tag",
@@ -361,7 +290,6 @@ const ERROR_ATTRIBUTE = {
   message: "error.message",
 } as const satisfies { readonly [Key in keyof Required<CauseFacts>]: string };
 
-/** The attribute each fact of the cause at the root of its chain is sent under, where it is another. */
 const ROOT_ATTRIBUTE = {
   name: "error.root.name",
   tag: "error.root.tag",
@@ -371,7 +299,6 @@ const ROOT_ATTRIBUTE = {
   message: "error.root.message",
 } as const satisfies { readonly [Key in keyof Required<CauseFacts>]: string };
 
-/** The attributes saying where it was shown, how, and in what state. */
 const FAILURE_ATTRIBUTE = {
   SURFACE: "failure.surface",
   KIND: "failure.kind",
@@ -380,14 +307,11 @@ const FAILURE_ATTRIBUTE = {
   ONLINE: "app.online",
   ACCOUNT: "app.account",
   LIVE: "app.live",
-  /** The trace the hosted call that failed traveled under, which the service's log lines for it carry. */
   HOSTED_TRACE: "hosted.trace_id",
 } as const;
 
-/** A W3C trace id, the one shape a hosted call's trace is read in. */
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
 
-/** The keys a failure's copied details name beside its attributes. */
 const DETAIL_KEY = {
   TIME: "time",
   VERSION: "app.version",
@@ -395,69 +319,44 @@ const DETAIL_KEY = {
   TRACE: "sentry.trace_id",
 } as const;
 
-/** The line a failure's copied details open with, saying what the rest is for. */
 const DETAILS_HEADING = `${PRODUCT_NAME} error details. Include these when you report this problem:`;
 
-/** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";
 
-/** The mechanism an issue names, so Sentry says which path caught it; handled, since the app showed it. */
 const SHOWN_FAILURE_MECHANISM = "auto.vespin.shown_failure";
 
-/** What every issue's fingerprint starts with, so a shown failure never groups with a crash of the same name. */
 const SHOWN_FAILURE_FINGERPRINT = "shown-failure";
 
-/** The code of a failure whose cause names none and has no name. */
 const UNNAMED_CODE = "unnamed";
 
-/** How long text read from a cause may be once redacted; past it, the rest is cut. */
 const TEXT_BOUND = 500;
 
-/** How deep a cause's chain is read: past it, the rest is left out. */
 const CHAIN_BOUND = 5;
 
-/** The key a value's cause is read from, as `Error`'s `cause` names it. */
 const CAUSE_KEY = "cause";
 
-/** A property of `value` that is a string, or nothing. */
 function stringOf(value: unknown, key: string): string | undefined {
   if (!Predicate.hasProperty(value, key)) return undefined;
   const read = value[key];
   return Predicate.isString(read) ? read : undefined;
 }
 
-/** A property of `value` that is a number, or nothing. */
 function numberOf(value: unknown, key: string): number | undefined {
   if (!Predicate.hasProperty(value, key)) return undefined;
   const read = value[key];
   return Predicate.isNumber(read) ? read : undefined;
 }
 
-/**
- * Text read from a cause as it may be sent: every credential-shaped run
- * replaced, and cut at the bound. Note that a name, a tag, a code, and a
- * fault pass here as a message does, because each is whatever string the
- * cause held, and a code becomes a tag and the issue's fingerprint besides.
- */
 function sendableText(text: string): string {
   const redacted = redactCredentials(text);
   return redacted.length > TEXT_BOUND ? `${redacted.slice(0, TEXT_BOUND)}…` : redacted;
 }
 
-/** A string a cause holds under `key`, as it may be sent, or nothing. */
 function sendableOf(value: unknown, key: string): string | undefined {
   const read = stringOf(value, key);
   return read === undefined ? undefined : sendableText(read);
 }
 
-/**
- * What a cause says of itself: a condition named in its place as its code,
- * a sentence as its message, or else its name, `_tag`, code, HTTP status,
- * fault, and message, read by the fields an `Error`, an Effect tagged error, an
- * oRPC error, a hosted refusal's slug (`refusal`), a client's failed
- * answer (`{ failure }`), and a refused action's answer carry them in. Note that a refused answer's
- * `status` is a word, kept as its code, while an HTTP status is a number.
- */
 function factsOf(cause: unknown): CauseFacts {
   if (FAILURE_CONDITIONS.has(cause) && Predicate.isString(cause)) return { code: cause };
   if (Predicate.isString(cause)) return { message: sendableText(cause) };
@@ -479,7 +378,6 @@ function factsOf(cause: unknown): CauseFacts {
   };
 }
 
-/** A cause and the causes beneath it, outermost first, as deep as the bound. */
 function chainOf(cause: unknown): readonly unknown[] {
   const chain = [cause];
   let next = cause;
@@ -491,18 +389,11 @@ function chainOf(cause: unknown): readonly unknown[] {
   return chain;
 }
 
-/**
- * A failure's code: the first code, fault, or tag its chain names, from the
- * outside in, a code before a fault before a tag since each is narrower than
- * the next, or else the name of the cause at its root, so a fault a failure
- * wrapped is grouped by what it was.
- */
 function codeOf(chain: readonly CauseFacts[]): string {
   const named = chain.find((facts) => (facts.code ?? facts.fault ?? facts.tag) !== undefined);
   return named?.code ?? named?.fault ?? named?.tag ?? chain.at(-1)?.name ?? UNNAMED_CODE;
 }
 
-/** Each fact under its attribute's name, for those the cause says. */
 function factAttributes(
   facts: CauseFacts,
   names: { readonly [Key in keyof Required<CauseFacts>]: string },
@@ -515,7 +406,6 @@ function factAttributes(
   return attributes;
 }
 
-/** Each id under its attribute's name, for those that are known. */
 function aboutAttributes(about: FailureAbout): FailureAttributes {
   const attributes: FailureAttributes = {};
   for (const key of Object.keys(ABOUT_ATTRIBUTE) as (keyof FailureAbout)[]) {
@@ -525,13 +415,6 @@ function aboutAttributes(about: FailureAbout): FailureAttributes {
   return attributes;
 }
 
-/**
- * The trace a hosted call traveled under, the first down the chain that
- * names one (`failure-facts.ts`), so the report and the service's log lines
- * for that call share it. Note that it is read outside the redaction, which
- * takes any run of 32 characters for a credential, and only in a trace id's
- * own shape, so nothing else travels through it unredacted.
- */
 function hostedTraceOf(chain: readonly unknown[]): string | undefined {
   for (const cause of chain) {
     const traceId = stringOf(cause, "traceId");
@@ -540,7 +423,6 @@ function hostedTraceOf(chain: readonly unknown[]): string | undefined {
   return undefined;
 }
 
-/** What a failure's log line and issue carry: where, how, its cause and its root's, the hosted call's trace, the ids, and the app's state. */
 function attributesOf(
   report: ShownFailureReport,
   chain: readonly CauseFacts[],
@@ -563,12 +445,6 @@ function attributesOf(
   } satisfies FailureAttributes;
 }
 
-/**
- * A stack as it may be sent: the cause's own frames under the header the
- * sent error says, where the cause's stack opens on its own header, as V8's
- * does; one that opens otherwise, as Safari's and Firefox's frames alone
- * do, is kept as it is, since its frames carry no message.
- */
 function sendableStack(cause: Error, sent: Error): string | undefined {
   const stack = cause.stack;
   if (stack === undefined) return undefined;
@@ -580,11 +456,6 @@ function sendableStack(cause: Error, sent: Error): string | undefined {
   return `${sentHeader}${stack.slice(header.length)}`;
 }
 
-/**
- * The error an issue is captured with: the cause's name, or its tag, its
- * message as it may be sent, its own frames, and the causes beneath it
- * likewise, so Sentry's linked errors read no message unredacted.
- */
 function sendableError(chain: readonly unknown[], facts: readonly CauseFacts[]): Error {
   const [cause, ...beneath] = chain;
   const [own, ...beneathFacts] = facts;
@@ -596,19 +467,12 @@ function sendableError(chain: readonly unknown[], facts: readonly CauseFacts[]):
   return sent;
 }
 
-/**
- * Whether a failure's own facts say its call got no answer: a network fault
- * or the call's deadline, anywhere down its chain (`account-call.ts`). Read
- * beside the platform's online flag, because a phone with no signal, or a
- * Mac just after waking, can still read online.
- */
 function unansweredOf(chain: readonly CauseFacts[]): boolean {
   return chain.some(
     (facts) => facts.fault === CALL_FAULT.NETWORK || facts.name === DEADLINE_ERROR_NAME,
   );
 }
 
-/** A failure read for sending: its chain, what each cause says, its code, and its attributes. */
 function readReport(report: ShownFailureReport) {
   const chain = chainOf(report.cause);
   const facts = chain.map(factsOf);
@@ -617,10 +481,6 @@ function readReport(report: ShownFailureReport) {
   return { chain, facts, code, trace, attributes: attributesOf(report, facts, code, trace) };
 }
 
-/**
- * The ids a payload names under the keys `FailureAbout` reads, for an act
- * whose failure was shown with nothing else to say what it was about.
- */
 export function failureAboutOf(payload: unknown): FailureAbout {
   return {
     workspaceId: stringOf(payload, "workspaceId"),
@@ -634,18 +494,6 @@ export function failureAboutOf(payload: unknown): FailureAbout {
   };
 }
 
-/**
- * Sends Sentry a failure the app showed: a log line, at `warn` for a refusal
- * something named, a failure shown offline, or a failure of a call that got
- * no answer, and at `error` for anything else, and for anything else an
- * issue besides, grouped by where it was shown and its code. Answers the
- * issue's event id, where it opened one, and the trace both went in. Note
- * that a failure shown while the machine had no network, or whose own facts
- * say its call got no answer, opens no issue, because a read or a write that
- * could not reach the service is the network's failure rather than the
- * app's, as a Mac waking from sleep, or a phone with no signal that still
- * reads online, shows every live read failed before the service answers.
- */
 export function sendShownFailure(
   sentry: ShownFailureSentry,
   report: ShownFailureReport,
@@ -677,15 +525,6 @@ export function sendShownFailure(
   return { eventId: eventId === "" ? undefined : eventId, traceId };
 }
 
-/**
- * What a person copies from a failure they were shown, to send with a
- * report of the problem as it is: a line saying what it is and what it is for, then one `key: value` line each for
- * the time it was shown (ISO 8601, UTC), the app's version, every attribute
- * its report sends under the name Sentry searches it by, and the event id
- * and trace Sentry answered, each where it is known. Note that it is built
- * from the report the same way the report's own attributes are, so the two
- * cannot drift, and nothing the report leaves out is copied.
- */
 export function shownFailureDetails(report: ShownFailureReport, told: ShownFailureTold): string {
   const { attributes } = readReport(report);
   const lines: Record<string, string | number | boolean | undefined> = {

@@ -7,12 +7,6 @@ import { afterEach, test } from "vitest";
 import { TextField } from "../text-field/text-field.js";
 import { FormField } from "./form-field.js";
 
-/**
- * form-field.test.ts -- a field that may be left empty says Optional in its
- * label, so its control is named with it, and a field that must be filled
- * says nothing of the kind.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -34,7 +28,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** A subject field, optional or not. */
 function subject(optional: boolean | undefined): ReactElement {
   return createElement(FormField, {
     label: "Subject",
@@ -43,7 +36,6 @@ function subject(optional: boolean | undefined): ReactElement {
   });
 }
 
-/** The words of the label that names the field's control, as a reader hears them. */
 function controlLabel(container: HTMLElement): string | undefined {
   const input = container.querySelector("input");
   assert.ok(input);

@@ -1,10 +1,3 @@
-/* resize-edge.css -- the edge a pane is resized by (`ResizeEdge`): a strip
-   wider than it looks, straddling its pane's border on its side, the side
-   panel's left or the sidebar's right, filled in the accent under the
-   pointer, mid-drag, or on the keyboard. The window's cursor while a drag
-   lasts, which must win over every cursor the app draws, is the app's to
-   draw under `data-edge-drag`. */
-
 @layer components {
   .ui-resize-edge {
     position: absolute;

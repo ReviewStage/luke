@@ -50,175 +50,6 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 export type { ListRowMenu } from "../row-menu/row-menu.js";
 export type { ListSelection } from "../selection/list-selection.js";
 
-/**
- * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
- *
- * A row is one line of the list: a leading mark, its title over its
- * description, and its metadata ("2h ago", "Owner") standing at the end, all
- * centered on the row's middle, and the row's own acts centered there beside
- * them, so a column of rows lines its metadata and its acts up whatever each
- * one says. A long title gives way rather than pushing either out of the row.
- *
- * A row that opens something is a button, `onPress`, named by its words in
- * the order they are drawn, title first, so a voice saying what it reads
- * presses it. Its acts are that button's siblings in the row's item, never
- * inside it, because a button holds no button: each is a control of its own,
- * reached by Tab after the row and pressed without pressing the row. A row
- * that opens nothing is no control at all. The leading mark is decoration,
- * hidden from a reader, since the title says what the row is. The row owns
- * every length in it and takes no class or style.
- *
- * A keyboard-driven list (arrows or j/k between rows, a key to act on the
- * one focused) reaches a row's press through `ref` and hears the keys
- * pressed on it through `onKeyDown`; a row that opens nothing takes no
- * focus, so its `ref` reaches its item, to scroll or measure, and it hears
- * no keys, which would only be its acts'.
- *
- * A row's own acts (`actions`) stand together as a group named by the
- * row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
- *
- * A row whose thing has acts of its own offers them as one menu (`menu`),
- * which every door to it opens alike: its ⋯ (`MoreButton`), the last of the
- * row's acts, drops it from the ⋯; a right-click or a touch's long press
- * anywhere on the row hangs it at the pointer; and the menu key or ⇧F10,
- * pressed on the row or any of its acts, hangs it under the row from its
- * start. The ⋯ is a Tab stop after the row's other acts, so the keyboard
- * reaches it as it reaches them, and named for the row's thing, "Task
- * actions", described by the row's title, so a reader hears which row's it
- * is. It keeps its place at the row's end and shows while the pointer
- * rests on the row, the row holds the keyboard, or its menu is open, and
- * always on a screen with no hover, where nothing would reveal it. Its menu
- * open rings the row; Escape hands focus back to the door it was opened
- * from: the ⋯, what held the keyboard as the menu key was pressed, or, for
- * a right-click, the row's press, or its ⋯ where it opens nothing. A row
- * that offers no acts now, its groups empty, or is unavailable, draws no ⋯
- * and opens nothing. A row that opens something may leave its ⋯ out
- * (`more`), as a phone's mail list draws none on its rows, and offer its
- * menu by the long press, the right-click, and the menu key alone; its end
- * then runs to the row's edge, as a row with no menu's does.
- * `menu` is the one way a row wires its menu: a row never opens one by a
- * right-click it wires itself.
- *
- * A list stands plain, its rows apart on the ground, each lit on its own;
- * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
- * ground with a hairline between each and the next, as a settings section's
- * card holds its rows. A dense column, a narrow panel's history, sets its
- * rows compact (`LIST_DENSITY.COMPACT`), a few pixels shorter and closer to
- * their edges, the words unchanged; a sidebar's column sets them dense
- * (`LIST_DENSITY.DENSE`), each one line a control's height, its title in the
- * body's type with its description after it on the same line, as a Mac's
- * sidebar lists. A row standing in a list of the app's own, one whose rows
- * the app drags, takes its density itself. A sidebar's row rests its title
- * in the sidebar's quieter ink (`LIST_ROW_INK.SIDEBAR`), lifted to the
- * text's own while the row is hovered, open, unread, or its menu is open.
- *
- * Acts offered only to the row in hand also stand while its menu is open,
- * and a row that offers none keeps its metadata in their place. A row whose menu is open (`menuOpen`) is ringed, as Finder rings
- * the row a right-click is about, so the menu is plainly about it. A row that goes somewhere deeper wears a
- * chevron at its end (`chevron`). A row whose press must leave the focus
- * where it is, on a search field beside the list that holds the keys, keeps
- * it (`keepFocus`), as a Button does. A `List`'s rows are one Tab stop, the
- * arrows walking them; one whose list steers it by keys of its own says
- * whether it is a Tab stop itself (`tabbable`), takes the focus it is
- * handed, and is left out of the arrows' walk, and
- * one a field drives names its item by `id`, the field's active row. A row
- * unavailable (`disabled`) refuses its press and leaves the tab order, as a
- * deleting row's does. Where an app hints a row's whole title only when it
- * is cut short, the row says whether it is (`onTitleClipped`), measured
- * whenever its box resizes.
- *
- * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
- * shown beside the list, as an Inbox's item is, or the one item chosen in
- * its set. It is lifted as a sheet on the ground, as a sidebar's is, or, in a
- * list that stands beside the page it opens (`LIST_ROW_CURRENT_LOOK.TINT`),
- * filled with the accent's tint, which reads in either theme and stands apart
- * from the neutral fill of a row under the pointer. An unread row's title stands in the heavier weight, and its
- * description in the body's ink, until it is read, as a mail app's unread
- * thread does. A row whose thing is done with stands back (`muted`), as a
- * done to-do grays: its words in the palette's quieter inks, still legible,
- * and only its marks faded, its fill as the row's own. A row that opens
- * something may hang the app's hint from its press
- * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
- * words to raise and the press it wraps, whose pointer and focus handlers
- * land on the press itself.
- *
- * A row may stand nested under another (`depth`), in by one glyph and its
- * gap for each level, so its glyph stands under the name of the row above
- * it, as a sidebar's nested place stands; and a row with rows nested under
- * it folds them (`fold`), whose holder keeps whether they stand open and
- * draws them, or not, after it. Its chevron is a control of its own beside
- * the press, as its acts are, never inside it, named by what it folds and
- * saying whether they stand open in `aria-expanded`, and the row's leading
- * mark gives way to it while the pointer rests on the row or the keyboard
- * is on the chevron, as a group's head gives its glyph way (`GroupHeader`),
- * standing at rest on a screen with no hover. → and ← pressed on the row
- * open and fold them, as a tree's keys do. A reader hears how deep it stands
- * and its place among its siblings (`nest`), where its list nests rows, as
- * a nested list's items are read, though every row stands flat in one list.
- *
- * A row may carry attachments (`attachments`), what its thing holds drawn
- * small on a line of their own over its words, as a message's files stand
- * over its words in the box and the transcript; they are decoration, the row's
- * words saying what it is, unless they are files a reader opens
- * (`attachmentsOpen`), which are read and reached as the row's own.
- *
- * A row's metadata stands at its middle, or, in a list read as a mail
- * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
- * title's or its lead's where that stands over the title, the lines under
- * it running the row's whole width and its leading mark level with the
- * first, though a row with no line under its first keeps it at its
- * middle, its marks and acts centered on the row as its title is; or, in a
- * rail whose rows count what each holds (`LIST_ROW_META.LAST`), at the
- * end of its last line, the description's, on that line's baseline, the
- * title over both running the row's whole width and its leading mark level
- * with the title's first line. A row
- * whose names run long may let its title run to a second line before it
- * is cut short (`LIST_ROW_TITLE_LINES.TWO`), ending then in an ellipsis
- * rather than a fade. A row's acts stand beside it, or, in a list
- * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
- * its metadata's place while the pointer rests on it or it holds the
- * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. While they stand, the row makes room for them beside its
- * words, so they cover nothing and the press keeps its ring; at rest, where
- * there is a hover, they take none, so the title runs to the metadata and
- * is cut anew before them as they come, and the row's ⋯ comes with them, in
- * the metadata's place, keeping no room of its own. A row with a ⋯ and no
- * acts offers its ⋯ the same way, so its metadata ends where its
- * neighbors' does.
- *
- * A title cut short, there or anywhere, fades out over its last few pixels
- * instead of ending in an ellipsis, as a browser's tab does; one drawn
- * whole ends on its last letter. A row's description, a dense row's label
- * beside its title or a fuller row's preview under it, fades the same way,
- * unless it alerts, which keeps its words whole, and so does the name of
- * what a row belongs to (`lead`), while its metadata ends in an ellipsis.
- *
- * A row may lead its description with what it belongs to (`lead`), a
- * thread's task, say, in a list grouped by something else: a small chip
- * of a glyph and a name, cut short at a short name's width, the
- * description's words following it on the same line, as a mail app tags a
- * thread with its mailbox. A fuller row may stand it on a line of its own
- * instead (`LIST_ROW_LEAD.ABOVE`), over its title, its glyph and its whole
- * name the row's largest words, the time at that line's end, as a
- * mail app names a thread's sender over its subject, so neither the name
- * nor the title is cut short to make room for the other. A fuller row
- * that keeps to two lines may lead its description with the plain words
- * instead (`LIST_ROW_LEAD.INLINE`), its glyph and its whole name in the
- * description's ink, a middle dot, then the description, as a two-line
- * row of its own kind reads its one quiet line.
- *
- * A row whose description says more than a reader should hear, a message's
- * whole code block, hands the words a reader hears of it instead
- * (`describedAs`), cut to what the eye reads first: its press is then named
- * by its lead, its title, and its metadata, in that order, and described by
- * those words, a text node of its own that no box draws, so a recording
- * masks it as it masks every word. An unread row whose unread weight
- * nothing else says to a reader says it at the head of its title
- * (`unreadWords`), which nothing hides while its acts hold the keyboard.
-
- */
-
-/** How the open row is current: the page shown beside the list, or the item chosen in its set. */
 export const LIST_ROW_CURRENT = {
   PAGE: "page",
   ITEM: "true",
@@ -226,7 +57,6 @@ export const LIST_ROW_CURRENT = {
 
 export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
 
-/** How the open row is lifted from the rest: a sheet over the ground, as a sidebar's is, or the accent's tint, as a list beside its page reads it. */
 export const LIST_ROW_CURRENT_LOOK = {
   SHEET: "sheet",
   TINT: "tint",
@@ -234,7 +64,6 @@ export const LIST_ROW_CURRENT_LOOK = {
 
 export type ListRowCurrentLook = (typeof LIST_ROW_CURRENT_LOOK)[keyof typeof LIST_ROW_CURRENT_LOOK];
 
-/** Where a row's metadata stands: at the row's middle, at the end of its title's line, or at the end of its last line, its description's. */
 export const LIST_ROW_META = {
   MIDDLE: "middle",
   TITLE: "title",
@@ -243,7 +72,6 @@ export const LIST_ROW_META = {
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
 
-/** How many lines a row's title may run to before it is cut short: one, or two, as a rail of long names reads them. */
 export const LIST_ROW_TITLE_LINES = {
   ONE: "one",
   TWO: "two",
@@ -251,13 +79,6 @@ export const LIST_ROW_TITLE_LINES = {
 
 export type ListRowTitleLines = (typeof LIST_ROW_TITLE_LINES)[keyof typeof LIST_ROW_TITLE_LINES];
 
-/**
- * Where a row's chevron stands: in room of its own beside its metadata, kept
- * so nothing moves as it shows, or in its metadata's place, the metadata
- * giving way while the row is in hand, as a sidebar row's count gives way to
- * its ⋯ (`nav-item.css`). The second keeps no room for an unseen glyph, so
- * words that run to the metadata fade there rather than short of it.
- */
 export const LIST_ROW_CHEVRON = {
   ROOM: "room",
   META: "meta",
@@ -265,7 +86,6 @@ export const LIST_ROW_CHEVRON = {
 
 export type ListRowChevron = (typeof LIST_ROW_CHEVRON)[keyof typeof LIST_ROW_CHEVRON];
 
-/** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
   ALWAYS: "always",
   HOVER: "hover",
@@ -273,7 +93,6 @@ export const LIST_ROW_ACTIONS = {
 
 export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
 
-/** Where what a row belongs to stands: a chip leading its description's line, its plain words leading that line, or a line of its own over the title. */
 export const LIST_ROW_LEAD = {
   DESCRIPTION: "description",
   INLINE: "inline",
@@ -282,13 +101,11 @@ export const LIST_ROW_LEAD = {
 
 export type ListRowLeadAt = (typeof LIST_ROW_LEAD)[keyof typeof LIST_ROW_LEAD];
 
-/** What a row belongs to, as the chip before its description names it: its glyph and its name, words but for a placeholder row's block. */
 export interface ListRowLead {
   readonly icon: ReactNode;
   readonly label: ReactNode;
 }
 
-/** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
 interface ListRowHintProps {
   "aria-describedby"?: string | undefined;
   "aria-keyshortcuts"?: string | undefined;
@@ -299,34 +116,23 @@ interface ListRowHintProps {
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
 }
 
-/** The app's hint a row's press hangs: its words, the row the press stands in, and the press it wraps. */
 export type ListRowHint = ComponentType<{
   label: string | undefined;
   row: RefObject<HTMLElement | null>;
   children: ReactElement<ListRowHintProps>;
 }>;
 
-/** The rows nested under a row, which it folds: whether they stand open, what hears a press asking for the other, and the words its chevron is named by. */
 export interface ListRowFold {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  /** What the fold holds, said as the chevron's name ("Sub-tasks of Ship the release"). */
   readonly label: string;
 }
 
-/** Where a row stands among the rows nested under the same parent as it, or among the rows at the top: its place, from 1, of how many. */
 export interface ListRowNest {
   readonly position: number;
   readonly size: number;
 }
 
-/**
- * What a reader hears of a row's nesting, spread on its item: its level, 1
- * at the top, and its place among its siblings, in a list that nests rows;
- * nothing for a row at the top of a list that nests none. Note that the
- * rows stand flat in one list, as their motion, their drag, and a grid's
- * columns need, so the place is said rather than left to the list to count.
- */
 export function nestedItem(
   depth: number,
   nest: ListRowNest | undefined,
@@ -335,7 +141,6 @@ export function nestedItem(
   return { "aria-level": depth + 1, "aria-posinset": nest.position, "aria-setsize": nest.size };
 }
 
-/** How a list stands: its rows apart on the ground, or edge to edge in a card. */
 export const LIST_VARIANT = {
   PLAIN: "plain",
   CARD: "card",
@@ -343,7 +148,6 @@ export const LIST_VARIANT = {
 
 export type ListVariant = (typeof LIST_VARIANT)[keyof typeof LIST_VARIANT];
 
-/** How much room a list's rows keep around their words. */
 export const LIST_DENSITY = {
   REGULAR: "regular",
   COMPACT: "compact",
@@ -352,7 +156,6 @@ export const LIST_DENSITY = {
 
 export type ListDensity = (typeof LIST_DENSITY)[keyof typeof LIST_DENSITY];
 
-/** The ink a row's title rests in: the text's own, or a sidebar's quieter one, lifted to the text's while the row is reached for, open, or unread. */
 export const LIST_ROW_INK = {
   TEXT: "text",
   SIDEBAR: "sidebar",
@@ -360,65 +163,31 @@ export const LIST_ROW_INK = {
 
 export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
 
-/**
- * A list's and a row's own boxes, in utilities over the theme. What its
- * state restyles stays in `list-row.css`: the row's fill and ring, the
- * press's insets and height, which a variant, a density, or the acts beside
- * it set, the words' type and ink, the hover acts' crossfade and the room
- * they take, and every reveal the pointer, the keyboard, or a menu makes,
- * through `:has()` and the pointer's media. Each part keeps its
- * `ui-list-row-*` class, which that sheet, the panel's, and the tests find
- * it by.
- */
 const LIST_CLASS =
   "ui-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
 
-/** The row: a grid of five tracks, its parts centered on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
   "ui-list-row group/list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--ui-duration-hover) ease-plain";
 
-/**
- * The fold's chevron, a control of its own standing over the leading mark's
- * cell, beside the press rather than in it, at least a glyph's size; its box
- * is the mark's, set in from the cell's edges by the press's inset and the
- * mark's gap, and that place and its reveal are `list-row.css`'s, so no
- * margin or self-alignment is spelled here to outrank them.
- */
 const FOLD_CLASS =
   "ui-list-row-fold col-[leading] row-1 z-1 grid min-h-control-icon min-w-control-icon cursor-press place-items-center rounded-control border-0 bg-transparent p-0 text-muted-foreground";
 
-/** Which way a key asks a row's fold to stand: → open, ← folded. */
 const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, ArrowLeft: false };
 
-/** The press spans the mark, the words, and the end, its parts standing in the row's own tracks. */
 const MAIN_CLASS =
   "ui-list-row-main col-[leading-start/end-end] row-1 m-0 grid min-w-0 grid-cols-subgrid items-center border-0 bg-transparent text-start text-inherit [font:inherit]";
 
-/** A press that is a button, pressed as a Mac's list is on the desktop, without the web's pointing hand. */
 const MAIN_BUTTON_CLASS = `${MAIN_CLASS} cursor-press disabled:cursor-default`;
 
-/**
- * The leading mark, muted, a glyph at a control's glyph size and an avatar
- * at its own; a provider's mark keeps the text's color, a brand mark being
- * the provider's identity, not a muted glyph.
- */
 const LEADING_CLASS =
   "ui-list-row-leading col-[leading] me-icon-gap inline-flex text-muted-foreground [&>.ui-provider-mark]:text-foreground [&>svg]:size-control-icon";
 
-/** The row's end, its metadata and its chevron, at the end of its track, so it lines up with the acts that share it. */
 const END_CLASS =
   "ui-list-row-end col-[end] ms-icon-gap flex min-w-0 items-center justify-self-end gap-icon-gap";
 
-/** A chevron at the end of a row that goes deeper, its room kept so nothing moves as it shows. */
 const CHEVRON_CLASS =
   "ui-list-row-chevron inline-flex flex-none text-muted-foreground transition-opacity duration-(--ui-duration-hover) ease-plain [&>svg]:size-ui-12";
 
-/**
- * What a row belongs to: a small chip of a glyph and a name cut short at a
- * short name's width leading its description, the glyph and the name bare
- * leading it, or a line of its own over its title, its glyph and its whole
- * name the row's largest words (`list-row.css`), with no chip round it.
- */
 const LEAD_CLASS = {
   [LIST_ROW_LEAD.DESCRIPTION]:
     "ui-list-row-lead me-ui-4 inline-flex max-w-list-row-lead items-center gap-ui-2 rounded-ui-6 bg-fill-strong px-ui-4 py-0 align-bottom text-muted-foreground",
@@ -427,99 +196,39 @@ const LEAD_CLASS = {
   [LIST_ROW_LEAD.ABOVE]: "ui-list-row-lead flex min-w-0 items-center gap-ui-6",
 } as const satisfies Record<ListRowLeadAt, string>;
 
-/** What stands between a lead's plain words and the description they lead. */
 const LEAD_SEPARATOR = " · ";
 
-/** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/**
- * The words a slot is measured by, where they are a plain string: a box whose
- * words are a tree is watched for any change under it instead, which a long
- * list of rows would pay for once a row.
- */
 function plainWords(words: ReactNode): string | undefined {
-  // A slot is handed over as a loose ReactNode, and a string is the one form
-  // whose words can be compared from render to render; this check is the boundary.
   return typeof words === "string" ? words : undefined;
 }
 
-/**
- * The density of the `List` a row stands in, which its rows take as the
- * stylesheet does, so a row knows it is dense in the render that draws it
- * rather than by reading where it stands once drawn.
- */
 const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
 
-/**
- * How the `List` a row stands in stands, so a row in a card, edge to edge
- * on the card's ground, answers a press inside its fill rather than pulling
- * that fill back from the card's edges.
- */
 const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
-/** The custom properties a row's sheet reads: how deep it stands. */
 function rowProperties(depth: number): CSSProperties | undefined {
   return depth === 0 ? undefined : cssCustomProperties({ "--ui-list-row-depth": depth });
 }
 
-/** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** The run a long `List` draws its rows in, only those near the view (`VirtualRows`). */
 export interface ListRun {
-  /** The element that scrolls, which the rows stand in. */
   readonly scroller: RefObject<HTMLElement | null>;
-  /** A box whose resizing moves where the list stands in its scroller. */
   readonly shiftedBy?: RefObject<HTMLElement | null> | undefined;
-  /** Each row's key, in order. */
   readonly keys: readonly string[];
-  /** The height a row is taken to have before it is measured, in pixels. */
   readonly estimate: number;
-  /** The room between two rows, in pixels: none unless said. */
   readonly gap?: number | undefined;
-  /** How many rows past each edge of the view are drawn, every row while a find bar stands open. */
   readonly overscan?: number | undefined;
-  /** What the caller asks of the run, such as bringing a row in. */
   readonly handle?: RefObject<VirtualRowsHandle | null> | undefined;
-  /** Draws the row at an index, a `ListRow` wearing `place`. */
   readonly row: (index: number, place: VirtualRowPlace) => ReactNode;
 }
 
-/**
- * A list of `ListRow`s, named by `label` for a reader moving between lists.
- * One whose rows a finger opens (`fingerTall`) stands each a finger's press
- * tall on a coarse pointer, its words centered in it, as a call's line does
- * of its own; a mouse keeps the row's own height.
- *
- * The list is one Tab stop (`useRovingKeys`): Tab enters it at the row last
- * focused, or its first, ↑↓ walk its rows, wrapping at the ends, Home and
- * End go to the first and the last, and an unavailable row is passed over.
- * A row whose list steers it from elsewhere, a field holding the keys, says
- * whether it is a Tab stop itself (`tabbable`) and stays out of the walk.
- * A list standing among others under group heads, a rail's, may instead
- * join the walk of a box around them all (`joinsWalk`), so the rows of
- * every group are one Tab stop the arrows walk from first to last.
- *
- * A list asked to (`selection`) chooses rows at once, as a Mac's list does
- * (`list-selection.ts`): ⌘-click one in or out, ⇧-click a run from the
- * last one pressed, ⇧↑↓ grow the run from the row in hand, ⌘A every row,
- * and Esc none, while a plain press still opens its row. Each row takes
- * part by its key (`selectKey`), and one chosen is filled and described as
- * selected. A list not asked chooses nothing.
- *
- * A long list draws only the rows near the view (`run`): its rows are a
- * run of `VirtualRows` in the caller's scroller, each `ListRow` wearing its
- * place, and the run's block is the list itself, so the list's sheet
- * reaches its rows as its children. A key walking past the rows drawn goes
- * on to the row it reaches in the whole list, brought in where it is not
- * drawn, the row holding the keyboard stays drawn wherever the list is
- * scrolled, and a choice reaches the rows left undrawn.
- */
 export function List({
   id,
   label,
@@ -533,24 +242,16 @@ export function List({
   run,
   children,
 }: {
-  /** The id of the list, which a `SelectionBar` over it names to hand it the focus back. */
   id?: string | undefined;
   label: string;
   variant?: ListVariant;
   density?: ListDensity;
-  /** Whether each row stands a finger's press tall on a coarse pointer. */
   fingerTall?: boolean | undefined;
-  /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
   moves?: boolean;
-  /** Whether its rows join the walk of a `useRovingKeys` box around it, with the rows of the lists beside it, rather than walk alone. */
   joinsWalk?: boolean;
-  /** Which rows are chosen and what hears the next set, where the list chooses rows at all. */
   selection?: ListSelection | undefined;
-  /** A press on the list, as a drag that puts its rows in another order hears it (the panel's `useRowDrag`). */
   onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
-  /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
   run?: ListRun | undefined;
-  /** The rows, where the list draws every one. */
   children?: ReactNode;
 }): React.JSX.Element {
   const own = useRef<VirtualRowsHandle>(null);
@@ -560,7 +261,6 @@ export function List({
     (key: string, then: () => void) => handle.current?.bringIn(key, then) ?? false,
     [handle],
   );
-  // Note that a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
   const roving = useRovingKeys<HTMLElement>({
     reach: keys === undefined ? undefined : reachInRun(handle),
   });
@@ -628,7 +328,6 @@ export function List({
   );
 }
 
-/** One row of a `List`: `title` over `description`, `meta` at its end, `actions` beside it. */
 export function ListRow({
   leading,
   title,
@@ -676,104 +375,54 @@ export function ListRow({
   unreadWords,
   place,
 }: {
-  /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
-  /** What the row is, which its name opens with. */
   title: ReactNode;
-  /** Whether the title names a person's thing, a task's or a repository's name, kept masked in a screen recording even where the row stands under `ReplayUnmask`; a title in words stays measured as words. */
   titleReplayMasked?: boolean | undefined;
   description?: ReactNode;
-  /** Whether the description holds a person's words, kept masked on the same terms as the title. */
   descriptionReplayMasked?: boolean | undefined;
-  /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
   lead?: ListRowLead | undefined;
-  /** Where the lead stands: a chip before the description, on its line, or a line of its own over the title. */
   leadAt?: ListRowLeadAt | undefined;
-  /** What the row's thing carries, its pictures or pages drawn small, on a line of their own over its words; decoration, since its words say what it is. */
   attachments?: ReactNode;
-  /** Whether the attachments are files a reader opens, so they are announced and reached rather than hidden as decoration. */
   attachmentsOpen?: boolean | undefined;
-  /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
-  /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
   metaAt?: ListRowMeta;
-  /** How many lines its title may run to before it is cut short. */
   titleLines?: ListRowTitleLines;
-  /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
-  /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
   actionsAt?: ListRowActions;
-  /** What pressing the row does, handed the press, whose modifiers it may read; a row without one is not a control. */
   onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
-  /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
   current?: ListRowCurrent | undefined;
-  /** Whether what the row stands for has not been seen, its title in the heavier weight. */
   unread?: boolean | undefined;
-  /** Whether what the row stands for is done with, so the row stands back, its words in quieter inks and its marks faded, its fill and acts as they are. */
   muted?: boolean | undefined;
-  /**
-   * Whether the row stands unseen until the pointer or the keyboard reaches
-   * it, keeping a way back to something put away in the place it stood; a
-   * screen with no hover draws it at rest.
-   */
   latent?: boolean | undefined;
-  /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
   hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
-  /** Its density where it stands in a list of the app's own rather than a `List`, which sets its rows'. */
   density?: ListDensity | undefined;
-  /** The ink its title rests in. */
   ink?: ListRowInk | undefined;
-  /** How the open row is lifted from the rest, where it is current. */
   currentLook?: ListRowCurrentLook | undefined;
-  /** Whether the row's own menu is open, which rings it and keeps its acts shown. */
   menuOpen?: boolean | undefined;
-  /** Whether a chevron at its end says the press goes somewhere deeper. */
   chevron?: boolean | undefined;
-  /** Where the chevron stands: in room of its own, or in its metadata's place while the row is in hand. */
   chevronAt?: ListRowChevron | undefined;
-  /** Whether a pointer's press leaves the focus where it is, as on a field beside the list that holds the keys. */
   keepFocus?: boolean | undefined;
-  /** Whether its press is unavailable: refused and out of the tab order. */
   disabled?: boolean | undefined;
-  /** Whether Tab stops on its press, said where something other than its `List` steers its rows, which leaves it out of the list's arrows; one that is not still takes the focus it is handed. Left out, its `List` keeps one row a Tab stop and walks the rest with the arrows. */
   tabbable?: boolean | undefined;
-  /** Hears whether the title is cut short, whenever that changes, so a hint can say it whole only then. */
   onTitleClipped?: ((clipped: boolean) => void) | undefined;
-  /** The id of the row's item, which a field driving the list names as its active row. */
   id?: string | undefined;
-  /** What the row is chosen by in a `List` that chooses rows (`selection`); a row with none is never chosen. */
   selectKey?: string | undefined;
-  /** Whether the row draws the box the pointer chooses it by over its unread gutter (`SELECT_BOX_PLACE.UNREAD_GUTTER`), where it can be chosen. */
   selectBox?: boolean | undefined;
-  /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
   motionKey?: string | undefined;
-  /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
-  /** A key pressed on the row's press; a row that opens nothing hears none. */
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
-  /** The menu of the row's thing's acts, opened alike by its ⋯, a right-click, a long press, and the menu key; it takes `menuOpen`'s place. */
   menu?: ListRowMenu | undefined;
-  /** Whether the row draws its menu's ⋯; one that opens something may leave it out, its menu still a long press, a right-click, and the menu key away. */
   more?: boolean | undefined;
-  /** How deep it stands nested under other rows: 0, at the top, unless said. */
   depth?: number | undefined;
-  /** Where it stands among its siblings, in a list that nests rows, which a reader hears with its level; none in a list that nests none. */
   nest?: ListRowNest | undefined;
-  /** The rows nested under it, which it folds; none where it holds none. */
   fold?: ListRowFold | undefined;
-  /** What a reader hears of its description, cut to what the eye reads first, which names the press by its other words and describes it by these; none where the press is named by its words as drawn. */
   describedAs?: string | undefined;
-  /** What an unread row says to a reader at the head of its title, its weight being drawn for the eye alone; none where its owner says it elsewhere. */
   unreadWords?: string | undefined;
-  /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`'s `listItems`), which its item wears; none in a list drawing every row. */
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
-  // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
   const pressElement = useRef<HTMLButtonElement | null>(null);
-  // Note that the row a hint hangs its card beside is the press's parent, the item.
   const rowElement = useRef<HTMLElement | null>(null);
   const pressRef = useCallback(
     (element: HTMLButtonElement | null) => {
@@ -788,7 +437,6 @@ export function ListRow({
   const leadId = useId();
   const metaId = useId();
   const describedId = useId();
-  // Note that → and ← are the row's only while they would move its fold, so a list walking its rows along them still hears the rest.
   const foldKeys = (event: KeyboardEvent<HTMLElement>) => {
     if (fold === undefined) return;
     const asked = FOLD_KEY_OPENS[event.key];
@@ -796,7 +444,6 @@ export function ListRow({
     event.preventDefault();
     fold.onOpenChange(asked);
   };
-  // Note that a row's menu is headed, as a phone's sheet, by the row's own mark and words, where its owner names no subject and its title is plain: its description under it, else what it belongs to.
   const named = plainWords(title);
   const subject =
     menu?.subject ??
@@ -808,7 +455,6 @@ export function ListRow({
     opener: onPress ? pressElement : undefined,
   });
   const offered = rowMenu.offered;
-  // Note that a row that opens nothing keeps its ⋯, because it is the one control its menu hands focus back to.
   const moreDrawn = offered && (more || onPress === undefined);
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
@@ -821,7 +467,6 @@ export function ListRow({
   const selecting = useContext(ListSelectionContext);
   const choosable = selecting !== undefined && selectKey !== undefined;
   const chosen = choosable && selecting.selected.has(selectKey);
-  // Note that the box is the pointer's way into a selection, so a row that refuses its press draws none.
   const boxed = choosable && selectBox && !disabled ? selecting : undefined;
   const [leadMeasured, leadClipped] = useClipped(plainWords(lead?.label));
   const heading = (
@@ -838,8 +483,6 @@ export function ListRow({
       <ReplayWords masked={titleReplayMasked}>{title}</ReplayWords>
     </span>
   );
-  // Note that the metadata and the chevron stand together at the row's end,
-  // the place a hover row's acts step into.
   const end =
     said(meta) || chevron ? (
       <span className={END_CLASS} data-chevron={chevron ? chevronAt : undefined}>
@@ -874,10 +517,8 @@ export function ListRow({
         </span>
       </span>
     );
-  // Note that a lead over the title takes the first line, the one the metadata ends.
   const above = leadAt === LIST_ROW_LEAD.ABOVE && lead !== undefined;
   const firstLine = above ? leadMark : heading;
-  // Note that a row of one line keeps its metadata at its middle, its first line, because a dense row centers its title in its height.
   const metaPlace =
     metaAt === LIST_ROW_META.TITLE &&
     titleLines === LIST_ROW_TITLE_LINES.ONE &&
@@ -886,7 +527,6 @@ export function ListRow({
     !said(attachments)
       ? LIST_ROW_META.MIDDLE
       : metaAt;
-  // Note that a row described apart is named by its words but the description, the time last, as a mail app's row is read.
   const namedBy =
     describedAs === undefined
       ? undefined
@@ -954,13 +594,10 @@ export function ListRow({
       tabIndex={tabbable === false ? -1 : undefined}
       {...(tabbable === undefined ? rovingItem() : {})}
       {...(choosable ? selectableRow(selectKey) : {})}
-      // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus ? preventFocusMove : choosable ? holdRun : undefined}
       onClick={(event) => {
-        // Note that the row around the press is what is pressed, its fill and its actions with it.
         const row = event.currentTarget.closest<HTMLElement>(".ui-list-row");
         pulsePress(row ?? event.currentTarget, pressPulse);
-        // Note that a right-click's menu holds the press as its opener, which its outside press leaves alone, so the press closes it.
         if (rowMenu.open) rowMenu.close(false);
         if (choosable && selecting.press(selectKey, event)) return;
         onPress(event);
@@ -983,7 +620,6 @@ export function ListRow({
           aria-expanded={fold.open}
           onClick={() => fold.onOpenChange(!fold.open)}
         >
-          {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
           <span className="ui-disclosure-turn" data-open={fold.open}>
             <FoldChevronIcon />
           </span>
@@ -1001,13 +637,11 @@ export function ListRow({
         </hint.Hint>
       )}
       {press === undefined || describedAs === undefined ? null : (
-        // Note that a description's words outrank `aria-description`, so a chosen row says so among them.
         <span id={describedId} hidden>
           {chosen ? `${SELECTION_WORDS.SELECTED}, ${describedAs}` : describedAs}
         </span>
       )}
       {said(actions) ? (
-        // Note that the acts are a group named by the row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
         // biome-ignore lint/a11y/useSemanticElements: a row's acts are presses on its thing, not a form's fields, so they are no `<fieldset>`.
         <div
           role="group"
@@ -1028,7 +662,6 @@ export function ListRow({
       ) : null}
     </>
   );
-  // Note that a row in a run is measured through its item, which hands its element to the row's own ref too where the row opens nothing.
   const { ref: placeRef, ...placed } = place ?? {};
   const opens = onPress !== undefined;
   const itemRef = useCallback(
@@ -1038,7 +671,6 @@ export function ListRow({
     },
     [opens, ref, placeRef],
   );
-  // Note that a row whose only act is its ⋯ offers it as a hover row offers its acts, so no row keeps an empty ⋯ track at rest.
   const actsOnHover = actionsAt === LIST_ROW_ACTIONS.HOVER || (moreDrawn && !said(actions));
   return (
     <>
@@ -1067,7 +699,6 @@ export function ListRow({
         data-depth={depth === 0 ? undefined : depth}
         onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(rowMenu.doors, {})}
-        // Note that the row stands where its run places it (`VirtualRows`), its depth's own property beside that.
         style={{ ...place?.style, ...rowProperties(depth) }}
       >
         {row}
@@ -1075,9 +706,6 @@ export function ListRow({
           <SelectBox selectKey={selectKey} place={SELECT_BOX_PLACE.UNREAD_GUTTER} />
         )}
       </li>
-      {/* Note that the menu stands beside the row rather than in it, because a
-          press or a key in the menu's portal would otherwise reach the row's
-          own handlers, a long press on an item opening the menu again. */}
       {rowMenu.popup}
     </>
   );

@@ -1,15 +1,4 @@
-/* shimmer.css -- words with a light passing along them: the muted gray with
-   the highlight in the text's own ink. The light is a window 60% of the
-   words' width, opaque at its middle and clear at its edges, sliding from
-   just before the words to just past them while the copy of the words inside
-   it slides back by as much. Both move on `transform` alone, so the
-   compositor runs the loop and the line is never painted again for it. Its
-   duration is a literal as an endless loop with no end of its own may have,
-   because it answers --ui-loop-motion with its play state. */
-
 @layer components {
-  /* Note that it clips with `clip`, never `hidden`, so the window sliding
-     past its edges widens no scroller around it and makes none of its own. */
   .ui-shimmer-frame {
     position: relative;
     display: inline-block;
@@ -20,10 +9,6 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* The window's left edge travels from 0.8 of the words' width before them
-     to 1.2 past their start, its center from half a width before them to
-     half a width past them. A percentage of `translate` is of the window's
-     own width, 0.6 of the words'. */
   .ui-shimmer-light {
     position: absolute;
     inset-block: 0;
@@ -37,9 +22,6 @@
     animation-play-state: var(--ui-loop-motion);
   }
 
-  /* The copy is the words' width again, so it wraps as they do, and slides
-     back by the window's own travel, in its own widths, standing still over
-     the words. */
   .ui-shimmer-light-words {
     position: absolute;
     top: 0;

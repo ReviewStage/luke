@@ -7,11 +7,6 @@ import { afterEach, test } from "vitest";
 import { STATUS_TONE } from "../../status-tone.js";
 import { BANNER_LOOK, Banner } from "./banner.js";
 
-/**
- * banner.test.ts -- a banner is a region named by its own words, its glyph
- * is not read, and its presses answer it in reading order.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

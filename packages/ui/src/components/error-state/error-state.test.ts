@@ -1,16 +1,3 @@
-/**
- * error-state.test.ts -- a failure is one alert saying its sentence and its
- * Retry; Retry is a button the keyboard can stand on and a press of it
- * tries again; a failure with no Retry, or where none is offered, says its
- * sentence alone; among rows
- * it offers the remedy, Retry, Remove, and Dismiss in that order, each
- * press doing its own; on a toolbar it is the same one alert, its whole
- * sentence its hint; the glyph that marks it as a fault says nothing to a
- * reader; a row that is itself the retry says its failure as an alert and
- * is named by it and Retry. Every failure offers Copy details beside its
- * presses.
- */
-
 // @vitest-environment jsdom
 
 import { MOTION_DELAY_MS } from "@repo/brand";
@@ -28,7 +15,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const LINE = "The inbox could not be read.";
 
-/** The failure beneath every line drawn here. */
 const { failure: FAILURE } = recordedFailure();
 
 const roots: Root[] = [];
@@ -38,7 +24,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `element` into the page and answers the one alert it says. */
 function mountAlert(element: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -197,7 +182,6 @@ test("a failure on a toolbar is one alert with its sentence and presses, its who
   expect(pressed).toEqual(["remedy", "retry"]);
 });
 
-/** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */
 function hintOn(target: Element): string | undefined {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

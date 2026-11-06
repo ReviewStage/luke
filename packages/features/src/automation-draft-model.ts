@@ -40,51 +40,27 @@ import {
   TRIGGER_PROVIDER,
 } from "./trigger-catalog.js";
 
-/**
- * automation-draft-model.ts -- an automation as its editor holds it while it is written: its trigger, a schedule in the picker's terms, a GitHub event, or a webhook, the task, the repository, and the owner, with what stops it saving and the write that saves it.
- *
- * The picker writes a schedule as a kind and a time, every hour, every day,
- * on weekdays, or on one day of the week, and keeps a cron it did not write
- * as it was, so opening an automation made elsewhere never rewrites its
- * schedule. A GitHub event is chosen by its kind, any label or branch filter
- * it was given kept as it was, since the editor does not show them; a
- * webhook is its kind alone, its secret the service's; an integration's
- * event is chosen with the filters the editor shows, and the hours it waits
- * before the same subject fires it again, which it writes into its guards. The repository the
- * editor shows is the first, where a run starts; any others it was given
- * are kept behind it, and with none chosen a run works in no repository,
- * which a GitHub trigger, fired by a repository's events, cannot. A save sends only what changed, so a field the editor does not
- * show, a model or a target, stands as the service holds it. Every word a
- * field's problem says is here, beside the rule it states.
- */
-
-/** How the picker spells a schedule. */
 export const SCHEDULE_KIND = {
   HOURLY: "hourly",
   DAILY: "daily",
   WEEKDAYS: "weekdays",
   WEEKLY: "weekly",
-  /** A cron the picker did not write, kept as it was. */
   CUSTOM: "custom",
 } as const;
 
 export type ScheduleKind = (typeof SCHEDULE_KIND)[keyof typeof SCHEDULE_KIND];
 
-/** The fields a draft's problems are said at. */
 export const DRAFT_FIELD = {
   NAME: "name",
   SCHEDULE: "schedule",
   PROMPT: "prompt",
   REPOSITORY: "repository",
-  /** An integration trigger's filters. */
   FILTERS: "filters",
-  /** An integration trigger's subject cooldown. */
   COOLDOWN: "cooldown",
 } as const;
 
 type DraftField = (typeof DRAFT_FIELD)[keyof typeof DRAFT_FIELD];
 
-/** A schedule as the picker holds it: the kind, the time of day, the day of the week cron numbers, and the cron a custom one keeps. */
 export interface ScheduleDraft {
   readonly kind: ScheduleKind;
   readonly hour: number;
@@ -93,49 +69,32 @@ export interface ScheduleDraft {
   readonly cron: string;
 }
 
-/** An automation as its editor holds it. */
 export interface AutomationDraft {
   readonly name: string;
   readonly schedule: ScheduleDraft;
   readonly timezone: string;
   readonly prompt: string;
-  /** What fires it: a schedule, a GitHub event, a call to its webhook, or an integration's event. */
   readonly triggerKind: AutomationTriggerKind;
-  /** The GitHub event it fires on, where that is its trigger; a new draft's is a pull request opened or updated. */
   readonly githubEvent: GitHubTriggerEvent;
-  /** The label and branch filters a GitHub trigger was given, kept as they were. */
   readonly githubFilters: {
     readonly labels?: readonly string[];
     readonly branches?: readonly string[];
   };
-  /** Whose events, at which moments, and whether drafts and forks fire a GitHub trigger: the row of choices under its sentence. */
   readonly githubSettings: GitHubTriggerSettings;
-  /** The integration event it fires on, with its filters, kept as it was given; a new draft's is a Sentry alert. */
   readonly integrationTrigger: IntegrationTrigger;
-  /** The repository a run starts in, `owner/name`, or none chosen yet. */
   readonly repository: string | null;
-  /** Any other repositories its runs work in, kept behind the first as they were given. */
   readonly alsoRepositories: readonly string[];
   readonly owner: AutomationScope;
-  /** Where a run lands: a new agent each time, or the one agent each run goes to. */
   readonly target: AutomationTargetKind;
-  /** The agent each run goes to where runs land in the same agent, or none chosen, so its first run starts one. */
   readonly agentId: string | null;
-  /** The model and effort a new agent runs on, or none for the account's default as it stands when a run starts. */
   readonly choice: ModelChoice | null;
-  /** Whether a run's agent is archived once it finishes without failing. */
   readonly archiveSuccessful: boolean;
-  /** Whether each run's result is sent to the automation's owner on Slack. */
   readonly slackDelivery: boolean;
-  /** The owner's MCP servers a run's new agent is not handed, by connection name (`notion`, `notion-2`), as the agent box's servers button switches them. */
   readonly disabledServers: readonly string[];
-  /** The guards it runs under: a saved one's, the service's defaults otherwise. */
   readonly guards: AutomationGuards | null;
-  /** The hours an integration trigger waits before the same subject fires it again, or nothing while its field holds no number. */
   readonly subjectCooldownHours: number | undefined;
 }
 
-/** A GitHub trigger's settings as its editor holds them, each stated where the trigger leaves it to a default. */
 export interface GitHubTriggerSettings {
   readonly senders: readonly GitHubSender[];
   readonly moments: readonly PullRequestMoment[];
@@ -143,7 +102,6 @@ export interface GitHubTriggerSettings {
   readonly forks: boolean;
 }
 
-/** A GitHub trigger's settings where it names none: people's events, at every moment, no drafts, no forks. */
 const GITHUB_DEFAULT_SETTINGS: GitHubTriggerSettings = {
   senders: GITHUB_DEFAULT_SENDERS,
   moments: PULL_REQUEST_DEFAULT_MOMENTS,
@@ -151,28 +109,23 @@ const GITHUB_DEFAULT_SETTINGS: GitHubTriggerSettings = {
   forks: false,
 };
 
-/** An integration trigger where none was given: a Sentry alert, unfiltered. */
 const NEW_INTEGRATION_TRIGGER: IntegrationTrigger = {
   kind: AUTOMATION_TRIGGER.INTEGRATION,
   provider: TRIGGER_PROVIDER.SENTRY,
   event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
 };
 
-/** What a draft starts from where nothing is written: nine on weekdays, in the zone the window is in. */
 export interface DraftDefaults {
   readonly timezone: string;
   readonly owner: AutomationScope;
 }
 
-/** A change to an automation as it is gathered, a field at a time. */
 type ChangeDraft = {
   -readonly [Key in keyof AutomationChangeParams["change"]]: AutomationChangeParams["change"][Key];
 };
 
-/** What each field says while it stops the draft saving. */
 export type DraftProblems = { readonly [Field in DraftField]?: string };
 
-/** A new automation's schedule: nine on weekdays. */
 const NEW_SCHEDULE: ScheduleDraft = {
   kind: SCHEDULE_KIND.WEEKDAYS,
   hour: 9,
@@ -181,28 +134,24 @@ const NEW_SCHEDULE: ScheduleDraft = {
   cron: "0 9 * * 1-5",
 };
 
-/** Why a schedule was refused, as its field says it. */
 const SCHEDULE_REFUSAL_WORDS = {
   [SCHEDULE_REFUSAL.CRON]: `That isn't a schedule ${PRODUCT_NAME} can read.`,
   [SCHEDULE_REFUSAL.TIMEZONE]: "Pick a time zone.",
   [SCHEDULE_REFUSAL.TOO_FREQUENT]: "It can run at most every 15 minutes.",
 } as const satisfies Record<ScheduleRefusal, string>;
 
-/** A whole number a cron field spells, within its bounds, or nothing for any other field. */
 function cronNumber(field: string | undefined, most: number): number | undefined {
   if (field === undefined || !/^\d+$/u.test(field)) return undefined;
   const value = Number(field);
   return value <= most ? value : undefined;
 }
 
-/** The repositories a draft's runs work in: the one shown first, then the others it kept, the first among them once; none where none is chosen. */
 export function draftRepositories(draft: AutomationDraft): readonly string[] {
   if (draft.repository === null) return [];
   const first = draft.repository;
   return [first, ...draft.alsoRepositories.filter((repository) => repository !== first)];
 }
 
-/** Whether two model choices are one: the same model, effort, and context window, or both the account's default. */
 function sameChoice(one: ModelChoice | null, other: ModelChoice | null): boolean {
   if (one === null || other === null) return one === other;
   return (
@@ -212,12 +161,10 @@ function sameChoice(one: ModelChoice | null, other: ModelChoice | null): boolean
   );
 }
 
-/** The agent a draft's runs land in: the one chosen where runs land in the same agent, and none where a new agent takes each, whatever was chosen before. */
 function landingAgent(draft: AutomationDraft): string | null {
   return draft.target === AUTOMATION_TARGET.SAME_AGENT ? draft.agentId : null;
 }
 
-/** The action a draft's runs take: its task, on its model where it names one, with the servers it switched off. */
 function actionOf(draft: AutomationDraft): AutomationAction {
   return {
     kind: AUTOMATION_ACTION.AGENT,
@@ -229,14 +176,12 @@ function actionOf(draft: AutomationDraft): AutomationAction {
   };
 }
 
-/** Where a draft's runs land, as the service takes it: a new agent, or the same one, chosen or, with none chosen, the one its first run starts. */
 function targetOf(draft: AutomationDraft): AutomationTarget {
   return draft.target === AUTOMATION_TARGET.SAME_AGENT
     ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: draft.agentId }
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
 
-/** A GitHub trigger's settings, each it leaves out at its default. */
 function githubSettingsOf(
   trigger: Extract<AutomationTrigger, { kind: typeof AUTOMATION_TRIGGER.GITHUB }>,
 ): GitHubTriggerSettings {
@@ -248,12 +193,10 @@ function githubSettingsOf(
   };
 }
 
-/** Whether two lists hold the same words, in any order. */
 function sameSet(one: readonly string[] = [], other: readonly string[] = []): boolean {
   return one.length === other.length && one.every((each) => other.includes(each));
 }
 
-/** Whether two GitHub triggers keep to the same labels and branches. */
 function sameFilters(
   one: AutomationDraft["githubFilters"],
   other: AutomationDraft["githubFilters"],
@@ -261,7 +204,6 @@ function sameFilters(
   return sameSet(one.labels, other.labels) && sameSet(one.branches, other.branches);
 }
 
-/** Whether two GitHub triggers' settings say the same. */
 function sameSettings(one: GitHubTriggerSettings, other: GitHubTriggerSettings): boolean {
   return (
     sameSet(one.senders, other.senders) &&
@@ -271,7 +213,6 @@ function sameSettings(one: GitHubTriggerSettings, other: GitHubTriggerSettings):
   );
 }
 
-/** Whether two integration triggers listen for the same event under the same filters, each filter's values in any order. */
 function sameIntegrationTrigger(one: IntegrationTrigger, other: IntegrationTrigger): boolean {
   return (
     one.provider === other.provider &&
@@ -282,7 +223,6 @@ function sameIntegrationTrigger(one: IntegrationTrigger, other: IntegrationTrigg
   );
 }
 
-/** A cooldown the guards take: a whole number of hours, from one to a week. */
 function cooldownAdmitted(hours: number | undefined): hours is number {
   return (
     hours !== undefined &&
@@ -292,12 +232,10 @@ function cooldownAdmitted(hours: number | undefined): hours is number {
   );
 }
 
-/** A saved automation's subject cooldown: its guards', or the service's default where they name none. */
 function cooldownOf(guards: AutomationGuards | null): number {
   return guards?.subjectCooldownHours ?? AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS;
 }
 
-/** The guards a draft writes: its own, with its subject cooldown where an integration fires it; none where it keeps the service's. */
 function guardsOf(draft: AutomationDraft): AutomationGuards | null {
   if (draft.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION) return draft.guards;
   if (!cooldownAdmitted(draft.subjectCooldownHours)) return draft.guards;
@@ -307,7 +245,6 @@ function guardsOf(draft: AutomationDraft): AutomationGuards | null {
   };
 }
 
-/** Whether one integration filter's values are within the wire's bounds: so many values, each so long. */
 export function filterAdmitted(values: readonly string[] = []): boolean {
   return (
     values.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUES &&
@@ -315,12 +252,10 @@ export function filterAdmitted(values: readonly string[] = []): boolean {
   );
 }
 
-/** Whether an integration trigger's filters are each within the wire's bounds. */
 function filtersAdmitted(filters: IntegrationTriggerFilters | undefined): boolean {
   return [filters?.project, filters?.environment, filters?.level].every(filterAdmitted);
 }
 
-/** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, its webhook, or its integration's event. */
 export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   switch (draft.triggerKind) {
     case AUTOMATION_TRIGGER.SCHEDULE:
@@ -331,7 +266,6 @@ export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
       };
     case AUTOMATION_TRIGGER.GITHUB: {
       const { senders, moments, drafts, forks } = draft.githubSettings;
-      // The moments speak to an update alone, so no other event carries them.
       const updated = draft.githubEvent === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED;
       return {
         kind: AUTOMATION_TRIGGER.GITHUB,
@@ -350,14 +284,12 @@ export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   }
 }
 
-/** A trimmed text past its bound, or empty, as its field says it; nothing while it reads. */
 function textProblem(text: string, most: number, empty: string, long: string): string | undefined {
   const trimmed = text.trim();
   if (trimmed === "") return empty;
   return trimmed.length > most ? long : undefined;
 }
 
-/** The schedule a cron reads as in the picker's terms, a cron it did not write kept as custom. */
 export function scheduleDraftOf(cron: string): ScheduleDraft {
   const spelled = cron.trim();
   const custom = { ...NEW_SCHEDULE, kind: SCHEDULE_KIND.CUSTOM, cron: spelled };
@@ -378,7 +310,6 @@ export function scheduleDraftOf(cron: string): ScheduleDraft {
     : { ...at, kind: SCHEDULE_KIND.WEEKLY, weekday: weekday % 7 };
 }
 
-/** The cron a schedule draft spells. */
 export function cronOf(schedule: ScheduleDraft): string {
   const { minute, hour } = schedule;
   switch (schedule.kind) {
@@ -395,11 +326,6 @@ export function cronOf(schedule: ScheduleDraft): string {
   }
 }
 
-/**
- * The draft an automation opens as, or a new one's from the defaults. One
- * fired by an event opens with its schedule fields standing at a new one's,
- * only so a draft has them should its trigger become a schedule.
- */
 export function automationDraft(
   automation: AutomationSummary | undefined,
   defaults: DraftDefaults,
@@ -462,18 +388,10 @@ export function automationDraft(
   };
 }
 
-/** Whether the automation a draft opened as needs no repository chosen: one on a task, whose repository is its task's. */
 export function repositoryHeld(automation: AutomationSummary | undefined): boolean {
   return automation !== undefined && automation.planId !== null;
 }
 
-/**
- * What stops a draft saving, at the field it is about: a name and a task
- * written, a schedule we read and that fires no more often than its
- * floor, an integration's filters within their bounds and its cooldown a
- * whole number of hours up to a week, and a repository chosen for a GitHub
- * trigger, whose events come from it, where none is held (`repositoryHeld`).
- */
 export function draftProblems(draft: AutomationDraft, held: boolean, now: Date): DraftProblems {
   const name = textProblem(
     draft.name,
@@ -517,7 +435,6 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
   return problems;
 }
 
-/** What stops a GitHub trigger's settings saving: no one whose events fire it, or an update at no moment. */
 function githubSettingsProblem(draft: AutomationDraft): string | undefined {
   const { senders, moments } = draft.githubSettings;
   if (draft.githubEvent !== GITHUB_TRIGGER_EVENT.CHECK_FAILED && senders.length === 0) {
@@ -529,7 +446,6 @@ function githubSettingsProblem(draft: AutomationDraft): string | undefined {
   return undefined;
 }
 
-/** The next instants a draft's schedule is due after `now`, as many as asked; none for one we cannot read. */
 export function draftNextRuns(draft: AutomationDraft, now: Date, count: number): readonly number[] {
   if (draft.triggerKind !== AUTOMATION_TRIGGER.SCHEDULE) return [];
   const schedule = { cron: cronOf(draft.schedule), timezone: draft.timezone };
@@ -544,7 +460,6 @@ export function draftNextRuns(draft: AutomationDraft, now: Date, count: number):
   return runs;
 }
 
-/** The write that makes a draft an automation in the workspace named, its runs on a new agent each, as the service starts one, in its repositories or in none. */
 export function createRequestOf(
   draft: AutomationDraft,
   workspaceId: string,
@@ -564,13 +479,11 @@ export function createRequestOf(
   return { ...made, repositories: draftRepositories(draft) };
 }
 
-/** Whether two drafts say the same: what a page compares to know whether anything was written into it. */
 export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean {
   return (
     one.name.trim() === other.name.trim() &&
     one.prompt.trim() === other.prompt.trim() &&
     one.triggerKind === other.triggerKind &&
-    // A GitHub event and its filters, chosen and left behind for another trigger kind, are no change.
     (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB ||
       (one.githubEvent === other.githubEvent &&
         sameFilters(one.githubFilters, other.githubFilters) &&
@@ -578,7 +491,6 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     (one.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION ||
       (sameIntegrationTrigger(one.integrationTrigger, other.integrationTrigger) &&
         one.subjectCooldownHours === other.subjectCooldownHours)) &&
-    // A new draft's guards, unset, are whatever the service sets, so they differ from none.
     (one.guards === null ||
       other.guards === null ||
       (one.guards.maxConcurrentRuns === other.guards.maxConcurrentRuns &&
@@ -597,12 +509,6 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
   );
 }
 
-/**
- * What a draft changes of the automation it opened as, each field only
- * where it moved, or nothing where none did. The task keeps the model the
- * automation runs on, which this editor does not show, and a repository is
- * sent only where the automation is not on a task.
- */
 export function changeOf(
   draft: AutomationDraft,
   automation: AutomationSummary,
@@ -612,7 +518,6 @@ export function changeOf(
   const scheduleMoved =
     draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE &&
     (cronOf(draft.schedule) !== cronOf(was.schedule) || draft.timezone !== was.timezone);
-  // Note that filters let go of on the way to another event and back are a change, because the editor then shows none.
   const eventMoved =
     draft.triggerKind === AUTOMATION_TRIGGER.GITHUB &&
     (draft.githubEvent !== was.githubEvent ||
@@ -623,7 +528,6 @@ export function changeOf(
     !sameIntegrationTrigger(draft.integrationTrigger, was.integrationTrigger);
   const triggerMoved =
     draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved || integrationMoved;
-  // Note that a cooldown is sent over the guards as saved, because a change's guards replace them whole.
   const cooldownMoved =
     draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION &&
     cooldownAdmitted(draft.subjectCooldownHours) &&
@@ -640,7 +544,6 @@ export function changeOf(
   if (cooldownMoved) {
     change.guards = { ...automation.guards, subjectCooldownHours: draft.subjectCooldownHours };
   }
-  // Note that a change names its servers even where none are off, because a change that names none keeps the saved ones.
   if (actionMoved) change.action = { ...actionOf(draft), disabledServers: draft.disabledServers };
   if (targetMoved) change.target = targetOf(draft);
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
@@ -652,13 +555,6 @@ export function changeOf(
   return Object.keys(change).length === 0 ? undefined : change;
 }
 
-/**
- * A draft moved to another GitHub event. The label and branch filters a
- * trigger was given go with the event they were given for, since the
- * editor does not show them and one event's filter can match nothing of
- * another's: a label filter on a push, whose delivery has no labels, would
- * keep the trigger from ever firing.
- */
 export function withGithubEvent(
   draft: AutomationDraft,
   event: GitHubTriggerEvent,
@@ -667,10 +563,6 @@ export function withGithubEvent(
   return { ...draft, githubEvent: event, githubFilters: {} };
 }
 
-/**
- * A draft moved to another event of its integration. The filters stay,
- * since every event of a provider carries the same fields.
- */
 export function withIntegrationEvent(
   draft: AutomationDraft,
   event: SentryTriggerEvent,
@@ -678,11 +570,6 @@ export function withIntegrationEvent(
   return { ...draft, integrationTrigger: { ...draft.integrationTrigger, event } };
 }
 
-/**
- * A draft whose integration trigger keeps to the filters given, merged over
- * those it had. A field left empty keeps nothing out, so it is dropped
- * rather than written empty, and a trigger with no field left names none.
- */
 export function withIntegrationFilters(
   draft: AutomationDraft,
   filters: IntegrationTriggerFilters,
@@ -702,18 +589,11 @@ export function withIntegrationFilters(
   return { ...draft, integrationTrigger };
 }
 
-/** The values a filter's field spells, comma-separated, each trimmed, empty ones and repeats left out. */
 export function filterValuesOf(text: string): readonly string[] {
   const values = text.split(",").map((value) => value.trim());
   return values.filter((value, at) => value !== "" && values.indexOf(value) === at);
 }
 
-/**
- * A draft moved to another repository, or to none. An agent works in its
- * own repository, so a same-agent draft lets go of the agent it had chosen,
- * which the picker then offers again from the new repository's agents,
- * rather than send its runs to an agent working elsewhere.
- */
 export function withRepository(draft: AutomationDraft, repository: string | null): AutomationDraft {
   if (repository === draft.repository) return draft;
   return { ...draft, repository, agentId: null };

@@ -5,58 +5,6 @@ import { useHeadingAway } from "../page-header/heading-away.js";
 import { PageHeader } from "../page-header/page-header.js";
 import { Toolbar, type ToolbarPickUp } from "../toolbar/toolbar.js";
 
-/**
- * detail-page.tsx -- the page one thing is drawn on: its title and acts, its main content, and an optional secondary column beside it.
- *
- * The page owns its widths and its scrolls: the window's bar (`Toolbar`)
- * stands still over the content, and the main content and the secondary
- * column each scroll on their own, so reading far down one leaves the other
- * where it was. The header opens the main content and scrolls with it, and
- * once it has scrolled away the bar picks up its name (`useHeadingAway`),
- * so the reader never loses it. The columns share one measure centered in
- * the room, the same as a collection's page, so a title opens on the main
- * content's edge and the header's acts end on that column's. Each scroll
- * reaches the page's edge on its own side, so the wheel works anywhere
- * over the column it moves. In a pane too narrow for two columns, the
- * secondary column follows the main content in the one scroll. A main
- * content that is only an `EmptyState` (or a centered `ErrorState`, where the
- * thing could not be read) stands it a little above the room's middle, as a
- * collection's page stands its empty and failed states.
- *
- * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
- * header nor bar of its own: the caller's toolbar stands still above the
- * columns, and the page is named by the toolbar's title. Under a toolbar it
- * draws itself, its columns stand across the room on the toolbar's own
- * edges, so the bar's title and actions line up with what it heads. Content that scrolls sideways stands across the
- * whole room (`PAGE_WIDTH.FULL`) rather than at the measure. A page in a
- * narrow column under rows that stand at a column's inset stands its words
- * with theirs (`DETAIL_PAGE_INSET.READING`) rather than a page's inset in from them. A
- * `List` laid straight into the content, or straight under one of its
- * sections, reaches past the column by its rows' own inset, as on a
- * collection's page, so its words line up with the title's.
- *
- * The page heads itself with a document's header (`PageHeader`), its title
- * the page's one `h1`, a page's inset under the window's bar. In a narrow
- * room, where the bar is a phone's head on the page's own ground rather
- * than the window's row above its sheet, the title stands a section's gap
- * under the bar's way back instead (`title-under-bar`), so neither the inset
- * nor the bar's row under its controls stacks into an empty band between
- * the way back and the title. Where the window's bar stands above the page and what
- * stands beside it (an editor with a panel beside it) rather than inside
- * its column, the page draws no bar of its own and hands the caller the name
- * its header reads (`onPickUp`), for the caller's bar to pick up. The
- * secondary column is a complementary landmark named by its `label`. The
- * page names itself by its title and takes no class or style.
- *
- * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base,
- * since shadcn has no page frame. Its sheet (`detail-page.css`) keeps the
- * page's measure, inset, and the room either side of it, which its profile
- * and its own width set; the columns' grid, scrolls, and insets, which the
- * narrow pane's container query and the secondary column's `:has()` undo;
- * and the reach of what the caller lays in.
- */
-
-/** How far in from its sides the page stands its words: a page's inset, or a column's, as tabs read at the measure stand theirs. */
 export const DETAIL_PAGE_INSET = {
   PAGE: "page",
   READING: "reading",
@@ -64,25 +12,16 @@ export const DETAIL_PAGE_INSET = {
 
 export type DetailPageInset = (typeof DETAIL_PAGE_INSET)[keyof typeof DETAIL_PAGE_INSET];
 
-/**
- * What either column is: its own scroll, a swipe past its end held there,
- * its gutter kept so a scrollbar moves nothing, and the keyboard's ring drawn
- * inside it, because the page clips anything drawn past its edge.
- */
 const COLUMN_CLASS =
   "box-border min-w-0 min-h-0 overscroll-contain scrollbar-gutter-stable outline-offset-[var(--ui-focus-ring-inset)]";
 
-/** A column's content, ending on the page's inset or clear of a phone's call card, whichever is more, a long word broken rather than run past the column. */
 const CONTENT_CLASS = "pb-detail-page-end wrap-anywhere";
 
-/** What stands beside the main content: facts about the thing, its people, its history. */
 export type DetailSecondary = {
-  /** What the column is, said to a reader as the landmark's name. */
   label: string;
   content: ReactNode;
 };
 
-/** One thing's page: its heading over the main content and an optional `secondary` column. */
 export function DetailPage({
   secondary,
   inset = DETAIL_PAGE_INSET.PAGE,
@@ -91,17 +30,8 @@ export function DetailPage({
   ...heading
 }: PageHeading & {
   secondary?: DetailSecondary | undefined;
-  /**
-   * For a page headed by its own title whose bar stands outside it: hears
-   * what the bar picks up, the name the header reads and whether the header
-   * has scrolled away (`Toolbar`'s `pickUp`), as either changes, in place of
-   * the page drawing a bar. It must keep one identity (a state setter), or
-   * each draw would hand it the name again.
-   */
   onPickUp?: ((pickUp: ToolbarPickUp) => void) | undefined;
-  /** How far in from its sides the words stand; a page's inset where left out. */
   inset?: DetailPageInset | undefined;
-  /** The main content (sections, a document, a transcript). */
   children: ReactNode;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
@@ -112,12 +42,10 @@ export function DetailPage({
   const side = useRef<HTMLElement>(null);
   const mainContent = useRef<HTMLDivElement>(null);
   const sideContent = useRef<HTMLDivElement>(null);
-  // Note that each column is the scroller its content is handed, which it is wherever it scrolls on its own; in a pane too narrow for two, where the body scrolls both, a column lets all its rows show.
   const [mainScroll] = useState((): PageScroll => ({ scroller: main, shiftedBy: mainContent }));
   const [sideScroll] = useState((): PageScroll => ({ scroller: side, shiftedBy: sideContent }));
   const underToolbar = heading.frame === PAGE_FRAME.TOOLBAR;
   const barOutside = !underToolbar && onPickUp !== undefined;
-  // Note that the caller hears the name when it or its visibility changes, because its bar stands outside this page and cannot read the header itself.
   useEffect(() => {
     onPickUp?.({ name: named.name, shown: named.away });
   }, [onPickUp, named.name, named.away]);

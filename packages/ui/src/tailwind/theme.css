@@ -1,17 +1,4 @@
-/* theme.css -- shadcn/ui's Tailwind vocabulary over the `--ui-*` tokens, the one theme every app's Tailwind entry takes on after Tailwind's own.
-
-   The components `@repo/ui` vendors from shadcn/ui (`../shadcn/`) and the
-   panel's AI Elements (`@repo/panel`'s `ai-elements/`) are written in
-   Tailwind's utility vocabulary: `bg-primary`, `text-muted-foreground`,
-   `border-border`. Each token here is an alias of a palette role (or of one
-   the panel's base.css names), so a utility and a hand-written rule read one
-   vocabulary, no app maps a name to a role of its own, and no second gray or
-   hairline is invented. Only the tokens something draws with. */
 @theme inline {
-  /* Note that Tailwind's numeric scale (`p-4`, `gap-2`) is a multiple of
-     one step, which it measures in rem; the step is the base scale's 4px
-     here, because the desktop's root type is 13px, under which a rem step
-     would put every numeric utility off the scale. */
   --spacing: var(--ui-space-4);
   --font-mono: var(--ui-font-mono);
   --color-background: var(--ui-color-overlay);
@@ -21,24 +8,15 @@
   --color-primary: var(--ui-color-text);
   --color-primary-foreground: var(--ui-color-ink-inverse);
   --color-border: var(--ui-color-border);
-  /* The switch's own inks, which the palette keeps apart from the accent. */
   --color-switch-track: var(--ui-color-switch-track);
   --color-switch-on: var(--ui-color-switch-on);
   --color-switch-thumb: var(--ui-color-switch-thumb);
   --shadow-switch-thumb: var(--ui-shadow-switch-thumb);
   --ease-spring-fast: var(--ui-spring-fast);
-  /* The two cursors a press gives (profiles.css): `cursor-press` on every
-     control, the arrow on the desktop and the hand on the web, and
-     `cursor-link` on a real link, the hand on both. */
   --cursor-press: var(--ui-cursor-press);
   --cursor-link: var(--ui-cursor-link);
-  /* How far a control fades while it cannot be used (`opacity-disabled`). */
   --opacity-disabled: var(--ui-disabled-opacity);
 
-  /* The controls' own roles (`profiles.css`), which a button, a toggle, and
-     a tab are drawn at in every profile; and a button's look, which its
-     variant and state set as `--ui-button-*` on the button itself
-     (`button.css`), so a container's sheet restyles it by those alone. */
   --font-ui: var(--ui-font-sans);
   --text-body: var(--ui-type-body-size);
   --text-body--line-height: var(--ui-type-body-leading);
@@ -49,12 +27,6 @@
   --spacing-control: var(--ui-control-height);
   --spacing-control-inset: var(--ui-control-inset);
 
-  /* The panel's side panel and the plan's summary beside the document
-     (`@repo/panel`): the summary's width and its rail's, both said once on
-     the task's column (`desktop.css`'s `.desktop-task-main`); the card's
-     inset, the rail's less its 1px border; the panel's widest, which leaves
-     the document its reserve; the empty panel's column, 300px at most; a
-     note's share of the toolbar; and the card's arrival and leaving. */
   --spacing-summary: var(--summary-width);
   --spacing-summary-rail: var(--summary-rail-width);
   --spacing-summary-card-inset: calc(var(--ui-space-12) - 1px);
@@ -73,10 +45,6 @@
   --spacing-menu-glyph: var(--ui-menu-glyph);
   --spacing-list-gap: var(--ui-list-gap);
 
-  /* The panel's work column (`@repo/panel`: a transcript's opening line, a
-     tool's page, the find bar, the version history):
-     the profile's spacing roles it reads beside the ones above, and its own
-     glyphs, measures, and motions. */
   --spacing-ring-reach: var(--ui-focus-ring-reach);
   --spacing-column-inset: var(--ui-space-12);
   --spacing-attention-mark: 14px; /* off-scale: the attention disc, a row glyph's size */
@@ -107,13 +75,6 @@
   --color-accent-ink: var(--ui-color-accent-text);
   --spacing-touch: var(--ui-touch-target);
 
-  /* The panel's Inbox (`@repo/panel`'s `tasks/inbox-*.tsx`): its two columns
-     and the one standing alone; the list's held height while a row leaves;
-     the thread's gutter, a list row's 20px, the line through its faces, and
-     the earlier messages' line inset past it; a pick's check centered on its
-     first line; a short field's measure and an answered field's least
-     height; and the column's inset
-     and the attention mark's glyph a size under a row's. */
   --grid-template-columns-inbox: auto minmax(0, 1fr);
   --grid-template-columns-single: minmax(0, 1fr);
   --spacing-list-held-least: var(--ui-list-held-height, 0);
@@ -124,8 +85,6 @@
   --spacing-inbox-field-short: calc(10 * var(--ui-space-16));
   --spacing-inbox-field-words: calc(var(--ui-type-body-leading) + 2 * var(--ui-item-gap));
   --spacing-attention-glyph-small: 10px; /* off-scale: the attention mark's glyph at a row's time */
-  /* A box or a range a choice is drawn in: a field's ground inside a
-     chosen row's edge, filled in the accent where it is on. */
   --color-field: var(--ui-color-input);
   --color-surface: var(--ui-color-surface);
   --color-control-edge: var(--ui-color-border-selected);
@@ -134,35 +93,21 @@
   --color-button-fill: var(--ui-button-fill);
   --color-button-ink: var(--ui-button-ink);
   --color-button-edge: var(--ui-button-edge);
-  /* Text entry and the words around it (`text-field`, `search-field`,
-     `form-field`, `inline-edit`, `length-counter`): a
-     field's grounds and edges, the type roles its words are set in, and the
-     lengths it stands at, each a profile's role. A name added here that
-     tailwind-merge cannot read is listed in `../cn.ts`. */
   --color-well: var(--ui-color-well);
   --color-field-focus: var(--ui-color-input-focus);
   --color-ground: var(--ui-color-ground);
   --font-body: var(--ui-font-sans);
   --text-title: var(--ui-type-title-size);
   --text-title--line-height: var(--ui-type-title-leading);
-  /* A field set a size under the body's keeps the body's line. */
   --leading-body: var(--ui-type-body-leading);
-  /* Words edited in place in the body's size, on the line of what they stand in. */
   --text-body-size: var(--ui-type-body-size);
-  /* A finger's field takes 16px words at least, or iOS zooms into it. */
   --text-touch: max(16px, 1em);
   --text-caption-touch: max(16px, var(--ui-type-caption-size));
-  /* The base scale's larger steps by name (the smaller stand with the menus'
-     roles below), because Tailwind's numbered steps are rems of a root the
-     window sets at the body's size, not 16px. */
   --spacing-ui-20: var(--ui-space-20);
   --spacing-ui-24: var(--ui-space-24);
-  /* A field a step under a control, among a bar's controls. */
   --spacing-control-compact: calc(var(--ui-control-height) - 2 * var(--ui-space-2));
-  /* A time's block inset: the room around one line, so its value stands on the field's middle. */
   --spacing-time-inset: calc((var(--ui-control-height) - var(--ui-type-body-leading)) / 2 - 1px);
   --spacing-time-value: var(--ui-type-body-leading);
-  /* A growing note's least height, from its rows (`--ui-text-area-rows`), and its most. */
   --spacing-text-area-least: calc(
     var(--ui-text-area-rows) *
     var(--ui-type-body-leading) +
@@ -180,29 +125,20 @@
     )
   );
   --spacing-text-area-grow-max: var(--ui-text-area-grow-max);
-  /* A bare text area's insets, which the card it stands in sets. */
   --spacing-text-area-inset-start: var(--ui-text-area-inset-start, 0px);
   --spacing-text-area-inset-inline: var(--ui-text-area-inset-inline, 0px);
   --spacing-text-area-inset-end: var(--ui-text-area-inset-end, 0px);
-  /* A search's lead, a hair under a row's, so the magnifier stands where a row's glyph does. */
   --spacing-search-lead: calc(var(--ui-space-8) - 1px);
-  /* A search's clear, nested inside the well's edge. */
   --spacing-search-clear: calc(var(--ui-control-height) - 2px - 2 * var(--ui-space-2));
-  /* A menu's search row: a menu row, its inset, and its hairline. */
   --spacing-menu-search: calc(var(--ui-menu-row-height) + 2 * var(--ui-space-2) + 2px);
-  /* A settings label renamed in place overhangs the label by its inset and edge. */
   /* off-scale: a 24px box over an 18px label line stands 3px past it each side. */
   --spacing-inline-edit-lift: 3px;
   --spacing-inline-edit-reach: calc(-1 * var(--ui-space-8) - 1px);
   --radius-control-compact: calc(var(--ui-control-radius) - var(--ui-space-2));
   --radius-inline-edit: calc(var(--ui-radius-6) - 1px);
   --shadow-selected-edge: inset 0 0 0 1px var(--ui-color-border-selected);
-  /* A row's ring while its menu stands open (`--ui-color-border-menu-open`). */
   --shadow-menu-open-edge: inset 0 0 0 1px var(--ui-color-border-menu-open);
   --ease-plain: var(--ui-motion-exit);
-  /* A field turning wrong shakes once; an arriving part fades in, a clear
-     grows in and shrinks out, an error drops into its line, and a count
-     ticks in the way it moved. */
   --animate-field-shake: field-shake var(--ui-duration-fast) var(--ui-motion-exit);
   --animate-arrive: arrive-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards;
   --animate-leave: leave-fade var(--ui-duration-exit) var(--ui-motion-exit) forwards;
@@ -271,12 +207,6 @@
     }
   }
 
-  /* The panel's shell (`../components/sidebar/`, `row-mark/`, `search-match/`,
-     and the panel's own settings rows and mobile bar): a row's
-     end mark, the sidebar's head and its corner, a settings row's inset and
-     least heights, the handover's field chip, and the room a settings search
-     lands a line below. A search's wash and a name at a dialog's size are the
-     rows' block's (`match`, `dialog-size`). */
   --spacing-row-mark: 14px; /* off-scale: a mark a size under the glyph it follows */
   --spacing-section-gap: var(--ui-section-gap);
   --tracking-identity: -0.01em; /* off-scale: a name set at a dialog's size, drawn in */
@@ -288,11 +218,6 @@
   --spacing-heir-least: 220px; /* off-scale: a field chip wide enough for a name */
   --spacing-settings-search-clearance: calc(var(--ui-space-32) + 3 * var(--ui-control-height));
 
-  /* The overlays' roles (`../shadcn/dialog.tsx`, `popover.tsx`, `tooltip.tsx`,
-     `hover-card.tsx`): the dimmed window, the surface a card or a menu
-     stands on and its hairline, the dark pill, their corners, lifts, and
-     layers, the measures a dialog's card stands at, and the words a hover
-     card says in. A width is the role's measure held inside its room. */
   --color-scrim: var(--ui-color-scrim);
   --color-popover: var(--ui-color-overlay);
   --color-popover-foreground: var(--ui-color-text);
@@ -311,13 +236,6 @@
   --z-index-dialog: var(--ui-z-dialog);
   --z-index-tooltip: var(--ui-z-tooltip);
   --spacing-dialog-inset: var(--ui-dialog-inset);
-  /* The panel's Home and its tasks (`@repo/panel`: Home's sections and its
-     welcome, a person's page, New task and Move, a card's server line): the
-     welcome's tile and the face on it, its composer at the page's measure, a
-     row's context's bound, the room New task's title leaves its chips, a
-     card's line drawn out past its inset; and the Tasks page's Board and
-     List, a column's width, a row's height, a maker's name's measure, and the
-     List's columns as the view draws them. */
   --spacing-welcome-tile: 56px; /* off-scale: the welcome's tile, a masthead's size */
   --spacing-welcome-mark: 34px; /* off-scale: the product's mark on the welcome's tile */
   --spacing-welcome-composer: min(var(--ui-page-measure), 100%);
@@ -327,28 +245,19 @@
   --spacing-card-line: calc(100% + 2 * var(--ui-row-inset));
   --spacing-tasks-board-column: 320px; /* off-scale: a card's width, as Linear's board stands it */
   --spacing-tasks-list-row: calc(var(--ui-control-height) + var(--ui-space-6));
-  /* A quick add's draft, raised as a card, takes its hairline out of the
-     row's inset, so its cells stand on the rows' lines. */
   --spacing-task-row-draft: calc(var(--ui-row-inset) - 1px);
   --spacing-tasks-list-maker: 16ch; /* off-scale: a maker's name, cut short at a short name's measure */
-  /* A row's box (`SelectBox`): a checkbox's own size, as shadcn/checkbox.tsx
-     draws it, and the start of a row that keeps a gutter for it, the box
-     standing at the row's inset with an icon's gap after it. */
   --spacing-select-box: 14px; /* off-scale: the checkbox's own size */
   --spacing-select-gutter: calc(
     var(--ui-row-inset) +
     var(--spacing-select-box) +
     var(--ui-icon-gap)
   );
-  /* How far in from a compact chip's start a box stands centered on the
-     chip's mark, as a board card's box stands over its status chip. */
   --spacing-select-box-inset: calc((var(--spacing-chip-compact) - var(--spacing-select-box)) / 2);
   --grid-template-columns-tasks-list: var(--tasks-list-columns);
   --spacing-dialog-action-gap: var(--ui-dialog-action-gap);
   --spacing-dialog-action: var(--ui-dialog-action-width);
   --spacing-dialog-room: var(--ui-dialog-room);
-  /* Where a card the window's size starts: clear of what the window draws
-     over its top (the traffic lights), as the window says, else a margin. */
   --spacing-dialog-window-top: var(--ui-dialog-window-top, var(--ui-space-24));
   --spacing-card-inset-snug: var(--ui-card-inset-snug);
   --spacing-dialog-reach: var(--ui-space-12);
@@ -358,23 +267,12 @@
   --spacing-row-inset: var(--ui-row-inset);
   --spacing-list-inset: var(--ui-list-inset);
   --spacing-control-gap: var(--ui-control-gap);
-  /* A list row nested under another stands in by the glyph and its gap once for each
-     level it stands at (`ListRow`'s `depth`), so its glyph stands under the
-     name of the row it is nested under. */
   --spacing-list-row-nest: calc(
     var(--ui-list-row-depth, 0) *
     (var(--ui-control-icon) + var(--ui-icon-gap))
   );
-  /* A nav item nested under a place (`NavItem`'s `nested`) starts where that
-     place's name does: its row's inset, a glyph, and the glyph's gap. */
   --spacing-nav-item-nest: calc(var(--ui-row-inset) + var(--ui-control-icon) + var(--ui-icon-gap));
 
-  /* The panel's places beside the sidebar (`@repo/panel`: Automations,
-     Settings, a version history, the Admin place, the sign-in): the
-     profile's spacing roles they read; the list-and-item split Settings, a
-     history, and Admin stand in; an automation row's columns and fields; a
-     glyph at its words' size; the sign-in's foot; the experiment tag's
-     tracking; and the spring a byline's presses fade on. */
   --grid-template-columns-place-split: min(var(--sidebar-width), 35%) minmax(0, 1fr);
   --grid-template-rows-single: minmax(0, 1fr);
   --spacing-automation-owner: 112px; /* off-scale: an owner's picture and name, in a column */
@@ -419,7 +317,6 @@
   --spacing-dialog-command-sheet: var(--ui-command-sheet);
   --container-tooltip: var(--ui-tooltip-max-width);
   --container-tooltip-card: var(--ui-tooltip-card-width);
-  /* Breadcrumbs and DataTable. */
   --font-weight-dialog: var(--ui-type-dialog-weight);
   --leading-tag: var(--ui-type-tag-leading);
   --leading-caption: var(--ui-type-caption-leading);
@@ -430,15 +327,7 @@
   --ease-motion-exit: var(--ui-motion-exit);
   --ease-pane: var(--ui-motion-pane);
 
-  /* The overlays' motion, spent from the motion tokens, which reduced motion
-     and a capture run already hold still: a dialog's dimmed window fades in,
-     its card fades and rises, and swells for a dismissal it holds back or
-     shakes for an act refused (each listing the entrance, because a name
-     dropped and named again replays); a hung panel arrives and drops as a
-     menu does (`menu.css`'s keyframes); a hint fades and grows in, and fades
-     out once seen. */
   --animate-dialog-scrim: ui-dialog-fade var(--ui-duration-quick) var(--ui-motion-exit);
-  /* A phone's sheet rises and sinks on the pane's beat, so its scrim and its card fade on it too. */
   --animate-sheet-scrim: ui-dialog-fade var(--ui-duration-pane) var(--ui-motion-pane);
   --animate-sheet-leave: leave-fade var(--ui-duration-pane) var(--ui-motion-pane) forwards;
   --animate-dialog-in:
@@ -512,19 +401,11 @@
     }
   }
 
-  /* The menu and picker roles (`../shadcn/dropdown-menu.tsx`,
-     `../shadcn/combobox.ts`, `../shadcn/calendar.ts`) the overlays' above
-     leave out: the inks, the corners, and the sizes a menu's surface and its
-     rows, a list, and a month are drawn at, each set per profile. */
   --color-secondary: var(--ui-color-fill-strong);
   --color-destructive: var(--ui-color-danger);
   --color-input: var(--ui-color-input);
-  /* A picked day's fill and ink, and the wash of a range between its ends. */
   --color-fill-selected: var(--ui-color-fill-selected);
-  /* A toolbar floated on the menu's surface: a row's round, a hair out. */
   --radius-menu-toolbar: calc(var(--ui-menu-row-radius) + var(--ui-space-2));
-  /* The base scale, as `p-ui-8` (`tokens/scale.css`), because the window's
-     root type is 13px and Tailwind's own numbered steps are rems of it. */
   --spacing-ui-2: var(--ui-space-2);
   --spacing-ui-4: var(--ui-space-4);
   --spacing-ui-6: var(--ui-space-6);
@@ -536,27 +417,18 @@
   --spacing-menu-least: 196px;
   --spacing-menu-most: 280px;
   --spacing-menu-chevron: 14px;
-  /* A menu no taller than the room Base UI's positioner finds for it
-     (`--available-height`, set on the positioner it stands in), and never
-     taller than can be seen, a margin short of either edge, so a long one
-     scrolls inside the window and above a phone's keyboard
-     (`tokens/viewport.css`). */
   --spacing-menu-max: min(
     var(--available-height, var(--ui-stage-height)),
     calc(var(--ui-stage-height) - 2 * var(--ui-space-8))
   );
-  /* A list's cap, an app's placement hook (README's "Placement hooks"). */
   --spacing-combobox-list: var(--ui-combobox-list-max, 280px);
   /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
   --spacing-combobox-lead: 9ch;
-  /* A pair of a facepile's faces, the second overlapping the first. */
   --spacing-combobox-faces: calc(var(--spacing-avatar-stack) * 2 - var(--spacing-actor-overlap));
   --text-group: var(--ui-type-group-size);
   --text-group--line-height: var(--ui-type-group-leading);
   --text-tag: var(--ui-type-tag-size);
   --text-tag--line-height: var(--ui-type-tag-leading);
-  /* A role's weight, so a utility reads `font-label` and never `font-medium`:
-     the weight is the role's, which `profiles.css` sets once. */
   --font-weight-text: var(--ui-type-body-weight);
   --font-weight-label: var(--ui-type-label-weight);
   --font-weight-group: var(--ui-type-group-weight);
@@ -566,8 +438,6 @@
   --font-weight-emphasis: var(--ui-type-emphasis-weight);
   --font-weight-title: var(--ui-type-title-weight);
   --tracking-title: var(--ui-type-title-tracking);
-  /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the
-     overlays' `--animate-menu-in` above. */
   --animate-menu-leave: ui-menu-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
   --z-index-menu: var(--ui-z-menu);
   --z-index-menu-over-dialog: calc(var(--ui-z-dialog) + 1);
@@ -585,26 +455,19 @@
   --spacing-data-table-medium: 640px;
   --spacing-data-table-wide: 760px;
 
-  /* Banner, ScrollArea, and Pagination. */
   --color-attention: var(--ui-color-attention);
-  /* A post that needs the reader: the attention ink's tint and nothing else. */
   --color-attention-tint: var(--ui-color-attention-tint);
   --color-body-foreground: var(--ui-color-text-body);
-  /* A strip's tint and hairline, mixed from the ink of the tone the banner
-     wears (`tokens/status-tone.css`). */
   --color-banner-strip: color-mix(in srgb, var(--ui-tone-ink) 9%, var(--ui-color-ground));
   --color-banner-strip-edge: color-mix(in srgb, var(--ui-tone-ink) 30%, var(--ui-color-border));
-  /* A status tone's tint, which whatever wears its `data-tone` sets. */
   --color-tone-tint: var(--ui-tone-tint);
   --spacing-banner-strip-block: var(--ui-space-2);
   --spacing-banner-strip-end: var(--ui-space-12);
   --spacing-banner-strip-start: var(--ui-space-20);
   --spacing-banner-card: var(--ui-space-12);
   --spacing-banner-card-start: var(--ui-space-16);
-  --spacing-banner-disc: var(--ui-space-32); /* the card's glyph disc */
-  --spacing-banner-mark-row: var(
-    --ui-type-label-leading
-  ); /* the card's bare mark, its heading's first line tall */
+  --spacing-banner-disc: var(--ui-space-32);
+  --spacing-banner-mark-row: var(--ui-type-label-leading);
   --spacing-banner-words-gap: var(--ui-space-2);
   --spacing-banner-row-inset: calc((var(--ui-control-height) - var(--ui-type-body-leading)) / 2);
   --spacing-pagination-gap: var(--ui-space-4);
@@ -612,8 +475,6 @@
   --spacing-pagination-item: calc(var(--ui-type-caption-leading) + 2 * var(--ui-space-6));
   --spacing-pagination-item-inset: var(--ui-space-8);
 
-  /* Toast, Spinner, and Progress. Their lengths name the scale's steps
-     rather than Tailwind's rem ones, since a root may set its own size. */
   --color-complete: var(--ui-color-complete);
   --color-working: var(--ui-color-working);
   --spacing-spinner: var(--ui-space-16);
@@ -632,7 +493,6 @@
   --shadow-toast-dismiss: 0 1px 3px var(--ui-color-shadow-soft);
   --z-index-toast: var(--ui-z-toast);
 
-  /* Chip and Badge. Their lengths name the scale's steps, as above. */
   --color-chip: var(--ui-color-chip);
   --color-chip-hover: var(--ui-color-chip-hover);
   --color-chip-selected: var(--ui-color-chip-selected);
@@ -650,7 +510,6 @@
   --color-badge-fill-edge: light-dark(var(--ui-badge-edge-light), var(--ui-badge-edge-dark));
   --color-badge-fill-words: light-dark(var(--ui-badge-words-light), var(--ui-badge-words-dark));
   --spacing-chip-inset: var(--ui-space-8);
-  /* A chip's leading mark from its box's edge, its hairline and its inset, which a line of chips under words is pulled back by so the mark stands on the words' edge. */
   --spacing-chip-lead: calc(var(--ui-space-8) + 1px);
   --spacing-chip-inset-wide: var(--ui-space-12);
   --spacing-chip-tight: var(--ui-space-4);
@@ -671,17 +530,16 @@
   --spacing-status-dot: 7px; /* off-scale: a status dot */
   --radius-badge: calc(var(--ui-type-caption-leading) / 2 + var(--ui-space-2));
 
-  /* Avatar, Skeleton, and Card. */
   --spacing-avatar-mark: 14px; /* off-scale: a disc at a row's time */
-  --spacing-avatar-inline: var(--ui-space-16); /* a disc in a line of words */
+  --spacing-avatar-inline: var(--ui-space-16);
   --spacing-avatar-glyph: var(--ui-control-icon);
   --spacing-avatar-stack: 18px; /* off-scale: a facepile's disc */
-  --spacing-avatar-row: var(--ui-space-20); /* a list row's disc */
+  --spacing-avatar-row: var(--ui-space-20);
   --spacing-avatar-account: 26px; /* off-scale: the account's disc */
-  --spacing-avatar-card: var(--ui-space-32); /* a card head's disc */
-  --spacing-avatar-page: var(--ui-space-48); /* a page head's disc */
+  --spacing-avatar-card: var(--ui-space-32);
+  --spacing-avatar-page: var(--ui-space-48);
   --spacing-avatar-masthead: 56px; /* off-scale: a masthead's disc */
-  --spacing-avatar-portrait: var(--ui-space-64); /* a portrait's disc */
+  --spacing-avatar-portrait: var(--ui-space-64);
   --spacing-avatar-glyph-share: 62%; /* off-scale: an app's glyph, a share of its disc */
   --radius-avatar-square: 36%; /* off-scale: an app's corner, a share of its edge */
   --radius-avatar-tile: 25%; /* off-scale: a tile's corner, a quarter of its edge */
@@ -694,8 +552,6 @@
   --color-identity-4: var(--ui-color-identity-4);
   --color-identity-5: var(--ui-color-identity-5);
   --color-identity-6: var(--ui-color-identity-6);
-  /* The product's avatar as GitHub shows the App's bot: copper on the night
-     tile, the same in either theme. */
   --color-avatar-tile: var(--ui-color-avatar-tile);
   --color-avatar-ink: var(--ui-color-avatar-ink);
   --spacing-skeleton-line: 0.8em; /* off-scale: a line's words, as tall as their type */
@@ -715,20 +571,11 @@
   --shadow-card-soft: 0 1px 2px var(--ui-color-shadow-soft);
   --shadow-card-lift: 0 2px 6px var(--ui-color-shadow-soft);
 
-  /* The panel window's own (`@repo/panel`'s desktop surfaces, which every
-     client mounts): the profile's spacing roles its layout reads beside the
-     ones above; the keyboard ring's reach a scroller stands past its column
-     by; the least height a column's list keeps while a row leaves near its
-     end (`ListMotion`); the sizes and inks of the sidebar's own parts, its
-     workspace head, its section icons drawn from the file tree's palette
-     (the panel's `base.css`), and the picker that chooses one. */
   --spacing-list-held: max(100%, var(--ui-list-held-height, 0px));
   /* off-scale: centers a line of words on the inline tile's 14px */
   --spacing-workspace-ref-lift: max(0px, calc((14px - 1lh) / 2));
   --spacing-corner-dot: 5px; /* off-scale: the dot a press wears at its corner (`CornerDot`) */
-  --spacing-corner-badge: var(
-    --ui-space-16
-  ); /* the disc a press wears at its corner (`CornerBadge`) */
+  --spacing-corner-badge: var(--ui-space-16);
   --spacing-corner-badge-glyph: 10px; /* off-scale: the glyph on that disc */
   --spacing-section-icon-scroll: 220px; /* off-scale: the icon grid's room, about seven rows */
   --container-section-icon-picker: 340px; /* off-scale: ten icon buttons and the picker's insets */
@@ -736,12 +583,6 @@
     10,
     28px
   ); /* off-scale: ten icon buttons, edge to edge */
-  /* An actor's mark (`@repo/panel`'s `actor-ref.tsx`): the opaque tile a
-     member who left, and a pile's count, stand on, a step of ink over the
-     ground, so the face a square overlaps never shows through it; the ground
-     a pile's ring cuts each face from; someone unnamed's outline; the app's
-     face's share of his square; the member an agent acted for, at the
-     corner; a pile's badge; and how far each face overlaps the one before. */
   --color-actor-tile: color-mix(in srgb, var(--ui-color-ink) 10%, var(--ui-color-ground));
   --color-actor-stack-ground: var(--actor-stack-ground, var(--ui-color-ground));
   --shadow-actor-outline: inset 0 0 0 1px var(--ui-color-border-strong);
@@ -757,11 +598,6 @@
   --spacing-actor-badge: 13px; /* off-scale: a pile face's badge */
   --spacing-actor-badge-glyph: 8px; /* off-scale: the badge's glyph */
   --spacing-actor-overlap: 5px; /* off-scale: how far each face overlaps the one before */
-  /* A sidebar row's end (`task-card.tsx`'s `SIDEBAR_ROW_TIME`): its time's
-     own slot, as wide as its longest count, so the marks before it line up; the repository
-     it names before its marks, cut short past a few words; the attention
-     mark's glyph a size under the row's; the empty group's slot past its header's glyph; and the
-     offline pill, its height, glyph, tint, and arrival. */
   --spacing-sidebar-row-age: 3.5ch; /* off-scale: a time's longest count, "59m", in its tabular figures */
   --spacing-sidebar-row-repository: 7em; /* off-scale: a few words of a repository's name */
   --spacing-sidebar-slot-start: calc(
@@ -773,46 +609,21 @@
   --spacing-offline-glyph: 13px; /* off-scale: the offline pill's glyph */
   --animate-offline-arrive: ui-menu-arrive var(--ui-duration-quick) var(--ui-motion-exit) backwards;
 
-  /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
-     utility runs on the quick duration and the spring, never on Tailwind's
-     own literal. */
   --default-transition-duration: var(--ui-duration-quick);
   --default-transition-timing-function: var(--ui-spring);
 
-  /* The choice bar's own (`components/choice-bar/`): a compact fill
-     option's height, a step under the control's; a segment's height and
-     corner inside its trough, the trough's inset in from the control's; the
-     thumb a segment stands on; a count's glyph, at the caption's size; and
-     the ink a status tone draws a count's part or a checked control in
-     (`tokens/status-tone.css`). */
   --spacing-choice-fill-compact: calc(var(--ui-control-height) - var(--ui-space-4));
   --spacing-choice-segment: calc(var(--ui-control-height) - 2 * var(--ui-space-2));
   --spacing-choice-segment-compact: calc(var(--ui-control-height) - 2 * var(--ui-space-4));
   --spacing-caption-glyph: var(--ui-type-caption-size);
-  /* A glyph at the size of the words it stands in (`ListRow`'s lead). */
   --spacing-words-glyph: 1em;
   --radius-choice-segment: calc(var(--ui-control-radius) - var(--ui-space-2));
   --color-choice-thumb: var(--ui-color-thumb);
   --color-tone-ink: var(--ui-tone-ink);
 
-  /* ChoiceList's own (`components/choice-list/`): a marked row's control,
-     filled in its status tone's ink (`tone-ink`) with its dot or tick in the
-     ground's ink; a checkbox's corner there, drawn at the
-     four-pixel space; the body's leading under a caption's size, as a pill
-     and a row's number keep it; and a caption's size alone, which keeps the
-     line of what holds it, as a card's aside does. */
   --radius-choice-box: var(--ui-space-4);
   --text-caption-inline: var(--ui-type-caption-size);
 
-  /* The content and text components' own (`components/text/`, `text-link/`,
-     `inline-ref/`, `code-card/`, `shortcut/`, `glyph-slot/`, `mark-strip/`,
-     `saved-tick/`, `working-mark/`): the top bar's title
-     role and the reading leading; a link's hairline corner and its
-     underline, a faint wash of its words' own ink; the placement hooks a
-     glyph's seat, a chord, and the working mark read, each with the size it
-     stands at where unset; a strip's mark's ink; the code's inks, a run's in the appearance
-     it stands in, and a diff row's tints; and a token's pill widths, its
-     wash's bleed, and a wash's name at least a mark tall. */
   --text-toolbar-title: var(--ui-type-toolbar-title-size);
   --text-toolbar-title--line-height: var(--ui-type-toolbar-title-leading);
   --font-weight-toolbar-title: var(--ui-type-toolbar-title-weight);
@@ -837,71 +648,40 @@
   --shadow-inline-ref-wash: 0 0 0 var(--ui-inline-ref-bleed) var(--ui-color-fill-hover);
   --spacing-inline-ref-mark: max(0px, calc((16px - 1lh) / 2)); /* off-scale: the mark's 16px */
 
-  /* Rows and navigation (`components/list-row/`, `nav-item/`, `disclosure/`,
-     `bar-item/`, `pane-bar/`, `toolbar/`, `over-pane/`,
-     `searchable-menu/`): the inks, lengths, and lifts a
-     row, a place in a column or a bar, a fold, and a pane's bars stand at,
-     each a profile's role or the base scale's step. */
   --color-attention-fill: var(--ui-color-attention-fill);
   --color-on-attention: var(--ui-color-on-attention);
   --spacing-ui-48: var(--ui-space-48);
   --spacing-caption-leading: var(--ui-type-caption-leading);
-  /* A phone bar's count, its left edge a step in from its glyph's end, ringed in the ground the bar stands on. */
   --spacing-bar-count-reach: calc(100% - var(--ui-space-8));
   --shadow-bar-count-ring: 0 0 0 var(--ui-space-2) var(--ui-color-ground);
-  /* A phone bar's one action, as tall as the pill of places beside it: an item's height and the pill's inset either side. */
   --spacing-bar-action: calc(var(--ui-space-48) + 2 * var(--ui-space-4));
   --spacing-pane-bar: var(--ui-pane-bar-height);
-  /* A toolbar's title, in the dialog's size on the line of the bar it stands in. */
   --text-dialog-size: var(--ui-type-dialog-size);
-  /* A searchable menu's match wash; a note starting where a row's label does,
-     past its glyph slot; and a submenu, a gap off the menu's edge, pushed
-     back over it where neither side holds it (`SUBMENU_GAP`). */
   --color-match: var(--ui-color-match);
   --spacing-menu-label: calc(var(--ui-row-inset) + var(--ui-menu-glyph) + var(--ui-icon-gap));
   --spacing-submenu-reach: calc(100% + 9px - var(--ui-submenu-shift, 0px));
   --spacing-submenu: 200px; /* off-scale: a submenu's width */
   --spacing-ui-32: var(--ui-space-32);
   --spacing-disclosure-row: 36px; /* off-scale: a file row's height */
-  /* A place in a column standing tall enough for a face. */
   --spacing-nav-identity: calc(var(--ui-control-height) + var(--ui-space-12));
   --leading-label: var(--ui-type-label-leading);
-  /* A list row's tracks: its leading mark, its words, its end (the metadata
-     and the chevron), its acts, and its ⋯, each line named so a part stands
-     in its own (`components/list-row/`). */
   --grid-template-columns-list-row: [leading-start] auto [leading-end text-start] minmax(0, 1fr)
     [text-end end-start] minmax(0, auto) [end-end acts-start] auto [acts-end more-start] auto
     [more-end];
-  /* A row's lead chip, its name cut short at a short name's measure, its glyph and the gap after it beside that. */
   --spacing-list-row-lead: calc(18ch + var(--ui-type-caption-size) + var(--ui-space-2));
   --text-tag-size: var(--ui-type-tag-size);
-  /* A part's corner, its row's own, so its fill follows the row's round. */
   --radius-inherit: inherit;
   --spacing-item-gap: var(--ui-item-gap);
-  /* An over pane's width: the box less a strip of the tab to press it away by, or a column's. */
   --spacing-over-pane: calc(100% - var(--ui-space-48));
   --spacing-over-pane-column: min(calc(var(--ui-space-64) * 4), calc(100% - var(--ui-space-48)));
 
-  /* Chips and media (`components/attachment-chip/`, `picture-set/`,
-     `picture-tile/`, `page-thumb/`, `video-player/`, `provider-button/`,
-     `card-press/`, `composer-frame/`). Their lengths name the scale's steps
-     where one fits, and say so where none does. */
   --spacing-page-thumb-row: 48px; /* off-scale: a row's media line */
   --spacing-icon-16: var(--ui-icon-16);
   --color-veil: var(--ui-color-veil);
   --color-on-veil: var(--ui-color-on-veil);
-  /* A picture's own shape, which its tile sets where it is drawn
-     (`--ui-picture-ratio`); the room a few grow from in a row, and the
-     width one of many stands at, each at that shape. */
   --aspect-picture: var(--ui-picture-ratio);
   --spacing-picture-row: calc(var(--ui-picture-ratio) * var(--ui-picture-row));
   --spacing-picture-thumb: calc(var(--ui-picture-ratio) * var(--ui-picture-thumb));
-  /* An attachment chip (`components/attachment-chip/`): as tall as a
-     thumbnail, a thumbnail's width where it holds a wait or a failure, a
-     picture at its own shape between a 2:3 and a 2:1 bound, and at most
-     this wide; its face a hair inside its edge, led a hair under a row's inset;
-     the way off a disc over its corner, whose 24px target overhangs it; a
-     landed file's check; and the upload's hairline meter. */
   --spacing-attachment-chip: 48px; /* off-scale: a thumbnail's height */
   --spacing-attachment-chip-thumb: 64px; /* off-scale: a thumbnail's width */
   --spacing-attachment-chip-picture-min: 32px; /* off-scale: 2:3 at the chip's height */
@@ -914,47 +694,25 @@
   --spacing-attachment-chip-meter: 2px; /* off-scale: a hairline bar */
   --radius-attachment-chip-face: calc(var(--ui-radius-8) - 1px);
   --shadow-attachment-chip-disc: inset 0 0 0 1px var(--ui-color-border-strong);
-  /* A video played in place (`components/video-player/`): no taller than a
-     picture is drawn, and full screen as wide as the stage. */
   --spacing-video-player: 520px; /* off-scale: a picture's drawn height */
   --spacing-stage: var(--ui-stage-width);
-  /* A sign-in gate's provider button (`components/provider-button/`): the
-     height a devtool's sign-in button stands at, a finger's at least under
-     one, in a hairline drawn inside it; and the last-used pill, in the
-     button's own ink at a tint laid over the ground. */
   --spacing-provider-gate: 40px; /* off-scale: a devtool's sign-in height */
   --spacing-provider-gate-touch: max(40px, var(--ui-touch-target)); /* off-scale: as above */
   --shadow-provider-gate: inset 0 0 0 1px var(--ui-color-border);
   --text-label-inline: var(--ui-type-label-size);
   --color-provider-last-used: color-mix(in srgb, var(--ui-color-ground) 16%, var(--ui-color-text));
   --color-provider-last-used-ink: color-mix(in srgb, var(--ui-color-ground) 72%, transparent);
-  /* A composer's card (`components/composer-frame/`), lifted by a soft
-     shadow rather than ringed by a dark edge. */
   --shadow-composer:
     0 1px 2px var(--ui-color-shadow-soft), 0 12px 32px -16px var(--ui-color-shadow);
-  /* A caption's small glyph. */
   --spacing-icon-12: var(--ui-icon-12);
 
-  /* The page patterns (`components/layout/`, `settings-*`,
-     `collection-page`, `detail-page`, `public-page`, `auth-page`,
-     `empty-state`, `error-state`, `failure-note`, `group-header`): the
-     roles a Stack's and an Inline's gaps and insets read, and each
-     pattern's own lengths, which name the scale's steps, as above. */
   --spacing-field-gap: var(--ui-field-gap);
   --spacing-page-section-gap: var(--ui-page-section-gap);
-  /* The least width a field gives way to before its line wraps. */
   --spacing-field-least: var(--ui-select-field-width);
   --spacing-page-inset: var(--ui-page-inset);
   --spacing-ui-64: var(--ui-space-64);
   --spacing-ui-96: var(--ui-space-96);
 
-  /* Settings (`settings-row`, `settings-section`, `settings-page`). */
-  /* A row's least height and padding at a bare compact row's density and a
-     reference list's, a card's standing with the panel shell's above
-     (`--ui-settings-row-*` in `profiles.css`); an indented row's step in to its parent's words and
-     what a row grows below its line, past the mark the row's sheet sizes
-     (`settings-row.css`); the mark's box, which a mark outside a row draws
-     at 20px; and a connected row's dot. */
   --spacing-settings-row-compact: var(--ui-settings-row-compact-min-height);
   --spacing-settings-row-compact-block: var(--ui-settings-row-compact-block);
   --spacing-settings-row-compact-inline: var(--ui-settings-row-compact-inline);
@@ -968,10 +726,6 @@
   --spacing-settings-row-mark: var(--ui-settings-row-mark-size, 20px); /* off-scale: a mark */
   --spacing-settings-row-state-dot: 6px; /* off-scale: a connected row's dot */
 
-  /* Pages (`collection-page`, `detail-page`, `public-page`, `auth-page`).
-     A page's measure and inset are its own sheet's custom properties, which
-     its profile and its own width (a container query) set, so the roles
-     here read them where the element stands. */
   --spacing-collection-page-inset: var(--ui-collection-page-inset);
   --container-collection-page: calc(
     var(--ui-collection-page-width) +
@@ -979,19 +733,11 @@
     var(--ui-collection-page-inset)
   );
   --spacing-detail-page-inset: var(--ui-detail-page-inset);
-  /* A document's title under a bar that leads with a way back (a page
-     standing alone in a small window, a phone's head): a section's gap under
-     the way back itself. Note that the bar centers its controls in a row
-     taller than they are (`toolbar.css`), so what the row leaves under them
-     is taken from the gap, or it would stack on it into an empty band
-     between the way back and the title. It is read where the page stands,
-     which the bar's row is set on. */
   --spacing-title-under-bar: calc(
     var(--ui-section-gap) -
     (var(--ui-toolbar-height) - var(--ui-control-height)) /
     2
   );
-  /* A detail column's end. A toast is an overlay and takes nothing. */
   --spacing-detail-page-end: var(--ui-detail-page-inset);
   --spacing-public-page-start: var(--ui-public-page-start);
   --spacing-public-page-end: var(--ui-public-page-end);
@@ -1000,14 +746,12 @@
   --container-public-page-lead: 34rem; /* off-scale: the landing's lead */
   --text-public-page-lead: 1.125rem; /* off-scale: the landing's lead */
   --text-public-page-lead--line-height: 1.75rem;
-  /* The hero's display style, the page title's where the profile has none. */
   --leading-public-page-hero: var(--ui-display-hero-leading, var(--ui-type-title-leading));
   --font-weight-public-page-hero: var(--ui-display-hero-weight, var(--ui-type-title-weight));
   --tracking-public-page-hero: var(--ui-display-hero-tracking, normal);
   --z-index-public-page-banner: 40; /* off-scale: the banner over the document's scroll */
   --color-public-page-banner: color-mix(in srgb, var(--ui-color-ground) 85%, transparent);
   --blur-public-page-banner: 12px; /* off-scale: the banner's blur */
-  /* A picture bleeding past the column, up to 960px and never nearer an edge than the page's inset. */
   --spacing-public-media-reach: calc(
     50% -
     min(960px / 2, 50cqw - var(--ui-page-inset))
@@ -1022,45 +766,21 @@
   --color-auth-badge-danger: var(--ui-color-danger-fill);
   --color-auth-badge-on-danger: var(--ui-color-on-danger);
 
-  /* States (`group-header`, `empty-state`, `error-state`, `failure-note`). */
   /* off-scale: the measure an empty place's glyph, words, and way on wrap
      at, never wider than the room. */
   --container-empty-state: min(280px, 100%);
-  /* A caption's line centered in a control-tall row, as the glyph and Retry
-     beside it are: an error state's words, a failure note's beside Retry. */
   --spacing-state-row-inset: calc((var(--ui-control-height) - var(--ui-type-caption-leading)) / 2);
-  /* A failure note's first row with no press in it: one caption's line. */
   --spacing-failure-note-row: var(--ui-type-caption-leading);
-  /* A group head's mark, a small note a step under its glyph. */
   --spacing-group-header-mark: var(--ui-icon-12);
 
-  /* The panel's task surfaces (`@repo/panel`'s tasks.css, moving onto
-     utilities): the gaps a byline's phrases, a line's parts, a pane's groups,
-     and a page's sections stand apart by, and the weights words are set in
-     where no type role names them; then each surface's own. */
   --spacing-log-over-composer: calc(var(--ui-scroll-fade) + var(--ui-space-4));
   --spacing-todos-dock: calc(var(--ui-stage-height) * 0.3);
   --spacing-dictation-clock: 34px; /* off-scale: a clock's widest reading */
   --text-section-inline: var(--ui-type-section-size);
-  /* The description (`description-body.tsx`): a section's byline, at most a
-     face and a short date, and the row it shares with the ⋯, which hangs a
-     step past the column (both measured on `.description-body`, tasks.css, where the
-     heading's room reads them too); the line under "Edited by" that Dismiss
-     overhangs; and the still wash of the app's accent on a section changed since
-     the last look. */
   --spacing-description-byline-room: var(--description-byline-room);
   --spacing-description-unit-row: calc(var(--description-unit-row-room) + var(--ui-space-6));
   --spacing-description-changed-note: 22px; /* off-scale: the line's room, which its button overhangs */
   --color-description-changed: color-mix(in srgb, var(--accent) 9%, transparent);
-  /* A transcript (`ai-elements/`): its column's inset; a reply's reading
-     leading; a bubble, the developer's and a received one alike, at most
-     enough short of the column that the two sides stand apart, at a large
-     corner; where a line's words start past its icon (`--transcript-gutter`,
-     tasks.css), which what opens under a line is set in to; a call's chip at a pill's widest
-     in its line; the measure of the line said in place of lines, and of a
-     failure with Continue beside it; what floats over the log on a ground of
-     its own, ringed and lifted, kept inside the log's edges, and the ground a
-     button floats on there; and the line of an address that opens nothing. */
   --spacing-content-inset: var(--content-inset);
   --spacing-bubble: 85%; /* off-scale: a share of the column */
   --spacing-transcript-gutter: var(--transcript-gutter);
@@ -1071,15 +791,6 @@
   --shadow-floating-edge: inset 0 0 0 1px var(--ui-color-border), var(--ui-menu-shadow);
   --color-button-ground: var(--ui-button-ground);
   --color-inert-link: color-mix(in srgb, currentColor 40%, transparent);
-  /* The code and diff views (File, Changes, page, and Browser tabs): a
-     column's inset; the tree beside a tab, as wide as it was last dragged
-     (`--file-tree-width`) and never over its share of the box, so the code
-     or diff beside it keeps the larger column; a crumb's tree, at a narrow popover's width
-     and never taller than its side of the crumb leaves it; the room after a
-     page's version steps, a control's gap less its own edge; a changed
-     image's side, two to a row where they fit; a snippet's height before it
-     is drawn, from its rows; a file's status letter's tint of its own ink;
-     and the app's own color, which its name is said in. */
   --spacing-file-tree: min(
     var(--file-tree-width, 264px),
     40%
@@ -1096,11 +807,6 @@
   --spacing-picture-held: var(--picture-held-height);
   --color-status-letter: color-mix(in srgb, currentcolor 14%, transparent);
   --color-voice-app: var(--voice-app);
-  /* A pull request's tab (`agent-pull-request-tab.tsx`): its Conversation's
-     sides, as far in as the measure leaves them (`--pull-request-page-measure`,
-     tasks.css), never under a column's inset; the Chapters view's rail, as
-     wide as Files changed's tree stands by default and never over two
-     fifths of the view; and a reviewer's disc at a face's corner. */
   --spacing-pull-request-page: max(
     var(--ui-space-12),
     (100cqi - var(--pull-request-page-measure)) /
@@ -1108,13 +814,6 @@
   );
   --spacing-chapter-rail: min(calc(var(--ui-space-64) * 4), 40%);
   --spacing-review-badge: 10px; /* off-scale: a standing's disc at a face's corner */
-  /* A pull request's conversation (`agent-pull-request-tab.tsx`): the
-     words' field growing from a few lines' height; a branch's chip at its
-     widest; a label's dot in its GitHub color (`--label-dot`); a line
-     comment's measure; a boxed entry's inset, its hairline counted
-     (`--boxed-inset`); a check's glyph and a deployment's door; and the
-     annotation card's measure and columns, which its sheet sets
-     (`.annotation-card`). */
   --spacing-comment-editor: calc(3lh + 2 * var(--ui-space-6));
   --spacing-branch-chip: 22rem; /* off-scale: a branch's name before it is cut */
   --spacing-branch-base: min(22rem, 50%); /* off-scale: the base's, at most half its row */
@@ -1131,8 +830,6 @@
   --spacing-annotation-gap: var(--annotation-gap);
   --spacing-annotation-more: calc(var(--annotation-face) + var(--annotation-gap));
   --grid-template-columns-annotation-comment: var(--annotation-face) minmax(0, 1fr);
-  /* A file's type icon in Pierre's color for its type, in the palette the
-     panel's base.css repeats from it (`file-type-icon.tsx`). */
   --color-file-icon-gray: var(--file-icon-gray);
   --color-file-icon-red: var(--file-icon-red);
   --color-file-icon-vermilion: var(--file-icon-vermilion);
@@ -1146,18 +843,10 @@
   --color-file-icon-purple: var(--file-icon-purple);
   --color-file-icon-pink: var(--file-icon-pink);
   --color-file-icon-mauve: var(--file-icon-mauve);
-  /* A file opened over the window (`attachment-viewer.tsx`): a text file's
-     reading width, centered in the card, never wider than the room the card
-     leaves it. */
   --spacing-viewer-text: min(880px, 100%); /* off-scale: a text file's reading width */
-  /* A Terminal tab (`terminal-tab.tsx`): its ground, a busy bar's dots spaced apart, and the shells'
-     list beside it. */
   --color-terminal-ground: var(--terminal-ground);
   --tracking-busy: 1px; /* off-scale: a busy bar's dots */
   --spacing-shells-pane: min(208px, 40%); /* off-scale: the shells' list's width */
-  /* The composer's popovers: the servers' list at most as tall as the window
-     leaves above the composer, a page's head at a pane bar's height, a 12px
-     glyph, and the context's parts in the chart's colors. */
   --spacing-servers-list: clamp(
     160px,
     var(--ui-stage-height) -
@@ -1167,11 +856,6 @@
   --color-chart-1: var(--ui-color-chart-1);
   --color-chart-2: var(--ui-color-chart-2);
   --color-chart-3: var(--ui-color-chart-3);
-  /* A picture in written words (`picture-block.tsx`): no taller than a
-     screenful's worth, a screenshot's shape at a stand-in's width while its
-     bytes are read, a caption a step under the words around it, a field
-     under it that describes it anew, and the glyph a picture from outside
-     the app is marked by. */
   --spacing-picture-most: 520px; /* off-scale: a screenful's worth */
   --spacing-picture-stand-in: 480px; /* off-scale: a picture's width before its bytes are read */
   --aspect-screenshot: 16 / 10;
@@ -1179,24 +863,13 @@
   --text-picture-caption--line-height: 1.45;
   --spacing-picture-describe: min(360px, 100%); /* off-scale: a description's field */
   --spacing-picture-glyph: 0.95em;
-  /* A page drawn in written words (`page-embed.tsx`): a stand-in's height
-     until the page says how tall it is, then the page's whole height,
-     bounded only against a runaway, or a screenful for a page that fills
-     whatever frame it stands in. */
   --spacing-page-embed-stand-in: 240px; /* off-scale: a page's height before it says */
   --spacing-page-embed: min(var(--page-embed-height), 20000px); /* off-scale: a runaway's bound */
   --spacing-page-embed-fill: 640px; /* off-scale: a screenful's worth */
-  /* Pictures written side by side (`@repo/panel`'s `transcript-pictures`):
-     as many to a row as keep each wide enough for a video's bar, the rest
-     wrapping under them, a row of few sharing the column's width. */
   --grid-template-columns-picture-row: repeat(
     auto-fit,
     minmax(min(220px, 100%), 1fr)
   ); /* off-scale: a video's bar, its play, time, scrubber, Expand, and Full screen */
-  /* The description's comments (`description-comments.tsx`): the margin past the column
-     its cards stand in at their own width, a reply's line set in under the
-     name past the writer's mark, and the quote's edge, struck where its
-     words are gone. */
   --spacing-comment-margin: calc(100% + var(--comment-margin-gap));
   --spacing-comment-card: var(--comment-card-width);
   --spacing-comment-indent: calc(
@@ -1207,29 +880,14 @@
   --color-quote-strike: color-mix(in srgb, currentColor 45%, transparent);
 }
 
-/* The conditions a control answers beside its states: a finger's pointer,
-   on which a press is taken a finger's width across (`pointer-coarse:`),
-   and the fold a narrow container asks of the controls in it through
-   `--ui-fold` (`fold-folded:`, `fold-bare:`; README's "Folding in a
-   narrow container"). */
 @custom-variant pointer-coarse (@media (pointer: coarse));
 @custom-variant fold-folded (@container style(--ui-fold: folded));
 @custom-variant fold-bare (@container style(--ui-fold: bare));
 
-/* An orientation, as shadcn/ui's own stylesheet names Base UI's
-   `data-orientation` for the components it vendors (a slider's, a tab
-   list's, a toggle group's). */
 @custom-variant data-horizontal (&[data-orientation="horizontal"]);
 @custom-variant data-vertical (&[data-orientation="vertical"]);
 
-/* The choice bar's: the room a toolbar short of it asks a bar folding
-   together, or named in words alone, to take in (`--ui-fold: tight`,
-   `components/choice-bar/`). */
 @custom-variant fold-tight (@container style(--ui-fold: tight));
-/* A composer's dialog card on a phone's screen (`../shadcn/dialog.tsx`): a
-   root that measures its own room says so in `data-ui-room` (the panel's
-   `stage-room.ts`), and one that says nothing is answered by the dimmed
-   window's own width. */
 @custom-variant room-narrow {
   :root[data-ui-room="narrow"] & {
     @slot;
@@ -1241,14 +899,7 @@
   }
 }
 
-/* A screen with no hover (`no-hover:`), where a turn's actions show on a
-   tap; and a finger with no hover (`finger:`), where a chord shown as a
-   hint is not drawn, since there is no keyboard to press it on. Both
-   features are asked for the second, so a tablet worked with a trackpad
-   keeps its hints. */
 @custom-variant no-hover (@media (hover: none));
 @custom-variant finger (@media (hover: none) and (pointer: coarse));
 
-/* The shell standing as one pane, a phone's, as its root says
-   (`data-ui-room`, the panel's `shell-room.ts`). */
 @custom-variant shell-narrow (:where(:root)[data-ui-room="narrow"] .desktop-shell &);

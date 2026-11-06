@@ -72,38 +72,15 @@ import {
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
-/**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a slug or a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
- *
- * Every call is the account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. Renaming, setting the photo,
- * removing a member, changing a member's role, handing the workspace over,
- * and leaving write through Better Auth's own
- * organization calls, so they carry the
- * Mac's Better Auth session rather than its OAuth token: with no session
- * yet, or one the service no longer takes, the call asks for one through
- * the browser's hand-off and is sent once more on it. An owner's or an
- * admin's invitations are made, read, and canceled the same way. A
- * workspace's photo is read apart from the list, as its bytes. A list that did not come back is
- * nothing, because the one thing a caller does without it is keep the
- * workspaces it last read; every other call answers a result, because its
- * caller draws why it did not happen: the account's role does not allow
- * it, the workspace is not one it is in, or no answer came.
- */
-
 export interface HostedWorkspaceClientOptions {
-  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
-  /** The Mac's own Better Auth session, for the calls that write through Better Auth's organization endpoints. */
   sessionCredential: CallCredential;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
 }
 
 const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
-/** The refusals a workspace call names, by the service's own word for each. */
 const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.NOT_PERMITTED, WORKSPACE_CALL_FAILURE.NOT_PERMITTED],
   [HOSTED_API_ERROR.NOT_FOUND, WORKSPACE_CALL_FAILURE.NOT_FOUND],
@@ -113,17 +90,12 @@ const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN, WORKSPACE_CALL_FAILURE.SLUG_TAKEN],
 ]);
 
-/** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : REFUSALS.get(refusal);
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
-/**
- * A procedure's answer picked, or the refusal it failed with where it is one
- * named here; unanswered for everything else.
- */
 function hostedResult<Answer, Picked>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   pick: (answer: Answer) => Picked,
@@ -137,11 +109,6 @@ function hostedResult<Answer, Picked>(
   });
 }
 
-/**
- * A live read's answer as a result, as `hostedResult` reads one, but signed
- * out where the service refused the session, as it answers a live read
- * started for another account (`LIVE_SIGNED_OUT`).
- */
 function liveResult<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<
@@ -165,9 +132,7 @@ function liveResult<Answer>(
 
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
-  /** The hosted contract's client under the account's credential. */
   readonly #hosted: HostedClient;
-  /** The hosted contract's client under the Mac's session, for the procedures that write through Better Auth. */
   readonly #hostedInSession: HostedClient;
 
   constructor(options: HostedWorkspaceClientOptions) {
@@ -189,12 +154,6 @@ export class HostedWorkspaceClient {
     });
   }
 
-  /**
-   * The account's workspaces sealed for following over Neon Realtime, for
-   * the account named, or with their rows inline where `poll` asks for
-   * them, held by the service until they move past `after`; signed out
-   * where the session is another account's, or why not.
-   */
   live(
     userId: string,
     poll = false,
@@ -209,12 +168,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /**
-   * A workspace's people sealed for following over Neon Realtime, to a member
-   * of it and for the account named, or with their rows inline where `poll`
-   * asks for them; signed out where the session is another account's, or
-   * why not.
-   */
   peopleLive(
     workspaceId: string,
     userId: string,
@@ -235,12 +188,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /**
-   * A workspace's pending invitations sealed for following over Neon
-   * Realtime, to an owner or an admin of it and for the account named, or
-   * with their rows inline where `poll` asks for them; signed out where the
-   * session is another account's, or why not.
-   */
   invitationsLive(
     workspaceId: string,
     userId: string,
@@ -261,13 +208,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /**
-   * A workspace's Sentry installations and Slack bot sealed for following
-   * over Neon Realtime, to a member of it and for the account named, with
-   * whether this deployment holds each integration, or with their rows
-   * inline where `poll` asks for them; signed out where the session is
-   * another account's, or why not.
-   */
   integrationsLive(
     workspaceId: string,
     userId: string,
@@ -288,7 +228,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** A workspace created with the name given, the account its owner; a name the service would refuse by shape never travels. */
   create(
     name: string,
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
@@ -300,7 +239,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace renamed by an owner or admin, answering it as it then stands; a name the service would refuse by shape never travels. */
   rename(
     workspaceId: string,
     name: string,
@@ -315,7 +253,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace's slug changed by its owner, answering it under its new slug; the service reads the slug's spelling itself, so a refusal names why. */
   setSlug(
     workspaceId: string,
     slug: string,
@@ -330,7 +267,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace's photo set as a `data:` URL, or removed with null, by an owner or admin, answering the workspace as it then stands; a photo the service would refuse by shape never travels. */
   setPhoto(
     workspaceId: string,
     photo: string | null,
@@ -345,7 +281,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Where the browser goes to connect a GitHub organization to the workspace: the App's install address, carrying a single-use intent. */
   githubConnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
@@ -359,7 +294,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace's GitHub organization disconnected, answering the workspace as it then stands. */
   githubDisconnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
@@ -373,7 +307,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Where the browser goes to install our Sentry integration for the workspace: Sentry's install address, carrying a single-use intent. */
   sentryInstall(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
@@ -387,7 +320,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** One of the workspace's Sentry installations disconnected, answering the workspace's Sentry as it then stands. */
   sentryDisconnect(
     workspaceId: string,
     installationId: string,
@@ -401,7 +333,6 @@ export class HostedWorkspaceClient {
       (answer) => answer,
     );
   }
-  /** Whether the deployment holds our Slack bot, and the Slack team the workspace's bot is connected to. */
   slackBot(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
@@ -417,7 +348,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace's Slack bot connected to the team its token answers for, answering the bot as it then stands. */
   slackBotConnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
@@ -431,7 +361,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace's Slack bot disconnected, answering the bot as it then stands. */
   slackBotDisconnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
@@ -445,7 +374,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The reader's own Slack notifications turned on or off, answering the bot as it then stands. */
   slackBotNotifications(
     workspaceId: string,
     notifications: boolean,
@@ -460,7 +388,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace's default repository for Slack starts named or cleared by an owner or admin, answering the bot as it then stands. */
   slackBotRepository(
     params: typeof workspaceSlackBotRepositoryRequestSchema.Type,
   ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
@@ -474,7 +401,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** One channel's bot membership or default repository changed by an owner or admin, answering the bot as it then stands. */
   slackBotChannel(
     params: typeof workspaceSlackBotChannelRequestSchema.Type,
   ): Effect.Effect<WorkspaceCallResult<WorkspaceSlackBot>, never, HttpClient.HttpClient> {
@@ -488,13 +414,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /**
-   * One workspace's photo, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with one a photo may
-   * be; not found where the workspace is not one the account is in or holds
-   * no photo; unanswered for anything else, another media type included, so
-   * nothing the window draws is a type it did not expect.
-   */
   photo(
     workspaceId: string,
   ): Effect.Effect<
@@ -515,7 +434,6 @@ export class HostedWorkspaceClient {
     });
   }
 
-  /** The repositories members added to the workspace on their own GitHub tokens, newest added first. */
   tokenRepositories(
     workspaceId: string,
   ): Effect.Effect<
@@ -533,11 +451,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /**
-   * A repository added to the workspace on the account's own GitHub token,
-   * or removed from it, answering the workspace's token repositories as they
-   * then stand; a request the service would refuse by shape never travels.
-   */
   setTokenRepository(
     workspaceId: string,
     repository: string,
@@ -557,7 +470,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** One member removed by an owner or admin, answering the members who remain; an id the service would refuse by shape never travels. */
   removeMember(
     workspaceId: string,
     userId: string,
@@ -572,7 +484,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Another member made an admin or an admin a member by the owner, answering the members as they then stand; a role the service would refuse by shape never travels. */
   changeRole(
     workspaceId: string,
     userId: string,
@@ -588,7 +499,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The workspace handed by its owner to one of its admins, the owner becoming an admin, answering the members as they then stand. */
   transfer(
     workspaceId: string,
     userId: string,
@@ -603,7 +513,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** The account leaves the workspace, answering the workspace left; an answer naming another workspace is no answer. */
   leave(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
@@ -620,7 +529,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** An invitation to the workspace for the address, as the role given, answering it with its accept link; an address the service would refuse by shape never travels. */
   invite(
     workspaceId: string,
     email: string,
@@ -636,7 +544,6 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** A pending invitation canceled, answering those still pending; an id the service would refuse by shape never travels. */
   cancelInvitation(
     workspaceId: string,
     invitationId: string,

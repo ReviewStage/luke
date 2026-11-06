@@ -5,15 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { BarAction, BarItem } from "./bar-item.js";
 
-/**
- * bar-item.test.ts -- a bar item is a button named by its words; the place
- * shown is announced as the page; one that opens something says whether it
- * stands open; a press and a pointer's press reach the caller; an inert
- * one is inert; and a count is drawn and said with its name, and stands
- * nowhere at none. The bar's action, a glyph alone, is named by its label,
- * and takes no press while disabled.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -78,7 +69,6 @@ test("an inert item is inert", () => {
   expect(button.hasAttribute("inert")).toBe(true);
 });
 
-/** What a reader hears an item named: its words, less what is drawn for the eye alone. */
 function spokenName(button: HTMLButtonElement): string {
   const heard = button.cloneNode(true) as HTMLElement;
   for (const unheard of heard.querySelectorAll("[aria-hidden='true']")) unheard.remove();

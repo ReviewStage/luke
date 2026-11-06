@@ -8,13 +8,6 @@ import { Checkbox } from "../checkbox/checkbox.js";
 import { ChoiceList } from "../choice-list/choice-list.js";
 import { ReadableControls } from "./readable-controls.js";
 
-/**
- * readable-controls.test.ts -- a press whose drag selected a control's words
- * neither picks an option nor ticks a box, while a press that selects
- * nothing, a press from the keyboard, and a press beside a selection made
- * before it all press as they always do.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -37,7 +30,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** An option to pick and a step to tick, inside a readable region, every change listed after them. */
 function Ask(): React.JSX.Element {
   const [picked, setPicked] = useState<readonly string[]>([]);
   const [ticked, setTicked] = useState(false);
@@ -68,7 +60,6 @@ function words(page: HTMLElement, selector: string): HTMLElement {
   return page.querySelector<HTMLElement>(selector) ?? assert.fail(`no ${selector}`);
 }
 
-/** Selects all of an element's words, as a drag over them does. */
 function select(element: HTMLElement): void {
   const range = document.createRange();
   range.selectNodeContents(element);
@@ -76,7 +67,6 @@ function select(element: HTMLElement): void {
   document.getSelection()?.addRange(range);
 }
 
-/** A press of the pointer on `element`, with whatever `during` does between its down and its click. */
 function press(element: HTMLElement, during: () => void = () => undefined): void {
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));

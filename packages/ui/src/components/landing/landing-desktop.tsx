@@ -33,18 +33,6 @@ import { Time } from "../time/time.js";
 import { WorkingMark } from "../working-mark/working-mark.js";
 import { MINUTE, STORY_NOW, still } from "./landing-story.js";
 
-/**
- * landing-desktop.tsx -- the Mac app's frame as the landing's windows draw it: the title bar's controls, the sidebar, and an agent's face.
- *
- * The sidebar is the desktop's own: the title bar's sidebar toggle and way
- * back and forward over the workspace, the places, and My tasks under each
- * task's repository, with the hidden statuses' line and the account's foot
- * with its settings. Its tasks and the workspace are one made-up team's,
- * acme, building teammate invitations. Every part is a `@repo/ui` component
- * placed as the panel places it (`packages/panel/src/desktop/desktop-sidebar.tsx`).
- */
-
-/** The page on show, which the sidebar marks among its places. */
 export const DESKTOP_PLACE = {
   INBOX: "inbox",
   TASK: "task",
@@ -53,7 +41,6 @@ export const DESKTOP_PLACE = {
 
 export type DesktopPlace = (typeof DESKTOP_PLACE)[keyof typeof DESKTOP_PLACE];
 
-/** One of My tasks: its status, its name, whether an agent is at work on it, and how long ago it moved. */
 type SidebarTask = {
   readonly id: string;
   readonly name: string;
@@ -62,7 +49,6 @@ type SidebarTask = {
   readonly ago: number;
 };
 
-/** My tasks, under the repository each works in. */
 const MY_TASKS: readonly { readonly repository: string; readonly tasks: readonly SidebarTask[] }[] =
   [
     {
@@ -98,10 +84,8 @@ const MY_TASKS: readonly { readonly repository: string; readonly tasks: readonly
     },
   ];
 
-/** The member at the account's foot. */
 export const MEMBER = "Sam Reyes";
 
-/** An agent's face: its name on the square of the harness it runs in. */
 export function agentFace(
   name: string,
   size: (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE],
@@ -117,7 +101,6 @@ export function agentFace(
   );
 }
 
-/** The title bar's controls over the sidebar: its toggle, and the way back and forward at its end. */
 function TitleBarControls(): React.JSX.Element {
   return (
     <div className="ui-landing-title-bar">
@@ -132,7 +115,6 @@ function TitleBarControls(): React.JSX.Element {
   );
 }
 
-/** The window's side-panel toggle at its top right. */
 export function SidePanelToggle(): React.JSX.Element {
   return (
     <span className="ui-landing-title-bar-end">
@@ -141,7 +123,6 @@ export function SidePanelToggle(): React.JSX.Element {
   );
 }
 
-/** The desktop's sidebar, `place` marked among its places and `openTask` among My tasks. */
 export function DesktopSidebar({
   place,
   openTask,

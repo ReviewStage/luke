@@ -9,15 +9,6 @@ import { PAGE_FRAME } from "../page-frame/page-frame.js";
 import { SettingsPage } from "../settings-page/settings-page.js";
 import { PageHeader } from "./page-header.js";
 
-/**
- * page-header.test.ts -- a document names itself once: every page that
- * heads itself (one thing's, a collection's, Settings) draws exactly one
- * `h1`, its title, and its acts stand in its header after the title, in
- * the keyboard's reach; a page under the window's toolbar draws none, so
- * the toolbar's title is never said twice; and the line under the title
- * says what the page is. Synthetic pages.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -25,7 +16,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** `element` drawn into the document. */
 function draw(element: ReactNode): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -35,7 +25,6 @@ function draw(element: ReactNode): HTMLElement {
   return container;
 }
 
-/** The page's one act. */
 function shareButton(): ReactNode {
   return createElement("button", { type: "button" }, "Share");
 }

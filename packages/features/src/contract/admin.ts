@@ -1,23 +1,3 @@
-/**
- * admin.ts -- the admin dashboard's reads and its one star write, as one resource (`admin-wire.ts`).
- *
- * Every procedure declares the dashboard's own refusals beside the hosted
- * ones, since the gate answers in the dashboard's vocabulary. Each read takes
- * its query as its input, every parameter optional text: which values a
- * parameter may carry is the handler's to say, with the refusal the page
- * words for it (`invalid-window`, `invalid-search`, ...), as the old group
- * said it, so the schema checks only that each is one value. A key named more
- * than once reaches the schema as a list and is refused as an invalid request.
- *
- * The star is one address under two methods, PUT to set it and DELETE to take
- * it back, each naming the account in its query; the input is read
- * `detailed`, since a PUT's compact input would be its body.
- *
- * The answers declare no output schema: the dashboard's answers are typed
- * in `admin-answer-wire.ts` as plain shapes, not schemas, and they are
- * written as the handler returns them, the bytes the old group wrote.
- */
-
 import type { ErrorMapItem } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
@@ -25,7 +5,6 @@ import { Schema as EffectSchema } from "effect";
 import { ADMIN_ERROR, ADMIN_QUERY, ADMIN_ROUTE_PATH, type AdminError } from "../admin-wire.js";
 import { hostedProcedure } from "./base.js";
 
-/** Every refusal an admin procedure may answer, the slug its code. */
 const ADMIN_ERRORS = {
   [ADMIN_ERROR.NOT_SIGNED_IN]: {},
   [ADMIN_ERROR.NOT_AUTHORIZED]: {},
@@ -43,10 +22,8 @@ const ADMIN_ERRORS = {
 
 const adminProcedure = hostedProcedure.errors(ADMIN_ERRORS);
 
-/** One query parameter: absent, or one value as text. */
 const parameter = EffectSchema.optionalKey(EffectSchema.String);
 
-/** A windowed read's query: the scope, the window, and for the roster, the search. */
 const windowedQuerySchema = EffectSchema.Struct({
   [ADMIN_QUERY.SCOPE]: parameter,
   [ADMIN_QUERY.WINDOW]: parameter,
@@ -78,7 +55,6 @@ const workspacesQuerySchema = EffectSchema.Struct({
   [ADMIN_QUERY.SEARCH]: parameter,
 });
 
-/** The star write's input, read `detailed`: the account it names, in its query. */
 const favoriteInputSchema = EffectSchema.Struct({
   query: EffectSchema.Struct({ [ADMIN_QUERY.USER_ID]: parameter }),
 });

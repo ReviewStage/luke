@@ -22,19 +22,11 @@ import {
 } from "./link-grammar.js";
 import { linkLabels, linksIn, mentionLinksIn, mentionsIn } from "./mention-link.js";
 
-/**
- * A place in the app as the link a teammate is sent: written under its
- * workspace by its ids alone, read back by the web's scheme or the
- * desktop's, and nothing read from an address that names no place.
- * Synthetic ids.
- */
-
 const TASK = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const OTHER = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 const HOME = "https://vespin.dev/acme";
 
-/** Every kind of place, and the link it is shared by, spelled out. */
 const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.HOME }, HOME],
   [{ kind: LINK_PLACE.BOARD }, `${HOME}/tasks`],
@@ -289,7 +281,6 @@ test("an address that names no place in Vespin names nothing", () => {
     `${HOME}/plan/Fix%20billing#rollout`,
     `${HOME}/plan/${TASK}/version/latest`,
     `${HOME}/plan/${TASK}/call/call_9/more`,
-    // The task's Call tab is gone, and a link to it, or to a call there, names nothing.
     `${HOME}/plan/${TASK}/call`,
     `${HOME}/plan/${TASK}/call/call_9`,
     `${HOME}/inbox/${OTHER}/answer`,
@@ -299,7 +290,6 @@ test("an address that names no place in Vespin names nothing", () => {
     `${HOME}/plan/${TASK}/agent/${AGENT}/page/${OTHER}`,
     `${HOME}/automations/${OTHER}`,
     `${HOME}/automation/${OTHER}/runs/${AGENT}`,
-    // Factory is gone, and a link to it names nothing.
     `${HOME}/factory`,
     `${HOME}/settings/Coding%20agents`,
     `${HOME}/person`,
@@ -307,12 +297,10 @@ test("an address that names no place in Vespin names nothing", () => {
     `${HOME}/person/user_9Fq2-x/tasks`,
     `${HOME}/person/charles%40acme.dev`,
     `${HOME}/issue/${OTHER}`,
-    // A page of ours, or a file, is no workspace's Home or Board, whatever its case; nor is a step past the Board.
     "https://vespin.dev/About/",
     "https://vespin.dev/sign-in/tasks",
     "https://vespin.dev/robots.txt",
     `${HOME}/tasks/${OTHER}`,
-    // The Admin place's Overview is the place's own link, and a section, an account, or a day it does not know is no place.
     `${HOME}/admin/dashboard`,
     `${HOME}/admin/animations`,
     `${HOME}/admin/bogus`,
@@ -369,7 +357,6 @@ test("a box's pairing link names its code under no workspace, read whatever its 
     appLinkOf("https://vespin.dev/connect/bcdf-ghjk?from=box"),
     "vespin://vespin.dev/connect/BCDF-GHJK",
   );
-  // A code holds no vowel, so a step of any workspace's place is never read as one.
   for (const target of [
     "https://vespin.dev/connect",
     "https://vespin.dev/connect/BCDF-GHJA",
@@ -408,7 +395,6 @@ test("a target holding a parenthesis or a space is written as one target", () =>
   );
 });
 
-/** Every kind of GitHub page the app reads, and the address it is written by. */
 const GITHUB_PAGES: readonly (readonly [GitHubPage, string])[] = [
   [
     { kind: GITHUB_PAGE.PULL_REQUEST, repository: "acme/relay", number: 42 },
@@ -454,7 +440,6 @@ test("every GitHub page the app reads is written by its address, and read back f
     ref: "HEAD",
     path: "src",
   });
-  // Lines on the default branch drift, so the page reads as the file alone.
   assert.deepEqual(readGitHubPage("https://github.com/acme/relay/blob/HEAD/src/a.ts#L3"), {
     kind: GITHUB_PAGE.FILE,
     repository: "acme/relay",

@@ -7,15 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion, SpinnerRing } from "./spinner.js";
 
-/**
- * spinner.test.ts -- a wait is said to a reader from a status line that
- * stands before its ring shows, and its ring waits the settle delay by
- * default, or shows at once where asked; a busy control says what it is
- * doing beside the words it keeps, which give way to the ring once the
- * delay has passed; and a ring beside words that already say the wait says
- * nothing more.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +21,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Whether a turning ring stands in `container`. */
 function ringIn(container: HTMLElement): boolean {
   return container.querySelector(".ui-spinner-ring") !== null;
 }

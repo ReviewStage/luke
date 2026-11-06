@@ -47,10 +47,8 @@ test("a device reads as there until it has missed four beats, as offline only on
       deviceStanding({ sinceBeatMs: 50_000, sinceReadMs: 5_000 }, false),
       deviceStanding({ sinceBeatMs: 66_000, sinceReadMs: 5_000 }, false),
       deviceStanding({ sinceBeatMs: 66_000, sinceReadMs: 5_000 }, true),
-      // The read found the beat 50 seconds old, and the window has heard nothing since: a read late or slow, not a device gone.
       deviceStanding({ sinceBeatMs: 50_000 + 31_000, sinceReadMs: 31_000 }, false),
       deviceStanding({ sinceBeatMs: 50_000 + 600_000, sinceReadMs: 600_000 }, false),
-      // A read that found the beat already 66 seconds old, but too long ago to stand.
       deviceStanding({ sinceBeatMs: 66_000 + 40_000, sinceReadMs: 40_000 }, false),
     ],
     [

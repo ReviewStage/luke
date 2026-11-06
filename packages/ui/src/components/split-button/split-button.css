@@ -1,12 +1,3 @@
-/* split-button.css -- a SplitButton's edge: the ink its look draws around
-   both halves and between them, set as a button's own inks are, so a
-   container's sheet restyles it the same way. The halves' joint and the
-   main part's fold are the box's utilities (`split-button.tsx`).
-
-   An outlined or quiet look draws a hairline around the halves and between
-   them, the quiet one fainter, the way a toolbar's split button is drawn; a
-   filled look draws none, its halves parted by a rule in its own ink. */
-
 @layer components {
   .ui-split-button {
     --ui-split-edge: var(--ui-color-border);

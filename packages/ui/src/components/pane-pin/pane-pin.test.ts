@@ -6,12 +6,6 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { PanePin } from "./pane-pin.js";
 
-/**
- * pane-pin.test.ts -- a press anywhere in a pinned pane, on a control in it
- * or on its bare ground, pins it before the document hears the press, and
- * a pane that floats nothing now pins nothing.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -29,7 +23,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A pane holding one button, whose pins and the document's presses are recorded in order. */
 function mount(pins: boolean): { pane: HTMLElement; heard: string[] } {
   const heard: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));

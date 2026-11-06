@@ -6,11 +6,6 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { KeepFocus } from "./keep-focus.js";
 
-/**
- * keep-focus.test.ts -- a press anywhere in the box leaves the focus where
- * it stood, and the control's own press still lands.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +21,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A box holding words and a button, whose presses are recorded. */
 function mount(): { box: HTMLElement; pressed: string[] } {
   const pressed: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));
@@ -52,7 +46,6 @@ function mount(): { box: HTMLElement; pressed: string[] } {
   return { box, pressed };
 }
 
-/** Whether a mouse press on `target` would move the focus, as the platform's default does. */
 function movesFocus(target: Element): boolean {
   const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {

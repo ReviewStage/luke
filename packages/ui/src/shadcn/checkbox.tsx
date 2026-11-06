@@ -3,28 +3,6 @@ import { cn } from "../cn.js";
 import { CheckIcon } from "../face/glyphs.js";
 import { ignoredByReplay } from "../session-replay-marks.js";
 
-/**
- * checkbox.tsx -- shadcn/ui's checkbox (style `base-nova`, on Base UI), vendored and drawn in our field and accent inks.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add checkbox` reads as a small diff. Our
- * changes: a 14px box, the size of the platform's own it replaces, in a
- * field's ground inside a chosen row's edge, filled in the accent while
- * checked or mixed; our check glyph rather than lucide's, and a dash for
- * a mixed box (`indeterminate`), which shadcn draws as a check; the tick
- * springing in from a little smaller as it fades in, and leaving the same
- * way on the exit's tokens, which Base UI holds it drawn through, the box's
- * fill settling as a hover does, and the box giving under a press held on
- * an enabled one, on the spring small elements ride; the
- * one press cursor (`cursor-press`); none of shadcn's field-group, invalid, or dark
- * utilities, which no surface of ours sets; and none of its outline or ring
- * utilities, because the window's own focus ring (`@repo/panel`'s base.css)
- * draws the keyboard's ring and a utility would outrank it
- * (`anti-slop/no-shadcn-focus-ring`); and its hidden input kept out of the
- * screen recording (`session-replay-marks.tsx`). `@repo/ui`'s `Checkbox`
- * (`components/checkbox/checkbox.tsx`) is what an app draws; this is its inside.
- */
-
 function Checkbox({ className, indeterminate, ...props }: CheckboxPrimitive.Root.Props) {
   return (
     <CheckboxPrimitive.Root

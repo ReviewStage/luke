@@ -1,23 +1,3 @@
-/**
- * zoom-image.tsx -- a picture opened over the window, zoomed and moved about as Preview's is: a pinch, a press, or a key zooms it, and a drag or a two-finger scroll moves it while it is zoomed.
- *
- * The view itself, and what each gesture makes of it, is `../../image-zoom.ts`'s;
- * `useImageZoom` measures the frame and the fitted picture as each gesture
- * lands and hands them in. Its owner, which keeps the zoom buttons and keys
- * beside the picture, holds it, wears `frameRef` on the frame the picture
- * stands in, and draws the picture as a `ZoomImage`. A pinch on the trackpad reaches the page as a scroll with
- * Control held, which is how Chromium tells one, and a mouse's Control-scroll
- * zooms the same. The view is drawn as a transform on the picture, so the
- * frame's layout never changes under it. A change from a press or a key
- * glides, while one following the fingers or the pointer lands at once,
- * because a glide behind a gesture would trail it. Once the picture has
- * loaded it says its own pixels as `--ui-zoom-natural-width` and
- * `--ui-zoom-natural-height`, plain numbers a frame may fit it by, as
- * large as the frame and no larger than a set multiple of them, and the last
- * picture's stand while the next one loads; one opened at its own pixels says
- * none, and stands no larger than they are.
- */
-
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import {
@@ -35,17 +15,14 @@ import {
 } from "../../image-zoom.js";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
-/** How far a press may wander, in pixels, and still be a press rather than a drag. */
 const PRESS_SLACK_PX = 4;
 
-/** The keys that zoom, bare of any modifier: in, out, and back to fitted. */
 const ZOOM_KEY = {
   IN: new Set(["=", "+"]),
   OUT: new Set(["-", "_"]),
   FIT: "0",
 } as const;
 
-/** A press on the picture while it is held: where it began and where the pointer was last. */
 interface Press {
   readonly pointerId: number;
   readonly startX: number;
@@ -55,20 +32,17 @@ interface Press {
   moved: boolean;
 }
 
-/** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
   PIXEL: 0,
   LINE: 1,
   PAGE: 2,
 } as const;
 
-/** Where a pointer on the frame stood last, in the page's pixels. */
 interface Spot {
   readonly x: number;
   readonly y: number;
 }
 
-/** How the picture is first drawn: fitted to the frame, or at its own pixels from its top left corner, as a diagram too fine to read fitted opens. */
 export const IMAGE_OPENING = {
   FITTED: "fitted",
   OWN_PIXELS: "own-pixels",
@@ -76,41 +50,31 @@ export const IMAGE_OPENING = {
 
 export type ImageOpening = (typeof IMAGE_OPENING)[keyof typeof IMAGE_OPENING];
 
-/** The CSS pixels a wheel's line stands for. */
 const WHEEL_LINE_PX = 16;
 
-/** The picture a view is of: its file's name and its address, since two files may hold the same bytes. */
 interface Subject {
   readonly name: string;
   readonly url: string;
 }
 
-/** The view of the picture `subject` names, and whether it glides to it from the last. */
 interface Shown {
   readonly subject: Subject;
   readonly view: ImageView;
   readonly glide: boolean;
 }
 
-/** What the owner of a zoomed picture holds: its frame, its picture, and the steps and keys that zoom it. */
 export interface ImageZoom {
-  /** Whether the picture is zoomed past fitted. */
   readonly zoomed: boolean;
-  /** The frame the picture is drawn in, which hears the pinch and the scroll. */
   readonly frameRef: (element: HTMLDivElement | null) => (() => void) | undefined;
-  /** What the picture itself wears: its element, its transform, and its presses and drags. */
   readonly imageProps: React.ImgHTMLAttributes<HTMLImageElement> & {
     ref: React.RefObject<HTMLImageElement | null>;
     "data-zoom": string;
     "data-glide": string;
   };
-  /** Zooms one step in (`1`) or out (`-1`) about the frame's center. */
   readonly step: (direction: 1 | -1) => void;
-  /** Zooms on a bare `=`, `+`, `-`, or `0`, and answers whether the key was one. */
   readonly keyDown: (event: React.KeyboardEvent) => boolean;
 }
 
-/** The frame and the picture fitted in it, as laid out now; none where no picture is drawn yet. */
 function measured(
   frame: HTMLElement | null,
   image: HTMLImageElement | null,
@@ -122,29 +86,20 @@ function measured(
   };
 }
 
-/** A wheel's delta in CSS pixels, whatever its `deltaMode` counts: a page is the frame's own length along the delta's axis, `page`. */
 function wheelPixels(event: WheelEvent, delta: number, page: number): number {
   if (event.deltaMode === WHEEL_DELTA.LINE) return delta * WHEEL_LINE_PX;
   if (event.deltaMode === WHEEL_DELTA.PAGE) return delta * page;
   return delta;
 }
 
-/** Whether two views draw the picture alike. */
 function sameView(first: ImageView, second: ImageView): boolean {
   return first.scale === second.scale && first.x === second.x && first.y === second.y;
 }
 
-/** The point halfway between two spots. */
 function between(first: Spot, second: Spot): Spot {
   return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
 }
 
-/**
- * `view` as two fingers moved it: one finger from `was` to `now` while the
- * other held at `held`, scaled by how far apart they moved about the point
- * between them, and moved as that point moved, so what was under each finger
- * stays under it. Points are the frame's, from its center.
- */
 function pinched(
   view: ImageView,
   sizes: ImageFrame,
@@ -160,28 +115,17 @@ function pinched(
   return pannedBy(zoomed, sizes, to.x - from.x, to.y - from.y);
 }
 
-/** The view a picture opening at its own pixels is drawn at: its own size over its fitted one, its top left corner where the fitted picture's stood. */
 function ownPixels(view: ImageView, sizes: ImageFrame, natural: ImageSize): ImageView {
   if (sizes.fitted.width <= 0) return view;
   const corner = { x: -sizes.fitted.width / 2, y: -sizes.fitted.height / 2 };
   return zoomedTo(view, sizes, natural.width / sizes.fitted.width, corner);
 }
 
-/** Where a pointer at `clientX`, `clientY` stands from the frame's center. */
 function pointIn(frame: HTMLElement, clientX: number, clientY: number): FramePoint {
   const box = frame.getBoundingClientRect();
   return { x: clientX - box.left - box.width / 2, y: clientY - box.top - box.height / 2 };
 }
 
-/**
- * The zoom of the file named `name` at `url`, fitted until a gesture says
- * otherwise, or at its own pixels once it has loaded where `opening` asks.
- * Two fingers on the frame pinch it about the point between them, as a
- * trackpad's pinch does, and move it as that point moves. Note that the zoom belongs to the picture rather than to its
- * place among the files, so another picture shown, however it came to be,
- * opens fitted, and the same picture moved along the files as an earlier one
- * lands keeps its zoom.
- */
 export function useImageZoom(
   name: string,
   url: string,
@@ -198,17 +142,10 @@ export function useImageZoom(
     : { subject: { name, url }, view: FITTED_VIEW, glide: false };
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
-  // The picture's own pixels once it has loaded, which a frame may fit it by
-  // (`--ui-zoom-natural-*`). Note that the last picture's stand until the
-  // next one's are read, because the browser draws the last picture until the
-  // next has loaded, and a frame left to guess between them draws it too large.
   const [loaded, setLoaded] = useState<ImageSize>();
   const press = useRef<Press | undefined>(undefined);
-  // Every pointer down on the frame, by its id, where it stood last.
   const fingers = useRef(new Map<number, Spot>());
 
-  // Note that every change measures the frame as it lands, because the
-  // window may have changed size since the last one.
   const change = useCallback(
     (glide: boolean, next: (view: ImageView, sizes: ImageFrame) => ImageView) => {
       const sizes = measured(frame.current, image.current);
@@ -217,16 +154,12 @@ export function useImageZoom(
         const same = last.subject.name === name && last.subject.url === url;
         const from = same ? last.view : FITTED_VIEW;
         const view = next(from, sizes);
-        // A change that moves nothing, a resize's or a scroll's on a fitted picture, draws nothing.
         return same && sameView(view, from) ? last : { subject: { name, url }, view, glide };
       });
     },
     [name, url],
   );
 
-  // Note that the scroll is heard on the element itself rather than through
-  // React, because React's own wheel listener is passive and could not keep
-  // a pinch from reaching the window.
   const frameRef = useCallback(
     (element: HTMLDivElement | null) => {
       frame.current = element;
@@ -242,7 +175,6 @@ export function useImageZoom(
         }
         change(false, (view, sizes) => pannedBy(view, sizes, -dx, -dy));
       };
-      // A frame or a fitted picture resized holds the picture's edges to the frame's again.
       const resized = new ResizeObserver(() =>
         change(false, (view, sizes) => pannedBy(view, sizes, 0, 0)),
       );
@@ -250,12 +182,8 @@ export function useImageZoom(
       if (image.current !== null) resized.observe(image.current);
       const down = (event: PointerEvent) => {
         fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-        // A second finger, on the picture or the frame around it, makes the press a pinch, which is no press.
         if (fingers.current.size > 1 && press.current !== undefined) press.current.moved = true;
       };
-      // Note that a finger is heard on the frame rather than the picture, so
-      // a pinch begun on the frame's ground around a small picture still
-      // zooms it, and before the picture's own handlers, which leave a pinch alone.
       const move = (event: PointerEvent) => {
         const was = fingers.current.get(event.pointerId);
         if (was === undefined) return;
@@ -290,9 +218,6 @@ export function useImageZoom(
     [change],
   );
 
-  // Note that a picture the browser already holds, as one walked back to, is
-  // drawn as soon as its address is set but says it loaded only later, so its
-  // pixels are read here, before it is painted at the last picture's.
   useLayoutEffect(() => {
     const element = image.current;
     if (element === null || !element.complete || element.naturalWidth === 0) return;
@@ -320,7 +245,6 @@ export function useImageZoom(
       draggable: false,
       style: {
         transform: `translate(${String(view.x)}px, ${String(view.y)}px) scale(${String(view.scale)})`,
-        // Note that a picture opened at its own pixels says none, because a fit grown past them would undo the scale its opening set.
         ...(loaded !== undefined && opening === IMAGE_OPENING.FITTED
           ? cssCustomProperties({
               "--ui-zoom-natural-width": loaded.width,
@@ -341,7 +265,6 @@ export function useImageZoom(
       },
       onPointerDown: (event) => {
         if (event.button !== 0) return;
-        // A second finger down makes the press a pinch, which is no press.
         if (fingers.current.size > 1) {
           if (press.current !== undefined) press.current.moved = true;
           return;
@@ -359,8 +282,6 @@ export function useImageZoom(
       onPointerMove: (event) => {
         const held = press.current;
         if (held === undefined || (event.buttons & 1) === 0) return;
-        // A pinch zooms on the frame (above); the finger that began the press
-        // keeps its place, so lifting the other drags on from where it stands.
         if (fingers.current.size > 1 || event.pointerId !== held.pointerId) {
           held.moved = true;
           if (event.pointerId === held.pointerId) {
@@ -380,7 +301,6 @@ export function useImageZoom(
       onClick: (event) => {
         const held = press.current;
         press.current = undefined;
-        // A drag that ends on the picture moved it, and is no press.
         if (held?.moved === true) return;
         pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
         if (frame.current === null) return;
@@ -397,12 +317,6 @@ export function useImageZoom(
   };
 }
 
-/**
- * The picture `zoom` zooms, drawn as its transform over the size that fits
- * its frame: a press zooms it in where it is fitted, and zoomed, it is held
- * and dragged, and a press puts it back (zoom-image.css). A press answers
- * with the quiet pulse a wide shape gives; a drag is no press.
- */
 export function ZoomImage({
   zoom,
   src,

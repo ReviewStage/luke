@@ -10,14 +10,6 @@ import {
   type ProviderButtonSize,
 } from "./provider-button.js";
 
-/**
- * provider-button.test.ts -- a provider's button is named "Continue with"
- * the provider in either size and begins its sign-in when pressed; busy,
- * it is named for the act in progress, says it is busy, and refuses another
- * press; disabled, it refuses the press; and the way in taken last is
- * described by its pill without the pill joining its name.
- */
-
 const SIZES = Object.values(PROVIDER_BUTTON_SIZE);
 
 const roots: Root[] = [];
@@ -27,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -37,7 +28,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** GitHub's button in `size`, counting its presses into `presses`. */
 function gitHub(
   size: ProviderButtonSize,
   presses: string[],
@@ -54,7 +44,6 @@ function gitHub(
   });
 }
 
-/** The one button drawn, and the name a reader hears for it. */
 function only(container: HTMLElement) {
   const buttons = Array.from(container.querySelectorAll("button"));
   expect(buttons).toHaveLength(1);

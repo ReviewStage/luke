@@ -7,19 +7,6 @@ import { afterEach, test, vi } from "vitest";
 import { layTitle } from "../../testing/laid-title.js";
 import { NOT_FOUND_THING, NotFound, Toolbar, type ToolbarProps } from "./toolbar.js";
 
-/**
- * toolbar.test.ts -- a workspace's bar reads its lead, its title as the
- * page's heading, the tag after it, and its actions, in that order, drawing
- * only the slots that say something, and its actions end it even with no
- * title; a page with a parent leads its heading with its trail, each
- * place a press back to it and the page's own name last, words that are no
- * press, said to be the current page; a bar that would cut the page's name
- * under the readable floor stands it on a row of its own, and above the
- * floor keeps one row, reading its title again once the page's fonts
- * load; and a place that is not found keeps its bar above
- * the words saying so.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -36,7 +23,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into the page and answers the box it stands in. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -45,12 +31,10 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** Draws a bar holding `props` and answers its banner. */
 function bar(props: ToolbarProps): HTMLElement {
   return draw(createElement(Toolbar, props)).querySelector("header") ?? assert.fail("no bar");
 }
 
-/** The text of each of the bar's own parts, in the order they stand. */
 function parts(banner: HTMLElement): string[] {
   return [...banner.children].map((part) => part.textContent ?? "");
 }
@@ -110,7 +94,6 @@ test("a title that is more than words stands in the title's place as given", () 
 });
 
 test("a trail leads the heading with each place above the page, the page's own name last and no press", () => {
-  // jsdom lacks the ResizeObserver a folding way back measures its fold by, and lays nothing out to measure.
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -183,7 +166,6 @@ test("a not-found state under a bar already drawn draws no second bar", () => {
 });
 
 test("a document's trail leads its bar, and its name joins the trail as the current page only once its header has scrolled away", () => {
-  // jsdom lacks the ResizeObserver a folding way back measures its fold by.
   vi.stubGlobal(
     "ResizeObserver",
     class {

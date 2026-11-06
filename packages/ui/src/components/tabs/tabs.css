@@ -1,38 +1,6 @@
-/* tabs.css -- Tabs, Tab, and TabCard: a strip of tabs drawn the way an
-   editor draws its tabs, and a recent-tabs switcher's cards; the keyboard's
-   ring is the app's reset's, as it is for every control.
-
-   A strip is drawn alike wherever it stands: each tab a glyph and a label in
-   a pill a toolbar button's size, raised while chosen and plain and muted
-   otherwise, with its × standing on the chosen tab and shown on another
-   while the pointer is on it. It gives way as Safari's tab bar does, in the
-   stylesheet alone, so the strip measures nothing (tabs.tsx):
-   - every tab asks for an equal share, up to `--ui-tab-widest`, and the
-     strip asks room for all of them at that width by their count
-     (`--ui-tab-count`, the one thing it is told), giving way from there;
-   - a tab other than the chosen one gives way as the strip's `data-fold`
-     says: below 72px as its glyph alone (`@container ui-tab`), or keeping
-     a short label while the strip scrolls;
-   - the chosen tab keeps its glyph, its label, and its × at a share of its
-     own;
-   - past holding every tab the strip scrolls along with no bar drawn, the
-     chosen tab pinned at whichever edge it would pass, and a fade where tabs
-     go on. The tab the strip brings into view glides there unless motion is
-     held still (`--ui-scroll-glide`).
-
-   Each box's plain look, its layout, type, and the inks no state changes,
-   is Tailwind utilities (`tabs.tsx`). What stays here is what a state, a
-   fold, a pinned tab, or the pointer changes, since a rule here restyles it
-   from this layer, where a utility would outrank it: the pills' sizes,
-   inks, insets, and masks; and what Tailwind has no words for: the scroll
-   fades, the pinned tab's scroll-state queries, and the fold's container
-   query. */
-
 @layer components {
   .ui-tabs {
     --ui-tab-widest: 200px;
-    /* What the strip's fades and the pinned tab paint over the tabs passing
-       beneath them: a side panel's well, or a column's ground. */
     --ui-tabs-ground: var(--ui-color-well);
     flex: 0 1
       calc(
@@ -43,9 +11,6 @@
       );
     overflow-x: auto;
     scroll-behavior: var(--ui-scroll-glide);
-    /* Room above and below the tabs, given back to the row, for the shadow
-       under a tab being dragged, which the strip's scrolling would clip, and
-       at either end for the keyboard's ring on the first tab and the last. */
     margin: calc(-1 * var(--ui-space-8)) calc(-1 * var(--ui-focus-ring-reach));
     padding: var(--ui-space-8) var(--ui-focus-ring-reach);
   }
@@ -58,17 +23,6 @@
     --ui-tabs-ground: var(--ui-color-sidebar);
   }
 
-  /* A fade at either end where tabs go on past it, drawn over them in the
-     strip's ground rather than as a mask, because a mask would fade the
-     chosen tab pinned there too; each comes in as the strip scrolls from
-     that end, by the strip's own scroll. They stand at the ends, taking no
-     room of their own. Note that each is unseen at rest and drawn only by
-     its scroll timeline, because a strip that holds every tab has no scroll
-     range, and a timeline with none is inactive: its animation draws
-     nothing, and the fade would otherwise stand at full strength over the
-     first tab and the last. An engine with no scroll timelines draws no
-     fade, rather than running the animation once and keeping its last
-     frame. */
   .ui-tabs::before,
   .ui-tabs::after {
     position: sticky;
@@ -132,14 +86,10 @@
   }
 
   .ui-tab {
-    /* The pill's insets about its glyph and label, and the ×'s box with its
-       inset from the pill's end. */
     --ui-tab-start: var(--ui-space-8);
     --ui-tab-end: var(--ui-space-12);
     --ui-tab-close: var(--ui-space-24);
     --ui-tab-close-inset: var(--ui-space-4);
-    /* The mask that fades a label out beneath the × over its end; off-scale:
-       the fade runs 10px. */
     --ui-tab-close-fade: linear-gradient(
       to left,
       transparent calc(var(--ui-tab-close) + var(--ui-tab-close-inset)),
@@ -150,12 +100,7 @@
     max-width: var(--ui-tab-widest);
     flex: 0 1 var(--ui-tab-widest);
     color: var(--ui-color-text-muted);
-    /* Every tab asks for an equal share and narrows by it, down to a
-       glyph's width; each is a container of its own width, so it can stand
-       as its glyph alone once it is narrow (below). */
     container: ui-tab / inline-size;
-    /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
-       dragged past it, and home again, on the bounce small elements ride. */
     transition:
       background-color var(--ui-duration-hover) var(--ui-motion-exit),
       color var(--ui-duration-hover) var(--ui-motion-exit),
@@ -174,16 +119,10 @@
     }
   }
 
-  /* The tab holding the keyboard stands over its neighbors, so the chosen
-     tab's fill beside it leaves its ring whole. */
   .ui-tab:has(:focus-visible) {
     z-index: 1;
   }
 
-  /* A tab being dragged is lifted over the tabs it passes: the chosen tab's
-     fill made opaque on the strip's ground, and a shadow beneath. It follows
-     the pointer frame for frame, so its own transform eases nothing. The
-     chosen tab, pinned, keeps standing over it (below). */
   .ui-tab[data-dragging="true"] {
     z-index: 1;
     background:
@@ -196,10 +135,6 @@
       color var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  /* The chosen tab keeps a share of its own, its glyph, its label, and its
-     × at every width, and stands pinned at whichever edge of the strip it
-     would scroll past, on its ground, so the tabs passing beneath it are
-     hidden. */
   .ui-tab[data-selected="true"] {
     position: sticky;
     z-index: 2;
@@ -216,9 +151,6 @@
     container: pinned / scroll-state;
   }
 
-  /* On the frame the chosen tab is lifted in the sheet's ground beneath it,
-     by a hairline and a soft shadow, as the sidebar draws the place standing
-     open (nav-item.css), so the strip and the sidebar choose alike. */
   .ui-tabs[data-ground="frame"] .ui-tab[data-selected="true"] {
     background: var(--ui-color-ground);
     box-shadow:
@@ -226,15 +158,11 @@
       0 1px 2px var(--ui-color-shadow-soft);
   }
 
-  /* A chosen tab alone in its strip keeps no share for others: it takes a
-     tab's own width, as any tab does. */
   .ui-tab[data-selected="true"]:only-child {
     flex-shrink: 1;
     flex-basis: var(--ui-tab-widest);
   }
 
-  /* Pinned, it fades the tabs passing beneath its inner edge as the strip's
-     ends do. */
   @container pinned scroll-state(stuck: left) {
     .ui-tab-button::after {
       position: absolute;
@@ -261,9 +189,6 @@
     }
   }
 
-  /* Only the chosen tab keeps room for its ×, so the strip holds more before
-     it scrolls; another tab's × comes over the end of its label, which fades
-     beneath it. */
   .ui-tab[data-closable="true"][data-selected="true"] {
     --ui-tab-end: calc(var(--ui-tab-close) + 2 * var(--ui-tab-close-inset));
   }
@@ -276,45 +201,30 @@
     mask-image: var(--ui-tab-close-fade);
   }
 
-  /* A screen with no hover fades a label under its × at rest, as under the
-     pointer, but a marked tab's, which keeps room for its mark. */
   @media (hover: none) {
     .ui-tab[data-closable="true"][data-selected="false"][data-marked="false"] .ui-tab-button {
       mask-image: var(--ui-tab-close-fade);
     }
   }
 
-  /* A label cut short fades out over its last 20px rather than ending in an
-     ellipsis, as a browser's tab does; only a label measured cut short
-     (use-clipped.ts) fades, so a short one ends on its last letter. The mask
-     fades the words themselves, so it reads alike over every fill a tab
-     wears, at rest, hovered, chosen, or dragged. */
   .ui-tab-label[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
     text-overflow: clip;
   }
 
-  /* A tab something arrived on reads in the heavier weight and the primary
-     ink until it is chosen, as a chat app's channels do. */
   .ui-tab[data-unread="true"] .ui-tab-label {
     color: var(--ui-color-text);
     font-weight: var(--ui-type-emphasis-weight);
   }
 
-  /* A preview tab, which the next one opened takes the place of, wears its
-     name in italics until it is kept, as VS Code draws one. */
   .ui-tab[data-preview="true"] .ui-tab-label {
     font-style: italic;
   }
 
-  /* Renamed in place, the label gives way to a field in the same type,
-     ringed rather than bordered so nothing moves. */
   .ui-tab-button[data-editing="true"] {
     box-shadow: inset 0 0 0 1px var(--ui-color-border-selected);
   }
 
-  /* The ×, a row's compact mark, stands at the pill's end, out of the
-     label's way. */
   .ui-tab-close {
     display: flex;
     opacity: 0;
@@ -331,35 +241,22 @@
     }
   }
 
-  /* A close takes a finger's press up and down alone on a coarse pointer,
-     never sideways, because beside it stand the words it would close, and a
-     tap meant for a tab's label that lands near its end must not close it.
-     Every other glyph button keeps its press a finger's width across
-     (button.css). */
   @media (pointer: coarse) {
     .ui-tab-close .ui-button::before {
       width: 100%;
     }
   }
 
-  /* A screen with no hover shows every tab's × at rest, over its label's
-     faded end as under the pointer, but a marked tab's, whose mark keeps
-     the place, its Close in its menu. */
   @media (hover: none) {
     .ui-tab[data-marked="false"] .ui-tab-close {
       opacity: 1;
     }
   }
 
-  /* A tab's end mark, a failed run's, stands in the ×'s place with room
-     kept for it, as the chosen tab keeps it, and trades places with the ×
-     under the pointer, as an editor's tab trades its unsaved dot. */
   .ui-tab[data-marked="true"] {
     --ui-tab-end: calc(var(--ui-tab-close) + 2 * var(--ui-tab-close-inset));
   }
 
-  /* Note that the mark and the × trade places on the hover's fade, as every
-     other reveal under the pointer does. */
   .ui-tab-end-mark {
     display: flex;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
@@ -375,20 +272,12 @@
     }
   }
 
-  /* Note that with no hover the swap never comes, so a marked tab's mark
-     keeps its place, the chosen tab's too. */
   @media (hover: none) {
     .ui-tab[data-marked="true"] .ui-tab-close {
       opacity: 0;
     }
   }
 
-  /* Folded to glyphs, a tab other than the chosen one narrower than 72px is
-     its glyph alone, centered: its label, its detail, its end mark, and its
-     × give way, and its hint says its name. Note that under the pointer,
-     folded or not, a tab that narrow wears no fade at its end, because the
-     fade makes room for a × it no longer has, or is wider than the glyph's
-     whole side of the pill. */
   /* off-scale: 72px, a tab that is only its glyph and a pill's padding */
   @container ui-tab (width < 72px) {
     .ui-tabs[data-fold="glyph"]
@@ -415,11 +304,6 @@
     }
   }
 
-  /* Keeping their labels, the tabs each stand at least a glyph and a few
-     letters wide, a label cut short with the fade, and the strip scrolls
-     along past the ones that do not fit. On a screen with no hover a tab
-     other than the chosen one gives its ×'s place to its label, its Close
-     standing in its menu, and on it once chosen. */
   .ui-tabs[data-fold="label"] .ui-tab {
     --ui-tab-widest: 160px;
     min-width: 96px;
@@ -437,17 +321,12 @@
     }
   }
 
-  /* A switcher's cards (their boxes are `tabs.tsx`'s utilities): a card
-     with no still yet wears its glyph, large and quiet; where it stands,
-     under the name, is inset to the name's words, and the line stands empty
-     where a card has none, so every card is one height. */
   .ui-tab-card-detail {
     --ui-glyph-size: var(--ui-type-caption-size);
     min-height: calc(var(--ui-type-caption-size) * 1.4);
     padding-left: calc(var(--ui-space-2) + var(--ui-menu-glyph) + var(--ui-icon-gap));
   }
 
-  /* The detail's glyph, a step smaller than the name's. */
   .ui-tab-card-detail > :is(svg, img) {
     width: var(--ui-type-caption-size);
     height: var(--ui-type-caption-size);

@@ -8,14 +8,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { it } from "vitest";
 import { TaskAgentsMark } from "./task-agents-mark.js";
 
-/**
- * task-agents-mark.test.ts -- a task's row wears the one icon that matters
- * most about its agents, named for a reader: a failure, then an agent at
- * work, then its pull request, an open or draft one before a merged one and
- * a merged one before a closed one.
- */
-
-/** A pull request numbered `number`, standing in `state`. */
 function pullRequest(number: number, state: TaskPullRequestLine["state"]): TaskPullRequestLine {
   return {
     number,
@@ -27,7 +19,6 @@ function pullRequest(number: number, state: TaskPullRequestLine["state"]): TaskP
   };
 }
 
-/** A task's agents at rest, with `pullRequests` published and `counts` beside them. */
 function agents(
   counts: Partial<Pick<TaskAgentsSummary, "working" | "failed">>,
   pullRequests: readonly TaskPullRequestLine[] = [],
@@ -42,7 +33,6 @@ function agents(
   };
 }
 
-/** What a reader hears of the icon drawn for `summary`; nothing where none is drawn. */
 function heard(summary: TaskAgentsSummary | undefined): string | undefined {
   const box = document.createElement("div");
   box.innerHTML = renderToStaticMarkup(createElement(TaskAgentsMark, { agents: summary }));

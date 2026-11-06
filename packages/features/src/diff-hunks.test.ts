@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { DIFF_ROW, patchHunks } from "./diff-hunks.js";
 
-/**
- * diff-hunks.test.ts -- a patch read as hunks: each keeps its header as written and the starts and counts git wrote in it, and each row is numbered on the side it stands on.
- */
-
 test("each hunk keeps its header and git's starts and counts, its rows numbered on the sides they stand on", () => {
   const hunks = patchHunks(
     [

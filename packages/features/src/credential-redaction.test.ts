@@ -28,7 +28,6 @@ it("a failure message keeps its words and loses every run shaped like a credenti
     redactCredentials("url ?api_key=fixture&token=fixture&error=model_not_found secret=fixture"),
     "url ?[redacted]&[redacted]&error=model_not_found [redacted]",
   );
-  // A named value is taken whole before the bare run can take its head and leave its tail.
   assert.equal(redactCredentials(`token=${"A".repeat(40)}-tail refused`), "[redacted] refused");
   assert.equal(
     redactCredentials(`{"api_key": "short-mixed_secret", "model": "gpt-5"}`),
@@ -46,7 +45,6 @@ it("a failure message keeps its words and loses every run shaped like a credenti
 });
 
 it("a name however long its prefix still loses its whole value", () => {
-  // Note that the value carries a dot, so the bare run cannot take it in the name's place.
   assert.equal(
     redactCredentials(`${"a".repeat(60)}api_key=fixture.value refused`),
     "[redacted] refused",

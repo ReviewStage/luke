@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { accountPictureAt, githubAvatarUrl, pinnedPictureUrl } from "./account-picture.js";
 
-/**
- * account-picture.test.ts -- a person's picture is drawn only from the hosts the
- * renderer's image policy allows, and someone a pull request names on GitHub
- * only from GitHub's own avatar host. Synthetic addresses throughout.
- */
-
 test("a GitHub avatar is kept only where GitHub's avatar host serves it over https", () => {
   assert.equal(
     githubAvatarUrl("https://avatars.githubusercontent.com/u/1001?v=4"),

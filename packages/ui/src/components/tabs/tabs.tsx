@@ -45,118 +45,41 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
 import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
-/**
- * tabs.tsx -- a strip of tabs, the way an editor draws its tabs, and the cards a recent-tabs switcher steps through.
- *
- * A tab is its glyph and its label in a compact pill: raised while it is the
- * chosen one, plain and muted otherwise. A tab that may be closed carries an
- * × at its end, standing on the chosen tab and shown on the others while the
- * pointer is on them. The strip is one stop for Tab, on its chosen tab
- * (`useRovingKeys`): the arrow keys, Home, and End move between its tabs,
- * bringing each into view, Return or Space chooses the one focused,
- * and Delete or Backspace closes it, handing focus to the tab chosen in its
- * place. The × is for the pointer alone, so it takes no stop of its own.
- *
- * A strip whose owner keeps the tabs' order lets them be moved: dragged
- * along it (`use-tab-drag.ts`), or the focused one stepped a place either
- * way by the owner's own chords through `controls`, with focus kept on it.
- * Either way the strip says where the tab now stands to whoever reads it
- * aloud.
- *
- * A tab something arrived on while another was chosen reads in semibold
- * until it is chosen, and says "New result" in its hint and to a reader. A
- * tab with actions of its own offers them on a right-click (`contextMenu`,
- * `useMenu`'s), or from the keyboard on the menu key or ⇧F10 (`onMenu`),
- * hung under the tab.
- *
- * Every tab asks for an equal share of the strip, up to 200px, and gives
- * way by the same share as the strip narrows; a label cut short wears
- * `data-overflow`, which fades out at its end, and is said whole in the
- * tab's hint, or in the card a tab with more to say hangs in its hint's
- * place. Past holding every tab, the strip scrolls along with no bar drawn,
- * a wheel turned up and down running it sideways, with the chosen tab pinned
- * at whichever edge it would pass and a fade where tabs go on. All of that
- * is the stylesheet's (tabs.css): the strip measures nothing, and asks only
- * for its tabs' count, as `--ui-tab-count`, so it may ask for room for
- * every tab at its widest. A narrow tab other than the chosen one stands as
- * its glyph alone, or keeps a short label while the strip scrolls, as its
- * owner's `fold` says. A tab chosen, or reached by
- * the keyboard, is scrolled into its own place, the strip's scroll alone and
- * never the window's.
- *
- * A TabCard is one screen among a switcher's recent ones, in a row of them
- * (`TabCards`): a still of it, or its glyph large until it has one, its name,
- * and where it stands. The keys stay where they were while a switcher is
- * held, so a card takes no stop; the pointer resting on it chooses it, and a
- * press picks it, on the press itself where the switcher's chord makes the
- * release a right-click (`pickOnPress`). The still is a picture of the
- * window, so the session recording leaves it out by its class.
- *
- * Its words are text, which the session recording masks with the rest.
- */
-
 const TAB = '[role="tab"]';
 
-/** An anchored tab's pill (`Tab`'s `anchored`). */
 const ANCHORED = '[data-anchored="true"]';
 
-/*
- * The strip's plain looks, in Tailwind over the theme as shadcn/ui's tabs
- * draw theirs: each box's layout, type, and the inks no state changes. Note
- * that the strip is our own rather than Base UI's tabs, because an
- * editor's strip chooses with Return, closes with Delete, reorders, and
- * holds each tab's choice in the tab, which Base UI's tabs, owning the
- * value and their roving focus, are not for; and that what a state, a
- * fold, a pinned tab, or the pointer changes stays in tabs.css, the sizes,
- * inks, insets, masks, and fades it restyles from the same layer, where a
- * utility would outrank it.
- */
-
-/** The strip: tabs in a row that scrolls along with no bar drawn; that it scrolls is tabs.css's, which an app's narrow layout reads. */
 const STRIP =
   "ui-tabs relative flex min-w-0 items-center gap-list-gap overscroll-x-contain [scrollbar-width:none]";
 
-/** A tab's pill, in a label's type; where it stands, pinned while chosen, is tabs.css's. */
 const PILL = "ui-tab flex items-center rounded-control text-label font-label";
 
-/** The pill's button, or the field a rename stands in its place: the pill's height and corner, in its type and ink. */
 const TAB_BUTTON =
   "ui-tab-button relative flex min-w-0 flex-[1_1_auto] items-center gap-icon-gap h-control m-0 [border:0] rounded-[inherit] bg-transparent bg-none text-inherit [font:inherit]";
 
-/** A mark at the pill's end, the × or a failed run's, centered on its line; whether it stands, a fold's, is tabs.css's. */
 const END_SLOT =
   "absolute top-1/2 right-(--ui-tab-close-inset) [transform:translateY(-50%)] transition-opacity duration-(--ui-duration-hover) ease-motion-exit";
 
-/** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
   PIXEL: 0,
   LINE: 1,
   PAGE: 2,
 } as const;
 
-/** The CSS pixels a wheel's line stands for, the tabs' own line of text. */
 const WHEEL_LINE = 16;
 
-/** What an unread tab says in its hint and to a reader beyond its label. */
 const UNREAD_TAB_NOTE = "New result";
 
-/** The ground a strip stands on, which its fades and its pinned tab paint over the tabs passing beneath. */
 export const TABS_GROUND = {
-  /** A side panel's well. */
   WELL: "well",
-  /** A column's own ground. */
   GROUND: "ground",
-  /** The window's frame, above the sheet it heads: the chosen tab is lifted in the sheet's ground, as a browser's is. */
   FRAME: "frame",
 } as const;
 
 export type TabsGround = (typeof TABS_GROUND)[keyof typeof TABS_GROUND];
 
-/** How a tab other than the chosen one gives way once the strip is narrow. */
 export const TABS_FOLD = {
-  /** Narrower than 72px it stands as its glyph alone, its hint naming it, as Safari collapses its tab titles into icons. */
   GLYPH: "glyph",
-  /** It keeps a short label, at least 96px, and the strip scrolls along instead, as a phone's browser scrolls its tabs: a finger has no hint to name a glyph. On a screen with no hover its × gives its place to the label, its Close standing in its menu. */
   LABEL: "label",
 } as const;
 
@@ -164,22 +87,17 @@ export type TabsFold = (typeof TABS_FOLD)[keyof typeof TABS_FOLD];
 
 export type { TabMove };
 
-/** Where a tab stands among the tabs that move, and the move that takes it elsewhere. */
 export interface TabPlace {
   readonly at: number;
   readonly count: number;
   readonly onMove: TabMove;
 }
 
-/** What a strip's owner reaches it by: the focused tab stepped along, and where a tab stands. */
 export interface TabsControls {
-  /** Moves the focused tab `by` places along, keeping focus on it; nothing where no tab that moves has focus, or past an end. */
   readonly step: (by: number) => void;
-  /** Where `tab`, a tab of the strip, stands among the tabs that move; none for a strip whose tabs stay put. */
   readonly placeOf: (tab: HTMLElement) => TabPlace | undefined;
 }
 
-/** What an app's hint hands the tab it wraps: when to show and go, and the chord it names. */
 interface TabHintProps {
   "aria-describedby"?: string | undefined;
   "aria-keyshortcuts"?: string | undefined;
@@ -191,24 +109,13 @@ interface TabHintProps {
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
 }
 
-/**
- * The app's hint a tab hangs: its words, or a card in their place, over the
- * tab it wraps. It must stay one component across renders, so the tab it
- * wraps stays one tab.
- */
 export type TabHint = ComponentType<{
   label: string | undefined;
   card?: ReactNode;
   children: ReactElement<TabHintProps>;
 }>;
 
-/** The words a tab's hint joins: its label where it is cut short, and its news. */
-function tabHint(input: {
-  label: string;
-  /** Whether the label may not be read whole: cut short, or a tab other than the chosen one, which a narrow strip may draw as its glyph alone. */
-  clipped: boolean;
-  unread: boolean;
-}): string | undefined {
+function tabHint(input: { label: string; clipped: boolean; unread: boolean }): string | undefined {
   const words = [
     input.clipped ? input.label : undefined,
     input.unread ? UNREAD_TAB_NOTE : undefined,
@@ -220,22 +127,12 @@ function closesTab(key: string): boolean {
   return key === "Delete" || key === "Backspace";
 }
 
-/** Scrolls the strip `by` along, gliding as its stylesheet says or at once. */
 function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
   if (!glide) strip.style.scrollBehavior = "auto";
   strip.scrollLeft += by;
   strip.style.scrollBehavior = "";
 }
 
-/**
- * Scrolls the strip, and nothing around it, the least that shows `tab`'s
- * pill in its own place. Note that the place is read off the tab before it,
- * because the chosen tab is pinned at the strip's edges (tabs.css) and
- * reads where it is stuck rather than where it stands; the strip's scroll
- * behavior, whether it glides, is the stylesheet's, and a pane sliding in
- * is never scrolled with it. A strip just drawn is put there at once, as a
- * page opens already scrolled.
- */
 function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
   const pill = tab.closest<HTMLElement>(".ui-tab") ?? tab;
   const before = pill.previousElementSibling;
@@ -251,49 +148,29 @@ function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
   }
 }
 
-/** Focus moved to a tab by the strip's own keys, which bring it into view with the strip's glide. */
 function focusTab(strip: HTMLElement | null, tab: HTMLElement | undefined | null): void {
   tab?.focus({ preventScroll: true });
   if (strip !== null && tab !== undefined && tab !== null) reveal(strip, tab);
 }
 
-/**
- * Whether an event's target stands in the strip itself. Note that an event
- * from what a tab draws elsewhere, its menu or an action in a toolbar's
- * slot, reaches the strip's handlers too, because React bubbles it through
- * the portal to the tab that drew it, and none of it is a tab to scroll or
- * move.
- */
 function within(strip: HTMLElement, target: EventTarget): boolean {
   return target instanceof Node && strip.contains(target);
 }
 
-/** What the strip says aloud of a tab moved: its label and the place it now stands. */
 function movedLine(tab: HTMLElement | undefined, to: number, count: number): string {
   return `${tab?.textContent ?? "Tab"} moved to position ${to + 1} of ${count}`;
 }
 
-/** Where a tab's menu hangs when the keyboard asks for it, or a right-click that names no point: under the tab, from its start. */
 export function tabMenuPlacement(tab: HTMLElement): MenuPlacement {
   const bounds = (tab.closest(".ui-tab") ?? tab).getBoundingClientRect();
   return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
 }
 
-/** The strip's tabs that move, in order: every one but an anchored tab, which leads the strip where it stands. */
 function movableTabs(strip: HTMLElement | null): HTMLElement[] {
   const tabs = [...(strip?.querySelectorAll<HTMLElement>(TAB) ?? [])];
   return tabs.filter((tab) => tab.closest(ANCHORED) === null);
 }
 
-/**
- * The strip of tabs. Note that focus follows a tab closed from the keyboard
- * to the tab that took its place a render later, because the tab it was on
- * is gone by then; with none left, it goes on to the button after the
- * strip, or the first in what follows it. `onMove`, while given, lets the
- * tabs be moved, and hears each move as the tab's place before and after
- * it, counted among the tabs that move. `onFocusChange` hears whether one
- * of its tabs has the focus, the one `controls`' step moves.
- */
 export function Tabs({
   label,
   ground = TABS_GROUND.WELL,
@@ -312,20 +189,14 @@ export function Tabs({
   children: ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
-  // Note that a key held with a modifier moves no focus, which the roving
-  // keys leave alone, because an owner's chords move the tab itself.
   const roving = useRovingKeys<HTMLDivElement>({
     orientation: ROVING_ORIENTATION.HORIZONTAL,
     stop: ROVING_STOP.CHOSEN,
     moveTo: (tab) => focusTab(strip.current, tab),
   });
   const stripRef = useMemo(() => joinRefs(strip, roving.ref), [roving.ref]);
-  // How many tabs the strip draws, which it asks room for at their widest (tabs.css).
   const count = Children.toArray(children).filter(isValidElement).length;
-  // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
-  // The chosen tab last brought into view, so a tab newly chosen, opened
-  // chosen among them, is brought in once rather than on every render.
   const revealed = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
     const at = closedAt.current;
@@ -356,8 +227,6 @@ export function Tabs({
         };
   const onPointerDown = useTabDrag(move);
   useImperativeHandle(controls, () => ({
-    // The focused tab one place along, drawn there before focus is put back
-    // on it, since moving it in the document can take focus from it.
     step: (by: number) => {
       const tabs = movableTabs(strip.current);
       const tab = tabs.find((each) => each === document.activeElement);
@@ -379,7 +248,6 @@ export function Tabs({
     const at = event.target instanceof HTMLElement ? tabs.indexOf(event.target) : -1;
     if (at < 0) return;
     if (closesTab(event.key)) {
-      // Only a tab that closes hands focus on; one that always stands stays.
       const pill = event.target instanceof HTMLElement ? event.target.closest(".ui-tab") : null;
       if (pill?.getAttribute("data-closable") === "true") closedAt.current = at;
       return;
@@ -387,10 +255,6 @@ export function Tabs({
     roving.onKeyDown(event);
   };
 
-  // A wheel turned up and down runs the strip along, as a browser's tab strip
-  // takes it; a trackpad's sideways swipe already scrolls it natively. Note
-  // that it scrolls at once rather than gliding, because a glide would be
-  // restarted, and cut short, by every step of a turning wheel.
   const wheel = (event: React.WheelEvent<HTMLDivElement>) => {
     const node = event.currentTarget;
     if (!within(node, event.target)) return;
@@ -431,31 +295,6 @@ export function Tabs({
   );
 }
 
-/**
- * One tab. `onClose` gives it its × and its Delete key; a tab without it is
- * one that always stands. `detail`, while given, follows the label in the
- * muted secondary color, parted from it by a space and no mark, as a
- * model's effort follows its name, or in the needs-you tone
- * (`STATUS_TONE.ATTENTION`, `detailTone`) where it counts what waits on the
- * reader, as a NavItem's count does. `endMark`, while given, stands at the
- * tab's end in its ×'s place, with room kept for it, and gives way to the ×
- * under the pointer, as an editor's tab trades its unsaved dot for its ×.
- * `editor`, while given, is drawn in the label's place as a field of its
- * own, outside the tab's role, so a reader reaches it. A label cut short is
- * said whole in the tab's `hint`, before an unread tab's news; `card`, while
- * given, hangs in the hint's place whether or not the label is cut short, and
- * says the whole name itself. The × says which tab it closes in a hint of its
- * own, with ⌘W on the chosen tab's alone. `contextMenu`
- * (`useMenu`'s) opens the tab's own actions from a right-click or a long
- * press, and `onMenu` opens them where it says from the keyboard's menu
- * keys; `menu`, the menu they open while it is drawn, stands inside the tab.
- * Note that it is drawn from the tab's own pill rather than beside it,
- * because what a menu's portal leaves where it is mounted, its focus guards
- * and the node that owns it for a reader, would otherwise stand in the
- * strip's row as children of their own, and a chosen tab alone in its strip
- * would no longer be its only child and would narrow to a shared one's
- * width (tabs.css).
- */
 export function Tab({
   id,
   controls,
@@ -480,48 +319,30 @@ export function Tab({
   onMenu,
   menu,
 }: {
-  /** The id the tab stands under, which the panel it shows names itself by (`aria-labelledby`). */
   id?: string | undefined;
-  /** The id of the tab panel this tab shows while chosen (`aria-controls`); none where no panel stands for it. */
   controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
-  /** Whether its label and its detail are the app's own words (Overview, Inbox and its count), which a screen recording shows as they read; masked otherwise, as a tab named by a task or a file is. */
   labelReplayUnmasked?: boolean | undefined;
-  /** Words after the label, dimmed: a count, as an Inbox tab's. */
   detail?: string | undefined;
-  /** The detail's status tone, muted where absent: attention for a count of what waits on the reader, as an Inbox tab's. */
   detailTone?: StatusTone | undefined;
-  /** A mark at the tab's end, in its ×'s place until the pointer comes over it: a failed run's. */
   endMark?: React.JSX.Element | undefined;
   selected: boolean;
-  /** Something arrived on the tab while another was chosen: its label in semibold until it is chosen. */
   unread?: boolean;
-  /** What the pointer resting on the tab shows in its hint's place: a card naming it whole and saying what it last did. */
   card?: ReactNode;
-  /** The app's hint the tab hangs its words or its card from; none drawn where absent. */
   hint?: TabHint | undefined;
   editor?: ReactNode;
   tabRef?: RefObject<HTMLButtonElement | null> | undefined;
-  /** Stands as its strip's preview, which the next one opened takes the place of: its label in italics, as VS Code draws one. */
   preview?: boolean;
-  /** Leads its strip and never moves: counted among no moves, dragged by none, and dropped before by none, as a task's Overview. */
   anchored?: boolean;
   onSelect: () => void;
-  /** Keeps a preview as a tab of its own, as a double-click on it asks. */
   onKeep?: (() => void) | undefined;
   onClose?: (() => void) | undefined;
   contextMenu?: ContextMenuProps | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
-  /** The tab's menu while drawn: `Menu`, opened by `contextMenu` or `onMenu`. */
   menu?: ReactNode;
 }): React.JSX.Element {
-  // Whether the label is cut short: a label renamed, or a lone tab giving
-  // way to the toolbar beside it.
   const [words, clipped] = useClipped(detail === undefined ? label : `${label} ${detail}`);
-  // Note that a tab other than the chosen one is named in its hint whether or
-  // not its label shows, because a narrow strip may draw it as its glyph
-  // alone, which the label's own measure cannot see.
   const said = tabHint({ label, clipped: clipped || !selected, unread });
   const own = useRef<HTMLButtonElement | null>(null);
   const button = tabRef ?? own;
@@ -542,7 +363,6 @@ export function Tab({
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       {...rovingItem()}
       onClick={(event) => {
-        // Note that the tab around the button is the pill a press is seen on.
         pulsePress(event.currentTarget.closest<HTMLElement>(".ui-tab") ?? event.currentTarget);
         onSelect();
       }}
@@ -635,7 +455,6 @@ export function Tab({
   );
 }
 
-/** A switcher's row of cards, one listbox the switcher's own keys steer. */
 export function TabCards({
   label,
   children,
@@ -650,14 +469,6 @@ export function TabCards({
   );
 }
 
-/**
- * One card: its still or its glyph, its name, and where it stands. `here`
- * dims the card of the screen already on show. `onPoint` hears the pointer
- * come onto it, and `onPick` a press on it: on the press itself where
- * `pickOnPress`, for a switcher held on ⌃, which a Mac makes a release a
- * right-click of, taking no Tab stop; or on the click otherwise, with a Tab
- * stop of its own, and Return or Space while it has the focus.
- */
 export function TabCard({
   icon,
   label,
@@ -674,15 +485,10 @@ export function TabCard({
 }: {
   icon: ReactNode;
   label: string;
-  /** Whether its name is the app's own words (Overview, Inbox), which a screen recording shows as they read; masked otherwise, as where it stands always is. */
   labelReplayUnmasked?: boolean | undefined;
-  /** Where it stands, under its name: a task and its strip; the line stands empty where absent, so every card is one height. */
   detail?: string | undefined;
-  /** The glyph before the detail's words. */
   detailIcon?: ReactNode;
-  /** A mark after the detail's words, or alone where there are none. */
   endMark?: ReactNode;
-  /** A picture of the screen, by its address; its glyph, large, until it has one. */
   still?: string | undefined;
   here?: boolean | undefined;
   chosen: boolean;
@@ -694,9 +500,6 @@ export function TabCard({
     <div
       role="option"
       aria-selected={chosen}
-      // Note that a card picked on the press takes no stop of its own, because
-      // the keys stay where they were while a switcher is held; one picked on
-      // the click is a Tab stop, so the keys reach it.
       tabIndex={pickOnPress ? -1 : 0}
       className="ui-tab-card group/card flex w-[176px] min-w-0 flex-none flex-col gap-1 p-1.5 border border-solid border-transparent rounded-ui-10 cursor-default aria-[selected=true]:border-border-selected aria-[selected=true]:bg-fill-strong"
       data-here={here}
@@ -712,7 +515,6 @@ export function TabCard({
           : undefined
       }
       onClick={pickOnPress ? undefined : pulseOnPress(onPick, PRESS_PULSE.QUIET)}
-      // Note that a card handed the focus is picked by Return or Space, as a press on it picks it.
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();

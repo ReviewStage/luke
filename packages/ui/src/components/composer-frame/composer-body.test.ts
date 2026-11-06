@@ -8,12 +8,6 @@ import { ComposerBody } from "./composer-body.js";
 import { ComposerFoot } from "./composer-foot.js";
 import { COMPOSER_ELEMENT, ComposerFrame } from "./composer-frame.js";
 
-/**
- * composer-body.test.ts -- a message box holds its files over its words, as
- * the sent message draws them, so the keyboard reaches a file before the
- * field and the field before the foot.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -27,12 +21,10 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Whether `first` comes before `then` in the document, which is the order Tab walks them in. */
 function before(first: Element, then: Element): boolean {
   return (first.compareDocumentPosition(then) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 }
 
-/** The one element `selector` finds, which the test fails without. */
 function only(container: HTMLElement, selector: string): Element {
   const found = container.querySelector(selector);
   if (found === null) throw new Error(`nothing matches ${selector}`);

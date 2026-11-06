@@ -1,11 +1,3 @@
-/* chart.css -- the chart's own frame around recharts' plot, and its tooltip's card.
-
-   Recharts is the engine and draws the plot; what it paints in its stock
-   grays (an axis tick, the grid, the hover cursor) is redrawn here in the
-   shared palette, and the outlines of its inner parts are dropped. Every
-   value is a `--ui-*` token, so the chart reads the same in whichever app
-   mounts it. */
-
 @layer components {
   .ui-chart {
     display: flex;
@@ -15,8 +7,6 @@
     line-height: var(--ui-type-caption-leading);
   }
 
-  /* A window's days (`daily-bars.tsx`): as wide as its frame and as tall as
-     its caller says, and pressable where a day's column opens a page. */
   .ui-chart.ui-daily-bars {
     aspect-ratio: auto;
     width: 100%;
@@ -50,18 +40,10 @@
     fill: var(--ui-color-fill-hover);
   }
 
-  /* Note that what recharts puts in the tab order, the plot (its
-     accessibility layer, whose arrows walk the tooltip) and a pie's root,
-     keeps the window's ring, because a keyboard reader has to see it holds
-     focus; only the parts no Tab reaches drop theirs. */
   .ui-chart :is(.recharts-layer, .recharts-sector, .recharts-surface):not([tabindex="0"]) {
     outline: none; /* no ring: no Tab stops here */
   }
 
-  /* Note that forced colors keep an outline on what holds the keyboard's
-     focus, drawn transparent, because the system paints it in its own ink
-     there and it is the focus's only cue; on the rest it would ring every
-     layer at once. */
   @media (forced-colors: active) {
     .ui-chart .recharts-layer:focus-visible,
     .ui-chart .recharts-sector:focus-visible,
@@ -71,9 +53,6 @@
     }
   }
 
-  /* The tooltip floats over a chart that sits on a card, so it is drawn on
-     the overlay's ground, a step above the card in the dark, never the
-     page's, which would draw the one floating surface below what it covers. */
   .ui-chart-tooltip {
     display: grid;
     align-items: start;
@@ -104,7 +83,6 @@
     width: 100%;
   }
 
-  /* A series' swatch, or the icon its config names in its place. */
   .ui-chart-tooltip-swatch,
   .ui-chart-tooltip-row > svg {
     flex-shrink: 0;
@@ -113,8 +91,6 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* Note that the corner is the scale's two-pixel step, because a swatch
-     this small rounded at a control's corner would read as a dot. */
   .ui-chart-tooltip-swatch {
     border-radius: var(--ui-space-2);
   }

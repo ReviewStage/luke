@@ -7,17 +7,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { Announcer } from "../announcer/announcer.js";
 import { Calendar } from "./calendar.js";
 
-/**
- * calendar.test.ts -- the month reads as a labeled grid of named days with
- * today marked and the selection selected; the arrows, Home, End, PageUp,
- * and PageDown move the keyboard, across a month's edge and the shown month
- * with it; Enter, Space, and a press pick a day, alone or as a range's end,
- * and a neighboring month's day is picked like any other; the keyboard
- * waits for a caller slow to show the month it stepped into, unless it left
- * the grid meanwhile; and paging stops at the four-digit years, its keys still
- * the grid's there. Synthetic days, with today handed in.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -33,20 +22,17 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What a caller heard from the calendar, in order, and how a slow caller shows a month later. */
 interface Heard {
   readonly picks: string[];
   readonly months: string[];
   show?: (month: string) => void;
 }
 
-/** A drawn calendar's container and what its caller heard. */
 interface Drawn {
   readonly container: HTMLElement;
   readonly heard: Heard;
 }
 
-/** A caller that shows the months the calendar asks for and keeps `start` and `end` as given. */
 function Shown({
   from,
   start,
@@ -58,7 +44,6 @@ function Shown({
   start?: string | undefined;
   end?: string | undefined;
   heard: Heard;
-  /** Whether the caller holds a month asked for until the test shows it. */
   slow?: boolean | undefined;
 }): React.JSX.Element {
   const [month, setMonth] = useState(from);
@@ -76,7 +61,6 @@ function Shown({
   });
 }
 
-/** Draws the calendar at `from` and hands back its container and what it heard. */
 function draw(
   from: string,
   selection: { start?: string; end?: string; slow?: boolean } = {},
@@ -90,28 +74,24 @@ function draw(
   return { container, heard };
 }
 
-/** The day named `name`. */
 function day(container: HTMLElement, name: string): HTMLElement {
   const found = container.querySelector<HTMLElement>(`[role="grid"] button[aria-label="${name}"]`);
   if (found === null) throw new Error(`no day named ${name}`);
   return found;
 }
 
-/** The names of the days in the grid's selected cells, in order. */
 function selected(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[role="grid"] td[aria-selected="true"] button')].map(
     (button) => button.getAttribute("aria-label") ?? "",
   );
 }
 
-/** The grid's name, read from what labels it. */
 function gridName(container: HTMLElement): string {
   const grid = container.querySelector('[role="grid"]');
   const label = grid?.getAttribute("aria-labelledby");
   return label ? (document.getElementById(label)?.textContent ?? "") : "";
 }
 
-/** Presses `key` on whatever has the focus, and answers whether the page's own response to it was refused. */
 function press(key: string, init: KeyboardEventInit = {}): boolean {
   const target = document.activeElement;
   if (target === null) throw new Error("nothing has the focus");
@@ -122,12 +102,10 @@ function press(key: string, init: KeyboardEventInit = {}): boolean {
   return event.defaultPrevented;
 }
 
-/** The name of the day with the focus. */
 function focused(): string | null {
   return document.activeElement?.getAttribute("aria-label") ?? null;
 }
 
-/** Puts the focus on the grid's one tab stop, as Tab would. */
 function enterGrid(container: HTMLElement): void {
   const stop = container.querySelector<HTMLElement>('[role="grid"] button[tabindex="0"]');
   act(() => stop?.focus());
@@ -311,7 +289,6 @@ test("a step still waiting on its month is dropped once the keyboard leaves the 
   expect(document.activeElement).toBe(elsewhere);
 });
 
-/** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */
 function hintOn(target: Element): string | undefined {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

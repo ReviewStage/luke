@@ -1,7 +1,3 @@
-/* link-field.css -- the popover a link is written in (`link-field.tsx`):
-   the menu's surface laid in a row, a field as wide as an address reads
-   and Open and Remove beside it. */
-
 @layer components {
   .ui-link-field {
     width: 340px;

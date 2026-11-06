@@ -3,45 +3,10 @@ import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { clsx } from "clsx";
 
-/**
- * badge.tsx -- shadcn/ui's badge (style `base-nova`, on Base UI), vendored and drawn as our badge.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add badge` reads as a small diff. Its local
- * changes:
- *
- * - The base box is our badge: a capsule that may shrink below its words
- *   and wrap them (no `h-5`, `w-fit`, `shrink-0`, `overflow-hidden`, or
- *   `whitespace-nowrap`), cornered by half a one-line badge's height
- *   (`rounded-badge`) rather than a full round, so a wrapped badge stands as
- *   a rounded box, in the tag's type and weight, its hairline
- *   drawn inside (`inset-ring`) rather than as a border, so it stands no
- *   taller than the compact chip beside it, and any glyph in it at 12px.
- * - `variant` names today's tones (`neutral`, `working`, `attention`,
- *   `complete`, `merged`, `danger`) rather than shadcn's `default`,
- *   `secondary`, `destructive`, `outline`, `ghost`, and `link`: a tone is
- *   said in the badge's glyph's ink, and a neutral badge's words are muted.
- * - `face` is added: the chip's own opaque face inside its hairline
- *   (`plain`), a provider's color (`filled`, from the custom properties the
- *   badge sets inline), or the ink (`lit`).
- * - `dot` is added: a dot of the tone's ink before the words, for a badge in
- *   a tone with no glyph or swatch to say it.
- * - None of shadcn's focus, `aria-invalid`, ring, transition, or `[a]:hover`
- *   utilities, since a badge takes no focus and no press, and the window
- *   draws the one focus ring (`anti-slop/no-shadcn-focus-ring`).
- * - Its classes are joined (`clsx`), not merged (`cn`), because
- *   a badge's type, ink, and face are picked whole by its variants, with
- *   no caller's class to settle against them.
- *
- * `@repo/ui`'s `Badge` (`components/badge/badge.tsx`) is what an app draws;
- * this is its inside.
- */
-
 const badgeVariants = cva(
   "group/badge inline-flex min-w-0 max-w-full flex-initial items-center gap-badge-gap rounded-badge px-badge-inline py-badge-block font-body text-tag leading-tag font-tag inset-ring [&_svg]:flex-none [&_svg]:size-badge-glyph [&_svg]:text-tone-ink",
   {
     variants: {
-      // Note that every tone draws its glyph in the tone's ink, which its `data-tone` sets (`tokens/status-tone.css`).
       variant: {
         neutral: "",
         working: "",

@@ -1,32 +1,12 @@
-/* settings-section.css -- what a settings group's utilities
-   (`settings-section.tsx`) cannot say: the hairline between each row of its
-   card and the next, an inset row's from its inset edge even inside a box
-   of its own, the rows a setting reveals ruled as the card's own, the
-   rule between two groups of bare rows, and the placeholders' own boxes. The heading, the card's edge, corner, and
-   ground, and a line in the rows' place are utilities; the rows' own padding
-   is theirs (`settings-row.tsx`), and the room between sections the page's. */
-
 @layer components {
-  /* Note that the rules between rows stay here rather than in a utility on
-     the card, because they fall on what the card holds, rows, lines, and
-     other components' boxes, whose own sheets a parent's child selector in
-     the utilities layer would beat. */
   .ui-settings-section-card > * + * {
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* A run of rows drawing only those near the view (virtual-rows.tsx) stands
-     as one box of the card, its rows placed in it absolutely: each is ruled
-     from the row above it but the run's first, by its place in the whole
-     run rather than among the rows drawn, since the first drawn may be any. */
   .ui-settings-section-card > .ui-virtual-rows > .ui-virtual-row:not([data-index="0"]) {
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* A row inset under the row above that stands inside a box of its own, as
-     a row with a menu of its own does, is ruled where its inset starts, as a
-     bare inset row is: the box draws no rule, and the row draws it from its
-     own inset edge. */
   .ui-settings-section-card
     > *
     + *:not(.ui-settings-row):has(> .ui-settings-row[data-indent="mark"]) {
@@ -37,10 +17,6 @@
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* The rows a row folds under it (`SettingsRowsFold`) stand in a box of
-     their own, ruled as the card's own: each from the row above it, the
-     first from the head row, an inset row from its inset edge. The box
-     draws no rule, and a closed one stands nowhere. */
   .ui-settings-rows-fold {
     display: flex;
     flex-direction: column;
@@ -67,8 +43,6 @@
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* The rows a setting reveals (reveal.css) are ruled as the card's own,
-     and a reveal with none to draw stands nowhere, so it draws no rule. */
   .ui-settings-section-card .ui-reveal > * + * {
     border-top: 1px solid var(--ui-color-border);
   }
@@ -77,20 +51,11 @@
     display: none;
   }
 
-  /* A section whose rows stand bare in a surface that frames them (a
-     popover's) is set apart from the section before it by a rule, as the
-     card's edge sets a card's apart. Note that this stays here rather than
-     in a utility, because it falls on the section's sibling. */
   .ui-settings-section[data-frame="rows"] + .ui-settings-section[data-frame="rows"] {
     padding-top: var(--ui-list-inset);
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* Note that the placeholders' boxes are drawn here rather than in
-     utilities, because a skeleton's intrinsic element wears only a class
-     naming itself a skeleton's (`anti-slop/skeleton-through-components`).
-     Their rows are ruled one from the next as a card's rows are, and their
-     sections stand a page's section gap apart. */
   .ui-settings-skeleton-rows {
     display: flex;
     flex-direction: column;

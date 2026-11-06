@@ -7,21 +7,10 @@ import { afterEach, beforeEach, test } from "vitest";
 import { DocumentIcon } from "../../face/glyphs.js";
 import { INLINE_REF_LOOK, INLINE_REF_NAME, InlineRef, type InlineRefHint } from "./inline-ref.js";
 
-/**
- * inline-ref.test.ts -- a token handed a press is a button named by its
- * words, or by what its press does where the place says so, and answers a
- * click and the keyboard, or a link where its press leaves the app; without
- * one it is words a reader reaches no press on, which take the focus while
- * they hang a card. A name drawn nowhere is still heard, its kind is heard
- * before it, and a gone subject keeps its name and is heard to be gone. What its hint is handed is its words or its card, and what the
- * hint hands back lands on the token.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** A stand-in hint, saying beside the token what it was handed, and hearing focus arrive on the token. */
 const Hint: InlineRefHint = ({ label, card, children }) =>
   createElement(
     "span",
@@ -47,7 +36,6 @@ afterEach(() => {
   delete document.body.dataset.hinted;
 });
 
-/** Draws `element` and answers its container. */
 function draw(element: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

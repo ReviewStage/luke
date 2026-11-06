@@ -1,5 +1,3 @@
-/* drop-slot.css -- the dashed place a carried row lands in, a row's height. */
-
 @layer components {
   .ui-drop-slot {
     box-sizing: border-box;

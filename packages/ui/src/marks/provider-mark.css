@@ -1,8 +1,3 @@
-/* provider-mark.css -- a provider's mark at the size it is asked for.
-
-   A slot's mark has no size of its own: the row, chip, or button it leads
-   sizes its glyph cell. The four sizes are the mark's own. */
-
 @layer components {
   .ui-provider-mark {
     flex: none;

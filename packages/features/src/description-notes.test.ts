@@ -94,7 +94,6 @@ test("a note naming a field rather than a heading is passed over, and a correcti
   });
 });
 
-/** A description's text holding a mention the developer placed. */
 const MENTIONED = "## Rollout\n\n- Ship as [@Goal](luke://plan/pl_1#Goal) says, store first.\n";
 
 test("a correction that drops a mention the developer placed is not taken", () => {
@@ -211,7 +210,6 @@ test("a heading is renamed by correcting its line, and a note's words open secti
   assert.equal(text.includes("\\#"), false);
 });
 
-/** A whole section of DOCUMENT as a find copies it, heading and all. */
 const ASSUMPTIONS_SECTION = "## Assumptions\n\n- Invites expire after 7 days.";
 
 test("an empty replacement deletes, taking out the lines it leaves empty, so a section is struck whole", () => {
@@ -266,7 +264,6 @@ test("a batch with one note naming what the text does not hold exactly once take
     { text: twice, note: { kind: NOTE_KIND.REPLACE, find: "## Goal", text: "## Goals" } },
   ];
   for (const { text, note } of cases) {
-    // The deletion before the miss is half of a move, and must not land without it.
     const taken = applyNotesToText(text, [
       { kind: NOTE_KIND.REPLACE, find: "Only an admin can add someone.", text: "" },
       note,
@@ -303,14 +300,11 @@ test("an agent's deletion is journaled as a strike, and a long replaced text is 
   ]);
 });
 
-/** A picture's address in a description's text, under the plan's own address. */
 const PICTURE_ADDRESS =
   "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13";
 
-/** A picture's line as the description's text writes it: alt text, address, and caption. */
 const PICTURE_LINE = `![Members page with two pending invites](${PICTURE_ADDRESS} "Pending invites sit in the list")`;
 
-/** A description's text holding a picture on its own line, between two points. */
 const PICTURED = [
   "## Approach",
   "",

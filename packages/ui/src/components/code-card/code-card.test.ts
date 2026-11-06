@@ -5,18 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { CODE_ROW, CodeCard, type CodeRow } from "./code-card.js";
 
-/**
- * code-card.test.ts -- a code card names its lines in its header with a
- * Copy named "Copy code"; a block over 40 lines shows its first 40 over
- * "Show all", which shows the rest and then offers "Show less"; Copy copies
- * the whole block however it stands, and the rest, drawn hidden until
- * found, shows when a find's match lands in it; and the lines the host colored
- * are cut as the block is. A block drawn as rows is cut as any block is; one
- * may copy other words than it shows; and one whose
- * body the caller draws keeps the header, the Copy of the lines it names,
- * and the actions beside it, with no cut. Synthetic code.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -37,12 +25,10 @@ function draw(element: ReactElement): void {
   act(() => root.render(element));
 }
 
-/** A block of `count` numbered lines. */
 function block(count: number): string {
   return Array.from({ length: count }, (_, at) => `const line${at + 1} = ${at + 1};`).join("\n");
 }
 
-/** The lines the card shows now, less what it holds `hidden` and the newline that closes the last. */
 function shownLines(): string[] {
   const body = document.querySelector("pre")?.cloneNode(true);
   if (!(body instanceof Element)) return expect.fail("No code body");

@@ -1,25 +1,16 @@
-/* readable-controls.css -- the words of the controls inside a readable
-   region, which select as text does (readable-controls.tsx). */
-
 @layer components {
-  /* The region draws no box, so what holds it lays out its controls. */
   .ui-readable-controls {
     display: contents;
   }
 
-  /* Note that the words select rather than the control around them, so a
-     badge, a key's number, and a box beside the words stay out of a copy;
-     a field's name selects too, and its Optional, inside the label that
-     keeps its own words from selecting as a label that presses what it
-     names. */
   .ui-readable-controls
-  :is(
-    .ui-choice-label,
-    .ui-choice-detail,
-    .ui-checkbox-words,
-    .ui-field-words,
-    .ui-field-optional
-  ) {
+    :is(
+      .ui-choice-label,
+      .ui-choice-detail,
+      .ui-checkbox-words,
+      .ui-field-words,
+      .ui-field-optional
+    ) {
     -webkit-user-select: text;
     user-select: text;
   }

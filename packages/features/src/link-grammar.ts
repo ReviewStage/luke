@@ -4,137 +4,17 @@ import { HOST_WIRE, hostConnectPath, hostUserCodeOf } from "./host-wire.js";
 import { inAppScheme, isLinkHome, LINK_ORIGIN, RESERVED_WORKSPACE_SLUGS } from "./link-home.js";
 import { parsedUrl } from "./parsed-url.js";
 
-/**
- * link-grammar.ts -- every link the app reads and writes, as the address it is and the Markdown it is written into words as: our own places, GitHub's and Linear's pages, and the app-only `mention://` forms.
- *
- * This is the one module that knows how an address is spelled. A mention
- * (`mention-link.ts`) names what a link names and reads it through here; a
- * card, a chip, a router, and the service's answers read and write theirs
- * through here too, so no two of them spell one address two ways, and every
- * label is escaped the same way (`markdownLink`).
- *
- * A link of ours is the thing's address on the web, `https://<home>/<workspace>/…`
- * (`link-home.ts`), and the desktop is handed the same address in its own
- * scheme. Each step after the
- * workspace says what kind of thing comes next,
- * and a list is plural where a thing is singular, as GitHub's `/pulls` and
- * `/pull/1` are:
- *
- * - the workspace's Home, its own address with no step after it, and the
- *   Board, `/tasks`, each read only under a step a workspace can stand
- *   under: never a page of ours (`RESERVED_WORKSPACE_SLUGS`) or a file,
- *   so `/about` and `/robots.txt` are no workspace's Home;
- * - a task, `/task/<id>`, and its section, `#<anchor>`, its version,
- *   `/task/<id>/version/<seq>`, and a page an agent wrote for it,
- *   `/task/<id>/page/<pageId>`, the task named by its id or by its number
- *   in the workspace (`taskNumberOf`);
- * - an agent, `/agent/<agentId>`, whether or not it works on a task, and
- *   under it what is its own: a worker, `/worker/<callId>`, its Changes,
- *   `/changes`, one review thread of its pull request in one of that tab's
- *   views, `/changes/<conversation|files>/thread/<threadId>`, a message,
- *   `/message/<messageId>`, and, on no task, a page it showed,
- *   `/page/<pageId>`; which task's panel it opens in is the reader's to
- *   find, by the agent;
- * - the Inbox, `/inbox`, the Inbox narrowed to one task's items,
- *   `/inbox/task/<taskId>`, and an item in it under the agent that posted it,
- *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
- *   reader's to find, by the agent, to open the item in that task's Inbox;
- *   or by its id alone, `/inbox/<itemId>`, whose agent, task, and workspace
- *   are the reader's to ask the service for, by the item;
- * - the Inbox again, `/channel/<id>`, which a link written before the
- *   Inbox's channels were removed spells, read and never written;
- * - the Automations page, `/automations`, an automation,
- *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
- * - a page of Settings, `/settings[/<page>]`;
- * - a person's page in the workspace, `/person/<userId>`, a member or
- *   someone who left, by the account id the service names them by;
- * - the Admin place, an admin's alone, which reads every workspace's
- *   accounts, so its workspace is only the one the link was copied in:
- *   `/admin`, a section of it, `/admin/<cost|reliability|workspaces|users>`,
- *   an account's page, `/admin/user/<userId>`, a workspace's,
- *   `/admin/workspace/<workspaceId>`, and a day's, `/admin/day/<YYYY-MM-DD>`.
- *
- * A place of the account's own, which no workspace holds, is linked under
- * no workspace (`ACCOUNT_PLACE`): a box's pairing, `/connect/<code>`, by the
- * code the box shows (`HOST_WIRE.CONNECT_PATH`), where the member approves
- * or denies it. `connect` is a reserved slug, so no workspace's link is
- * ever read as one.
- *
- * An issue's page, `/issue/<issueId>`, is no place now that we keep no
- * issues of our own, and Factory's, `/factory`, none now that Factory is
- * gone, so an old link to either reads as a link it does not know.
- *
- * An agent's place was once written under its task too,
- * `/task/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
- * `/task/<id>/inbox/<itemId>`, each still read, the task kept, and still
- * written while a writer names the task. A turn of our own work,
- * `/plan/<id>/work/<at>`, and a worker of our own,
- * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
- * its task and written no more.
- *
- * A picture in a description, `/task/<id>/files/<picture>`
- * (`description-attachment-link.ts`), or under `/plan/` as every picture
- * written before the rename stands, is read as its task, and a picture in an
- * Inbox item's words, the item's
- * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
- * the item, since nothing of a picture is opened by its link.
- *
- * Note that a link carries ids and nothing else: never a name, a token, or
- * any of the thing's words, since a link is pasted where anyone may read it
- * (AGENTS.md's "Never"). The workspace's slug reads well and is never
- * trusted: the id alone finds the thing, and whoever opens the link is
- * checked against it there, so a link says no more than its address does.
- * A pairing's code is no credential either: the box prints it for anyone at
- * its terminal to read, it approves nothing until a signed-in member presses
- * Connect, and it lapses in minutes. A task is written `/task/`, the name
- * the unit of work took, and read under `/plan/` forever, the step every link
- * written before it holds, whatever follows the task's id; a reader takes a
- * trailing slash, a query, and a fragment a kind has no use for, and refuses
- * anything else. A task's id is a UUID, never all digits, so a task step
- * all digits, `/task/42`, names the task by its number in the link's
- * workspace, which a reader asks the service to find by the slug and the
- * number before it opens the place, wherever a task's id is read; a key
- * spelled there, `/task/STAG-42`, is read as its number alone, since its
- * prefix is the workspace's name and follows a rename. A number that
- * finds no task opens as an id that names none does. A section's anchor is
- * its heading as GitHub spells a Markdown heading's (`mention-link.ts`'s
- * `sectionAnchors`), read in lower case.
- *
- * A page of GitHub's the app reads is a pull request's,
- * `https://github.com/<owner>/<name>/pull/<number>` or any page under it, an
- * issue's, `/issues/<number>`, or a file's or a folder's,
- * `/blob/<ref>/<path>` and `/tree/<ref>/<path>`, read only on `HEAD` or a
- * commit, since a branch's name may hold a slash and leave no telling where
- * it ends and the path begins; a file's lines, `#L3-L5`, are read only at a
- * commit, since a branch's lines drift. A Linear issue's page is
- * `https://linear.app/<workspace>/issue/<KEY-123>`, its slug after it or not.
- *
- * The forms written before our links were settled, `luke://<host>/<path>`,
- * are read forever. What has no page of its own on the web, an MCP server
- * and a date, is written in the same form under `mention://`, which reads
- * as any `luke://` host does; what each host's path means is the mention's.
- *
- * A link is written into words as `[label](target)`: its label's brackets
- * and backslashes escaped and its line breaks made spaces, so a title
- * holding `]` stays one label, and its target's parentheses and spaces
- * percent-encoded, so it stays one target.
- */
-
 export const LINK_PLACE = {
-  /** The workspace's Home, the page with no task open, at the workspace's own address. */
   HOME: "home",
-  /** The workspace's Board, its tasks by where each stands. */
   BOARD: "board",
   TASK: "task",
   SECTION: "section",
-  /** One comment thread of a task, written as the task's link with the thread in its `comment` query. */
   COMMENT: "comment",
   VERSION: "version",
   PAGE: "page",
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "changes",
-  /** One review thread of an agent's pull request, in its Pull request tab's Conversation or Files changed, by GitHub's node id for the thread. */
   PULL_REQUEST_THREAD: "pull-request-thread",
   MESSAGE: "message",
   INBOX: "inbox",
@@ -144,11 +24,9 @@ export const LINK_PLACE = {
   AUTOMATION_RUN: "automation-run",
   SETTINGS: "settings",
   PERSON: "person",
-  /** The Admin place: its Overview, a section, an account's page, a workspace's, or a day's. */
   ADMIN: "admin",
 } as const;
 
-/** The Admin place's sections a link names past its Overview, which is the place's own link. */
 export const ADMIN_LINK_SECTION = {
   COST: "cost",
   RELIABILITY: "reliability",
@@ -160,7 +38,6 @@ export type AdminLinkSection = (typeof ADMIN_LINK_SECTION)[keyof typeof ADMIN_LI
 
 const ADMIN_LINK_SECTIONS: ReadonlySet<string> = new Set(Object.values(ADMIN_LINK_SECTION));
 
-/** Which of a Pull request tab's views a review thread's link opens it in: its Conversation, or Files changed, on its line. */
 export const PULL_REQUEST_THREAD_VIEW = {
   CONVERSATION: "conversation",
   FILES: "files",
@@ -171,7 +48,6 @@ export type PullRequestThreadView =
 
 const THREAD_VIEWS: ReadonlySet<string> = new Set(Object.values(PULL_REQUEST_THREAD_VIEW));
 
-/** The steps of a link's path, each naming what the step after it is. */
 const STEP = {
   PLAN: "plan",
   TASK: "task",
@@ -186,7 +62,6 @@ const STEP = {
   MESSAGE: "message",
   FILES: "files",
   INBOX: "inbox",
-  /** A link written before the Inbox's channels were removed, read as the Inbox. */
   CHANNEL: "channel",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
@@ -199,19 +74,10 @@ const STEP = {
   DAY: "day",
 } as const;
 
-/** The query a task's link names one of its comment threads under. */
 const COMMENT_QUERY = "comment";
 
-/** The steps a task is read under: the one written, and the one every older link holds. */
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
 
-/**
- * A workspace's path as it is written now: its task's step `/task/` where it
- * holds `/plan/`, the step every link written before the task was a task
- * holds, the rest of it, its query and its fragment included, as it was; any
- * other path as it is. A tab opened at an older link is moved onto the one
- * written now, which names the same place.
- */
 export function currentTaskPath(path: string): string {
   const [, workspace, step, rest] = /^\/([^/?#]+)\/([^/?#]+)(.*)$/su.exec(path) ?? [];
   return workspace !== undefined && step === STEP.PLAN
@@ -220,72 +86,42 @@ export function currentTaskPath(path: string): string {
 }
 
 const LINK_BOUNDS = {
-  /** The most characters a link may spell before it is read: a section's at the mention codec's own bound, its anchor a long heading percent-encoded. */
   MAX_LINK_CHARS: 24_000,
-  /** The most characters a workspace's slug, or an id, may spell. */
   MAX_STEP_CHARS: 200,
 } as const;
 
-/** An id as the service mints one, or as a call's id is spelled: letters, digits, `_`, and `-`. */
 const ID = /^[A-Za-z0-9_-]+$/u;
 
-/** The places a link names by its workspace's step alone, or one step after it, which a page of ours or a file could otherwise be read as. */
 const WORKSPACE_PLACES: ReadonlySet<string> = new Set([LINK_PLACE.HOME, LINK_PLACE.BOARD]);
 
-/** A page of Settings as its link spells it: lower case, words joined by hyphens. */
 const SETTINGS_PAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
-/** A picture's id as the service mints one, a UUID in lower case (`description-attachment-link.ts`). */
 const PICTURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-/** A UTC day as the Admin place's day page names it, `YYYY-MM-DD`; whether it is a real day is `isUtcDayKey`'s. */
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/u;
 
-/** A number spelled whole: a version's, or a moment's in epoch milliseconds. */
 const WHOLE = /^\d{1,15}$/u;
 
-/** A task's number in its workspace as a link spells it in the task's step: whole, from one, within a Postgres integer. */
 const TASK_NUMBER = /^[1-9]\d{0,8}$/u;
 
-/** A task's key as a link may spell it in the task's step, `STAG-42`: a prefix of up to four capitals or digits, held to its case as `workspace-key.ts` holds a key, a hyphen, and its number. */
 const TASK_KEY = /^[\p{Lu}\p{N}]{1,4}-([1-9]\d{0,8})$/u;
 
-/** An anchor as a heading's is spelled: letters, marks, digits, underscores, and hyphens. */
 const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
 
-/** GitHub's own host, whose pages are its pull requests, issues, files, and folders. */
 const GITHUB_HOST = "github.com";
 
-/** GitHub's own address, by the scheme its pages are written in. */
 export const GITHUB_ORIGIN = `https://${GITHUB_HOST}`;
 
-/** The branch a file's or a folder's page names the default one by, which follows it. */
 export const GITHUB_DEFAULT_BRANCH = "HEAD";
 
-/** GitHub's own bounds on a repository's `owner/name`. */
 export const GITHUB_REPOSITORY_BOUNDS = {
-  /** GitHub's own bound on an owner's login. */
   MAX_OWNER_CHARS: 39,
-  /** GitHub's own bound on a repository's name. */
   MAX_NAME_CHARS: 100,
 } as const;
 
-/**
- * `owner/name`: a login, which GitHub spells in letters, digits, and single
- * hyphens between them, one slash, and a name in letters, digits, dots,
- * underscores, and hyphens, which GitHub never lets be `.` or `..`. Nothing
- * else, so a path cannot ride in a repository's name.
- */
 export const GITHUB_REPOSITORY_PATTERN =
   /^[A-Za-z0-9](?:-?[A-Za-z0-9])*\/(?!\.{1,2}$)[A-Za-z0-9_.-]+$/u;
 
-/**
- * A repository's full name as the wire takes it: trimmed, and held to GitHub's
- * own shape and bounds. Note that it stands here beside its pattern, below
- * the agent's wire, because the start request names repositories and
- * `github-repositories-wire.ts`, which reads the agent's wire, would close a
- * loop.
- */
 export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(
     GITHUB_REPOSITORY_BOUNDS.MAX_OWNER_CHARS + 1 + GITHUB_REPOSITORY_BOUNDS.MAX_NAME_CHARS,
@@ -293,7 +129,6 @@ export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
   EffectSchema.isPattern(GITHUB_REPOSITORY_PATTERN),
 );
 
-/** The kinds of GitHub's pages the app reads. */
 export const GITHUB_PAGE = {
   PULL_REQUEST: "pull-request",
   ISSUE: "issue",
@@ -301,7 +136,6 @@ export const GITHUB_PAGE = {
   FOLDER: "folder",
 } as const;
 
-/** The step before what a GitHub page's path names next: a pull request's number, an issue's, or a file's or a folder's ref. */
 const GITHUB_STEP = {
   [GITHUB_PAGE.PULL_REQUEST]: "pull",
   [GITHUB_PAGE.ISSUE]: "issues",
@@ -309,37 +143,26 @@ const GITHUB_STEP = {
   [GITHUB_PAGE.FOLDER]: "tree",
 } as const;
 
-/** The schemes a page on the web is read by. */
 const WEB_PROTOCOLS: ReadonlySet<string> = new Set(["https:", "http:"]);
 
-/** A commit as a link pins one: seven to forty hexadecimal digits. */
 const COMMIT = /^[0-9a-f]{7,40}$/u;
 
-/** A GitHub page's lines: `#L3`, or `#L3-L5`. */
 const LINES_FRAGMENT = /^#L(\d{1,9})(?:-L(\d{1,9}))?$/u;
 
-/** A pull request's or an issue's number as its page's path spells it: whole, from one. */
 const PAGE_NUMBER = /^[1-9]\d{0,8}$/u;
 
-/** Linear's own host, whose `/<workspace>/issue/<identifier>` pages are its issues. */
 const LINEAR_HOST = "linear.app";
 
-/** The step before an issue's identifier in a Linear page's path. */
 const LINEAR_ISSUE_STEP = "issue";
 
-/** A Linear issue's identifier, its team's key and its number, `ENG-123`, as Linear spells it. */
 export const LINEAR_IDENTIFIER = /^[A-Z][A-Z0-9_]{0,9}-[1-9]\d{0,8}$/u;
 
-/** The scheme the app's own forms are written in, for what has no page of its own on the web. */
 const MENTION_PROTOCOL = "mention:";
 
-/** The scheme of the forms written before our links were settled, read as `MENTION_PROTOCOL` is. */
 const LEGACY_PROTOCOL = "luke:";
 
-/** The schemes an app-only form is read in. */
 const SCHEME_PROTOCOLS: ReadonlySet<string> = new Set([MENTION_PROTOCOL, LEGACY_PROTOCOL]);
 
-/** What a `mention://` or `luke://` address's host says its path names. */
 export const SCHEME_LINK_HOST = {
   PLAN: "plan",
   FILE: "file",
@@ -350,22 +173,16 @@ export const SCHEME_LINK_HOST = {
 
 export type SchemeLinkHost = (typeof SCHEME_LINK_HOST)[keyof typeof SCHEME_LINK_HOST];
 
-/** What marks a link's label as a mention's: `[@Rollout](<target>)`. */
 export const MENTION_SIGIL = "@";
 
-/** The characters a markdown link's label must escape to stay one label. */
 const LABEL_SPECIAL = /[[\]\\]/gu;
 
-/** A label's escaped character, read back. */
 const LABEL_ESCAPE = /\\([[\]\\])/gu;
 
-/** What would end a markdown link's target early: a parenthesis, an angle bracket, or white space. */
 const TARGET_BREAKING = /[()<>\s]/gu;
 
-/** The characters `encodeURIComponent` leaves that would end or break a markdown link's target. */
 const TARGET_SPECIAL = /[()!'*]/gu;
 
-/** The code of a space, below which, and at delete, a character is a control one. */
 const SPACE_CODE = 0x20;
 const DELETE_CODE = 0x7f;
 
@@ -466,9 +283,6 @@ const linkPlaceSchema = EffectSchema.Union([
       EffectSchema.String.check(EffectSchema.isPattern(SETTINGS_PAGE)),
     ),
   }),
-  // One struct with every view optional, as Settings' is, so a
-  // section the schema does not know is refused rather than read as the
-  // Overview by a struct naming none.
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.ADMIN),
     section: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(ADMIN_LINK_SECTION))),
@@ -483,17 +297,10 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
 ]);
 
-/**
- * A place in the app a link can send someone to, by the ids that find it. An
- * agent's place names its task only where a link written under the task
- * did, or a writer still does, so a reader finds the task by the agent.
- */
 export type LinkPlace = typeof linkPlaceSchema.Type;
 
-/** The kind of place a link sends someone to. */
 export type LinkPlaceKind = LinkPlace["kind"];
 
-/** A link read: the place it names, and the workspace it was written under, which a reader may show and never trusts. */
 export interface ReadLink {
   readonly workspace: string;
   readonly place: LinkPlace;
@@ -501,10 +308,8 @@ export interface ReadLink {
 
 const readPlace = EffectSchema.decodeUnknownOption(linkPlaceSchema);
 
-/** Whether a value is a place a link can name, as one crossing from main to a window is checked. */
 export const isLinkPlace = EffectSchema.is(linkPlaceSchema);
 
-/** A step of a path written percent-encoded, parentheses included, so a link pasted into markdown stays one target. */
 export function encodedStep(step: string): string {
   return encodeURIComponent(step).replace(
     TARGET_SPECIAL,
@@ -512,12 +317,10 @@ export function encodedStep(step: string): string {
   );
 }
 
-/** A path written percent-encoded step by step, its slashes kept. */
 export function encodedPath(path: string): string {
   return path.split("/").map(encodedStep).join("/");
 }
 
-/** A step of a path read back, or nothing where its encoding is broken. */
 export function decodedStep(step: string): string | undefined {
   try {
     return decodeURIComponent(step);
@@ -526,27 +329,22 @@ export function decodedStep(step: string): string | undefined {
   }
 }
 
-/** A step of a link of ours read back, or nothing where its encoding is broken or it is too long to be one. */
 function boundedStep(step: string): string | undefined {
   return step.length > LINK_BOUNDS.MAX_STEP_CHARS * 3 ? undefined : decodedStep(step);
 }
 
-/** Whether the steps after an Inbox item's id name one of its pictures, `files/<picture>`, which opens the item. */
 function namesItemPicture(more: readonly string[]): boolean {
   const [step, id, ...after] = more;
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
-/** A task's step as the place holds it: a key read as its number alone, any other step as written. */
 function taskStepOf(step: string): string {
   return TASK_KEY.exec(step)?.[1] ?? step;
 }
 
-/** The steps after a task's id: a version, a page, an agent's, or an Inbox item; a turn of ours or a worker of ours read as the task, since each is drawn nowhere now. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
-  // A picture in an item's words opens the item, and nothing of the picture.
   if (step === STEP.INBOX && id !== undefined && namesItemPicture(more)) {
     return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
   }
@@ -564,7 +362,6 @@ function taskFields(taskId: string, rest: readonly string[]) {
       return { kind: LINK_PLACE.TASK, planId: taskId };
     case STEP.INBOX:
       return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
-    // A picture of the task's description opens the task, and nothing of the picture.
     case STEP.FILES:
       return PICTURE_ID.test(id) ? { kind: LINK_PLACE.TASK, planId: taskId } : undefined;
     default:
@@ -572,7 +369,6 @@ function taskFields(taskId: string, rest: readonly string[]) {
   }
 }
 
-/** The steps after an agent's id, under the task an older link names it under or none: the agent itself, a worker, its Changes, a message, or, on no task, a page or an Inbox item of its own. */
 function agentFields(taskId: string | undefined, agentId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   const task = taskId === undefined ? {} : { planId: taskId };
@@ -594,7 +390,6 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
   return undefined;
 }
 
-/** A review thread's steps after its agent's Changes, `<view>/thread/<threadId>`; nothing for any other. */
 function threadFields(
   task: { readonly planId?: string },
   agentId: string,
@@ -606,7 +401,6 @@ function threadFields(
   return { kind: LINK_PLACE.PULL_REQUEST_THREAD, ...task, agentId, threadId, view };
 }
 
-/** The fields a link's steps after its workspace spell, for the schema to read; nothing where they name no place. */
 function placeFields(steps: readonly string[]) {
   const [step, id, ...rest] = steps;
   if (step !== undefined && TASK_STEPS.has(step)) {
@@ -647,7 +441,6 @@ function placeFields(steps: readonly string[]) {
   }
 }
 
-/** The Inbox's fields past its step: the Inbox itself, the Inbox narrowed to one task, `task/<taskId>`, or an item by its id alone, a picture in its words opening the item. */
 function inboxFields(step: string | undefined, rest: readonly string[]) {
   if (step === undefined) return { kind: LINK_PLACE.INBOX };
   if (TASK_STEPS.has(step)) {
@@ -661,7 +454,6 @@ function inboxFields(step: string | undefined, rest: readonly string[]) {
     : undefined;
 }
 
-/** The Admin place's fields past its step: its Overview, a section, an account's page, a workspace's, or a day's. */
 function adminFields(step: string | undefined, rest: readonly string[]) {
   if (step === undefined) return { kind: LINK_PLACE.ADMIN };
   const [id, ...more] = rest;
@@ -676,12 +468,10 @@ function adminFields(step: string | undefined, rest: readonly string[]) {
     : undefined;
 }
 
-/** Whether a link's first step is one a workspace can stand under: an id's or a slug's spelling, and no page of ours whatever its case. */
 function workspaceStep(workspace: string): boolean {
   return ID.test(workspace) && !RESERVED_WORKSPACE_SLUGS.has(workspace.toLowerCase());
 }
 
-/** A task's link, or a section's by its fragment, an empty one the task's own; the anchor read in lower case. */
 function taskLink(taskId: string, hash: string): LinkPlace | undefined {
   if (hash === "" || hash === "#") {
     return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.TASK, planId: taskId }));
@@ -690,7 +480,6 @@ function taskLink(taskId: string, hash: string): LinkPlace | undefined {
   return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.SECTION, planId: taskId, anchor }));
 }
 
-/** The path a place is written at under its workspace, each id percent-encoded. */
 function placePath(place: LinkPlace): readonly string[] {
   switch (place.kind) {
     case LINK_PLACE.HOME:
@@ -748,17 +537,10 @@ function placePath(place: LinkPlace): readonly string[] {
   }
 }
 
-/** An agent's path: under the workspace, or under the task a writer still names it under. */
 function agentPath(taskId: string | undefined, agentId: string): readonly string[] {
   return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.TASK, taskId, STEP.AGENT, agentId];
 }
 
-/**
- * The link a place is shared by, under its workspace by slug, or by id
- * where the slug is not yet known, by its ids alone: a section's with its
- * anchor as the fragment, the task's own where the anchor is empty, and a
- * comment thread's in the task's query.
- */
 export function linkOf(place: LinkPlace, workspace: string): string {
   const link = [LINK_ORIGIN, workspace, ...placePath(place)]
     .map((step, index) => (index === 0 ? step : encodedStep(step)))
@@ -772,11 +554,6 @@ export function linkOf(place: LinkPlace, workspace: string): string {
   return link;
 }
 
-/**
- * The place a link names and the workspace it was written under, by the
- * web's scheme or the desktop's, on our home or a host it once had;
- * nothing for any other address, or one naming no place.
- */
 export function readLink(target: string): ReadLink | undefined {
   if (target.length > LINK_BOUNDS.MAX_LINK_CHARS) return undefined;
   const url = parsedUrl(target);
@@ -787,13 +564,11 @@ export function readLink(target: string): ReadLink | undefined {
   if (first !== "" || workspace === undefined || workspace === "") return undefined;
   if (workspace.length > LINK_BOUNDS.MAX_STEP_CHARS) return undefined;
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
-  // A task's own link, or a section's, is read by the codec that writes a mention of either.
   const [step, written, ...rest] = after;
   const taskStep = step !== undefined && TASK_STEPS.has(step);
   const taskId = taskStep && written !== undefined ? taskStepOf(written) : written;
   const taskOwn = taskStep && taskId !== undefined && rest.length === 0;
   const placeSteps = taskStep && taskId !== undefined ? [step, taskId, ...rest] : after;
-  // Note that a task's link naming one of its comment threads opens the thread; any other query is the address's own, which the place has no use for.
   const thread = url.searchParams.getAll(COMMENT_QUERY);
   const place =
     taskOwn && thread.length === 1
@@ -804,28 +579,20 @@ export function readLink(target: string): ReadLink | undefined {
         ? taskLink(taskId, url.hash)
         : Option.getOrUndefined(readPlace(placeFields(placeSteps)));
   if (place === undefined) return undefined;
-  // Note that the workspace's own address, and its Board's, are a page of ours or a file's but for the workspace's step.
   if (WORKSPACE_PLACES.has(place.kind) && !workspaceStep(workspace)) return undefined;
   return { workspace, place };
 }
 
-/** The number a place names its task by in its link's workspace, `42` from `/task/42`, which the service finds the task by; nothing for a place naming its task by its id, or no task. */
 export function taskNumberOf(place: LinkPlace): number | undefined {
   return "planId" in place && place.planId !== undefined && TASK_NUMBER.test(place.planId)
     ? Number(place.planId)
     : undefined;
 }
 
-/** The place with its task named by the id the service found for its number, everything else as it was. */
 export function withTaskId(place: LinkPlace, taskId: string): LinkPlace {
   return "planId" in place ? { ...place, planId: taskId } : place;
 }
 
-/**
- * The step a task's links name it by: its number in its workspace, which
- * reads well and every reader finds by the slug (`taskNumberOf`), or its id
- * where no number is known, as from a service before tasks had one.
- */
 export function taskLinkStep(task: {
   readonly id: string;
   readonly number?: number | undefined;
@@ -833,9 +600,7 @@ export function taskLinkStep(task: {
   return task.number === undefined ? task.id : String(task.number);
 }
 
-/** The places of the account's own, which no workspace holds, so their links name none. */
 export const ACCOUNT_PLACE = {
-  /** A box's pending pairing, by the code it shows, which the member approves or denies. */
   CONNECT: "connect",
 } as const;
 
@@ -846,31 +611,20 @@ const accountPlaceSchema = EffectSchema.Struct({
   ),
 });
 
-/** A place of the account's own, by what finds it: a pairing's code as its eight letters. */
 export type AccountPlace = typeof accountPlaceSchema.Type;
 
-/** The kind of place of the account's own a link sends someone to. */
 export type AccountPlaceKind = AccountPlace["kind"];
 
-/** Whether a value is a place of the account's own, as one crossing from main to a window is checked. */
 export const isAccountPlace = EffectSchema.is(accountPlaceSchema);
 
-/** A link read that names no workspace: a place of the account's own. */
 export interface AccountLink {
   readonly place: AccountPlace;
 }
 
-/** A link of ours the system hands a window: a place under the workspace it was written in, or one of the account's own. */
 export type ShownLink = ReadLink | AccountLink;
 
-/** The step a pairing's link names its code after, as its path spells it. */
 const CONNECT_PREFIX = `${HOST_WIRE.CONNECT_PATH}/`;
 
-/**
- * The place of the account's own a link names, by the web's scheme or the
- * desktop's, on our home: a pairing's, its code read whatever its case
- * and dash; nothing for any other address.
- */
 function readAccountLink(target: string): AccountLink | undefined {
   if (target.length > LINK_BOUNDS.MAX_LINK_CHARS) return undefined;
   const url = parsedUrl(target);
@@ -882,21 +636,14 @@ function readAccountLink(target: string): AccountLink | undefined {
   return code === undefined ? undefined : { place: { kind: ACCOUNT_PLACE.CONNECT, code } };
 }
 
-/** The link a place of the account's own is shared by, under no workspace: a pairing's, its code as the box shows it. */
 function accountLinkOf(place: AccountPlace): string {
   return `${LINK_ORIGIN}${hostConnectPath(place.code)}`;
 }
 
-/** What a link the system hands a window names: a workspace's place, or the account's own; nothing for an address naming neither. */
 export function readShownLink(target: string): ShownLink | undefined {
   return readAccountLink(target) ?? readLink(target);
 }
 
-/**
- * A link spelled in the desktop's own scheme, which the system hands the
- * app: written again from the place it names, so nothing else the address
- * carried reaches the app; nothing for an address naming no place.
- */
 export function appLinkOf(target: string): string | undefined {
   const read = readShownLink(target);
   if (read === undefined) return undefined;
@@ -905,28 +652,23 @@ export function appLinkOf(target: string): string | undefined {
   );
 }
 
-/** A file's lines a GitHub page names, the first through the last, counted from one. */
 interface GitHubLines {
   readonly startLine: number;
   readonly endLine: number;
 }
 
-/** A pull request or an issue a page's address names: its repository, `owner/name`, and its number. */
 export interface NumberedAddress {
   readonly repository: string;
   readonly number: number;
 }
 
-/** A page of GitHub's the app reads, by what finds it: a pull request, an issue, or a file or a folder of a repository at a ref. */
 export type GitHubPage =
   | ({ readonly kind: typeof GITHUB_PAGE.PULL_REQUEST } & NumberedAddress)
   | ({ readonly kind: typeof GITHUB_PAGE.ISSUE } & NumberedAddress)
   | {
       readonly kind: typeof GITHUB_PAGE.FILE;
       readonly repository: string;
-      /** `HEAD`, or a commit; a written page may name a branch. */
       readonly ref: string;
-      /** From the repository's root, its steps joined by slashes. */
       readonly path: string;
       readonly lines?: GitHubLines;
     }
@@ -937,7 +679,6 @@ export type GitHubPage =
       readonly path: string;
     };
 
-/** Whether words are a repository's `owner/name` as GitHub spells one, within its bounds. */
 function isGitHubRepository(words: string): boolean {
   const { MAX_OWNER_CHARS, MAX_NAME_CHARS } = GITHUB_REPOSITORY_BOUNDS;
   return (
@@ -945,7 +686,6 @@ function isGitHubRepository(words: string): boolean {
   );
 }
 
-/** A repository's path read back from its steps, or nothing where a step's encoding is broken, a step is empty, or it climbs. */
 function repositoryPath(encoded: readonly string[]): string | undefined {
   const steps = encoded.map(decodedStep);
   const whole = steps.every(
@@ -954,7 +694,6 @@ function repositoryPath(encoded: readonly string[]): string | undefined {
   return whole && steps.length > 0 ? steps.join("/") : undefined;
 }
 
-/** The lines a file's fragment names at a commit; none where it names none or the ref is no commit, and `false` where it names lines no file has. */
 function fragmentLines(ref: string, hash: string): GitHubLines | false | undefined {
   const lines = LINES_FRAGMENT.exec(hash);
   if (lines === null || !COMMIT.test(ref)) return undefined;
@@ -963,7 +702,6 @@ function fragmentLines(ref: string, hash: string): GitHubLines | false | undefin
   return startLine >= 1 && startLine <= endLine ? { startLine, endLine } : false;
 }
 
-/** A file's or a folder's page past its repository at the ref named; nothing for a page naming no path, or lines no file has. */
 function repositoryPageOf(
   repository: string,
   step: string,
@@ -982,7 +720,6 @@ function repositoryPageOf(
   return lines === undefined ? file : { ...file, lines };
 }
 
-/** The steps of a page of GitHub's past its repository, and the repository, `owner/name`; nothing for any other address. */
 function gitHubStepsOf(target: string) {
   const url = parsedUrl(target);
   if (url === undefined || url.hostname !== GITHUB_HOST || !WEB_PROTOCOLS.has(url.protocol)) {
@@ -994,18 +731,11 @@ function gitHubStepsOf(target: string) {
   return { repository, step, rest, hash: url.hash };
 }
 
-/** Whether a page's steps name a file or a folder at a ref a reader reads one at, `HEAD` or a commit. */
 function namesRepositoryPage(step: string, ref: string | undefined): boolean {
   const kind = step === GITHUB_STEP[GITHUB_PAGE.FILE] || step === GITHUB_STEP[GITHUB_PAGE.FOLDER];
   return kind && ref !== undefined && (ref === GITHUB_DEFAULT_BRANCH || COMMIT.test(ref));
 }
 
-/**
- * The page of GitHub's an address is: a pull request's or any page under
- * it, an issue's, or a file's or a folder's on `HEAD` or a commit, a file's
- * lines with it at a commit; nothing for any other address, a branch's file
- * among them.
- */
 export function readGitHubPage(target: string): GitHubPage | undefined {
   const page = gitHubStepsOf(target);
   if (page === undefined) return undefined;
@@ -1021,12 +751,6 @@ export function readGitHubPage(target: string): GitHubPage | undefined {
   return repositoryPageOf(repository, step, rest, hash);
 }
 
-/**
- * The repository an address names a file or a folder of, on `HEAD` or a
- * commit, whether or not its path and lines read as one's, so a reader that
- * holds such a page of its own repository to a file can say a broken one
- * names nothing, rather than read it as a page of GitHub's.
- */
 export function gitHubFilePageRepositoryOf(target: string): string | undefined {
   const page = gitHubStepsOf(target);
   return page !== undefined && namesRepositoryPage(page.step, page.rest[0])
@@ -1034,7 +758,6 @@ export function gitHubFilePageRepositoryOf(target: string): string | undefined {
     : undefined;
 }
 
-/** The address a page of GitHub's is written by: each step percent-encoded, a ref's slashes kept, and a file's lines as its fragment. */
 export function gitHubPageLink(page: GitHubPage): string {
   const repository = `${GITHUB_ORIGIN}/${encodedPath(page.repository)}/${GITHUB_STEP[page.kind]}`;
   if (page.kind === GITHUB_PAGE.PULL_REQUEST || page.kind === GITHUB_PAGE.ISSUE) {
@@ -1046,11 +769,6 @@ export function gitHubPageLink(page: GitHubPage): string {
   return startLine === endLine ? `${at}#L${startLine}` : `${at}#L${startLine}-L${endLine}`;
 }
 
-/**
- * The pull request a page of GitHub's is, `acme/relay` and `42` from
- * `https://github.com/acme/relay/pull/42` or any page under it, its Files
- * tab say; nothing for any other address.
- */
 export function pullRequestAddressOf(target: string): NumberedAddress | undefined {
   const page = readGitHubPage(target);
   return page?.kind === GITHUB_PAGE.PULL_REQUEST
@@ -1058,11 +776,6 @@ export function pullRequestAddressOf(target: string): NumberedAddress | undefine
     : undefined;
 }
 
-/**
- * The issue a page of GitHub's is, `acme/relay` and `7` from
- * `https://github.com/acme/relay/issues/7`; nothing for any other address,
- * the repository's list of issues among them.
- */
 export function issueAddressOf(target: string): NumberedAddress | undefined {
   const page = readGitHubPage(target);
   return page?.kind === GITHUB_PAGE.ISSUE
@@ -1070,11 +783,6 @@ export function issueAddressOf(target: string): NumberedAddress | undefined {
     : undefined;
 }
 
-/**
- * The identifier of the issue a page of Linear's is, `ENG-123` from
- * `https://linear.app/acme/issue/ENG-123/its-title`, in capitals; nothing
- * for any other address, another of Linear's pages among them.
- */
 export function readLinearIssue(target: string): string | undefined {
   const url = parsedUrl(target);
   if (url === undefined || url.hostname !== LINEAR_HOST) return undefined;
@@ -1084,7 +792,6 @@ export function readLinearIssue(target: string): string | undefined {
   return LINEAR_IDENTIFIER.test(upper) ? upper : undefined;
 }
 
-/** A `mention://` or `luke://` address read: its host, its path's steps still percent-encoded, and its fragment and query as written. */
 export interface SchemeLink {
   readonly host: string;
   readonly steps: readonly string[];
@@ -1092,7 +799,6 @@ export interface SchemeLink {
   readonly search: string;
 }
 
-/** The parts of an address in the app's own form, `mention://` or the `luke://` written before it; nothing for any other address. */
 export function readSchemeLink(target: string): SchemeLink | undefined {
   const url = parsedUrl(target);
   if (url === undefined || !SCHEME_PROTOCOLS.has(url.protocol)) return undefined;
@@ -1100,12 +806,10 @@ export function readSchemeLink(target: string): SchemeLink | undefined {
   return { host: url.host, steps, hash: url.hash, search: url.search };
 }
 
-/** An address in the app's own form, `mention://<host>/<path>`, its path already spelled as its host reads it. */
 export function schemeLinkOf(host: SchemeLinkHost, path: string): string {
   return `${MENTION_PROTOCOL}//${host}/${path}`;
 }
 
-/** Words as a markdown link's label holds them: each control character, a line break among them, a space, and each bracket and backslash escaped. */
 export function escapedLabel(words: string): string {
   const oneLine = [...words]
     .map((character) => {
@@ -1116,12 +820,10 @@ export function escapedLabel(words: string): string {
   return oneLine.replace(LABEL_SPECIAL, (special) => `\\${special}`);
 }
 
-/** A markdown link's label as written read back, its escaped brackets and backslashes as themselves. */
 export function readLabel(written: string): string {
   return written.replace(LABEL_ESCAPE, "$1");
 }
 
-/** An address as a markdown link's target holds it: each parenthesis, angle bracket, and space percent-encoded, so it stays one target and reads back the same. */
 export function linkTarget(address: string): string {
   return address.replace(TARGET_BREAKING, (special) => {
     if (special === "(") return "%28";
@@ -1130,12 +832,10 @@ export function linkTarget(address: string): string {
   });
 }
 
-/** A link written into markdown, `[label](target)`, its label escaped and its target kept one. */
 export function markdownLink(label: string, target: string): string {
   return `[${escapedLabel(label)}](${linkTarget(target)})`;
 }
 
-/** A mention written into markdown, `[@name](target)`, as `markdownLink` writes a link. */
 export function mentionMarkdownLink(name: string, target: string): string {
   return markdownLink(`${MENTION_SIGIL}${name}`, target);
 }

@@ -7,13 +7,6 @@ import {
   isUploadOf,
 } from "./github-image.js";
 
-/**
- * github-image.test.ts -- an upload in GitHub's rendering is asked for by its
- * asset's id, however GitHub spelled it, its signature never; a public image
- * on GitHub's image proxy as it stands; and anything else, or anything with
- * credentials in it, is no image the window draws. Synthetic addresses.
- */
-
 const ID = "4f2c1a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
 
 test("an upload is asked for by its asset's id, however GitHub spelled it", () => {

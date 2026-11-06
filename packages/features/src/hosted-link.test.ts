@@ -37,7 +37,6 @@ function invalidToken(): Response {
   return jsonResponse({ error: HOSTED_API_ERROR.INVALID_TOKEN }, HTTP_STATUS.UNAUTHORIZED);
 }
 
-/** An account whose token and holder the test moves, renewing to the next of each. */
 function account(tokens: (string | undefined)[], holders: string[] = ["account-1"]) {
   let token = tokens.shift();
   let holder = holders.shift();
@@ -52,28 +51,23 @@ function account(tokens: (string | undefined)[], holders: string[] = ["account-1
   });
 }
 
-/** The models procedure asked through the link under the credential and deadline given. */
 function askModels(credential: CallCredential, deadline?: HostedDeadline) {
   const hosted = hostedClient({ baseUrl: `${BASE_URL}/`, credential });
   return askHosted(hosted.models.list, undefined, deadline);
 }
 
-/** A trace id as Effect's tracer mints one: 32 lowercase hex characters. */
 const TRACE_ID = /^[0-9a-f]{32}$/;
 
-/** The trace a failure traveled under, checked to be a trace id, since every ask mints its own. */
 function traceOf(failure: HostedFailure): string {
   const traceId = failure.traceId ?? "";
   assert.match(traceId, TRACE_ID);
   return traceId;
 }
 
-/** A random draw that always lands on `value`, so an ask's sampling is decided by the test. */
 function drawing(value: number) {
   return { nextDoubleUnsafe: () => value, nextIntUnsafe: () => 0 };
 }
 
-/** Lets the link's promise steps run until the client has been asked, so the deadline is armed before the clock moves. */
 function untilAsked(requests: readonly RecordedRequest[]): Effect.Effect<void> {
   return Effect.gen(function* () {
     while (requests.length === 0) yield* Effect.yieldNow;

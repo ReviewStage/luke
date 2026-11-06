@@ -41,38 +41,8 @@ import {
 } from "./task-wire.js";
 import { transcriptWindowPartRowSchema, transcriptWindowRowSchema } from "./transcript-window.js";
 
-/**
- * live-wire.ts -- a read the desktop follows over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
- *
- * Neon's guide is followed as written: the service builds each statement
- * with the account's id in it and seals it ("Sealing authorized queries"),
- * the desktop fetches the sealed statements from an endpoint ("Fetch from an
- * API endpoint"), subscribes to them at the address the answer names, and
- * renews them before they expire ("Renew the sealed query"). A sealed
- * statement is a short-lived bearer: it is held where the account's own
- * bearer is, in the desktop's host, and never carried on to a window.
- *
- * The rows are the wire's own entries, since the service writes each live
- * statement to select every column under the key the wire reads it by and
- * each instant as epoch milliseconds. Realtime keeps no order, so the
- * reader orders them as the held read does.
- */
-
-/**
- * The address a live read is answered at where it was read rather than
- * sealed: the reader asked to poll, or Realtime could not seal it. Each
- * statement then carries its rows, and nothing subscribes.
- */
 export const LIVE_POLL_URL = "vespin-poll:";
 
-/**
- * How a reader asks for a live read's rows inline rather than sealed, while
- * Realtime fails it; where they last stood (`AFTER`); for a read whose
- * parts it follows by cursor, the cursor it holds them at (`CURSOR`), past
- * which those parts are answered rather than whole; and, for a read that
- * answers deltas, the sync id it holds every row at (`SYNC`), past which it
- * is answered what moved alone, held until something does.
- */
 export const LIVE_POLL = {
   QUERY: "poll",
   ON: "true",
@@ -81,60 +51,28 @@ export const LIVE_POLL = {
   SYNC: "sync",
 } as const;
 
-/**
- * The query every live read names the account it was started for under, as
- * Neon's guide says a page sends its user ("When the session changes"): the
- * service answers a session of anyone else, or a read naming none, as
- * signed out.
- */
 export const LIVE_USER_QUERY = "userId";
 
-/** A live read the service refused as signed out: no session, or one of another account than the read names. */
 export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
 
 const LIVE_SOCKET_PATH = "/api/live/socket";
 
-/**
- * The one WebSocket a signed-in host sends its live polls over, in place of
- * a held request per read. It is no subscription: an ask is one poll, named
- * by the path and query (`READ_PREFIX` onward) its HTTP poll would GET, and
- * its answer is that poll's status and body as the HTTP poll would answer
- * them, so a read's key, `after`, and `cursor` travel as they always have
- * and a new socket resumes nothing. The socket is opened under the account's
- * credential, the desktop's bearer or the page's cookie
- * (`@repo/service/http/relay-upgrade`), which every ask is answered under,
- * whatever its frame says.
- *
- * Every frame is a JSON text frame. An ask refuses a key it did not name,
- * and the service closes the socket on one that does not read; an answer is
- * read dropping any key a newer service added.
- */
 export const LIVE_SOCKET = {
   PATH: LIVE_SOCKET_PATH,
-  /** Where the path of every read an ask names begins: the socket's own directory, which every live read's path shares (`service-paths.ts`). */
   READ_PREFIX: LIVE_SOCKET_PATH.slice(0, LIVE_SOCKET_PATH.lastIndexOf("/") + 1),
 } as const;
 
-/** The most characters an ask's path may carry: a read's ids, account, digest, and cursor are well under it. */
 const LIVE_SOCKET_PATH_MAX_CHARS = 8 * 1024;
 
-/** Any origin, for reading a path alone: an ask's origin is the service's own, never its frame's. */
 const PATH_BASE = "http://live.invalid";
 
-/**
- * Whether a path names a live read: under `READ_PREFIX` as written, which
- * leaves it no scheme or host of its own, and once its dot segments are
- * resolved, encoded ones among them.
- */
 function isLiveReadPath(path: string): boolean {
   if (!path.startsWith(LIVE_SOCKET.READ_PREFIX) || !URL.canParse(path, PATH_BASE)) return false;
   return new URL(path, PATH_BASE).pathname.startsWith(LIVE_SOCKET.READ_PREFIX);
 }
 
-/** Which ask an answer is to: the host's own count, unique among its socket's open asks. */
 const liveSocketAskIdSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
-/** One poll a host asks over its socket: the path and query its HTTP poll would GET. */
 export const liveSocketAskSchema = EffectSchema.Struct({
   id: liveSocketAskIdSchema,
   path: EffectSchema.String.check(
@@ -145,7 +83,6 @@ export const liveSocketAskSchema = EffectSchema.Struct({
 
 export type LiveSocketAsk = typeof liveSocketAskSchema.Type;
 
-/** One poll answered over the socket: the status and body its HTTP poll would have answered, the body as the text it was. */
 export const liveSocketAnswerSchema = EffectSchema.Struct({
   id: liveSocketAskIdSchema,
   status: EffectSchema.Int,
@@ -154,13 +91,6 @@ export const liveSocketAnswerSchema = EffectSchema.Struct({
 
 export type LiveSocketAnswer = typeof liveSocketAnswerSchema.Type;
 
-/**
- * Where a polled read's rows stand as one value: each part's digest, in
- * the parts' name order. A reader sends the one it last saw as `after`, and
- * the service holds the poll until the rows move past it. Note that a part
- * answered past a cursor (`cursor`) is left out, because its reader holds it
- * at the cursor instead, and its rows are only what moved past it.
- */
 export function liveDigestOf(
   queries: Readonly<Record<string, { readonly digest?: string; readonly cursor?: unknown }>>,
 ): string | undefined {
@@ -171,90 +101,33 @@ export function liveDigestOf(
   return digests.every((digest) => digest !== undefined) ? digests.join(",") : undefined;
 }
 
-/**
- * Where a part a reader follows by cursor stands: the cursor its rows were
- * read past, absent where they are its rows whole, as for a reader whose
- * cursor a rewind left behind; and the cursor to read past next, where
- * every row read stands at least.
- */
 const liveCursorAnswerSchema = EffectSchema.Struct({
   past: EffectSchema.optionalKey(EffectSchema.String),
   next: EffectSchema.String,
 });
 
-/**
- * Where a part a reader follows by sync id stands: the id its rows were read
- * past, absent where they are its rows whole, as for a reader too far
- * behind; and the id to read past next, below which every write has ended
- * and shows in the rows a reader holds once it joins these on.
- */
 const liveSyncAnswerSchema = EffectSchema.Struct({
   past: EffectSchema.optionalKey(EffectSchema.String),
   next: EffectSchema.String,
 });
 
-/** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
-  /** When the seal expires, in epoch milliseconds; the reader renews it before. */
   expiresAt: countedNumber,
-  /**
-   * The statement's rows as they stand, answered only at `LIVE_POLL_URL`.
-   * They travel as JSON text, since a row has no wire form until its
-   * reader decodes it.
-   */
   rows: EffectSchema.optionalKey(
     EffectSchema.fromJsonString(EffectSchema.Array(EffectSchema.Unknown)),
   ),
-  /**
-   * Where the statement's rows stand, answered only at `LIVE_POLL_URL`: a
-   * poll held past `after` that ends with nothing moved carries the digest
-   * and no rows.
-   */
   digest: EffectSchema.optionalKey(EffectSchema.String),
-  /**
-   * The ids of the transactions whose writes woke the held poll this
-   * answers, on every part it answers, since each was read after them: none
-   * where nothing woke it but its clock. A writer confirms a write once the
-   * read that shows it carries the write's txid.
-   */
   txids: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
-  /**
-   * The snapshot the statement's rows, or its digest, were read at, as
-   * Postgres spells one (`xmin:xmax:xip,…`), answered only at
-   * `LIVE_POLL_URL`: a writer confirms a write once every part of an answer
-   * was read at a snapshot its transaction is visible in, whatever woke the
-   * poll. Absent from a service before it.
-   */
   snapshot: EffectSchema.optionalKey(EffectSchema.String),
-  /**
-   * Where a part the reader follows by cursor (`LIVE_POLL.CURSOR`) stands,
-   * answered only to a reader that named one: its rows are then only those
-   * written or amended past `past`, which the reader joins onto the rows it
-   * holds, or its rows whole where `past` is absent.
-   */
   cursor: EffectSchema.optionalKey(liveCursorAnswerSchema),
-  /**
-   * Where the part stands for a reader that named a sync id
-   * (`LIVE_POLL.SYNC`), answered only to such a reader: its rows are then
-   * only those past `past` moved, which replace the reader's rows of the
-   * same id, or its rows whole where `past` is absent.
-   */
   sync: EffectSchema.optionalKey(liveSyncAnswerSchema),
-  /** The ids of the part's rows that moved past `sync.past` and stand no longer for the reader, which it drops; answered only beside `sync.past`. */
   gone: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
 
-/**
- * What waits on the developer across the account, sealed for following: the
- * address to subscribe at, and one statement per part of the account
- * inbox's answer (`account-inbox-wire.ts`). The service answers
- * `unavailable` where its deployment's Realtime is misconfigured, which the
- * desktop answers by asking again.
- */
 export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
@@ -262,7 +135,6 @@ export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
     planless: sealedLiveQuerySchema,
     plans: sealedLiveQuerySchema,
     automations: sealedLiveQuerySchema,
-    /** Each agent with no task holding items; absent from a service before it, as the held read's `agents` is. */
     agents: EffectSchema.optionalKey(sealedLiveQuerySchema),
     failedRuns: sealedLiveQuerySchema,
   }),
@@ -270,19 +142,16 @@ export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
 
 export type AccountInboxLiveAnswer = typeof accountInboxLiveAnswerSchema.Type;
 
-/** An item of an agent with no plan as its row delivers it: the workspace as the column holds it, null for none. */
 const tasklessLiveRowSchema = EffectSchema.Struct({
   ...accountTasklessEntrySchema.fields,
   workspaceId: EffectSchema.NullOr(EffectSchema.String),
 });
 
-/** An agent with no plan holding items as its row delivers it: the workspace as the column holds it, null for none. */
 const agentHoldingLiveRowSchema = EffectSchema.Struct({
   ...accountInboxAgentSchema.fields,
   workspaceId: EffectSchema.NullOr(EffectSchema.String),
 });
 
-/** Each part's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const accountInboxLiveRowSchemas = {
   items: accountInboxEntrySchema,
   planless: tasklessLiveRowSchema,
@@ -292,7 +161,6 @@ export const accountInboxLiveRowSchemas = {
   failedRuns: accountFailedRunSchema,
 } as const;
 
-/** Every part's rows as one delivery carries them, decoded whole where they arrive. */
 export const accountInboxLiveRowsSchema = EffectSchema.Struct({
   items: EffectSchema.Array(accountInboxLiveRowSchemas.items),
   planless: EffectSchema.Array(accountInboxLiveRowSchemas.planless),
@@ -302,13 +170,10 @@ export const accountInboxLiveRowsSchema = EffectSchema.Struct({
   failedRuns: EffectSchema.Array(accountInboxLiveRowSchemas.failedRuns),
 });
 
-/** Each part's rows, decoded. */
 export type AccountInboxLiveRows = typeof accountInboxLiveRowsSchema.Type;
 
-/** How far back a run that failed to start is still carried to its automation's owner. */
 export const FAILED_RUN_WINDOW_MILLIS = 7 * 24 * 60 * 60 * 1000;
 
-/** The latest changed first, and by id among those changed at one instant, as the held read orders them. */
 function latestFirst<Row extends { readonly updatedAt: number }>(
   key: (row: Row) => string,
 ): (a: Row, b: Row) => number {
@@ -319,7 +184,6 @@ function latestFirst<Row extends { readonly updatedAt: number }>(
   };
 }
 
-/** A short, stable digest of a text: cyrb53, which needs no platform hash, since the host also runs in a browser tab. */
 function digest(text: string): string {
   let first = 0xdeadbeef;
   let second = 0x41c6ce57;
@@ -335,14 +199,6 @@ function digest(text: string): string {
   return (4294967296 * (2097151 & second) + (first >>> 0)).toString(16);
 }
 
-/**
- * The cursor of a live answer: a digest of what the held read's cursor
- * stamps, each item's id, revision, instant, read state, who it waits
- * on, so its task's assignee changing moves it, whether it asks, and until
- * when its reminder comes due, and
- * each failed run, so an answer whose cursor is the last one's moved nothing
- * a reader announces or counts, as a held answer's does.
- */
 function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): string {
   const itemStamp = (item: {
     readonly id: string;
@@ -370,14 +226,6 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
   );
 }
 
-/**
- * The account inbox's answer as the live rows stand at `now`: the parts
- * ordered as the held read orders them, an item with no workspace said as
- * none, and the failed runs kept to the last week, which the held read
- * bounds in its statement and a live statement cannot. Its cursor is a
- * digest of what it holds (`liveCursorOf`), which moves wherever the held
- * read's would, though the two are never compared.
- */
 export function accountInboxOfLiveRows(
   rows: AccountInboxLiveRows,
   now: number,
@@ -407,12 +255,6 @@ export function accountInboxOfLiveRows(
   return { ...answer, cursor: liveCursorOf(answer), readAt: now };
 }
 
-/**
- * When the earliest failed run the rows carry at `now` ages out of the last
- * week, in epoch milliseconds; none where they carry none. Nothing a live
- * statement delivers says so, since Realtime follows no clock, so the
- * follower builds the answer again then.
- */
 export function nextFailedRunExpiry(
   failedRuns: readonly AccountFailedRun[],
   now: number,
@@ -423,19 +265,6 @@ export function nextFailedRunExpiry(
   return expiries.length === 0 ? undefined : Math.min(...expiries);
 }
 
-/**
- * An open task's description, pages, calls, and agents' code sealed for following: the
- * address, and one statement a part, each a mark that moves as its rows do
- * and carries none of their words: the description's last save (`plan`), and the
- * pages agents showed (`pages`), the calls about the task (`calls`), and the
- * code its agents showed (`code`), which this build no longer reads, since
- * it holds a task's pages on their own read (`LIVE_READ.PAGES`), but a
- * released desktop still requires. The desktop reads the description again once its
- * mark moves, rather than when a call's activity or end suggests it might have. The
- * service answers `not-found` for a task the account does not reach, and
- * `unavailable` where its deployment's Realtime is misconfigured, which the
- * desktop answers by asking again.
- */
 export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
@@ -448,25 +277,21 @@ export const taskRecordLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskRecordLiveAnswer = typeof taskRecordLiveAnswerSchema.Type;
 
-/** The task's description as its row delivers it: when its text was last saved, epoch milliseconds, as the open document's `updatedAt` reads it. */
 const taskDescriptionLiveRowSchema = EffectSchema.Struct({
   taskId: EffectSchema.String,
   savedAt: EffectSchema.Finite,
 });
 
-/** One page shown on the task as its row delivers it: its newest version's number. */
 const taskPageLiveRowSchema = EffectSchema.Struct({
   pageId: EffectSchema.String,
   version: EffectSchema.Finite,
 });
 
-/** One journal of an agent on the task as its row delivered it while agents showed code: the ids of the calls that showed it, as JSON text. None is delivered now. */
 const taskCodeLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   calls: EffectSchema.String,
 });
 
-/** The task's description, pages, and agents' code as Realtime delivers them, a part's rows each, of which this build compares the description's alone: none of any for a task the account no longer reaches. */
 export const taskRecordLiveRowsSchema = EffectSchema.Struct({
   description: EffectSchema.Array(taskDescriptionLiveRowSchema),
   pages: EffectSchema.Array(taskPageLiveRowSchema),
@@ -475,28 +300,9 @@ export const taskRecordLiveRowsSchema = EffectSchema.Struct({
 
 export type TaskRecordLiveRows = typeof taskRecordLiveRowsSchema.Type;
 
-/**
- * A coding agent's transcript, or one of its workers', sealed for
- * following: the address, and the statements a page past the reader's
- * cursor is read from, which move where the service's held read would wake
- * (`packages/service/src/agents/coder-host/transcript-live.ts`): its
- * messages, its turns, its conversation's journal revision and title, the
- * agent's title, its workers' titles and delegations, its queue, and a
- * device agent's newest launch line; and its newest
- * messages themselves as rows (`window`, `windowParts`), which the reader
- * draws as they arrive; to a reader that names a cursor, only those written
- * or amended past it, which it joins by message id onto the ones it holds.
- * What stands beside them on a page, the agent's
- * status, cost, workers, and where its launch stands, is still read from
- * the service, once the turns, titles, workers, queue, or launch move. The service answers
- * `not-found` for an agent the account does not reach, and `unavailable`
- * where its deployment's Realtime is misconfigured, which the desktop
- * answers by asking again.
- */
 export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
-    /** How many messages the transcript holds and its newest: still sealed for released desktops, which read a page again as it moves; the host follows the window's rows instead. */
     messages: sealedLiveQuerySchema,
     turns: sealedLiveQuerySchema,
     conversation: sealedLiveQuerySchema,
@@ -504,16 +310,13 @@ export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
     workers: sealedLiveQuerySchema,
     window: sealedLiveQuerySchema,
     windowParts: sealedLiveQuerySchema,
-    /** The agent's queue as its revision, which every change to the queue moves on; absent from a service older than the queue. */
     queueRevision: EffectSchema.optionalKey(sealedLiveQuerySchema),
-    /** A device agent's newest launch line, as its claim, its step, and its settling stand; absent from a service older than it. */
     launch: EffectSchema.optionalKey(sealedLiveQuerySchema),
   }),
 });
 
 export type AgentTranscriptLiveAnswer = typeof agentTranscriptLiveAnswerSchema.Type;
 
-/** A transcript's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   turns: EffectSchema.Array(
     EffectSchema.Struct({
@@ -545,11 +348,9 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   ),
   window: EffectSchema.Array(transcriptWindowRowSchema),
   windowParts: EffectSchema.Array(transcriptWindowPartRowSchema),
-  /** The agent's queue as its revision, a row at most, none before its first change and from a service older than the queue. */
   queueRevision: EffectSchema.optionalKey(
     EffectSchema.Array(EffectSchema.Struct({ revision: countedNumber })),
   ),
-  /** A device agent's newest launch line, a row at most: its id, the step its host reported, and whether it is claimed and settled; none for an agent in the cloud and on a worker's transcript, and absent from a service older than it. */
   launch: EffectSchema.optionalKey(
     EffectSchema.Array(
       EffectSchema.Struct({
@@ -562,38 +363,16 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   ),
 });
 
-/** The query a transcript read is asked at once by rather than held, and the one word it takes. */
 export const TRANSCRIPT_NOW_QUERY = { WAIT: "wait", NONE: "none" } as const;
 
-/**
- * A page of the transcript read at once rather than held, for a reader
- * following its live statements: the page the held read answers, and
- * whether that read would have held on it for more, which is when the
- * reader waits for the statements to move, or for the clock to reach an
- * edge the rows cannot say, before it reads again.
- */
 export const transcriptNowAnswerSchema = EffectSchema.Struct({
   ...agentMessagesAnswerSchema.fields,
   holds: EffectSchema.Boolean,
-  /**
-   * Where it would hold, how many milliseconds from now the clock alone may
-   * end that, which no row changing says: an agent passing the grace its
-   * first turn had to land in, or the window of a title it waits on
-   * closing. The reader reads again then. Absent where only a row may, and
-   * from a service older than it.
-   */
   wakeIn: EffectSchema.optionalKey(countedNumber),
 });
 
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;
 
-/**
- * The commands the account's agents queued for its Mac, of the kinds it
- * runs, sealed for following: the address, and the commands no Mac has
- * claimed yet as one statement. The Mac claims each it hears of
- * (`mac-command-wire.ts`), on the service's clock, so a command left waiting
- * too long is refused there.
- */
 export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ commands: sealedLiveQuerySchema }),
@@ -603,22 +382,15 @@ export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
 
 const [macShellCommandSchema] = macCommandSchema.members;
 
-/**
- * One unclaimed command as its row delivers it: the command of its kind, and
- * when it was queued in epoch milliseconds. Note that a column its kind
- * leaves null is read past, as every key a struct does not name is.
- */
 const macCommandLiveRowSchema = EffectSchema.Struct({
   ...macShellCommandSchema.fields,
   queuedAt: countedNumber,
 });
 
-/** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const macCommandsLiveRowsSchema = EffectSchema.Struct({
   commands: EffectSchema.Array(macCommandLiveRowSchema),
 });
 
-/** The unclaimed commands, the earliest queued first, so the Mac claims them in the order they were asked for. */
 export function macCommandsOfLiveRows(
   rows: typeof macCommandsLiveRowsSchema.Type,
 ): readonly MacCommand[] {
@@ -636,16 +408,6 @@ export function macCommandsOfLiveRows(
     );
 }
 
-/**
- * One plan's inbox, or one agent's, sealed for following: the address, and
- * its open items and its latest settled ones as one statement, as the held
- * read reads them, so an item settling moves in one change, with their
- * threads' latest messages and the files their answers and messages
- * carried as two more, which the reader joins to them. The service answers
- * `not-found` for a plan or agent the account does not reach, and
- * `unavailable` where its deployment's Realtime is misconfigured, which the
- * desktop answers by asking again.
- */
 export const scopeInboxLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
@@ -657,7 +419,6 @@ export const scopeInboxLiveAnswerSchema = EffectSchema.Struct({
 
 export type ScopeInboxLiveAnswer = typeof scopeInboxLiveAnswerSchema.Type;
 
-/** One message of an item's thread as its row carries it: its item, the member by id and name, either null where none stands, and the key the reader's own was sent under. */
 const inboxLiveMessageSchema = EffectSchema.Struct({
   id: inboxMessageSchema.fields.id,
   itemId: EffectSchema.String,
@@ -667,27 +428,22 @@ const inboxLiveMessageSchema = EffectSchema.Struct({
   text: EffectSchema.String,
   ask: EffectSchema.NullOr(inboxReadAskSchema),
   answers: EffectSchema.NullOr(inboxAnswersSchema),
-  /** The key the reader's own message was sent under; null on every other, and absent from a service before it. */
   clientKey: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   createdAt: countedNumber,
 });
 
-/** One file as its row carries it: the message that carried it, and where it stands among its files. */
 const inboxLiveFileSchema = EffectSchema.Struct({
   ...inboxAnswerFileSchema.fields,
   messageId: EffectSchema.NullOr(EffectSchema.String),
   position: EffectSchema.NullOr(countedNumber),
 });
 
-/** An item's fields bar the key a hosted answer still fills for a desktop from before the rename, which a live row carries for that desktop alone. */
 const { snoozedUntil: _beforeRemindAt, ...liveItemFields } = inboxItemSchema.fields;
 
-/** One item as its row delivers it: what an item leaves out where it holds nothing is null. */
 const inboxLiveRowSchema = EffectSchema.Struct({
   ...liveItemFields,
   startedBy: EffectSchema.String,
   startedByName: EffectSchema.NullOr(EffectSchema.String),
-  /** Absent from a service before it, as the item's own `waitsOn` is. */
   waitsOn: EffectSchema.optionalKey(EffectSchema.String),
   waitsOnName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   answeredBy: EffectSchema.NullOr(EffectSchema.String),
@@ -698,11 +454,9 @@ const inboxLiveRowSchema = EffectSchema.Struct({
   openAskMessageId: EffectSchema.NullOr(EffectSchema.String),
   settledAt: EffectSchema.NullOr(countedNumber),
   unread: EffectSchema.Boolean,
-  /** Null where the reader set no reminder on the item; absent from a service before reminders. */
   remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
-/** A scope's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const scopeInboxLiveRowsSchema = EffectSchema.Struct({
   items: EffectSchema.Array(inboxLiveRowSchema),
   messages: EffectSchema.Array(inboxLiveMessageSchema),
@@ -714,7 +468,6 @@ type InboxLiveRow = typeof inboxLiveRowSchema.Type;
 type InboxLiveMessage = typeof inboxLiveMessageSchema.Type;
 type InboxLiveFile = typeof inboxLiveFileSchema.Type;
 
-/** The rows grouped under a key each names, a row naming none left out. */
 function groupedBy<Row>(
   rows: readonly Row[],
   keyOf: (row: Row) => string | null,
@@ -728,14 +481,12 @@ function groupedBy<Row>(
   return groups;
 }
 
-/** Files in the order they were attached, each as the wire names it, as the held read lists them. */
 function filesInOrder(files: readonly InboxLiveFile[] | undefined) {
   return (files ?? [])
     .toSorted((one, other) => (one.position ?? Infinity) - (other.position ?? Infinity))
     .map(({ attachmentId, name, mediaType }) => ({ attachmentId, name, mediaType }));
 }
 
-/** A message as the wire carries it, the member named where their account stands, no files where it carried none, and its ask as it stands on the item, as the held read writes it. */
 function inboxMessageOfLiveRow(
   row: InboxLiveMessage,
   filesOf: ReadonlyMap<string, readonly InboxLiveFile[]>,
@@ -759,11 +510,6 @@ function inboxMessageOfLiveRow(
   };
 }
 
-/**
- * An item's thread from its delivered messages, oldest first, as the held
- * read carries it: its latest `MAX_MESSAGES_READ` messages, with its first
- * and the one whose ask it holds open however many came since.
- */
 function threadOf(
   messages: readonly InboxLiveMessage[],
   openAskMessageId: string | null,
@@ -776,13 +522,11 @@ function threadOf(
   );
 }
 
-/** A thread's messages oldest first, as the held read orders them. */
 function threadOrder(one: InboxLiveMessage, other: InboxLiveMessage): number {
   if (one.createdAt !== other.createdAt) return one.createdAt - other.createdAt;
   return one.id < other.id ? -1 : one.id > other.id ? 1 : 0;
 }
 
-/** A row as the wire carries its item, its thread and its files joined to it, each absent field left out rather than null, as the held read writes it. */
 function inboxItemOfLiveRow(
   row: InboxLiveRow,
   threads: ReadonlyMap<string, readonly InboxLiveMessage[]>,
@@ -833,7 +577,6 @@ function inboxItemOfLiveRow(
   };
 }
 
-/** Items as the held read orders a scope's: every open one, then the settled, each the latest changed first. */
 export function inboxInOrder(items: readonly InboxItem[]): readonly InboxItem[] {
   const ordered = latestFirst((item: InboxItem) => item.id);
   return [
@@ -842,127 +585,63 @@ export function inboxInOrder(items: readonly InboxItem[]): readonly InboxItem[] 
   ];
 }
 
-/** The scope's items as the held read answers them: every open one, then the latest settled, each the latest changed first. */
 export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
   const threads = groupedBy(rows.messages, (message) => message.itemId);
   const messageFilesOf = groupedBy(rows.files, (file) => file.messageId);
   return inboxInOrder(rows.items.map((row) => inboxItemOfLiveRow(row, threads, messageFilesOf)));
 }
 
-/**
- * Each read moved onto the host's app state, by the one name that
- * identifies it from the service's live query (`defineLiveQuery`) to the
- * panel's `useHostRead`.
- */
 export const LIVE_READ = {
-  /** The account's preferences row, its default agent, chapters model, and Slack notifications as stored, by the account: the service's `accountPreferences` query, held for the signed-in session into the sync engine's pool, every write to one drawn over it the moment it is asked. */
   ACCOUNT_PREFERENCES: "accountPreferences",
-  /** The run of an automation that started one agent, by the agent: the service's `agentOriginLive` query, held for the windows that show the agent's page and a few they showed lately. */
   AGENT_ORIGINS: "agentOrigins",
-  /** Every inbox item the account reaches. */
   INBOX_ITEMS: "inboxItems",
-  /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
   HOLDER_INBOX: "holderInbox",
-  /** The skills the account sees in one workspace, the workspace's and its own, by the workspace: the service's `installedSkills` query, held for the windows that draw Settings › Skills and a few they drew lately. */
   INSTALLED_SKILLS: "installedSkills",
-  /** Where each of the account's integrations stands, by the account: the service's `integrationStatusesLive` query, with GitHub's standing fetched beside it, held while a window draws an integration. */
   INTEGRATIONS: "integrationStatuses",
-  /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
   INTEGRATION_TOOLS: "integrationTools",
-  /** What GitHub holds of the pull request or issue a link names, by the workspace it is read through and then the link's own address: fetched by the host while a chip holds it. */
   LINK_STANDINGS: "linkStandings",
-  /** One workspace's memories, by the workspace: the service's `workspaceMemories` query, held for the windows that draw Settings › Memory and a few they drew lately. */
   MEMORIES: "workspaceMemories",
-  /** The models a coding agent may run on as the account is offered them, and its devices a task may run on, by the account: fetched by the host while a window holds it, and asked again as a window comes forward, as the account's provider keys move, and every `MODEL_CATALOG_TTL`. */
   MODELS: "models",
-  /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
-  /** The account's own provider keys and plans, as hints and statuses and never a key, by the account: fetched by the host while a window holds it, and laid from each write's own answer. */
   PROVIDER_KEYS: "providerKeys",
-  /** One agent's pull request as its Pull request tab draws it, by the agent and then the pull request's number, or the agent's own: fetched by the host while a window holds it. */
   PULL_REQUEST: "pullRequest",
-  /** The account's own GitHub token as its login, hint, and status, never the token, by the account: fetched by the host while a window holds it, and laid from each save's and removal's own answer. */
   GITHUB_TOKEN: "githubToken",
-  /** One agent's pull request's newest chapters, by the agent and the pull request's number: the service's `pullRequestChaptersLive` query. */
   PULL_REQUEST_CHAPTERS: "pullRequestChapters",
-  /** The checks on one agent's pull request's head, keyed and fetched as `PULL_REQUEST`. */
   PULL_REQUEST_CHECKS: "pullRequestChecks",
-  /** One agent's pull request's conversation and where its reviewers stand, keyed and fetched as `PULL_REQUEST`. */
   PULL_REQUEST_CONVERSATION: "pullRequestConversation",
-  /** What one agent published, its pull request as the service last read it from GitHub, keyed and fetched as `PULL_REQUEST`. */
   PULL_REQUEST_PUBLISHED: "pullRequestPublished",
-  /** Which of one agent's pull request's files the member marked viewed on GitHub, read on their own GitHub sign-in, keyed and fetched as `PULL_REQUEST`. */
   PULL_REQUEST_VIEWED: "pullRequestViewed",
-  /** What the reviewer and label pickers of one agent's Pull request tab offer, its repository's labels, assignable users, and teams, keyed and fetched as `PULL_REQUEST`. */
   REVIEW_OPTIONS: "reviewOptions",
-  /** One task's comments, its description's own threads or one page's: the service's `taskCommentsLive` query. */
   DESCRIPTION_COMMENTS: "taskComments",
-  /** One task's description history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */
   HISTORY: "taskHistory",
-  /** One task's cloud Browser tabs, every one of its agents', or one agent's, by what they are listed for: the service's `taskBrowserTabsLive` or `agentBrowserTabsLive` query, by its kind, held for the windows whose side panel lists them and a few they listed lately. */
   BROWSER_TABS: "browserTabs",
-  /** The repositories the account reaches in one workspace, or in every one where a list names none, by the workspace: fetched by the host while a window holds it. */
   REPOSITORY_LISTS: "repositoryLists",
-  /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
   DEVICE_PRESENCE: "devicePresence",
-  /** The account's hosts, by the account: the service's `hostsLive` query, held while Settings › Hosts draws them and a while after. */
   HOSTS: "hosts",
-  /** One workspace's pending invitations, by the workspace: the service's `workspaceInvitations` query, held for an owner's or an admin's windows that draw them and a few they drew lately. */
   WORKSPACE_INVITATIONS: "workspaceInvitations",
-  /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */
   THIS_MAC_HOST: "thisMacHost",
-  /** One agent's transcript, or one of its workers', by the agent and then the worker's call or the agent's own: the service's `agentTranscriptLive` query with the pages read beside it, held for the windows whose tab shows it and a few they showed lately, which stop following while no window holds them. */
   TRANSCRIPT: "transcripts",
-  /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
-  /** One workspace's Sentry installations and Slack bot, by the workspace: the service's `workspaceIntegrations` query, held for the windows that draw Settings › Workspace's integrations or an automation's editor, and a few they drew lately. */
   WORKSPACE_INTEGRATIONS: "workspaceIntegrations",
-  /** The channels of one workspace's Slack team, by the workspace: Slack's own list, fetched by the host while an owner's or an admin's window holds it. */
   SLACK_CHANNELS: "slackChannels",
-  /** The repositories members added to one workspace on their own GitHub tokens, those its App reaches left out, by the workspace: fetched by the host while a window holds it, and laid from each addition's and removal's own answer. */
   TOKEN_REPOSITORIES: "tokenRepositories",
-  /** Each listed workspace's photo as a `data:` URL under the version the workspaces carry, by the workspace: fetched by the host once per version as the version it lists moves, held for the session. */
   WORKSPACE_PHOTOS: "workspacePhotos",
-  /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
-  /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › MCP holds it. */
   MCP_CLIENTS: "mcpClients",
-  /** One workspace's automations, by the workspace: the service's `automations` query, held for the windows that draw them and a few they drew lately. */
   AUTOMATIONS: "automations",
-  /** Every run of one workspace's automations the account reads, by the workspace: the service's `automationWorkspaceRuns` query, held as the automations are. */
   AUTOMATION_WORKSPACE_RUNS: "automationWorkspaceRuns",
-  /** One automation's runs, by the automation: the service's `automationRuns` query, held as the automations are. */
   AUTOMATION_RUNS: "automationRuns",
-  /**
-   * One task's description, by the task, held for the windows that opened it and a
-   * few they opened lately. Note that no live query carries its text: the
-   * host follows the task's record (`taskRecordLive`), whose description mark moves
-   * with each save, and reads the description again where it moved past the copy held.
-   */
   DESCRIPTION_DOCUMENT: "descriptionDocument",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
 
-/**
- * The account's inbox items as one read follows them (`/api/live/inbox-items`):
- * the query naming the instant the reader holds every item changed since,
- * in epoch milliseconds (`SINCE`); the parts its poll is held on alone
- * (`HELD_ON`), so a reader whose `since` moved with no item moving is held
- * still; and how far back a settled item is carried (`SETTLED_WINDOW_MILLIS`),
- * an open one always.
- */
 export const ACCOUNT_INBOX_ITEMS = {
   SINCE: "since",
   HELD_ON: ["stamps"],
   SETTLED_WINDOW_MILLIS: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
-/**
- * Where a polled read's named parts stand as one value (`liveDigestOf` over
- * those parts alone): what a reader of a read held on some of its parts
- * sends as `after`.
- */
 export function liveDigestOn(
   queries: Readonly<Record<string, { readonly digest?: string; readonly cursor?: unknown }>>,
   parts: readonly string[],
@@ -970,19 +649,6 @@ export function liveDigestOn(
   return liveDigestOf(Object.fromEntries(parts.map((part) => [part, queries[part] ?? {}])));
 }
 
-/**
- * Every inbox item the account reaches, sealed for following: the address;
- * where each item stands (`stamps`), every open item and every settled one
- * changed in the last week, on the account's tasks and of its agents with
- * no task; and the items among them changed since the reader's `since`,
- * whole, with their threads and files, as a plan's inbox carries them
- * (`scopeInboxLiveAnswerSchema`). Its poll is held on `stamps` alone
- * (`ACCOUNT_INBOX_ITEMS.HELD_ON`), whose digest the reader sends as `after`
- * (`liveDigestOn`). Past a sync id (`LIVE_POLL.SYNC`), every part carries
- * the items that moved alone, each whole: its stamp, its row, and every
- * message and file its thread draws, which the reader takes in place of
- * what it holds of the item; a part's `gone` names items alone.
- */
 export const accountInboxItemsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
@@ -995,13 +661,6 @@ export const accountInboxItemsLiveAnswerSchema = EffectSchema.Struct({
 
 export type AccountInboxItemsLiveAnswer = typeof accountInboxItemsLiveAnswerSchema.Type;
 
-/**
- * Where one item stands as its row carries it: its plan, null for an item
- * of an agent with no task, and its agent; its stamp; whether it is unread
- * for the reader, which a read mark moves without moving `updatedAt`; who
- * it waits on; and how many messages its thread holds, which a withdrawn
- * message moves.
- */
 const inboxItemStampRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   planId: EffectSchema.NullOr(EffectSchema.String),
@@ -1011,38 +670,25 @@ const inboxItemStampRowSchema = EffectSchema.Struct({
   status: inboxItemSchema.fields.status,
   updatedAt: countedNumber,
   unread: EffectSchema.Boolean,
-  /** When the reader's reminder on the item comes due, which a reminder moves without moving `updatedAt`; null where they set none, absent from a service before reminders. */
   remindAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   waitsOn: EffectSchema.String,
   messages: countedNumber,
 });
 
-/** The account's items' rows as one delivery carries them, decoded whole where they arrive. */
 export const accountInboxItemsLiveRowsSchema = EffectSchema.Struct({
   stamps: EffectSchema.Array(inboxItemStampRowSchema),
   ...scopeInboxLiveRowsSchema.fields,
 });
 
-/** Each part's rows of the account's inbox items, decoded. */
 export type AccountInboxItemsLiveRows = typeof accountInboxItemsLiveRowsSchema.Type;
 
-/** Where one item stands as its stamp row carries it. */
 export type InboxItemStamp = AccountInboxItemsLiveRows["stamps"][number];
 
-/** Two keys compared in order: the first that differs decides. */
 function byKeys(...keys: readonly (readonly [number | string, number | string])[]): number {
   for (const [a, b] of keys) if (a !== b) return a < b ? -1 : 1;
   return 0;
 }
 
-/**
- * One task's pages sealed for following: the address, and one statement
- * that delivers each page at its newest version, as the task's held list
- * of pages reads it. The window's Inbox shows the pages of whichever task
- * its item is of, so the desktop follows them while that panel reads them.
- * The service answers `not-found` for a task the account does not reach;
- * asked with `?poll=true`, the rows inline at the poll address.
- */
 export const taskPagesLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ pages: sealedLiveQuerySchema }),
@@ -1050,7 +696,6 @@ export const taskPagesLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskPagesLiveAnswer = typeof taskPagesLiveAnswerSchema.Type;
 
-/** One page as its row delivers it: the page's line, with who showed it null where none was kept. */
 const taskPagesLiveRowSchema = EffectSchema.Struct({
   id: pageLineSchema.fields.id,
   title: pageLineSchema.fields.title,
@@ -1059,12 +704,10 @@ const taskPagesLiveRowSchema = EffectSchema.Struct({
   shownBy: EffectSchema.NullOr(pageShowerSchema),
 });
 
-/** A task's pages as Realtime delivers them: none for a task the account no longer reaches. */
 export const taskPagesLiveRowsSchema = EffectSchema.Struct({
   pages: EffectSchema.Array(taskPagesLiveRowSchema),
 });
 
-/** The pages as the held list answers them, from their rows: the most recently written first, then by id. */
 export function pagesOfLiveRows(rows: typeof taskPagesLiveRowsSchema.Type): readonly PageLine[] {
   return rows.pages
     .map(({ shownBy, ...line }): PageLine => (shownBy === null ? line : { ...line, shownBy }))
@@ -1073,14 +716,6 @@ export function pagesOfLiveRows(rows: typeof taskPagesLiveRowsSchema.Type): read
     );
 }
 
-/**
- * One task's Browser tabs sealed for following: the address, and one
- * statement that delivers every tab the task's held list of tabs lists the
- * account, the agent's pointer on each among it, so a window draws the
- * pointer moving within a moment of the agent's action. The service answers
- * `not-found` for a task the account does not reach; asked with
- * `?poll=true`, the rows inline at the poll address.
- */
 export const taskBrowserTabsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ tabs: sealedLiveQuerySchema }),
@@ -1088,17 +723,10 @@ export const taskBrowserTabsLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskBrowserTabsLiveAnswer = typeof taskBrowserTabsLiveAnswerSchema.Type;
 
-/** A task's tabs as Realtime delivers them, each as the service keeps it: none for a task the account no longer reaches. */
 export const taskBrowserTabsLiveRowsSchema = EffectSchema.Struct({
   tabs: EffectSchema.Array(agentBrowserTabLineSchema),
 });
 
-/**
- * The tabs as the held list answers them at the instant given, in epoch
- * milliseconds, from their rows: the oldest first, then by id. Note that a
- * takeover lapses with no row moving, so a reader reads its rows again at
- * `nextBrowserTabLapse`.
- */
 export function browserTabsOfLiveRows(
   rows: typeof taskBrowserTabsLiveRowsSchema.Type,
   now: number,
@@ -1108,7 +736,6 @@ export function browserTabsOfLiveRows(
     .map((line) => agentBrowserTabOf(line, now));
 }
 
-/** The next instant, in epoch milliseconds, a takeover the rows hold lapses at after `now`; none where none stands. */
 export function nextBrowserTabLapse(
   rows: typeof taskBrowserTabsLiveRowsSchema.Type,
   now: number,
@@ -1119,15 +746,6 @@ export function nextBrowserTabLapse(
   return lapses.length === 0 ? undefined : Math.min(...lapses);
 }
 
-/**
- * One task's newest page of description history sealed for following: the address,
- * and one statement that delivers the newest revisions as the history's
- * held read of its newest page reads them, one past the page among them to
- * say whether an older page stands. The desktop follows it while the task's
- * version history stands. The service answers `not-found` for a task the
- * account does not reach; asked with `?poll=true`, the rows inline at the
- * poll address.
- */
 export const taskHistoryLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ revisions: sealedLiveQuerySchema }),
@@ -1135,13 +753,6 @@ export const taskHistoryLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskHistoryLiveAnswer = typeof taskHistoryLiveAnswerSchema.Type;
 
-/**
- * One revision as its row delivers it: who wrote it, the member and the
- * agent as their rows name them now, and its instants in epoch
- * milliseconds. Note that the row still carries `liveSessionId` and
- * `callId`, always null, for a released desktop that decodes them; this
- * build reads neither.
- */
 const taskHistoryLiveRowSchema = EffectSchema.Struct({
   seq: descriptionRevisionSeqSchema,
   actor: EffectSchema.Literals(Object.values(DESCRIPTION_ACTOR)),
@@ -1157,14 +768,12 @@ const taskHistoryLiveRowSchema = EffectSchema.Struct({
   restoredAt: EffectSchema.NullOr(countedNumber),
 });
 
-/** A task's newest revisions as Realtime delivers them: none for a task the account no longer reaches. */
 export const taskHistoryLiveRowsSchema = EffectSchema.Struct({
   revisions: EffectSchema.Array(taskHistoryLiveRowSchema),
 });
 
 type TaskHistoryLiveRow = typeof taskHistoryLiveRowSchema.Type;
 
-/** A revision's line as the version history lists it, from its row, a coding agent named as its row names it now. */
 function revisionLineOf(row: TaskHistoryLiveRow): DescriptionRevisionLine {
   return {
     seq: row.seq,
@@ -1189,11 +798,6 @@ function revisionLineOf(row: TaskHistoryLiveRow): DescriptionRevisionLine {
   };
 }
 
-/**
- * The history's newest page as its held read answers it, from its rows:
- * the newest revisions first, a page of them, and where the next older page
- * is read before where one past the page was delivered.
- */
 export function revisionsOfLiveRows(
   rows: typeof taskHistoryLiveRowsSchema.Type,
 ): DescriptionRevisionsAnswer {

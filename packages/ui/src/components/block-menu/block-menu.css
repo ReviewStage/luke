@@ -1,7 +1,3 @@
-/* block-menu.css -- the list a `/` opens in a document (`block-menu.tsx`):
-   the `@` list's surface and rows, a menu's width, and at each row's end
-   the Markdown that makes its block, set in the code face. */
-
 @layer components {
   .ui-block-menu {
     width: 280px;

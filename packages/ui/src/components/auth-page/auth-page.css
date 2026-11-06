@@ -1,17 +1,8 @@
-/* auth-page.css -- what an auth page's utilities (`auth-page.tsx`,
-   `auth-mark.tsx`) cannot say: the card's inset, which a narrow page's
-   container query narrows; the sizes it sets on the glyphs other components
-   draw inside it; and the desktop window's drag. The page queries its own
-   width rather than the viewport's, so a card drawn in a narrow frame
-   narrows its inset as it would on a phone; a container query cannot read
-   a custom property, so the width it narrows under is a literal here. */
-
 @layer components {
   .ui-auth-card {
     padding: var(--ui-space-40) var(--ui-space-32);
   }
 
-  /* Under a phone's width the card gives its inset back to what it holds. */
   /* off-scale: 400px, a phone's card */
   @container (width < 400px) {
     .ui-auth-card {
@@ -19,13 +10,11 @@
     }
   }
 
-  /* The ring's mark, a provider's or the app's, at about two thirds of it. */
   .ui-auth-ring > svg {
     width: 36px;
     height: 36px;
   }
 
-  /* The badge's glyph, in the badge's own ink at full strength. */
   .ui-auth-badge > svg {
     width: 12px;
     height: 12px;
@@ -34,17 +23,12 @@
     stroke-width: 3;
   }
 
-  /* A footnote of several notes stands them one under another. */
   .ui-auth-footnote > * {
     display: block;
   }
 
-  /* The footnote can hold a press (a wait's Cancel), and the way on, a
-     step's foot, and the way out are presses, which are no part of a window
-     drag: the way out stands in the title bar, after the window's drag strip
-     in DOM order, so its no-drag wins there. */
   [data-ui-profile="desktop"]
-  :is(.ui-auth-footnote, .ui-auth-action, .ui-auth-foot, .ui-auth-exit) {
+    :is(.ui-auth-footnote, .ui-auth-action, .ui-auth-foot, .ui-auth-exit) {
     -webkit-app-region: no-drag;
   }
 }

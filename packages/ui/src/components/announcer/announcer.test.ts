@@ -7,16 +7,6 @@ import { afterEach, test } from "vitest";
 import { Dialog } from "../dialog/dialog.js";
 import { ANNOUNCE, Announcer, announce, type Retire, useAnnounce } from "./announcer.js";
 
-/**
- * announcer.test.ts -- `announce` says polite words in the status region and
- * an alert in the alert region; the same words twice are read twice; a burst
- * ends on its last words; an alert takes the polite words waiting with it;
- * nothing is said before an announcer stands; words taken back leave their
- * region, never taking newer words with them, and words a component says
- * leave as they change or it goes; a window holds one pair of regions
- * however many announcers mount; and a modal dialog leaves them heard.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +20,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Mounts an `Announcer` in a container of its own. */
 function mount(): Root {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -108,7 +97,6 @@ test("words taken back leave their region, and words said since stay", () => {
   assert.equal(region("status")?.textContent, "Task archived");
 });
 
-/** Says `words` politely as they change, as a component's state does. */
 function Saying({ words }: { words: string }): null {
   useAnnounce(ANNOUNCE.POLITE, words);
   return null;

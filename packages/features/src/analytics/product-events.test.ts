@@ -21,7 +21,6 @@ test("prose cannot pass as a property value", () => {
     }),
     undefined,
   );
-  // A version reader is not a string reader: a path is not `x.y.z`.
   assert.equal(
     productEventFromWire({
       name: PRODUCT_EVENT.APP_LAUNCH,
@@ -73,7 +72,6 @@ test("an experiment's switch is counted by its key and on or off, and by nothing
 });
 
 test("a batch's build is read as strictly as an event's, and is never a reason to refuse the batch", () => {
-  // A field the build does not name is not copied forward.
   assert.deepEqual(
     productEventBuildFromWire({
       events: [],
@@ -81,8 +79,6 @@ test("a batch's build is read as strictly as an event's, and is never a reason t
     }),
     { app_version: "0.18.0", packaged: true },
   );
-  // A version that is not `x.y.z` or a flag that is not a boolean leaves the
-  // whole build off rather than forwarding it.
   assert.deepEqual(
     productEventBuildFromWire({
       events: [],
@@ -94,6 +90,5 @@ test("a batch's build is read as strictly as an event's, and is never a reason t
     productEventBuildFromWire({ events: [], build: { app_version: "0.18.0", packaged: "yes" } }),
     {},
   );
-  // Builds 0.7 to 0.17 send no build at all.
   assert.deepEqual(productEventBuildFromWire({ events: [] }), {});
 });

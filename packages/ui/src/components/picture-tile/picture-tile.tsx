@@ -2,43 +2,6 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { notePictureOrigin } from "../../picture-expand.js";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
-/**
- * picture-tile.tsx -- a picture that opens when pressed: the press that enlarges a picture over the window, around the picture as its place draws it.
- *
- * A tile is a `<button>` with no box of its own, so what is seen is the
- * picture the place hands it (`children`), in that place's own frame, and
- * the press is the whole of it. It is named for what a press does,
- * "Enlarge" and the picture's words after it (`name`), and wears the
- * zooming pointer. A press sinks the picture a little under the finger and
- * lets it spring back, by transform alone, so nothing beside it moves; the
- * tile stays put while its face moves, so a press made near its edge still
- * lands on it. The keyboard's ring is drawn around the picture
- * (`data-focus-ring`) rather than around a caption under it.
- *
- * It hugs its picture, at most its container's width, unless it fills the
- * room its container gives it (`fill`), as a set's tile does. Its face, and
- * so its ring and the corner a viewer grows from, rounds as a frame's
- * corner, or whole where the picture is a person's disc
- * (`PICTURE_TILE_FACE.ROUND`), as an account's photo is. Words under
- * the picture that a press takes with it (`caption`) stand inside the
- * press, under the face, and do not sink with it. What a press does is the
- * place's (`onOpen`), handed the click so it can keep the press from the
- * element around it, or let it through; an app's hint wraps it as it wraps
- * a Button, handing it the pointer, press, and focus handlers it shows and
- * goes on by, each heard before the tile's own. A place whose pointer's
- * press opens nothing, and falls through to what is around the tile, says
- * so (`pointerOpens`): a pointer's press then opens nothing and passes on
- * to the place around it, the tile wearing the plain pointer and not
- * sinking, while a key's press still opens it. A viewer the press opens
- * that asks for it (`usePictureExpand`) grows from the face's own rect and
- * shrinks back into it.
- *
- * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
- * shadcn's button is a control's box, and a tile has no box of its own, its
- * face being the picture its place frames.
- */
-
-/** How the face rounds: as a framed picture's corner, or whole, as a person's disc does. */
 export const PICTURE_TILE_FACE = {
   FRAMED: "framed",
   ROUND: "round",
@@ -46,23 +9,14 @@ export const PICTURE_TILE_FACE = {
 
 export type PictureTileFace = (typeof PICTURE_TILE_FACE)[keyof typeof PICTURE_TILE_FACE];
 
-/** What a press is named for, the picture's words after it. */
 const ENLARGE_LABEL = "Enlarge";
 
-/** The press: no box of its own, hugging its picture or filling its room, the zooming pointer where a pointer's press opens it. */
 const TILE =
   "ui-picture-tile group/picture-tile relative m-0 flex w-fit min-w-0 max-w-full cursor-zoom-in flex-col gap-ui-4 border-0 bg-transparent p-0 text-start text-inherit [font:inherit] data-[fill=true]:w-full data-[pointer-opens=false]:cursor-auto";
 
-/**
- * The face, the picture's shape, so the ring rounds as its frame does, which
- * sinks under a pointer's press and springs back. Note that a picture sinks
- * less than a button's words do, because a whole picture shrinking by a
- * button's share reads as a jump.
- */
 const FACE =
   "ui-picture-tile-face relative block min-w-0 max-w-full rounded-control data-[face=round]:rounded-full transition-transform duration-(--ui-duration-fast) ease-spring-fast group-active/picture-tile:[transform:scale(0.98)] group-data-[pointer-opens=false]/picture-tile:group-active/picture-tile:[transform:none]";
 
-/** What an app's hint hands the tile it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
   | "onPointerEnter"
@@ -76,7 +30,6 @@ type HintProps = Pick<
   | "aria-keyshortcuts"
 >;
 
-/** A picture that opens when pressed, named "Enlarge" and its words. */
 export function PictureTile({
   name,
   onOpen,
@@ -88,19 +41,12 @@ export function PictureTile({
   onClick,
   ...hinted
 }: HintProps & {
-  /** The picture's words, its alt text or caption; empty where it has none, and the tile is named "Enlarge" alone. */
   name: string;
-  /** Opens the picture, handed the press. */
   onOpen: (event: MouseEvent<HTMLButtonElement>) => void;
-  /** Whether it fills the room its container gives it rather than hugging its picture. */
   fill?: boolean | undefined;
-  /** How the face rounds, as the picture's own frame does. */
   face?: PictureTileFace | undefined;
-  /** Whether a pointer's press opens it, so it wears the zooming pointer and sinks; a key's press always does. */
   pointerOpens?: boolean | undefined;
-  /** Words under the picture that the press takes with it. */
   caption?: ReactNode;
-  /** The picture, in its place's own frame. */
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -113,13 +59,10 @@ export function PictureTile({
       {...hinted}
       onClick={(event) => {
         onClick?.(event);
-        // Note that a key's press is a click the pointer counts none of, so a click count says a pointer pressed it.
         if (!pointerOpens && event.detail > 0) return;
-        // Note that the face is what a press sinks, so it is what gives as the press lands.
         const pressed = event.currentTarget.querySelector<HTMLElement>(".ui-picture-tile-face");
         if (pressed !== null) {
           pulsePress(pressed, PRESS_PULSE.QUIET);
-          // The picture opened grows from this one (`picture-expand.ts`).
           notePictureOrigin(pressed);
         }
         onOpen(event);

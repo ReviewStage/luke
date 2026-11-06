@@ -16,7 +16,6 @@ const BASE_URL = "https://app.test";
 const APP_VERSION = "0.2.0";
 const NOON = Date.parse("2026-08-19T12:00:00.000Z");
 
-/** What a test changes of the sender: its options, and the account its bearer is read from. */
 type SenderOverrides = Partial<Omit<ProductEventSenderOptions, "credential"> & AccountToken>;
 
 function senderWith(
@@ -49,7 +48,6 @@ function senderWith(
   );
 }
 
-/** The armed sender every test that is not about arming starts from. */
 function sharingSender(
   overrides: SenderOverrides = {},
   respond?: (request: RecordedRequest) => Response,
@@ -69,8 +67,6 @@ it.effect("a batch queued under one account is never posted under another's bear
       {
         readAccessToken: () => Effect.succeed(token),
         readAccountKey: () => Effect.succeed(account),
-        // The sign-out and sign-in the refusal was the first sign of: the token
-        // the retry would carry answers for somebody else.
         refreshAccount: () =>
           Effect.sync(() => {
             account = "grace@app.test";
@@ -87,8 +83,6 @@ it.effect("a batch queued under one account is never posted under another's bear
       ["Bearer stale"],
     );
 
-    // Spent, not requeued: these counts belong to an account this sender can no
-    // longer name.
     yield* sender.flush;
     assert.equal(requests.length, 1);
   }),
@@ -96,7 +90,6 @@ it.effect("a batch queued under one account is never posted under another's bear
 
 const NEXT_NOON = Date.parse("2026-08-20T12:00:00.000Z");
 
-/** The host's settings file as the sender sees it: kept across launches by event, discriminator, and account. */
 function keptDays(): RecordedDayStore {
   const days = new Map<string, Map<string, Map<string, string>>>();
   return {
@@ -113,18 +106,12 @@ function keptDays(): RecordedDayStore {
   };
 }
 
-/** How many day markers the requests a launch made carried. */
 function dayMarkers(requests: readonly RecordedRequest[]): number {
   return requests
     .flatMap((request) => JSON.parse(request.body ?? "{}").events ?? [])
     .filter((event: { name: string }) => event.name === PRODUCT_EVENT.APP_DAY_ACTIVE).length;
 }
 
-/**
- * One launch of the app: a sender of its own over the kept days, which marks
- * the day as the host does at launch and on its first tick, flushes, and
- * answers how many day markers it sent.
- */
 function launch(options: SenderOverrides, respond?: (request: RecordedRequest) => Response) {
   return Effect.scoped(
     Effect.gen(function* () {
@@ -213,12 +200,10 @@ it.effect("a day marked for one account is never sent under the next account's b
     };
     const { sender, requests } = yield* sharingSender(options);
     yield* sender.markDayActive();
-    // Ada signs out and Grace signs in before the minute's flush.
     account = "grace@app.test";
     yield* sender.flush;
     assert.equal(dayMarkers(requests), 0);
 
-    // Grace's own day is hers to count, once; Ada's is counted when she is back.
     yield* sender.markDayActive();
     yield* sender.flush;
     yield* sender.markDayActive();
@@ -239,7 +224,6 @@ it.effect("a clock that was wrong hides no real day, and costs one count at most
     };
 
     assert.equal(yield* launch(options), 1);
-    // Corrected back a year: today was never counted, so it is, once.
     now = NOON;
     assert.equal(yield* launch(options), 1);
     assert.equal(yield* launch(options), 0);
@@ -278,7 +262,6 @@ it.effect(
       yield* sender.flush;
       assert.equal(requests.length, 0);
 
-      // Turned on again, the day is counted after all, and nothing from while it was off rides along.
       sender.arm();
       yield* sender.markDayActive();
       yield* sender.flush;

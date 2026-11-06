@@ -31,7 +31,6 @@ const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/checkout";
 const PLACE: MentionPlace = { workspace: "acme", repository: REPOSITORY };
 
-/** Whether a target names no file or folder of a task about `repository`: nothing, or a page of GitHub's own. */
 function namesNoFile(target: string, repository: string | null): boolean {
   const kind = decodeMention(target, repository)?.kind;
   return kind !== MENTION_KIND.FILE && kind !== MENTION_KIND.FOLDER;
@@ -970,7 +969,6 @@ test("the links written in words are every inline link whatever its label, an au
       ["@Dana", "https://vespin.dev/acme/person/u1"],
       ["https://example.com/a", "https://example.com/a"],
       ["https://example.com/b", "https://example.com/b"],
-      // An escaped bracket opens no link, so its address stands bare, as GFM links it.
       ["https://example.com/e", "https://example.com/e"],
     ],
   );

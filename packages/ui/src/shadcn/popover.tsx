@@ -1,22 +1,6 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { cn } from "../cn.js";
 
-/**
- * popover.tsx -- shadcn/ui's popover (style `base-nova`, on Base UI's popover), vendored and drawn as a menu's panel hung from the control that opened it.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add popover` reads as a small diff. Our
- * changes: the popup is the menu's surface, edge, corner, lift, and motion
- * (`PopoverPanel`'s card), with no padding of its own, since what it holds
- * lays itself out; it hangs on the window's own layer, over a dialog's card
- * where its control stands in one (`layer`), because the card clips what
- * stands inside it; and the positioner takes the control (`anchor`), since
- * the control is `@repo/ui`'s own button. shadcn's trigger, header, title,
- * and description are left out. What an app draws is `@repo/ui`'s
- * `PopoverIconButton`; this is its inside.
- */
-
-/** How far a popover keeps from the window's edges, as a menu keeps. */
 const POPOVER_MARGIN = 8;
 
 function Popover({ ...props }: PopoverPrimitive.Root.Props) {

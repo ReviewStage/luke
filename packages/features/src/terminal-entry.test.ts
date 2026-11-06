@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { TERMINAL_TARGET, terminalTarget } from "./terminal-entry.js";
 
-/**
- * The new-terminal rules, row by row:
- * which agent ⌘J and New terminal mean from each place a developer can be,
- * both alike and never asking.
- */
-
 const FIRST = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SECOND = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 const BOTH = [FIRST, SECOND];

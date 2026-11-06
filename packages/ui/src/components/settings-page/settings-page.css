@@ -1,14 +1,3 @@
-/* settings-page.css -- what a settings page's utilities (`settings-page.tsx`)
-   cannot say: rows scrolled up dissolve into the page's top edge, on a scroll
-   timeline; an empty state that is the page's content fills the room under
-   the title; and the column's inset narrows under 480px of the page, which is
-   a container of its own (`@container/ui-settings-page`). The frame, the
-   page's scroller, the room under the head, and the sections' gap are
-   utilities; the sections' own heading and card are theirs
-   (`settings-section.tsx`). */
-
-/* The depth of the top's fade, a registered length so a scroll timeline can
-   ease it from none to the whole fade over the page's first scroll. */
 @property --ui-settings-page-fade {
   syntax: "<length>";
   inherits: false;
@@ -26,13 +15,6 @@
 }
 
 @layer components {
-  /* The page's measure, which its column and an empty state's column read;
-     and the fade its rows dissolve into at the top. Note that the fade is a
-     mask, so its black is an alpha and the rows dissolve into whatever
-     ground the page stands on. It deepens over the first stretch of
-     scrolling, so a page at rest at its top, or one with nothing to scroll,
-     whose timeline never runs, is left whole. A scroll timeline is not
-     motion, so reduced motion leaves it be. */
   .ui-settings-page {
     --ui-settings-page-measure: var(--ui-settings-measure);
     mask-image: linear-gradient(to bottom, transparent, #000 var(--ui-settings-page-fade));
@@ -41,18 +23,12 @@
     animation-range: 0 var(--ui-space-24);
   }
 
-  /* Note that the column's box, measure, and inset stay here rather than in
-     utilities, because the rules below for an empty state and a narrow page
-     undo them, and a rule in this layer cannot undo a utility. */
   .ui-settings-page-column {
     box-sizing: content-box;
     max-width: var(--ui-settings-page-measure);
     padding: var(--ui-page-inset);
   }
 
-  /* A page whose content is an empty state gives it the room under the
-     title, the column filling the page's height at its measure, and the
-     state standing in the middle of what the head leaves. */
   .ui-settings-page:has(> .ui-settings-page-column > .ui-settings-page-sections > .ui-empty-state) {
     display: flex;
     flex-direction: column;
@@ -71,8 +47,6 @@
     flex: 1 0 auto;
   }
 
-  /* A container query cannot read a custom property, so the contract's
-     width is written here (`tokens/profiles.css`). */
   @container ui-settings-page (width < 480px) {
     .ui-settings-page-column {
       padding: var(--ui-page-inset-narrow);

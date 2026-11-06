@@ -31,16 +31,8 @@ import {
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
-/**
- * An automation as its editor holds it: a schedule read into the picker's
- * terms and written back, what stops a draft saving, its next runs, and the
- * writes that make or change it, each change only what moved. Synthetic
- * ids and words.
- */
-
 const DEFAULTS = { timezone: "America/New_York", owner: AUTOMATION_SCOPE.PERSONAL };
 
-/** A Wednesday morning in New York, in January, so no daylight-saving change is near. */
 const NOW = new Date("2026-01-14T12:00:00Z");
 
 const SAVED: AutomationSummary = {
@@ -292,7 +284,6 @@ test("an automation fired by an event keeps its trigger: its schedule fields sto
   assert.equal(changeOf(rescheduled, onEvent, DEFAULTS), undefined);
 });
 
-/** The settings a GitHub trigger a draft writes always states, at a new draft's defaults. */
 const SAID_SETTINGS = { senders: [GITHUB_SENDER.PEOPLE], drafts: false, forks: false };
 
 test("a GitHub trigger's settings are written as the row of choices leaves them, and a change of one is a change of the trigger", () => {
@@ -379,7 +370,6 @@ test("a trigger written as a GitHub event or a webhook is made and changed as on
     },
   );
   assert.ok(!sameDraft(opened, { ...opened, githubEvent: GITHUB_TRIGGER_EVENT.PUSH }));
-  // An event chosen, then left for a schedule again, leaves the schedule's draft as it was.
   const scheduled = automationDraft(SAVED, DEFAULTS);
   assert.ok(sameDraft(scheduled, { ...scheduled, githubEvent: GITHUB_TRIGGER_EVENT.PUSH }));
 });
@@ -419,7 +409,6 @@ test("runs land in a new agent each time on the account's default until a model 
     },
   );
   const same = { ...fresh, target: AUTOMATION_TARGET.SAME_AGENT };
-  // None chosen, its first run starts the agent every later run goes to.
   assert.deepEqual(draftProblems(same, false, NOW), {});
   assert.deepEqual(createRequestOf(same, "workspace-acme").target, {
     kind: AUTOMATION_TARGET.SAME_AGENT,
@@ -516,7 +505,6 @@ test("a move to another GitHub event lets go of the filters the event before was
     },
   );
   assert.equal(withGithubEvent(opened, GITHUB_TRIGGER_EVENT.ISSUE_OPENED), opened);
-  // Away and back again, the filters let go of are a change the editor can save, since it now shows none.
   const back = withGithubEvent(
     withGithubEvent(opened, GITHUB_TRIGGER_EVENT.PUSH),
     GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
@@ -569,7 +557,6 @@ test("two drafts whose guards differ only in their subject cooldown are not the 
   assert.ok(!sameDraft(draft, longer));
 });
 
-/** A saved automation fired by Sentry alerts from two projects, waiting six hours before the same issue runs again. */
 const ALERTED: AutomationSummary = {
   ...SAVED,
   trigger: {
@@ -657,7 +644,6 @@ test("a Sentry trigger stops a save where its cooldown is no whole number of hou
     project: Array.from({ length: 11 }, (_, n) => `project-${n}`),
   });
   assert.ok(draftProblems(crowded, false, NOW)[DRAFT_FIELD.FILTERS]);
-  // A cooldown left behind by another trigger kind stops nothing.
   assert.deepEqual(
     draftProblems(
       { ...opened, triggerKind: AUTOMATION_TRIGGER.WEBHOOK, subjectCooldownHours: undefined },

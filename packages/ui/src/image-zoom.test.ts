@@ -15,14 +15,6 @@ import {
   zoomedTo,
 } from "./image-zoom.js";
 
-/**
- * image-zoom.test.ts -- a picture opened over the window zooms about the
- * point under the pointer, never moves past its own edges, pinches back to
- * where it began, and a press zooms it to its own pixels and back. A
- * synthetic 800 by 500 frame holding a 2400 by 1200 screenshot fitted to
- * 800 by 400.
- */
-
 const FRAME: ImageFrame = {
   frame: { width: 800, height: 500 },
   fitted: { width: 800, height: 400 },
@@ -30,12 +22,10 @@ const FRAME: ImageFrame = {
 
 const NATURAL = { width: 2400, height: 1200 };
 
-/** Where the picture's point now under `at` lies on the fitted picture, from its center. */
 function pictureUnder(view: ImageView, at: FramePoint): FramePoint {
   return { x: (at.x - view.x) / view.scale, y: (at.y - view.y) / view.scale };
 }
 
-/** Whether two lengths are the same to a hundredth of a pixel. */
 function near(first: number, second: number): boolean {
   return Math.abs(first - second) < 0.01;
 }
@@ -78,7 +68,6 @@ test("a mouse wheel's notch zooms by a step, not a leap", () => {
 test("a zoomed picture moves no further than to bring its edge to the frame's", () => {
   const zoomed = zoomedTo(FITTED_VIEW, FRAME, 2, FRAME_CENTER);
   const far = pannedBy(zoomed, FRAME, 10_000, -10_000);
-  // At twice, the picture is 1600 by 800 in an 800 by 500 frame.
   assert.equal(far.x, 400, "its left edge stands at the frame's left");
   assert.equal(far.y, -150, "its bottom edge stands at the frame's bottom");
   const back = pannedBy(far, FRAME, -10_000, 10_000);

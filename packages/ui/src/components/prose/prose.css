@@ -1,25 +1,9 @@
-/* prose.css -- written words read as a document: the rules the site's
-   generated documents and the window's Markdown share (`.ui-prose`), and
-   the site's document rhythm over them (`.ui-prose-document`). Every
-   measure a run of words sets is in `em`, so a rule reads at the window's
-   caption size and at the site's body size alike; a code span's tint is
-   `--ui-prose-tint`, which a surface whose ink is not the page's own, a
-   sent bubble's, mixes from its own color.
-
-   Below them, a note's Markdown (`.ui-markdown`, `@repo/ui/markdown`):
-   the description, its versions, a comment, a file's note, and the caption. */
-
 @layer components {
-  /* The shared rules. Note that a note draws its headings as paragraphs of
-     its own (`.ui-markdown-heading`), so only a document's real headings
-     take these. */
   .ui-prose :is(h1, h2, h3) {
     font-weight: var(--ui-type-section-weight);
     letter-spacing: var(--ui-type-title-tracking);
   }
 
-  /* The user agent's markers, discs then circles down a nesting, which the
-     site's reset strips from every list. */
   .ui-prose :is(ul, ol) {
     padding-left: 1.5em;
     list-style: revert;
@@ -30,7 +14,6 @@
     border-radius: 0.4em;
     background: var(--ui-prose-tint, var(--ui-color-fill-hover));
     font-family: var(--ui-font-mono);
-    /* Mono runs wider than the words around it at equal size. */
     font-size: 0.9em;
   }
 
@@ -40,13 +23,6 @@
     background: transparent;
   }
 
-  /* A chord is drawn as the separate keys it is, one <kbd> per key with a
-     gap between caps. The heavier bottom edge is what reads as a keycap
-     rather than a code span. `line-height: 1` because an inline-block's
-     whole box, padding and borders included, sizes the line it sits on, and
-     at the inherited leading the cap would stretch its line taller than its
-     neighbors. The raise is measured, not chosen: on the baseline the cap's
-     box centers below the words' own, and `middle` still leaves it low. */
   .ui-prose kbd {
     display: inline-block;
     padding: 0.1em 0.45em;
@@ -64,14 +40,6 @@
     margin-left: 0.3em;
   }
 
-  /* A note's Markdown, drawn wherever the app's or the developer's words are:
-     the description, a comment, a file's note, and the caption bar. Every measure is
-     in `em` so the same rules read at the caption's ten pixels and the
-     thread's twelve and a half, and every tint is mixed from `currentColor`,
-     so the same rule reads on the raised bubble's gray and on the sent
-     bubble's accent without a per-speaker override. Blocks are spaced by
-     margin rather than a flex gap: the caption's root is an ordinary block
-     whose wrapped height is measured. */
   .ui-markdown {
     --ui-markdown-tint: color-mix(in srgb, currentColor 13%, transparent);
     --ui-markdown-edge: color-mix(in srgb, currentColor 28%, transparent);
@@ -88,9 +56,6 @@
     overflow-wrap: anywhere;
   }
 
-  /* A tight list's item holds its words with no paragraph around them, so it
-     breaks a long path or identifier at the column's edge as a paragraph
-     does, rather than letting it run past the edge. */
   .ui-markdown li {
     overflow-wrap: anywhere;
   }
@@ -112,35 +77,25 @@
     font-size: 1.05em;
   }
 
-  /* A code span is the prose one above, on the note's own tint, a step
-     heavier because the thread's words are small. */
   .ui-markdown code {
     font-weight: var(--ui-type-label-weight);
     letter-spacing: 0;
   }
 
-  /* A link is drawn in the links' own ink, as a text link is, rather than
-     the browser's blue, which follows no theme. */
   .ui-markdown a {
     color: var(--ui-color-accent-text);
   }
 
-  /* Code keeps each source line whole and scrolls only sideways: a wrapped
-     identifier reads as one the author never wrote. Left-aligned even inside
-     the centered caption, because indentation is part of what code says. */
   .ui-markdown pre {
     margin: 0;
     padding: 0.6em 0.8em;
     border-radius: 0.7em;
     background: var(--ui-markdown-tint);
     overflow-x: auto;
-    /* A line's end is read by the same sideways swipe that pulls a thread;
-       at the block's edge the swipe stays the block's. */
     overscroll-behavior-x: contain;
     text-align: left;
   }
 
-  /* A fence's code drops the span's dress, as the prose's does above. */
   .ui-markdown pre code {
     display: block;
     font-weight: var(--ui-type-body-weight);
@@ -148,7 +103,6 @@
     white-space: pre;
   }
 
-  /* A list's gutter and markers are the prose's above. */
   .ui-markdown :is(ul, ol) {
     margin: 0;
     text-align: left;
@@ -163,14 +117,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* A task item's box is its marker: the shared `Checkbox` in a note
-     (`markdown-tasks.tsx`), and the library's own disabled checkbox where
-     words are drawn whole by Streamdown. The box stands in the bullet's gutter,
-     out of the line, so the space after it folds away and the words, wrapped
-     lines included, start where a bullet's would; the description's editor's item
-     and box wear the same classes, so opening a section moves nothing. Note
-     that the box takes the words' size, because a control's own is the
-     browser's. */
   .ui-markdown li.task-list-item {
     position: relative;
     list-style: none;
@@ -187,13 +133,6 @@
     accent-color: var(--ui-color-accent);
   }
 
-  /* A note's box (`markdown-tasks.tsx`, a wordless `Checkbox`, read-only
-     where the reader cannot tick it) stands in the bullet's gutter, exactly where the box alone stands, at
-     the words' size; on a coarse pointer its label takes a press a finger's
-     width across and as tall, centered on the box (`checkbox.css`). The
-     description's editor draws its box the same, in the same place. A loose list's
-     item holds its words in a paragraph, the box among them, which stands in
-     the same gutter. */
   .ui-markdown li.task-list-item > .ui-markdown-task,
   .ui-markdown li.task-list-item > p:first-child > .ui-markdown-task {
     position: absolute;
@@ -209,15 +148,6 @@
     display: block;
   }
 
-  /* A table scrolls sideways rather than widening its column; a column's
-     alignment arrives as each cell's own inline style, from the delimiter
-     row. Its edges fade where it hides columns past them, as the tab strip
-     does, so a column cut at the edge reads as more to scroll to rather than
-     as words cut short: the one scroll fade (`ScrollArea`, whose registered
-     depths and keyframes it eases), its two depths eased on the table's own
-     inline timeline, which stands only while the table overflows. Note that
-     the table is no `ScrollArea` itself, because a table's own box is what
-     scrolls. */
   .ui-markdown table {
     display: block;
     max-width: 100%;
@@ -248,10 +178,6 @@
     vertical-align: top;
   }
 
-  /* A cell keeps each word whole, so a table too wide for the column scrolls
-     rather than splitting its words into letters. Note that it outranks the
-     note's `p`, which an editor's cell holds its words in, and a list item
-     around the table, whose words break anywhere. */
   .ui-markdown :is(th, td),
   .ui-markdown :is(th, td) > p {
     overflow-wrap: normal;
@@ -272,12 +198,6 @@
     border-top: 1px solid var(--ui-markdown-edge);
   }
 
-  /* A chip stands with the punctuation written against it as one box no line
-     breaks inside (`link-glue.ts`), in a note's words and a transcript's
-     alike, so a comma never starts a line alone after a chip and an opening
-     bracket never ends one alone before it. The box is held to the column,
-     and the chip in it gives way before it would push its comma past the
-     edge, so a long name in a narrow column still ellipsizes. */
   .link-glued {
     display: inline-flex;
     max-width: 100%;
@@ -289,21 +209,10 @@
     min-width: 0;
   }
 
-  /* A held chip standing straight in a tight list's item is words on the
-     item's line, not a block of the item, so it takes none of the space
-     between an item's blocks (`li > * + *`, above): an inline box's margin
-     would make its line taller, pushing the words below the item's box,
-     which stands in the gutter at the line's top. The words then stand as
-     they do in the description's editor, which holds them in a paragraph. */
   .ui-markdown li > .link-glued {
     margin-top: 0;
   }
 
-  /* The site's documents, the privacy policy and each changelog release,
-     are read start to finish, so they set more rhythm than the marketing
-     copy around them: a clear step between heading levels and generous room
-     after a paragraph. A document's first block opens flush, so a release's
-     first line stands level with the version rail beside it. */
   .ui-prose-document > :first-child {
     margin-top: 0;
   }
@@ -347,18 +256,11 @@
     text-underline-offset: 2px;
   }
 
-  /* A pull-request reference is a technical token, and mono is what the
-     site reserves for those. */
   .ui-prose-document a[href*="/pull/"] {
     font-family: var(--ui-font-mono);
     font-size: 0.8em;
   }
 
-  /* A screenshot stands on the hairline card the rest of the site puts
-     artwork on. Every one stands as tall as a whole-window screenshot at
-     full measure (2400 by 1591), so a close-up cut from one is the same
-     height, only narrower, and centered in the column. Each is a link to its
-     own full-size file, and the cursor is what says so. */
   .ui-prose-document:has(img) {
     container-type: inline-size;
   }
@@ -379,19 +281,6 @@
   }
 }
 
-/* A quote (`@repo/ui/quote-face`), drawn alike in a transcript, a sent
-   bubble, an Inbox item, the description, and the description's editor, as a thread or a
-   document draws one: flush with the words around it, set off by a thin
-   rule and a short step of room after it, in the quiet ink at the same size
-   and upright. A quote inside a quote adds one more rule and step and
-   nothing else. The ink is the quote's color and not its opacity, so a
-   picture or a code block inside it stays at full strength. Note that the
-   rules over its blocks name the element and stand after the lists, so
-   they outrank the note's `p` and lists above, and the browser's own
-   margins on a transcript's paragraphs, which no reset reaches there. And
-   they stand outside the components layer, because a transcript's quote is
-   a child of Streamdown's root, whose spacing utility (`space-y-4`) sits in
-   the utilities layer above it and would set the quote's margins. */
 .markdown-quote {
   margin: 0;
   padding-left: 0.8em;

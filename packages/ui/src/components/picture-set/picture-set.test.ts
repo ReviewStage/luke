@@ -7,18 +7,7 @@ import { PictureSet, PictureSetTile, PictureStandIn } from "../../index.js";
 import { PICTURE_STATE } from "../../picture-read.js";
 import { recordedFailure } from "../../testing/reported-failure.js";
 
-/** The failure beneath a picture whose read did not land. */
 const { failure: FAILURE } = recordedFailure();
-
-/**
- * picture-set.test.ts -- a set of pictures is a list its caller names; a
- * few stand captioned, each opening at a press, while many say how many
- * they hold, the last tile drawn saying how many more; a gone picture says
- * so in its words, or why where its place says, and opens nothing, as does
- * one whose place gives nothing to open; a picture whose read did not land
- * offers Retry in its press's place; and a picture still read is said as
- * reading it.
- */
 
 const roots: Root[] = [];
 
@@ -27,7 +16,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

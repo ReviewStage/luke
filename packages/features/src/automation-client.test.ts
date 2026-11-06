@@ -13,14 +13,6 @@ import {
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-/**
- * The window's automation calls against a scripted service: each travels
- * under the account's bearer to its own path, a write's answer is read for
- * its summary alone so a secret the service answered never reaches the
- * window, a write the service would refuse by shape never travels, and a
- * refusal is named in the window's own words. Synthetic ids and words.
- */
-
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 const WORKSPACE_ID = "workspace-1";
 

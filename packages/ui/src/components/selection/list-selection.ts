@@ -7,96 +7,41 @@ import {
   useRef,
 } from "react";
 
-/**
- * list-selection.ts -- the rows a `List` holds chosen at once, as a Mac's list chooses them: ⌘-click one in or out, ⇧-click a run of them, ⌘A every one, Esc none, and ⇧↑↓ grow the run from the row in hand.
- *
- * A list chooses rows only where it is asked to (`List`'s `selection`),
- * and its owner keeps which ones: the list hands it the next set and is
- * drawn with whatever set it is handed back, so the owner may clear it, act
- * on it, or drop a row that has gone. A row takes part by its key
- * (`ListRow`'s `selectKey`) and only through its press, so a row that opens
- * nothing is never chosen; one unavailable is passed over by every way in.
- *
- * A plain press is the row's own, opening it as it always has, and leaves
- * the set as it stands; it only marks where a run starts, the anchor. ⌘
- * (or Ctrl, off a Mac) and a press puts the row in or takes it out and
- * anchors there. ⇧ and a press chooses the run from the anchor to the row,
- * over whatever was chosen as the anchor was set, so a second ⇧-press
- * swaps the run for a longer or a shorter one rather than adding to it.
- * ⇧↑ and ⇧↓ grow or shrink that run a row at a time from the row holding
- * the focus, which they take on with them, and stop at either end rather
- * than wrapping. X puts the row holding the focus in or takes it out, as
- * Linear's lists do, and a row's box (`SelectBox`) does the same under the
- * pointer. ⌘A chooses every row, and Esc, while any is chosen, none.
- *
- * Where the rows stand in several runs of their own, a board's columns, a
- * ⇧-press reaches only across the run the row stands in (`selectionRun`),
- * as Linear's board chooses a run within one column, since rows side by side
- * hold no order between them.
- *
- * A list of the app's own, whose rows are no `ListRow`s, chooses them the
- * same way inside a `SelectionRegion`, each row's `CardPress` taking part
- * by its key, its rows chosen together across every list the region holds.
- *
- * Note that the order and who is available are read off the rows as they
- * are drawn, as `useRovingKeys` reads its items, because the rows are
- * drawn by whoever fills the list; a region drawing only the rows near the
- * view (`VirtualRows`) is handed the order of every row it lists instead,
- * run by run where its rows stand in runs (`order`), so ⇧-click, ⇧↑↓, and
- * ⌘A reach the rows it leaves undrawn, ⇧↑↓ bringing the row they reach into
- * view through its owner (`bringIn`). And note that a key pressed in a
- * field inside the list is the field's.
- */
-
-/** Which rows of a `List` are chosen, kept by its owner: the keys chosen, and what hears the next set. */
 export interface ListSelection {
   readonly selected: ReadonlySet<string>;
   readonly onChange: (selected: ReadonlySet<string>) => void;
 }
 
-/** What a row of a choosing `List` reads: whether it is chosen, and the doors its press and its box go through. */
 export interface ListSelecting {
   readonly selected: ReadonlySet<string>;
-  /** Hears a press on the row keyed `key`; answers whether it chose rows, so the row's own press is not also made. */
   readonly press: (key: string, event: MouseEvent<HTMLElement>) => boolean;
-  /** Puts the row keyed `key` in or takes it out, as its box and X do, anchoring a run there. */
   readonly toggle: (key: string) => void;
 }
 
-/** The selection of the `List` a row stands in, where that list chooses rows at all. */
 export const ListSelectionContext = createContext<ListSelecting | undefined>(undefined);
 
-/** The attribute a choosable row's press wears, naming its key. */
 const KEY_ATTRIBUTE = "data-select-key";
 
-/** The attribute the box whose rows are chosen together wears: a `List`, or a `SelectionRegion` over lists of the app's own. */
 const ROOT_ATTRIBUTE = "data-selection-root";
 
-/** What finds the box a row is chosen in. */
 const ROOT_SELECTOR = `[${ROOT_ATTRIBUTE}]`;
 
-/** The attribute a run of rows wears inside a box whose rows are chosen together, as a board's column does. */
 const RUN_ATTRIBUTE = "data-selection-run";
 
-/** What finds the run a row stands in. */
 const RUN_SELECTOR = `[${RUN_ATTRIBUTE}]`;
 
-/** What the box whose rows are chosen together wears. */
 export function selectionRoot(): { readonly "data-selection-root": "" } {
   return { [ROOT_ATTRIBUTE]: "" };
 }
 
-/** What a run of rows wears, a board's column, across which alone a ⇧-press reaches. */
 export function selectionRun(): { readonly "data-selection-run": "" } {
   return { [RUN_ATTRIBUTE]: "" };
 }
 
-/** What a row's press wears in a list that chooses rows. */
 export function selectableRow(key: string): { readonly "data-select-key": string } {
   return { [KEY_ATTRIBUTE]: key };
 }
 
-/** Where a run starts, the chosen set it is laid over, the row it reaches now, and the set it left. */
 interface Anchor {
   readonly key: string;
   readonly base: ReadonlySet<string>;
@@ -104,13 +49,11 @@ interface Anchor {
   readonly left: ReadonlySet<string>;
 }
 
-/** A choosable row of the list, in the order drawn: its key, its press, and whether it is available. */
 interface Choosable {
   readonly key: string;
   readonly press: HTMLElement;
 }
 
-/** The available rows of `list` that can be chosen, in the order they are drawn, none of a list nested in it. */
 function choosableOf(list: Element): Choosable[] {
   return Array.from(list.querySelectorAll<HTMLElement>(`[${KEY_ATTRIBUTE}]`))
     .filter((press) => press.closest(ROOT_SELECTOR) === list)
@@ -120,25 +63,21 @@ function choosableOf(list: Element): Choosable[] {
     .map((press) => ({ key: press.getAttribute(KEY_ATTRIBUTE) ?? "", press }));
 }
 
-/** The rows of `rows` that stand in the run `press` stands in, every one where the list draws no runs. */
 function inRunOf(rows: readonly Choosable[], press: Element): readonly Choosable[] {
   const run = press.closest(RUN_SELECTOR);
   return run === null ? rows : rows.filter((row) => row.press.closest(RUN_SELECTOR) === run);
 }
 
-/** Focuses the first available row of `box` that can be chosen, where a region of the app's own rows keeps no roving Tab stop; answers whether one took it. */
 export function focusChoosable(box: Element): boolean {
   const first = choosableOf(box)[0];
   first?.press.focus();
   return first !== undefined;
 }
 
-/** Whether `a` and `b` hold the same keys. */
 function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return a.size === b.size && [...a].every((key) => b.has(key));
 }
 
-/** `base` with every row from `from` to `to` in it, by the rows' keys in order, both ends included; `to` alone where `from` is listed no more. */
 function withRun(
   keys: readonly string[],
   base: ReadonlySet<string>,
@@ -152,17 +91,14 @@ function withRun(
   return new Set([...base, ...run]);
 }
 
-/** The keys of `rows`, in their order. */
 function keysOf(rows: readonly Choosable[]): readonly string[] {
   return rows.map((row) => row.key);
 }
 
-/** The run of `order` that lists `key`, none where no run does. */
 function runListing(order: readonly (readonly string[])[], key: string): readonly string[] {
   return order.find((run) => run.includes(key)) ?? [];
 }
 
-/** Whether a key landed in a field, whose own it is. */
 function typedIn(target: EventTarget): boolean {
   return (
     target instanceof HTMLElement &&
@@ -170,31 +106,16 @@ function typedIn(target: EventTarget): boolean {
   );
 }
 
-/** Whether ⌘ is held, or Ctrl, the same key off a Mac. */
 function command(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
   return event.metaKey || event.ctrlKey;
 }
 
-/**
- * A ⇧-press on a row that can be chosen, which would otherwise select the
- * words from the last press to this one: it takes the focus itself instead.
- */
 export function holdRun(event: MouseEvent<HTMLElement>): void {
   if (!event.shiftKey) return;
   event.preventDefault();
   event.currentTarget.focus();
 }
 
-/**
- * The selection a `List` keeps over its rows: what its rows read, and the
- * keys it hears, which answer whether they chose anything so the arrows'
- * walk is not also made. A list asked for none chooses nothing. `order`,
- * where given, is every choosable row's key in order, those not drawn
- * among them, run by run where the rows stand in runs (`selectionRun`),
- * which ⇧-click, ⇧↑↓, and ⌘A read in place of the rows drawn, and
- * `bringIn` draws a row ⇧↑↓ reach that is not drawn and calls `then` once
- * it is.
- */
 export function useListSelection(
   selection: ListSelection | undefined,
   order?: readonly (readonly string[])[],
@@ -204,7 +125,6 @@ export function useListSelection(
   readonly onKeyDown: (event: KeyboardEvent<HTMLElement>) => boolean;
 } {
   const anchor = useRef<Anchor | undefined>(undefined);
-  // The latest selection, which a caller hands anew on every render.
   const latest = useRef(selection);
   latest.current = selection;
   const listed = useRef(order);
@@ -212,8 +132,6 @@ export function useListSelection(
   const bringing = useRef(bringIn);
   bringing.current = bringIn;
 
-  // Note that an anchor stands only while the set is the one it left, so a
-  // set its owner changed itself, a Clear, starts the next run afresh.
   const standing = useCallback((chosen: ReadonlySet<string>): Anchor | undefined => {
     const held = anchor.current;
     return held !== undefined && sameKeys(held.left, chosen) ? held : undefined;
@@ -271,7 +189,6 @@ export function useListSelection(
       const list = event.currentTarget;
       if (event.key === "Escape") {
         if (current.selected.size === 0 || event.nativeEvent.isComposing) return false;
-        // Note that the key goes no further, so what stands behind the list stays open.
         event.preventDefault();
         event.stopPropagation();
         hand(new Set(), undefined);
@@ -296,13 +213,11 @@ export function useListSelection(
       const inHand = all.find((row) => row.press === event.target);
       if (inHand === undefined) return false;
       const rows = inRunOf(all, inHand.press);
-      // Note that a list handed its order walks every row its run lists, the one reached brought into view where it is not drawn.
       const runs = listed.current;
       const keys = runs === undefined ? keysOf(rows) : runListing(runs, inHand.key);
       const at = keys.indexOf(inHand.key);
       event.preventDefault();
       const here = inHand.key;
-      // Note that the run grows from the row in hand: one the focus walked to apart from the run starts a new one there.
       const held = standing(current.selected);
       const from =
         held !== undefined && held.head === here

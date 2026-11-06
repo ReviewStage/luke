@@ -3,12 +3,6 @@ import { test } from "vitest";
 import { LINK_PLACE, linkOf } from "./link-grammar.js";
 import { LONE_LINK, loneLinkOf } from "./lone-link.js";
 
-/**
- * What a link standing alone in a paragraph is drawn as: a pull request's
- * card, a page of ours, or lines of a file at a commit; anything else none.
- * Synthetic ids and repositories.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const PAGE_ID = "3c4d5e6f-0000-4000-8000-000000000001";
 const COMMIT = "4f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39";

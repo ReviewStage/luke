@@ -7,12 +7,6 @@ import {
 } from "./inbox-attachment-link.js";
 import { LINK_PLACE, readLink } from "./link-grammar.js";
 
-/**
- * A picture in an Inbox item's words as its address: written under the
- * item's own link, read back by either scheme, opened as its item, and
- * found in a text only where it is the item's own. Synthetic ids.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const ITEM_ID = "a1b2c3d4-0000-4000-8000-000000000001";

@@ -18,16 +18,6 @@ import {
   DisclosureSummary,
 } from "./disclosure.js";
 
-/**
- * disclosure.test.ts -- a fold draws its body only once its summary is
- * pressed, says whether it is open on the summary, starts open when asked,
- * follows the element's own toggle (a find's), and draws a closed body,
- * still closed, while a find looks through it; a control its head holds
- * stands beside its summary, never in it, and is pressed without folding
- * it, while the row's bare ground beside it folds; and a card's head
- * draws its body only once a press opens it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -131,7 +121,6 @@ test("a fold its holder keeps tells the holder of a press and stays as the holde
   assert.deepEqual(heard, [true, false]);
 });
 
-/** A fold whose head holds a ⋯ and a box beside its summary, and a menu the ⋯ draws elsewhere. */
 function foldWithActions(pressed: string[], menuHost: HTMLElement): ReactElement {
   return createElement(Disclosure, {
     actions: createElement(
@@ -172,7 +161,6 @@ function find<T extends HTMLElement>(selector: string): T {
   return document.querySelector<T>(selector) ?? assert.fail(selector);
 }
 
-/** What takes a press or the focus of its own. */
 const CONTROL = "a[href], button, input, select, textarea, [role='button'], [tabindex]";
 
 test("a head's controls stand beside its summary, which its own words alone name, open or closed", () => {

@@ -9,13 +9,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { ONE_LINE_ELEMENT, OneLine } from "./one-line.js";
 
-/**
- * one-line.test.ts -- a line reads its words whole to a reader, and its
- * hint says them whole only while its box cuts them short, the window's
- * tooltip where its caller gives none. jsdom lays nothing out, so the box's widths are stood in for, and the observer that
- * measures it is fired by hand.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -24,10 +17,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** The measurement each observed box was handed, fired as a resize. */
 const resizes: (() => void)[] = [];
 
-/** Fires every observed box's measurement, as a resize would. */
 function resize(): void {
   act(() => {
     for (const fire of resizes) fire();
@@ -61,7 +52,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** A hint that says the address whole while the line is cut short, as an app's tooltip would. */
 function hint(line: ReactElement, clipped: boolean): ReactElement {
   return createElement("span", { "data-hint": clipped ? "sam@example.com" : "" }, line);
 }
@@ -87,7 +77,6 @@ test("a line whose glyphs stand a pixel past its leading is not cut short, thoug
   vi.stubGlobal("ResizeObserver", StandInObserver);
   const view = render(createElement(OneLine, { children: "Ada Lovelace" }));
   const line = view.querySelector<HTMLElement>(".ui-one-line") ?? assert.fail("the line");
-  // Note that jsdom reads no stylesheet, so one-line.css's nowrap is stood in for inline.
   line.style.whiteSpace = "nowrap";
   vi.spyOn(line, "scrollWidth", "get").mockReturnValue(101);
   vi.spyOn(line, "clientWidth", "get").mockReturnValue(101);
@@ -102,7 +91,6 @@ test("a line whose glyphs stand a pixel past its leading is not cut short, thoug
   assert.equal(line.dataset.overflow, "true", "a third line of wrapped words runs below two");
 });
 
-/** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */
 function restOn(target: Element): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -117,7 +105,6 @@ function restOn(target: Element): void {
   }
 }
 
-/** A line as the window draws it, its box `width` wide against words 120 wide, with no hint of its caller's. */
 function renderUnhinted(width: number): { view: HTMLElement; line: Element } {
   vi.stubGlobal("ResizeObserver", StandInObserver);
   const view = render(

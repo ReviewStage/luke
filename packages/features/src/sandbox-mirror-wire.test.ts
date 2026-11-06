@@ -3,11 +3,6 @@ import { Schema } from "effect";
 import { test } from "vitest";
 import { MIRROR_FRAME, mirrorFrameSchema } from "./sandbox-mirror-wire.js";
 
-/**
- * sandbox-mirror-wire.test.ts -- the bridge's header names a commit by its full id and
- * nothing else, since the Mac passes it to git as an argument.
- */
-
 const decode = Schema.decodeUnknownResult(mirrorFrameSchema);
 
 test("a header's base is read only as a full lowercase commit id", () => {

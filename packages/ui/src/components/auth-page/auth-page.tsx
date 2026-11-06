@@ -3,59 +3,21 @@ import { isReported, type ShownError } from "../../reported-failure.js";
 import { BUTTON_SIZE, BUTTON_VARIANT, Button, ButtonLink } from "../button/button.js";
 import { FailureCopy } from "../failure-copy/failure-copy.js";
 
-/**
- * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centered in the window, with nothing else on the page.
- *
- * The card holds, one under another, the artwork it opens with, its title,
- * what the title means, the form or the provider choices the page is for,
- * a foot under them (a step's `AuthStepFoot`, or a consent's answers),
- * what went wrong, the one way on it offers, and a closing note. A quiet
- * way out of the flow, such as setup's Sign out, stands off the card in the
- * page's top-right corner, where a toolbar's last button would, so it never
- * competes with the step's own presses and stays clear of the desktop
- * window's traffic lights at the other end of its title bar. The page
- * owns every length between them and the card's own width, which gives way
- * to a narrow window rather than overflowing it: its inset narrows under a
- * phone's width, and what it holds stretches to the card's inner width, so a
- * provider's button or a form's field is never wider than the screen. The way
- * on is a link drawn as an outline button, centered under the words. A caller
- * hands it words and controls, never a class.
- *
- * The artwork is decoration, hidden from a reader, since the title says what
- * the card is and how it stands. The error stands in an alert region from the
- * first render, empty until it says something, because a reader announces a
- * region filling more surely than one arriving. A failure of the app's
- * comes with the failure beneath it, reported as it first stands, and its
- * details to copy stand under its words, the compact copy glyph alone,
- * named "Copy details", outside the alert so a reader hears the words alone.
- *
- * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
- * the card is no `Card`, whose corners, shadow, and insets are a page's
- * card's rather than this dialog-cornered surface standing over the window.
- * Its sheet (`auth-page.css`) keeps the card's inset, which a narrow page's
- * container query narrows, the sizes it sets on the glyphs other components
- * draw inside it, and the desktop window's drag.
- */
-
-/** The one way on a page offers: its words, where it goes, and what its press does first. */
 export interface AuthAction {
   readonly label: string;
   readonly href: string;
   readonly onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
 }
 
-/** A quiet way out of the flow the page is a step of, such as Sign out: its words and its press. */
 export interface AuthExit {
   readonly label: string;
   readonly onPress: () => void;
 }
 
-/** Whether words say anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** A sign-in, consent, or connection page: `title` under `mark`, holding `children`, with `action` under them. */
 export function AuthPage({
   mark,
   title,
@@ -67,22 +29,14 @@ export function AuthPage({
   exit,
   children,
 }: {
-  /** The artwork the page opens with: an `AuthMark`, or the product's mark. */
   mark?: ReactNode;
-  /** What the page is for, or how it ended, which names it. */
   title: ReactNode;
   description?: ReactNode;
-  /** What went wrong and the failure beneath it, or nothing while nothing has. */
   error?: ShownError | undefined;
-  /** The way on, such as the Open link, or nothing where there is none. */
   action?: AuthAction | undefined;
-  /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;
-  /** The foot under what the page holds: a step's `AuthStepFoot`, or a consent's answers. */
   foot?: ReactNode;
-  /** A quiet way out off the card, at the page's top right, such as Sign out, or nothing where there is none. */
   exit?: AuthExit | undefined;
-  /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;

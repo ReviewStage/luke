@@ -7,12 +7,6 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { PortalFence } from "./portal-fence.js";
 
-/**
- * portal-fence.test.ts -- a press or a key on a control drawn in a portal
- * inside the fence is that control's alone: the tree that drew it hears
- * neither, though React carries a portal's events up through it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

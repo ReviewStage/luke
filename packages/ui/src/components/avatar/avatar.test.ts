@@ -6,17 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { AVATAR_SHAPE, Avatar, UnassignedAvatar } from "./avatar.js";
 
-/**
- * avatar.test.ts -- the letter stands until the picture loads and comes back
- * where it fails; a picture that failed is asked for again once its address
- * is given back; a glyph stands where the letter would, for an app; a
- * picture the browser drew before the page took over is shown; the disc
- * names its person to a reader once; and no one's outline is named
- * Unassigned to a reader, once. The page's
- * answer to a picture is the boundary, so a test sends the load or the error
- * the browser would.
- */
-
 const PICTURE = "https://pictures.example/ada.png";
 
 declare global {
@@ -35,7 +24,6 @@ afterEach(() => {
 
 type AvatarProps = Parameters<typeof Avatar>[0];
 
-/** A disc drawn into the page, and a way to draw it again with other props. */
 interface Drawn {
   readonly container: HTMLElement;
   readonly redraw: (next: AvatarProps) => void;
@@ -51,12 +39,10 @@ function drawn(props: AvatarProps): Drawn {
   return { container, redraw };
 }
 
-/** The picture the disc asks for, if it asks for one. */
 function picture(container: HTMLElement): HTMLImageElement | null {
   return container.querySelector("img");
 }
 
-/** The browser answers the picture's request with `answer`. */
 function answer(container: HTMLElement, answer: "load" | "error"): void {
   const asked = picture(container);
   assert.ok(asked, "no picture was asked for");
@@ -113,7 +99,6 @@ test("a name with no character to draw stands as the figure, said to nobody", ()
   assert.equal(disc?.getAttribute("aria-hidden"), "true");
 });
 
-/** A glyph a caller hands the square, as an app's mark would be. */
 const GLYPH = createElement("svg", { "data-glyph": "robot" });
 
 test("an app's glyph stands where its letter would, until its picture loads and again where it fails", () => {

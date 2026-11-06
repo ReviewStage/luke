@@ -1,13 +1,3 @@
-/* landed.css -- "you landed here" (landed.ts): a wash over the place the view
-   brought the eye to, standing for --ui-confirm-delay and fading over
-   --ui-duration-shape. Reduced motion zeroes the fade, never the stand, so
-   the wash still marks the place, still, for as long. The light is one
-   number, --ui-landed, from 1 to 0, played on the wash, whose end is
-   heard as the landed element's own, or on a place that draws it itself
-   (`held`), whose children inherit it: a diff's lines, inside a shadow root
-   no keyframes of the document's reach. On opacity alone, so no words
-   re-shape. */
-
 @property --ui-landed {
   syntax: "<number>";
   inherits: true;
@@ -15,8 +5,6 @@
 }
 
 @layer components {
-  /* The light's timing, read where it plays: on the wash, so a motion of the
-     place's own never stands in its way, or on a place that draws it itself. */
   [data-landed] {
     --ui-landed-light: ui-landed var(--ui-duration-shape) var(--ui-motion-exit)
       var(--ui-confirm-delay) both;
@@ -45,7 +33,6 @@
     animation: var(--ui-landed-light);
   }
 
-  /* Note that a row flush to its card keeps its wash a step inside, clear of the card's corner. */
   [data-landed="within"]::before {
     inset: var(--ui-space-2);
     border-radius: calc(var(--ui-control-radius) - var(--ui-space-2));

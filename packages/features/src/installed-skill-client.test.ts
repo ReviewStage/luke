@@ -12,13 +12,6 @@ import {
 } from "./installed-skill-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-/**
- * The window's installed skills calls against a scripted service: each
- * travels under the account's bearer to its own path, and a refusal is named
- * in the window's own words, a refused skill by why, with its name.
- * Synthetic ids and words.
- */
-
 const SKILL_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
 const WORKSPACE_ID = "workspace-1";
 

@@ -11,39 +11,8 @@ import { Button } from "../button/button.js";
 import { List, ListRow } from "../list-row/list-row.js";
 import { RowHint, RowHintOptions, Tooltip } from "./hint.js";
 
-/**
- * hint.test.ts -- a card hung beside a row that names its row hangs past
- * the row's end, not its control's, so a control that gives its end up to
- * the row's acts on hover never puts the card over the row. And a finger,
- * which has no hover, opens a hint by hand: a tap on words that are no
- * control opens their card, and a tap elsewhere or Escape closes it, while a
- * mouse's click opens nothing; a link's tap still goes where it leads, and
- * a long press opens its card instead, its release pressing nothing; and a
- * control whose long press opens its menu keeps it for the menu. A tap on a
- * control inside hinted words is the control's alone, and its hold opens the hint, a finger's scroll
- * opens nothing, and a tap spent on a hint shows no message's actions.
- *
- * The window waits out the pointer's rest before it draws a hint: a pointer
- * only crossing a control mounts nothing for it, a card's row moved on from
- * lets the next row wait its own wait, so a pointer sweeping down a list
- * hangs no card, and a pill seen still lets the next control's show at once.
- * A modifier held alone, as a screenshot's chord begins, neither calls a
- * waiting hint off nor takes a standing one down.
- * Words cut short inside a control hanging a card raise its card, not their
- * pill, while a button inside it raises its own, and the pointer moving on
- * from that button to the words raises the card.
- *
- * A reader hears a hint without the pointer or the keyboard: from its first
- * render, a control is described by its hint's words, beside a description
- * of its own, whether the control is the page's own element or a component;
- * words that take no focus, which a reader's cursor only walks over, own
- * them as hidden text read at their end, their own words as they were; and a
- * control whose own name says them is told them by no other way.
- */
-
 const roots: Root[] = [];
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: a hint is placed once and never resized here. */
 class StillResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -53,12 +22,10 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StillResizeObserver);
 });
 
-/** `element` under `registry`, as an app's root provides its own. */
 function onRegistry(registry: AtomRegistry.AtomRegistry, element: ReactElement): ReactElement {
   return createElement(RegistryContext.Provider, { value: registry }, element);
 }
 
-/** The pointer arriving on `target` and resting there past the hint's wait, on a faked clock. */
 function restOn(target: Element): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -81,12 +48,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Gives `element` a fixed box, as layout would, since jsdom lays nothing out. */
 function boxed(element: Element, left: number, right: number): void {
   element.getBoundingClientRect = () => new DOMRect(left, 10, right - left, 28);
 }
 
-/** A list row handed only a card for its hint, with an act after its press, as a sidebar row draws one. */
 function Row(): React.JSX.Element {
   return createElement(List, {
     label: "Tasks",
@@ -113,8 +78,6 @@ test("a list row's card, handed no place to hang, hangs past the row's end, not 
   assert.ok(row && press);
   boxed(row, 8, 260);
   boxed(press, 8, 200);
-  // A window as wide as jsdom says it is, which its root's box, read for the
-  // room a card keeps inside, otherwise answers as none.
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
     return this === document.documentElement ? window.innerWidth : 0;
   });
@@ -124,8 +87,6 @@ test("a list row's card, handed no place to hang, hangs past the row's end, not 
 
   restOn(press);
 
-  // Note that the card is placed once its place has been worked out, a few
-  // microtasks after it mounts, by the positioner it stands in.
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
@@ -136,7 +97,6 @@ test("a list row's card, handed no place to hang, hangs past the row's end, not 
   assert.ok(left > 260, `the card stands past the row's end, at ${placed}`);
 });
 
-/** Draws `element` into the document, on a registry of its own. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -146,7 +106,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** A pointer of `pointerType` going `type` on `target`, as the browser sends it. */
 function press(target: Element, type: string, pointerType: string): void {
   act(() => {
     target.dispatchEvent(
@@ -163,17 +122,11 @@ function press(target: Element, type: string, pointerType: string): void {
   });
 }
 
-/**
- * A press of `pointerType` let go on `target`, and the click its release
- * makes, as the browser makes it: for a touch, only where its touchend was
- * not refused. Answers whether it made the click.
- */
 function release(target: Element, pointerType: string): boolean {
   press(target, "pointerup", pointerType);
   return clickOf(target, pointerType);
 }
 
-/** The click a press's release makes, as the browser makes it: for a touch, only where its touchend was not refused. */
 function clickOf(target: Element, pointerType: string): boolean {
   const touchEnd = new TouchEvent("touchend", { bubbles: true, cancelable: true });
   act(() => {
@@ -184,11 +137,6 @@ function clickOf(target: Element, pointerType: string): boolean {
   return !touchEnd.defaultPrevented;
 }
 
-/**
- * A tap, or a mouse's click, on `target`. Note that a finger arrives on
- * what it touches and leaves it again as it lifts, as a browser says, while
- * a mouse is already resting where it clicks.
- */
 function tap(target: Element, pointerType = "touch"): boolean {
   const touched = pointerType === "touch";
   if (touched) press(target, "pointerover", pointerType);
@@ -198,7 +146,6 @@ function tap(target: Element, pointerType = "touch"): boolean {
   return clickOf(target, pointerType);
 }
 
-/** A finger held still on `target` well past a long press, then lifted; answers whether its release clicked. */
 function longPress(target: Element): boolean {
   vi.useFakeTimers();
   press(target, "pointerdown", "touch");
@@ -209,13 +156,10 @@ function longPress(target: Element): boolean {
   return release(target, "touch");
 }
 
-/** The card drawn, standing or on its way out, if one is. */
 const card = () => document.querySelector(".ui-tooltip-card");
 
-/** Whether a card stands, drawn and not on its way out. */
 const cardStands = () => card() !== null && !card()?.hasAttribute("data-leaving");
 
-/** How a turn ended, as words that are no control, hanging the turn's card. */
 const WORKED = createElement(Tooltip, {
   label: "Worked for 3m",
   card: createElement("p", null, "Began at 9:14 AM"),
@@ -229,7 +173,6 @@ const WORKED = createElement(Tooltip, {
 test("under a finger, a tap on words that are no control opens their card at once, and another tap closes it", () => {
   const line = mount(WORKED).querySelector("[data-worked]") ?? assert.fail("the line");
 
-  // Note that no time passes, so the card standing says it skipped the hover's wait.
   tap(line);
   assert.equal(card()?.textContent, "Began at 9:14 AM");
 
@@ -245,7 +188,6 @@ test("a card a tap opened goes on a tap elsewhere, or on Escape, and stays for a
   const elsewhere = page.querySelector("[data-else]") ?? assert.fail("elsewhere");
 
   tap(line);
-  // Note that the clock is the test's, so a card left to linger would be gone by the check.
   vi.useFakeTimers();
   tap(card() ?? assert.fail("the card"));
   act(() => {
@@ -372,16 +314,13 @@ test("a finger that scrolls from a link, which the browser takes over, opens no 
   assert.equal(cardStands(), false);
 });
 
-/** The cards mounted so far, by the row each was hung from. */
 let mounted: string[] = [];
 
-/** The faked clock a hint waits on, and no card mounted yet. */
 function waiting(): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   mounted = [];
 }
 
-/** A card that notes it was mounted, which only a card drawn is. */
 function Card({ row }: { row: string }): React.JSX.Element {
   const noted = useRef(false);
   if (!noted.current) {
@@ -391,7 +330,6 @@ function Card({ row }: { row: string }): React.JSX.Element {
   return createElement("p", null, `${row}'s card`);
 }
 
-/** A row's press hanging its card beside it, its row counting as its control, as a sidebar row's does. */
 function CardedRow({ row }: { row: string }): React.JSX.Element {
   const item = useRef<HTMLElement | null>(null);
   return createElement(
@@ -407,7 +345,6 @@ function CardedRow({ row }: { row: string }): React.JSX.Element {
   );
 }
 
-/** Rows that each hang a card, drawn under a registry of their own. */
 function drawRows(rows: readonly string[]): (row: string) => HTMLElement {
   const container = document.body.appendChild(document.createElement("ul"));
   const root = createRoot(container);
@@ -429,12 +366,6 @@ function drawRows(rows: readonly string[]): (row: string) => HTMLElement {
     assert.fail(`${row} is drawn`);
 }
 
-/**
- * The pointer moving from `from`, where it stood, onto `to`: out of `from`,
- * leaving each element holding it that does not hold `to`, as a browser
- * tells them, and over `to`. Note that React draws its own enter and leave
- * from the out and the over, while a row's own listener hears the leave.
- */
 function move(from: Element | undefined, to: Element): void {
   act(() => {
     from?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
@@ -491,7 +422,6 @@ test("a pointer sweeping on from a row whose card stands lets each next row wait
   pass(MOTION_DELAY_MS.HINT);
   assert.deepEqual(cards(), ["Alpha's card"]);
 
-  // Note that each row is crossed in less than the wait, the card left behind lingering and going meanwhile.
   move(press("Alpha"), press("Beta"));
   pass(MOTION_DELAY_MS.HINT / 4);
   move(press("Beta"), press("Gamma"));
@@ -546,7 +476,6 @@ test("a modifier held alone, as a screenshot's chord begins, neither calls a wai
   assert.equal(cardStands(), false, "the chord's key takes it down");
 });
 
-// Note that this stands last, because the warm spell it leaves is the window's own.
 test("a pill seen warms the window, so the next control's shows at once", () => {
   waiting();
   const container = document.body.appendChild(document.createElement("div"));
@@ -590,7 +519,6 @@ test("a pill seen warms the window, so the next control's shows at once", () => 
   assert.equal(pill(), "Forward", "the next shows at once");
 });
 
-/** The words of each element `control` names in its `attribute`, in turn, as a reader hears them. */
 function wordsNamedBy(control: Element, attribute = "aria-describedby"): string[] {
   return (control.getAttribute(attribute) ?? "")
     .split(" ")

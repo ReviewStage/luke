@@ -1,10 +1,3 @@
-/**
- * index.ts -- the hosted service's oRPC contract, one key per resource.
- *
- * A subpath door of its own (`@repo/features/contract`), so a bundle that
- * reads the contract resolves no service code behind it.
- */
-
 import { accountContract } from "./account.js";
 import { adminContract } from "./admin.js";
 import { agentBrowserTabsContract } from "./agent-browser-tabs.js";
@@ -48,7 +41,6 @@ export { EVENTS_MAXIMUM_BODY_BYTES } from "./events.js";
 export { integrationStatusesReadSchema } from "./integrations.js";
 export { RETIRED_TASK_PATHS, TASK_START_STATUS } from "./tasks.js";
 
-/** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
   account: accountContract,
   admin: adminContract,

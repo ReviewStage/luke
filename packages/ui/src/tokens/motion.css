@@ -1,19 +1,3 @@
-/* motion.css -- reduced motion, answered at the motion tokens.
-
-   The durations themselves are `@repo/brand`'s, generated into
-   `motion-tokens.css` under their `--ui-*` names. Reduced motion zeroes
-   them here rather than component by component, keeping hover feedback's
-   70ms (a color settling is not motion) and `--ui-late-delay`, a wait that
-   holds back a blip rather than moving anything, and pauses `--ui-loop-motion`,
-   the play state of a loop with no end of its own (a busy button's ring).
-   `--ui-scroll-glide` is how a scroller a component moves itself gets
-   there, a tab strip bringing a tab into view: a glide, or at once where
-   motion is held still. `--ui-wait-motion` is the play state of a wait
-   drawn over its own length, a toast's countdown: it says how much time is
-   left, so reduced motion keeps it running, in steps rather than a glide,
-   and only a capture run holds it. The desktop holds the same tokens still
-   on its capture stage. */
-
 :root {
   --ui-loop-motion: running;
   --ui-wait-motion: running;

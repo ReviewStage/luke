@@ -14,13 +14,6 @@ import {
   toolStep,
 } from "./agent-replay.js";
 
-/**
- * A first message written with a replay and read back: the brief, the
- * replay, and the note told apart by the markers' lengths alone, whatever
- * the steps' words hold, and a message whose markers do not add up read as
- * its brief whole.
- */
-
 const SOURCE = "6f1d1b2e-58c1-4a5e-9a39-0c7f0f7f5d11";
 const MESSAGE = "0b8f7a52-1d4c-4e3e-a0b5-3c2f1e9d8a77";
 

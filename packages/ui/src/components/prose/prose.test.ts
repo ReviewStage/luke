@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Prose } from "../../index.js";
 
-/**
- * prose.test.ts -- what a reader of a generated document meets: its own
- * headings at their levels, its links where they lead, its lists' items in
- * order, and its keys and code as the words they are.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

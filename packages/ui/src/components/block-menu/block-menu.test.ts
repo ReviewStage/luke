@@ -13,22 +13,12 @@ import {
   writingRow,
 } from "./block-menu.js";
 
-/**
- * block-menu.test.ts -- the `/` menu: its blocks under their groups' headings,
- * each saying at its end the Markdown that makes it or else its chord; the
- * row the editor's keys stand on highlighted and named by its id; the
- * pointer moving the highlight and a press choosing a row; a group with
- * nothing in it left out, and a menu with nothing in it saying so; and the
- * keys it hears named at its foot.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 const roots: Root[] = [];
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks, since the list draws its rows through a run that measures them. */
 class StandInResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -49,7 +39,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A row of the owner's own, which no writing action is. */
 const TABLE: BlockMenuRow = {
   id: "table",
   label: "Table",
@@ -66,13 +55,11 @@ const GROUPS: readonly BlockMenuGroup[] = [
   { label: BLOCK_MENU_GROUP.INSERT, rows: [TABLE, writingRow(WRITING_INSERT.DIVIDER)] },
 ];
 
-/** What a test's menu told its owner. */
 interface Told {
   active: number[];
   chosen: string[];
 }
 
-/** The menu over `groups`, `active` highlighted. */
 function mount(groups: readonly BlockMenuGroup[], active = 0): { menu: HTMLElement; told: Told } {
   const told: Told = { active: [], chosen: [] };
   const container = document.body.appendChild(document.createElement("div"));
@@ -92,7 +79,6 @@ function mount(groups: readonly BlockMenuGroup[], active = 0): { menu: HTMLEleme
   return { menu: container, told };
 }
 
-/** The menu's rows. */
 function rows(menu: HTMLElement): HTMLElement[] {
   return [...menu.querySelectorAll<HTMLElement>('[role="option"]')];
 }

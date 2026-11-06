@@ -4,25 +4,6 @@ import { MODEL_PROVIDER } from "./models-wire.js";
 import { chapterSchema } from "./pull-request-chapters.js";
 import { countedNumber } from "./service-wire.js";
 
-/**
- * pull-request-chapters-wire.ts -- a pull request's chapters as the hosted service answers them: read as they stand, or generated on a member's Generate.
- *
- * Both procedures name the pull request as a Pull request tab's other reads
- * do: the coding agent by its id in the path, and, where the tab shows a
- * pull request of the agent's repository other than the agent's own, that
- * pull request's number in the `number` query, as the query spells it
- * (`pullRequestChaptersRequestSchema`); a read always names the number, the
- * one the tab's own read of the pull request found. Each answers the same way
- * (`pullRequestChaptersAnswerSchema`): none where the agent published no pull
- * request, or the number names none; else whether this deployment can
- * generate chapters at all, and on which model and whose key (`runsOn`),
- * and the workspace's newest chapters for the pull
- * request with the head they were made for, whatever it is, which the panel
- * holds against the heads its own reads hold, drawing chapters made for
- * another as stale beside a Regenerate.
- */
-
-/** Where a pull request's newest chapters stand for its workspace: never asked for, being made, given up on, or made. */
 export const PULL_REQUEST_CHAPTERS_STATE = {
   NONE: "none",
   GENERATING: "generating",
@@ -30,12 +11,6 @@ export const PULL_REQUEST_CHAPTERS_STATE = {
   READY: "ready",
 } as const;
 
-/**
- * Why a generation failed, in the store's words: the diff was too large to
- * send, the model took too long, the model declined, what it answered could
- * not be read as chapters, or something else went wrong on the service,
- * which says nothing more.
- */
 export const PULL_REQUEST_CHAPTERS_FAILURE_KIND = {
   TOO_LARGE: "too_large",
   TIMEOUT: "timeout",
@@ -44,19 +19,15 @@ export const PULL_REQUEST_CHAPTERS_FAILURE_KIND = {
   UNEXPECTED: "unexpected",
 } as const;
 
-/** A git commit's name, as GitHub spells it. */
 const commitSchema = EffectSchema.NonEmptyString;
 
-/** The commits a generation read the diff between: the base it was read against and the head it split. */
 const generationCommits = { headSha: commitSchema, baseSha: commitSchema };
 
-/** The pull request's newest chapters, by where their generation stands. */
 const pullRequestChaptersStateSchema = EffectSchema.Union([
   EffectSchema.Struct({ status: EffectSchema.Literal(PULL_REQUEST_CHAPTERS_STATE.NONE) }),
   EffectSchema.Struct({
     status: EffectSchema.Literal(PULL_REQUEST_CHAPTERS_STATE.GENERATING),
     ...generationCommits,
-    /** When the generation was claimed, as epoch milliseconds. */
     startedAt: countedNumber,
   }),
   EffectSchema.Struct({
@@ -67,19 +38,13 @@ const pullRequestChaptersStateSchema = EffectSchema.Union([
   EffectSchema.Struct({
     status: EffectSchema.Literal(PULL_REQUEST_CHAPTERS_STATE.READY),
     ...generationCommits,
-    /** The model that told them, by its provider's id. */
     model: EffectSchema.NonEmptyString,
-    /** In reading order, "Other changes" last where it holds anything. */
     chapters: EffectSchema.Array(chapterSchema),
   }),
 ]);
 
 export type PullRequestChaptersState = typeof pullRequestChaptersStateSchema.Type;
 
-/**
- * The model the asking member's Generate would run on, by its provider's
- * id, and the provider whose API key, the member's own, it runs on.
- */
 export const chaptersRunsOnSchema = EffectSchema.Struct({
   provider: EffectSchema.Literals(Object.values(MODEL_PROVIDER)),
   model: EffectSchema.NonEmptyString,
@@ -87,30 +52,21 @@ export const chaptersRunsOnSchema = EffectSchema.Struct({
 
 export type ChaptersRunsOn = typeof chaptersRunsOnSchema.Type;
 
-/** A Generate of a pull request's chapters: the agent in the path, and the number in the query where the tab names one. */
 export const pullRequestChaptersRequestSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   number: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** A read of a pull request's chapters: the agent in the path, and the number the tab's own read of it found in the query. */
 export const pullRequestChaptersReadRequestSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   number: EffectSchema.String,
 });
 
-/**
- * A pull request's chapters as the service answers a read or a Generate:
- * none where there is no pull request to tell; else whether this deployment
- * can generate chapters, what the asker's Generate would run on, and the
- * newest chapters.
- */
 export const pullRequestChaptersAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       number: githubPullRequestNumberSchema,
       generatable: EffectSchema.Boolean,
-      /** What the asker's Generate would run on; absent where they can generate none, and from a service older than it. */
       runsOn: EffectSchema.optionalKey(chaptersRunsOnSchema),
       chapters: pullRequestChaptersStateSchema,
     }),

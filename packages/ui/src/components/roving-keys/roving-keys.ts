@@ -7,60 +7,6 @@ import {
   useRef,
 } from "react";
 
-/**
- * roving-keys.ts -- one Tab stop for a set of items, the arrows walking between them, as a Mac's list or a toolbar's buttons are walked.
- *
- * A box (`useRovingKeys`) holds its items, each marked by `rovingItem()`.
- * Exactly one of them is a Tab stop: the one last focused, or while none
- * has been, the chosen one (`aria-selected`, `aria-checked`), then the
- * current one (`aria-current` of `page`, `step`, or `true`), then the first,
- * and every other is out of the tab order, so Tab
- * enters the set once and leaves it at the next. The arrows along the
- * set's orientation (↑↓, or ←→ for a row of items) step the focus to the
- * next or previous item, wrapping at either end, and Home and End go to the
- * first and the last. An item unavailable (`disabled`, `aria-disabled`) is
- * stepped over and never the Tab stop.
- *
- * Note that a key held with ⌘, ⌥, Ctrl, or ⇧ is left alone, because those
- * are the app's own shortcuts (⇧⌘↑ moves a row, ⌘↓ goes to the end), and so
- * is a key an item's own handler already took (`defaultPrevented`), so a
- * list that steers its rows from a field, or a row that answers a key
- * itself, still has the last word. A key heard on the box itself steps
- * from the item holding the focus, or, while the focus stands on none of
- * them, from none: forward and Home to the first, back and End to the last.
- *
- * Sets standing side by side as columns, a board's, each walked down by
- * ↑↓ in a box of its own, are crossed by ←→ (`useRovingColumns`): from
- * an item, to the Tab stop of the column beside it, wrapping, as Tab
- * entering that column would land, a column holding no available item
- * passed over.
- *
- * A set may differ in four ways, each an option rather than a copy of the
- * walk. A radio group steps by either pair of arrows (`BOTH`). A set where
- * one item is chosen, a tablist or a radio group, keeps its Tab stop on the
- * chosen one rather than the one last focused (`ROVING_STOP.CHOSEN`), and a
- * set whose tab order a library or its owner keeps, a menu's or a group of
- * checkboxes each a stop, takes the keys alone (`ROVING_STOP.NONE`). And a
- * set that does more as a key lands, a strip of tabs scrolling the tab into
- * view or a radio group choosing as it goes, moves the focus itself
- * (`moveTo`). A list that steps a highlight while the focus stays in a
- * field moves no focus at all, and takes the walk alone (`rovingStep`). A
- * set that draws only some of its items, a list drawing the rows near the
- * view (`VirtualRows`), hands its owner every key that walks it (`reach`),
- * since the item after the one in hand may be drawn nowhere near it, or not
- * at all, as a group's rows left undrawn below the view are: the owner
- * takes the focus to the set's own first or last item, or the one after or
- * before the item in hand, wherever it stands, and a key it leaves walks the
- * items drawn.
- *
- * The box keeps the tab order in the DOM rather than in a render, because
- * its items are drawn by whoever fills it: it settles the order whenever
- * its owner draws it, whenever an item comes, goes, turns unavailable, or
- * is chosen, and whenever the focus lands on one. An item therefore renders no `tabIndex` of its
- * own, which React would put back over the box's.
- */
-
-/** Which arrows step through the set: ↑↓ down a column, ←→ along a row, or either pair, as a radio group takes them. */
 export const ROVING_ORIENTATION = {
   VERTICAL: "vertical",
   HORIZONTAL: "horizontal",
@@ -69,7 +15,6 @@ export const ROVING_ORIENTATION = {
 
 export type RovingOrientation = (typeof ROVING_ORIENTATION)[keyof typeof ROVING_ORIENTATION];
 
-/** Which item is the set's one Tab stop: the one last focused, the one chosen, or none the box keeps, its owner keeping the tab order. */
 export const ROVING_STOP = {
   HELD: "held",
   CHOSEN: "chosen",
@@ -78,7 +23,6 @@ export const ROVING_STOP = {
 
 export type RovingStop = (typeof ROVING_STOP)[keyof typeof ROVING_STOP];
 
-/** Where a key reaches in a set that draws only some of its items: its first or last item, or the one after or before the item in hand. */
 export const ROVING_REACH = {
   FIRST: "first",
   LAST: "last",
@@ -88,13 +32,10 @@ export const ROVING_REACH = {
 
 export type RovingReach = (typeof ROVING_REACH)[keyof typeof ROVING_REACH];
 
-/** The attribute the box wears, so an item finds the set it belongs to and no set a box inside it holds. */
 const BOX_ATTRIBUTE = "data-roving";
 
-/** The attribute an item wears. */
 const ITEM_ATTRIBUTE = "data-roving-item";
 
-/** The keys that step forward and back, by orientation. */
 const STEP_KEYS = {
   [ROVING_ORIENTATION.VERTICAL]: { next: ["ArrowDown"], previous: ["ArrowUp"] },
   [ROVING_ORIENTATION.HORIZONTAL]: { next: ["ArrowRight"], previous: ["ArrowLeft"] },
@@ -107,13 +48,10 @@ const STEP_KEYS = {
   { next: readonly string[]; previous: readonly string[] }
 >;
 
-/** The attributes that say an item is the chosen one: a tab's, or a radio's. */
 const CHOSEN_ATTRIBUTES = ["aria-selected", "aria-checked"] as const;
 
-/** The `aria-current` values that say an item is where the person stands: a page, a step, or the thing itself. */
 const CURRENT_VALUES = ["page", "step", "true"] as const;
 
-/** What a change under the box settles the tab order on: an item coming, going, turning unavailable, chosen, or current. */
 const WATCHED = {
   childList: true,
   subtree: true,
@@ -129,42 +67,35 @@ const WATCHED = {
 
 const NONE_SKIPPED = () => false;
 
-/** The items of the set the box holds, in the order they are drawn, none of a set nested inside it. */
 function itemsOf(box: HTMLElement): HTMLElement[] {
   return Array.from(box.querySelectorAll<HTMLElement>(`[${ITEM_ATTRIBUTE}]`)).filter(
     (item) => item.parentElement?.closest(`[${BOX_ATTRIBUTE}]`) === box,
   );
 }
 
-/** The boxes a box of columns holds, in the order they are drawn, none inside another of them. */
 function boxesOf(columns: HTMLElement): HTMLElement[] {
   return Array.from(columns.querySelectorAll<HTMLElement>(`[${BOX_ATTRIBUTE}]`)).filter(
     (box) => !columns.contains(box.parentElement?.closest(`[${BOX_ATTRIBUTE}]`) ?? null),
   );
 }
 
-/** Whether an item can take the focus. */
 function available(item: HTMLElement): boolean {
   return !item.matches(":disabled") && item.getAttribute("aria-disabled") !== "true";
 }
 
-/** Whether an item is the chosen one of its set. */
 function chosen(item: HTMLElement): boolean {
   return CHOSEN_ATTRIBUTES.some((name) => item.getAttribute(name) === "true");
 }
 
-/** Whether an item is the current one of its set, as the open page of a list of pages is. */
 function current(item: HTMLElement): boolean {
   return CURRENT_VALUES.some((value) => item.getAttribute("aria-current") === value);
 }
 
-/** The item of the box an event landed on, where it landed on one. */
 function itemAt(box: HTMLElement, target: EventTarget): HTMLElement | undefined {
   if (!(target instanceof HTMLElement) || !target.hasAttribute(ITEM_ATTRIBUTE)) return undefined;
   return itemsOf(box).includes(target) ? target : undefined;
 }
 
-/** The first index from `start` on, `step` at a time and wrapping, that is not skipped; none where every one of `count` is. */
 function landing(
   start: number,
   step: 1 | -1,
@@ -178,14 +109,6 @@ function landing(
   return undefined;
 }
 
-/**
- * The index a key moves to among `count` items from `at` (below zero for
- * none), as a roving set walks them: the arrows along `orientation` a step
- * on, wrapping at either end, and from none to the first or the last; Home
- * and End to the first and the last. An item `skipped` is passed over, and
- * where every one is, the key stays at `at`. A key that moves nothing
- * answers none. It reads no modifier, which is its caller's to refuse.
- */
 export function rovingStep(
   key: string,
   orientation: RovingOrientation,
@@ -201,13 +124,6 @@ export function rovingStep(
   return landing(start, forward ? 1 : -1, count, skipped) ?? at;
 }
 
-/**
- * The key of the item a reach lands on (`reach`), among every item's `keys`
- * in order, those not drawn among them, from the key of the item in hand
- * (`from`): the first or the last, or the one after or before it, wrapping
- * at either end; none where the set lists none, or a step from an item it
- * does not list.
- */
 export function reachedKey(
   keys: readonly string[],
   from: string | undefined,
@@ -220,12 +136,6 @@ export function reachedKey(
   return keys[(at + (to === ROVING_REACH.NEXT ? 1 : keys.length - 1)) % keys.length];
 }
 
-/**
- * Where a key walking the set reaches from the item in hand, `at` (below
- * zero for none): Home and End to the set's ends, and a step to the item
- * after or before it, or from none, forward to the first and back to the
- * last, as the walk goes; none for a key that walks nothing.
- */
 function reachOf(key: string, orientation: RovingOrientation, at: number): RovingReach | undefined {
   if (key === "Home") return ROVING_REACH.FIRST;
   if (key === "End") return ROVING_REACH.LAST;
@@ -239,12 +149,6 @@ function reachOf(key: string, orientation: RovingOrientation, at: number): Rovin
   return undefined;
 }
 
-/**
- * Hands the focus to the Tab stop of the set `box` holds, as Tab entering
- * it would; answers whether one took it. Note that a stop just taken away
- * leaves none until the box settles again, so its first available item
- * takes the focus then, as it would take the stop.
- */
 export function focusRovingStop(box: HTMLElement): boolean {
   const open = itemsOf(box).filter(available);
   const stop = open.find((item) => item.tabIndex === 0) ?? open[0];
@@ -252,17 +156,14 @@ export function focusRovingStop(box: HTMLElement): boolean {
   return stop !== undefined;
 }
 
-/** What an item of a roving set wears, spread on the element that takes the focus. */
 export function rovingItem(): { readonly "data-roving-item": "" } {
   return { [ITEM_ATTRIBUTE]: "" };
 }
 
-/** The item of a roving set `row` holds, the element in it that takes the focus; none where it holds none. */
 export function rovingItemIn(row: Element): HTMLElement | undefined {
   return row.querySelector<HTMLElement>(`[${ITEM_ATTRIBUTE}]`) ?? undefined;
 }
 
-/** What the box of a roving set takes, spread on it: its ref and the keys and focus it hears; its key handler says whether the key stepped. */
 export interface RovingBox<T extends HTMLElement> {
   readonly "data-roving": "";
   readonly ref: RefCallback<T>;
@@ -270,18 +171,10 @@ export interface RovingBox<T extends HTMLElement> {
   readonly onFocus: (event: FocusEvent<T>) => void;
 }
 
-/** Moves the focus to the item a key landed on, as a set does unless it says otherwise. */
 function focusItem(item: HTMLElement): void {
   item.focus();
 }
 
-/**
- * One Tab stop over the items a box holds, the arrows along `orientation`,
- * Home, and End walking them. `stop` says which item is the Tab stop,
- * `moveTo` takes the focus to the item a key lands on, and does whatever
- * else the set does as it lands, and `reach`, in a set drawing only some of
- * its items, takes each key walking it, answering whether it moved the focus.
- */
 export function useRovingKeys<T extends HTMLElement>({
   orientation = ROVING_ORIENTATION.VERTICAL,
   stop = ROVING_STOP.HELD,
@@ -291,17 +184,12 @@ export function useRovingKeys<T extends HTMLElement>({
   orientation?: RovingOrientation;
   stop?: RovingStop;
   moveTo?: (item: HTMLElement) => void;
-  /** Takes a key from the item in hand, none where the focus stands on none, to where it reaches in the whole set; answers whether it moved the focus, a key it leaves walking the items drawn. */
   reach?: ((from: HTMLElement | undefined, to: RovingReach) => boolean) | undefined;
 } = {}): RovingBox<T> {
-  // The item last focused, which stays the Tab stop while it stands and is available.
   const held = useRef<HTMLElement | null>(null);
-  // The box while it stands, settled again each time its owner draws it.
   const drawn = useRef<T | null>(null);
-  // The latest `moveTo`, which a caller may hand anew on every render.
   const move = useRef(moveTo);
   move.current = moveTo;
-  // The latest `reach`, which a caller may hand anew on every render.
   const reaching = useRef(reach);
   reaching.current = reach;
 
@@ -310,9 +198,6 @@ export function useRovingKeys<T extends HTMLElement>({
       if (stop === ROVING_STOP.NONE) return;
       const items = itemsOf(box);
       const open = items.filter(available);
-      // Note that Tab enters on the row the person last moved to, else the
-      // chosen row, else the current one, else the first, so a list opens
-      // where its owner already stands.
       const remembered = stop === ROVING_STOP.HELD ? held.current : null;
       const tabStop =
         remembered !== null && open.includes(remembered)
@@ -320,9 +205,6 @@ export function useRovingKeys<T extends HTMLElement>({
           : (open.find(chosen) ?? open.find(current) ?? open[0]);
       for (const item of items) {
         const order = item === tabStop ? 0 : -1;
-        // Note that a disabled control is out of the order already: one
-        // that stood as the stop gives up its tabindex rather than keep one
-        // that would offer it the focus, and any other is left as drawn.
         if (!item.matches(":disabled")) {
           if (item.tabIndex !== order) item.tabIndex = order;
         } else if (item.getAttribute("tabindex") === "0") item.removeAttribute("tabindex");
@@ -346,9 +228,6 @@ export function useRovingKeys<T extends HTMLElement>({
     [settle],
   );
 
-  // Note that the order is settled as the owner's render lands too, rather
-  // than only once the watcher hears of it, so an item chosen in that render
-  // is the Tab stop before anything reads the order.
   useLayoutEffect(() => {
     if (drawn.current !== null) settle(drawn.current);
   });
@@ -368,7 +247,6 @@ export function useRovingKeys<T extends HTMLElement>({
       if (event.defaultPrevented) return false;
       if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return false;
       const box = event.currentTarget;
-      // Note that a key heard on the box itself steps from the item holding the focus, or from none.
       const onBox = event.target === box;
       const item = itemAt(box, onBox ? (document.activeElement ?? box) : event.target);
       if (item === undefined && !onBox) return false;
@@ -392,18 +270,10 @@ export function useRovingKeys<T extends HTMLElement>({
   return { [BOX_ATTRIBUTE]: "", ref, onKeyDown, onFocus };
 }
 
-/** What a box of roving columns takes, spread on it: the key it hears, which says whether the key crossed to another column. */
 export interface RovingColumns<T extends HTMLElement> {
   readonly onKeyDown: (event: KeyboardEvent<T>) => boolean;
 }
 
-/**
- * ←→ across the roving sets a box holds as columns, each a
- * `useRovingKeys` box of its own walked by ↑↓: from the item holding the
- * focus to the Tab stop of the column beside it, wrapping, a column with no
- * available item passed over. A key a column already took, or one held with
- * a modifier, is left alone, as the walk down a column leaves it.
- */
 export function useRovingColumns<T extends HTMLElement>(): RovingColumns<T> {
   const onKeyDown = useCallback((event: KeyboardEvent<T>): boolean => {
     if (event.defaultPrevented) return false;

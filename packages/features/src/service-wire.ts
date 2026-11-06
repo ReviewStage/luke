@@ -2,244 +2,85 @@ import { EXCESS_KEYS } from "@repo/wire";
 import { readEither, verbatimJsonSchema } from "@repo/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 
-/**
- * The vocabulary every hosted endpoint shares: how a refusal is worded, what
- * a day's allowance looks like, and the two text shapes the per-domain
- * declarations are written from. Each domain's own answers live in its own
- * wire module beside this one.
- *
- * Every declaration below is composed directly as an Effect `Schema` and
- * exported under its own name: a caller reads a request through `readEither`,
- * an answer through `readServiceAnswer` below, and shows either through
- * `emitJsonSchema` from `@repo/wire/effect`.
- */
-
-/** Every refusal a hosted endpoint answers with, by its reason. */
 export const HOSTED_API_ERROR = {
-  /** The bearer token is missing, expired, or revoked. */
   INVALID_TOKEN: "invalid-token",
-  /** The request body is not what this endpoint takes. */
   INVALID_REQUEST: "invalid-request",
-  /**
-   * Today's free allowance for this meter is spent, or — on the recording
-   * endpoint, which meters nothing — this account has sent more counts this
-   * minute than the brake allows.
-   */
   QUOTA_EXHAUSTED: "quota-exhausted",
-  /**
-   * The deployment holds no key for what was asked — OpenAI's for the hosted
-   * tier, the analytics processor's for recording — so that endpoint is off.
-   */
   UNAVAILABLE: "unavailable",
-  /** The upstream refused or failed; the status travels, the bodies never do. */
   UPSTREAM_ERROR: "upstream-error",
-  /**
-   * The upstream itself is rate limiting; nothing was answered. Distinct from
-   * a spent allowance: the caller cools down for the bounded wait the
-   * `Retry-After` header names rather than for the day.
-   */
   UPSTREAM_THROTTLED: "upstream-throttled",
-  /** The request body weighs more than the endpoint's fixed byte bound; nothing of it was read. */
   REQUEST_TOO_LARGE: "request-too-large",
-  /** The prepared prompt is longer than the contract's own prompt envelope; nothing was sent upstream. */
   PROMPT_TOO_LARGE: "prompt-too-large",
-  /** A tool name the service's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: "unknown-tool",
   METHOD_NOT_ALLOWED: "method-not-allowed",
-  /** The row the path names is not one this account holds; another account's and none at all read alike. */
   NOT_FOUND: "not-found",
-  /**
-   * The GitHub installation connected to the workspace reaches no such
-   * repository, or the workspace has none connected. Nothing was written.
-   */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /**
-   * GitHub did not answer whether the workspace reaches the repository: it
-   * was down, rate limiting, or slow past the deadline. Nothing was written,
-   * and the same request a moment later may be taken.
-   */
   GITHUB_UNANSWERED: "github-unanswered",
-  /** The task names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
   NO_REPOSITORY: "no-repository",
-  /** The branch a coding agent was asked to start on is none of the repository's on GitHub; nothing was started. */
   BRANCH_NOT_FOUND: "branch-not-found",
-  /** The message spells more characters than one message to a coding agent may; shortened, it is taken. */
   MESSAGE_TOO_LONG: "message-too-long",
-  /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */
   AGENT_NOT_READY: "agent-not-ready",
-  /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
-  /**
-   * The agent runs on a native harness (Claude Code or Codex) that this part
-   * of the app cannot reach yet, such as a call, which runs on eve alone; nothing
-   * was written or charged. It is reached from the agent's own tab.
-   */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
-  /**
-   * What was asked runs on OpenAI (a voice call, a dictated clip) and the
-   * account saved no OpenAI API key of its own, which we spend none of our
-   * own in place of; nothing was sent or charged. The key is added in Settings.
-   */
   OPENAI_KEY_MISSING: "openai-key-missing",
-  /**
-   * What was asked runs on the account's own OpenAI key, and OpenAI refused
-   * that key as none of its own: revoked, deleted, or mistyped. Nothing of
-   * OpenAI's answer travels beside the slug. A new key is saved in Settings.
-   */
   OPENAI_KEY_REFUSED: "openai-key-refused",
-  /**
-   * What was asked runs on the account's own OpenAI key, and OpenAI answered
-   * that the key's account has no credit left (its `insufficient_quota`).
-   * Nothing of OpenAI's answer travels beside the slug. Credit is added on
-   * OpenAI's own billing page.
-   */
   OPENAI_KEY_UNFUNDED: "openai-key-unfunded",
-  /**
-   * The agent runs on its starter's plan (a ChatGPT plan, on Codex), and the
-   * starter's sign-in cannot launch it: none is kept, the provider signed it
-   * out, or the service cannot open it. The starter signs in again in
-   * Settings; nothing was written, and nothing turned to another payer.
-   */
   AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
-  /**
-   * The agent runs on its starter's plan and its provider did not answer as
-   * the sign-in was renewed; nothing was written, and the same request a
-   * little later, under the same key, may be taken.
-   */
   AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
-  /**
-   * The agent runs on its starter's plan, whose usage limit refused its last
-   * turn and has not reset; nothing was written, nothing turned to another
-   * payer, and the same request after the reset may be taken.
-   */
   AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
-  /**
-   * The agent runs on its starter's plan, whose provider said the account
-   * is not eligible to run it; nothing was written, and nothing turned to
-   * another payer.
-   */
   AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
-  /**
-   * The account keeps no credential that pays for a coding agent on the
-   * model's provider: neither that provider's subscription (a Claude
-   * setup-token, a ChatGPT sign-in) nor its API key. Our own key pays for
-   * no coding agent, so nothing was written; the refusal names the provider,
-   * which the account connects in Settings › Agents.
-   */
   AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
-  /**
-   * The agent runs on its starter's API key, which is saved but cannot be
-   * opened under this deployment's key ring, as on a Preview whose database
-   * holds keys sealed under production's. No retry opens it: the starter
-   * saves the key again in Settings › Agents. Nothing was written.
-   */
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
-  /**
-   * The account's role in the workspace does not allow this: a member
-   * removing someone, an owner removed or leaving. Nothing was written.
-   */
   NOT_PERMITTED: "not-permitted",
-  /** The address is already a member of the workspace, or already holds a pending invitation to it; nothing was sent. */
   ALREADY_INVITED: "already-invited",
-  /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: "sandbox-stopped",
-  /** The coding agent's sandbox can never resume: its snapshot expired or was deleted, its saved files with it, and the agent's next turn starts a fresh one. Nothing was resumed. */
   SANDBOX_SNAPSHOT_GONE: "sandbox-snapshot-gone",
-  /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
   SKILL_NAME_TAKEN: "skill-name-taken",
-  /** A skill's files were refused: a file past its bound, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
   SKILL_FILES_REFUSED: "skill-files-refused",
-  /** A slug the owner chose is spelled other than a slug may be (`workspaceSlugProblemOf`). Nothing was written. */
   WORKSPACE_SLUG_MALFORMED: "workspace-slug-malformed",
-  /** A slug the owner chose is one our own pages stand under, or one an account's first workspace falls back to. Nothing was written. */
   WORKSPACE_SLUG_RESERVED: "workspace-slug-reserved",
-  /** A slug the owner chose is another workspace's, whatever its case. Nothing was written. */
   WORKSPACE_SLUG_TAKEN: "workspace-slug-taken",
-  /** A Start on This Mac was refused, for the reason it names (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
-  /** A Start naming repositories beside its agent's own was refused, for the reason it names (`EXTRA_REPOSITORY_REFUSAL`), with the repository where one is why. Nothing was written. */
   EXTRA_REPOSITORY_REFUSED: "extra-repository-refused",
-  /** A host called with a daemon below the service's floor, or with no version at all (`host-wire.ts`); nothing was read or written, and the box's install script upgrades it in place. */
   HOST_UPGRADE_NEEDED: "host-upgrade-needed",
-  /** The agent ran on a host its starter removed, so no message reaches it again; Continue starts a new agent elsewhere. Nothing was sent. */
   DEVICE_REMOVED: "device-removed",
-  /** A child task was asked for in a repository other than its parent's, which a child always works in; nothing was written. */
   CHILD_REPOSITORY_LOCKED: "child-repository-locked",
-  /** A block asked for would close a cycle: the task it blocks already blocks it, itself or through others. Nothing was written. */
   TASK_BLOCK_CYCLE: "task-block-cycle",
-  /** A parent asked for is the task itself or one of its descendants, under which the task would descend from itself. Nothing was written. */
   TASK_PARENT_CYCLE: "task-parent-cycle",
-  /** A start asked to be the parent of a task that has a parent already, which a start never takes the place of. Nothing was written. */
   TASK_PARENT_HELD: "task-parent-held",
-  /** The account named too many pairing codes that no pending pairing has, so its reads, approves, and denies by code are refused until the time the refusal names; nothing was read or written. */
   HOST_PAIRING_HELD: "host-pairing-held",
-  /** A write sent again under the idempotency key (`IDEMPOTENCY_KEY`) it was taken under before; it was not run again, so what it wrote stands as the service holds it now. */
   ALREADY_WRITTEN: "already-written",
-  /** The member has Memory off, so their workspace's memories are neither kept nor searched for them; nothing was read or written. */
   MEMORY_OFF: "memory-off",
-  /** A memory's words look like they hold a credential, which is never kept; nothing was written. */
   MEMORY_CREDENTIAL: "memory-credential",
-  /** The workspace holds as many memories as it may (`MEMORY_BOUNDS.MAX_MEMORIES`), so a new one is refused until one is corrected or forgotten; nothing was written. */
   MEMORY_FULL: "memory-full",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
 
-/**
- * The idempotency key a write may be sent under, as the header names it: a
- * write sent again under a key the service took it under is answered
- * `ALREADY_WRITTEN` without running again, so a write whose answer was lost
- * lands once however often it is sent. A key is the sender's own, at most
- * `MAX_LENGTH` characters; a request without one is taken as it always was.
- */
 export const IDEMPOTENCY_KEY = {
   HEADER: "idempotency-key",
   MAX_LENGTH: 255,
 } as const;
 
-/** What one day's allowance looked like when the service last answered. */
 export interface HostedQuota {
   used: number;
   limit: number;
-  /** When the day's counter resets, as epoch milliseconds. */
   resetsAt: number;
 }
 
 const HOSTED_API_ERROR_NAMES = Object.values(HOSTED_API_ERROR);
 
-/**
- * A count an answer reports: any finite number at or above zero, whole or
- * not, because what these carry are the service's own counters and instants
- * and a fractional one is the service miscounting rather than the wire
- * carrying something else.
- */
 export const countedNumber = EffectSchema.Finite.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
-/**
- * Reads an answer of the service, or a frame it sent, dropping any key a
- * newer service added rather than refusing the whole answer. Every desktop
- * read of what the service answered goes through this, because a build that
- * refused an unknown key — v0.11.0 reading a task — stops working the day
- * the service adds one. A request frame the desktop builds, an IPC act, and
- * anything the service parses are read with `readEither` as declared,
- * refusing a key they do not name.
- */
 export const readServiceAnswer = <S extends EffectSchema.ConstraintDecoder<unknown>>(schema: S) =>
   readEither(schema, { excess: EXCESS_KEYS.DROP });
 
-/**
- * An answer's records are plain structs: whether a key a newer service added
- * is dropped or refused is no longer the declaration's to state, so a reader
- * of one of these asks for it through {@link readServiceAnswer}, and the
- * option it passes reaches every struct nested inside.
- */
 export const hostedQuotaSchema = EffectSchema.Struct({
   used: countedNumber,
   limit: countedNumber,
   resetsAt: countedNumber,
 });
 
-/** A member set read with its ends trimmed, the way an enum reads one. */
 function trimmedEnum<const Member extends string>(members: readonly Member[]) {
   return verbatimJsonSchema(
     EffectSchema.Trim.pipe(
@@ -254,7 +95,6 @@ function trimmedEnum<const Member extends string>(members: readonly Member[]) {
 
 const hostedErrorRecord = EffectSchema.Struct({ error: trimmedEnum(HOSTED_API_ERROR_NAMES) });
 
-/** The error reason out of a refused hosted answer, or nothing. */
 export const hostedErrorSchema = hostedErrorRecord.pipe(
   EffectSchema.decodeTo(
     EffectSchema.Literals(HOSTED_API_ERROR_NAMES),
@@ -267,7 +107,6 @@ export const hostedErrorSchema = hostedErrorRecord.pipe(
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-/** The length of a UUID as its text form spells it. */
 export const WIRE_UUID_LENGTH = 36;
 
 export function isWireUuid(value: string): boolean {
@@ -279,32 +118,12 @@ const trimmedUuidText = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(WIRE_UUID_LENGTH),
 );
 
-/**
- * A row's or a device's id as the hosted wire takes it: the UUID text, case
- * folded so the same id spelled two ways is one. A stored id column is
- * `uuid`, and Postgres refuses any other text bound to it, so an id is held
- * to this shape at the boundary rather than met as a failed query.
- */
 export const wireUuidSchema = trimmedUuidText
   .pipe(EffectSchema.decodeTo(EffectSchema.String, SchemaTransformation.toLowerCase()))
   .check(EffectSchema.makeFilter(isWireUuid));
 
-/**
- * The id a create's maker chose for the row it makes, minted by the client
- * so it can draw the row before the service answers: the row is made under
- * it, a create sent again under it makes nothing new and answers the row it
- * made, and one under an id a row the maker does not reach holds is refused
- * as any other refused create is, naming nothing of that row. A create that
- * names none is made under an id the service mints.
- */
 export const chosenIdSchema = wireUuidSchema;
 
-/**
- * A member named where the service attributes work to one: their account's
- * id, and the name it holds now, a member who has since left the workspace
- * among them. The window calls the member You only where the id is its own
- * account's.
- */
 export const memberRefSchema = EffectSchema.Struct({
   userId: EffectSchema.String,
   name: EffectSchema.String,

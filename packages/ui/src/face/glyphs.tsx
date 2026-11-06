@@ -1,18 +1,5 @@
-/**
- * Every glyph the panel draws itself that no icon set draws as well: drawn
- * here rather than pulled from one, so they share one weight and one box and
- * are sized by the headings, labels, and controls they sit in. What Lucide
- * already draws is Lucide's, behind `icons/lucide-glyphs.tsx`; the door to
- * both is `icons/icons.ts`. They are ours, not
- * anyone's brand mark, so they inherit `currentColor` like any other text — a
- * provider's own mark lives in `marks/provider-mark.tsx` and keeps its brand color.
- * The one exception is the app's own mark, which is ours in both senses: it is a
- * brand mark, and it inherits `currentColor` like the rest.
- */
-
 import React from "react";
 
-// `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
 function Glyph({
@@ -39,7 +26,6 @@ function Glyph({
   );
 }
 
-/** Sits beside a provider's name to say it is connected, in the state palette. */
 export function CheckIcon(): React.JSX.Element {
   return (
     <Glyph className="credential-check">
@@ -78,7 +64,6 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
-/** A check, drawn as a button's glyph: marks a task done. */
 export function MarkDoneIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -87,7 +72,6 @@ export function MarkDoneIcon(): React.JSX.Element {
   );
 }
 
-/** A box under its lid: puts an agent, or a task left archived, away under Archived. */
 export function ArchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -98,7 +82,6 @@ export function ArchiveIcon(): React.JSX.Element {
   );
 }
 
-/** A box with an arrow rising out of it: brings an archived task back. */
 export function UnarchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -111,7 +94,6 @@ export function UnarchiveIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow turning back on itself: returns a setting to its default. */
 export function ResetIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -121,7 +103,6 @@ export function ResetIcon(): React.JSX.Element {
   );
 }
 
-/** Stands down without choosing: the cancel a control becomes mid-action. */
 export function CloseIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -131,7 +112,6 @@ export function CloseIcon(): React.JSX.Element {
   );
 }
 
-/** Three dots in a row: more actions on the thing it sits beside, in a menu. */
 export function EllipsisIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -142,7 +122,6 @@ export function EllipsisIcon(): React.JSX.Element {
   );
 }
 
-/** Points back out of one: the control that returns to the front page. */
 export function BackIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -151,7 +130,6 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
-/** Points on, the mirror of `BackIcon`: a calendar's next month. */
 export function ForwardIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -160,7 +138,6 @@ export function ForwardIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow pointing left: back to the place the window stood on before. */
 export function ArrowLeftIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -170,7 +147,6 @@ export function ArrowLeftIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow pointing right: forward again to where back came from. */
 export function ArrowRightIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -180,7 +156,6 @@ export function ArrowRightIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow pointing up: a row moved one place up its list. */
 export function ArrowUpIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -190,7 +165,6 @@ export function ArrowUpIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow pointing down: a row moved one place down its list. */
 export function ArrowDownIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -200,7 +174,6 @@ export function ArrowDownIcon(): React.JSX.Element {
   );
 }
 
-/** Sound leaving the machine: everything about how the app is heard. */
 export function SpeakerIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -211,7 +184,6 @@ export function SpeakerIcon(): React.JSX.Element {
   );
 }
 
-/** The display the app stands on: everything about where and how it is drawn. */
 export function DisplayIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -232,7 +204,6 @@ export function KeyboardIcon(): React.JSX.Element {
   );
 }
 
-/** Heads the Updates section: the arrival a newer release waits as. */
 export function DownloadIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -243,7 +214,6 @@ export function DownloadIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow rising in a circle: the sidebar's way into a newer release. */
 export function UpdateIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -254,10 +224,8 @@ export function UpdateIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow up and to the right, set after a link's words: a press leaves the place for another. */
 export function ArrowUpRightIcon(): React.JSX.Element {
   return (
-    // Note that the ↗ follows its link's words' size, faint until the link lights; the pointer lights it only where there is a hover, because iOS plays a first tap as a hover, which a change it draws spends.
     <Glyph className="ui-text-link-out ms-[0.12em] inline-block size-[0.78em] align-[-0.02em] opacity-55 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-hover/text-link:opacity-100 group-focus-visible/text-link:opacity-100">
       <path d="M7 17 17 7" />
       <path d="M8 7h9v9" />
@@ -265,7 +233,6 @@ export function ArrowUpRightIcon(): React.JSX.Element {
   );
 }
 
-/** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (
     <Glyph className="link-icon">
@@ -276,7 +243,6 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
-/** A person: the account the app is signed in as. */
 export function UserIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -286,7 +252,6 @@ export function UserIcon(): React.JSX.Element {
   );
 }
 
-/** A magnifier: the list read for the rows that say the typed words. */
 export function SearchIcon(): React.JSX.Element {
   return (
     <Glyph className="search-glyph">
@@ -296,7 +261,6 @@ export function SearchIcon(): React.JSX.Element {
   );
 }
 
-/** Work happening on this Mac: the machine it is happening on. */
 export function LaptopIcon(): React.JSX.Element {
   return (
     <Glyph className="filter-icon">
@@ -306,7 +270,6 @@ export function LaptopIcon(): React.JSX.Element {
   );
 }
 
-/** The microphone itself — what macOS's own access ask is about. */
 export function MicrophoneIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -317,7 +280,6 @@ export function MicrophoneIcon(): React.JSX.Element {
   );
 }
 
-/** The microphone struck through, on a call that is muted. */
 export function MicrophoneOffIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -329,7 +291,6 @@ export function MicrophoneOffIcon(): React.JSX.Element {
   );
 }
 
-/** A picture, on the control that attaches one. */
 export function ImageIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -340,11 +301,6 @@ export function ImageIcon(): React.JSX.Element {
   );
 }
 
-/**
- * Takes one attachment back off the note. Its own element rather than a
- * `Glyph`: at the eight pixels it is drawn at, the shared 1.9 stroke thins to
- * nothing and the X reads as a dot, so this one carries the weight it needs.
- */
 export function RemoveIcon(): React.JSX.Element {
   return (
     <svg
@@ -362,7 +318,6 @@ export function RemoveIcon(): React.JSX.Element {
   );
 }
 
-/** A plus: a workspace or an agent that did not exist before the action. */
 export function PlusIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -372,11 +327,6 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
-/**
- * The Model Context Protocol's mark, its three strokes redrawn in this
- * file's weight and box rather than shipped as the project's artwork: the
- * composer's button over the MCP servers an agent is handed.
- */
 export function McpIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -387,7 +337,6 @@ export function McpIcon(): React.JSX.Element {
   );
 }
 
-/** A window with a pane down its right side: the side panel beside the document, shown or hidden. */
 export function SidePanelIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -397,7 +346,6 @@ export function SidePanelIcon(): React.JSX.Element {
   );
 }
 
-/** Two arrows out to opposite corners: a pane grown to fill the window. */
 export function ExpandIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -409,7 +357,6 @@ export function ExpandIcon(): React.JSX.Element {
   );
 }
 
-/** Two arrows in from opposite corners: a full-window pane brought back to its place. */
 export function CollapseIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -421,7 +368,6 @@ export function CollapseIcon(): React.JSX.Element {
   );
 }
 
-/** The window's sidebar, shown or folded away: the side panel's frame with its left column ruled off. */
 export function SidebarIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -431,7 +377,6 @@ export function SidebarIcon(): React.JSX.Element {
   );
 }
 
-/** A pencil over an open square: a new piece of work, as every chat app's compose button draws it. */
 export function ComposeIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -441,7 +386,6 @@ export function ComposeIcon(): React.JSX.Element {
   );
 }
 
-/** A cog: the account's row that leads to Settings, drawn the way every app draws settings. */
 export function GearIcon(): React.JSX.Element {
   return (
     <Glyph className="gear-glyph">
@@ -451,7 +395,6 @@ export function GearIcon(): React.JSX.Element {
   );
 }
 
-/** A terminal's prompt: the Settings page about the coding agents that run in one. Outline, like the other pages' glyphs. */
 export function TerminalIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -462,7 +405,6 @@ export function TerminalIcon(): React.JSX.Element {
   );
 }
 
-/** A lit bulb: what our agents remember for the workspace. */
 export function MemoryIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -472,7 +414,6 @@ export function MemoryIcon(): React.JSX.Element {
   );
 }
 
-/** A page with its corner turned down and lines of text on it: the task's own document. */
 export function DocumentIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -484,7 +425,6 @@ export function DocumentIcon(): React.JSX.Element {
   );
 }
 
-/** A folder with its tab: a repository whose owner's picture is not drawn. */
 export function FolderIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -493,7 +433,6 @@ export function FolderIcon(): React.JSX.Element {
   );
 }
 
-/** Starts a run: the triangle every transport draws for play. */
 export function PlayIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -502,7 +441,6 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
-/** Holds what is playing: the two bars every transport draws for pause, at the triangle's weight. */
 export function PauseIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -512,7 +450,6 @@ export function PauseIcon(): React.JSX.Element {
   );
 }
 
-/** Steps a paused video back one frame: a bar and the play triangle turned toward it, at the triangle's weight. */
 export function PreviousFrameIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -522,7 +459,6 @@ export function PreviousFrameIcon(): React.JSX.Element {
   );
 }
 
-/** Steps a paused video on one frame: the play triangle and a bar it stops at, at the triangle's weight. */
 export function NextFrameIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -532,7 +468,6 @@ export function NextFrameIcon(): React.JSX.Element {
   );
 }
 
-/** A video sent back a few seconds: the two triangles every transport draws for rewind, at the play triangle's weight. */
 export function RewindIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -542,7 +477,6 @@ export function RewindIcon(): React.JSX.Element {
   );
 }
 
-/** A video sent on a few seconds: the mirror of `RewindIcon`, every transport's fast-forward. */
 export function FastForwardIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -552,7 +486,6 @@ export function FastForwardIcon(): React.JSX.Element {
   );
 }
 
-/** Four corners turned out: a video grown to fill the screen. */
 export function FullScreenIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -564,7 +497,6 @@ export function FullScreenIcon(): React.JSX.Element {
   );
 }
 
-/** Four corners turned in: a full-screen video brought back to its place. */
 export function ExitFullScreenIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -576,7 +508,6 @@ export function ExitFullScreenIcon(): React.JSX.Element {
   );
 }
 
-/** Stops what is playing: the square every transport draws for stop, at the triangle's weight. */
 export function StopIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
@@ -585,7 +516,6 @@ export function StopIcon(): React.JSX.Element {
   );
 }
 
-/** A board on its stand with a line drawn across it: a description's diagram. */
 export function BoardIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -597,7 +527,6 @@ export function BoardIcon(): React.JSX.Element {
   );
 }
 
-/** Points down into a menu: the half of a split button that opens its choices. */
 export function ChevronDownIcon(): React.JSX.Element {
   return (
     <Glyph className="settings-chevron">
@@ -606,7 +535,6 @@ export function ChevronDownIcon(): React.JSX.Element {
   );
 }
 
-/** Points at a fold's body, turned down by its stylesheet while the fold is open. */
 export function FoldChevronIcon(): React.JSX.Element {
   return (
     <Glyph className="ui-disclosure-chevron">
@@ -615,7 +543,6 @@ export function FoldChevronIcon(): React.JSX.Element {
   );
 }
 
-/** A pair of angle brackets with a slash between them: code. */
 export function CodeIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -626,7 +553,6 @@ export function CodeIcon(): React.JSX.Element {
   );
 }
 
-/** Points into a submenu beside a menu row, in the chevron's own stroke. */
 export function ChevronRightIcon(): React.JSX.Element {
   return (
     <Glyph className="settings-chevron">

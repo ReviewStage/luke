@@ -6,22 +6,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useMenu } from "../menu/menu.js";
 import { NAV_CURRENT, NAV_ITEM_VARIANT, NavItem, NavItemLink } from "./nav-item.js";
 
-/**
- * nav-item.test.ts -- a nav item is a button named by its words, its count
- * read with its noun and left out at none; the place shown is announced as
- * the page, a search's find as the location; a menu's trigger says the
- * menu it drops and whether it stands; a place's own ⋯ stands beside its
- * press, never inside it, so each is its own button; an unavailable item refuses its
- * press; a hint's words describe the item they hang from; and one that
- * keeps focus leaves it on the field that held it. A nav item link is a
- * link to its address, named by its words or its label, announced as the
- * page where it is shown, handing its press to its caller, and opening in
- * a tab of its own where it leaves the page.
- */
-
 const roots: Root[] = [];
 
-/** Stands in for the ResizeObserver jsdom lacks, which a row's name is measured by. */
 class StandInResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -37,7 +23,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -47,7 +32,6 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The one button drawn in `container`. */
 function button(container: HTMLElement): HTMLButtonElement {
   const found = container.querySelector("button");
   if (found === null) throw new Error("no button drawn");

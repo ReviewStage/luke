@@ -1,53 +1,15 @@
 import { Data, type Effect } from "effect";
 
-/**
- * A refresh the account lifecycle could not complete, worded by whoever owns
- * the credential. A call that asked for one reads nothing off it but its
- * presence: the retry runs on whatever token stands, and a second refusal is
- * what gets reported.
- */
 export class AccountRefreshFailed extends Data.TaggedError("AccountRefreshFailed")<{
   readonly message: string;
 }> {}
-/**
- * Who a call to our own service is on behalf of. Every client that speaks
- * to the service on the signed-in account — the brain's transports, the voice
- * mint, the key vault, the event sender — is handed these rather than the
- * account itself: the token is read fresh for every attempt, so a client
- * holds none, and the account lifecycle stays the one thing that knows how a
- * session is kept.
- */
 export interface AccountToken {
-  /** The signed-in account's current access token, read fresh for every attempt. */
   readAccessToken: () => Effect.Effect<string | undefined>;
-  /**
-   * Asks the account lifecycle to refresh its tokens. Access tokens outlive a
-   * call by an hour at most while the app runs for days, so a 401 is routine:
-   * the call retries once with whatever the refresh produced, and only a
-   * second refusal is reported.
-   */
   refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
-  /**
-   * Who the token answers for, as an opaque identity, for the one comparison
-   * a refreshed token needs: a sign-out and sign-in between an attempt and
-   * its retry must read as the caller's account gone rather than as a fresh
-   * bearer to carry the old account's payload under. An account lifecycle
-   * with no identity to name omits it, and then the comparison does not
-   * exist.
-   */
   readAccountKey?: (() => Effect.Effect<string | undefined>) | undefined;
 }
 
-/**
- * The Mac's own Better Auth session, for the calls our service makes
- * through Better Auth's organization endpoints, which take a session rather
- * than an OAuth token. A session is not refreshed the way a token is: a new
- * one comes only through the browser's hand-off, so asking for one is
- * something only a press may do.
- */
 export interface AccountSessionToken {
-  /** The signed session token, read fresh for every attempt; none before the Mac holds one. */
   readSessionToken: () => Effect.Effect<string | undefined>;
-  /** Asks for a new session through the browser's hand-off; the call retries on whatever it left. */
   obtainSession: () => Effect.Effect<void, AccountRefreshFailed>;
 }

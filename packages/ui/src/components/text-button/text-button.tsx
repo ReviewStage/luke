@@ -4,35 +4,6 @@ import { cn } from "../../cn.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
 
-/**
- * text-button.tsx -- a press drawn as words among words: a link's look on a button, for an act that stays in the window.
- *
- * A text button is a `<button>`, since what it does is an act here (open a
- * thread, show a list, cancel a wait) rather than a page to follow, yet it
- * stands inside a line of text, so it takes the words' own size and weight
- * and no box of its own. Its tone says how it reads at rest:
- *
- * - `quiet` in the words' own ink, underlined only under the pointer or the
- *   keyboard, for words that already read as the act (a name, an "Edited"
- *   line, a count);
- * - `accent` in the accent's ink, set as a label, for the one act a line
- *   offers ("3 replies").
- *
- * There is no underlined tone at rest: an underline means a press leaves the
- * app, so it is a `TextLink` (an anchor), never this.
- *
- * It keeps to one line unless asked for two (`lines`), as a card's name
- * wraps: words longer than that end in an ellipsis. Words too short to want
- * cutting, a time, may be asked whole: on a coarse pointer those lift the
- * clip and take a finger's press wider and taller than they are, which the
- * clip of words that can be cut would cut short. It takes no
- * class or style, and its outer spacing is its container's. One that keeps
- * focus (`keepFocus`) leaves the focus where it is when a pointer presses
- * it, as a Button's does, and an app's hint wraps it as it wraps a Button,
- * handing it the pointer and focus handlers it shows and goes on.
- */
-
-/** How a text button reads at rest. */
 export const TEXT_BUTTON_TONE = {
   QUIET: "quiet",
   ACCENT: "accent",
@@ -40,7 +11,6 @@ export const TEXT_BUTTON_TONE = {
 
 export type TextButtonTone = (typeof TEXT_BUTTON_TONE)[keyof typeof TEXT_BUTTON_TONE];
 
-/** What an app's hint hands the button it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
   | "onPointerEnter"
@@ -52,33 +22,17 @@ type HintProps = Pick<
   | "aria-keyshortcuts"
 >;
 
-/** How many lines its words take before they are cut short with an ellipsis. */
 export const TEXT_BUTTON_LINES = {
   ONE: "one",
   TWO: "two",
-  /** Too short to want cutting, so on a coarse pointer its press reaches past its words. */
   WHOLE: "whole",
 } as const;
 
 export type TextButtonLines = (typeof TEXT_BUTTON_LINES)[keyof typeof TEXT_BUTTON_LINES];
 
-/**
- * Words with no box of their own, in the line's own type and ink: a
- * hairline corner, so the keyboard's ring hugs them, and a glyph after them
- * (a disclosure's chevron) set to their size. Note that a clip, unlike a
- * hidden overflow, keeps the words' own baseline, so the press sits on the
- * line it stands in.
- */
 const TEXT =
   "ui-text-button align-baseline min-w-0 max-w-full m-0 p-0 [border:0] rounded-[2px] bg-transparent bg-none text-inherit [font:inherit] text-start text-ellipsis cursor-press transition-[color,text-decoration-color] duration-(--ui-duration-hover) ease-motion-exit [&_svg]:size-[0.8em] [&_svg]:ms-0.5 [&_svg]:align-[-0.05em]";
 
-/**
- * How many lines the words take. One is cut with an ellipsis; two wrap
- * and cut a third short, a card's name; whole, too short to want cutting
- * (a time), takes on a coarse pointer a press a finger's height, and at
- * least as wide, centered on the words, as a Button's is, its clip lifted
- * so it does not clip the press.
- */
 const TEXT_LINES = {
   one: "inline-block overflow-clip whitespace-nowrap",
   two: "[display:-webkit-inline-box] overflow-hidden wrap-anywhere whitespace-normal [-webkit-box-orient:vertical] [-webkit-line-clamp:2]",
@@ -86,28 +40,17 @@ const TEXT_LINES = {
     "inline-block overflow-clip whitespace-nowrap pointer-coarse:relative pointer-coarse:overflow-visible pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:w-[max(100%,var(--ui-touch-target))] pointer-coarse:before:h-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']",
 } as const satisfies Record<TextButtonLines, string>;
 
-/** The line a quiet or an accent text button draws only under the pointer or the keyboard. */
 const UNDERLINE_ON_HOVER = "no-underline decoration-1 underline-offset-[0.24em]";
 
-/**
- * How each tone reads: quiet, in the line's ink until the pointer or the
- * keyboard underlines it in the full ink; the accent, in the accent's ink
- * and a label's weight. Note that a state here is a selector of its own
- * rather than Tailwind's `hover:`, which a touch screen never answers, and
- * that the accent's weight is keyed on its tone, which outweighs the box's
- * `font: inherit`.
- */
 const TEXT_TONE = {
   quiet: `${UNDERLINE_ON_HOVER} hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline`,
   accent: `${UNDERLINE_ON_HOVER} text-accent-ink data-[tone=accent]:font-label hover:underline focus-visible:underline`,
 } as const satisfies Record<TextButtonTone, string>;
 
-/** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
-/** Words in a line that act when pressed, drawn in `tone`. */
 export function TextButton({
   tone = TEXT_BUTTON_TONE.QUIET,
   lines = TEXT_BUTTON_LINES.ONE,
@@ -121,14 +64,10 @@ export function TextButton({
   tone?: TextButtonTone;
   lines?: TextButtonLines;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
-  /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
   id?: string | undefined;
-  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
-  /** Its accessible name, where the words on screen say less than the act. */
   "aria-label"?: string | undefined;
-  /** The region it shows and hides, and whether that stands open. */
   "aria-expanded"?: boolean | undefined;
   "aria-controls"?: string | undefined;
   children: ReactNode;
@@ -152,7 +91,6 @@ export function TextButton({
       onPointerDown={props.onPointerDown}
       onFocus={props.onFocus}
       onBlur={props.onBlur}
-      // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onClick={pulseOnPress(onClick, PRESS_PULSE.WORDS)}
     >

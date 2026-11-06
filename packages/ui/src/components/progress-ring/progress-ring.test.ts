@@ -6,11 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PROGRESS_RING_TONE, ProgressCount, ProgressRing } from "./progress-ring.js";
 
-/**
- * progress-ring.test.ts -- a count's ring is a picture whose share is the
- * count's, and a reader hears the label whole in place of the figures.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -32,7 +27,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** How much of the ring's circle (radius 6) the fill covers, from its dash. */
 function filledShare(view: HTMLElement): number {
   const fill = view.querySelectorAll("circle")[1] ?? assert.fail("a fill");
   const dash = Number.parseFloat(fill.getAttribute("stroke-dasharray") ?? "");

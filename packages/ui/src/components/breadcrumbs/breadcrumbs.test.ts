@@ -13,21 +13,6 @@ import {
   type Crumb,
 } from "./breadcrumbs.js";
 
-/**
- * breadcrumbs.test.ts -- a path is one landmark under its name holding its
- * crumbs in order, the page the reader stands on said to be current; a
- * crumb with no press is words and no button; a press is handed the crumb
- * pressed; a crumb that opens something says what and whether it stands
- * open; a crumb's own name stands over its words and its hint raises its
- * words; a crumb's glyph is hidden from a reader, who hears its words, and
- * its card hangs from the app's hint, a crumb with no press's included; a
- * toolbar's way back is a button named by its words; and a path that does
- * not fit its bar folds its first crumbs into one "…" that opens a menu of
- * them, each leading where its crumb did, the last crumb standing, and one
- * that fits folds nothing; and a path measures its fold again, folding or
- * unfolding, when its crumbs change width after it is drawn.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -36,10 +21,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** What each standing ResizeObserver calls back with, so a test can say that something was resized. */
 const resizeWatchers = new Set<() => void>();
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here, and a resize is what a test says. */
 class StandInResizeObserver {
   private readonly resized: () => void;
   constructor(resized: () => void) {
@@ -53,7 +36,6 @@ class StandInResizeObserver {
   }
 }
 
-/** The page's font set, which jsdom lacks, so a test can say that the fonts finished loading. */
 const fonts = new EventTarget();
 
 beforeEach(() => {
@@ -70,7 +52,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws a path of `crumbs` and hands back what it was drawn into. */
 function draw(props: Parameters<typeof Breadcrumbs>[0]): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -80,7 +61,6 @@ function draw(props: Parameters<typeof Breadcrumbs>[0]): HTMLElement {
   return container;
 }
 
-/** The button a reader knows by `name`. */
 function button(container: HTMLElement, name: string): HTMLButtonElement {
   const found = [...container.querySelectorAll("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
@@ -201,13 +181,8 @@ test("a toolbar's way back is a button named by its words, answering a press", (
   expect(container.querySelector("[aria-current='page']")?.textContent).toBe("REL-1");
 });
 
-/** How wide each crumb is laid out, which a test may change once the path is drawn, as a web font arriving late does. */
 let crumbWidth = 100;
 
-/**
- * Lays the path out at `crumbWidth` pixels a crumb in a bar `room` wide,
- * which jsdom does not: a path is as wide as the crumbs it draws.
- */
 function layOut(room: number): void {
   vi.spyOn(HTMLOListElement.prototype, "scrollWidth", "get").mockImplementation(function (
     this: HTMLOListElement,

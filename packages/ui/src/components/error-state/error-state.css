@@ -1,24 +1,8 @@
-/* error-state.css -- what a failure line's utilities (`error-state.tsx`)
-   cannot say: Retry drawn as its glyph alone where the row is narrow, a
-   container query reaching into Retry's button, and a toolbar's sentence
-   cut short where it gives way to its presses; and the glyph of a row that
-   is itself the retry (`RetryRowLabel`), which the row may size. */
-
 @layer components {
-  /* Note that the ellipsis stays here rather than in a utility, a place the
-     style guard's baseline holds for this sheet until the line takes the
-     fade; the utilities hold the sentence to one clipped line. */
   .ui-error-state[data-placement="toolbar"] > .ui-error-state-words {
     text-overflow: ellipsis;
   }
 
-  /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
-     square in the muted ink, its words kept for a reader and drawn nowhere.
-     Note that the row's own utilities name the container
-     (`@container/ui-error-state`), and that this stays in the sheet
-     because it restyles Button's parts by their classes, as one sheet of
-     the `components` layer restyles another's, which a utility would
-     outrank. */
   @container ui-error-state (width < 360px) {
     .ui-error-state-retry > .ui-button {
       --ui-button-ink: var(--ui-color-text-muted);
@@ -37,9 +21,6 @@
     }
   }
 
-  /* Note that the glyph's size stays in this layer, because the row lending
-     the label its type may size the glyphs in it by its own utilities, as
-     `TextButton` does, and those must still win. */
   .ui-retry-row-label svg {
     width: var(--ui-space-12);
     height: var(--ui-space-12);

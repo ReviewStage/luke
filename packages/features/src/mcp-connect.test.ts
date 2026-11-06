@@ -3,9 +3,6 @@ import { cursorConfigWithServer } from "./mcp-connect.js";
 
 const SERVER_URL = "https://app.test/api/mcp";
 
-// Note that the regression this catches is `mcp install cursor` writing over the person's own
-// Cursor config: another server dropped, a key beside `mcpServers` lost, or a file that is no
-// config replaced rather than left for them.
 describe("cursorConfigWithServer", () => {
   it("adds the server beside every server and key already there", () => {
     const existing = {

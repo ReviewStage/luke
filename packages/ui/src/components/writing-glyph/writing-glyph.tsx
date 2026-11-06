@@ -22,15 +22,6 @@ import {
   TodoListIcon,
 } from "../../icons/lucide-glyphs.js";
 
-/**
- * writing-glyph.tsx -- the glyph of each writing action, a mark or a block, as the format toolbar, Turn into, and the `/` menu all draw it.
- *
- * The vocabulary names each action's words and chord
- * (`@repo/settings/shortcuts`' `WRITING_SHORTCUTS`); this names its glyph,
- * once, so every surface that offers an action shows it alike.
- */
-
-/** Each writing action's glyph. */
 const WRITING_GLYPH = {
   [WRITING_MARK.BOLD]: BoldIcon,
   [WRITING_MARK.ITALIC]: ItalicIcon,
@@ -49,7 +40,6 @@ const WRITING_GLYPH = {
   [WRITING_INSERT.DIVIDER]: DividerIcon,
 } as const satisfies Record<WritingAction, () => React.JSX.Element>;
 
-/** The glyph `action` is drawn with wherever it is offered. */
 export function WritingGlyph({ action }: { action: WritingAction }): React.JSX.Element {
   const Glyph = WRITING_GLYPH[action];
   return <Glyph />;

@@ -9,14 +9,6 @@ import {
   sendShownFailure,
 } from "./shown-failure.js";
 
-/**
- * shown-failure.test.ts -- a failure nothing named, shown while the machine
- * had no network or whose own facts say its call got no answer, is a log
- * line at `warn` and opens no issue, as a Mac waking from sleep offline shows
- * its task list unread, or a phone that reads online with no signal shows its
- * inbox unread. A recording SDK stands in for Sentry. Synthetic throughout.
- */
-
 const SIGNED_IN = "signed-in";
 
 test.each([

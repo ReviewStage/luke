@@ -7,13 +7,6 @@ import {
 import { test } from "vitest";
 import { commentSpansIn, hungTop, marginTops, PENDING_THREAD } from "./description-comments.js";
 
-/**
- * Where a description's comments are drawn: each open thread's words marked inside
- * the section they stand in, a resolved thread's and a deleted passage's
- * not at all, and the margin's cards stood level with their words without
- * overlapping, the open one exactly level. Synthetic threads.
- */
-
 function thread(
   id: string,
   anchor: { from: number; to: number } | undefined,

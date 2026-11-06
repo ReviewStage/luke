@@ -1,8 +1,3 @@
-/* checkbox.css -- the ink of a Checkbox's words, which a stepped-back
-   region quiets from this same layer (stepped-back.css), where a utility
-   would outrank it. The box and the rest of its row are Tailwind utilities
-   (`checkbox.tsx`, `../../shadcn/checkbox.tsx`). */
-
 @layer components {
   .ui-checkbox {
     color: var(--ui-color-text);
@@ -12,12 +7,6 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* A box beside words is pressed anywhere on its row, the words too, and
-     on a coarse pointer the row takes the press a finger's target tall at
-     least, centered on it, while it draws at its own size, as a box alone
-     does (`checkbox.tsx`). Note that the press stands behind the row's
-     words, under the row's own stacking, so a press of their own among
-     them, such as the Inbox's addressee, stays theirs. */
   @media (pointer: coarse) {
     .ui-checkbox[data-words="true"] {
       position: relative;

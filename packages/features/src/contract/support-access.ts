@@ -1,15 +1,3 @@
-/**
- * support-access.ts -- the member's grant of support access (`account-wire.ts`), as procedures: granted and revoked under the caller's own session.
- *
- * Both run through the auth service's own support-access endpoints, which
- * take a session, so the service reads its caller from the session the
- * request carries, the Mac's signed bearer or a browser's cookie, rather
- * than the account's bearer. Neither carries a body.
- *
- * The output is the wire schema flipped, so oRPC's output check encodes the
- * handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
- */
-
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";

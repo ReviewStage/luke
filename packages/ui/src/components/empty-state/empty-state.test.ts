@@ -6,15 +6,6 @@ import { afterEach, expect, test } from "vitest";
 import { SearchIcon } from "../../face/glyphs.js";
 import { EmptyState, type EmptyStateAction } from "./empty-state.js";
 
-/**
- * empty-state.test.ts -- an empty place shows its heading and its line, its
- * glyph hidden from a reader; its one way on is a button named by its words
- * that answers a press; and a place with a line alone offers neither a
- * heading nor a button; a way on unavailable for now stands and takes no
- * press; a place a failure left empty is one alert holding its line and its
- * way on, and an empty one is no alert.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +21,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws an empty state on the page and hands back what it was drawn into. */
 function draw(props: {
   title?: string;
   action?: EmptyStateAction;

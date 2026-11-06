@@ -8,35 +8,6 @@ import {
 } from "./device-agent-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
-/**
- * models-wire.ts -- the models a coding agent may run on, and the account's default among them, as the desktop reads and writes them.
- *
- * `GET /api/models` answers the service's filtered read of AI Gateway's
- * public catalog: each model's catalog id, its name, which of the two
- * providers runs it, the efforts it lists, and its two context windows
- * where it offers a choice of them, in the catalog's order. The Start menu
- * and Settings › Coding agents both draw it, and every model row carries
- * its provider's mark, so the provider travels as a word of this wire's own
- * rather than being read off the id.
- *
- * The account's default is the `agent` part of the preferences
- * snapshot at `/api/account/preferences`: one model, one effort, and the
- * standard context window where it was chosen, read beside the settings
- * preferences the desktop syncs through its own client and written on its
- * own, as a body carrying that part alone. Only Settings writes it: a Start
- * that names a model runs that one agent on it and stores nothing. An
- * account that stored none reads the fallback the credentials it keeps pay
- * for (`agentFallbackChoice`).
- *
- * A choice without a context window runs on the model's whole window, the
- * long one, which is what every agent ran on before the choice, so a
- * desktop that predates it names nothing new; the smaller standard window
- * is the one a choice opts into, and a desktop that has it names the
- * window only then, so a service that predates it, which refuses a key it
- * does not know, is sent none for the default.
- */
-
-/** The providers whose models we run coding agents on, as the catalog prefixes their ids. */
 export const MODEL_PROVIDER = {
   ANTHROPIC: "anthropic",
   OPENAI: "openai",
@@ -44,32 +15,15 @@ export const MODEL_PROVIDER = {
 
 export type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
 
-/**
- * How long a read of the models is kept before it is asked again: AI
- * Gateway's catalog by each service instance (`model-catalog.ts`), and the
- * models the account is offered by the host that holds them for its
- * windows (`LIVE_READ.MODELS`), so neither sits on a catalog longer than
- * the other.
- */
 export const MODEL_CATALOG_TTL = Duration.hours(1);
 
-/** What a first-time account starts an agent on until it chooses, by the provider whose credential pays for it (`agentFallbackChoice`). */
 export const AGENT_FALLBACK_CHOICE = {
   [MODEL_PROVIDER.ANTHROPIC]: { model: "anthropic/claude-opus-5.5", effort: "high" },
   [MODEL_PROVIDER.OPENAI]: { model: "openai/gpt-6.1-sol", effort: "high" },
 } as const satisfies Record<ModelProvider, ModelChoice>;
 
-/** What a first-time account starts an agent on, until it chooses, where a Claude credential pays or none does. */
 export const AGENT_DEFAULT_CHOICE = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.ANTHROPIC];
 
-/**
- * How fast a catalog id's version of its model runs, which the id's suffix
- * says: AI Gateway's own `-fast` slug beside its base model
- * (`anthropic/claude-opus-5.5-fast`), and the `-ultrafast` id the service
- * gives a GPT model whose catalog entry prices OpenAI's Ultrafast tier
- * (`openai/gpt-6.1-sol-ultrafast`, `model-catalog.ts`); every other id runs
- * at standard speed.
- */
 export const MODEL_SPEED = {
   STANDARD: "standard",
   FAST: "fast",
@@ -78,20 +32,17 @@ export const MODEL_SPEED = {
 
 export type ModelSpeed = (typeof MODEL_SPEED)[keyof typeof MODEL_SPEED];
 
-/** The suffix of a catalog id naming each speed but standard's, whose id has none. Note that neither ends the other: `-ultrafast` has no dash before its `fast`. */
 export const MODEL_SPEED_SUFFIX = {
   [MODEL_SPEED.FAST]: "-fast",
   [MODEL_SPEED.ULTRAFAST]: "-ultrafast",
 } as const satisfies Record<Exclude<ModelSpeed, typeof MODEL_SPEED.STANDARD>, string>;
 
-/** The speed a catalog id names, by its suffix. */
 export function modelSpeedOf(catalogId: string): ModelSpeed {
   if (catalogId.endsWith(MODEL_SPEED_SUFFIX[MODEL_SPEED.ULTRAFAST])) return MODEL_SPEED.ULTRAFAST;
   if (catalogId.endsWith(MODEL_SPEED_SUFFIX[MODEL_SPEED.FAST])) return MODEL_SPEED.FAST;
   return MODEL_SPEED.STANDARD;
 }
 
-/** The id of the model a catalog id is a version of, which runs at standard speed; a standard id as it is. */
 export function standardModelIdOf(catalogId: string): string {
   const speed = modelSpeedOf(catalogId);
   return speed === MODEL_SPEED.STANDARD
@@ -99,21 +50,13 @@ export function standardModelIdOf(catalogId: string): string {
     : catalogId.slice(0, -MODEL_SPEED_SUFFIX[speed].length);
 }
 
-/** A model provider as the wire spells it. */
 export const modelProviderSchema = EffectSchema.Literals(Object.values(MODEL_PROVIDER));
 
-/** A model id or an effort as the wire carries it, bounded as a Start bounds them. */
 const choiceText = EffectSchema.Trim.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_CHOICE_CHARS),
 );
 
-/**
- * A model's two context windows, where it offers a choice of them: each
- * one's size in tokens, and what a request past the standard window costs
- * as a multiple of the standard price, input and output each, where the
- * catalog prices it.
- */
 const contextWindowsSchema = EffectSchema.Struct({
   standardTokens: countedNumber,
   longTokens: countedNumber,
@@ -123,51 +66,18 @@ const contextWindowsSchema = EffectSchema.Struct({
 
 export type ContextWindows = typeof contextWindowsSchema.Type;
 
-/** One model the service offers: its catalog id, its name, its provider, the efforts it lists, its two windows where it offers them, and why its fast version is withheld where it is. */
 export const catalogModelSchema = EffectSchema.Struct({
-  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   id: choiceText,
   name: EffectSchema.String,
   provider: EffectSchema.Literals(Object.values(MODEL_PROVIDER)),
-  /** The efforts the model lists, in the catalog's order; never empty. */
   efforts: EffectSchema.Array(choiceText).check(EffectSchema.isMinLength(1)),
-  /** Absent for a model with one window, which every choice of it runs on. */
   contextWindows: EffectSchema.optionalKey(contextWindowsSchema),
-  /**
-   * Whether this model's fast version is withheld because Anthropic said the
-   * organization of the key the account's agents run on was never granted
-   * fast mode; absent otherwise, and from a service older than it. Note
-   * that it is a key of its own, because a desktop that refuses a value it
-   * does not know reads a key it does not know as nothing at all.
-   */
   fastNotEnabled: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
-   * Whether no subscription or API key of the account's pays for this
-   * model's provider, so a Start on it is refused until one is connected in
-   * Settings › Agents; the menus draw it disabled. Absent otherwise, and
-   * from a service older than it.
-   */
   credentialMissing: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CatalogModel = typeof catalogModelSchema.Type;
 
-/**
- * One of the account's devices a task may run its agents on, as the menus
- * offer it: by its id and name, the model providers an agent on it runs,
- * which a task's Runs on lists it for and the service checks a Start
- * against, what kind of device it is and its platform, which its glyph
- * and words follow, and the epoch milliseconds it last
- * beat, which a window does not judge by, since its own clock may differ from the service's: it reads the beats
- * from `hosts.presence` (`deviceStanding`); only a
- * device there now is taken. The kind, the platform, and the beat are absent from a service
- * older than them, which offered only the devices there now. A device still
- * setting itself up says where that stands (`DEVICE_SETUP`), and why for one
- * that failed, and takes no agent until it is ready; both are absent for a
- * ready one. It says which machine it runs on, and its model, as its host
- * last reported them (`deviceMachineFields`); each is absent where it never
- * did, and from a service older than them.
- */
 export const macOfferSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
   name: EffectSchema.String,
@@ -185,7 +95,6 @@ export const macOfferSchema = EffectSchema.Struct({
 
 export type MacOffer = typeof macOfferSchema.Type;
 
-/** The models the service offers (GET), and the account's devices a task may run its agents on, there now or not, where the account registered any; absent otherwise, and from a service older than it. */
 export const modelsAnswerSchema = EffectSchema.Struct({
   models: EffectSchema.Array(catalogModelSchema),
   macs: EffectSchema.optionalKey(EffectSchema.Array(macOfferSchema)),
@@ -193,7 +102,6 @@ export const modelsAnswerSchema = EffectSchema.Struct({
 
 export type ModelsAnswer = typeof modelsAnswerSchema.Type;
 
-/** A model, an effort, and the context window where it is not the default long one, as a Start names them and the account's default stores them. */
 export const modelChoiceSchema = EffectSchema.Struct({
   model: choiceText,
   effort: choiceText,
@@ -202,24 +110,10 @@ export const modelChoiceSchema = EffectSchema.Struct({
 
 export type ModelChoice = typeof modelChoiceSchema.Type;
 
-/** The coding-agent part written on its own (PUT): the body carries nothing else, so the settings preferences stand as they were. */
 export const agentDefaultWriteSchema = EffectSchema.Struct({
   agent: modelChoiceSchema,
 });
 
-/**
- * The default of an account that stored none, read off the models it is
- * offered as `GET /api/models` marks them (`credentialMissing`): OpenAI's
- * fallback where the Claude models offered are marked as no credential of
- * the account's paying for them and OpenAI's fallback model is offered and
- * paid for, Anthropic's otherwise. So an account a Claude credential pays
- * for, or nothing does, or whose OpenAI fallback left the catalog, starts on
- * Anthropic's. Note that a mark is the provider's, so one Claude model
- * marked says no Claude credential pays, and a catalog offering none says
- * nothing of it, so it reads Anthropic's. A Start naming no model, the
- * preferences snapshot, and Settings' marks all read it here, so they never
- * disagree.
- */
 export function agentFallbackChoice(
   models: readonly Pick<CatalogModel, "id" | "provider" | "credentialMissing">[],
 ): ModelChoice {

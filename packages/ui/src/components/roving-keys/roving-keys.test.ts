@@ -12,19 +12,6 @@ import {
   useRovingKeys,
 } from "./roving-keys.js";
 
-/**
- * roving-keys.test.ts -- a row of items walks with ←→ and leaves ↑↓ alone,
- * a key heard on the box itself steps from none, and an item's own handler
- * that takes a key keeps it; a set drawing only some of its items hands
- * its owner every key walking it; columns of sets are crossed by
- * ←→, an empty column passed over. A `List`'s walk down its rows is tested
- * through the list (`list-row.test.ts`), and a set's other options through
- * the components that take them: a chosen stop and a `moveTo` through
- * `Tabs` and `ChoiceBar`, both pairs of arrows through `ChoiceBar` and
- * `ChoiceList`, a tab order the box leaves alone through `Menu` and
- * `ChoiceList`, and the walk alone through `Combobox`. Synthetic tools.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -40,7 +27,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A toolbar of tools walked along its row, Italic taking ArrowRight itself. */
 function Toolbar(): React.JSX.Element {
   const roving = useRovingKeys<HTMLDivElement>({ orientation: ROVING_ORIENTATION.HORIZONTAL });
   return createElement(
@@ -66,7 +52,6 @@ function Toolbar(): React.JSX.Element {
   );
 }
 
-/** Draws the toolbar and hands back its tools by name. */
 function draw(): Record<(typeof TOOLS)[number], HTMLButtonElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -78,7 +63,6 @@ function draw(): Record<(typeof TOOLS)[number], HTMLButtonElement> {
   return { Bold: bold, Italic: italic, Link: link };
 }
 
-/** Presses `name` on whatever holds the focus. */
 function key(name: string): void {
   const target = document.activeElement ?? document.body;
   act(() => {
@@ -124,7 +108,6 @@ test("a key heard on the box itself steps from none: forward and Home to the fir
   }
 });
 
-/** The tools drawn of a longer toolbar, the owner taking every key walking it but a step back, and hearing where each reached. */
 function DrawnTools({ heard }: { heard: RovingReach[] }): React.JSX.Element {
   const roving = useRovingKeys<HTMLDivElement>({
     orientation: ROVING_ORIENTATION.HORIZONTAL,
@@ -170,7 +153,6 @@ test("a set drawing only some of its items hands its owner every key walking it,
 
 const COLUMNS = [["Backlog one", "Backlog two"], [], ["Done one"]] as const;
 
-/** One column of cards, walked down by ↑↓. */
 function Column({ cards }: { cards: readonly string[] }): React.JSX.Element {
   const roving = useRovingKeys<HTMLDivElement>();
   return createElement(
@@ -182,7 +164,6 @@ function Column({ cards }: { cards: readonly string[] }): React.JSX.Element {
   );
 }
 
-/** A board of columns, the middle one holding no card, crossed by ←→. */
 function Board(): React.JSX.Element {
   const crossing = useRovingColumns<HTMLDivElement>();
   return createElement(
@@ -218,7 +199,6 @@ test("← and → cross from a column to the next one's Tab stop, an empty colum
 
 const ROWS = ["First", "Second", "Third"] as const;
 
-/** A list of rows walked by ↑↓, each drawn with the attributes `marks` gives it. */
 function Rows({
   marks,
 }: {
@@ -234,7 +214,6 @@ function Rows({
   );
 }
 
-/** Draws the rows and hands back their stops, in order. */
 function drawRows(marks: React.ComponentProps<typeof Rows>["marks"]): HTMLButtonElement[] {
   const container = document.createElement("div");
   document.body.append(container);

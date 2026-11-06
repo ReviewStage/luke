@@ -7,10 +7,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { HarnessMark } from "./harness-mark.js";
 
-/**
- * Codex's mark is the picture the app serves, at each density.
- */
-
 const CODEX_ART = { oneX: "/a/codex-16.png", twoX: "/a/codex-32.png", threeX: "/a/codex-48.png" };
 
 function drawn(provider: ModelProvider): Element {

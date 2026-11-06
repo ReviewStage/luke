@@ -9,13 +9,6 @@ import {
   replyOf,
 } from "./reply-quote.js";
 
-/**
- * reply-quote.test.ts -- words picked out of an agent's message are kept
- * tidy and bounded; a message holds them as blockquotes set apart from the
- * developer's lines by a blank line, and reads back as the same quotes and
- * lines. Synthetic words.
- */
-
 const quote = (words: string): MessageBlock => ({ kind: MESSAGE_BLOCK.QUOTE, words });
 const lines = (...each: string[]): MessageBlock => ({ kind: MESSAGE_BLOCK.WORDS, lines: each });
 

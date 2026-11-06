@@ -7,16 +7,6 @@ import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { Button } from "../button/button.js";
 import { OverPane } from "./over-pane.js";
 
-/**
- * over-pane.test.ts -- a closed pane stays drawn through its slide out and
- * is let go once it has run, or at once where motion is held still; one
- * opened again on its way out stays; Escape and a press outside it close
- * it, a press in it or on its toggle, or any of its toggles, does not; and
- * it takes the keyboard as it opens, holds it against Tab, and hands it back
- * to its toggle as it closes; one that comes as a peek takes no keyboard
- * until it is made open.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -34,7 +24,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** A tab with a toggle that floats its pane, the pane holding two controls, and a control of the tab's own beside. */
 function Tab(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -78,7 +67,6 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
-/** A press as a pointer makes it: down, then the click. */
 function press(target: HTMLElement): void {
   act(() => {
     target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
@@ -86,7 +74,6 @@ function press(target: HTMLElement): void {
   });
 }
 
-/** Opens the pane from its toggle, the keyboard on the toggle first, as a press or Return leaves it. */
 function openFromToggle(): void {
   act(() => button("Files").focus());
   press(button("Files"));
@@ -168,7 +155,6 @@ test("Escape hands the keyboard back to the toggle that opened the pane", () => 
   expect(document.activeElement).toBe(button("Files"));
 });
 
-/** A tab whose pane is a peek until its Settle is pressed, the pane named by two toggles. */
 function PeekTab(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [peek, setPeek] = useState(true);

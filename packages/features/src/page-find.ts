@@ -4,55 +4,22 @@ import { PAGE_PICK_SCRIPT } from "./page-pick.js";
 import { PAGE_SIZE_SCRIPT } from "./page-size.js";
 import { PAGE_THEME_SCRIPT } from "./page-theme.js";
 
-/**
- * page-find.ts -- ⌘F in a plan's page as drawn: the find the page's frame runs over its own words, and the messages the side panel and the frame pass to drive it.
- *
- * A page is drawn in a frame sandboxed to its scripts alone, with an opaque
- * origin, so nothing in the panel reaches its words to find them. Every
- * server of a page therefore answers it with one script of our own ahead of
- * the agent's HTML (`withPageScripts`), which finds in the page's text at the
- * panel's asking, tints the matches with the CSS Custom Highlight API rather
- * than wrapping them, so the page's own tree is never rewritten, and brings
- * the one the find is at into view. The panel's find bar is the one every
- * tab draws (`find-in-tab.tsx`); this is its source where the words stand
- * in the frame (`page-pane.tsx`).
- *
- * The panel posts a search, a step, or a clear to the frame; the frame posts
- * back its tally after each, and again as its text changes, the words
- * selected in it as the selection changes, which ⌘F seeds the field with,
- * and ⌘F, ⌘G, and ⇧⌘G pressed in it, which no key pressed in a frame
- * otherwise brings to the window's keymap.
- * The script runs among the page's own, so whatever the frame posts is the
- * page's word, not ours: the panel takes a message only from the frame it
- * drew and only in the shape below, and what it takes is a count and a
- * selection, nothing it acts on beyond the find bar.
- */
-
-/** The mark every message of the find wears, setting it apart from whatever else the page posts. */
 export const PAGE_FIND_TYPE = "app-page-find";
 
-/** What the panel asks of the frame. */
 export const PAGE_FIND_ACT = {
   SEARCH: "search",
   STEP: "step",
   CLEAR: "clear",
 } as const;
 
-/**
- * The find chords the frame hears pressed in the page and hands the panel,
- * since a key pressed in a frame never reaches the window's own keymap:
- * ⌘F, ⌘G, and ⇧⌘G.
- */
 export const PAGE_FIND_KEY = {
   FIND: "find",
   NEXT: "next",
   PREVIOUS: "previous",
 } as const;
 
-/** The longest selection the frame hands the panel to seed the field with. */
 const PAGE_FIND_SELECTION_CHARS = 1_000;
 
-/** A message the panel posts to the frame: find the query, step from the match it is at, or take the tints away. */
 export type PageFindAsk =
   | {
       readonly type: typeof PAGE_FIND_TYPE;
@@ -69,7 +36,6 @@ export type PageFindAsk =
 
 const countSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
-/** A message the frame posts to the panel: the matches it holds and which it is at, or the words selected in it. */
 export const pageFindAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(PAGE_FIND_TYPE),
@@ -88,16 +54,6 @@ export const pageFindAnswerSchema = EffectSchema.Union([
   }),
 ]);
 
-/**
- * The script the frame runs, ahead of the page's own. It is plain JavaScript in
- * a string because it runs in the page, apart from every bundle of ours.
- * A match is the query found in the page's text read as one string, case
- * aside, where an inline element runs on into its neighbors and any other
- * sets its text apart, as the panel's own find reads a tab; what is hidden
- * (`display: none`, `hidden`) or no words (scripts, styles) is not read. The
- * tints are the panel's find colors (`palettes.css`), set by a stylesheet
- * the document adopts rather than an element added to it.
- */
 const PAGE_FIND_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_FIND_TYPE)};
@@ -268,14 +224,8 @@ const PAGE_FIND_SCRIPT = `(() => {
   });
 })();`;
 
-/** The doctype a page opens with, where it opens the text it is read from. */
 const DOCTYPE = /^<!doctype[^>]*>/i;
 
-/**
- * Where the page's doctype ends, past the whitespace and comments HTML
- * lets stand ahead of it; 0 for a page with none there, which is in quirks
- * mode however it is served.
- */
 function doctypeEnd(html: string): number {
   let at = html.length - html.trimStart().length;
   while (html.startsWith("<!--", at)) {
@@ -288,16 +238,6 @@ function doctypeEnd(html: string): number {
   return doctype === undefined ? 0 : at + doctype.length;
 }
 
-/**
- * The page as served: our scripts, the find's, the link's
- * (`@repo/features/page-link`), a comment's pick
- * (`@repo/features/page-pick`), its height's
- * (`@repo/features/page-size`), and its theme's
- * (`@repo/features/page-theme`), ahead of the agent's HTML, after its
- * doctype, so markup the page leaves open (a `<textarea>` or a comment
- * never closed) cannot swallow them, and a page keeps the standards mode
- * its doctype asks for.
- */
 export function withPageScripts(html: string): string {
   const end = doctypeEnd(html);
   const scripts = `<script>${PAGE_FIND_SCRIPT}</script><script>${PAGE_LINK_SCRIPT}</script><script>${PAGE_PICK_SCRIPT}</script><script>${PAGE_SIZE_SCRIPT}</script><script>${PAGE_THEME_SCRIPT}</script>`;

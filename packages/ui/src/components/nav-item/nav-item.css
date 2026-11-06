@@ -1,18 +1,4 @@
-/* nav-item.css -- what of NavItem its utilities (`nav-item.tsx`) leave
-   here: its inks at rest, under the pointer, open, and unread, which a
-   strip's chosen tab is held to (`tabs-frame.test.ts`); its detail's
-   ellipsis; and its end, whose count and chord trade places under the
-   pointer and the keyboard, through `:has()` and the pointer's media; a
-   step's meta line under its name, and its glyph and end level with the
-   name's first line; its actions' ⋯, which comes in over that end the same
-   way. A row standing in a frame is hovered while the pointer is anywhere
-   on the frame, its ⋯ included, so its fill and its chord hold as the
-   pointer moves onto it. The keyboard's ring is the app's reset's, as
-   it is for every control. */
-
 @layer components {
-  /* Note that the rest ink is the sidebar's, a step under the primary, as
-     the task rows it heads are. */
   .ui-nav-item {
     background: none;
     color: var(--ui-color-sidebar-ink);
@@ -31,8 +17,6 @@
     }
   }
 
-  /* The place standing open is drawn in the work sheet's ground, lifted
-     by a hairline and a soft shadow. */
   .ui-nav-item:is([aria-current="page"], [aria-current="location"]) {
     background: var(--ui-color-ground);
     box-shadow:
@@ -45,12 +29,10 @@
     color: var(--ui-color-text);
   }
 
-  /* Who or where stands in the primary ink. */
   .ui-nav-item[data-variant="identity"] {
     color: var(--ui-color-text);
   }
 
-  /* A row's detail ends in an ellipsis where it is cut short. */
   .ui-nav-item-detail {
     min-width: 0;
     flex: 1 1 0;
@@ -61,19 +43,15 @@
     white-space: nowrap;
   }
 
-  /* A step's meta line stands whole under its name, in the caption's line,
-     rather than giving way beside it. */
   .ui-nav-item[data-variant="step"] .ui-nav-item-detail {
     flex: none;
     line-height: var(--ui-type-caption-leading);
   }
 
-  /* A step's glyph and end stand level with its name's first line. */
   .ui-nav-item[data-variant="step"] > :is(.ui-nav-item-glyph, .ui-nav-item-rest) {
     height: var(--ui-type-label-leading);
   }
 
-  /* A place's end stands at the row's end. */
   .ui-nav-item-rest,
   .ui-nav-item-shortcut {
     display: inline-flex;
@@ -82,8 +60,6 @@
     gap: var(--ui-space-6);
   }
 
-  /* The count gives way to the actions on their own fade, so the two swap
-     as one gesture rather than one snapping as the other fades. */
   .ui-nav-item-rest {
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
@@ -99,8 +75,6 @@
     opacity: 0;
   }
 
-  /* A count of what waits on the reader is in the needs-you tone, as the
-     rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
   .ui-nav-item-count[data-tone]:not([data-tone="neutral"]) {
     color: var(--ui-tone-ink);
   }
@@ -115,9 +89,6 @@
     }
   }
 
-  /* The chord sits in the row's spare width at rest, unseen, so showing it
-     moves nothing; where a count or a mark stands, it takes their place
-     while the row is hovered or has the keyboard. */
   .ui-nav-item-shortcut {
     opacity: 0;
     transition: opacity var(--ui-duration-quick) var(--ui-motion-exit);
@@ -161,9 +132,6 @@
     }
   }
 
-  /* A row with a ⋯ draws its chord just before it rather than under it: the
-     ⋯'s compact width and its inset from the frame's end, a hairline gap,
-     less the row's own inset the chord already stands in. */
   .ui-nav-item-frame[data-actions="true"] > .ui-nav-item > .ui-nav-item-shortcut {
     margin-inline-end: calc(
       var(--ui-control-height) -
@@ -175,10 +143,6 @@
     );
   }
 
-  /* Under a finger there is no keyboard to press the chord on, so the chord
-     never stands, even on the row the keyboard reached, and the count or
-     mark it would take the place of stays. Note that the focused selectors
-     are written again, because they outweigh a bare one. */
   @media (hover: none) and (pointer: coarse) {
     .ui-nav-item-shortcut,
     .ui-nav-item:focus-visible:not(:disabled) > .ui-nav-item-rest + .ui-nav-item-shortcut {
@@ -190,11 +154,6 @@
     }
   }
 
-  /* A place's ⋯ waits unseen over the row's end at rest, and comes in
-     while the row is hovered, holds the keyboard, or its menu stands,
-     standing where the count and the mark stood, which give way then.
-     Note that an unseen ⋯ takes no press, so a finger, which has no
-     hover, reaches the row's menu by its long press and keeps the count. */
   .ui-nav-item-actions {
     opacity: 0;
     pointer-events: none;
@@ -207,16 +166,11 @@
     pointer-events: auto;
   }
 
-  /* Note that the count gives way by its opacity, never its visibility,
-     because a hidden one leaves the row's name, and a reader reaching the
-     row would no longer hear what waits in it. */
   .ui-nav-item-frame[data-actions="true"]:focus-within .ui-nav-item-rest,
   .ui-nav-item-frame:has(.ui-nav-item-actions [aria-expanded="true"]) .ui-nav-item-rest {
     opacity: 0;
   }
 
-  /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
-     centered in it, as a list row's is (`list-row.css`). */
   @media (pointer: coarse) {
     .ui-nav-item-actions .ui-button[data-size="compact"][data-icon-only="true"] {
       min-width: var(--ui-touch-target);

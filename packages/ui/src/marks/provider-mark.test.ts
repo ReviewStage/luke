@@ -8,19 +8,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { MARK_PROVIDER, type MarkProvider, ProviderMark } from "./provider-mark.js";
 
-/**
- * Every provider's mark as a row draws it: well-formed path data, since a
- * browser draws a path only up to its first malformed segment and leaves a
- * stray stroke where the brand should be, as Granola's once did, and its
- * artwork inside its own viewBox and filling it. Bounds are read from the
- * points each path passes through, which a curve never strays far beyond.
- */
-
-/** How far, as a share of the viewBox, a mark may run past its edge or fall short of filling it. */
 const SLACK = 0.02;
 const FILL = 0.8;
 
-/** How many numbers each path command takes per segment. */
 const ARITY = new Map([
   ["M", 2],
   ["L", 2],
@@ -51,7 +41,6 @@ function grow(bounds: Bounds | undefined, x: number, y: number): Bounds {
   };
 }
 
-/** The bounds of the points one path's segments end on. */
 function pathBounds(d: string, start: Bounds | undefined): Bounds | undefined {
   let bounds = start;
   let [x, y, startX, startY] = [0, 0, 0, 0];
@@ -65,7 +54,6 @@ function pathBounds(d: string, start: Bounds | undefined): Bounds | undefined {
       continue;
     }
     const numbers = (args.match(/-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?/gi) ?? []).map(Number);
-    // Note that a browser stops drawing a path at its first malformed segment.
     assert.ok(numbers.length > 0 && numbers.length % arity === 0, `${letter}${args} is malformed`);
     for (let at = 0; at + arity <= numbers.length; at += arity) {
       const segment = numbers.slice(at, at + arity);
@@ -73,7 +61,6 @@ function pathBounds(d: string, start: Bounds | undefined): Bounds | undefined {
       if (command === "H") x = (relative ? x : 0) + (segment[0] ?? 0);
       else if (command === "V") y = (relative ? y : 0) + (segment[0] ?? 0);
       else [x, y] = relative ? [x + endX, y + endY] : [endX, endY];
-      // A moveto's first pair starts a subpath; its others are linetos.
       if (command === "M" && at === 0) [startX, startY] = [x, y];
       bounds = grow(bounds, x, y);
     }

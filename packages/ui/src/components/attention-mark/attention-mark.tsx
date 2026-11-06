@@ -1,16 +1,3 @@
-/**
- * attention-mark.tsx -- the mark of something about a task that wants the developer's hand: a white exclamation on a disc of the attention orange.
- *
- * The orange alone is the window's word for a temporary state (`base.css`'s
- * `--ui-color-attention`), light in the dark and deep in the light, so a
- * white glyph would not hold on it in the dark. The disc is the mark's own
- * orange instead, deep enough under the white in either appearance, so the
- * mark reads the same on the sidebar's ground and a banner's tint alike.
- * The mark is hidden from a screen reader; whatever wears it says why in
- * words beside it or in its pill.
- */
-
-/** The mark: a disc with a white exclamation, the size of the glyph it stands in for. */
 export function AttentionMark(): React.JSX.Element {
   return (
     <span

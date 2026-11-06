@@ -1,20 +1,7 @@
-/**
- * workspace-key.ts -- the key a window names a workspace's numbered thing by: its workspace's prefix and its number, as `ACME-42`; and a task's key found among other words.
- *
- * The prefix is read off the workspace's name rather than kept, so it
- * follows a rename: the initials of a name of several words, or the head of
- * a name of one, upper-cased, so "Acme" is ACME and "Lunar Labs" is LL. A
- * task's number is its workspace's, counted from one and never reused, so
- * its key names one task of the workspace for good.
- */
-
-/** The prefix a task's key falls back on where the workspace's name holds no letter or digit. */
 const TASK_FALLBACK_PREFIX = "TASK";
 
-/** The most characters a prefix spells. */
 const MAX_PREFIX_CHARS = 4;
 
-/** The prefix a workspace's tasks are keyed by, or `TASK_FALLBACK_PREFIX` where its name holds no letter or digit. */
 function workspacePrefix(workspaceName: string): string {
   const words = workspaceName
     .replaceAll(/['’]/gu, "")
@@ -28,24 +15,13 @@ function workspacePrefix(workspaceName: string): string {
   return prefix.join("").toLocaleUpperCase();
 }
 
-/** A task's key in its workspace, as `ACME-42`. */
 export function taskKey(workspaceName: string, number: number): string {
   return `${workspacePrefix(workspaceName)}-${number}`;
 }
 
-/**
- * What may be a task's key among words: up to four capitals or digits, a
- * hyphen, and a number, standing as a word of its own. Note that a key in a
- * path or an address, before it or after it (`docs/STAG-1`, `STAG-1/notes`,
- * `STAG-1.md`, `#STAG-1`, `STAG-1#plan`), or one joined to more words
- * (`STAG-1-fix`) is no key, while a sentence's stop after one is no word, and that the case is held to, since the
- * keys are capitals and words in prose that happen to share their letters
- * are not keys.
- */
 const KEY_IN_WORDS =
   /(?<![\p{L}\p{N}_\-/.#@])[\p{Lu}\p{N}]{1,4}-\d+(?![\p{L}\p{N}_/#]|[-.][\p{L}\p{N}])/gu;
 
-/** One key found among words: the key, and where it stands in them. */
 export interface KeySpan<Known> {
   readonly key: string;
   readonly start: number;
@@ -53,11 +29,6 @@ export interface KeySpan<Known> {
   readonly known: Known;
 }
 
-/**
- * Each task's key that `known` holds standing among the words, in order; a
- * word shaped like one that `known` does not hold, `UTF-8` say, is left as
- * words.
- */
 export function keySpansIn<Known>(
   words: string,
   known: ReadonlyMap<string, Known>,
@@ -76,7 +47,6 @@ export function keySpansIn<Known>(
   return spans;
 }
 
-/** Whether the words typed are a task's key whole, as `stag-422` is STAG-422: the case and the space around them aside. */
 export function namesTaskKey(words: string, key: string): boolean {
   return words.trim().toLocaleUpperCase() === key;
 }

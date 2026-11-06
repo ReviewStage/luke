@@ -5,10 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { CONSENT_ANSWER, ConsentCard } from "./consent-card.js";
 
-/**
- * consent-card.test.ts -- one answer going out stands busy and holds the other, so a member cannot both allow and deny.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {

@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { COMMAND_LINK_ELEMENT, CommandLink } from "./command-link.js";
 
-/**
- * command-link.test.ts -- a ⌘-click, or a Ctrl-click, on the words opens what
- * they name, while a plain press leaves them to be selected and a press on a
- * button among them is the button's own.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

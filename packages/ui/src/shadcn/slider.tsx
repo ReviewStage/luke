@@ -1,23 +1,6 @@
 import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import { cn } from "../cn.js";
 
-/**
- * slider.tsx -- shadcn/ui's slider (style `base-nova`, on Base UI), vendored and drawn in our switch inks.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add slider` reads as a small diff. Our
- * changes: the track and range in the switch's track and "on" inks, the
- * thumb a 16px round of the switch's thumb ink lifted by its shadow, as a
- * switch's is, giving a little under a press held; a `thumbLabel` each
- * thumb is named by and a `thumbValueText` it is read as, which shadcn
- * leaves to its caller's `getAriaLabel` and `getAriaValueText`;
- * the one press cursor (`cursor-press`); and none of shadcn's outline or ring
- * utilities, because the window's own focus ring (`@repo/panel`'s
- * base.css) draws the keyboard's ring and a utility would outrank it
- * (`anti-slop/no-shadcn-focus-ring`). `@repo/ui`'s `Slider`
- * (`components/slider/slider.tsx`) is what an app draws; this is its inside.
- */
-
 function Slider({
   className,
   defaultValue,

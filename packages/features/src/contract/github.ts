@@ -1,24 +1,3 @@
-/**
- * github.ts -- the account's GitHub and the repositories of a workspace's installation, as one resource.
- *
- * Connecting the account's GitHub (`github-connection-wire.ts`): the Mac's
- * connect intent, the page's claim of it, whether GitHub is connected, and
- * the disconnect. And the repositories of a workspace's GitHub installation
- * (`github-repositories-wire.ts`), and one of them's file, tree, skills,
- * pull request, and issue; and the repositories members added to a workspace on
- * their own tokens.
- *
- * Every read of a repository is a GET whose input is its query, so each
- * field is declared by what the query carries, text, and decodes to the
- * wire's own value: a workspace, a repository's full name, a folder, and a
- * number. A key named more than once reaches the schema as a list and is
- * refused as an invalid request, as the old group refused it, and a key it
- * does not name is ignored, as the old group ignored one. The claim's body
- * is read exactly, a key it does not name refused. Each output is the wire
- * schema flipped, so oRPC's output check encodes the handler's value into
- * the bytes the wire carries (`packages/service/src/orpc/base.ts`).
- */
-
 import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
@@ -50,22 +29,17 @@ import { workspaceTokenRepositoryRequestSchema } from "../workspace-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 import { taskFileQueryFields } from "./task-files.js";
 
-/** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
 const CLAIM_BODY_BYTES = 1_024;
 
-/** A token repository's add or removal is a workspace's id, a name, and a boolean, so a body past this is not one. */
 const TOKEN_REPOSITORY_BODY_BYTES = 1_024;
 
-/** The value a tree's `recursive` query carries when everything under the folder is asked. */
 export const GITHUB_REPOSITORY_TREE_RECURSIVE = "1";
 
-/** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository. */
 const repositoryPlaceQuery = {
   [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceIdSchema,
   [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: githubRepositoryFullNameSchema,
 };
 
-/** A pull request's or an issue's number, as the query carries it in text. */
 const numberQuerySchema = EffectSchema.String.pipe(
   EffectSchema.decodeTo(
     githubPullRequestNumberSchema,
@@ -76,7 +50,6 @@ const numberQuerySchema = EffectSchema.String.pipe(
   ),
 );
 
-/** One pull request or issue of a repository, as a read with no plan names it: the repository's place and the number. */
 export const numberedQuerySchema = EffectSchema.Struct({
   ...repositoryPlaceQuery,
   [GITHUB_REPOSITORIES_QUERY.NUMBER]: numberQuerySchema,
@@ -123,11 +96,9 @@ export const githubContract = {
     .input(
       EffectSchema.Struct({
         ...repositoryPlaceQuery,
-        /** The folder, the root where it is not named. */
         path: EffectSchema.optionalKey(
           EffectSchema.String.check(EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS)),
         ),
-        /** Whether everything under the folder is asked. */
         recursive: EffectSchema.optionalKey(EffectSchema.Literal(GITHUB_REPOSITORY_TREE_RECURSIVE)),
       }),
     )
@@ -137,7 +108,6 @@ export const githubContract = {
     .input(
       EffectSchema.Struct({
         [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceIdSchema,
-        /** The repository whose skills lead the list; where none is named, the member's installed skills alone are answered. */
         [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: EffectSchema.optionalKey(
           githubRepositoryFullNameSchema,
         ),

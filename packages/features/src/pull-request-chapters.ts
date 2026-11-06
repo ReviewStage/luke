@@ -4,41 +4,11 @@ import type { AgentChangedFile, ReviewThread } from "./agent-wire.js";
 import { DIFF_SIDE } from "./agent-wire.js";
 import { DIFF_ROW, type DiffHunk, LOCKFILE_NAMES, patchHunks } from "./diff-hunks.js";
 
-/**
- * pull-request-chapters.ts -- a pull request's diff told as chapters: what one is on the wire, and the checks that hold a model's chapters to the diff they tell.
- *
- * A chapter is one step of the story a pull request tells, in the order a
- * reviewer should read it: a title, a short summary in Markdown, the hunks
- * it holds, the changes a reviewer should weigh in it (`KeyChange`), each
- * on lines of its own hunks, and how risky it is and why. The last chapter
- * may be "Other changes", told by no model (`otherChangesChapter`): the
- * files a reader reads past (`ignoredForChapters`), those with no hunk to
- * read, and any hunk the model left out. It is named by its `kind` rather
- * than its title, because a model may title a chapter of its own the same.
- *
- * A hunk is named by its git coordinates, its file and the line it starts
- * at on the old side (`HunkRef`), as ReviewStage names one; `oldStart` 0
- * names a file with no hunks, a pure rename, a binary file, or one whose
- * patch was left out (`HEADER_ONLY_OLD_START`). A hunk adding a file starts
- * at 0 too, which names it alone, since that file has a hunk.
- *
- * A model's answer is held to the diff in code, never trusted: every hunk
- * stands in exactly one chapter (`coverHunks`), as stage-cli's coverage
- * check holds an agent's, a key change points only at lines of its own
- * chapter's hunks (`validLineRefs`), and literal `\n` a model escaped twice
- * is read as the newline it meant (`unescapeLiteralNewlines`). What a
- * chapter draws is its own hunks out of each file's patch
- * (`chapterPatches`), with the review threads on them (`threadInChapter`)
- * and the lines they change (`chapterLineCounts`).
- */
-
-/** What a chapter is: a step of the story a model told, or the fixed "Other changes" chapter that closes it. */
 export const CHAPTER_KIND = {
   STORY: "story",
   OTHER: "other",
 } as const;
 
-/** Which file a line reference counts in: the new file's lines, where it adds, or the old file's, where it removes. */
 export const LINE_REF_SIDE = {
   ADDITIONS: "additions",
   DELETIONS: "deletions",
@@ -46,17 +16,14 @@ export const LINE_REF_SIDE = {
 
 type LineRefSide = (typeof LINE_REF_SIDE)[keyof typeof LINE_REF_SIDE];
 
-/** How risky a chapter is to merge unread. */
 export const CHAPTER_RISK = {
   HIGH: "high",
   MEDIUM: "medium",
   LOW: "low",
 } as const;
 
-/** The old-side start that names a file with no hunks rather than one of its hunks. */
 export const HEADER_ONLY_OLD_START = 0;
 
-/** A hunk by its git coordinates: its file's path, and the line it starts at on the old side, or 0 for a file with no hunks. */
 export const hunkRefSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   oldStart: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(HEADER_ONLY_OLD_START)),
@@ -64,14 +31,8 @@ export const hunkRefSchema = EffectSchema.Struct({
 
 export type HunkRef = typeof hunkRefSchema.Type;
 
-/** A line of a file, counted from one. */
 const lineNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
-/**
- * Lines of one file a key change points at: the new file's where it counts
- * additions, the old file's where it counts deletions, from its first line
- * to its last.
- */
 export const lineRefSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   side: EffectSchema.Literals(Object.values(LINE_REF_SIDE)),
@@ -81,17 +42,11 @@ export const lineRefSchema = EffectSchema.Struct({
 
 export type LineRef = typeof lineRefSchema.Type;
 
-/** One change a reviewer should weigh, in Markdown, and the lines it is on. */
 export const keyChangeSchema = EffectSchema.Struct({
   content: EffectSchema.String,
   lineRefs: EffectSchema.Array(lineRefSchema),
 });
 
-/**
- * One chapter: what it is, its title, its summary in Markdown, the hunks
- * it holds in the order it reads them, the changes a reviewer should weigh
- * in it, and how risky it is and why, null for "Other changes".
- */
 export const chapterSchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CHAPTER_KIND)),
   title: EffectSchema.String,
@@ -104,24 +59,16 @@ export const chapterSchema = EffectSchema.Struct({
 
 export type Chapter = typeof chapterSchema.Type;
 
-/** One hunk a chapter may hold: its name, and the hunk itself, null for a file with no hunks. */
 export interface ChapterHunk {
   readonly ref: HunkRef;
   readonly hunk: DiffHunk | null;
 }
 
-/** A file's hunks, none where it carries no patch, or one that holds no hunk or does not read as a diff. */
 function fileHunks(file: AgentChangedFile): readonly DiffHunk[] {
   if (file.omitted !== null || file.patch === null) return [];
   return patchHunks(file.patch) ?? [];
 }
 
-/**
- * Every hunk of the changed files, file by file in the order given, each
- * named by its file and old-side start, and, for a file with none, a pure
- * rename, a binary file, or one whose patch was left out, its name alone
- * (`HEADER_ONLY_OLD_START`).
- */
 export function chapterHunks(files: readonly AgentChangedFile[]): readonly ChapterHunk[] {
   return files.flatMap((file): readonly ChapterHunk[] => {
     const hunks = fileHunks(file);
@@ -132,10 +79,8 @@ export function chapterHunks(files: readonly AgentChangedFile[]): readonly Chapt
   });
 }
 
-/** Each hunk by its file's path and its old-side start. */
 type HunkIndex = ReadonlyMap<string, ReadonlyMap<number, ChapterHunk>>;
 
-/** The hunks indexed by their names, the first of any two that share one kept. */
 function indexHunks(hunks: readonly ChapterHunk[]): HunkIndex {
   const index = new Map<string, Map<number, ChapterHunk>>();
   for (const each of hunks) {
@@ -146,7 +91,6 @@ function indexHunks(hunks: readonly ChapterHunk[]): HunkIndex {
   return index;
 }
 
-/** The hunks a chapter's refs name, each once, in the order it names them; a ref naming no hunk is passed over. */
 function chapterOwnHunks(chapter: Chapter, index: HunkIndex): readonly ChapterHunk[] {
   const seen = new Set<ChapterHunk>();
   for (const ref of chapter.hunkRefs) {
@@ -156,14 +100,6 @@ function chapterOwnHunks(chapter: Chapter, index: HunkIndex): readonly ChapterHu
   return [...seen];
 }
 
-/**
- * The patterns of files a reader reads past, as `.gitignore` writes them:
- * ReviewStage's default ignore list (every lockfile, what an operating
- * system leaves in a folder, minified files, source maps, snapshots,
- * images, fonts, video, and documents), and the schema snapshots Drizzle
- * writes beside each migration, which can run to tens of thousands of
- * lines a reader never reads.
- */
 const IGNORE_PATTERNS: readonly string[] = [
   ...LOCKFILE_NAMES,
   ".DS_Store",
@@ -189,34 +125,17 @@ const IGNORE_PATTERNS: readonly string[] = [
   "**/meta/*_snapshot.json",
 ];
 
-/** The one matcher every path is held to, whatever its case, as ReviewStage's `filterFilesForLlm` builds it. */
 const IGNORED = ignore({ ignoreCase: true }).add([...IGNORE_PATTERNS]);
 
-/**
- * Whether a file is left out of the chapters a model tells and stands in
- * "Other changes" instead (`IGNORE_PATTERNS`). Matched with `.gitignore`'s
- * semantics, whatever the case: a pattern with no slash matches every step
- * of the path, so a folder so named leaves out everything in it.
- */
 export function ignoredForChapters(path: string): boolean {
   return IGNORED.ignores(path);
 }
 
-/** A model's chapters held to the hunks it was given, and the hunks no chapter holds. */
 export interface CoveredChapters {
   readonly chapters: readonly Chapter[];
   readonly missing: readonly HunkRef[];
 }
 
-/**
- * The chapters with every hunk in exactly one of them, as stage-cli's
- * coverage check holds an agent's: a ref naming no hunk given is dropped, a
- * hunk named twice stays in the first chapter that names it, and a chapter
- * left holding none is dropped. What no chapter holds is named, in the
- * order the hunks were given, so a caller can ask the model to place it
- * and close the story with "Other changes" (`otherChangesChapter`) for what
- * still stands outside.
- */
 export function coverHunks(
   chapters: readonly Chapter[],
   hunks: readonly ChapterHunk[],
@@ -232,17 +151,11 @@ export function coverHunks(
   return { chapters: covered, missing };
 }
 
-/** The title "Other changes" wears. */
 const OTHER_CHANGES_TITLE = "Other changes";
 
-/** What "Other changes" says of itself. */
 const OTHER_CHANGES_SUMMARY =
   "Lockfiles, generated files, binary assets, pure renames, and any change no chapter told.";
 
-/**
- * The fixed chapter that closes a pull request's story, always last: the
- * hunks named, told by no model, so it weighs no change and names no risk.
- */
 export function otherChangesChapter(refs: readonly HunkRef[]): Chapter {
   return {
     kind: CHAPTER_KIND.OTHER,
@@ -255,28 +168,18 @@ export function otherChangesChapter(refs: readonly HunkRef[]): Chapter {
   };
 }
 
-/** Where a hunk stands on one side, from its first line to its last; empty where it counts no line there. */
 function sideSpan(hunk: DiffHunk, side: LineRefSide): { first: number; last: number } {
   return side === LINE_REF_SIDE.ADDITIONS
     ? { first: hunk.newStart, last: hunk.newStart + hunk.newLines - 1 }
     : { first: hunk.oldStart, last: hunk.oldStart + hunk.oldLines - 1 };
 }
 
-/** Whether two line references point at the same lines. */
 function sameLines(a: LineRef, b: LineRef): boolean {
   return (
     a.path === b.path && a.side === b.side && a.startLine === b.startLine && a.endLine === b.endLine
   );
 }
 
-/**
- * The chapter with each key change pointing only at lines of its own
- * hunks, as ReviewStage's line-ref check holds one: a reference to a file
- * the chapter holds no hunk of, one starting before line 1 or ending
- * before it starts, one not wholly inside a single hunk of the chapter on
- * its side, and a second reference to the same lines are dropped, and a
- * key change left pointing at nothing is dropped with them.
- */
 export function validLineRefs(chapter: Chapter, hunks: readonly ChapterHunk[]): Chapter {
   const own = chapterOwnHunks(chapter, indexHunks(hunks));
   const inChapter = (ref: LineRef) =>
@@ -296,7 +199,6 @@ export function validLineRefs(chapter: Chapter, hunks: readonly ChapterHunk[]): 
   return { ...chapter, keyChanges };
 }
 
-/** A patch's hunks as written, each from its header to the line before the next, in order. */
 function hunkTexts(patch: string): readonly string[] {
   const texts: string[][] = [];
   for (const line of patch.split("\n")) {
@@ -306,13 +208,11 @@ function hunkTexts(patch: string): readonly string[] {
   return texts.map((lines) => lines.join("\n"));
 }
 
-/** How many lines something adds and removes. */
 interface LineCounts {
   readonly additions: number;
   readonly deletions: number;
 }
 
-/** The lines a hunk adds and removes. */
 function hunkCounts(hunk: DiffHunk): LineCounts {
   return {
     additions: hunk.rows.filter((row) => row.kind === DIFF_ROW.ADDED).length,
@@ -320,17 +220,6 @@ function hunkCounts(hunk: DiffHunk): LineCounts {
   };
 }
 
-/**
- * The files a chapter draws, each in the order the chapter first names
- * one of its hunks: the file as it changed, its patch holding only the
- * hunks the chapter holds, in the order the patch holds them, each with
- * its own header as written, so the list draws it (`listPatch`) as it
- * draws a whole file's; and the lines those hunks add and remove. A file
- * whose every hunk the chapter holds, and one with no hunks, which the
- * chapter names by `HEADER_ONLY_OLD_START` and the list draws as its
- * header alone, are the very file given. A ref naming no file or hunk
- * draws nothing.
- */
 export function chapterPatches(
   chapter: Chapter,
   files: readonly AgentChangedFile[],
@@ -364,24 +253,10 @@ export function chapterPatches(
   });
 }
 
-/** Whether a line stands among the lines a hunk counts from `start`. */
 function within(line: number, start: number, count: number): boolean {
   return line >= start && line < start + count;
 }
 
-/**
- * Whether a review thread stands in a chapter, as ReviewStage counts a
- * chapter's comments: a thread on a whole file, which names no line where
- * it stands or where it was made, stands in every chapter holding a hunk
- * of its file; any thread on a file with no hunks, a pure rename or a
- * binary file, stands in the one chapter naming the file, since no hunk
- * places it elsewhere; a thread on lines
- * stands where a hunk of the chapter in its file counts its line, a
- * thread on the old side's line among the hunk's old lines and one on the
- * new side's among its new; and a thread a later push outdated, which
- * names no line where it stands now, by the line it was made on among the
- * hunk's old lines.
- */
 export function threadInChapter(
   thread: Pick<ReviewThread, "path" | "line" | "originalLine" | "side">,
   chapter: Chapter,
@@ -392,7 +267,6 @@ export function threadInChapter(
   );
   if (thread.line === null && thread.originalLine === null) return own.length > 0;
   return own.some(({ hunk }) => {
-    // A file with no hunks stands in this chapter alone, so every thread on it does too.
     if (hunk === null) return true;
     if (thread.line === null) {
       return (
@@ -405,17 +279,10 @@ export function threadInChapter(
   });
 }
 
-/** How many files a chapter draws, and the lines they add and remove. */
 interface ChapterCounts extends LineCounts {
   readonly files: number;
 }
 
-/**
- * The files a chapter draws and the lines they add and remove, summed as
- * Files changed sums them, each hunk counted once: a file with no hunks,
- * binary, renamed, or its patch left out, counts what GitHub says it
- * changes, since no hunk of it can be counted here.
- */
 export function chapterLineCounts(
   chapter: Chapter,
   files: readonly AgentChangedFile[],
@@ -428,19 +295,8 @@ export function chapterLineCounts(
   };
 }
 
-/**
- * A fenced block, an inline code span of one or two backticks, or a literal
- * `\n`. Note that a fenced block is matched before a span, so its fences
- * are not read as spans of their own.
- */
 const ESCAPED_NEWLINE = /```[\s\S]*?```|``[\s\S]*?``|`[^`]*`|\\n/gu;
 
-/**
- * A model's words with each literal `\n` it escaped twice read as the
- * newline it meant, in prose and in a fenced block, whose lines a Markdown
- * reader and a diagram need apart; never inside inline code, where the
- * words may mean the escape itself.
- */
 export function unescapeLiteralNewlines(text: string): string {
   return text.replace(ESCAPED_NEWLINE, (match) => {
     if (match.startsWith("```")) return match.replaceAll("\\n", "\n");

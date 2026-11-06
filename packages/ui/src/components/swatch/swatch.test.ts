@@ -5,11 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { Swatch } from "./swatch.js";
 
-/**
- * swatch.test.ts -- a swatch is a button named by its label that says
- * whether its color is the one chosen, and a press hands the choice on.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -17,7 +12,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page and returns its button. */
 function mount(element: React.ReactElement): HTMLButtonElement {
   const container = document.createElement("div");
   document.body.append(container);

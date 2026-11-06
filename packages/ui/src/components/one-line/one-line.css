@@ -1,8 +1,3 @@
-/* one-line.css -- words held to one line: an ellipsis where they are cut
-   short, or a fade over their last few pixels, as a browser's tab ends a
-   long title; only a line measured cut short fades, so a short one ends on
-   its last letter. */
-
 @layer components {
   .ui-one-line {
     display: block;

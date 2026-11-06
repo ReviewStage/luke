@@ -31,7 +31,6 @@ const SUMMARY = {
   openedAt: 1_800_000_200_000,
 };
 
-/** A task the account does not reach. */
 const OTHER_TASK = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a";
 
 const TASK = {
@@ -166,7 +165,6 @@ it.effect(
         ok: true,
         answer: { task, agent: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE } },
       });
-      // A plan's reached limit keeps the reset the service named, as a Start on its own does.
       assert.deepEqual(limited, {
         ok: true,
         answer: {
@@ -210,7 +208,6 @@ it.effect("a start the service never answers carries what failed beneath it, by 
       api.layer,
     );
 
-    // Note that the trace is the call's own, which the service's log lines carry, so only its shape is known here.
     const traceId = unanswered.ok ? undefined : unanswered.cause?.traceId;
     assert.match(String(traceId), /^[0-9a-f]{32}$/);
     assert.deepEqual(unanswered, {
@@ -291,7 +288,6 @@ it.effect(
 
       assert.deepEqual(unanswered, { ok: false, failure: WRITE_UNTAKEN.UNANSWERED });
       assert.deepEqual(written, { ok: false, failure: WRITE_UNTAKEN.ALREADY_WRITTEN });
-      // Note that the trace is the call's own, so only the start's own answer names it.
       const traceId = started.ok ? undefined : started.cause?.traceId;
       assert.deepEqual(started, {
         ok: false,

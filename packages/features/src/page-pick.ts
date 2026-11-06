@@ -1,60 +1,17 @@
 import { Schema as EffectSchema } from "effect";
 import { DESCRIPTION_COMMENT_BOUNDS } from "./description-comment-wire.js";
 
-/**
- * page-pick.ts -- a comment's element in a plan's page as drawn: the pick the page's frame runs when a member comments on one of its elements, and the messages the side panel and the frame pass to drive it.
- *
- * A page is drawn in a frame sandboxed to its scripts alone, with an opaque
- * origin, so nothing in the panel reaches its elements. Every server of a
- * page therefore answers it with one more script of our own ahead of the
- * agent's HTML (`withPageScripts`), beside the find's and the link's: at the
- * panel's asking it outlines the element under the pointer, takes the next
- * press for itself rather than the page's, and posts what was pressed back
- * to the panel by its path from the document's root, its words, the
- * heading of the section it stands in, and where it stands in the frame; it
- * outlines the element a thread is on and brings it into view, where the
- * version drawn still holds it, and faintly the one whose pin the pointer
- * is over; it says where each element the panel marks stands, again as the
- * page scrolls, resizes, or changes, so the panel pins the threads on it
- * over the frame, and tints in it the words a thread quotes, with the CSS
- * Custom Highlight API, as the find tints its matches; and it posts the words selected in the
- * page, with where they stand and the element holding them, as a press or
- * a key lets them go, or a finger's rests, and that none are once they go;
- * and it says a press landed in the page that selected nothing, which
- * dismisses a card standing over it, as a press anywhere else does.
- * The outline is a stylesheet the document adopts over an attribute set on
- * the element, so the page's own tree is never rewritten.
- *
- * The script runs among the page's own, so whatever the frame posts is the
- * page's word, not ours: the panel takes a pick only from the frame it drew,
- * only in the shape below, only while it asked for one, and only while the
- * window holds a press of the developer's, which a press in the frame hands
- * the window that framed it (`page-pane.tsx`). A page can still answer a
- * pick with another element than the one pressed, since its scripts share
- * the frame with ours; what it gains is a wrong quote on a comment about
- * itself, since a pick is kept and shown as words and nothing acts on it.
- */
-
-/** The mark every message of the pick wears, setting it apart from whatever else the page posts. */
 export const PAGE_PICK_TYPE = "app-page-pick";
 
-/** What the panel asks of the frame. */
 export const PAGE_PICK_ACT = {
-  /** Outline the element under the pointer and take the next press as the pick. */
   START: "start",
-  /** Stop picking, taking no press. */
   STOP: "stop",
-  /** Outline the element a path names and bring it into view; an empty path outlines none. */
   SHOW: "show",
-  /** Outline faintly the element a path names, as the pointer is over its pin; an empty path outlines none. */
   HINT: "hint",
-  /** Say where the elements the marks name stand, now and each time they move, and tint the words selected in them that a thread quotes. */
   MARK: "mark",
-  /** Let go of the words selected, as a reply quoting them was pressed. */
   UNSELECT: "unselect",
 } as const;
 
-/** A message the panel posts to the frame. */
 export type PagePickAsk =
   | {
       readonly type: typeof PAGE_PICK_TYPE;
@@ -74,13 +31,11 @@ export type PagePickAsk =
       readonly marks: readonly PageMark[];
     };
 
-/** An element the panel marks: by its path, with the words selected in it that a thread quotes, where one does. */
 export interface PageMark {
   readonly path: string;
   readonly words?: string;
 }
 
-/** Where something stands in the frame, in its own viewport's pixels. */
 const frameBoxSchema = EffectSchema.Struct({
   left: EffectSchema.Finite,
   top: EffectSchema.Finite,
@@ -95,7 +50,6 @@ const elementPathSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_ELEMENT_PATH_CHARS),
 );
 
-/** An element picked in the frame, as it posts it: its path, its words, the heading it stands under, and where it stands. */
 const pickedSchema = EffectSchema.Struct({
   path: elementPathSchema,
   quote: EffectSchema.String.check(
@@ -106,19 +60,11 @@ const pickedSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_SECTION_CHARS),
   ),
   box: frameBoxSchema,
-  /** Whether the quote is words selected in the element rather than the element as a whole. */
   words: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type PagePicked = typeof pickedSchema.Type;
 
-/**
- * A message the frame posts to the panel: the element picked; that the pick
- * was let go, by Escape in the page; where each element marked stands, or
- * none where the page holds it no more; the words selected, in the shape
- * of an element picked whose quote they are, or none once they go; or that
- * a press landed in the page, selecting nothing.
- */
 export const pagePickAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ type: EffectSchema.Literal(PAGE_PICK_TYPE), picked: pickedSchema }),
   EffectSchema.Struct({
@@ -141,17 +87,6 @@ export const pagePickAnswerSchema = EffectSchema.Union([
   }),
 ]);
 
-/**
- * The script the frame runs, ahead of the page's own. It is plain JavaScript
- * in a string because it runs in the page, apart from every bundle of ours.
- * Its listeners stand on the window as a press sets out, ahead of every one
- * the page adds, so while it picks no press reaches the page. An element's
- * path names it by its id where it has one, and otherwise by its place among
- * its siblings of its kind, from the body down; one too long to keep names
- * the nearest element above it that fits. Its words are its text, its
- * whitespace run together, else its label or alternative text, else its
- * kind; its section is the last heading at or before it.
- */
 export const PAGE_PICK_SCRIPT = `(() => {
   "use strict";
   const TYPE = ${JSON.stringify(PAGE_PICK_TYPE)};

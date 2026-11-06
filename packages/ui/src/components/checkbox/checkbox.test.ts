@@ -6,16 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { Checkbox } from "./checkbox.js";
 
-/**
- * checkbox.test.ts -- a press on the box and a press on its words each hand
- * the caller the value they ask for, a mixed box resolves to checked while
- * still submitting what its caller holds, and an unavailable one changes
- * nothing; nor does a read-only one, which is not unavailable. A box named
- * by a label of its own draws no words. Space checks a box the keyboard is
- * on, as a press does. Each reads the box as a reader is told it: the
- * `role="checkbox"` element and what it says of itself.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -37,7 +27,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** A choice the caller holds, every change it was handed listed after it. */
 function Signed({
   mixed = false,
   disabled = false,
@@ -68,7 +57,6 @@ function box(page: HTMLElement): HTMLElement {
   return page.querySelector<HTMLElement>('[role="checkbox"]') ?? assert.fail("no box");
 }
 
-/** What the box tells a reader it is: checked, unchecked, or mixed. */
 function said(page: HTMLElement): string | null {
   return box(page).getAttribute("aria-checked");
 }

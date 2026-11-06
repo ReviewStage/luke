@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { EMAIL_CHIP_STATE, type EmailChip, EmailChipsField } from "../../index.js";
 
-/**
- * email-chips-field.test.ts -- words typed become chips at a comma, or at a
- * space once they hold an address, and a pasted list lands whole; Backspace in empty words takes the last address
- * back to edit; an address sent stands with no ×; and why an address is
- * wrong is its chip's hint, which describes it to a reader.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -21,7 +14,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks, since a chip's words measure whether they are cut short. */
 class StandInResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -37,7 +29,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A field whose caller splits words at spaces and commas and holds the chips, as a form would. */
 function Held({ start }: { start: readonly EmailChip[] }): React.JSX.Element {
   const [chips, setChips] = useState(start);
   const [typed, setTyped] = useState("");
@@ -75,7 +66,6 @@ function render(start: readonly EmailChip[] = []): HTMLInputElement {
   return words;
 }
 
-/** Types `value` into the words as React hears a keystroke. */
 function type(words: HTMLInputElement, value: string): void {
   const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -96,7 +86,6 @@ test("a comma ends an address, a space only once the words hold one, and a paste
   assert.deepEqual(chipWords(), ["dana@acme.dev"]);
   assert.equal(words.value, "");
 
-  // A list pasted over words selected replaces them, rather than landing beside them.
   type(words, "theo@acme");
   words.setSelectionRange(0, words.value.length);
   const paste = new Event("paste", { bubbles: true, cancelable: true });

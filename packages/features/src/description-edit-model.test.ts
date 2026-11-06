@@ -22,7 +22,6 @@ import { TASK_CALL_FAILURE } from "./tasks-view.js";
 
 const TEXT = "# Context\n\nOnly an admin can add a member.\n";
 
-/** The save an editor would make now, failing the test where it has none. */
 function saved(editor: DocumentEditor) {
   const request = pendingSave(editor);
   assert.ok(request !== undefined, "a save is pending");
@@ -124,13 +123,11 @@ const SECTIONS = [
   "",
 ].join("\n");
 
-/** An editor whose save of `mine` met `theirs`, the text another writer saved from the same base meanwhile. */
 function conflictedOver(mine: string, theirs: string): DocumentEditor {
   const typed = editorTyped(editorOpened(SECTIONS), mine);
   return editorAnswered(editorSent(typed, saved(typed)), { conflict: { current: theirs } });
 }
 
-/** The text the service holds once it takes the editor's next save over `current`. */
 function storedAfter(editor: DocumentEditor, current: string): string {
   const outcome = applyDocumentEdit(current, saved(editor));
   assert.ok("applied" in outcome, "the save lands");

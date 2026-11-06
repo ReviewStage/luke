@@ -1,20 +1,8 @@
-/* spinner.css -- what of the ring Tailwind's utilities cannot say: the
-   turn, which is a keyframe, and the ring's stroke, which a region's box sets
-   for the ring inside it. The ring's look, its sizes, the region, and the
-   wait before it shows are the component's (`spinner.tsx`, `settle-wait.ts`,
-   `../../shadcn/spinner.tsx`). */
-
 @layer components {
-  /* A region's box thickens the stroke of the ring inside it, since the
-     ring itself never knows the size it is drawn at. */
   .ui-spinner[data-size="region"] {
     --ui-spinner-stroke: 2px;
   }
 
-  /* The ring's stroke, as its box sets it, and its turn: an endless loop
-     with no end to wait for, so its duration is a literal; it holds still on
-     --ui-loop-motion with every other. The panel's plan heading turns on
-     the same keyframes (`tasks.css`). */
   .ui-spinner-ring {
     border-width: var(--ui-spinner-stroke, 1.5px);
     animation: ui-spinner-turn 900ms linear infinite;

@@ -1,10 +1,3 @@
-/* visually-hidden.css -- words read by assistive tech and drawn nowhere, as
-   a shared control says its state to a reader beside a glyph or a ring.
-   The one rule stands here rather than in a component's utilities because
-   other components put the class on words of their own (a nav item's count,
-   a table's sort, a skeleton's status); words given a step (`data-under`)
-   are hidden by `visually-hidden.tsx`'s container query instead. */
-
 @layer components {
   .ui-visually-hidden:not([data-under]) {
     position: absolute;

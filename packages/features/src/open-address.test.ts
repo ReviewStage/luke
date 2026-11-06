@@ -3,17 +3,9 @@ import { afterEach, test, vi } from "vitest";
 import { LINK_PLACE } from "./link-grammar.js";
 import { openTargetOf } from "./open-address.js";
 
-/**
- * What a web page at a link of ours hands the desktop app: the place its
- * address names, spelled in the app's own scheme, on vespin.dev or any
- * preview that serves the web app, and nothing for an address that names no
- * place. Synthetic ids.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-/** The app link the page hands over for an address, alone. */
 function appLinkFromAddress(pathname: string, hash: string): string | undefined {
   return openTargetOf(pathname, hash)?.appLink;
 }
@@ -35,7 +27,6 @@ test("a task's address, or a section's, opens that task in the app, whichever ho
     appLinkFromAddress(`/acme/plan/${TASK_ID}`, "#rollout"),
     `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,
   );
-  // A task's link a later build writes under task hands the app the link it reads now.
   assert.equal(
     appLinkFromAddress(`/acme/task/${TASK_ID}`, "#rollout"),
     `vespin://vespin.dev/acme/task/${TASK_ID}#rollout`,

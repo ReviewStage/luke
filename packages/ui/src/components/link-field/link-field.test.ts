@@ -5,14 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { LinkField } from "./link-field.js";
 
-/**
- * link-field.test.ts -- the popover a link is written in: it opens with the
- * caret in its field, holding the link already there; Enter hands its
- * owner the address typed, trimmed, and Escape gives up; Open and Remove
- * stand only beside a link already there, each told when pressed; and a
- * field handed another link starts over from it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -28,10 +20,8 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What a test's field told its owner, in order. */
 type Told = string[];
 
-/** The field over words linked to `href`, or none, and a way to hand the same field another link. */
 function mount(href?: string): {
   popover: HTMLElement;
   field: HTMLInputElement;
@@ -60,7 +50,6 @@ function mount(href?: string): {
   return { popover: container, field, told, relink: draw };
 }
 
-/** Types `words` into `field` as a person would, replacing what it holds. */
 function type(field: HTMLInputElement, words: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -69,14 +58,12 @@ function type(field: HTMLInputElement, words: string): void {
   });
 }
 
-/** Presses `key` in `field`. */
 function key(field: HTMLInputElement, key: string): void {
   act(() => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
   });
 }
 
-/** The names of the popover's buttons. */
 function buttons(popover: HTMLElement): string[] {
   return [...popover.querySelectorAll("button")].map(
     (button) => button.getAttribute("aria-label") ?? "",

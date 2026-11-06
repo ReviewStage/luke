@@ -5,20 +5,12 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { PUBLIC_SECTIONS, PUBLIC_TITLE, PublicPage, PublicSection } from "./public-page.js";
 
-/**
- * public-page.test.ts -- what a reader of a public page meets: a banner, a
- * main under the page's one `h1`, sections named by their titles, and a
- * footer, each only when the caller hands it one; and the lead, shown
- * whether or not the page has a title of its own.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 const containers: HTMLElement[] = [];
 
-/** Draws `element` into a fresh container in the document. */
 async function render(element: ReactElement): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -33,14 +25,12 @@ afterEach(() => {
   for (const container of containers.splice(0)) container.remove();
 });
 
-/** The element a heading at `level` reading `name` is, or nothing. */
 function heading(container: HTMLElement, level: number, name: string): Element | undefined {
   return [...container.querySelectorAll(`h${level}`)].find(
     (element) => element.textContent === name,
   );
 }
 
-/** The section `aria-labelledby` names `name`, as a reader finds the region. */
 function region(container: HTMLElement, name: string): Element | undefined {
   return [...container.querySelectorAll("section[aria-labelledby]")].find(
     (element) =>

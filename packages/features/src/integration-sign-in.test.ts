@@ -7,17 +7,10 @@ import {
   INTEGRATION_STATUS,
 } from "./integration-wire.js";
 
-/**
- * A sign-in as the window's reads end it, read through its line: a read
- * that answers late, issued before a sign-in began again, never puts the
- * earlier sign-in's reason over the one the later sign-in failed with.
- */
-
 const GRANOLA = INTEGRATION_PROVIDER.GRANOLA;
 const DISCONNECTED = INTEGRATION_STATUS.DISCONNECTED;
 
 test("a slow read from before a sign-in began again leaves that sign-in's own reason standing", () => {
-  // Try again pressed at mark 5, and the read issued at mark 6 says it was canceled.
   const retried = signInBegun(5, 0, true);
   const canceled = signInAfterRead(retried, {
     status: DISCONNECTED,
@@ -27,7 +20,6 @@ test("a slow read from before a sign-in began again leaves that sign-in's own re
   });
   assert.equal(canceled?.kind, SIGN_IN.FAILED);
 
-  // The read issued at mark 3, before the retry, lands last with the first sign-in's refusal.
   const late = signInAfterRead(canceled, {
     status: DISCONNECTED,
     failure: { reason: INTEGRATION_SIGN_IN_FAILURE.ERROR, message: "The provider said no." },

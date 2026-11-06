@@ -2,16 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { POPOVER_ALIGN, POPOVER_SIDE, popoverPlace } from "./popover-place.js";
 
-/**
- * popover-place.test.ts -- a popover stands above its anchor unless only
- * below has room, at its owner's edge unless only the other keeps it inside,
- * else pushed back inside and narrowed to the room. The worked numbers use
- * the 4px gap off the anchor and the 8px margin off the room's edges.
- */
-
 const ROOM = { left: 0, top: 0, right: 800, bottom: 600 };
 
-/** A 100 by 30 button standing `left` in and `top` down. */
 function anchorAt(left: number, top: number) {
   return { left, top, right: left + 100, bottom: top + 30 };
 }
@@ -37,9 +29,7 @@ test("a popover turns below only where the room above cannot hold it and below c
       height,
       align: POPOVER_ALIGN.END,
     }).side;
-  // 60 - 4 - 8 = 48 above, too short for 200; 600 - 90 - 12 = 498 below.
   assert.equal(place(60, 200), POPOVER_SIDE.BELOW);
-  // 212 - 12 = 200 above holds a 200-tall popover exactly.
   assert.equal(place(212, 200), POPOVER_SIDE.ABOVE);
 });
 
@@ -52,14 +42,11 @@ test("a popover neither side holds opens on the side with more room, and is told
       height: 700,
       align: POPOVER_ALIGN.END,
     });
-  // 60 - 12 = 48 above against 600 - 90 - 12 = 498 below.
   assert.deepEqual([place(60).side, place(60).room], [POPOVER_SIDE.BELOW, 498]);
-  // 500 - 12 = 488 above against 600 - 530 - 12 = 58 below.
   assert.deepEqual([place(500).side, place(500).room], [POPOVER_SIDE.ABOVE, 488]);
 });
 
 test("a popover takes the other edge where the asked one runs past the room", () => {
-  // From the trailing edge it would start at 120 - 340 = -220; from the leading edge at 20 it fits.
   const place = popoverPlace({
     anchor: anchorAt(20, 400),
     room: ROOM,
@@ -93,8 +80,6 @@ test("a popover asked to hang below does so, turning above only where below cann
       align: POPOVER_ALIGN.START,
       side: POPOVER_SIDE.BELOW,
     }).side;
-  // 600 - 230 - 12 = 358 below holds a 200-tall popover.
   assert.equal(place(200, 200), POPOVER_SIDE.BELOW);
-  // 600 - 530 - 12 = 58 below is too short; 500 - 12 = 488 above holds it.
   assert.equal(place(500, 200), POPOVER_SIDE.ABOVE);
 });

@@ -1,20 +1,11 @@
 import { expect, test } from "vitest";
 import { SEARCH_TIER, type SearchSubject, type SearchTier, searchHit } from "./search-score.js";
 
-/**
- * search-score.test.ts -- a row answers a query in the first tier it meets,
- * a task's key typed whole, its label begun, every word starting a word,
- * every word somewhere, its keywords, then letters in order where it is
- * loose, and the hit marks exactly the stretches that tier landed on.
- */
-
 interface Case {
   readonly name: string;
   readonly subject: SearchSubject;
   readonly query: string;
-  /** The tier it meets, or none where nothing finds it. */
   readonly tier: SearchTier | undefined;
-  /** What the hit marks in the label, then in each line, as the words it covers. */
   readonly marks?: { readonly label: readonly string[]; readonly lines?: readonly string[][] };
 }
 
@@ -115,7 +106,6 @@ const CASES: readonly Case[] = [
   },
 ];
 
-/** The words each of a text's ranges covers. */
 function covered(text: string, ranges: readonly { start: number; end: number }[]): string[] {
   return ranges.map((range) => text.slice(range.start, range.end));
 }

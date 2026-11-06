@@ -35,78 +35,44 @@ import {
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-/**
- * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, says which step a launch it claimed has reached, settles a line or answers a request, and saves its agents' state.
- *
- * Each is a procedure of the hosted contract over the one account call, so
- * the bearer is read fresh per attempt and a 401 is renewed and retried
- * once. No call fails: a held read the service did not answer is nothing,
- * which the caller asks again after a pause; a claim refused is
- * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, or its caller withdrew
- * it) and one unanswered nothing; a
- * register, a step, a settle, or an answer not taken is false, and a beat
- * not taken is nothing. A save of an agent's
- * state, or its commit, refused says whether a newer save made it stale,
- * and one unanswered, or refused as unavailable, is nothing. A host also
- * asks the runner token route for a GitHub token for one of its agents
- * (`githubToken`), on the same credential, its device secret. A box with
- * no secret yet pairs with a code: it starts a pairing with no credential
- * (`startHostPairing`) and polls on the poll secret it was answered
- * (`pollHostPairing`) until a member approves or denies it.
- */
-
-/** A read's bytes as the answer's wire spells them. */
 const encodeBytes = Schema.encodeSync(Schema.Uint8ArrayFromBase64);
 
-/** What a claim the service refused answers. */
 export const DEVICE_AGENT_NOT_CLAIMED = { claimed: false } as const;
 
-/** A launch line claimed, with the secrets its claim handed over once, where it is one, or saying they are gone, where its claim was asked again. */
 export interface DeviceAgentClaimedLine {
   readonly line: DeviceAgentLine;
   readonly secrets?: DeviceAgentLaunchSecrets | undefined;
   readonly secretsGone?: true | undefined;
 }
 
-/** A beat the service took: the ids of the launches it holds the device to, and a release newer than the host's, where the service names one (`deviceAgentBeatAnswerSchema`). */
 export interface DeviceAgentBeat {
   readonly openLaunches: readonly string[];
   readonly release?: DeviceAgentRelease | undefined;
 }
 
-/** Where a host's update stands, as its beat says it while one is under way, and why it failed where it did. */
 export interface DeviceAgentUpdate {
   readonly update: HostUpdate;
   readonly updateFailure?: string | undefined;
 }
 
-/** What a Mac registers as: its name, its platform and architecture, which machine it is where it read it (`DeviceMachine`), its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, the lines beyond the first it takes, and where its setup stands until it is ready. */
 export interface DeviceAgentDevice extends DeviceMachine {
   readonly name: string;
   readonly platform: DevicePlatform;
   readonly arch: DeviceArch;
   readonly home: string;
-  /** The folder its own layout puts its agents under (`deviceAgentsFolder`), absolute. */
   readonly agentsFolder: string;
   readonly claudeExecutable: string;
   readonly codexExecutable?: string | undefined;
   readonly capabilities: readonly DeviceCapability[];
-  /** Where its setup stands while it is not ready to take an agent, and why it failed where it did; none once it is ready. */
   readonly setup?: DeviceSetup | undefined;
   readonly setupFailure?: string | undefined;
 }
 
-/** How a pairing's start or poll ended. */
 export const HOST_PAIRING_OUTCOME = {
-  /** The service answered: a start its poll secret, code, and link; a poll where the pairing stands. */
   ANSWERED: "answered",
-  /** The service is taking no more starts from the box's address for now; start again a little later. */
   BRAKED: "braked",
-  /** The service refused the daemon's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
   UPGRADE_NEEDED: "upgrade-needed",
-  /** The service refused the call for any other reason: a malformed start, or a poll on no poll secret. */
   REFUSED: "refused",
-  /** No answer could be read: the network, the deadline, or a service answering something else. */
   UNANSWERED: "unanswered",
 } as const;
 
@@ -120,7 +86,6 @@ export type HostPairingOutcome<Answer> =
   | { readonly outcome: typeof HOST_PAIRING_OUTCOME.REFUSED }
   | { readonly outcome: typeof HOST_PAIRING_OUTCOME.UNANSWERED };
 
-/** A pairing call's answer, or how it failed, by the refusal's slug. */
 function pairingOutcome<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<HostPairingOutcome<Answer>, never, HttpClient.HttpClient> {
@@ -150,13 +115,6 @@ function pairingOutcome<Answer>(
   );
 }
 
-/**
- * A box's pairing started (`contract/device-agents.ts`'s `startPairing`),
- * with no credential: answered the poll secret it polls on, the code to
- * show and the link that opens it, how long the code lasts, and how often
- * to poll. The daemon's version rides on the caller's own `HttpClient`, as
- * on every call of a host's.
- */
 export function startHostPairing(
   serviceBaseUrl: string,
   request: HostPairingStartRequest,
@@ -165,13 +123,6 @@ export function startHostPairing(
   return pairingOutcome(askHosted(hosted.deviceAgents.startPairing, request));
 }
 
-/**
- * A pairing box's poll on its poll secret, as the call's bearer
- * (`contract/device-agents.ts`'s `pollPairing`): pending, slow down,
- * denied, expired, or approved with the box's device id and secret, which
- * the service answers this once. The daemon's version rides on the
- * caller's own `HttpClient`.
- */
 export function pollHostPairing(
   serviceBaseUrl: string,
   pollSecret: string,
@@ -184,21 +135,14 @@ export function pollHostPairing(
   return pairingOutcome(askHosted(hosted.deviceAgents.pollPairing, undefined));
 }
 
-/** The machine an own enroll names, which the service creates the device from where the account never registered its id, and which machine it is where it was read (`DeviceMachine`). */
 type OwnEnrollingMachine = Required<Pick<OwnDeviceEnrollRequest, "name" | "platform" | "arch">> &
   DeviceMachine;
 
-/** How an own device's enroll ended (`HostedDeviceAgentClient.enrollOwn`). */
 export const OWN_ENROLL_OUTCOME = {
-  /** The service converted the device in place and answered its device secret, this once. */
   ENROLLED: "enrolled",
-  /** The account holds no device of that id. */
   NOT_FOUND: "not-found",
-  /** The service refused the enroll for any other reason, its slug kept. */
   REFUSED: "refused",
-  /** The service refused the host program's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
   UPGRADE_NEEDED: "upgrade-needed",
-  /** No answer could be read: the network, the deadline, or a service answering something else. */
   UNANSWERED: "unanswered",
 } as const;
 
@@ -212,7 +156,6 @@ export type OwnEnrollOutcome =
     }
   | { readonly outcome: typeof OWN_ENROLL_OUTCOME.UNANSWERED };
 
-/** How a refusal of an own device's enroll reads, by its slug. */
 function ownEnrollRefusal(failed: HostedRefused): OwnEnrollOutcome {
   switch (failed.refusal) {
     case HOSTED_API_ERROR.NOT_FOUND:
@@ -228,9 +171,7 @@ function ownEnrollRefusal(failed: HostedRefused): OwnEnrollOutcome {
 }
 
 export interface HostedDeviceAgentClientOptions {
-  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
 }
 
@@ -246,7 +187,6 @@ export class HostedDeviceAgentClient {
     this.#call = accountCall({ baseUrl: options.serviceBaseUrl, credential: options.credential });
   }
 
-  /** A GitHub token for the host's own agent's repository; nothing where the service refused it or did not answer. */
   githubToken(agentId: string): Effect.Effect<string | undefined, never, HttpClient.HttpClient> {
     return Effect.map(
       this.#call.ask(
@@ -261,14 +201,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /**
-   * One of the account's own machines enrolled on its sign-in
-   * (`contract/device-agents.ts`'s `enrollOwn`): converted in place under its
-   * id, or created under the account as the machine given names itself
-   * where the account never registered the id, and traded for a device
-   * secret, answered this once. The host program's version rides on the
-   * caller's own `HttpClient`, as on a host's every call.
-   */
   enrollOwn(
     deviceId: string,
     machine?: OwnEnrollingMachine,
@@ -290,12 +222,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /**
-   * This host removed from its account on its own secret: whether it is
-   * gone. Note that a secret the service refuses as unauthenticated is one
-   * no standing host holds (`auth/device-secret.ts`), so a host the service
-   * had already removed is gone too.
-   */
   leave(deviceId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.deviceAgents.leave, { deviceId }).pipe(
       Effect.as(true),
@@ -307,20 +233,16 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** This Mac registered under its id; whether the service took it. */
   register(
     deviceId: string,
     device: DeviceAgentDevice,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     const { codexExecutable, capabilities, setup, setupFailure, ...rest } = device;
-    // Note that a Mac with no Codex checked names none, which the service reads as no Codex,
-    // and one with no capability names no list, which a service from before the field refuses.
     const input = {
       deviceId,
       ...rest,
       ...(codexExecutable === undefined ? undefined : { codexExecutable }),
       ...(capabilities.length === 0 ? undefined : { capabilities }),
-      // Likewise a device ready to take an agent names no setup, so only one a service from before the field would never list is refused.
       ...(setup === undefined ? undefined : { setup }),
       ...(setup === undefined || setupFailure === undefined ? undefined : { setupFailure }),
     };
@@ -330,7 +252,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** That this Mac is here now, and where its update stands while one is under way; the launches the service holds it to and a newer release where it took the beat, and nothing where it did not. */
   beat(
     deviceId: string,
     updating?: DeviceAgentUpdate,
@@ -338,7 +259,6 @@ export class HostedDeviceAgentClient {
     const failure = updating?.updateFailure;
     const input = {
       deviceId,
-      // Note that a beat updating nothing names neither key, since a service from before them refuses a key it does not know.
       ...(updating === undefined ? undefined : { update: updating.update }),
       ...(updating === undefined || failure === undefined ? undefined : { updateFailure: failure }),
     };
@@ -353,7 +273,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** The lines waiting for this Mac, held by the service until one does; nothing where it did not answer. */
   lines(
     deviceId: string,
   ): Effect.Effect<readonly DeviceAgentLine[] | undefined, never, HttpClient.HttpClient> {
@@ -363,14 +282,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /**
-   * One line claimed by its id under the token the Mac minted for it, with
-   * a launch line's secrets; refused, or nothing where unanswered. Note
-   * that a claim naming a token is asked again without it where the
-   * service refuses it, since a service from before the field refuses a
-   * request naming any key it does not know, and one after it refuses the
-   * claim without a token too wherever it refused the claim with one.
-   */
   claimLine(
     deviceId: string,
     id: string,
@@ -399,12 +310,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /**
-   * The step a launch line this Mac claimed has reached (`DEVICE_LAUNCH_STEP`),
-   * which the agent's transcript words until its harness's first event;
-   * whether the service kept it. A service from before the procedure
-   * refuses it, which is false too, so a report never holds up the launch.
-   */
   lineStep(
     deviceId: string,
     id: string,
@@ -416,7 +321,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** One line settled, a launch line with its runner's exit code where it exited with one, and why it never started where the host knows; whether the service took it. */
   settleLine(
     deviceId: string,
     id: string,
@@ -434,7 +338,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** The requests waiting for this Mac, held by the service until one does; nothing where it did not answer. */
   requests(
     deviceId: string,
   ): Effect.Effect<readonly DeviceAgentRequest[] | undefined, never, HttpClient.HttpClient> {
@@ -444,7 +347,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** One request claimed by its id; refused, or nothing where unanswered. */
   claimRequest(
     deviceId: string,
     id: string,
@@ -461,7 +363,6 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** One request answered; whether the service took it. */
   answerRequest(
     deviceId: string,
     id: string,

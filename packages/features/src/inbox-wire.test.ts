@@ -9,16 +9,8 @@ import {
   standingAsk,
 } from "./inbox-wire.js";
 
-/**
- * inbox-wire.test.ts -- an ask kept open reads as the item stands: open
- * while the item holds it open, replaced where it holds another, and
- * answered or withdrawn, with the close's reason, once the item settled
- * on it; and a thread a member starts is titled by its words.
- */
-
 const ASK_ID = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
 
-/** The decide ask kept open. */
 const DECIDE: InboxReadAsk = {
   type: INBOX_ASK.DECIDE,
   options: [{ label: "Operating" }, { label: "Payroll" }],

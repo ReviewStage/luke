@@ -10,22 +10,8 @@ import { holdExits } from "../../testing/held-exits.js";
 import { recordedFailure } from "../../testing/reported-failure.js";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
 
-/** The failure beneath a refusal. */
 const { failure: FAILURE } = recordedFailure();
 
-/**
- * confirm-dialog.test.ts -- a question opened from a button lands on
- * Cancel, or on its field where it asks one; Cancel and Escape withdraw it
- * and hand focus back; an answer under way stills both buttons and holds
- * the card until it lands; a refusal keeps the card up saying why, and the
- * act can be tried again; and the question goes the moment its subject or
- * its surface does, a refusal with it, while an answer already given
- * finishes unseen. An answer that lands holds the card until its check has
- * been seen, and the card is drawn until its fade has run; and a gated
- * question offers its act only once the subject's name is typed exactly.
- */
-
-/** The answers the owner's act is waiting on, settled by the test in the order they were asked. */
 type Answers = ((result: ActionResult) => void)[];
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -47,7 +33,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A settings line that asks before deleting a key, with toggles that take the key or the page away. */
 function Owner({
   answers,
   withField,
@@ -90,20 +75,17 @@ function Owner({
   );
 }
 
-/** The button whose accessible name is `name`, wherever it stands. */
 function button(name: string): HTMLButtonElement | undefined {
   return [...document.querySelectorAll("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
   );
 }
 
-/** Presses `name`, failing if no such button stands. */
 function press(name: string): void {
   const target = button(name) ?? assert.fail(`no ${name} button`);
   act(() => target.click());
 }
 
-/** Presses `key` on whatever holds focus. */
 function key(name: string): void {
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
@@ -112,7 +94,6 @@ function key(name: string): void {
   });
 }
 
-/** Presses Enter as an input method does to confirm a composition, on whatever holds focus: flagged composing, and for Safari's last key, code 229 alone. */
 function composingEnter(init: KeyboardEventInit): void {
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
@@ -121,25 +102,18 @@ function composingEnter(init: KeyboardEventInit): void {
   });
 }
 
-/** The question's card, while it stands. */
 function question(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="alertdialog"]');
 }
 
-/** What the card's error line says, which is nothing while the act was not refused. */
 function refusal(): string | undefined {
   return question()?.querySelector('[data-slot="field-error"]')?.textContent ?? undefined;
 }
 
-/**
- * Whether `element` holds the keyboard. Note that a focus is compared by
- * hand, because a failed `assert.equal` prints both elements whole.
- */
 function holds(element: Element | null | undefined): boolean {
   return element !== null && element !== undefined && document.activeElement === element;
 }
 
-/** The owner drawn and its question asked from its button, which keeps focus as a press would give it. */
 function asked(withField = false, gate: string | undefined = undefined) {
   const answers: Answers = [];
   const container = document.createElement("div");
@@ -259,8 +233,6 @@ test("an answer that lands holds the card until the check's motion finishes", as
   const cancelStilled = button("Cancel")?.disabled;
   key("Escape");
   const keptByEscape = question() !== null;
-  // Note that the engine goes before the check's motion ends, so the card's
-  // own fade, which jsdom cannot run, does not hold it.
   Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
   act(() => motion.dispatchEvent(new Event("finish")));
 

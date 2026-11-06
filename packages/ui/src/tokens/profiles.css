@@ -1,17 +1,3 @@
-/* profiles.css -- the role values of each app: how tall a control stands, how type is set, and how far a page insets.
-
-   A profile is an attribute on an app's root and on every overlay portal it
-   draws (`data-ui-profile`), so a component reads one role name and is
-   drawn at the desktop's density in the window and the site's on the web.
-   Both profiles set every role.
-
-   Two widths cannot be tokens, because a container query cannot read a
-   custom property: a settings row's control wraps below its label under
-   380px, and a desktop page insets `--ui-page-inset-narrow` under 480px of
-   content. The pattern that draws each says so where it queries. */
-
-/* A bar's title floor is read in pixels by the bar that answers it, so it is
-   registered as a length, which a computed style resolves. */
 @property --ui-title-floor {
   syntax: "<length>";
   inherits: true;
@@ -21,59 +7,33 @@
 [data-ui-profile="desktop"] {
   --ui-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
   --ui-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-  /* The window sets no display face of its own; its largest words are the system's. */
   --ui-font-display: var(--ui-font-sans);
 
   --ui-control-height: 30px;
   --ui-control-radius: var(--ui-radius-10);
   --ui-control-icon: var(--ui-icon-16);
-  /* The least a press is taken across on a coarse pointer, a finger's: a
-     control drawn smaller keeps its size and takes the press around it. */
   --ui-touch-target: 44px;
-  /* The bar across the top of a tab or a dock (`PaneBar`): a control's
-     height with a tight gap over and under it, and the hairline it stands
-     on, so a bar holding words alone stands as tall as one holding buttons. */
   --ui-pane-bar-height: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px);
-  /* The least of a bar's title that reads: a bar that would cut it shorter
-     on one row stands it on a row of its own (`use-wrap-when-cut.ts`). */
   --ui-title-floor: calc(10 * var(--ui-space-12));
   --ui-control-inset: var(--ui-space-12);
   --ui-control-gap: var(--ui-space-8);
-  /* How far every control fades while it cannot be used: one look, so a
-     switched-off button, field, switch and menu row read as the same state. */
   --ui-disabled-opacity: 0.5;
-  /* The one cursor rule (docs/DESIGN.md): a control gives the Mac's arrow,
-     as Finder, Mail and Notes do, and only a real link the pointing hand.
-     A control reads `--ui-cursor-press` (`cursor-press`), a link
-     `--ui-cursor-link` (`cursor-link`); the style guard refuses the hand
-     spelled anywhere else (`pointer-cursor`). */
   --ui-cursor-press: default;
   --ui-cursor-link: pointer;
   --ui-icon-gap: var(--ui-space-8);
-  /* A settings row's pop-up stands in one column whatever value it names. */
   --ui-select-field-width: 200px;
   --ui-field-gap: var(--ui-space-16);
-  /* The room between two groups inside a pane or a form. */
   --ui-section-gap: var(--ui-space-16);
-  /* The room between a page's sections, Settings' and every other page's. */
   --ui-page-section-gap: var(--ui-space-32);
-  /* The room between the parts of one item, by how close they read: a
-     label's own parts, the boxes of a list, and the blocks of a thread. */
   --ui-tight-gap: var(--ui-space-4);
   --ui-item-gap: var(--ui-space-6);
   --ui-block-gap: var(--ui-space-12);
-  /* How far a row holds its glyph and its words from its own edge, and how
-     far a list holds its rows from its. */
   --ui-row-inset: var(--ui-space-8);
   --ui-list-inset: var(--ui-space-12);
   --ui-page-inset: var(--ui-space-48);
   --ui-page-inset-narrow: var(--ui-space-24);
-  /* Between two items of a list, close enough that they read as one. */
   --ui-list-gap: var(--ui-space-2);
-  /* How far a list's row travels as it arrives or leaves (`ListMotion`). */
   --ui-list-travel: var(--ui-space-16);
-  /* The measure a page is read at, about seventy characters of body text: a
-     document, a detail page, a collection. Settings reads a step narrower. */
   --ui-page-measure: 720px;
   --ui-settings-measure: 640px;
 
@@ -89,28 +49,16 @@
   --ui-type-dialog-leading: 20px;
   --ui-type-title-size: 26px;
   --ui-type-title-leading: 34px;
-  /* Long-form text read line after line, a document's body, a step larger
-     than a control's words and set looser, as code is. */
   --ui-type-reading-size: 15px;
   --ui-type-reading-leading: 1.6;
 
-  /* A group's heading over its rows (a sidebar's, a menu's, a picker's), and a
-     badge's, a chip's, a tooltip's, and a compact button's words: the caption's
-     size, a weight heavier. */
   --ui-type-group-size: var(--ui-type-caption-size);
   --ui-type-group-leading: var(--ui-type-caption-leading);
   --ui-type-tag-size: var(--ui-type-caption-size);
   --ui-type-tag-leading: var(--ui-type-caption-leading);
-  /* The window's top bar names its workspace in a size of its own, the
-     dialog's, so it stands out beside a page's own title. */
   --ui-type-toolbar-title-size: 15px;
   --ui-type-toolbar-title-leading: 20px;
 
-  /* One weight to a role, whatever its app or its component: a component reads
-     its role's, never one of its own, so the same job is the same weight
-     everywhere. The three headings are semibold, a label and a tag medium,
-     and words read as a run regular. Emphasis is the weight a word takes to
-     stand out of its role's own: an unread row, the current page, a count. */
   --ui-type-body-weight: var(--ui-weight-regular);
   --ui-type-label-weight: var(--ui-weight-medium);
   --ui-type-caption-weight: var(--ui-weight-regular);
@@ -122,42 +70,28 @@
   --ui-type-title-weight: var(--ui-weight-semibold);
   --ui-type-reading-weight: var(--ui-weight-regular);
   --ui-type-emphasis-weight: var(--ui-weight-semibold);
-  /* Only a title carries tracking, and the top bar's and the page's share it. */
   --ui-type-title-tracking: -0.01em;
 
   --ui-settings-row-block: var(--ui-space-12);
   --ui-settings-row-inline: var(--ui-space-16);
-  /* Every row stands as tall as a label and its description need, with or
-     without the description, so a card of rows reads even rather than cramped. */
   --ui-settings-row-min-height: 56px;
-  /* A compact row stands bare in a popover's own inset, a menu row's height. */
   --ui-settings-row-compact-block: var(--ui-space-0);
   --ui-settings-row-compact-inline: var(--ui-space-0);
   --ui-settings-row-compact-min-height: 32px;
-  /* A list row stands in a card as a reference list's line does, denser
-     than a setting's, because it is read down rather than set. */
   --ui-settings-row-list-block: var(--ui-space-8);
   --ui-settings-row-list-min-height: 40px;
 
   --ui-text-area-grow-max: 320px;
 
-  /* A card frames a group of content on a page: a dialog's corner, and an
-     inset a step wider than a field's gap, so what it holds stands clear of
-     its edge; the compact and snug insets are the block axis of a figure's
-     card and a one-line band's. */
   --ui-card-radius: var(--ui-radius-14);
   --ui-card-inset: var(--ui-space-24);
   --ui-card-inset-compact: var(--ui-space-16);
   --ui-card-inset-snug: var(--ui-space-12);
-  /* How tall a set of pictures stands (`PictureSet`): a row of a few, aimed
-     at before it is stretched to the column, and each of many's thumbnails. */
   --ui-picture-row: 120px;
   --ui-picture-thumb: 112px;
 
-  /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
-  /* How far a wash bleeds past a name's box, by a ring of its own color. */
   --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
 
   --ui-dialog-confirm-width: 400px;
@@ -169,33 +103,15 @@
   --ui-dialog-radius: var(--ui-radius-14);
   --ui-dialog-action-gap: var(--ui-space-8);
   --ui-dialog-action-width: 80px;
-  /* The card's lift off the dimmed window, and the ring and deeper lift a
-     drag it would take draws on it. */
   --ui-dialog-shadow: 0 16px 56px var(--ui-color-shadow);
   --ui-dialog-drop-shadow:
     0 0 0 2px color-mix(in srgb, var(--ui-color-accent) 70%, transparent),
     0 24px 64px var(--ui-color-shadow-deep);
-  /* The room a dialog's card may stand in: the window seen, less its margins,
-     each the wider of a card's margin and a phone's safe-area inset there
-     (`../shadcn/dialog.tsx`'s room margin). */
   --ui-dialog-room: calc(
     var(--ui-stage-height) -
     max(var(--ui-space-24), env(safe-area-inset-top, 0px)) -
     max(var(--ui-space-24), env(safe-area-inset-bottom, 0px) - var(--ui-keyboard-inset))
   );
-  /* ⌘K's card: the chrome around its list is a field, a filter band and a
-     foot, the list's own padding, a group's heading and the three hairlines
-     between them; the list keeps three rows beside that however short the
-     window is, so the card stands two thirds of the window tall (four fifths
-     as a sheet) or what that takes, never past the window less a margin,
-     and its top yields to make room. Where the window cannot hold all of
-     it, the card takes the window and the list scrolls. In a short window,
-     where that share is less than a card's full height
-     (`--ui-command-full`), the card goes on down as far as a tall
-     window's top would leave it (less the margin) before its list is cut,
-     rather than leaving the room under it empty. The card stands in the
-     middle of the window, as much room over it as under it, which a tall
-     window's share and top already give. */
   --ui-command-chrome: calc(
     var(--ui-touch-target) +
     var(--ui-control-height) +
@@ -225,18 +141,11 @@
     min(var(--ui-stage-height) - var(--ui-space-8), var(--ui-command-full))
   );
 
-  /* A hover hint: the pill's own corner and lift, as it was drawn before it
-     was shared, the widest it stands (the window, less twice tooltip.tsx's
-     TOOLTIP_MARGIN), and the width of a card hung in its place. */
   --ui-tooltip-radius: 7px;
   --ui-tooltip-shadow: 0 4px 14px var(--ui-color-shadow);
   --ui-tooltip-max-width: calc(var(--ui-stage-width) - 12px);
   --ui-tooltip-card-width: 280px;
 
-  /* A hover card's name is a label and the line under it a caption; what it
-     keeps off the type scale is the code in its note, its own glyph, and the
-     most a list under a rule stands before it scrolls within the card (some
-     seven rows, less in a short window). */
   --ui-hover-card-code-size: 11px;
   --ui-hover-card-glyph: 14px;
   --ui-hover-card-list-height: min(
@@ -247,54 +156,27 @@
   --ui-menu-row-height: 32px;
   --ui-menu-row-radius: var(--ui-radius-8);
   --ui-menu-inset: var(--ui-space-4);
-  /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
   --ui-menu-radius: calc(var(--ui-menu-row-radius) + var(--ui-menu-inset));
-  /* The glyph slot every menu row keeps, at its end as at its start. */
   --ui-menu-glyph: 16px;
   --ui-menu-shadow: 0 8px 32px var(--ui-color-shadow-soft);
-  /* A pane floating over the work (the folded sidebar's float): a hairline
-     round it, then a near shadow and a far one, and the work blurred and
-     brightened through its glass (`--ui-color-float`). */
   --ui-float-shadow:
     0 0 0 1px var(--ui-color-border-strong), 0 2px 4px var(--ui-color-shadow-soft),
     0 12px 24px -6px var(--ui-color-shadow), 0 32px 80px -8px var(--ui-color-shadow-deep);
   --ui-float-backdrop: blur(32px) saturate(170%);
-  /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
-     a Settings picker's, the composer's, and one that holds an issue's title
-     with its key and state after it. */
   --ui-popover-width-narrow: 280px;
   --ui-popover-width-regular: 340px;
   --ui-popover-width-wide: 420px;
 
-  /* How deep a scroller's edge dissolves where content runs past it
-     (`ScrollArea`'s fade); the window's has stood a step off the scale. */
   --ui-scroll-fade: 26px;
-  /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --ui-label-fade: 20px;
-  /* How tall a band stuck at a scroller's start stands, a section's heading,
-     which its fade begins beneath (`ScrollArea`'s `fadeInset`). */
   --ui-scroll-band: var(--ui-space-32);
 
-  /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its color is the palette's `--ui-color-focus-ring`. The reach is
-     how far the ring stands past the control's edge: a scroller pads by it,
-     so the ring of a row laid edge to edge in it is not clipped. A box that
-     clips what it holds keeps the ring whole one of two ways. One whose clip
-     is only there to hold in what runs long clips past the ring,
-     `overflow: clip` with `overflow-clip-margin` the room; note that the room
-     names its box, because Chromium drops a bare `calc()` there and clips at
-     the edge after all. One whose clip is an edge it draws, a card, sets the
-     offset to the inset for everything in it, so the ring is drawn inside
-     the control, on the card's side of the edge. */
   --ui-focus-ring-width: 2px;
   --ui-focus-ring-offset: 1px;
   --ui-focus-ring-inset: calc(-1 * var(--ui-focus-ring-width));
   --ui-focus-ring-reach: calc(var(--ui-focus-ring-width) + var(--ui-focus-ring-offset));
   --ui-focus-ring-room: padding-box var(--ui-focus-ring-reach);
 
-  /* The layers that float over the whole page, each drawn at the root of the
-     document: a menu, then a dialog, then the passing notice, then a hint
-     over everything, since a toast's own × hangs one over the toast. */
   --ui-z-menu: 20;
   --ui-z-dialog: 30;
   --ui-z-toast: 31;
@@ -305,55 +187,33 @@
   --ui-font-sans: "Geist Variable", -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
   --ui-font-mono:
     "JetBrains Mono Variable", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-  /* The wordmark's face, which the marketing pages' display styles are set in. */
   --ui-font-display: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
 
   --ui-control-height: 44px;
   --ui-control-radius: var(--ui-radius-10);
   --ui-control-icon: var(--ui-icon-16);
-  /* The least a press is taken across on a coarse pointer, a finger's: a
-     control drawn smaller keeps its size and takes the press around it. */
   --ui-touch-target: 44px;
-  /* The bar across the top of a tab or a dock (`PaneBar`): a control's
-     height with a tight gap over and under it, and the hairline it stands
-     on, so a bar holding words alone stands as tall as one holding buttons. */
   --ui-pane-bar-height: calc(var(--ui-control-height) + 2 * var(--ui-tight-gap) + 1px);
-  /* The least of a bar's title that reads: a bar that would cut it shorter
-     on one row stands it on a row of its own (`use-wrap-when-cut.ts`). */
   --ui-title-floor: calc(10 * var(--ui-space-12));
   --ui-control-inset: var(--ui-space-16);
   --ui-control-gap: var(--ui-space-8);
-  /* How far every control fades while it cannot be used: one look, so a
-     switched-off button, field, switch and menu row read as the same state. */
   --ui-disabled-opacity: 0.5;
-  /* The one cursor rule: on the web every control gives the pointing hand,
-     as a link does. */
   --ui-cursor-press: pointer;
   --ui-cursor-link: pointer;
   --ui-icon-gap: var(--ui-space-8);
   --ui-select-field-width: auto;
   --ui-field-gap: var(--ui-space-16);
-  /* The room between two groups inside a pane or a form. */
   --ui-section-gap: var(--ui-space-16);
-  /* The room between a page's sections, Settings' and every other page's. */
   --ui-page-section-gap: var(--ui-space-32);
-  /* The room between the parts of one item, by how close they read: a
-     label's own parts, the boxes of a list, and the blocks of a thread. */
   --ui-tight-gap: var(--ui-space-4);
   --ui-item-gap: var(--ui-space-6);
   --ui-block-gap: var(--ui-space-12);
-  /* How far a row holds its glyph and its words from its own edge, and how
-     far a list holds its rows from its. */
   --ui-row-inset: var(--ui-space-8);
   --ui-list-inset: var(--ui-space-12);
   --ui-page-inset: var(--ui-space-24);
   --ui-page-inset-narrow: var(--ui-space-24);
-  /* Between two items of a list, close enough that they read as one. */
   --ui-list-gap: var(--ui-space-2);
-  /* How far a list's row travels as it arrives or leaves (`ListMotion`). */
   --ui-list-travel: var(--ui-space-16);
-  /* The measure a page is read at, about seventy characters of body text: a
-     document, a detail page, a collection. Settings reads a step narrower. */
   --ui-page-measure: 720px;
   --ui-settings-measure: 640px;
 
@@ -369,28 +229,16 @@
   --ui-type-dialog-leading: 28px;
   --ui-type-title-size: 28px;
   --ui-type-title-leading: 36px;
-  /* Long-form text read line after line, at the body's own size and set
-     looser, as code is. */
   --ui-type-reading-size: var(--ui-type-body-size);
   --ui-type-reading-leading: 1.6;
 
-  /* A group's heading over its rows (a sidebar's, a menu's, a picker's), and a
-     badge's, a chip's, a tooltip's, and a compact button's words: the caption's
-     size, a weight heavier. */
   --ui-type-group-size: var(--ui-type-caption-size);
   --ui-type-group-leading: var(--ui-type-caption-leading);
   --ui-type-tag-size: var(--ui-type-caption-size);
   --ui-type-tag-leading: var(--ui-type-caption-leading);
-  /* The window's top bar names its workspace in a size of its own, the
-     dialog's; the site draws no top bar, so it holds the desktop's. */
   --ui-type-toolbar-title-size: 15px;
   --ui-type-toolbar-title-leading: 20px;
 
-  /* One weight to a role, whatever its app or its component: a component reads
-     its role's, never one of its own, so the same job is the same weight
-     everywhere. The three headings are semibold, a label and a tag medium,
-     and words read as a run regular. Emphasis is the weight a word takes to
-     stand out of its role's own: an unread row, the current page, a count. */
   --ui-type-body-weight: var(--ui-weight-regular);
   --ui-type-label-weight: var(--ui-weight-medium);
   --ui-type-caption-weight: var(--ui-weight-regular);
@@ -402,7 +250,6 @@
   --ui-type-title-weight: var(--ui-weight-semibold);
   --ui-type-reading-weight: var(--ui-weight-regular);
   --ui-type-emphasis-weight: var(--ui-weight-semibold);
-  /* Only a title carries tracking, and the top bar's and the page's share it. */
   --ui-type-title-tracking: -0.01em;
 
   --ui-settings-row-block: var(--ui-space-12);
@@ -420,15 +267,11 @@
   --ui-card-inset: var(--ui-space-24);
   --ui-card-inset-compact: var(--ui-space-16);
   --ui-card-inset-snug: var(--ui-space-12);
-  /* How tall a set of pictures stands (`PictureSet`): a row of a few, aimed
-     at before it is stretched to the column, and each of many's thumbnails. */
   --ui-picture-row: 120px;
   --ui-picture-thumb: 112px;
 
-  /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --ui-inline-ref-pill-width: 240px;
   --ui-inline-ref-pill-stated-width: 360px;
-  /* How far a wash bleeds past a name's box, by a ring of its own color. */
   --ui-inline-ref-bleed: 3px; /* off-scale: the wash's bleed */
 
   --ui-dialog-confirm-width: 400px;
@@ -440,33 +283,15 @@
   --ui-dialog-radius: var(--ui-radius-14);
   --ui-dialog-action-gap: var(--ui-space-8);
   --ui-dialog-action-width: 80px;
-  /* The card's lift off the dimmed window, and the ring and deeper lift a
-     drag it would take draws on it. */
   --ui-dialog-shadow: 0 16px 56px var(--ui-color-shadow);
   --ui-dialog-drop-shadow:
     0 0 0 2px color-mix(in srgb, var(--ui-color-accent) 70%, transparent),
     0 24px 64px var(--ui-color-shadow-deep);
-  /* The room a dialog's card may stand in: the window seen, less its margins,
-     each the wider of a card's margin and a phone's safe-area inset there
-     (`../shadcn/dialog.tsx`'s room margin). */
   --ui-dialog-room: calc(
     var(--ui-stage-height) -
     max(var(--ui-space-24), env(safe-area-inset-top, 0px)) -
     max(var(--ui-space-24), env(safe-area-inset-bottom, 0px) - var(--ui-keyboard-inset))
   );
-  /* ⌘K's card: the chrome around its list is a field, a filter band and a
-     foot, the list's own padding, a group's heading and the three hairlines
-     between them; the list keeps three rows beside that however short the
-     window is, so the card stands two thirds of the window tall (four fifths
-     as a sheet) or what that takes, never past the window less a margin,
-     and its top yields to make room. Where the window cannot hold all of
-     it, the card takes the window and the list scrolls. In a short window,
-     where that share is less than a card's full height
-     (`--ui-command-full`), the card goes on down as far as a tall
-     window's top would leave it (less the margin) before its list is cut,
-     rather than leaving the room under it empty. The card stands in the
-     middle of the window, as much room over it as under it, which a tall
-     window's share and top already give. */
   --ui-command-chrome: calc(
     var(--ui-touch-target) +
     var(--ui-control-height) +
@@ -496,18 +321,11 @@
     min(var(--ui-stage-height) - var(--ui-space-8), var(--ui-command-full))
   );
 
-  /* A hover hint: the pill's own corner and lift, as it was drawn before it
-     was shared, the widest it stands (the window, less twice tooltip.tsx's
-     TOOLTIP_MARGIN), and the width of a card hung in its place. */
   --ui-tooltip-radius: 7px;
   --ui-tooltip-shadow: 0 4px 14px var(--ui-color-shadow);
   --ui-tooltip-max-width: calc(var(--ui-stage-width) - 12px);
   --ui-tooltip-card-width: 280px;
 
-  /* A hover card's name is a label and the line under it a caption; what it
-     keeps off the type scale is the code in its note, its own glyph, and the
-     most a list under a rule stands before it scrolls within the card (some
-     seven rows, less in a short window). */
   --ui-hover-card-code-size: 11px;
   --ui-hover-card-glyph: 14px;
   --ui-hover-card-list-height: min(
@@ -515,70 +333,36 @@
     calc(var(--ui-stage-height) * 0.4)
   );
 
-  /* A web menu's rows are its controls' height, a finger's target. */
   --ui-menu-row-height: 44px;
   --ui-menu-row-radius: var(--ui-radius-8);
   --ui-menu-inset: var(--ui-space-4);
-  /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
   --ui-menu-radius: calc(var(--ui-menu-row-radius) + var(--ui-menu-inset));
-  /* The glyph slot every menu row keeps, at its end as at its start. */
   --ui-menu-glyph: 16px;
   --ui-menu-shadow: 0 8px 32px var(--ui-color-shadow-soft);
-  /* A pane floating over the work (the folded sidebar's float): a hairline
-     round it, then a near shadow and a far one, and the work blurred and
-     brightened through its glass (`--ui-color-float`). */
   --ui-float-shadow:
     0 0 0 1px var(--ui-color-border-strong), 0 2px 4px var(--ui-color-shadow-soft),
     0 12px 24px -6px var(--ui-color-shadow), 0 32px 80px -8px var(--ui-color-shadow-deep);
   --ui-float-backdrop: blur(32px) saturate(170%);
-  /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
-     a Settings picker's, the composer's, and one that holds an issue's title
-     with its key and state after it. */
   --ui-popover-width-narrow: 280px;
   --ui-popover-width-regular: 340px;
   --ui-popover-width-wide: 420px;
 
-  /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
   --ui-scroll-fade: var(--ui-space-24);
-  /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --ui-label-fade: 20px;
-  /* How tall a band stuck at a scroller's start stands, which its fade begins beneath. */
   --ui-scroll-band: var(--ui-space-32);
 
-  /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its color is the palette's `--ui-color-focus-ring`. The reach is
-     how far the ring stands past the control's edge: a scroller pads by it,
-     so the ring of a row laid edge to edge in it is not clipped. A box that
-     clips what it holds keeps the ring whole one of two ways. One whose clip
-     is only there to hold in what runs long clips past the ring,
-     `overflow: clip` with `overflow-clip-margin` the room; note that the room
-     names its box, because Chromium drops a bare `calc()` there and clips at
-     the edge after all. One whose clip is an edge it draws, a card, sets the
-     offset to the inset for everything in it, so the ring is drawn inside
-     the control, on the card's side of the edge. */
   --ui-focus-ring-width: 2px;
   --ui-focus-ring-offset: 1px;
   --ui-focus-ring-inset: calc(-1 * var(--ui-focus-ring-width));
   --ui-focus-ring-reach: calc(var(--ui-focus-ring-width) + var(--ui-focus-ring-offset));
   --ui-focus-ring-room: padding-box var(--ui-focus-ring-reach);
 
-  /* The layers that float over the whole page, each drawn at the root of the
-     document: a menu, then a dialog, then the passing notice, then a hint
-     over everything, since a toast's own × hangs one over the toast. */
   --ui-z-menu: 20;
   --ui-z-dialog: 30;
   --ui-z-toast: 31;
   --ui-z-tooltip: 32;
 }
 
-/* A compact site surface, a dashboard's (`DENSITY.COMPACT` in `surface.ts`):
-   the site's roles a step down in size, its controls short enough to stand
-   in a dense header and its type a step under a public page's. It sets size
-   roles alone, each one the site's profile sets, so its faces, its spacing
-   between things, and its palette stay the site's. A finger keeps the site's
-   full size whatever the root asks: on a coarse pointer the compact roles
-   never apply, so a control stays a 44px target and a field's 16px words
-   keep iOS from zooming into it. */
 @media not all and (pointer: coarse) {
   [data-ui-profile="web"][data-ui-density="compact"] {
     --ui-control-height: 32px;
@@ -591,7 +375,6 @@
     --ui-type-title-size: 22px;
     --ui-type-title-leading: 30px;
 
-    /* A compact menu's rows are its controls' height, as the site's are. */
     --ui-menu-row-height: 32px;
   }
 }

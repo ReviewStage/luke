@@ -2,28 +2,6 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 import { Label } from "./label.js";
 
-/**
- * field.tsx -- shadcn/ui's field (style `base-nova`), vendored and drawn as our form field.
- *
- * The parts are shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add field` reads as a small diff. The local
- * changes: only the parts a `@repo/ui` component draws are kept (`Field`,
- * `FieldLabel`, `FieldDescription`, `FieldError`); a field is one
- * orientation, its parts one under another, so `Field` takes no
- * `orientation` and draws no `role="group"`, which an unnamed field would
- * only add to a reader's tree; and `FieldError` always stands, with no
- * `role="alert"`, empty until it says something, its words what the caller
- * says rather than a list of validation errors, which `ErrorLine` says
- * through the window's `Announcer` rather than a live region of its own. The classes are our own: the parts six
- * apart, the description in the muted caption, and the error in the danger
- * ink, dropping into its line as it arrives, fading out where its caller
- * holds it leaving (`data-leaving`), and, while empty, standing out of the
- * flow, so it gives back the gap before it in whatever stack holds it.
- * None of shadcn's ring utilities (`anti-slop/no-shadcn-focus-ring`). `@repo/ui`'s
- * `FormField` (`components/form-field`) is what an app draws, and its
- * `ErrorLine` (`components/error-line`) the error alone; this is their inside.
- */
-
 export function Field({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div data-slot="field" className={cn("flex min-w-0 flex-col gap-ui-6", className)} {...props} />

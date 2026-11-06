@@ -9,12 +9,6 @@ import {
   type EditableHeadingLeave,
 } from "./editable-heading.js";
 
-/**
- * editable-heading.test.ts -- Esc leaves the heading back onto what holds
- * it and Return or ↓ on into what follows, each key held from typing, while
- * every other key types, and a key an input method took is left alone.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -47,7 +41,6 @@ function drawHeading(left: EditableHeadingLeave[]): HTMLElement {
   return heading;
 }
 
-/** Presses `name` on `target`, answering whether the key went on to type. */
 function key(target: HTMLElement, name: string, init: KeyboardEventInit = {}): boolean {
   const event = new KeyboardEvent("keydown", {
     bubbles: true,

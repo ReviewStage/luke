@@ -8,21 +8,6 @@ import {
 import { Option, Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
-/**
- * What the desktop may count about its own use, and the one reader both sides
- * run over it. The rest of `@repo/features` holds the contracts for what our service
- * *answers*; this holds the contract for what the desktop *asks* it to record.
- *
- * The vocabulary is the privacy boundary, not a convention on top of one. An
- * event is a name from this file, and every property value is a member of an
- * `as const` set here, a rung on the session-count ladder, or a release
- * version — so a session title, a branch, a path, a prompt, or an
- * error line has no shape it could travel in. Nothing observed and nothing
- * typed or spoken can be expressed, and the reader below builds its output
- * from the allowlist rather than from the envelope, so a field cannot be
- * smuggled through by naming it.
- */
-
 export const PRODUCT_EVENT = {
   APP_LAUNCH: "app:launch",
   APP_DAY_ACTIVE: "app:day_active",
@@ -44,15 +29,6 @@ export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT
 
 export const ProductEventNameSchema = Schema.Literals(Object.values(PRODUCT_EVENT));
 
-/**
- * The events the renderer may ask the main process to count, and the whole of
- * what the surface channel carries. Everything else is emitted where the action
- * itself happens, in the main process; these are surface motion the main
- * process cannot see — which tab is drawn, which page a row opened, whether a
- * search field was summoned. Keeping the set small and separate is what makes
- * the channel narrow: the handler validates against this union rather than
- * against every name, so a compromised renderer gains no reach into the actions.
- */
 export const PRODUCT_SURFACE_EVENT = {
   PANEL_TAB_CHANGE: PRODUCT_EVENT.PANEL_TAB_CHANGE,
   SETTINGS_VIEW_OPEN: PRODUCT_EVENT.SETTINGS_VIEW_OPEN,
@@ -67,7 +43,6 @@ const PRODUCT_SURFACE_EVENT_NAMES: ReadonlySet<string> = new Set(
   Object.values(PRODUCT_SURFACE_EVENT),
 );
 
-/** Guards a name arriving from the renderer's own surface-event channel. */
 export function isProductSurfaceEventName(
   value: UnparsedWireValue,
 ): value is ProductSurfaceEventName {
@@ -92,7 +67,6 @@ export const PRODUCT_EVENT_PROPERTY = {
 
 type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
 
-/** Where an account stands after an action, never who the account is. */
 export const PRODUCT_ACCOUNT_ACTION = {
   SIGN_IN_START: "sign_in_start",
   SIGN_IN_CANCEL: "sign_in_cancel",
@@ -105,13 +79,6 @@ export type ProductAccountAction =
 
 export const ProductAccountActionSchema = Schema.Literals(Object.values(PRODUCT_ACCOUNT_ACTION));
 
-/**
- * The things the Updates section's buttons ever do, named as what happened: a
- * restart is counted as the install it schedules, `release_open` is the
- * browser trip to the latest release, and `changelog_open` is the Changelog
- * row's own browser trip, to the fixed changelog page rather than the
- * releases one.
- */
 export const PRODUCT_UPDATE_ACTION = {
   CHECK: "check",
   INSTALL: "install",
@@ -121,7 +88,6 @@ export const PRODUCT_UPDATE_ACTION = {
 
 type ProductUpdateAction = (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_UPDATE_ACTION];
 
-/** Which half of the panel is drawn, said exactly as `APP_PANEL_TAB` says it. */
 const PRODUCT_PANEL_TAB = {
   TASKS: APP_PANEL_TAB.TASKS,
   SETTINGS: APP_PANEL_TAB.SETTINGS,
@@ -129,13 +95,6 @@ const PRODUCT_PANEL_TAB = {
 
 type ProductPanelTab = (typeof PRODUCT_PANEL_TAB)[keyof typeof PRODUCT_PANEL_TAB];
 
-/**
- * Which settings page a row of the Settings sidebar opened. It repeats the settings
- * package's own page set rather than importing it, because that package reads
- * this file for a setting's counted value and the edge would close a loop; the
- * desktop closes the gap with a total `Record` bridge, so a new page does not
- * build until this vocabulary answers for it.
- */
 export const PRODUCT_SETTINGS_VIEW = {
   ROOT: "root",
   VOICE: "voice",
@@ -150,7 +109,6 @@ export const PRODUCT_SETTINGS_VIEW = {
   CLI: "cli",
   SKILLS: "skills",
   API_KEYS: "api_keys",
-  /** No page since Settings › Plan template was removed; an older build still counts a visit to it. */
   PLAN_TEMPLATE: "plan_template",
   WORKSPACE: "workspace",
   ACCOUNT: "account",
@@ -163,24 +121,17 @@ export const PRODUCT_SETTINGS_VIEW = {
 export type ProductSettingsView =
   (typeof PRODUCT_SETTINGS_VIEW)[keyof typeof PRODUCT_SETTINGS_VIEW];
 
-/** Which list a search field was summoned over, never what was typed into it. */
 export const PRODUCT_SEARCH_SURFACE = {
   SETTINGS: "settings",
 } as const;
 
 type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];
 
-/**
- * Which surface of the panel was opened: the kind of page or pane, never which
- * task, agent, file, or person it showed. Where a task's column and its side
- * panel each show a surface, each is opened on its own.
- */
 export const PRODUCT_SURFACE = {
   HOME: "home",
   TASK: "task",
   VERSION_HISTORY: "version_history",
   INBOX: "inbox",
-  /** Removed with Channels, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CHANNEL: "channel",
   THREAD: "thread",
   AGENT: "agent",
@@ -200,7 +151,6 @@ export const PRODUCT_SURFACE = {
 
 export type ProductSurface = (typeof PRODUCT_SURFACE)[keyof typeof PRODUCT_SURFACE];
 
-/** How the panel was laid out as a surface opened: panes side by side, or one pane at a time. */
 export const PRODUCT_LAYOUT = {
   WIDE: "wide",
   NARROW: "narrow",
@@ -208,7 +158,6 @@ export const PRODUCT_LAYOUT = {
 
 export type ProductLayout = (typeof PRODUCT_LAYOUT)[keyof typeof PRODUCT_LAYOUT];
 
-/** What the system answered a permission ask with. */
 export const PRODUCT_PERMISSION_RESULT = {
   GRANTED: "granted",
   DENIED: "denied",
@@ -217,12 +166,6 @@ export const PRODUCT_PERMISSION_RESULT = {
 export type ProductPermissionResult =
   (typeof PRODUCT_PERMISSION_RESULT)[keyof typeof PRODUCT_PERMISSION_RESULT];
 
-/**
- * The shape a setting's new value is counted in, never the value itself: a
- * chosen workspace project is a project name, and a hotkey is a chord the
- * developer chose. Whether a switch went on or off, and whether a choice was
- * made or returned to nothing, is the whole of what travels.
- */
 export const PRODUCT_SETTING_VALUE = {
   ON: "on",
   OFF: "off",
@@ -235,61 +178,31 @@ export type ProductSettingValue =
 
 export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_SETTING_VALUE));
 
-/**
- * Which experiment a developer switched on or off in Settings ›
- * Experimental, by its key. It repeats the settings package's own set rather
- * than importing it, because that package reads this file and the edge would
- * close a loop; the settings package closes the gap with a total `Record`
- * bridge, so a new experiment does not build until this set answers for it.
- */
 export const PRODUCT_EXPERIMENT = {
-  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   BROWSER: "browser",
-  /** Removed with Chat, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CHAT: "chat",
-  /** Removed with Factory, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   FACTORY: "factory",
-  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   AUTOMATIONS: "automations",
-  /** Removed with the Code review automation, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CODE_REVIEW: "code-review",
-  /** Removed with video calls, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   VIDEO_CALLS: "video-calls",
   MEMORY: "memory",
-  /** Removed with our own issues, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   ISSUES: "issues",
-  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   SECTIONS: "sections",
-  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   GITHUB_TOKEN: "github-token",
-  /** Removed with the Inbox-first sidebar, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   INBOX_FIRST: "inbox-first",
-  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   LOCAL_AGENTS: "local-agents",
-  /** Removed with Channels, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CHANNELS: "channels",
   PILOT: "pilot",
   SKILLS: "skills",
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
-  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   SEVERAL_REPOSITORIES: "several-repositories",
   DESCRIPTIONS: "descriptions",
-  /** Renamed to Task descriptions, so no build sends it now; kept because a web tab served before the rename still may, and one unread value refuses the batch. */
   PLANS: "plans",
-  /** Removed with Chat on the right, so no build sends it now; kept because an older build's batch still may, and one unread value refuses the batch. */
   CHAT_ON_THE_RIGHT: "chat-on-the-right",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
 
-/**
- * The rungs every count travels on. A raw count is a weak fingerprint —
- * "137 Codex sessions" identifies a machine across days — where a rung says
- * the same thing about adoption and says it about a crowd rather than a
- * person. Each rung is the smallest count that reaches it. The ladder is
- * shared rather than per-property: a second ladder would be a second thing to
- * keep honest, and the question every count answers here is the same one.
- */
 const PRODUCT_SESSION_COUNT_BUCKET = {
   NONE: 0,
   ONE: 1,
@@ -306,7 +219,6 @@ const PRODUCT_SESSION_COUNT_LADDER: readonly ProductSessionCountBucket[] = Objec
   PRODUCT_SESSION_COUNT_BUCKET,
 ).sort((left, right) => right - left);
 
-/** The highest rung a count reaches; anything below the first rung is none. */
 export function productSessionCountBucket(count: number): ProductSessionCountBucket {
   if (!Number.isFinite(count)) return PRODUCT_SESSION_COUNT_BUCKET.NONE;
   return (
@@ -330,17 +242,11 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: ProductExperiment;
 }
 
-/**
- * The properties no set can enumerate. Each gets a named reader instead, and
- * all are narrower than free text by construction: a version parses as `x.y.z`
- * or not at all, and a count must be a rung of the ladder above.
- */
 type EnumeratedProductEventProperty = Exclude<
   ProductEventProperty,
   typeof PRODUCT_EVENT_PROPERTY.APP_VERSION | typeof PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
 >;
 
-/** Every value each enumerable property may ever hold. */
 const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
@@ -355,12 +261,6 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: Object.values(PRODUCT_EXPERIMENT),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
 
-/**
- * Which properties each event may carry. A name without an entry here does
- * not build, the same lever the settings schema uses — so widening the
- * vocabulary is a deliberate edit to this table rather than a call site that
- * quietly started sending more.
- */
 const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.APP_LAUNCH]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.APP_DAY_ACTIVE]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
@@ -384,57 +284,30 @@ const PRODUCT_EVENT_PROPERTIES = {
   ],
 } as const satisfies { [Name in ProductEventName]: readonly ProductEventProperty[] };
 
-/** Exactly the properties one event carries, each with its own value type. */
 export type ProductEventPropertiesFor<Name extends ProductEventName> = {
   readonly [Property in (typeof PRODUCT_EVENT_PROPERTIES)[Name][number]]: ProductEventPropertyValue[Property];
 };
 
-/** Any event's properties, as a validated event holds them. */
 type ProductEventProperties = {
   readonly [Property in ProductEventProperty]?: ProductEventPropertyValue[Property];
 };
 
-/** One counted event: what happened, when, and the properties it may carry. */
 export interface ProductEvent {
   name: ProductEventName;
-  /** When it happened on the desktop's clock, as epoch milliseconds. */
   at: number;
   properties: ProductEventProperties;
 }
 
 export type ProductEventBatch = readonly ProductEvent[];
 
-/**
- * What the service answers a batch it took: how many of its events it
- * recorded, which a batch of nothing but retired names makes none.
- */
 export const productEventsAnswerSchema = Schema.Struct({
   accepted: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
-/**
- * How many events one request may carry. A flush past this is a desktop bug
- * rather than a busy day, so the endpoint refuses the batch whole.
- */
 export const PRODUCT_EVENT_BATCH_LIMIT = 50;
 
-/**
- * How far back an event's own `at` may date it when the service records it.
- * The service clamps an older instant into this window ending at its own
- * clock, so a Mac set to the wrong year cannot scatter counts across the
- * timeline; the desktop's hold drops an event it would otherwise post to be
- * re-dated, so the two sides read one number.
- */
 export const PRODUCT_EVENT_MAXIMUM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Event names this vocabulary once held and no build since 0.8.0 emits. A
- * batch from a 0.7.1 or older build may still carry one, and the batch reader
- * refuses a batch whole on any name it does not know, so it skips these items
- * instead and keeps the rest of that build's counts. A name that was never in
- * the vocabulary is still refused. Delete this set once no build at or below
- * 0.7.1 is active.
- */
 const RETIRED_PRODUCT_EVENT = {
   PROVIDER_CONNECT: "provider:connect",
   PROVIDER_DISCONNECT: "provider:disconnect",
@@ -475,23 +348,10 @@ const COUNT_BUCKETS: ReadonlySet<number> = new Set(Object.values(PRODUCT_SESSION
 
 function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | undefined {
   if (!isWireNumber(value) || !COUNT_BUCKETS.has(value)) return undefined;
-  // SAFETY: the value is a member of the bucket ladder declared above.
   return value as ProductSessionCountBucket;
 }
 
-/**
- * How each property's value is read. Every enumerable property's reader comes
- * from that property's own declared set rather than from a second list, so the
- * two can never disagree; the two no set can enumerate are named here, which
- * is what makes "no free text" a property of the type rather than a promise
- * about call sites: a version that is not `x.y.z` and a count that is not a
- * rung are both discarded.
- */
 const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
-  // SAFETY: the source is keyed by exactly the enumerable properties, and each
-  // reader answers a member of the set filed under the key it lands on, which
-  // is that property's own value type; the cast restores what `Object.entries`
-  // and `Object.fromEntries` widen away.
   ...(Object.fromEntries(
     Object.entries(PRODUCT_EVENT_PROPERTY_VALUES).map(([property, values]) => [
       property,
@@ -509,15 +369,6 @@ function isProductEventName(value: UnparsedWireValue): value is ProductEventName
   return readsProductEventName(value);
 }
 
-/**
- * Reads one event out of an untrusted envelope, or nothing. The result is
- * assembled from the event's own allowlist rather than copied from what
- * arrived, so a `distinct_id`, an `$ip`, an `email`, or a `$set` on the way in
- * has nowhere to land — naming a field is not a way to send one. A missing or
- * unreadable property discards the whole event rather than being repaired: the
- * desktop only sends what it built from this same table, so anything else is a
- * bug that should be loud.
- */
 export function productEventFromWire(value: UnparsedWireValue): ProductEvent | undefined {
   if (!isRecord(value) || !isProductEventName(value.name)) return undefined;
   const at = value.at;
@@ -530,18 +381,9 @@ export function productEventFromWire(value: UnparsedWireValue): ProductEvent | u
     if (read === undefined) return undefined;
     properties[property] = read;
   }
-  // SAFETY: every key came from this event's allowlist and every value from
-  // that property's own reader, which is exactly the declared shape.
   return { name: value.name, at, properties: properties as ProductEventProperties };
 }
 
-/**
- * Reads a whole batch, or nothing. One unreadable event refuses the batch
- * rather than trimming it: a partial acceptance would let a desktop bug show
- * up as a quiet gap in the counts instead of a refusal somebody notices. The
- * one exception is a retired name, which an older build still sends and which
- * is skipped, so a batch of nothing but retired names reads as empty.
- */
 export function productEventBatchFromWire(value: UnparsedWireValue): ProductEventBatch | undefined {
   if (!isRecord(value) || !Array.isArray(value.events)) return undefined;
   if (value.events.length === 0 || value.events.length > PRODUCT_EVENT_BATCH_LIMIT) {
@@ -557,13 +399,6 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
   return events;
 }
 
-/**
- * Which of our shells something came from, under the `platform` property:
- * the desktop's panel window or the web app's tab, for the counted events and
- * the session replay alike, so one filter separates both. A client names
- * itself in its batch's `build`; the service's own counts are `server`, which
- * no client may claim.
- */
 export const PRODUCT_PLATFORM = {
   DESKTOP: "desktop",
   WEB: "web",
@@ -572,24 +407,14 @@ export const PRODUCT_PLATFORM = {
 
 export type ProductPlatform = (typeof PRODUCT_PLATFORM)[keyof typeof PRODUCT_PLATFORM];
 
-/** The platforms a client batch may name for itself. */
 export type ProductClientPlatform = Exclude<ProductPlatform, typeof PRODUCT_PLATFORM.SERVER>;
 
-/** The fields of a batch's `build`, which the service stamps on every event the batch carries. */
 export const PRODUCT_EVENT_BUILD_FIELD = {
   APP_VERSION: PRODUCT_EVENT_PROPERTY.APP_VERSION,
   PACKAGED: "packaged",
   PLATFORM: "platform",
 } as const;
 
-/**
- * What the desktop says about the build a whole batch came from: its release
- * version, read as strictly as an event's own, and whether it runs from a
- * packaged bundle rather than a development checkout. It rides beside the
- * events rather than inside each one, because it is a fact of the sender and
- * not of anything counted, and one place on the request keeps it out of every
- * event's allowlist.
- */
 const ProductEventBuildSchema = Schema.Struct({
   [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]: Schema.optionalKey(
     Schema.String.check(
@@ -608,19 +433,11 @@ export type ProductEventBuild = typeof ProductEventBuildSchema.Type;
 
 const decodeProductEventBuild = Schema.decodeUnknownOption(ProductEventBuildSchema);
 
-/**
- * Reads a batch's `build`, which is never a reason to refuse it. Note that a
- * missing or unreadable `build` is left off whole rather than refusing the
- * batch, because builds 0.7 to 0.17 send none at all and their counts still
- * have to land; an event then carries no claim about its build rather than a
- * wrong one. A field the schema does not name is not copied forward.
- */
 export function productEventBuildFromWire(value: UnparsedWireValue): ProductEventBuild {
   if (!isRecord(value)) return {};
   return Option.getOrElse(decodeProductEventBuild(value.build), () => ({}));
 }
 
-/** What every emitter is handed: a name, and exactly that name's properties. */
 export type RecordProductEvent = <Name extends ProductEventName>(
   name: Name,
   properties: ProductEventPropertiesFor<Name>,

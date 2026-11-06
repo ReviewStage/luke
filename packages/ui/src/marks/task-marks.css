@@ -1,9 +1,3 @@
-/* task-marks.css -- a task's status and priority marks, each in the ink of what it stands for.
-
-   A mark fills the glyph cell of the row, chip, or button it leads, which
-   sizes it. Lines and fills draw in the mark's own color; the check, the
-   cross, and urgent's stroke are cut in the ground they sit on. */
-
 @layer components {
   .ui-task-mark {
     flex: none;
@@ -29,7 +23,6 @@
     stroke-linejoin: round;
   }
 
-  /* A status is in its tone's ink (`tokens/status-tone.css`). */
   .ui-task-status-mark {
     color: var(--ui-tone-ink);
   }

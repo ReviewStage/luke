@@ -1,10 +1,3 @@
-/**
- * error-boundary.test.ts -- a child that throws while drawing leaves its
- * place saying so, one alert with its sentence and Reload, rather than
- * nothing, and the rest of the window stands; Reload runs what it is handed
- * and draws the place again.
- */
-
 // @vitest-environment jsdom
 
 import { act, createElement, Fragment } from "react";
@@ -20,7 +13,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const FAILURE = "This window could not be shown.";
 
-/** What a failed place's alert says around `failure`: the heading, the sentence, and Reload. */
 function alertSaying(failure: string): string {
   return `Something went wrong${failure}Reload`;
 }
@@ -28,7 +20,6 @@ function alertSaying(failure: string): string {
 let roots: Root[] = [];
 
 beforeEach(() => {
-  // Note that React says on the console every error a boundary caught, as it would in the window.
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -39,7 +30,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A place that throws while `broken` says it is, and says its words otherwise. */
 function placeThatThrows(broken: { now: boolean }): () => React.JSX.Element {
   return () => {
     if (broken.now) throw new Error("The place could not draw.");
@@ -47,7 +37,6 @@ function placeThatThrows(broken: { now: boolean }): () => React.JSX.Element {
   };
 }
 
-/** Draws `element` into the page, answering the element it was drawn in. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

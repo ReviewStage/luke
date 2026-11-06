@@ -2,19 +2,6 @@ import { GITHUB_INSTALL_STATUS, type GitHubInstallStatus } from "./github-instal
 import { INTEGRATION_LANDING_STATUS, type IntegrationLandingStatus } from "./integration-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
-/**
- * landing-outcome.ts -- how a connect ended, as every page a browser lands on after one says it: its tone, its title, and the line under it.
- *
- * GitHub's App landing, an integration's landing, and the account's own
- * GitHub connect each end in one of a few outcomes, and each outcome is
- * worded once, here, so one idea reads one way across the product
- * (`docs/DESIGN.md`'s Copy). A title names the provider where the page knows
- * it and says the outcome on its own, since the artwork beside it is hidden
- * from a reader. The line under it says only what the reader can act on; a
- * page that offers the way back draws that as its button rather than as words.
- */
-
-/** How a flow ended: complete, or danger, as STATUS_TONE names them. A page still on its way has no tone. */
 export const LANDING_TONE = {
   COMPLETE: "complete",
   DANGER: "danger",
@@ -22,54 +9,35 @@ export const LANDING_TONE = {
 
 export type LandingTone = (typeof LANDING_TONE)[keyof typeof LANDING_TONE];
 
-/** Every way a connect can end, whichever provider it was for. */
 export const LANDING_OUTCOME = {
-  /** The provider is connected to the account. */
   CONNECTED: "connected",
-  /** The provider is connected to the workspace, for everyone in it. */
   WORKSPACE_CONNECTED: "workspace-connected",
-  /** The provider's app was installed and we reach its repositories. */
   INSTALLED: "installed",
-  /** An installation changed which repositories we reach. */
   UPDATED: "updated",
-  /** The developer asked an organization's owner to install the app. */
   REQUESTED: "requested",
-  /** The provider named no installation we could confirm. */
   NOT_CONFIRMED: "not-confirmed",
-  /** The sign-in gave us no grant: declined, canceled, or refused. */
   NOT_COMPLETED: "not-completed",
-  /** We could not reach the provider, or the service between them. */
   UNAVAILABLE: "unavailable",
-  /** The connect's link is too old, already used, or not ours. */
   EXPIRED: "expired",
-  /** The provider's account already stands for another workspace. */
   ALREADY_CONNECTED: "already-connected",
-  /** The page was opened with no connect to carry out. */
   NOTHING_TO_CONNECT: "nothing-to-connect",
-  /** Our own service gave no answer. */
   SERVICE_UNREACHABLE: "service-unreachable",
 } as const;
 
 export type LandingOutcome = (typeof LANDING_OUTCOME)[keyof typeof LANDING_OUTCOME];
 
-/** What a landing says of an outcome. */
 export interface LandingWords {
   readonly tone: LandingTone;
-  /** The outcome on its own, naming the provider where the page knows it. */
   readonly title: string;
-  /** What to do next, where there is anything. */
   readonly line: string | undefined;
 }
 
-/** Said under a settled outcome where the landing is a tab of its own, which is nothing more to the reader. */
 export const LANDING_CLOSE_TAB = "You can close this tab.";
 
-/** How to go on from an outcome a fresh connect fixes. */
 function connectAgain(name: string | undefined): string {
   return `Connect ${name ?? "it"} again from ${PRODUCT_NAME}.`;
 }
 
-/** Each outcome's words, for the provider `name`, or none where the page does not know it. */
 const LANDING_WORDS = {
   [LANDING_OUTCOME.CONNECTED]: (name) => ({
     tone: LANDING_TONE.COMPLETE,
@@ -99,7 +67,6 @@ const LANDING_WORDS = {
   }),
   [LANDING_OUTCOME.REQUESTED]: () => ({
     tone: LANDING_TONE.COMPLETE,
-    // The page knows the provider, never the organization, so it cannot name one.
     title: "Your request went to your organization's owner",
     line: undefined,
   }),
@@ -152,12 +119,10 @@ const LANDING_WORDS = {
   }),
 } as const satisfies Record<LandingOutcome, (name: string | undefined) => LandingWords>;
 
-/** What a landing says of `outcome`, for the provider `name`, or for none where the page does not know it. */
 export function landingWords(outcome: LandingOutcome, name: string | undefined): LandingWords {
   return LANDING_WORDS[outcome](name);
 }
 
-/** The outcome each of the GitHub App's landing statuses is. */
 export const GITHUB_INSTALL_OUTCOME = {
   [GITHUB_INSTALL_STATUS.INSTALLED]: LANDING_OUTCOME.INSTALLED,
   [GITHUB_INSTALL_STATUS.UPDATED]: LANDING_OUTCOME.UPDATED,
@@ -169,7 +134,6 @@ export const GITHUB_INSTALL_OUTCOME = {
   [GITHUB_INSTALL_STATUS.EXPIRED]: LANDING_OUTCOME.EXPIRED,
 } as const satisfies Record<GitHubInstallStatus, LandingOutcome>;
 
-/** The outcome each of an integration's landing statuses is. */
 export const INTEGRATION_LANDING_OUTCOME = {
   [INTEGRATION_LANDING_STATUS.CONNECTED]: LANDING_OUTCOME.CONNECTED,
   [INTEGRATION_LANDING_STATUS.NOT_COMPLETED]: LANDING_OUTCOME.NOT_COMPLETED,

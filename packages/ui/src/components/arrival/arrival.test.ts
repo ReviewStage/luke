@@ -1,7 +1,3 @@
-/**
- * arrival.test.ts -- a region still reading says so as a status in place of its content, and its content stands once the read lands.
- */
-
 // @vitest-environment jsdom
 
 import { act, createElement } from "react";
@@ -27,7 +23,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws the region at `reading` into the page and answers a way to draw it again at another. */
 function mount(reading: boolean): { container: HTMLElement; read: (now: boolean) => void } {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

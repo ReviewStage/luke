@@ -6,14 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useClipped } from "./use-clipped.js";
 
-/**
- * use-clipped.test.ts -- a label is marked cut short once its words outrun
- * its box: words handed in as a string in the very render that draws them,
- * and words drawn as a tree once the change under the box is heard. jsdom
- * lays nothing out, so a box is stood in for as 50px wide, its words 10px a
- * letter, and the observer reports a box once as a first layout would.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -49,7 +41,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A label drawing `words`, handing them to the hook, or as a tree it cannot compare where `tree` says so. */
 function Label({ words, tree }: { words: string; tree: boolean }): React.JSX.Element {
   const [measured, clipped] = useClipped(tree ? undefined : words);
   return createElement(
@@ -59,7 +50,6 @@ function Label({ words, tree }: { words: string; tree: boolean }): React.JSX.Ele
   );
 }
 
-/** Draws a label of `words` and answers what reads whether it is cut short, and a way to draw it again. */
 function mount(words: string, tree: boolean) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

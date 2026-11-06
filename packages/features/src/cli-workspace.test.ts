@@ -8,8 +8,6 @@ import {
 const ACME = { id: "ws-acme", slug: "acme", formerSlugs: ["acme-old"] };
 const LABS = { id: "ws-labs", slug: "labs" };
 
-// Note that the regression these catch is the order turned around, so a stale config default
-// beats the -w a person typed, or a mistyped -w silently falls through to another workspace.
 describe("resolveCliWorkspace", () => {
   it.each([
     [

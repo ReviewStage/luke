@@ -8,11 +8,6 @@ import { STATUS_TONE } from "../../status-tone.js";
 import { VISUALLY_HIDDEN_UNDER } from "../visually-hidden/visually-hidden.js";
 import { Badge } from "./badge.js";
 
-/**
- * badge.test.ts -- a badge is read by its words, and a provider's color
- * worn as a dot before them is never read in their stead.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

@@ -6,12 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { PageToolbar } from "../../index.js";
 
-/**
- * page-toolbar.test.ts -- a page's strip is a banner holding what leads it,
- * then its heading, then its actions, in that order, and draws only the
- * parts it is given.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -28,7 +22,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws a strip with the parts given and answers its banner. */
 function draw(props: Parameters<typeof PageToolbar>[0]): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

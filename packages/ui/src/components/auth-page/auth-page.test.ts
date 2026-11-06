@@ -9,14 +9,6 @@ import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { AuthMark } from "./auth-mark.js";
 import { AuthPage } from "./auth-page.js";
 
-/**
- * auth-page.test.ts -- the page is one main landmark holding one card named
- * by its title, its artwork hidden from a reader; what went wrong is
- * announced from an alert region that stood before it arrived; a page with
- * nothing to say past its title says its title alone; a badged mark leaves
- * the title the region's name; and the way on is one link under the words.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -24,7 +16,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -34,10 +25,8 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The failure beneath a sign-in that could not start. */
 const { failure: FAILURE } = recordedFailure();
 
-/** A sign-in page whose provider choice fails to start when pressed. */
 function SignIn(): React.JSX.Element {
   const [failure, setFailure] = useState<string | undefined>(undefined);
   return createElement(AuthPage, {

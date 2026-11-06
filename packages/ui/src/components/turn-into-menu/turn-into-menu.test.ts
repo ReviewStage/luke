@@ -8,13 +8,6 @@ import { Button } from "../button/button.js";
 import { useMenu } from "../menu/menu.js";
 import { TurnIntoMenu } from "./turn-into-menu.js";
 
-/**
- * turn-into-menu.test.ts -- the blocks a line is turned into, each with
- * the chord that turns it, the current one's kept beside its check,
- * opening on the current block, which alone is checked; choosing one
- * hands the focus back and tells the owner which.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +23,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A button that drops Turn into over a line that is `current`. */
 function Harness({
   current,
   onTurn,
@@ -49,7 +41,6 @@ function Harness({
   );
 }
 
-/** Opens Turn into over a line that is `current`; answers its rows and what it told. */
 function open(current: WritingBlock | undefined): { rows: HTMLElement[]; turned: WritingBlock[] } {
   const turned: WritingBlock[] = [];
   const container = document.body.appendChild(document.createElement("div"));

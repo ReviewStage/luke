@@ -7,15 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
 
-/**
- * attachment-chip.test.ts -- a chip with an open opens its file on a press
- * or a key, one without presses nothing, its way off takes the file off by
- * pointer or keyboard and refuses while unavailable, a reader hears each
- * control by the file's name, and a file still read or failed opens nothing.
- * A file on its way up is heard as uploading, at its share where one is
- * known, and opens nothing until it is up.
- */
-
 const PICTURE = "data:image/png;base64,iVBORw0KGgo=";
 
 declare global {
@@ -26,7 +17,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: nothing is laid out here. */
 class StandInResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -42,7 +32,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** One chip drawn into a list of the page, as its callers draw it. */
 function drawn(props: Parameters<typeof AttachmentChip>[0]): HTMLElement {
   const list = document.createElement("ul");
   document.body.append(list);
@@ -52,7 +41,6 @@ function drawn(props: Parameters<typeof AttachmentChip>[0]): HTMLElement {
   return list;
 }
 
-/** One chip drawn into a list of the page, and a way to draw it again as it changes. */
 function redrawn(props: Parameters<typeof AttachmentChip>[0]): {
   list: HTMLElement;
   to: (next: Parameters<typeof AttachmentChip>[0]) => void;
@@ -65,7 +53,6 @@ function redrawn(props: Parameters<typeof AttachmentChip>[0]): {
   return { list, to: (next) => act(() => root.render(createElement(AttachmentChip, next))) };
 }
 
-/** The button a reader hears by `name`. */
 function button(list: HTMLElement, name: string): HTMLButtonElement {
   const found = [...list.querySelectorAll("button")].find(
     (each) => each.getAttribute("aria-label") === name,
@@ -73,12 +60,10 @@ function button(list: HTMLElement, name: string): HTMLButtonElement {
   return found ?? assert.fail(`a button named ${name}`);
 }
 
-/** The names of every button a reader hears. */
 function buttonNames(list: HTMLElement): (string | null)[] {
   return [...list.querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
 }
 
-/** Rests the pointer on `target` for as long as a hint waits before it shows. */
 function hover(target: Element): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -93,10 +78,6 @@ function hover(target: Element): void {
   }
 }
 
-/**
- * A keyboard press: the button is a Tab stop and takes the focus, and a
- * native button turns Enter and Space into its click, which is the browser's.
- */
 function pressByKeyboard(target: HTMLButtonElement): void {
   assert.equal(target.tabIndex, 0, "a Tab stop");
   act(() => target.focus());

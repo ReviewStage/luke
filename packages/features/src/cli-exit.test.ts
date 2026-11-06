@@ -5,8 +5,6 @@ import { CLI_EXIT, cliExitOfAgentStatus, cliExitOfHostedFailure } from "./cli-ex
 import { HostedRefused, HostedUnanswered } from "./hosted-link.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-// Note that the regression these catch is a failure read as the wrong kind, so a script retries a
-// lapsed sign-in as an outage, or signs in again over a refusal.
 describe("cliExitOfHostedFailure", () => {
   it.each([
     [
@@ -27,8 +25,6 @@ describe("cliExitOfHostedFailure", () => {
   });
 });
 
-// Note that the regression this catches is a turn's end read as the wrong outcome: a script that
-// waits on an agent goes on after a failed or stopped turn, or stops waiting while it still runs.
 describe("cliExitOfAgentStatus", () => {
   it.each([
     [AGENT_STATUS.STARTING, undefined],

@@ -1,12 +1,3 @@
-/**
- * hosts.ts -- the account's hosts as Settings › Hosts draws them (`../host-wire.ts`): listed, removed, and a box's pairing read, approved, or denied by its code.
- *
- * Every procedure is the account's own, on its sign-in or its browser
- * session. The outputs are the wire schemas flipped, so oRPC's output
- * check encodes the handler's value into the bytes the wire carries
- * (`packages/service/src/orpc/base.ts`).
- */
-
 import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
@@ -22,7 +13,6 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
-/** Every body here: an id or a code, and room to spare. */
 const BODY_BYTES = 1_024;
 
 export const hostsContract = {

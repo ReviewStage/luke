@@ -11,15 +11,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { FormatToolbar } from "./format-toolbar.js";
 
-/**
- * format-toolbar.test.ts -- the toolbar over selected words: each mark a
- * toggle pressed while the selection wears it, telling its owner which
- * was pressed without taking the focus, and naming its chord; Turn into
- * naming the current block and dropping the blocks, the current one
- * checked, the one chosen told; Comment told; and one Tab stop the arrows,
- * Home, and End move along.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -35,14 +26,12 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What a test's toolbar told its owner, in order. */
 interface Told {
   marks: WritingMark[];
   turned: WritingBlock[];
   comments: number;
 }
 
-/** The toolbar over a selection wearing `marks`, offering Turn into from `current` and Comment where asked. */
 function mount(
   marks: readonly WritingMark[],
   offer: { turnInto?: boolean; current?: WritingBlock; comment?: boolean } = {},
@@ -74,7 +63,6 @@ function mount(
   return { toolbar, told };
 }
 
-/** The toolbar's button named `name`. */
 function press(toolbar: HTMLElement, name: string): HTMLButtonElement {
   const button = [...toolbar.querySelectorAll("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
@@ -83,14 +71,12 @@ function press(toolbar: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
-/** The names of the toolbar's buttons, in order. */
 function names(toolbar: HTMLElement): string[] {
   return [...toolbar.querySelectorAll("button")].map(
     (button) => button.getAttribute("aria-label") ?? button.textContent ?? "",
   );
 }
 
-/** Presses `key` on what holds the focus. */
 function key(key: string): void {
   const target = document.activeElement ?? document.body;
   act(() => {

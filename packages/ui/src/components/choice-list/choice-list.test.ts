@@ -13,18 +13,6 @@ import {
   type ChoiceSelect,
 } from "./choice-list.js";
 
-/**
- * choice-list.test.ts -- a pick-one list is a radio group the arrows walk
- * past an unavailable row, a press on its checked row keeping or clearing
- * the choice as asked; a pick-several list toggles each row on its own, the
- * arrows moving along it; a numbered list wears each row's key; a read-only
- * list keeps its pick checked and takes no press, key, or Tab, its words
- * selecting under a drag;
- * a settled list names what was picked and takes no press; and Enter
- * presses a row and a card's own field keeps its caret, where Base UI's
- * radio and group would not.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -65,7 +53,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** A list whose value its caller holds, every change it was handed listed after it. */
 function Held({
   select,
   options = OPTIONS,

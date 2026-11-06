@@ -1,503 +1,174 @@
-/**
- * Where our hosted service answers, rooted at the service origin. The
- * addresses alone: what each endpoint takes and answers with is declared in
- * the wire module for its own domain, and a client that only needs to know
- * where to knock imports nothing else.
- */
-
 export const HOSTED_SERVICE_PATH = {
   ACCOUNT_DELETE: "/api/account/delete",
   EVENTS: "/api/events",
-  /**
-   * Store and read account preferences (GET, PUT). Only settings named by
-   * `@repo/settings` as cross-device preferences belong here.
-   */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
-  /**
-   * Whether the signed-in account is an admin (GET), so a client can offer
-   * the admin dashboard; `account-wire.ts` declares the answer.
-   */
   ACCOUNT_ACCESS: "/api/account/access",
-  /**
-   * The account's own Anthropic and OpenAI API keys: read what they are
-   * (GET), save one (PUT), remove one (DELETE), or turn a connected plan's
-   * default for coding agents (PATCH). No answer carries a key.
-   * `provider-key-wire.ts` declares every body.
-   */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
-  /** A ChatGPT plan's connection through Codex's device-code login begun (POST): the code to enter, and the login to poll. */
   ACCOUNT_CHATGPT_DEVICE: "/api/account/chatgpt/device",
-  /** One check of a device-code connection (POST), by its login. */
   ACCOUNT_CHATGPT_DEVICE_POLL: "/api/account/chatgpt/device/poll",
-  /** A device-code connection dropped (POST), by its login. */
   ACCOUNT_CHATGPT_DEVICE_CANCEL: "/api/account/chatgpt/device/cancel",
-  /**
-   * The memories our agents kept in a workspace the account is a member
-   * of, named in the query: read them (GET), or forget one by its id
-   * (DELETE); and one kept in the member's own words, the workspace named in
-   * the body (POST). `memory-wire.ts` declares all three.
-   */
   ACCOUNT_MEMORIES: "/api/account/memories",
-  /** The workspace's memories a few words find, best first (GET); `memory-wire.ts` declares it. */
   ACCOUNT_MEMORIES_SEARCH: "/api/account/memories/search",
-  /**
-   * The outside MCP clients the account allowed: read them (GET), or revoke
-   * one by its client id in the query (DELETE). `mcp-client-wire.ts`
-   * declares both.
-   */
   ACCOUNT_MCP_CLIENTS: "/api/account/mcp-clients",
-  /**
-   * A clip dictated into a message box, answered with its words (POST).
-   * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
-   * both bodies.
-   */
   DICTATION: "/api/dictation",
-  /**
-   * The member's grant of support access, under which a maintainer may sign
-   * in as the account from the web for an hour at a time: grant it for seven
-   * days (POST), or revoke it, ending any such sign-in under way (DELETE).
-   * Both run under the caller's own session. `account-wire.ts` declares the
-   * answer.
-   */
   ACCOUNT_SUPPORT_ACCESS: "/api/account/support-access",
-  /** Where every one of the account's integrations stands (GET). `integration-wire.ts` declares the answer. */
   ACCOUNT_INTEGRATIONS: "/api/account/integrations",
-  /**
-   * Where every one of the account's integrations stands, each sign-in
-   * still under way settled first (POST): the statuses read's own answer.
-   * The read settles only for a bearer, so a browser's cookie settles here.
-   */
   ACCOUNT_INTEGRATIONS_SETTLE: "/api/account/integrations/settle",
-  /** Where GitHub stands for the account as an integration (GET): connected while its GitHub sign-in yields a token. `integration-wire.ts` declares the answer. */
   ACCOUNT_INTEGRATIONS_GITHUB: "/api/account/integrations/github",
-  /**
-   * Where Vercel Connect returns the browser from an integration's sign-in
-   * (GET), with the sign-in's own state, which names the provider too: the
-   * route settles it and sends the browser on to the landing page
-   * `integration-wire.ts` names.
-   */
   ACCOUNT_INTEGRATIONS_CONNECTED: "/api/account/integrations/connected",
-  /**
-   * What waits on the developer across the account's tasks: every open
-   * inbox item, past a cursor (GET), held open while nothing changed, as a
-   * task's inbox is. `account-inbox-wire.ts` declares the answer.
-   */
   INBOX: "/api/inbox",
-  /**
-   * Every item the asking member's Inbox lists, marked read for them (PUT),
-   * in the one workspace the body names or in all of theirs.
-   * `inbox-wire.ts` declares the request and the answer.
-   */
   INBOX_READ: "/api/inbox/read",
-  /**
-   * What waits on the developer across the account, sealed for following
-   * over Neon Realtime (GET): the address and one sealed statement per part
-   * of the account inbox, or `unavailable` where the deployment has no
-   * Realtime. `live-wire.ts` declares the answer.
-   */
   LIVE_INBOX: "/api/live/inbox",
-  /**
-   * Every inbox item the account reaches, sealed for following over Neon
-   * Realtime (GET): where each stands, and those changed since `?since=`
-   * whole, or `unavailable`. `live-wire.ts` declares the answer.
-   */
   LIVE_INBOX_ITEMS: "/api/live/inbox-items",
-  /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_TASK_RECORD: "/api/live/task-record",
-  /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_PAGES: "/api/live/task-pages",
-  /** One coding agent's own pages, on no task, under `?id=`, on the terms a task's are. */
   LIVE_AGENT_PAGES: "/api/live/agent-pages",
-  /** The run of an automation that started one coding agent under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its row inline, none for an agent no run started; or `not-found`. `agent-origin-live.ts` declares the answer. */
   LIVE_AGENT_ORIGIN: "/api/live/agent-origin",
-  /** One task's newest page of description history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
   LIVE_TASK_HISTORY: "/api/live/task-history",
-  /** One task's comments under `?id=`, its description's own threads, or with `&page=` one page's on every version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. `description-comment-live.ts` declares the answer. */
   LIVE_TASK_COMMENTS: "/api/live/task-comments",
-  /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
-  /** One coding agent's Browser tabs under `?id=`, on a task or on none, on the terms a task's are. */
   LIVE_AGENT_BROWSER_TABS: "/api/live/agent-browser-tabs",
-  /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
-  /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
   LIVE_TASK_INBOX: "/api/live/task-inbox",
-  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
   LIVE_AGENT_INBOX: "/api/live/agent-inbox",
-  /** The task list sealed for following over Neon Realtime (GET): its tasks and every agent of them and with no task, or `unavailable`. `task-list-live.ts` declares the answer. */
   LIVE_TASKS: "/api/live/tasks",
-  /** A workspace's automations under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `automation-live.ts` declares the answer. */
   LIVE_AUTOMATIONS: "/api/live/automations",
-  /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
-  /** A workspace's newest runs of every automation the account reads, under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. */
   LIVE_AUTOMATION_WORKSPACE_RUNS: "/api/live/automation-workspace-runs",
-  /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
   LIVE_WORKSPACES: "/api/live/workspaces",
-  /** The account's sidebar sections, the tasks in them, and its pinned repositories, sealed for following over Neon Realtime (GET), or their rows inline where polled. */
   LIVE_SIDEBAR: "/api/live/sidebar",
-  /** One workspace's people under `?workspaceId=`, sealed for following over Neon Realtime (GET): its members and who its work names but left, or `not-found`, or their rows inline where polled. */
   LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
-  /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
   LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
-  /** One workspace's memories under `?workspaceId=`, sealed for following over Neon Realtime (GET), each with its keeper's name and whether the reader may forget it, or `not-found`, or their rows inline where polled. `memory-live.ts` declares the answer. */
   LIVE_WORKSPACE_MEMORIES: "/api/live/workspace-memories",
-  /** One workspace's Sentry installations and Slack bot under `?workspaceId=`, sealed for following over Neon Realtime (GET), with whether this deployment holds each integration, or `not-found`, or their rows inline where polled. `workspace-integrations-live.ts` declares the answer. */
   LIVE_WORKSPACE_INTEGRATIONS: "/api/live/workspace-integrations",
-  /** The account's hosts, sealed for following over Neon Realtime (GET), with the install script's address on the service's own origin, or their rows inline where polled. `host-live.ts` declares the answer. */
   LIVE_HOSTS: "/api/live/hosts",
-  /** One coding agent's pull request's newest chapters, the agent under `?id=` and the pull request under `&number=`, sealed for following over Neon Realtime (GET), with whether the reader can generate them, or `not-found`. `pull-request-chapters-live.ts` declares the answer. */
   LIVE_PULL_REQUEST_CHAPTERS: "/api/live/pull-request-chapters",
-  /** The skills the account sees in one workspace under `?workspaceId=`, the workspace's and its own, sealed for following over Neon Realtime (GET), each with whether the account may manage it, or `not-found`, or their rows inline where polled. `installed-skill-live.ts` declares the answer. */
   LIVE_INSTALLED_SKILLS: "/api/live/installed-skills",
-  /** Every integration row the account holds and where each stands as stored, sealed for following over Neon Realtime (GET), with the providers it is offered and those that take several accounts. `integration-live.ts` declares the answer. */
   LIVE_INTEGRATION_STATUSES: "/api/live/integration-statuses",
-  /** The account's preferences row, its default agent, chapters model, and Slack notifications as stored, sealed for following over Neon Realtime (GET), or its row inline where polled, none for an account that stored nothing. `account-preferences-live.ts` declares the answer. */
   LIVE_ACCOUNT_PREFERENCES: "/api/live/account-preferences",
-  /**
-   * A workspace's agents, on a task or with none, newest started first and
-   * the archived ones left out unless the query asks for them, narrowed to
-   * one repository where the query names one (GET), what an automation's
-   * Same agent and an `@` list's agents are chosen from; the plan list's
-   * answer (`agent-wire.ts`).
-   */
   AGENTS: "/api/agents",
-  /**
-   * A runner's own token (POST): a Codex runner's ChatGPT access token on
-   * its runner's bearer, and, on a host's device secret, a GitHub token for
-   * one of that host's own agents (`host-wire.ts`'s `hostGithubTokenRequestSchema`).
-   */
   RUNNER_TOKEN: "/api/agents/runner-token",
-  /** A local agent's Mac registered under the account, with its name, home folder, and bundled CLI (POST). `device-agent-wire.ts` declares the bodies. */
   DEVICE_AGENT_DEVICES: "/api/device-agents/devices",
-  /** That a local agent's Mac is there now (POST), on a timer while it runs local agents. */
   DEVICE_AGENT_PRESENCE: "/api/device-agents/presence",
-  /** The lines waiting for a Mac's local agents, held open while none is (GET), and one claimed line settled (POST). */
   DEVICE_AGENT_LINES: "/api/device-agents/lines",
-  /** One waiting line, named by its id, claimed for the Mac, a launch line's secrets with it (POST). */
   DEVICE_AGENT_LINE_CLAIM: "/api/device-agents/lines/claim",
-  /** The step a claimed launch line's launch has reached on the Mac, named by the line's id (POST). */
   DEVICE_AGENT_LINE_STEP: "/api/device-agents/lines/step",
-  /** The requests of a Mac's local agents' tools, held open while none waits (GET), and one claimed request answered (POST). */
   DEVICE_AGENT_REQUESTS: "/api/device-agents/requests",
-  /** One waiting request, named by its id, claimed for the Mac (POST). */
   DEVICE_AGENT_REQUEST_CLAIM: "/api/device-agents/requests/claim",
-  /** The ids of the account's agents that should still stand on a Mac: pinned to it and not archived (GET). */
   DEVICE_AGENT_LIVE_AGENTS: "/api/device-agents/live-agents",
-  /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
-  /** A host removing itself from its account, on its own device secret, as Settings › Hosts' Remove does (POST): `vespin-host uninstall` calls it before it deletes the secret. */
   DEVICE_AGENT_LEAVE: "/api/device-agents/devices/leave",
-  /** A box's pairing started with no credential: its poll secret, the code it shows and the link that opens it, how long the code lasts, and how often to poll (POST). `host-wire.ts` declares the bodies. */
   HOST_PAIRING_START: "/api/device-agents/pairing",
-  /** A pairing box's poll on its poll secret: pending, slow down, denied, expired, or approved with its device secret, answered once (POST). */
   HOST_PAIRING_POLL: "/api/device-agents/pairing/poll",
-  /** The account's enrolled machines, as Settings lists them (GET). `host-wire.ts` declares the bodies. */
   HOSTS: "/api/hosts",
-  /** How long ago the account's own devices last beat, read to keep a label's online state true while it is drawn (GET). */
   DEVICE_PRESENCE: "/api/hosts/presence",
-  /** One of the account's hosts removed, its secret refused at once (POST). */
   HOST_REMOVE: "/api/hosts/remove",
-  /** A pending pairing read by its code, as the approve screen shows it (POST, so the code rides in the body). `host-wire.ts` declares the bodies. */
   HOST_PAIRING: "/api/hosts/pairing",
-  /** A pending pairing approved by its code, which makes the account's host (POST). */
   HOST_PAIRING_APPROVE: "/api/hosts/pairing/approve",
-  /** A pending pairing denied by its code, so its box is answered denied (POST). */
   HOST_PAIRING_DENY: "/api/hosts/pairing/deny",
-  /**
-   * The shell commands the account's agents asked to run on the developer's
-   * Mac: the ones waiting, held open while none is, each claimed for the
-   * Mac that read it (GET), and one's result (POST). `mac-command-wire.ts`
-   * declares the bodies.
-   */
   MAC_COMMANDS: "/api/mac-commands",
-  /** One waiting command, named by its id, claimed for the Mac that heard of it live (POST). `mac-command-wire.ts` declares the bodies. */
   MAC_COMMAND_CLAIM: "/api/mac-commands/claim",
-  /** That a Mac of the account listens now for the kinds it names (POST), which a Mac following its commands live says on a timer, since its read writes nothing. */
   MAC_COMMANDS_LISTENING: "/api/mac-commands/listening",
-  /**
-   * The commands of the kinds named that no Mac of the account has claimed,
-   * sealed for following (GET), or with `?poll=true` their rows inline.
-   * `live-wire.ts` declares the answer.
-   */
   LIVE_MAC_COMMANDS: "/api/live/mac-commands",
-  /**
-   * The account's automations: list them, newest first, or one task's where
-   * `planId` names it (GET), or make one (POST). `automation-wire.ts`
-   * declares the bodies.
-   */
   AUTOMATIONS: "/api/automations",
-  /**
-   * The skills members install into the app: the ones the account sees in a
-   * workspace under `?workspaceId=` (GET), or skills installed from a
-   * paste (POST); `/preview` reads a paste as an install would (POST), and
-   * `/{id}` turns one on or off (PATCH) or removes it (DELETE), and its
-   * `/update` says whether its source moved (GET) or updates it (POST).
-   * `installed-skill-route-wire.ts` declares the bodies.
-   */
   INSTALLED_SKILLS: "/api/installed-skills",
-  /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
-  /**
-   * The account's named feature tasks: list them, newest started first
-   * (GET), or start one (POST) with its name and, where one is chosen, the
-   * GitHub repository it is about. `task-wire.ts` declares both.
-   */
   TASKS: "/api/plans",
-  /**
-   * The repositories the account pinned in the sidebar: read them, newest
-   * pinned first (GET), or pin or unpin one (PUT), answered with them all as
-   * they then stand. `task-wire.ts` declares both.
-   */
   REPOSITORY_PINS: "/api/repository-pins",
-  /**
-   * The sections the account made in its sidebars and the tasks it keeps in
-   * them: read them (GET), or make, change, move, or delete one, or put a
-   * task in one (PUT), answered with them all as they then stand.
-   * `task-section-wire.ts` declares both.
-   */
   TASK_SECTIONS: "/api/task-sections",
-  /**
-   * The repositories the signed-in account reaches through our GitHub
-   * App, most recently updated first (GET), with whether the App is
-   * installed anywhere for them and where to install it.
-   * `github-repositories-wire.ts` declares the answer, and the
-   * `GITHUB_REPOSITORIES_QUERY` that names a workspace to list for.
-   */
   GITHUB_REPOSITORIES: "/api/github/repositories",
-  /**
-   * One folder of a repository a workspace's installation reaches, as
-   * GitHub holds it now (GET), named by the workspace and the repository
-   * (`GITHUB_REPOSITORIES_QUERY`), for a place with no plan to name it by,
-   * such as an agent an automation started; the answer is a plan's tree's
-   * (`description-wire.ts`).
-   */
   GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
-  /**
-   * A window of one file of a repository a workspace's installation
-   * reaches, as GitHub holds it now or at a commit (GET), named as
-   * `GITHUB_REPOSITORY_TREE` names it, its window queried as a plan's File
-   * tab queries its own; the answer is a plan's file's (`task-wire.ts`).
-   */
   GITHUB_REPOSITORY_FILE: "/api/github/repositories/file",
-  /**
-   * The skills a developer may choose of a repository a workspace's
-   * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
-   * the answer is a plan's skills' (`description-wire.ts`).
-   */
   GITHUB_REPOSITORY_SKILLS: "/api/github/repositories/skills",
-  /**
-   * One pull request of a repository a workspace's installation reaches, as
-   * GitHub holds it now (GET), named as `GITHUB_REPOSITORY_TREE` names the
-   * repository and by its number (`GITHUB_REPOSITORIES_QUERY`), for a link
-   * to it to draw its title and where it stands; the answer is
-   * `github-repositories-wire.ts`'s, null where there is none to draw.
-   */
   GITHUB_REPOSITORY_PULL_REQUEST: "/api/github/repositories/pull-request",
-  /**
-   * One issue of a repository a workspace's installation reaches, as GitHub
-   * holds it now (GET), named as `GITHUB_REPOSITORY_PULL_REQUEST` names a
-   * pull request, for a link to it to draw its title and where it stands;
-   * the answer is `github-repositories-wire.ts`'s, null where there is none
-   * to draw.
-   */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
-  /**
-   * Sends the browser to GitHub to install our GitHub App, or to change
-   * which repositories it reaches (GET). GitHub returns the browser to
-   * `GITHUB_INSTALLED` afterwards.
-   */
   GITHUB_INSTALL: "/api/github/install",
-  /**
-   * The App's Setup URL (GET): GitHub lands here after an install or an
-   * update with the installation's id, and the route confirms it before
-   * sending the browser on to the landing page `github-install-wire.ts`
-   * names.
-   */
   GITHUB_INSTALLED: "/api/github/installed",
-  /**
-   * The callback a workspace's connect returns through (GET): the Setup URL
-   * sends the browser to authorize the App once, GitHub returns it here with
-   * a one-time code, and the route confirms the installation with the user
-   * who authorized before linking it. A registered callback URL of the App.
-   */
   GITHUB_INSTALLED_AUTHORIZED: "/api/github/installed/authorized",
-  /**
-   * A connect intent for the account's GitHub (POST): a ten-minute,
-   * single-use ticket bound to the account, answered with the web page that
-   * links GitHub on the browser's session. `github-connection-wire.ts`
-   * declares the answer.
-   */
   GITHUB_CONNECT: "/api/github/connect",
-  /**
-   * The connect page claims an intent (POST) on the browser's own session
-   * rather than a bearer: only the intent's own account claims it.
-   * `github-connection-wire.ts` declares both bodies.
-   */
   GITHUB_CONNECT_CLAIM: "/api/github/connect/claim",
-  /**
-   * The member's own classic GitHub personal access token: read what it is
-   * (GET), save one (PUT), or remove it (DELETE), while the GitHub token
-   * experiment is on for them. No answer carries the token.
-   * `github-token-wire.ts` declares every body.
-   */
   GITHUB_TOKEN: "/api/github/token",
-  /**
-   * The repositories members added to a workspace on their own GitHub
-   * tokens: read them for the workspace the query names (GET), or add or
-   * remove one (PUT), answered with them all as they then stand.
-   * `github-repositories-wire.ts` declares the answer.
-   */
   GITHUB_TOKEN_REPOSITORIES: "/api/github/token-repositories",
-  /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
-  /**
-   * The account's GitHub disconnected (POST), under the Mac's Better Auth
-   * session rather than its OAuth token, answering the connection as it then
-   * stands.
-   */
   GITHUB_DISCONNECT: "/api/github/disconnect",
-  /**
-   * The workspaces the account is a member of, its first one first and
-   * the rest by name, each with its connected GitHub account (GET), or a
-   * workspace created, the account its owner (POST). `workspace-wire.ts`
-   * declares both.
-   */
   WORKSPACES: "/api/workspaces",
-  /**
-   * Where an owner or admin connects a GitHub organization to a workspace
-   * (POST): answers our GitHub App's install address, carrying a
-   * single-use intent GitHub returns to `GITHUB_INSTALLED` with.
-   */
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
-  /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
-  /**
-   * Where an owner or admin installs our Sentry integration for a
-   * workspace (POST): answers Sentry's install address, carrying a
-   * single-use intent Sentry returns to `SENTRY_INSTALLED` with
-   * (`sentry-install-wire.ts`).
-   */
   WORKSPACE_SENTRY_INSTALL: "/api/workspaces/sentry/install",
-  /** Whether the deployment holds our Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
   WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
-  /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
   WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",
-  /** Whether the deployment holds our Slack bot, and the Slack team a workspace's bot is connected to, to a member (GET, `WORKSPACE_SLACK_BOT_QUERY`). */
   WORKSPACE_SLACK_BOT: "/api/workspaces/slack-bot",
-  /** A workspace's Slack bot connected by an owner or admin to the team its token answers for (POST), answering the bot as it then stands (`slack-bot-wire.ts`). */
   WORKSPACE_SLACK_BOT_CONNECT: "/api/workspaces/slack-bot/connect",
-  /** A workspace's Slack bot disconnected by an owner or admin (POST), answering the bot as it then stands. */
   WORKSPACE_SLACK_BOT_DISCONNECT: "/api/workspaces/slack-bot/disconnect",
-  /** The reader's own Slack notifications turned on or off by any member (POST), answering the bot as it then stands. */
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: "/api/workspaces/slack-bot/notifications",
-  /** The workspace's default repository for Slack starts named or cleared by an owner or admin (POST), answering the bot as it then stands. */
   WORKSPACE_SLACK_BOT_REPOSITORY: "/api/workspaces/slack-bot/repository",
-  /** One channel's bot membership or default repository changed by an owner or admin (POST), answering the bot as it then stands. */
   WORKSPACE_SLACK_BOT_CHANNEL: "/api/workspaces/slack-bot/channel",
-  /**
-   * The Sentry integration's Redirect URL (GET): Sentry lands the browser
-   * here after an install with the code, the installation's id, the
-   * organization's slug, and the intent's state; the route proves the
-   * installation with Sentry, links it, and lands on the integrations
-   * landing page.
-   */
   SENTRY_INSTALLED: "/api/triggers/sentry/installed",
-  /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
-  /** A workspace's slug changed by its owner alone (POST), answering the workspace under its new slug. */
   WORKSPACES_SLUG_SET: "/api/workspaces/slug/set",
-  /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
   WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
-  /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
-  /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
-  /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */
   WORKSPACES_MEMBERS_ROLE: "/api/workspaces/members/role",
-  /** The owner hands the workspace to an admin, becoming an admin (POST), answered with the members as they then stand. */
   WORKSPACES_TRANSFER: "/api/workspaces/transfer",
-  /** The account leaves a workspace it does not own (POST). */
   WORKSPACES_LEAVE: "/api/workspaces/leave",
-  /**
-   * A workspace's pending invitations, to an owner or an admin (GET, the
-   * workspace named in `workspace-invitation-wire.ts`'s
-   * `WORKSPACE_INVITATIONS_QUERY`), or an invitation made (POST).
-   */
   WORKSPACES_INVITATIONS: "/api/workspaces/invitations",
-  /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
   WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
   WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
 } as const;
 
-/** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
 }
 
-/** One installed skill: turn it on or off (PATCH) or remove it (DELETE). */
 export function installedSkillPath(skillId: string): string {
   return `${HOSTED_SERVICE_PATH.INSTALLED_SKILLS}/${encodeURIComponent(skillId)}`;
 }
 
-/**
- * An automation's webhook address (POST), called by the sender the developer
- * hands it to under the trigger's secret rather than an account bearer.
- */
 export function automationWebhookPath(automationId: string): string {
   return `${automationPath(automationId)}/webhook`;
 }
 
-/** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
-/** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
 export interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
 }
 
-/** Where the skills a developer may choose are read: a workspace, and the repository whose skills lead them where there is one. */
 export interface SkillsPlace {
   readonly workspaceId: string;
   readonly repository?: string;
 }
 
-/** One description's pictures, under which each is served as its bytes (`descriptionAttachmentPath`). */
 function descriptionAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
 }
 
-/** One picture of one description, as its bytes (GET). */
 export function descriptionAttachmentPath(taskId: string, attachmentId: string): string {
   return `${descriptionAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
-/** One item of a task's inbox, which its attachments are under. */
 function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
 }
 
-/** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */
 export function workspacePhotoPath(workspaceId: string): string {
   return `${HOSTED_SERVICE_PATH.WORKSPACES}/${encodeURIComponent(workspaceId)}/photo`;
 }
 
-/** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
 export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
   return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
-/** One picture a tool answered an agent, as its bytes under its own media type (GET), served to whoever may read the agent; one of its workers' where `callId` names the delegation call that started the worker. */
 export function agentPicturePath(agentId: string, pictureId: string, callId?: string): string {
   const agent = `/api/agents/${encodeURIComponent(agentId)}`;
   const owner = callId === undefined ? agent : `${agent}/subagents/${encodeURIComponent(callId)}`;
   return `${owner}/pictures/${encodeURIComponent(pictureId)}`;
 }
 
-/** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
 export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
 }

@@ -4,12 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { GLYPH } from "./glyph-registry.js";
 
-/**
- * glyph-registry.test.ts -- one glyph per meaning and one meaning per glyph:
- * no two concepts are drawn by the same mark, and every mark is hidden from
- * a reader.
- */
-
 const DRAWN = Object.entries(GLYPH).map(([concept, glyph]) => ({
   concept,
   markup: renderToStaticMarkup(createElement(glyph)),

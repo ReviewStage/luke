@@ -1,10 +1,4 @@
-/* calendar.css -- what of a Calendar's look its Tailwind classes cannot say
-   (`calendar.tsx`, drawn in `../../shadcn/calendar.ts`): the keyboard's
-   ring on a day, which the window's own focus ring draws. */
-
 @layer components {
-  /* Note that a day draws the keyboard's ring inside itself, because its
-     neighbors stand against it on every side. */
   .ui-calendar-day {
     outline-offset: var(--ui-focus-ring-inset);
   }

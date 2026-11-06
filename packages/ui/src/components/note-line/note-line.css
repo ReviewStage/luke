@@ -1,5 +1,3 @@
-/* note-line.css -- a muted line said where a list's rows would stand. */
-
 @layer components {
   .ui-note-line {
     margin: 0;
@@ -33,8 +31,6 @@
     margin: var(--ui-space-4) var(--ui-row-inset);
   }
 
-  /* A trail keeps the leading of the line that holds it, so its chips stand
-     as they do in its holder's words, and is centered on its glyph's seat. */
   .ui-note-line[data-look="trail"] {
     display: flex;
     flex-wrap: wrap;

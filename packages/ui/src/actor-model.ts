@@ -19,27 +19,6 @@ import {
 } from "@repo/features/workspace-wire";
 import { TAB_WORDS } from "./tab-strip-model.js";
 
-/**
- * actor-model.ts -- whoever did something, as the window names them: a person, the app itself, a coding agent, an automation, or someone it cannot name.
- *
- * Every place that says who wrote, said, started, or answered something
- * reads its actor here and draws it one way (`actor-ref.tsx`): a person on a
- * circle, their sign-in picture or the first letter of their name on a hue
- * read off their id; the app itself, an agent, and an automation each on a solid
- * rounded square; and someone the window cannot name on a quiet outline. A
- * person is named by the reader's own words for them: "you" for the
- * reader's own, "your" for what is theirs. A member the wire names by
- * `{userId, name}` is read against the workspace's members, which add the
- * picture, email, and role, so the wire's every person field needs no
- * picture of its own; a member the read no longer lists has left.
- *
- * A description's edit is named by its actor (`editActor`), and the app's also by
- * whose call it wrote it on (`editCallOwner`). A person's or the app's card
- * says what they last did in the description, read off who last changed each of
- * its sections (`latestActivity`), which the window already holds.
- */
-
-/** The kinds of actor the window names. */
 export const ACTOR_KIND = {
   PERSON: "person",
   APP: "app",
@@ -49,7 +28,6 @@ export const ACTOR_KIND = {
   GITHUB: "github",
 } as const;
 
-/** Where an agent's or an automation's work stands, as its tile wears it: the same three a tab's glyph wears. */
 export const ACTOR_STATE = {
   WORKING: "working",
   FAILED: "failed",
@@ -58,7 +36,6 @@ export const ACTOR_STATE = {
 
 export type ActorState = (typeof ACTOR_STATE)[keyof typeof ACTOR_STATE];
 
-/** Why the window cannot name someone: a member who left, a save the service names nobody for, or the one revision from before history. */
 export const SOMEONE_REASON = {
   FORMER: "former",
   UNNAMED: "unnamed",
@@ -67,7 +44,6 @@ export const SOMEONE_REASON = {
 
 type SomeoneReason = (typeof SOMEONE_REASON)[keyof typeof SOMEONE_REASON];
 
-/** A person as the window draws them; what the members read adds is absent until it answers. */
 export interface PersonActor {
   readonly kind: typeof ACTOR_KIND.PERSON;
   readonly userId: string;
@@ -75,7 +51,6 @@ export interface PersonActor {
   readonly pictureUrl?: string;
   readonly email?: string;
   readonly role?: WorkspaceRole;
-  /** Whether this is the reader's own account. */
   readonly you: boolean;
 }
 
@@ -83,14 +58,11 @@ export type Actor =
   | PersonActor
   | {
       readonly kind: typeof ACTOR_KIND.APP;
-      /** Whether it is drawn as GitHub shows the App's bot, where a place shows how a commit reads there; the window's own square where absent. */
       readonly onGitHub?: boolean;
     }
   | {
       readonly kind: typeof ACTOR_KIND.AGENT;
-      /** The agent's id, which tells two agents of one name apart; absent where an older service named none. */
       readonly agentId?: string | undefined;
-      /** The task the agent works on, where the place naming it knows it, which its card and its tab are read under. */
       readonly taskId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
@@ -98,116 +70,80 @@ export type Actor =
     }
   | {
       readonly kind: typeof ACTOR_KIND.AUTOMATION;
-      /** The automation's id, which its card is read by; absent where the place naming it knows only its name. */
       readonly automationId?: string | undefined;
       readonly name: string;
       readonly state: ActorState;
-      /** What fires it, or what fired the one run it stands for, whose glyph its tile wears (`FiringGlyph`); the clock where the place naming it knows only its name. */
       readonly trigger?: AutomationTrigger | AutomationFiring | undefined;
     }
   | {
       readonly kind: typeof ACTOR_KIND.SOMEONE;
       readonly reason: SomeoneReason;
-      /** The name the service still holds for a member who left; none for the rest. */
       readonly name?: string;
-      /** A member who left's account id, which their page is opened by; none for the rest. */
       readonly userId?: string;
-      /** A member who left's sign-in picture, which the window draws grayed; none where the service names none. */
       readonly pictureUrl?: string;
     }
   | GitHubActor;
 
-/** Someone GitHub names who is no member of the workspace, or an App's bot: by their login and their GitHub avatar. */
 export interface GitHubActor {
   readonly kind: typeof ACTOR_KIND.GITHUB;
   readonly login: string;
   readonly avatarUrl?: string;
-  /** Whether it is an App's bot, drawn on a square as the app and the agents are, rather than a person's circle. */
   readonly bot: boolean;
 }
 
-/** What an activity calls the words a description holds before its first heading, as the version history does. */
 const OPENING_SECTION = "Opening";
 
-/** A member's role in their workspace, in the words a row and a card say it. */
 export const ROLE_WORDS = {
   [WORKSPACE_ROLE.OWNER]: "Owner",
   [WORKSPACE_ROLE.ADMIN]: "Admin",
   [WORKSPACE_ROLE.MEMBER]: "Member",
 } as const satisfies Record<WorkspaceRole, string>;
 
-/** The app itself, which is always the same actor. */
 export const APP_ACTOR: Actor = { kind: ACTOR_KIND.APP };
 
-/** How many hues an identity's letter is drawn on: `--ui-color-identity-1` through `--ui-color-identity-6`. */
 const IDENTITY_HUES = 6;
 
-/** Splits a name into the characters a reader sees, an emoji's parts as one. */
 const CHARACTERS = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-/** The words for someone the window cannot name, by why, as a line's start says them. */
 const SOMEONE_WORDS = {
   [SOMEONE_REASON.FORMER]: "Former member",
   [SOMEONE_REASON.UNNAMED]: "Someone",
   [SOMEONE_REASON.EARLIER]: "Earlier",
 } as const satisfies Record<SomeoneReason, string>;
 
-/**
- * The hue an identity is drawn in, from 1, read off its id alone, so a
- * rename keeps the mark its members know it by: a workspace's tile and a
- * person's letter alike.
- */
 export function identityHue(id: string): number {
   let hash = 0;
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return (hash % IDENTITY_HUES) + 1;
 }
 
-/** A name's first character as a reader sees it, an emoji's whole, upper-cased; none for a blank name. */
 export function identityLetter(name: string): string {
   const [first] = CHARACTERS.segment(name.trim());
   return first === undefined ? "" : first.segment.toUpperCase();
 }
 
-/** The suffix GitHub gives an App's bot's login, which its name drops since its square says it is one. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
-/** Whether a GitHub login is an App's bot's, which GitHub spells with its suffix. */
 function isBotLogin(login: string): boolean {
   return login.endsWith(BOT_LOGIN_SUFFIX);
 }
 
-/**
- * Someone GitHub names by their login alone, as a line GitHub told an agent
- * of does: an App's bot by its login's suffix, on its robot, since GitHub
- * serves its App's picture only at an address the login does not name, and
- * a person by the avatar GitHub serves for their login.
- */
 export function githubLoginActor(login: string): GitHubActor {
   const bot = isBotLogin(login);
   const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login, bot };
   return bot ? actor : { ...actor, avatarUrl: githubUserAvatarUrl({ login }) };
 }
 
-/** What a GitHub account is called: its login, an App's bot's without the suffix GitHub gives it. */
 function githubName(actor: GitHubActor): string {
   return actor.bot && isBotLogin(actor.login)
     ? actor.login.slice(0, -BOT_LOGIN_SUFFIX.length)
     : actor.login;
 }
 
-/** Lower-cases a line's opening word where the name stands inside a sentence. */
 function inSentence(words: string, sentence: boolean): string {
   return sentence ? words.charAt(0).toLowerCase() + words.slice(1) : words;
 }
 
-/**
- * What an actor is called: the reader's own account "You", or "you" inside
- * a sentence, a person or a former member by name, the app itself, an agent or an
- * automation by its title, and someone unnamed as "Someone". `possessive`
- * says whose: "Your pick" opening a phrase, "your Mac" inside a sentence, or
- * "Charles Pan’s".
- */
 export function actorName(
   actor: Actor,
   { sentence = false, possessive = false }: { sentence?: boolean; possessive?: boolean } = {},
@@ -232,13 +168,6 @@ export function actorName(
   return possessive ? `${name}’s` : name;
 }
 
-/**
- * A member named on the wire, as the window draws them: read against the
- * workspace's `members` for their picture, email, and role, and as the
- * reader where the id is the reader's own. While the members are unread
- * the wire's name stands alone; once read, a member they no longer list has
- * left the workspace, and keeps the picture `former` names them by. A ref the service named nobody for is someone unnamed.
- */
 export function personActor(
   ref: { readonly userId: string; readonly name: string } | undefined,
   members: readonly WorkspaceMember[] | undefined,
@@ -249,7 +178,6 @@ export function personActor(
   const you = readerId !== undefined && ref.userId === readerId;
   const member = members?.find((each) => each.userId === ref.userId);
   if (members !== undefined && member === undefined && !you) {
-    // Note that the read of who left names them as their account does now, so a name changed since the work stood is the new one.
     const named = former?.find((each) => each.userId === ref.userId);
     const left = {
       kind: ACTOR_KIND.SOMEONE,
@@ -264,7 +192,6 @@ export function personActor(
   return member === undefined ? person : memberActor(member, readerId);
 }
 
-/** A member as the members read lists them, the reader's own among them. */
 export function memberActor(member: WorkspaceMember, readerId: string | undefined): PersonActor {
   const person: PersonActor = {
     kind: ACTOR_KIND.PERSON,
@@ -277,11 +204,6 @@ export function memberActor(member: WorkspaceMember, readerId: string | undefine
   return member.pictureUrl === undefined ? person : { ...person, pictureUrl: member.pictureUrl };
 }
 
-/**
- * The signed-in account as the window draws it: the reader, by the name and
- * picture their sign-in holds. Note that an account stored without an id is
- * hued by its address, which names it as surely.
- */
 export function accountActor(account: {
   readonly id?: string | undefined;
   readonly email: string;
@@ -299,14 +221,6 @@ export function accountActor(account: {
   return pictureUrl === undefined ? person : { ...person, pictureUrl };
 }
 
-/**
- * Who created a task, for the reader: the member `createdBy` names, read
- * against the members. Note that a service before `createdBy` names only
- * the owner's id, so the reader's own task is drawn as their `account`, as
- * the members list them where they do, and another member's as the members
- * list that id; where neither knows a name, the creator is someone unnamed,
- * never a face with no name.
- */
 export function creatorActor(
   task: {
     readonly createdBy?: DescriptionEditor | undefined;
@@ -325,16 +239,6 @@ export function creatorActor(
   return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
 }
 
-/**
- * Who created a task someone else created, as its row wears them: the
- * creator `creatorActor` names, where the creator is not the reader. Note
- * that a task is the reader's own, and wears nobody, wherever its creator's
- * id is theirs, and that one whose creator nobody names, from a service
- * before either field, or read before the reader's own id is known, wears
- * nobody either, since the row cannot say it is someone else's. A creator
- * whose account is gone is named by `ownerId` alone, and stands on the
- * quiet outline.
- */
 export function teammateCreator(
   task: {
     readonly createdBy?: DescriptionEditor | undefined;
@@ -350,30 +254,14 @@ export function teammateCreator(
   return creatorActor(task, reader, undefined);
 }
 
-/** The face a task's row wears for who is on it: its assignee, or, where no one is assigned, the unassigned mark (`assignee` undefined). */
 export interface AssigneeFace {
   readonly assignee: Actor | undefined;
 }
 
-/**
- * Whether the reader is known to be their workspace's one member, by its
- * listed count or else by its members as read; a workspace counted neither
- * way is not taken for one.
- */
 function soleMember(reader: EditReader): boolean {
   return (reader.memberCount ?? reader.members?.length) === 1;
 }
 
-/**
- * Who a task's row names by face: the member it is assigned to where that
- * is someone other than the reader, read against the members as
- * `personActor` reads them, and the unassigned mark where no one is; a
- * task assigned to the reader wears nothing. Note that a task no one is on
- * wears nothing either in a workspace of the reader alone, because the mark
- * is there to say someone else could take it. Who made it, a teammate, the app itself,
- * or an agent, is never its face, since it is not who is on it, and stays
- * on its card and its menu's Created by.
- */
 export function assigneeFace(
   task: { readonly assignee?: { readonly userId: string; readonly name: string } | undefined },
   reader: EditReader,
@@ -384,24 +272,15 @@ export function assigneeFace(
   return { assignee: personActor(assignee, reader.members, reader.readerId, reader.former) };
 }
 
-/** The coding agent that made a task, as the window holds it: its name, harness, where it stands, its task, and the automation whose run started it. */
 export interface OriginAgent {
   readonly name: string;
   readonly provider: ModelProvider | undefined;
   readonly state: ActorState;
   readonly taskId?: string | undefined;
-  /** The name of the task the agent works on, which a task it made is said to come from. */
   readonly taskName?: string | undefined;
   readonly automationName?: string | undefined;
 }
 
-/**
- * Who made a task for its member, where they did not make it by hand
- * (`TaskOrigin`): the app itself for one made on their call; the automation whose run
- * started the agent that made it; or that agent, as `agent` names it, or as
- * a coding agent the window does not hold, on the mark of no known harness.
- * None for a task its member made by hand, whose creator alone names it.
- */
 export function originActor(
   origin: TaskOrigin | undefined,
   agent: OriginAgent | undefined,
@@ -421,35 +300,22 @@ export function originActor(
   };
 }
 
-/**
- * Who reads a description's edits, as each is named for them: the workspace's
- * members as read, and the reader's own account id.
- */
 export interface EditReader {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
-  /** Who the workspace's work names but left, whose pictures they keep, grayed. */
   readonly former?: readonly FormerMember[] | undefined;
-  /** How many members the workspace has, the reader among them, as its listing counts them; absent where the window has no count. */
   readonly memberCount?: number | undefined;
 }
 
-/** A coding agent an edit names, as the window found it among the task's agents: its harness and where its work stands. */
 export interface EditAgent {
   readonly provider: ModelProvider | undefined;
   readonly state: ActorState;
 }
 
-/** The member an edit names, for the reader, as the directory reads them. */
 function editPerson(edit: DescriptionLastEdit, reader: EditReader): Actor {
   return personActor(edit.by, reader.members, reader.readerId, reader.former);
 }
 
-/**
- * Who wrote an edit: a member, the reader among them; the app itself; a coding agent
- * as its row names it now, wearing the harness and state of `agent` where
- * the window found it; nobody for the one revision from before history.
- */
 export function editActor(
   edit: DescriptionLastEdit,
   reader: EditReader,
@@ -473,13 +339,11 @@ export function editActor(
   }
 }
 
-/** What an actor last did in a description: the sections whose last change is theirs, in the description's order, and the newest of those changes. */
 export interface ActorActivity {
   readonly sections: readonly string[];
   readonly at: number;
 }
 
-/** Whether a section's last change is the actor's: a member's by their id, the app's, or a coding agent's by its name. */
 function changedBy(edit: DescriptionLastEdit, actor: Actor): boolean {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
@@ -498,11 +362,6 @@ function changedBy(edit: DescriptionLastEdit, actor: Actor): boolean {
   }
 }
 
-/**
- * What an actor last did in a description, read off who last changed each of its
- * sections: none where no section's last change is theirs, and none for an
- * automation or someone the window cannot name, whom no section names.
- */
 export function latestActivity(
   edits: readonly DescriptionSectionEdit[],
   actor: Actor,
@@ -515,18 +374,10 @@ export function latestActivity(
   };
 }
 
-/** An activity in a line, every section it changed named: "Edited Rollout and Risks", "Edited Goal, Rollout, Risks, and Open questions". */
 export function activityWords(activity: ActorActivity): string {
   return `Edited ${andList(activity.sections)}`;
 }
 
-/**
- * Whether two agents are one: by their ids where both carry one, since two
- * agents may share a title, and by name only between two an older service
- * named no id for. Note that an agent with an id is never one with an agent
- * without, because a name matching each of two agents that differ by id
- * would make the pile hide one of them, depending on which section stood first.
- */
 function sameAgent(
   one: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>,
   other: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>,
@@ -537,7 +388,6 @@ function sameAgent(
   return one.agentId === other.agentId;
 }
 
-/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why, their account id, and the name they go by, someone on GitHub by their login in any case. */
 function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
@@ -549,7 +399,6 @@ function sameActor(one: Actor, other: Actor): boolean {
     case ACTOR_KIND.AUTOMATION:
       return other.kind === one.kind && other.name === one.name;
     case ACTOR_KIND.SOMEONE:
-      // Note that two who left may share a name, so their account ids tell them apart.
       return (
         other.kind === ACTOR_KIND.SOMEONE &&
         other.reason === one.reason &&
@@ -557,36 +406,22 @@ function sameActor(one: Actor, other: Actor): boolean {
         other.name === one.name
       );
     case ACTOR_KIND.GITHUB:
-      // Note that GitHub reads a login whatever its case, and its answers do not always spell one alike.
       return (
         other.kind === ACTOR_KIND.GITHUB && other.login.toLowerCase() === one.login.toLowerCase()
       );
   }
 }
 
-/** Each actor once, where it first stands, as a facepile draws who did a thing. */
 export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
   return actors.filter((actor, at) => actors.findIndex((each) => sameActor(each, actor)) === at);
 }
 
-/**
- * Where someone a pull request names on GitHub is drawn: the workspace's
- * members as read and the reader's id, which name a teammate.
- */
 export interface GitHubPlace {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
-  /** Who the workspace's work names but left, whose pictures a linked login who left keeps. */
   readonly former?: readonly FormerMember[] | undefined;
 }
 
-/**
- * Someone a pull request names on GitHub, as the window draws them. A
- * GitHub account linked to a member is that member, by the name the
- * members read gives them, or the login while it is unread. Anyone else is
- * themself on GitHub: a person's circle, or an App's bot's square, our
- * own App's bot among them.
- */
 export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {
   if (person.userId !== undefined) {
     const member = place.members?.find((each) => each.userId === person.userId);

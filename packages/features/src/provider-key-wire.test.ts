@@ -1,7 +1,3 @@
-/**
- * provider-key-wire.test.ts -- where a plan stands at a moment: a reached limit lifts once its named reset passes, one with no reset named stands, and a launch is refused only until a named reset.
- */
-
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { PROVIDER_KEY_STATUS, planLimitResetsAt, planStanding } from "./provider-key-wire.js";

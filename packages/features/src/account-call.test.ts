@@ -24,7 +24,6 @@ import {
 
 const BASE_URL = "https://app.test";
 
-/** The service's reach as it is first kept, at the test clock's start, before any call was made. */
 const REACHABLE: ServiceReachState = { reachable: true, answeredAt: 0 };
 const PATH = "/api/account/preferences";
 
@@ -32,7 +31,6 @@ function refusal(): Response {
   return jsonResponse({ error: "invalid-token" }, HTTP_STATUS.UNAUTHORIZED);
 }
 
-/** An account whose token the test moves, and whose holder it can move too. */
 function account(tokens: (string | undefined)[], holders?: (string | undefined)[]) {
   const renewals: string[] = [];
   let token = tokens.shift();
@@ -52,11 +50,6 @@ function account(tokens: (string | undefined)[], holders?: (string | undefined)[
   };
 }
 
-/**
- * The call under a client that answers each request by hand, for a route whose
- * status moves between attempts — what a renewed credential is read by, and
- * what a route table's one status per route cannot say.
- */
 function callOn(
   credential: CallCredential,
   respond: (request: RecordedRequest) => Response | Promise<Response>,
@@ -198,7 +191,6 @@ it.effect(
 
       yield* TestClock.adjust("30 seconds");
       assert.ok(callAnswered(yield* send));
-      // A quiet gap no call was answered in, longer than the deadline and shorter than the silence it takes.
       yield* TestClock.adjust("25 seconds");
       const silent = yield* Effect.forkChild(send);
       while (asked < 2) yield* Effect.yieldNow;

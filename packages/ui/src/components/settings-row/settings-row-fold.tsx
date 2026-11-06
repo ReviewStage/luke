@@ -20,63 +20,19 @@ import {
   type SettingsRowIndent,
 } from "./settings-row.js";
 
-/**
- * settings-row-fold.tsx -- a settings row that folds open what it owns under its words, a line each, as a GitHub account its repositories.
- *
- * The row is `SettingsRow` as it stands, its chevron last at its end, a
- * quiet `IconButton` after any ⋯ the row holds, so every fold row's chevron
- * stands in one column, which turns as the fold opens and
- * says whether it is open in `aria-expanded`. The fold
- * stands in the row's own `below`, inside the row's rule and inset to its
- * words, so what it holds reads as part of the row rather than a box of its
- * own in the card. It opens and closes on the disclosure's motion
- * (`useDisclosureFold`): a press unrolls the body and fades it in, a close
- * fades it out first, and reduced motion holds it still at the tokens; a
- * fold drawn open from the start replays nothing.
- *
- * Its lines (`SettingsFoldLine`) are the row's description's type and tone,
- * the muted caption, each a name alone, starting where the row's words do
- * and held to one line as a row's name is (`OneLine`); a press at the foot,
- * such as Show all, stands on a line of its own (`SettingsFoldFoot`). A
- * fold of many lines, an account's thousands of repositories, draws only
- * those near the view (`run`), each line wearing its place in the run, in
- * the page's scroller, with its foot, if any, after them.
- *
- * A row that owns whole rows rather than lines, as an integration its
- * accounts or channels, folds them with `SettingsRowsFold`: the same
- * chevron last at the head row's end, and the rows after it in a box of
- * their own, each a row of the card in its own right, ruled as the card's
- * own (settings-section.css). Note that a closed fold hides its rows rather
- * than letting them go, because a row keeps what it is waiting on, such as
- * a refusal still to be said under a picker, while the fold is closed.
- */
-
-/** The lines a fold of many draws only near the view (`VirtualRows`), each a `SettingsFoldLine` wearing its place. */
 export interface SettingsFoldRun {
-  /** The element that scrolls, which the lines stand in. */
   readonly scroller: RefObject<HTMLElement | null>;
-  /** A box whose resizing moves where the lines stand in their scroller. */
   readonly shiftedBy?: RefObject<HTMLElement | null> | undefined;
-  /** Each line's key, in order. */
   readonly keys: readonly string[];
-  /** Draws the line at an index. */
   readonly line: (index: number, place: VirtualRowPlace) => ReactNode;
 }
 
-/** The room between two lines of a fold, in pixels: the theme's `ui-4`. */
 const LINE_GAP_PX = 4;
 
-/** How tall a line of a fold is taken to stand before it is measured, a caption's line, in pixels. */
 const LINE_ESTIMATE_PX = 18;
 
-/** The list a fold's lines stand in. */
 const LINES = "ui-settings-row-fold-lines m-0 flex list-none flex-col gap-ui-4 p-0";
 
-/**
- * A row named `label` that folds `children` open under its words, its
- * chevron named `foldLabel`, open at first where `defaultOpen` says, and
- * the row's other controls, such as its ⋯, before the chevron at its end.
- */
 export function SettingsFoldRow({
   label,
   description,
@@ -90,17 +46,12 @@ export function SettingsFoldRow({
 }: {
   label: ReactNode;
   description?: ReactNode;
-  /** The face or mark the row leads with, past which the fold's lines start. */
   leading?: ReactNode;
   indent?: SettingsRowIndent | undefined;
-  /** The chevron's name, which a sighted reader has from the row ("Repositories of acme"). */
   foldLabel: string;
   defaultOpen?: boolean | undefined;
-  /** The row's other controls, handed its ids, standing before the chevron. */
   actions?: ((control: SettingsRowControl) => ReactNode) | undefined;
-  /** The fold's many lines, drawn only near the view, before `children`. */
   run?: SettingsFoldRun | undefined;
-  /** The fold's lines, or where it has a `run`, its foot. */
   children?: ReactNode;
 }): React.JSX.Element {
   const { state, details } = useDisclosureFold(defaultOpen);
@@ -162,23 +113,13 @@ export function SettingsFoldRow({
   );
 }
 
-/**
- * A head row and the rows it owns under it, closed until its chevron is
- * pressed: `head` draws the row, handed the chevron (named `label`) to
- * stand last at its end, or, where there are no `rows` to fold, the
- * chevron's room alone, so the controls of every row in the card end in one
- * column whether it folds or not.
- */
 export function SettingsRowsFold({
   label,
   head,
   rows,
 }: {
-  /** The chevron's name, which a sighted reader has from the head row ("GitHub's accounts"). */
   label: string;
-  /** The head row, handed the chevron to draw after its other controls. */
   head: (chevron: ReactNode) => ReactNode;
-  /** The rows the fold owns, or nothing where it owns none now. */
   rows?: ReactNode;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -206,16 +147,13 @@ export function SettingsRowsFold({
   );
 }
 
-/** The type and tone of every line of a fold: the row description's muted caption. */
 const LINE =
   "ui-settings-fold-line flex min-w-0 items-center font-sans text-caption font-caption text-muted-foreground";
 
-/** One line of a fold: its words on one line, read whole in the window's tooltip while they are cut short. */
 export function SettingsFoldLine({
   place,
   children,
 }: {
-  /** Where the line stands in a fold's run (`SettingsFoldRun`), which its item wears; none in a fold drawing every line. */
   place?: VirtualRowPlace | undefined;
   children: string;
 }): React.JSX.Element {
@@ -226,7 +164,6 @@ export function SettingsFoldLine({
   );
 }
 
-/** The foot of a fold's lines: the press that shows the rest, such as Show all, on a line of its own. */
 export function SettingsFoldFoot({ children }: { children: ReactNode }): React.JSX.Element {
   return <li className={LINE}>{children}</li>;
 }

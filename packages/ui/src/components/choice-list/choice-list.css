@@ -1,20 +1,3 @@
-/* choice-list.css -- a choice row's fill, edge, and ink: the parts of a choice list a sheet must draw.
-
-   The list draws itself in Tailwind utilities (choice-list.tsx); what
-   stays here is what a utility cannot hold. A row's background, box-shadow,
-   and color, and a detail's color, are quieted by a stepped-back region
-   (`stepped-back.css`) from this same components layer, where a utility,
-   in the layer above, would outrank it and keep the row loud.
-
-   A row is a quiet fill at rest, the strong fill once hovered, the strong
-   fill ringed once checked so it reads apart from the hover that shares
-   it. A settled list keeps the pick in the checked look and steps the rest
-   back to an outline in muted words; a read-only one keeps the open look
-   at full strength.
-
-   The fill is a registered color, so it eases as the row lists it among
-   its transitions. */
-
 @property --ui-choice-fill {
   syntax: "<color>";
   inherits: false;
@@ -46,7 +29,6 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* A pill is outlined at rest and tinted in the accent once picked. */
   .ui-choice-list[data-look="pill"] > .ui-choice {
     box-shadow: inset 0 0 0 1px var(--ui-color-border);
   }
@@ -56,7 +38,6 @@
     box-shadow: inset 0 0 0 1px var(--ui-color-accent);
   }
 
-  /* A card wears the row's box, its head's radio none. */
   .ui-choice-card-head > .ui-choice,
   .ui-choice-card-head > .ui-choice[aria-checked="true"] {
     background: none;
@@ -74,7 +55,6 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* A finger picks a row by pressing it, so its key says nothing there, as a menu's keys do not (`menu-keys.css`). */
   @media (pointer: coarse) {
     .ui-choice-number {
       display: none;

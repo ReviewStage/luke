@@ -17,35 +17,14 @@ import {
   SearchableMenu,
 } from "./searchable-menu.js";
 
-/**
- * searchable-menu.test.ts -- what typing in a picker's field does and the
- * keys it reads: typing filters the rows to those every word matches, the
- * arrows pass over a row that cannot be picked and go on into the pinned
- * rows, Enter picks the one the field names to a reader, Right and Left
- * open and close a submenu, Escape closes the submenu before the menu and
- * never reaches what stands behind it, keys an input method is composing
- * with pick and move nothing, and a list too short to search reads the
- * same keys itself. A read that failed says so in the list's place with
- * Retry rather than that nothing matches. A submenu turns left where it
- * would run past the room its menu keeps to; and a row's own end marks
- * stand at its end, drawn in place as well. In a phone's layout the menu
- * rises as a sheet whose list, not its field, takes the focus as it opens,
- * a focus moving inside it never told as leaving, and a pinned row's
- * submenu stands in the sheet's place, a pick in it putting the sheet away
- * first; a finger dragging from its field swipes nothing.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-// Note that jsdom lays nothing out and so scrolls nothing, and has no
-// `scrollIntoView` for the menu to bring its highlight into view with.
 Element.prototype.scrollIntoView ??= () => undefined;
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks, since the popover and every row's words measure themselves. */
 class StandInResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -72,14 +51,12 @@ const ROWS: readonly MenuRow[] = [
   { id: "haiku", label: "Haiku" },
 ];
 
-/** What the menu was asked to do, in order, and each time it said the focus left it. */
 interface Asked {
   readonly said: string[];
   readonly escapedPast: string[];
   readonly left: string[];
 }
 
-/** A pinned effort row with its submenu, and a press of its own. */
 function footOf(said: string[], stays = false): FootRow[] {
   return [
     {
@@ -100,12 +77,10 @@ function footOf(said: string[], stays = false): FootRow[] {
   ];
 }
 
-/** The menu drawn over `rows`, with a field where `placeholder` is given, in a page that hears what Escape reaches. */
 function mount(
   options: {
     placeholder?: string;
     foot?: boolean;
-    /** The effort submenu leaves the menu standing after a pick. */
     staying?: boolean;
     room?: boolean;
     rows?: readonly MenuRow[];
@@ -115,8 +90,6 @@ function mount(
   } = {},
 ) {
   const asked: Asked = { said: [], escapedPast: [], left: [] };
-  // Note that the page listens a box above React's root, because a press
-  // kept from it still reaches the root's own listeners.
   const page = document.body.appendChild(document.createElement("div"));
   const container = page.appendChild(document.createElement("div"));
   if (options.room === true) page.dataset.popoverRoom = "";
@@ -148,7 +121,6 @@ function mount(
   return asked;
 }
 
-/** Where the keys are read: the field, or the list where there is none. */
 function keys(): HTMLElement {
   return (
     document.querySelector<HTMLElement>('[role="combobox"]') ??
@@ -163,7 +135,6 @@ function press(init: KeyboardEventInit): void {
   });
 }
 
-/** `words` typed into the field, as an input event hands them. */
 function type(words: string): void {
   const field = keys() as HTMLInputElement;
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -173,14 +144,12 @@ function type(words: string): void {
   });
 }
 
-/** The words of the row the keys' element names active to a reader. */
 function announced(): string | undefined {
   const id = keys().getAttribute("aria-activedescendant");
   const row = id === null ? null : document.getElementById(id);
   return row?.textContent ?? undefined;
 }
 
-/** The names of the rows the list holds now. */
 function listed(): string[] {
   return [...document.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (option) => option.textContent ?? "",
@@ -342,7 +311,6 @@ test("the arrows go on into the pinned rows, whose submenu Right opens, Left clo
   assert.deepEqual(asked.said, ["effort low"]);
 });
 
-/** A listed row that opens a submenu of where a new tab opens, beside a row of its own. */
 function browserRows(said: string[]): readonly MenuRow[] {
   return [
     { id: "board", label: "Board" },
@@ -433,13 +401,6 @@ test("a list too short to search holds focus, names its highlight, and reads the
   assert.deepEqual(asked.said, ["pick haiku"]);
 });
 
-/**
- * Where the Effort submenu stands once opened in a room `room` wide at the
- * window's left, its menu's row from `rowLeft` to `rowRight`: the side it
- * took and how far it was pushed back over the menu. jsdom lays nothing
- * out, so the window, the room, the row, and the submenu, 200px wide and
- * drawn on the right, are answered as the panel would lay them.
- */
 function submenuIn(room: number, rowLeft: number, rowRight: number, bounds?: PopoverBounds) {
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1200);
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
@@ -476,11 +437,9 @@ test("a submenu of a menu bounded by the window alone opens to the right past it
 });
 
 test("a submenu with room on neither side takes the side it runs past less, pushed back over the menu inside the room", () => {
-  // A 340px menu at x=30 in a 390px side panel: 209px past on the right, 179px on the left.
   assert.deepEqual(submenuIn(390, 30, 370), { side: "left", shift: 179 });
 });
 
-/** The pinned row whose words are `label`. */
 function pinned(label: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(
@@ -489,7 +448,6 @@ function pinned(label: string): HTMLElement {
   );
 }
 
-/** The mouse moving over `row` to the point `clientX`, `clientY`, as a browser reports it. */
 function mouseOver(row: HTMLElement, clientX: number, clientY: number): void {
   act(() => {
     row.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX, clientY }));
@@ -497,7 +455,6 @@ function mouseOver(row: HTMLElement, clientX: number, clientY: number): void {
 }
 
 test("the pointer crossing a pinned row on its way into the submenu beside another leaves that submenu standing, until it rests on the row it crossed", () => {
-  // Note that the Effort submenu stands right of its row, from x=330 and y=100 down to y=200.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -511,7 +468,6 @@ test("the pointer crossing a pinned row on its way into the submenu beside anoth
   try {
     mouseOver(pinned("Effort"), 300, 116);
     const opened = effortOpen();
-    // Straight from the move that opened it, the pointer heads down and right for the submenu's lower rows, over the next row's end.
     mouseOver(pinned("Open on GitHub"), 310, 140);
     const crossed = effortOpen();
     act(() => {
@@ -549,7 +505,6 @@ test("a row's own end marks stand at its end, after why it cannot be picked now,
   assert.deepEqual(ends, [[".failed-mark"], ["Archived", ".actor-mark"], null]);
 });
 
-/** The pointer arriving on `target` and resting there past the hint's wait. */
 function restOn(target: Element): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -620,29 +575,24 @@ test("rows drawn in place wear their end marks and hang their cards while the po
   );
 });
 
-/** The window drawn in a phone's layout, as the panel's shell marks its root. */
 function inPhoneLayout(): void {
   document.documentElement.setAttribute("data-ui-room", "narrow");
 }
 
-/** The sheet the menu stands as in a phone's layout. */
 function sheet(): HTMLElement {
   return document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the sheet stands");
 }
 
-/** The name the sheet's head gives it. */
 function sheetName(): string | null | undefined {
   return document.getElementById(sheet().getAttribute("aria-labelledby") ?? "")?.textContent;
 }
 
-/** The names of the lists the sheet holds now. */
 function sheetLists(): (string | null)[] {
   return [...sheet().querySelectorAll('[role="listbox"]')].map((list) =>
     list.getAttribute("aria-label"),
   );
 }
 
-/** A press on the button in the sheet named `name`. */
 function pressNamed(name: string): void {
   const named =
     [...sheet().querySelectorAll<HTMLElement>("button")].find(

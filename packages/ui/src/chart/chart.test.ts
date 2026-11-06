@@ -5,14 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { type ChartConfig, ChartContainer } from "./chart.js";
 
-/**
- * chart.test.ts -- a chart's single-color series ride the container's own
- * style, so a page whose content security policy refuses inline stylesheets
- * still colors them, and only a series with a color per theme writes a
- * stylesheet; a key or color that fails validation costs its series the
- * variable, not the chart its render.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 let root: Root | undefined;
@@ -23,7 +15,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The chart's container, drawn with `config` around an empty plot. */
 function draw(config: ChartConfig): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

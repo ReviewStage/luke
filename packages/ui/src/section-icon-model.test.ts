@@ -10,15 +10,6 @@ import {
   glyphName,
 } from "./section-icon-model.js";
 
-/**
- * What the section icon picker offers and finds, over a synthetic slice of
- * Lucide's icons and of `unicode-emoji-json`'s groups: a glyph found by
- * the words of its name, drawn again from
- * the name it is stored under, the suggested glyphs first, and the emoji a
- * Mac draws, by category, found by name.
- */
-
-/** Keys of Lucide's `icons`, a few of them. */
 const ICONS = ["ArrowDownWideNarrow", "Grid2x2", "Rocket", "FlaskConical", "Accessibility"];
 
 const GROUPS = [

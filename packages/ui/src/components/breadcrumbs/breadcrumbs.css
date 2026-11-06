@@ -1,24 +1,12 @@
-/* breadcrumbs.css -- what a path's utilities cannot say: the widths of the
-   `BreadcrumbBar` a crumb and its chevron are drawn at, each crumb's share
-   of a narrow bar and its floor, the clip past the keyboard's ring, and the
-   motions of a crumb that comes and goes. The rest of its look is the
-   utilities `breadcrumbs.tsx` spells. */
-
 @layer components {
-  /* Note that the path clips past the keyboard's ring on a crumb, which no
-     utility spells. */
   .ui-breadcrumbs {
     overflow-clip-margin: padding-box calc(var(--ui-focus-ring-width) + var(--ui-focus-ring-offset));
   }
 
-  /* Note that a crumb's and a chevron's display stay here, because the
-     widths below hide them, and a display utility would outrank that. */
   .ui-breadcrumbs li {
     display: flex;
   }
 
-  /* A crumb that keeps its size, so a narrow bar cuts the crumbs after it
-     short first. */
   .ui-breadcrumbs li[data-fixed="true"] {
     flex-shrink: 0;
   }
@@ -27,10 +15,6 @@
     display: flex;
   }
 
-  /* A crumb that comes and goes (`shown`) lands in the path at once and
-     rides in on the pair an arriving element rides, a fade and a short rise
-     on the spring, and fades out before it goes. Reduced motion keeps no
-     rise, and its tokens hold the fade still. */
   .ui-breadcrumbs li[data-motion="arriving"] {
     animation:
       ui-breadcrumb-fade var(--ui-duration-quick) var(--ui-motion-exit) backwards,
@@ -65,17 +49,6 @@
     }
   }
 
-  /* A bar's path: a crumb gives way, by its share, down to its first
-     letters, fading out, its chevron always standing before it, and the
-     current one, last, gives way last of all. Note that the floors stay
-     here, because they hang on `:has()` and on the bar's widths.
-
-     Note that a crumb stands on its floor and grows by its share to its own
-     width, never past it, rather than shrinking from its width to a floor,
-     because a floor wider than a short crumb's words would stretch its item
-     and stand a gap before the next chevron; this way a crumb's least width
-     is the lesser of its floor and its words, and a path with room packs
-     each crumb one chevron after the one before. */
   .ui-breadcrumbs[data-variant="caption"] li {
     --ui-breadcrumb-floor: 2.5em;
     --ui-breadcrumb-chevron-room: 0px;
@@ -84,10 +57,6 @@
     max-width: max-content;
   }
 
-  /* Note that a crumb of words or a plain press keeps a floor its words read
-     at, because a path that squeezes every crumb to two letters says
-     nothing. It gives way to that floor only once the path has nothing left
-     to fold (`crumb-fold.ts`); until then it keeps its whole width below. */
   .ui-breadcrumbs[data-variant="caption"] li[data-legible="true"] {
     --ui-breadcrumb-floor: 11em;
   }
@@ -96,36 +65,28 @@
     --ui-breadcrumb-chevron-room: 12px;
   }
 
-  /* Note that a crumb whose chevron a width hides takes no chevron's room
-     in its floor there, as below for the narrower widths. */
   .ui-breadcrumbs[data-variant="caption"] li:has(> .ui-breadcrumb-separator[data-wide="false"]) {
     --ui-breadcrumb-chevron-room: 0px;
   }
 
-  /* The last crumb, the page the reader stands on, takes the larger share of
-     the room past the floors, so it gives way last. */
   .ui-breadcrumbs[data-variant="caption"] li:last-child {
     flex-grow: 9;
   }
 
-  /* A crumb that keeps its size, one standing for others a narrow bar
-     leaves out, and a crumb of words while the path may still fold one
-     (`crumb-fold.ts`) keep their width, so a path folds its first crumbs
-     before it cuts any. */
   .ui-breadcrumbs[data-variant="caption"]
-  li:is([data-fixed="true"], [data-whole="true"], [data-shown="narrow"], [data-shown="narrowest"]) {
+    li:is(
+      [data-fixed="true"],
+      [data-whole="true"],
+      [data-shown="narrow"],
+      [data-shown="narrowest"]
+    ) {
     flex: none;
   }
 
-  /* The widths a crumb is drawn at (`shownAt`): a wide bar, or none, draws
-     what it says it does; a crumb standing for others is drawn only where
-     the bar is narrow enough to leave them out. */
   .ui-breadcrumbs li:is([data-shown="narrow"], [data-shown="narrowest"]) {
     display: none;
   }
 
-  /* A chevron is drawn at the widths where a crumb before its own is, so
-     the crumb leading the path at a width stands without one there. */
   .ui-breadcrumb-separator[data-wide="false"] {
     display: none;
   }

@@ -15,27 +15,6 @@ import {
   SUBMIT_STATE,
 } from "./button.js";
 
-/**
- * button.test.ts -- a ButtonLink is a link a reader finds by its words,
- * going where its address says, and its press is heard before the browser
- * follows it. A button that is not tabbable is left out of the tab order,
- * yet takes the focus a roving group hands it and is pressed as any other;
- * an ordinary button stays a Tab stop. A button that keeps focus leaves it
- * on the field that held it when a pointer presses it. A labeled button
- * given a label is named by it, which holds its words, and one wearing a
- * badge says the badge's words after its own. An IconButtonLink is
- * a link named by its label, and one in a new tab opens there. A compact row
- * mark is a button named by its label like any other, its right-click heard
- * so it can offer its row's menu, and an unavailable one is pressed to no
- * effect. An unavailable button that keeps its Tab stop, and a busy one,
- * refuse a press. A done button wears its check, refuses a press, and is
- * heard done once its check has been seen. A busy button whose press
- * succeeded wears the check until its hold ends, then its words; one that
- * failed wears none. A submit sends its form while it takes a press, sends
- * nothing while it is unavailable, and made a Stop does its own act without
- * sending the form.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -43,7 +22,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -81,7 +59,6 @@ test("a press on a ButtonLink is heard, and the link is still followed", () => {
   );
   const link = container.querySelector("a");
   expect(link).not.toBeNull();
-  // Note that jsdom cannot follow a link, so the page stops it once the press has bubbled past the component.
   document.addEventListener("click", (event) => event.preventDefault(), { once: true });
 
   act(() => link?.click());
@@ -136,7 +113,6 @@ test("a button that keeps focus, pressed with the pointer, leaves the focus on t
   if (field === null || back === undefined || connect === undefined) throw new Error("not drawn");
   act(() => field.focus());
 
-  // Note that jsdom moves no focus on a mousedown, so the browser's move is read as the press's default action.
   const press = (button: HTMLButtonElement) => {
     const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     act(() => {
@@ -367,7 +343,6 @@ test("an unavailable button that keeps its Tab stop refuses a press, as a busy o
   expect(pressed).toEqual(["Open"]);
 });
 
-/** Draws a form holding `submit`, and answers how many times the form was sent. */
 function mountForm(submit: React.ReactElement) {
   let sent = 0;
   const container = mount(
@@ -465,7 +440,6 @@ test("a done button wears its check in its words' place, refuses its press, and 
   expect(beforeFinish).toEqual([]);
   expect(afterFinish).toEqual(["done"]);
 
-  // With no motion running, as under reduced motion, it is heard at once.
   act(() => root.render(draw(false)));
   act(() => root.render(draw(true)));
   expect(heard).toEqual(["done", "done"]);
@@ -491,7 +465,6 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
         busy,
         busyLabel: "Saving",
         succeeded,
-        // Note that what landed may leave it unavailable, as a Save with nothing left to save is.
         disabled: !busy,
         onClick: () => {
           pressed += 1;
@@ -535,7 +508,6 @@ test("a busy button whose press succeeded wears a check where its ring stood, re
   expect(save?.getAttribute("aria-label")).toBeNull();
   expect(save?.textContent).toBe("Save");
 
-  // A press that failed stops its ring with no check.
   act(() => root.render(draw(true, false)));
   act(() => root.render(draw(false, false)));
   expect(container.querySelector(".ui-button-done")).toBeNull();

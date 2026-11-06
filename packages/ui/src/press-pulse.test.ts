@@ -3,18 +3,10 @@
 import { afterEach, expect, test } from "vitest";
 import { PRESS_PULSE, pulsePress } from "./press-pulse.js";
 
-/**
- * press-pulse.test.ts -- a flush row's pulse moves what it holds and stands
- * until the first of those that draws a box settles, a seat drawn as
- * `contents` passed over, since it draws none whose motion could end; and a
- * flush row holding no element fades instead.
- */
-
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A row holding a seat drawn as `contents`, then its words. */
 function row(): { row: HTMLElement; seat: HTMLElement; words: HTMLElement } {
   const row = document.body.appendChild(document.createElement("div"));
   const seat = row.appendChild(document.createElement("span"));

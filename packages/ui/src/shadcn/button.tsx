@@ -2,25 +2,6 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../cn.js";
 
-/**
- * button.tsx -- shadcn/ui's button (style `base-nova`, on Base UI), vendored and drawn at our control roles.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add button` reads as a small diff. Our
- * changes: the sizes are the control's roles (`control`, `compact`, `icon`,
- * `icon-compact`, and a menu's `row`) and a `shape` that rounds them; the
- * looks are not here, because a look is a set of `--ui-button-*` inks a
- * container's sheet may restyle (`components/button/button.css`), so the
- * fill and ink are drawn there and only the edge is read here; none of
- * shadcn's outline or ring utilities, because the window's own focus ring
- * (`@repo/panel`'s base.css) draws the keyboard's ring and a utility would
- * outrank it (`anti-slop/no-shadcn-focus-ring`); none of its press translate, which
- * our button answers by its face (`button.css`); and the desktop's arrow
- * cursor. `@repo/ui`'s `Button` and `IconButton`
- * (`components/button/button.tsx`) are what an app draws; this is their
- * inside, and `buttonVariants` dresses a link as a button, as shadcn's does.
- */
-
 const buttonVariants = cva(
   "group/button relative flex-none items-center justify-center max-w-full m-0 border border-solid border-button-edge font-ui no-underline whitespace-nowrap transition-[--ui-button-fill,background-color,color,filter,opacity] duration-(--ui-duration-hover) ease-motion-exit",
   {

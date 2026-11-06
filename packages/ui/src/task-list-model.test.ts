@@ -39,7 +39,6 @@ const NAMES = {
   [MAYA]: "Maya Okafor",
 } as const;
 
-/** A task on `repository`, started at `createdAt`, last updated at `updatedAt`, by `creator` where one is named. */
 function task(
   name: string,
   repository: string | null,
@@ -63,7 +62,6 @@ function task(
 const names = (groups: readonly { rows: readonly TaskRow[] }[]) =>
   groups.map((group) => group.rows.map(taskRowName));
 
-/** The tasks grouped by repository, as their rows are. */
 const groupsByRepository = (tasks: readonly TaskSummary[]): readonly RepositoryGroup[] =>
   repositoryGroups(tasks.map(taskRow));
 
@@ -141,7 +139,6 @@ test("an agent's activity older than the description's own edit leaves the descr
   expect(taskTime(summary, TASK_ORDER.CREATED)).toBe(1);
 });
 
-/** An agent an automation of `starter`'s started with no task, on `repository`, started at `createdAt`, last moving at `activityAt`. */
 function oneOff(
   title: string | null,
   repository: string,
@@ -180,7 +177,6 @@ test("a one-off agent stands among the tasks of its repository by its last activ
   ]);
 });
 
-/** A task standing in `status` at `priority`, last updated at `updatedAt`. */
 function standing(
   name: string,
   status: TaskStatus | undefined,
@@ -213,7 +209,6 @@ test("the list leaves the backlog and the settled out, counting them by status, 
   ]);
 });
 
-/** A task as `task` makes it, assigned to `assignee`. */
 function assigned(
   name: string,
   updatedAt: number,
@@ -260,7 +255,6 @@ test("Me holds the reader's tasks, their one-off agents, and the tasks no one is
   ]);
 });
 
-/** A task on acme/relay under `parent`, where one is named, updated at `updatedAt`. */
 function childTask(name: string, updatedAt: number, parent?: string): TaskSummary {
   return {
     ...task(name, "acme/relay", updatedAt, updatedAt),
@@ -268,7 +262,6 @@ function childTask(name: string, updatedAt: number, parent?: string): TaskSummar
   };
 }
 
-/** The rows drawn, each as its name indented two spaces for each level it stands at. */
 function drawnNames(
   tasks: readonly TaskSummary[],
   opened: readonly string[],

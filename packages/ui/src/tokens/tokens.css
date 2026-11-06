@@ -1,5 +1,3 @@
-/* tokens.css -- every shared token in the order a sheet needs them: the base scale, the profiles' roles, the palettes, the brand's colors on them, and the status tones they color, then the site's display styles, the visible viewport, the motion, and its answer to reduced motion. */
-
 @import "./scale.css";
 @import "./profiles.css";
 @import "./palettes.css";

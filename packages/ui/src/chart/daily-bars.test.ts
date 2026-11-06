@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { type DailyAxis, DailyBars } from "./daily-bars.js";
 
-/**
- * daily-bars.test.ts -- a window's days are named along the plot's foot, one
- * tick a day, and its measure up the side in the words the caller's axis
- * gives it, whole numbers where it allows no fractions.
- */
-
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 let root: Root | undefined;
@@ -26,7 +20,6 @@ const DAYS = [
   { day: "2026-10-22", calls: 5, tasks: 2 },
 ];
 
-/** The words of every tick the plot draws, the days' first and then the measure's. */
 function drawnTicks(axis: DailyAxis): string[] {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

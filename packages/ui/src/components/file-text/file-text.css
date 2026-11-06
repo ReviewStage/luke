@@ -1,8 +1,3 @@
-/* file-text.css -- a file's words as written: mono, wrapped line for line, on
-   the code's ground in a control's corner; a peek clipped to its head and
-   faded at its foot, the whole scrolling inside a reading height, a brief one
-   inside a peek's. */
-
 @layer components {
   .ui-file-text {
     --ui-file-text-peek: calc(var(--ui-type-caption-leading) * 6);

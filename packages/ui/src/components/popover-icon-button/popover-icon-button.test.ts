@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PopoverIconButton } from "./popover-icon-button.js";
 
-/**
- * popover-icon-button.test.ts -- the button hangs its panel outside the box
- * it stands in, named by its title and saying so in `aria-expanded`; a second
- * press on the button puts the panel away rather than opening it again; and
- * Escape puts it away and hands the focus back to the button.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A button whose panel's standing is held as an owner holds it. */
 function Held(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return createElement(PopoverIconButton, {

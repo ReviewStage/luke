@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SecretField } from "./secret-field.js";
 
-/**
- * secret-field.test.ts -- a secret is masked as it is typed, shown on Show
- * and masked again on Hide, kept out of the system's autofill and spell
- * check, and masked again once its caller empties it; a secret already
- * kept says Saved and can never be shown, since the field never holds it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,12 +19,10 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What the test does to the field's caller: empty it, as one does once its secret is saved. */
 interface Caller {
   empty: () => void;
 }
 
-/** A secret field whose caller holds what is typed, as a token's form does. */
 function render(saved: boolean): Caller {
   const caller: Caller = { empty: () => undefined };
   function Holder(): React.JSX.Element {
@@ -57,14 +48,12 @@ function field(): HTMLInputElement {
   return input;
 }
 
-/** The press that shows or hides what is typed, by the word it says now. */
 function toggle(word: "Show" | "Hide"): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${word}"]`);
   assert.ok(button, `the field offers ${word}`);
   return button;
 }
 
-/** Types `value` into the field as the page would hand it to React. */
 function type(value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -77,7 +66,6 @@ function press(button: HTMLButtonElement): void {
   act(() => button.click());
 }
 
-/** Whether a press may reach the button: it is neither disabled nor marked so. */
 function pressable(button: HTMLButtonElement): boolean {
   return !button.disabled && button.getAttribute("aria-disabled") !== "true";
 }

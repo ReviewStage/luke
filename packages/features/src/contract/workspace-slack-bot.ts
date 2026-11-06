@@ -1,7 +1,3 @@
-/**
- * workspace-slack-bot.ts -- a workspace's own Slack bot read, connected, and disconnected, and the reader's own notifications from it (`slack-bot-wire.ts`).
- */
-
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
@@ -17,10 +13,8 @@ import {
 import { workspaceIdSchema } from "../task-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
-/** The most a request body may hold: a workspace id, a channel id, the switch, and a repository's name. */
 const BODY_BYTES = 1_024;
 
-/** The read's query: the one workspace it names. */
 const workspaceSlackBotQuerySchema = EffectSchema.Struct({
   [WORKSPACE_SLACK_BOT_QUERY.WORKSPACE_ID]: workspaceIdSchema,
 });

@@ -175,26 +175,8 @@ import {
 } from "./service-wire.js";
 import type { TaskAgentRefusal } from "./task-wire.js";
 
-/**
- * agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
- *
- * Every call is the one account call, so the bearer is read fresh per
- * attempt and a 401 is renewed and retried once. Each call answers one of
- * the view's shapes rather than failing, because every caller does the same
- * thing with a failure: draws why, and offers to try again. The transcript
- * read and the two inbox reads, a task's and the account's, are the calls
- * the service holds open, for as long
- * as it waits on the agent's next message or the next change, so they
- * travel under a deadline of
- * their own that outlasts that hold; a Start travels under a longer one
- * still, since one from another agent copies its work first; every other
- * call keeps the account call's usual one.
- */
-
 export interface HostedAgentClientOptions {
-  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
 }
@@ -213,10 +195,8 @@ type Failed = {
   readonly refusedRepository?: string;
 };
 
-/** The refusals a call may answer with, by the service's own word for each. */
 type NamedRefusals = Readonly<Partial<Record<HostedApiError, AgentCallFailure>>>;
 
-/** The refusals a Start can answer with. */
 const START_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.NO_REPOSITORY]: AGENT_CALL_FAILURE.NO_REPOSITORY,
@@ -236,18 +216,15 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED,
 } satisfies NamedRefusals;
 
-/** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
 const MEMORY_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
-/** The refusals a call that names one row can answer with. */
 const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
-/** The refusals a repository added to an agent can answer with: the agent gone, one only its starter adds to, a repository refused beside its own for why, out of reach, or not read off GitHub. */
 const ADD_REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
@@ -256,13 +233,11 @@ const ADD_REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
 } satisfies NamedRefusals;
 
-/** The refusals an archive or a delete can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
 const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, an agent on its starter's own GitHub token the caller did not start, and a device away, refused as a Start on it is. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -282,33 +257,27 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } satisfies NamedRefusals;
 
-/** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
 const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
 
-/** The refusals a dictated clip can answer with: the account saved no OpenAI key to hear it on. */
 const DICTATION_REFUSALS = {
   [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: AGENT_CALL_FAILURE.OPENAI_KEY_MISSING,
 } satisfies NamedRefusals;
 
-/** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: AGENT_CALL_FAILURE.INVALID_CHOICE,
 } satisfies NamedRefusals;
 
-/** The refusals changing an agent's choice can answer with: the agent gone, or a choice the catalog does not offer. */
 const CHOOSE_REFUSALS = {
   ...ROW_REFUSALS,
   ...DEFAULT_REFUSALS,
 } satisfies NamedRefusals;
 
-/** The refusals a pairing's read, approve, or deny can answer with; a code refused by its shape is one no pending pairing has. */
 const PAIRING_REFUSALS: Readonly<Partial<Record<HostedApiError, HostPairingCallFailure>>> = {
   [HOSTED_API_ERROR.NOT_FOUND]: HOST_PAIRING_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.INVALID_REQUEST]: HOST_PAIRING_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOST_PAIRING_CALL_FAILURE.HELD,
 };
 
-/** A pairing procedure's answer, or the refusal it failed with where the approve screen draws it, with when a held member is taken again where the service said; unanswered for everything else. */
 function pairingAnswer<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<Answer | HostPairingFailed, never, HttpClient.HttpClient> {
@@ -326,7 +295,6 @@ function pairingAnswer<Answer>(
   });
 }
 
-/** The chapters failures a refusal may stand for, by the service's own word for each. */
 type ChaptersRefusals = Readonly<
   Partial<
     Record<
@@ -336,7 +304,6 @@ type ChaptersRefusals = Readonly<
   >
 >;
 
-/** The refusals a read or a Generate of a pull request's chapters can answer with. */
 const CHAPTERS_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]:
@@ -345,7 +312,6 @@ const CHAPTERS_REFUSALS = {
   [HOSTED_API_ERROR.UNAVAILABLE]: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE,
 } satisfies ChaptersRefusals;
 
-/** A chapters procedure's answer, or the refusal it failed with where it is one the tab acts on; unanswered for everything else. */
 function chaptersAnswer(
   asked: Effect.Effect<PullRequestChaptersAnswerView, HostedFailure, HttpClient.HttpClient>,
   named: ChaptersRefusals = CHAPTERS_REFUSALS,
@@ -359,11 +325,6 @@ function chaptersAnswer(
   );
 }
 
-/**
- * The refusal a refused answer carries, where it is one the caller names;
- * unanswered otherwise. A repository out of reach carries why where the
- * service said and the reason is one this build reads, and none otherwise.
- */
 function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
@@ -405,16 +366,10 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
 }
 
-/** A Start's refusal the service answered beside a task it made all the same (`task-wire.ts`'s `taskStartAnswerSchema`), read as a refused Start is. */
 export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
   return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
-/**
- * A call that never reached the service, unanswered with where it ended,
- * the network or its deadline among them, which the window reports and
- * never draws, so a read the network failed is not reported as the app's.
- */
 function unansweredCall(answer: Exclude<CallAnswer, { readonly response: Response }>): Failed {
   const { fault, errorName } = answer;
   const unanswered = new HostedUnanswered({
@@ -424,20 +379,12 @@ function unansweredCall(answer: Exclude<CallAnswer, { readonly response: Respons
   return { ...UNANSWERED, cause: hostedFailureFacts(unanswered) };
 }
 
-/** The types an inbox item's attachment is served under: a block's picture's or recording's, or any a file an answer carried traveled as. */
 const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
-/** A served file's bytes in base64 under its type: a picture, a recording, or a file an inbox answer carried or a queued message holds; unanswered under any other type. */
 function readInboxFile(response: Response): Effect.Effect<AgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
 
-/**
- * A procedure's answer, or the refusal it failed with where it is one the
- * caller names, with the fields that refusal carries; unanswered for
- * everything else.
- */
-/** A transcript page read at once, or unanswered where the service said nothing of whether it would hold, as one too old to read at once does. */
 function readNow(
   answer: (AgentMessagesAnswerView & { readonly holds?: boolean }) | Failed,
 ): TranscriptNowAnswer | Failed {
@@ -452,12 +399,6 @@ function hostedAnswer<Answer>(
   return Effect.catch(asked, (failed) => Effect.succeed(hostedFailedAs(failed, named)));
 }
 
-/**
- * A request as the service reads it: checked as the service would check it,
- * so one it would refuse by shape never travels, and then encoded back into
- * the value the wire carries (a trimmed text trimmed); nothing where it is
- * refused.
- */
 function wireRequestOf<Request, Encoded>(
   schema: Schema.Codec<Request, Encoded>,
   request: UnparsedWireValue,
@@ -467,17 +408,10 @@ function wireRequestOf<Request, Encoded>(
   return Option.getOrUndefined(Schema.encodeOption(schema)(admitted));
 }
 
-/** The agent and, where the tab names one, the pull request of its repository a read is about, the number as its query spells it. */
 function pullRequestRead(agentId: string, number: number | undefined) {
   return number === undefined ? { id: agentId } : { id: agentId, number: String(number) };
 }
 
-/**
- * The refusal a hosted failure is, where it is one the caller names, with
- * the fields that refusal carries; unanswered for everything else, with the
- * failure beneath it and the trace its call traveled under, which the
- * window reports and never draws.
- */
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
   if (failed._tag !== "HostedRefused" || failure === undefined) {
@@ -498,12 +432,6 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   };
 }
 
-/**
- * The default a write left off the preferences snapshot, with the
- * transaction it committed in, or why there was none: its coding-agent part
- * as a choice reads, the settings parts beside it the settings client's to
- * read.
- */
 function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAnswer {
   if ("failure" in read) return read;
   const choice = Option.getOrUndefined(Schema.decodeUnknownOption(modelChoiceSchema)(read.agent));
@@ -511,14 +439,6 @@ function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAns
   return read.txid === undefined ? { choice } : { choice, txid: read.txid };
 }
 
-/**
- * The window's reads and writes of a task's coding agents: the models the
- * service offers and the account's default among them, a task's agents,
- * one started, one's transcript past a cursor, one messaged, one's model
- * and effort changed, one stopped, what one published, the task's inbox
- * of what its agents need of the developer, read past a cursor and
- * answered an item at a time, and what waits across the account's tasks.
- */
 export class HostedAgentClient {
   readonly #call: AccountCallEffects;
 
@@ -538,26 +458,18 @@ export class HostedAgentClient {
     });
   }
 
-  /** The models a coding agent may run on, as the service offers them now. */
   models(): Effect.Effect<AgentModelsAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.models.list, undefined), {});
   }
 
-  /** The account's hosts, as Settings lists them. */
   hosts(): Effect.Effect<HostsAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.hosts.list, undefined), ROW_REFUSALS);
   }
 
-  /** How long ago the account's own devices last beat, and nothing else of them. */
   devicePresence(): Effect.Effect<DevicePresenceAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.hosts.presence, undefined), ROW_REFUSALS);
   }
 
-  /**
-   * The account's hosts sealed for following over Neon Realtime, with the
-   * install script's address, or with their rows inline where `poll` asks for
-   * them; signed out where the session is another account's, or why not.
-   */
   hostsLive(
     userId: string,
     poll = false,
@@ -576,34 +488,24 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
-  /** One of the account's hosts removed, its secret refused at once, answering the transaction it was removed in. */
   removeHost(id: string): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
   }
 
-  /** A box's pending pairing by the code its link named, as the approve screen shows it: the box and the address its start came from. */
   readHostPairing(code: string): Effect.Effect<HostPairingView, never, HttpClient.HttpClient> {
     return pairingAnswer(askHosted(this.#hosted.hosts.readPairing, { code }));
   }
 
-  /** A box's pending pairing approved by its code, which makes the account's host at once; its box collects its secret on its next poll. */
   approveHostPairing(
     code: string,
   ): Effect.Effect<HostPairingApproveView, never, HttpClient.HttpClient> {
     return pairingAnswer(askHosted(this.#hosted.hosts.approvePairing, { code }));
   }
 
-  /** A box's pending pairing denied by its code, so its box is answered denied. */
   denyHostPairing(code: string): Effect.Effect<HostPairingDenyView, never, HttpClient.HttpClient> {
     return pairingAnswer(askHosted(this.#hosted.hosts.denyPairing, { code }));
   }
 
-  /**
-   * The account's preferences row, its default agent, chapters model, and
-   * Slack notifications as stored, sealed for following, or with its row
-   * inline where `poll` asks for it; signed out where the session is
-   * another account's, or why not.
-   */
   accountPreferencesLive(
     userId: string,
     poll = false,
@@ -622,7 +524,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, {}));
   }
 
-  /** The account's default written on its own, answering it as kept with the transaction it committed in; a choice the service would refuse by shape is refused here without traveling at all. */
   writeDefault(
     choice: ModelChoice,
   ): Effect.Effect<AgentDefaultAnswer, never, HttpClient.HttpClient> {
@@ -634,12 +535,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * The memories our agents kept in a workspace the account is a member of,
-   * sealed for following, each with its keeper's name and whether the
-   * account may forget it, or with their rows inline where `poll` asks for
-   * them; signed out where the session is another account's, or why not.
-   */
   workspaceMemoriesLive(
     workspaceId: string,
     userId: string,
@@ -659,11 +554,9 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, MEMORY_REFUSALS));
   }
 
-  /** One memory forgotten for good, answering the workspace's memories as they then stand. */
   forgetMemory(
     params: MemoryForgetParams,
   ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
-    // The workspace and the memory ride in the query, since a DELETE carries no body.
     return hostedAnswer(
       askHosted(this.#hosted.account.forgetMemory, {
         query: { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId, [MEMORY_QUERY.ID]: params.id },
@@ -672,16 +565,10 @@ export class HostedAgentClient {
     );
   }
 
-  /** The account's own provider keys, as hints and statuses. */
   readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.account.providerKeys, undefined), {});
   }
 
-  /**
-   * One key saved for its provider, answering the keys as they then stand
-   * and, where the service kept nothing, why; a key the service would
-   * refuse by shape is refused here without traveling at all.
-   */
   saveProviderKey(
     params: ProviderKeySaveParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
@@ -690,7 +577,6 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses. */
   startChatGptDeviceLogin(): Effect.Effect<
     ChatGptDeviceStartAnswerView,
     never,
@@ -699,7 +585,6 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.startChatGptDeviceLogin, undefined), {});
   }
 
-  /** How a device-code login stands, the keys once it connected; a login id the service would refuse by shape never travels. */
   pollChatGptDeviceLogin(
     params: ChatGptDeviceLoginParams,
   ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
@@ -708,7 +593,6 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.pollChatGptDeviceLogin, admitted), {});
   }
 
-  /** A device-code login withdrawn, answering how it then stands; a login id the service would refuse by shape never travels. */
   cancelChatGptDeviceLogin(
     params: ChatGptDeviceLoginParams,
   ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
@@ -717,11 +601,6 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.cancelChatGptDeviceLogin, admitted), {});
   }
 
-  /**
-   * A connected plan's default for the account's coding agents turned on or
-   * off, answering the keys as they then stand; a request the service would
-   * refuse by shape never travels.
-   */
   setProviderKeyForAgents(
     params: ProviderKeyForAgentsParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
@@ -730,11 +609,9 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.setProviderKeyForAgents, admitted), {});
   }
 
-  /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    // The provider rides in the query, since a DELETE carries no body.
     return hostedAnswer(
       askHosted(this.#hosted.account.removeProviderKey, {
         query: {
@@ -746,11 +623,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * One dictated clip's words, under the held deadline, since the service
-   * answers only once the model has heard the clip through; a clip the
-   * service would refuse by shape is refused here without traveling at all.
-   */
   transcribeDictation(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView, never, HttpClient.HttpClient> {
@@ -762,16 +634,10 @@ export class HostedAgentClient {
     );
   }
 
-  /** The member's own GitHub token, as what tells it apart; never the token. */
   readGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.githubToken.read, undefined), {});
   }
 
-  /**
-   * The member's GitHub token saved, answering it as it then stands and,
-   * where the service kept nothing, why; a token the service would refuse
-   * by shape is refused here without traveling at all.
-   */
   saveGitHubToken(
     params: GitHubTokenSaveParams,
   ): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
@@ -780,12 +646,10 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.githubToken.save, admitted), {});
   }
 
-  /** The member's GitHub token removed, answering none. */
   removeGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.githubToken.remove, undefined), {});
   }
 
-  /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
   list(
     taskId: string,
     includeArchived = false,
@@ -801,7 +665,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** A workspace's agents, newest started first, narrowed to one repository where one is named and to the words given where some are, the archived ones among them where `includeArchived` asks. */
   listWorkspace(
     params: AgentWorkspaceListParams,
   ): Effect.Effect<AgentListAnswer, never, HttpClient.HttpClient> {
@@ -822,11 +685,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * Starts an agent on the task under the request's own key, so a retry
-   * carrying the same key answers the agent the first Start made; a request
-   * the service would refuse by shape is refused here without traveling.
-   */
   start(
     taskId: string,
     request: AgentStartRequest,
@@ -846,12 +704,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * Starts an agent from the one named, continuing it or forking it at the
-   * message the request's `from` names, in that agent's own place: its task,
-   * or its workspace and repository where it has none. Keyed and refused as
-   * `start` is; a request whose `from` names no agent is refused here.
-   */
   startFrom(
     request: AgentStartRequest,
   ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
@@ -871,13 +723,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * One agent's transcript past the cursor, or a worker's, read at once
-   * rather than held, with whether the held read would have held on it: for
-   * a reader following the transcript's live statements, which reads again
-   * once they move. Where `cut` asks, its heavy parts come cut to their two
-   * ends, which the reader fetches whole as it opens one (`agentPart`).
-   */
   messagesNow(
     agentId: string,
     after: string,
@@ -896,14 +741,6 @@ export class HostedAgentClient {
     return Effect.map(hostedAnswer(asked, ROW_REFUSALS), readNow);
   }
 
-  /**
-   * One agent's transcript, or a worker's, read back from its end at once:
-   * its newest page, with all the page past a cursor carries, the cursor
-   * `messagesNow` follows on from with nothing written meanwhile missed, and
-   * where the next older page is read below (`messagesBefore`); none where
-   * nothing older stands. Where `cut` asks, its heavy parts come cut to
-   * their two ends, as `messagesNow`'s do.
-   */
   messagesNewest(
     agentId: string,
     callId?: string,
@@ -911,17 +748,10 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentNewestAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
       hostedAnswer(this.#newest(agentId, callId, undefined, cut), ROW_REFUSALS),
-      // Note that a read naming no `before` is answered the newest page, which an older page alone is not.
       (answer) => ("failure" in answer || "status" in answer ? answer : UNANSWERED),
     );
   }
 
-  /**
-   * The page of an agent's transcript, or a worker's, below the oldest row
-   * a reader holds, as `messagesNewest` or this answered `before`: its
-   * messages, oldest first, and where the page older still is read below;
-   * none where nothing older stands.
-   */
   messagesBefore(
     agentId: string,
     before: string,
@@ -940,7 +770,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** A transcript read back from its end, the agent's or its worker's, below `before` where it names one, its heavy parts cut where `cut` asks. */
   #newest(agentId: string, callId?: string, before?: string, cut = false) {
     const page = {
       ...(before === undefined ? undefined : { before }),
@@ -951,12 +780,6 @@ export class HostedAgentClient {
       : askHosted(this.#hosted.messages.agentWorkerNewest, { id: agentId, call: callId, ...page });
   }
 
-  /**
-   * One part of a message of an agent's transcript, or a worker's where
-   * `callId` names the delegation call, whole: what a page carried cut. Not
-   * found where the agent is not one the account reaches or no such part
-   * stands; unanswered for anything else.
-   */
   agentPart(
     agentId: string,
     messageId: string,
@@ -971,16 +794,6 @@ export class HostedAgentClient {
     return hostedAnswer(asked, ROW_REFUSALS);
   }
 
-  /**
-   * One agent's transcript, or a worker's where the delegation call is
-   * named, sealed for following over Neon Realtime, answered at once: not
-   * found where the account reaches no such agent, unanswered for anything
-   * else, which the caller answers by sealing it again; with `poll`, its
-   * rows inline, for a reader polling while Realtime fails it; with
-   * `cursor`, its newest messages only past where the reader holds them.
-   * Sealed for the account `userId` names, and signed out where the session
-   * is no longer that account's.
-   */
   agentTranscriptLive(
     agentId: string,
     userId: string,
@@ -1007,12 +820,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
-  /**
-   * Sends one agent a message under the key the window made for the send,
-   * which a retry carries again, and answers the agent as it then stands,
-   * which is running; a message the service would refuse by shape is
-   * refused here without traveling.
-   */
   message(
     agentId: string,
     request: AgentMessageRequest,
@@ -1029,7 +836,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** Changes one agent's queue of messages waiting behind its turn, answering the queue as it then stands; a change the service would refuse by shape is refused here without traveling. */
   changeQueue(
     agentId: string,
     change: AgentQueueChange,
@@ -1046,7 +852,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** Changes one agent's model and effort for its next step, answering it as it then stands; a choice the service would refuse by shape is refused here without traveling. */
   choose(
     agentId: string,
     choice: ModelChoice,
@@ -1056,7 +861,6 @@ export class HostedAgentClient {
     return this.#change(agentId, admitted, CHOOSE_REFUSALS);
   }
 
-  /** Renames one agent, or clears its title with an empty one, under the idempotency key given where one is, answering it as it then stands; a title past the bound is refused here without traveling. */
   rename(
     agentId: string,
     request: AgentRenameRequest,
@@ -1067,7 +871,6 @@ export class HostedAgentClient {
     return this.#change(agentId, admitted, ROW_REFUSALS, key);
   }
 
-  /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
   switchServers(
     agentId: string,
     request: AgentServersRequest,
@@ -1077,7 +880,6 @@ export class HostedAgentClient {
     return this.#change(agentId, admitted, ROW_REFUSALS);
   }
 
-  /** Adds a repository to one agent beside the ones it works in, answering it as it then stands; a repository refused by shape is refused here without traveling. */
   addRepository(
     agentId: string,
     request: AgentAddRepositoryRequest,
@@ -1087,7 +889,6 @@ export class HostedAgentClient {
     return this.#change(agentId, admitted, ADD_REPOSITORY_REFUSALS);
   }
 
-  /** Archives one agent, stopping a turn it still runs first, or brings it back, answering it as it then stands. */
   archive(
     agentId: string,
     request: AgentArchiveRequest,
@@ -1095,7 +896,6 @@ export class HostedAgentClient {
     return this.#change(agentId, { archived: request.archived }, ARCHIVE_REFUSALS);
   }
 
-  /** Pins one agent for the account alone, or unpins it, under the idempotency key given where one is, answering it as it then stands. */
   pin(
     agentId: string,
     request: AgentPinRequest,
@@ -1111,7 +911,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** Moves the account's own read mark of one agent (`read-mark.ts`), under the idempotency key given where one is, answering it as it then stands. */
   markRead(
     agentId: string,
     request: AgentReadRequest,
@@ -1120,7 +919,6 @@ export class HostedAgentClient {
     return this.#change(agentId, { readMark: request.readMark }, ROW_REFUSALS, key);
   }
 
-  /** One change of an agent, under the idempotency key given where one is, answering it as it then stands. */
   #change(
     agentId: string,
     body: AgentChangeRequest,
@@ -1138,17 +936,14 @@ export class HostedAgentClient {
     );
   }
 
-  /** Deletes one agent for good, a turn it still runs stopped first; that it was, or why not: gone already, or one still starting with no turn to stop yet. */
   delete(agentId: string): Effect.Effect<AgentDeleteAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.delete, { id: agentId }), ARCHIVE_REFUSALS);
   }
 
-  /** Stops one agent, answering it as it then stands. */
   stop(agentId: string): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.stop, { id: agentId }), ROW_REFUSALS);
   }
 
-  /** Takes one agent back to just before one of the developer's lines, stopping it first where it still works, answering it as it then stands. */
   rewind(
     agentId: string,
     messageId: string,
@@ -1163,12 +958,10 @@ export class HostedAgentClient {
     );
   }
 
-  /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<AgentPageAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
   }
 
-  /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   pullRequest(
     agentId: string,
     number?: number,
@@ -1179,7 +972,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One agent's changes: the files of its pull request as GitHub holds them now. */
   changes(
     agentId: string,
     number?: number,
@@ -1193,7 +985,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   overviewPullRequest(
     agentId: string,
     number?: number,
@@ -1207,7 +998,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now. */
   workspaceTools(
     agentId: string,
   ): Effect.Effect<AgentWorkspaceToolsAnswerView, never, HttpClient.HttpClient> {
@@ -1217,7 +1007,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams as GitHub holds them now. */
   reviewOptions(
     agentId: string,
   ): Effect.Effect<AgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
@@ -1227,7 +1016,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One agent's pull request's chapters generated for its head now, or the generation already under way, answered as a read of them is; held for as long as a generation may take. */
   generateChapters(
     agentId: string,
     number?: number,
@@ -1244,7 +1032,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** The checks on one agent's pull request's head as GitHub holds them now. */
   overviewChecks(
     agentId: string,
     number?: number,
@@ -1255,7 +1042,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them now. */
   overviewConversation(
     agentId: string,
     number?: number,
@@ -1269,13 +1055,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * What waits on the developer across the account sealed for following
-   * over Neon Realtime, or with `poll` its rows inline, answered at once:
-   * unanswered for anything that went wrong, which the caller answers by
-   * asking again. Sealed for the account `userId` names, and signed out
-   * where the session is no longer that account's.
-   */
   accountInboxLive(
     userId: string,
     poll = false,
@@ -1301,17 +1080,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, {}));
   }
 
-  /**
-   * Every inbox item the account reaches, its rows inline, read by the sync
-   * id the reader holds them at (`LIVE_POLL.SYNC`): whole, with the id to
-   * read past next, where `sync` is empty or the reader is too far behind;
-   * past an id, only the items that moved since, each whole, with the ids
-   * of those that stand no longer for it, held by the service until
-   * something moves. Without `sync`, every item whole as it stands, answered
-   * at once. Unanswered for anything that went wrong, which the caller
-   * answers by asking again. Read for the account `userId` names, and signed
-   * out where the session is no longer that account's.
-   */
   accountInboxItemsLive(
     userId: string,
     sync: string | undefined,
@@ -1324,7 +1092,6 @@ export class HostedAgentClient {
       [LIVE_USER_QUERY]: userId,
       ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
     };
-    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
     return Effect.catchIf(
       askLive(
         this.#hosted.live.inboxItems,
@@ -1339,13 +1106,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, {}));
   }
 
-  /**
-   * One plan's inbox sealed for following over Neon Realtime, or with
-   * `poll` its rows inline, answered at once: not found where the account
-   * reaches no such plan, unanswered for anything else, which the caller
-   * answers by asking again. Sealed for the account `userId` names, and
-   * signed out where the session is no longer that account's.
-   */
   taskInboxLive(
     taskId: string,
     userId: string,
@@ -1365,7 +1125,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
-  /** One agent's inbox sealed for following over Neon Realtime, on the terms a plan's is. */
   agentInboxLive(
     agentId: string,
     userId: string,
@@ -1385,12 +1144,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
-  /**
-   * One agent's pull request's newest chapters sealed for following, by the
-   * number the tab's own read of the pull request found, with whether the
-   * reader can generate them beside the statement, on the terms an agent's
-   * inbox is.
-   */
   pullRequestChaptersLive(
     agentId: string,
     number: number,
@@ -1411,11 +1164,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
-  /**
-   * The run of an automation that started one agent, sealed for following,
-   * on the terms an agent's inbox is: the agent's page holds it while it
-   * stands rather than reading the agent whole.
-   */
   agentOriginLive(
     agentId: string,
     userId: string,
@@ -1435,14 +1183,6 @@ export class HostedAgentClient {
     ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
-  /**
-   * One picture a tool answered an agent, or one of its workers where
-   * `callId` names the delegation call, or one file of a message queued for
-   * the agent, fetched under the account: its bytes in base64 under the media
-   * type the service kept or the file travels as, as an inbox file is; not
-   * found where the agent is not one the account reaches or it keeps no such
-   * picture or file; unanswered for anything else.
-   */
   agentPicture(
     agentId: string,
     pictureId: string,
@@ -1465,11 +1205,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * One change to an agent's pull request, made on GitHub by the service as
-   * the account, on its own GitHub sign-in: how GitHub took it; a change the
-   * service would refuse by shape is refused here without traveling.
-   */
   pullRequestAction(
     agentId: string,
     request: PullRequestActionRequest,
@@ -1488,7 +1223,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** Which of the agent's pull request's files the member marked viewed on GitHub, read on their own sign-in. */
   pullRequestViewed(
     agentId: string,
     number?: number,
@@ -1499,12 +1233,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * One image an agent's pull request's overview names, by the address
-   * GitHub's rendering spelled, fetched under the account: its bytes in
-   * base64 under the type GitHub served; not found where GitHub answers no
-   * image the window draws; unanswered for anything else.
-   */
   githubImage(
     agentId: string,
     src: string,
@@ -1526,14 +1254,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * One image of an inbox item, fetched under the account: its bytes in
-   * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block's picture or an answer's file may be; not found where the item or
-   * the attachment is not the account's; unanswered for anything else,
-   * another media type included, so nothing the window draws is a type it
-   * did not expect.
-   */
   inboxAttachment(
     itemId: string,
     attachmentId: string,
@@ -1552,14 +1272,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * Acknowledges one notice of the inbox, Got it, against the revision the
-   * window drew, under the key the window made for the nod, which a retry
-   * carries again; sent under the idempotency key given where one is. It
-   * answers the item as it then stands with whether the nod was taken; a
-   * nod the service would refuse by shape is refused here without
-   * traveling.
-   */
   answerInbox(
     itemId: string,
     request: InboxAcknowledgeRequest,
@@ -1578,13 +1290,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * Closes one open item of the inbox without an answer, against the
-   * revision the window drew, under the key the window made for the close,
-   * which a retry carries again; sent under the idempotency key given where
-   * one is. It answers the item as it then stands with whether the close
-   * was taken, as an answer does.
-   */
   closeInbox(
     itemId: string,
     request: InboxCloseRequest,
@@ -1603,12 +1308,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * A message of the account's on one item's thread, open or settled: the
-   * item as it then stands, its thread with the message on it, where the
-   * service wrote it and handed it to the agent; the refusals a message to
-   * the agent answers with otherwise, since it reaches the agent as one.
-   */
   messageInbox(
     itemId: string,
     request: InboxMessageRequest,
@@ -1625,12 +1324,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * A thread the account starts with one agent, as a new mail is written:
-   * the thread as it then stands, its first message on it, where the
-   * service wrote it and handed it to the agent; the refusals a message to
-   * the agent answers with otherwise, since it reaches the agent as one.
-   */
   startInboxThread(
     request: InboxStartRequest,
   ): Effect.Effect<AgentInboxMessagedView, never, HttpClient.HttpClient> {
@@ -1642,20 +1335,12 @@ export class HostedAgentClient {
     );
   }
 
-  /** Where one item stands, its agent, task, and workspace, as a link naming it by its id alone is opened; not found where the item is not one the account may read. */
   inboxItemHome(
     itemId: string,
   ): Effect.Effect<AgentInboxItemHomeView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.inbox.home, { id: itemId }), ROW_REFUSALS);
   }
 
-  /**
-   * One item marked read for the account, as opening it does: its id and
-   * its read state; not found where the item is not one the account
-   * reaches. Marking an item read that is read already changes nothing, so
-   * the window may ask on every open. Sent under the idempotency key given
-   * where one is.
-   */
   markInboxItemRead(
     itemId: string,
     key?: string,
@@ -1666,7 +1351,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One item marked unread for the account until it reads the item again, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
   markInboxItemUnread(
     itemId: string,
     key?: string,
@@ -1677,7 +1361,6 @@ export class HostedAgentClient {
     );
   }
 
-  /** One item's reminder set for the account for `until`, in epoch milliseconds, or canceled where `until` is null, whether it is read standing as it was, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
   remindInboxItem(
     itemId: string,
     until: number | null,
@@ -1694,13 +1377,6 @@ export class HostedAgentClient {
     );
   }
 
-  /**
-   * Every item the account's Inbox lists marked read for it, open or
-   * settled, in the one workspace the request names or in all of its
-   * workspaces, under the idempotency key given where one is: how many were
-   * unread. It clears the unread dots alone; an item still waiting on an
-   * answer still waits.
-   */
   markInboxRead(
     request: InboxReadAllRequest = {},
     key?: string,

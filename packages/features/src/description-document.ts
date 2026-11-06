@@ -4,65 +4,29 @@ import {
   type DescriptionEditor,
 } from "./task-wire.js";
 
-/**
- * description-document.ts -- a description kept as one free Markdown document: its sections, and who last changed each.
- *
- * A description is one Markdown text the developer and the app both write, started
- * from the account's own template (`docs/TASKS.md`). The text has no title line,
- * since the description's name is its own, and its assumptions are a section like
- * any other. A section is a `#` or `##` heading and everything up to the
- * next one, a deeper heading standing inside its section, and a heading
- * inside a code fence being no heading at all; what stands before the first
- * heading is a section of its own with no heading. A section is known by its
- * heading's words, so the window can say who wrote each section. Who last
- * changed each is read off the description's revisions, each against the one before
- * it, and a heading renamed with nothing beneath it changed is the same
- * section under its new words, still naming the save that last changed them.
- */
-
-/**
- * Who last changed one section of a description that is one document, and when: the
- * section's heading, the writer (`DESCRIPTION_ACTOR`), the coding agent's id where
- * an agent wrote the revision, and the revision's latest save.
- */
 export interface DescriptionSectionWriter {
   readonly section: string;
   readonly actor: DescriptionActor;
-  /** The coding agent's id, where a coding agent wrote the revision. */
   readonly agentId?: string;
-  /** The member who wrote the revision, where the service can name one (`task-wire.ts`'s `descriptionEditorSchema`). */
   readonly by?: DescriptionEditor;
-  /** Epoch milliseconds of the revision's latest save. */
   readonly at: number;
 }
 
-/** Who wrote a revision, as each section it changed names them. */
 export type DescriptionSectionWriterWho = Omit<DescriptionSectionWriter, "section" | "at">;
 
-/**
- * One section of a document: the heading it is known by, empty for what
- * stands before the first, its lines, the heading's among them, with the
- * blank lines after them left out, and where those lines stand in the text.
- */
 export interface DescriptionSection {
   readonly heading: string;
   readonly text: string;
-  /** The offset of the section's first character in the text. */
   readonly from: number;
-  /** The offset just past its last character, before the blank lines that follow it. */
   readonly to: number;
 }
 
-/** A code fence's opening line: up to three spaces, then three or more backticks or tildes, then any info string. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
 
-/** A code fence's closing line: up to three spaces, the run, and nothing after it but spaces, since a closing fence takes no info string. */
 const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
 
-/** What opens a `#` or `##` heading line: up to three spaces, the hashes, then a space, a tab, or the line's end. */
 const SECTION_OPENER = /^ {0,3}#{1,2}(?=[ \t]|$)/u;
 
-/** The fence open after a line, given the one open before it: a line opens one outside a fence and closes the one it matches inside it. */
 function fenceAfter(open: string | undefined, line: string): string | undefined {
   const fence = (open === undefined ? FENCE_LINE : CLOSING_FENCE_LINE).exec(line)?.[1];
   if (fence === undefined) return open;
@@ -70,11 +34,6 @@ function fenceAfter(open: string | undefined, line: string): string | undefined 
   return fence[0] === open[0] && fence.length >= open.length ? undefined : open;
 }
 
-/**
- * The fence still open where a line of the text starts at or past `offset`,
- * as the run that opened it, or nothing where `offset` stands outside every
- * fence: what a note writing there must not write into, or must close first.
- */
 export function openFenceAt(text: string, offset: number): string | undefined {
   let open: string | undefined;
   let at = 0;
@@ -86,19 +45,12 @@ export function openFenceAt(text: string, offset: number): string | undefined {
   return open;
 }
 
-/** A section while its lines are read: its heading, where it starts, and the lines so far. */
 interface SectionLines {
   readonly heading: string;
   readonly from: number;
   readonly lines: string[];
 }
 
-/**
- * A heading's words with the closing hashes CommonMark allows left out: a
- * run of them at the end, standing behind a space or alone. Note that they
- * are walked by hand rather than matched, because a pattern over a run of
- * spaces and hashes backtracks across every long run it finds no end in.
- */
 function withoutClosingHashes(words: string): string {
   let end = words.length;
   while (end > 0 && words[end - 1] === "#") end -= 1;
@@ -108,7 +60,6 @@ function withoutClosingHashes(words: string): string {
   return before === " " || before === "\t" ? words.slice(0, end).trimEnd() : words;
 }
 
-/** The words a heading line is known by, cut to the bound, or nothing for a line that opens no section. */
 function headingOf(line: string): string | undefined {
   const opener = SECTION_OPENER.exec(line);
   if (opener === null) return undefined;
@@ -116,12 +67,6 @@ function headingOf(line: string): string | undefined {
   return words.slice(0, DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS);
 }
 
-/**
- * The document's sections in order. Note that a fence is closed only by a
- * line of the same character at least as long as the one that opened it and
- * holding nothing after the run, as CommonMark has it, because a shorter
- * run, or one labeled like an opening, inside a fence is code.
- */
 export function descriptionSections(text: string): readonly DescriptionSection[] {
   const sections: SectionLines[] = [];
   let open: string | undefined;
@@ -148,7 +93,6 @@ export function descriptionSections(text: string): readonly DescriptionSection[]
   });
 }
 
-/** Each heading's sections' words, in the order they stand, so two sections under one heading are compared one by one. */
 function wordsByHeading(text: string): ReadonlyMap<string, readonly string[]> {
   const byHeading = new Map<string, string[]>();
   for (const section of descriptionSections(text)) {
@@ -157,11 +101,6 @@ function wordsByHeading(text: string): ReadonlyMap<string, readonly string[]> {
   return byHeading;
 }
 
-/**
- * The headings whose sections a change from `before` to `after` moved, each
- * once: those `after` holds that differ, in its order, then those only
- * `before` held, which the change struck.
- */
 export function changedSections(before: string, after: string): readonly string[] {
   const was = wordsByHeading(before);
   const now = wordsByHeading(after);
@@ -174,13 +113,11 @@ export function changedSections(before: string, after: string): readonly string[
   return [...changed, ...[...was.keys()].filter((heading) => !now.has(heading))];
 }
 
-/** A section's words beneath its heading line, which renaming the heading alone leaves as they stood. */
 function wordsBeneath(section: DescriptionSection): string {
   const end = section.text.indexOf("\n");
   return end === -1 ? "" : section.text.slice(end + 1);
 }
 
-/** How many of the sections hold each run of words beneath their heading. */
 function countBeneath(sections: readonly DescriptionSection[]): ReadonlyMap<string, number> {
   const counts = new Map<string, number>();
   for (const section of sections) {
@@ -190,14 +127,6 @@ function countBeneath(sections: readonly DescriptionSection[]): ReadonlyMap<stri
   return counts;
 }
 
-/**
- * The headings a change renamed and nothing else, each new heading to the
- * one it replaced: a heading only `after` holds whose words beneath stand
- * exactly as those of a heading only `before` held. Note that a pair is
- * taken only where those words name one heading on each side, because two
- * empty sections, one struck and one renamed, cannot be told apart, and an
- * arbitrary writer carried over is worse than the renamer named.
- */
 function renamedHeadings(
   before: readonly DescriptionSection[],
   after: readonly DescriptionSection[],
@@ -218,13 +147,6 @@ function renamedHeadings(
   return renamed;
 }
 
-/**
- * The sections' writers after a revision by `who` at `at` that took the text
- * from `before` to `after`: each section it changed now names it, a section
- * it only renamed keeps the writer it had under its new heading, every other
- * section still standing keeps the writer it had, and a section the text no
- * longer holds keeps none. The newest are kept past the bound.
- */
 function withSectionWriters(
   writers: readonly DescriptionSectionWriter[],
   change: { readonly before: string; readonly after: string },
@@ -246,22 +168,12 @@ function withSectionWriters(
   return written.slice(-DESCRIPTION_SECTION_BOUNDS.MAX_SECTIONS);
 }
 
-/** One revision of a description as its sections' writers are read off it: its text, and who wrote it, when. */
 export interface SectionRevision {
   readonly text: string;
   readonly who: DescriptionSectionWriterWho;
-  /** Epoch milliseconds of the revision's latest save. */
   readonly at: number;
 }
 
-/**
- * Who last changed each section of a description, read off its revisions, oldest
- * first, each against the text before it, the first against `base`: the
- * newest revision that changed a section names its writer on it. Note that a
- * revision is one writer's saves joined, and keeps only the text they left,
- * so a section is named with the revision's latest save, and one changed and
- * changed back within a revision is no change of it.
- */
 export function sectionWritersOf(
   base: string,
   revisions: readonly SectionRevision[],

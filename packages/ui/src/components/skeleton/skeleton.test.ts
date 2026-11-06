@@ -6,11 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "./skeleton.js";
 
-/**
- * skeleton.test.ts -- a placeholder region tells a reader what it is
- * reading and that it is busy, and its blocks say nothing to a reader.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

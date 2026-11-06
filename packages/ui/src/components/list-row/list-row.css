@@ -1,25 +1,3 @@
-/* list-row.css -- a List's rows: the row's press and its acts side by side
-   in one filled line, its metadata and its acts centered on the row's middle.
-   The fill is the item's, so the pointer anywhere on the row, an act
-   included, lights the whole of it as one.
-
-   A row is a grid of five tracks: its leading mark, its words, its end (the
-   metadata and the chevron), its acts, and its ⋯. The press spans the first three
-   and lays its parts in the row's own tracks (`subgrid`), so an act offered
-   only to the row in hand can stand in the end's track beside the press
-   rather than inside it, a button holding no button: that track widens to
-   the acts while they stand, so the words never run under them, and where
-   there is a hover it is the end's alone at rest, so the words run to the
-   metadata (below).
-
-   Each part's own box is drawn in utilities (`list-row.tsx`); what stays
-   here is what a row's state restyles: its fill and ring, the press's
-   insets and height, the words' type and ink, the hover acts and the room
-   they take, and every reveal, through `:has()`, the pointer's media, and
-   custom properties set on the row. */
-
-/* The cap height of a lead line's name, registered as a length so it is
-   read in the name's size where it is set, then handed down (`ListRow`). */
 @property --ui-list-row-cap {
   syntax: "<length>";
   inherits: true;
@@ -27,17 +5,10 @@
 }
 
 @layer components {
-  /* A list's own box is drawn in utilities (`list-row.tsx`) but for its
-     margin, which a page pulls out past its column by from this layer
-     (`collection-page.css`, `detail-page.css`), and a utility would outrank. */
   .ui-list {
     margin: 0;
   }
 
-  /* Note that the end's track gives way to nothing but the words: it takes
-     its widest part where the row has room, and the metadata is cut short
-     only once the words have given all theirs. The insets are the press's,
-     which the acts keep too, so each stands as far in from the row's end. */
   .ui-list-row {
     --ui-list-row-inset-block: var(--ui-row-inset);
     --ui-list-row-inset-inline: var(--ui-list-inset);
@@ -46,8 +17,6 @@
     border-radius: var(--ui-control-radius);
   }
 
-  /* The pointer lights a row that opens something, never past the open
-     row's own stronger fill or a chosen row's. */
   @media (hover: hover) {
     .ui-list-row:has(> button.ui-list-row-main):hover:not(
         [data-current="true"],
@@ -57,14 +26,10 @@
     }
   }
 
-  /* A row whose menu is open is ringed, the way Finder rings the row a
-     right-click is about, so the menu is plainly about it. */
   .ui-list-row[data-menu-open="true"] {
     box-shadow: inset 0 0 0 1px var(--ui-color-border-menu-open);
   }
 
-  /* The open row is drawn in the work sheet's ground, lifted by a hairline
-     and a soft shadow, as the sheet itself is. */
   .ui-list-row[data-current="true"][data-current-look="sheet"] {
     background: var(--ui-color-ground);
     box-shadow:
@@ -72,32 +37,19 @@
       0 1px 2px var(--ui-color-shadow-soft);
   }
 
-  /* A list standing beside the page it opens fills its open row with the
-     accent's tint instead, so it reads on the list's own ground in either
-     theme; it sets no shadow, so a row whose menu is open keeps its ring. */
   .ui-list-row[data-current="true"][data-current-look="tint"] {
     background: var(--ui-color-fill-current);
   }
 
-  /* A row chosen in its list's selection is filled as a Mac's list fills
-     the rows chosen, over the open row's fill where it is both. Note that
-     it names the look too, so it matches the open row's rules in weight and
-     wins by standing after them. */
   .ui-list-row[data-selected="true"][data-current-look] {
     background: var(--ui-color-fill-selected);
   }
 
-  /* The press stands its words at the row's insets, which a variant, a
-     density, and the acts beside it set, and takes the row's corners,
-     which a card squares at its end where acts stand beside it (below). */
   .ui-list-row-main {
     padding: var(--ui-list-row-inset-block) var(--ui-list-row-inset-inline);
     border-radius: inherit;
   }
 
-  /* A card holds its rows edge to edge on its ground (`list-row.tsx`), a
-     hairline between each and the next, as a settings section's card does;
-     its corner clips the fill of its first and last rows. */
   .ui-list[data-variant="card"] > .ui-list-row {
     border-radius: 0;
   }
@@ -106,23 +58,14 @@
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* A card's rows keep a settings row's side inset, so their words line up
-     with the card's other rows. */
   .ui-list[data-variant="card"] > .ui-list-row {
     --ui-list-row-inset-inline: var(--ui-space-16);
   }
 
-  /* Note that everything in a card rings inside itself, a row's press and
-     its acts alike, because the card's corner clips whatever stands past
-     its edge, as a flush `Card` does (`card.tsx`). */
   .ui-list[data-variant="card"] {
     --ui-focus-ring-offset: var(--ui-focus-ring-inset);
   }
 
-  /* A card's first and last rows take its corner where they meet it, its
-     round inside its hairline, so what is drawn on the row, its fill and an
-     open menu's ring, follows the card's round rather than cutting square
-     across it. */
   .ui-list[data-variant="card"] > .ui-list-row {
     --ui-list-row-card-corner: calc(var(--ui-control-radius) - 1px);
   }
@@ -137,8 +80,6 @@
     border-end-end-radius: var(--ui-list-row-card-corner);
   }
 
-  /* Note that the press's end meets the card only where no act or ⋯ stands
-     beside it, so there its ring stays square at its end, mid-row. */
   .ui-list[data-variant="card"]
     > .ui-list-row:has(> .ui-list-row-actions, > .ui-list-row-more)
     > .ui-list-row-main {
@@ -146,24 +87,17 @@
     border-end-end-radius: 0;
   }
 
-  /* A compact row keeps its words and gives up some of the room around them. */
   .ui-list[data-density="compact"] > .ui-list-row {
     --ui-list-row-inset-block: var(--ui-space-4);
     --ui-list-row-inset-inline: var(--ui-row-inset);
   }
 
-  /* A list whose rows a finger opens stands each a finger's press tall on a
-     coarse pointer, its words still centered; a mouse keeps its height. */
   @media (pointer: coarse) {
     .ui-list[data-finger-tall="true"] .ui-list-row-main {
       min-height: var(--ui-touch-target);
     }
   }
 
-  /* A dense row is one line a control's height: its title in the body's
-     type, its description after it on that line, giving way before it. */
-  /* Note that a dense row's layout is its own, so a change inside one,
-     its words cut anew or its acts coming in, lays out that row alone. */
   :is(.ui-list[data-density="dense"] > .ui-list-row, .ui-list-row[data-density="dense"]) {
     --ui-list-row-inset-block: 0px;
     --ui-list-row-inset-inline: var(--ui-row-inset);
@@ -171,11 +105,6 @@
     contain: layout style;
   }
 
-  /* A compact or dense row whose acts come in on hover holds compact icon
-     buttons in its metadata's place, each a step wider either side than its
-     glyph, so they end that step past the row's end inset: the last glyph
-     ends where the metadata's words end, on the column a group head's acts
-     and a nav row's ⋯ stand on. */
   :is(
     .ui-list:is([data-density="compact"], [data-density="dense"]) > .ui-list-row,
     .ui-list-row:is([data-density="compact"], [data-density="dense"])
@@ -208,10 +137,8 @@
     min-width: 0;
   }
 
-  /* A dense row's description that alerts, a refusal, takes a line of its
-     own under the title, its words whole (below), rather than giving way. */
   :is(.ui-list[data-density="dense"] > .ui-list-row, .ui-list-row[data-density="dense"])
-  .ui-list-row-text:has(> .ui-list-row-description [role="alert"]) {
+    .ui-list-row-text:has(> .ui-list-row-description [role="alert"]) {
     flex-wrap: wrap;
     padding-block: var(--ui-space-6);
   }
@@ -221,10 +148,8 @@
     flex-basis: 100%;
   }
 
-  /* A dense row's attachments take a line of their own over its title, as
-     a roomier row's do, rather than standing beside it. */
   :is(.ui-list[data-density="dense"] > .ui-list-row, .ui-list-row[data-density="dense"])
-  .ui-list-row-text:has(> .ui-list-row-attachments) {
+    .ui-list-row-text:has(> .ui-list-row-attachments) {
     flex-wrap: wrap;
     padding-block: var(--ui-space-6);
   }
@@ -235,7 +160,6 @@
     margin-block-end: 0;
   }
 
-  /* Its leading mark stands level with the row's first line. */
   :is(.ui-list[data-density="dense"] > .ui-list-row, .ui-list-row[data-density="dense"])
     :has(> .ui-list-row-text > .ui-list-row-attachments)
     > .ui-list-row-leading {
@@ -245,17 +169,14 @@
     margin-block-start: var(--ui-space-6);
   }
 
-  /* An unread dense row's title steps up to the semibold, enough beside
-     the regular a dense row reads in. */
   :is(
-    .ui-list[data-density="dense"] > .ui-list-row,
-    .ui-list-row[data-density="dense"]
-  )[data-unread="true"] .ui-list-row-title {
+      .ui-list[data-density="dense"] > .ui-list-row,
+      .ui-list-row[data-density="dense"]
+    )[data-unread="true"]
+    .ui-list-row-title {
     font-weight: var(--ui-type-emphasis-weight);
   }
 
-  /* A sidebar's row rests its title and lead in the sidebar's quieter ink,
-     lifted to the text's own while it is reached for, open, unread, or its menu is. */
   .ui-list-row[data-ink="sidebar"] :is(.ui-list-row-title, .ui-list-row-lead[data-at="above"]) {
     color: var(--ui-color-sidebar-ink);
     transition: color var(--ui-duration-hover) var(--ui-motion-exit);
@@ -277,29 +198,20 @@
     }
   }
 
-  /* Beside its acts, the row's press gives its end inset to the acts,
-     whatever its list's variant or density set it (so this rule stays below
-     theirs); acts standing in its end's track on hover take none of it. */
   .ui-list-row:not([data-actions="hover"]):has(> .ui-list-row-actions) > .ui-list-row-main {
     padding-inline-end: 0;
   }
 
-  /* Beside its ⋯, the row's press gives its end inset to the ⋯ too, its
-     acts on hover or none, since the ⋯ stands in a track of its own. */
   .ui-list-row:has(> .ui-list-row-more) > .ui-list-row-main {
     padding-inline-end: 0;
   }
 
-  /* A row's words stand in a column, which a dense row lays in a line and
-     a mail-style row hands to the press's tracks. */
   .ui-list-row-text {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-2);
   }
 
-  /* A row's attachments stand on a line of their own over its words, in a
-     run that is cut at the row's end rather than wrapping. */
   .ui-list-row-attachments {
     margin-block-end: var(--ui-space-4);
   }
@@ -310,8 +222,6 @@
     white-space: nowrap;
   }
 
-  /* A description that alerts, a refusal, keeps its words whole, wrapping
-     rather than being cut short. */
   .ui-list-row-description:has([role="alert"]) {
     white-space: normal;
   }
@@ -322,9 +232,6 @@
     font-weight: var(--ui-type-label-weight);
   }
 
-  /* A lead over the title reads as a mail app's sender, the row's largest
-     words, and the title under it steps down to the body's weight, keeping
-     a label's size, under the lead's on the web too, where the body's is not. */
   .ui-list-row-lead[data-at="above"] {
     font-size: var(--ui-type-toolbar-title-size);
     line-height: var(--ui-type-toolbar-title-leading);
@@ -335,18 +242,10 @@
     font-weight: var(--ui-type-body-weight);
   }
 
-  /* A title and its description fade rather than ending in an ellipsis,
-     as a browser's tab does, out over their last few pixels only while they
-     are measured cut short, so a short one ends on its last letter; a row
-     whose acts come in on hover reads the cut sliding as they come and go.
-     The mask fades the words themselves, so it reads alike over every fill
-     the row wears. */
   :is(.ui-list-row-title, .ui-list-row-description)[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
-  /* What has not been seen reads in a heavier weight, and its description
-     in the body's ink, until it is, as a mail app's unread threads do. */
   .ui-list-row[data-unread="true"] .ui-list-row-title {
     font-weight: var(--ui-type-emphasis-weight);
   }
@@ -355,13 +254,6 @@
     color: var(--ui-color-text);
   }
 
-  /* A row whose thing is done with stands back in the palette's quieter
-     inks rather than by fading its words, which still name what it opens
-     and so read at AA (`docs/DESIGN.md`): its title and lead take the muted
-     ink its description and metadata already wear. Only its mark,
-     the leading glyph its words already say, and its attachments fade.
-     Its fill, which says it is open or in hand, and its acts stay as they
-     are. */
   .ui-list-row[data-muted="true"] :is(.ui-list-row-title, .ui-list-row-lead[data-at="above"]) {
     color: var(--ui-color-text-muted);
   }
@@ -371,10 +263,6 @@
     opacity: 0.45;
   }
 
-  /* A latent row keeps its place unseen at rest, a way back to something
-     put away, and comes in while the row is hovered or holds the keyboard.
-     Note that it is faded by its opacity, never its visibility, so a reader
-     still reaches it, and a screen with no hover draws it at rest. */
   @media (hover: hover) {
     .ui-list-row[data-latent="true"] {
       opacity: 0;
@@ -393,12 +281,10 @@
     line-height: var(--ui-type-caption-leading);
   }
 
-  /* The name of what a row belongs to fades where its chip cuts it short. */
   .ui-list-row-lead-label[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--ui-label-fade));
   }
 
-  /* The title gives way first; past it, the metadata is cut short. */
   .ui-list-row-meta {
     flex: 0 1 auto;
     min-width: 0;
@@ -408,14 +294,6 @@
     white-space: nowrap;
   }
 
-  /* Metadata on the title's line ends it, the title giving way first, and
-     the description runs the words' and the end's tracks
-     whole under both; the row's marks stand level with the title's line
-     rather than the row's middle. A lead on a line of its own over the title
-     takes the title's place on that first line, the marks level with its
-     larger words, and the title runs whole under it.
-     The words and the first line lend their parts to the press's tracks, so
-     each lands in its own. */
   .ui-list-row[data-meta="title"] {
     --ui-list-row-head-leading: var(--ui-type-label-leading);
   }
@@ -442,15 +320,8 @@
     height: var(--ui-list-row-head-leading);
   }
 
-  /* A lead line's first line is drawn exactly, in any face: every part of
-     it stands on the name's baseline, the time's words included, and every
-     mark, which keeps no baseline of its own (`contain: layout`), stands on
-     it by its bottom edge and is carried to the name's cap-height center,
-     half its own height less half the name's cap height. The name's cap
-     height is read once where each part's box takes the name's size, and
-     handed to the marks as `--ui-mark-cap`, as the unread dot reads it. */
   .ui-list-row[data-meta="title"][data-lead="above"]
-  :is(.ui-list-row-leading, .ui-list-row-end, .ui-list-row-more) {
+    :is(.ui-list-row-leading, .ui-list-row-end, .ui-list-row-more) {
     font-size: var(--ui-type-toolbar-title-size);
   }
 
@@ -479,19 +350,11 @@
     align-self: baseline;
   }
 
-  /* Note that a leading column with no dot keeps its place, since an empty
-     column has no baseline to stand on and nothing in it to align, and one
-     with a dot stands as tall as its own line, so it reaches no lower than
-     the name's and the row keeps its height. */
   .ui-list-row[data-meta="title"][data-lead="above"] .ui-list-row-leading:has(.ui-unread-dot) {
     height: auto;
     align-self: baseline;
   }
 
-  /* A row that draws its select box over its unread gutter stands the box
-     in its own box, and hides its dot while the box shows, under the
-     pointer or while its list is being chosen from, so the two never
-     stand one over the other; its words' weight still says it is unread. */
   .ui-list-row[data-select-box] {
     position: relative;
   }
@@ -506,10 +369,8 @@
     }
   }
 
-  /* Note that in a lead line's metadata the time is the one word, so
-     whatever else stands there is a mark. */
   .ui-list-row[data-meta="title"][data-lead="above"]
-  :is(.ui-list-row-more, .ui-list-row-lead-icon, .ui-list-row-meta > * > :not(time)) {
+    :is(.ui-list-row-more, .ui-list-row-lead-icon, .ui-list-row-meta > * > :not(time)) {
     contain: layout;
     translate: 0 calc(50% - var(--ui-mark-cap) / 2);
   }
@@ -530,12 +391,6 @@
     margin-block-start: var(--ui-space-2);
   }
 
-  /* Metadata on the last line ends the description's line, on its
-     baseline, and the title runs the words' and the end's tracks whole over
-     both; the row's mark stands level with the title's first line. The
-     words lend their parts to the press's tracks, as a mail-style row's do,
-     so the title takes the first row and the description and the end the
-     next, each in its own track. */
   .ui-list-row[data-meta="last"] .ui-list-row-text {
     display: contents;
   }
@@ -559,11 +414,7 @@
     align-self: baseline;
   }
 
-  /* A title that may run to two lines wraps, and one longer still fades
-     out at the end of its second, its first line drawn whole above it. */
   .ui-list-row-title[data-lines="two"] {
-    /* Note that it is held to two lines by its height, because a line clamp
-       draws an ellipsis whatever its overflow says. */
     max-height: calc(2 * var(--ui-type-label-leading));
     overflow-wrap: anywhere;
     white-space: normal;
@@ -577,20 +428,12 @@
     mask-size: 100% 50%;
   }
 
-  /* Acts that always stand do so in their own track beside the press, as
-     far in from the row's end as the press's words are. */
   .ui-list-row-actions {
     grid-column: acts;
     margin-inline-start: var(--ui-control-gap);
     padding-inline-end: var(--ui-list-row-acts-inset);
   }
 
-  /* A row's ⋯ stands last, in its own track, as far in from the row's end
-     as its press's words are, its room kept whether it shows or not so its
-     coming and going moves nothing. Beside acts that always stand it keeps
-     their own gap and takes their end inset; in a row whose acts come in on
-     hover, or that has none, it comes in on hover too, in its end's place,
-     where there is a hover (below). */
   .ui-list-row-more {
     grid-column: more;
     margin-inline-start: var(--ui-control-gap);
@@ -599,8 +442,6 @@
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
   }
 
-  /* A mail-style row, whose metadata stands on its title's line, keeps its
-     ⋯ on that line too, level with the metadata and the acts beside it. */
   .ui-list-row[data-meta="title"] .ui-list-row-more {
     align-self: start;
     height: var(--ui-list-row-head-leading);
@@ -615,9 +456,6 @@
     margin-inline-start: var(--ui-space-4);
   }
 
-  /* The ⋯ shows while the row holds the keyboard or its menu is open, and
-     while the pointer rests on it where there is a hover; a screen with no
-     hover shows it always, since nothing there would reveal it. */
   .ui-list-row:is(:has(:focus-visible), [data-menu-open="true"]) .ui-list-row-more {
     opacity: 1;
   }
@@ -634,21 +472,12 @@
     }
   }
 
-  /* Under a finger a compact ⋯ is as wide as a finger's target, its glyph
-     centered in it, rather than taking its press past its own 24px box
-     (`button.css`): it stands at the row's end, whose edge would cut that
-     press short. */
   @media (pointer: coarse) {
     .ui-list-row-more > .ui-button[data-size="compact"][data-icon-only="true"] {
       min-width: var(--ui-touch-target);
     }
   }
 
-  /* A chevron in its metadata's place keeps no room: it stands over the
-     metadata's end, and the metadata gives way on its own fade while the
-     chevron shows, so the two swap as one gesture, as a sidebar row's count
-     and ⋯ do. Note that the metadata gives way by its opacity, never its
-     visibility, so a reader reaching the row still hears it. */
   .ui-list-row-end[data-chevron="meta"] {
     position: relative;
   }
@@ -674,9 +503,6 @@
     }
   }
 
-  /* Note that a screen with no hover keeps the metadata at rest rather than
-     the chevron every other row shows there, as a finger keeps a sidebar
-     row's count, since a row has no hand on it to swap them. */
   @media (hover: none) {
     .ui-list-row:not(:has(:focus-visible), [data-current="true"])
       .ui-list-row-end[data-chevron="meta"]
@@ -685,8 +511,6 @@
     }
   }
 
-  /* A row that goes deeper wears its chevron at its end, shown while the
-     row is reached for or open, its room kept so nothing moves as it shows. */
   .ui-list-row-chevron {
     opacity: 0;
     transition: opacity var(--ui-duration-hover) var(--ui-motion-exit);
@@ -696,37 +520,18 @@
     opacity: 1;
   }
 
-  /* Note that the pointer's own reveals, here and below, stand only where
-     there is a hover, because iOS plays a first tap as a hover and spends
-     it on a reveal: the row opens on the second tap alone. */
   @media (hover: hover) {
     .ui-list-row:hover .ui-list-row-chevron {
       opacity: 1;
     }
   }
 
-  /* A screen with no hover shows every row's chevron at rest, so a row that
-     goes deeper says so before it is tapped. */
   @media (hover: none) {
     .ui-list-row-chevron {
       opacity: 1;
     }
   }
 
-  /* Acts offered to the row in hand stand in the end's track, on the title's
-     line, over the press, and come in there while the pointer rests on the
-     row, it holds the keyboard, or its menu is open. The track is as wide as
-     the wider of the end and the acts while they stand, so the words never
-     run under them, and where there is a hover the acts take no room at rest
-     (below), so the title runs to the metadata and is cut anew as they come:
-     the end fades out a step toward the row's start as the acts fade in
-     from a step past its end, on opacity and transform alone, the step
-     settling on the motion tokens, so reduced motion and a capture run hold
-     it still. Nothing is painted behind the acts, so whatever the row stands
-     on shows through them: its fill, the window's ground, or the Mac's
-     frosted sidebar. The acts take no height of their own, centered on the
-     row's middle or level with its title's line, so a row stands as tall
-     as its words whatever its acts are. */
   .ui-list-row[data-actions="hover"] {
     --ui-list-row-step: var(--ui-space-4);
   }
@@ -749,8 +554,6 @@
       transform var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  /* A mail-style row's acts, whether they always stand or come in on
-     hover, stand level with its title's line, as its ⋯ does. */
   .ui-list-row[data-meta="title"] .ui-list-row-actions {
     align-self: start;
     height: var(--ui-list-row-head-leading);
@@ -763,8 +566,6 @@
       transform var(--ui-duration-fast) var(--ui-spring-fast);
   }
 
-  /* Note that the metadata leaves the press's words once it has faded, and
-     comes back to them at once, so a reader hears what the row shows. */
   .ui-list-row[data-actions="hover"] .ui-list-row-meta {
     transition: visibility 0s;
   }
@@ -776,12 +577,11 @@
     transform: none;
   }
 
-  /* Note that a row offering no acts keeps its end, since nothing steps in
-     for it. */
   .ui-list-row[data-actions="hover"]:has(.ui-list-row-actions):is(
-    :has(:focus-visible),
-    [data-menu-open="true"]
-  ) .ui-list-row-end {
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
+    .ui-list-row-end {
     opacity: 0;
     transform: translateX(calc(-1 * var(--ui-list-row-step)));
   }
@@ -802,13 +602,11 @@
       transform: none;
     }
 
-    /* Note that a row whose only act is its ⋯ steps its end aside for it
-       too, held, focused or its menu open, since there the ⋯ stands in its
-       end's place (below). */
     .ui-list-row[data-actions="hover"]:is(
         :has(.ui-list-row-actions):hover,
         :has(.ui-list-row-more):is(:hover, :has(:focus-visible), [data-menu-open="true"])
-      ) .ui-list-row-end {
+      )
+      .ui-list-row-end {
       opacity: 0;
       transform: translateX(calc(-1 * var(--ui-list-row-step)));
     }
@@ -823,23 +621,6 @@
     }
   }
 
-  /* Where there is a hover, a row whose acts come in on hover keeps no
-     room for them at rest: its words run to its metadata, and its metadata
-     ends the row at its end inset. The acts take their room only while they
-     stand, the row in hand, holding the keyboard, or its menu open, the end
-     stepping aside for them (above) and the title cut anew before them, as
-     a title is cut wherever its row narrows. At rest each keeps its place
-     but takes no room, standing out of the row's flow in its end's place
-     (`position: absolute`, its grid area its containing block), so its
-     buttons stand where they will show. Its ⋯ is one of them, with acts or
-     without: it comes in last, in its end's place, and keeps no track of
-     its own, so a row whose only act is its ⋯ ends its metadata where a row
-     with acts does, and the times of a list stand in one column at the
-     row's end inset. Note that the acts stand clear of the ⋯ by its width
-     (`--ui-list-row-more-size`, its button's) and the gap between them,
-     because they are two boxes in one track. A screen with no hover keeps
-     the ⋯ in its own track beside the end, where it is always shown and
-     the acts keep their room (above). */
   @media (hover: hover) {
     .ui-list-row[data-actions="hover"] {
       --ui-list-row-more-size: var(--ui-control-height);
@@ -884,10 +665,6 @@
     }
   }
 
-  /* A screen with no hover never has a row in hand, so each row there keeps
-     its metadata at rest, its acts offered by its menu on a long press
-     (`menu.tsx`), and the open row alone shows its acts in its end's place,
-     as the row in hand does. */
   @media (hover: none) {
     .ui-list-row[data-actions="hover"][data-current="true"] .ui-list-row-actions {
       opacity: 1;
@@ -907,24 +684,11 @@
     }
   }
 
-  /* Note that the row holding the keyboard stands over its neighbors,
-     because its ring reaches past the list's gap and the next row's fill
-     would otherwise paint over the ring's foot. */
   .ui-list-row:has(:focus-visible) {
     position: relative;
     z-index: 1;
   }
 
-  /* A row folding the rows nested under it stands its chevron over its
-     leading mark's cell, past the press's inset, so the two share one place
-     and the title never moves. The mark gives way to the chevron while the
-     pointer rests on the row or the keyboard is on the chevron, as a group's
-     head gives its glyph way (`group-header.tsx`), and on a screen with no
-     hover, where nothing would bring it, the chevron stands at rest. Note
-     that the chevron's box is the mark's own, the cell less the press's
-     inset before it and the mark's gap after it, so the two share a center
-     whatever the mark's size, and stands level with the mark on a mail-style
-     row as the ⋯ does. */
   .ui-list-row-fold {
     justify-self: stretch;
     margin-block: 0;

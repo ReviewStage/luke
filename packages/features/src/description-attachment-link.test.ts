@@ -8,12 +8,6 @@ import {
   taskPicturesIn,
 } from "./description-attachment-link.js";
 
-/**
- * A plan's picture as its address: written under the plan's own, read back
- * by either scheme, and found in a plan's text only where it is the plan's
- * own. Synthetic ids.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const OTHER_TASK_ID = "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d";
 const PICTURE = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
@@ -76,7 +70,6 @@ test("a picture's line holds its alt text and caption on one line, escaped so ne
     `![The \\[new\\] members page](${address} "Says \\"pending\\" \\\\ twice")`,
   );
   assert.equal(taskPictureMarkdown(address, "Members page"), `![Members page](${address})`);
-  // The line written is a picture the plan's text draws, escaped alt text and all, so a correction must keep it.
   assert.deepEqual(taskPicturesIn(taskPictureMarkdown(address, "The [new] page", 'Says "hi"')), [
     address,
   ]);

@@ -14,10 +14,8 @@ import {
   ADMIN_UNANSWERED,
 } from "./admin-wire.js";
 
-/** One account in the roster the fake service answers. */
 const ROSTER = { total: 1, rows: [{ id: "user-ada", name: "Ada" }] };
 
-/** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
 function client(
   session: AccountSessionToken = {
     readSessionToken: () => Effect.succeed("session-1"),
@@ -131,7 +129,6 @@ it.effect(
     }),
 );
 
-/** A login page, as a preview's deployment protection answers a redirect the transport followed. */
 const LOGIN_PAGE = () =>
   new Response("<!doctype html><title>Log in</title>", {
     status: HTTP_STATUS.OK,

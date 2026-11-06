@@ -3,66 +3,27 @@ import { cn } from "../../cn.js";
 import { pulsePress } from "../../press-pulse.js";
 import { Checkbox as ShadcnCheckbox } from "../../shadcn/checkbox.js";
 
-/**
- * checkbox.tsx -- a yes-or-no choice beside the words that say what it is: a box drawn in the accent.
- *
- * The box is shadcn/ui's Base UI checkbox (`../../shadcn/checkbox.tsx`), a
- * `role="checkbox"` the reader is told is checked, unchecked, or mixed, with
- * a hidden native checkbox beside it that a form submits. It is checked and
- * unchecked by a press on it or on its words and by Space alike. It is controlled: the caller holds `checked` and answers every
- * change with the value it asks for, so a press and a key arrive as the same
- * value. A box standing for a group whose members are some checked and some
- * not is `mixed`, which a press resolves to checked. A box `readOnly` records
- * a choice made: drawn as it stands, in its words' own ink rather than an
- * unavailable box's faded one, its press and Space changing nothing. A box
- * whose words stand beside it already, a task item's marker, is named by a
- * `label` of its own and draws the box alone, which on a coarse pointer
- * takes a press a finger's width across, centered on it. A box with words may
- * hold a `detail` under them, aligned with them and outside the box's press,
- * such as a to-do step's command in its card, which a press on its Copy
- * leaves unticked.
- */
-
-/** How a box is named: by its words beside it, or by a label of its own where it stands alone. */
 type Named =
   | {
-      /** Its words, which name it and take a press for it. */
       children: ReactNode;
       label?: undefined;
     }
   | {
       children?: undefined;
-      /** The accessible name of a box drawn without words. */
       label: string;
     };
 
-/**
- * The words beside the box, in the body's type, the box standing on their
- * first line. Note that their ink is `checkbox.css`'s, which a stepped-back
- * region quiets from the components layer, where a utility would outrank it.
- * Note that the row stands at the top of its line rather than on its
- * baseline, because the baseline is the box's, which moves as the tick
- * mounts in it, and a row on it would grow and shrink as it is ticked.
- */
 const CHECKBOX =
   "ui-checkbox inline-flex items-start gap-icon-gap min-w-0 align-top font-ui text-body cursor-press";
 
-/**
- * A box without words stands on no line of its own, and on a coarse
- * pointer takes a press a finger's width across, centered on it, while it
- * draws at its own size, as a compact button does.
- */
 const BOX_ALONE =
   "relative pointer-coarse:before:absolute pointer-coarse:before:top-1/2 pointer-coarse:before:left-1/2 pointer-coarse:before:size-touch pointer-coarse:before:[transform:translate(-50%,-50%)] pointer-coarse:before:content-['']";
 
-/** What stands under a box's words, in from the box by its size and the gap after it, so it lines up with the words. */
 const DETAIL =
   "ui-checkbox-detail min-w-0 pl-[calc(var(--spacing-select-box)+var(--spacing-icon-gap))]";
 
-/** The box beside words, stood on their first line. */
 const BOX_ON_LINE = "mt-[calc((var(--ui-type-body-leading)-14px)/2)]";
 
-/** A box and its words, checked while `checked`, answering a change with the value asked for. */
 export function Checkbox({
   checked,
   onChange,
@@ -78,16 +39,12 @@ export function Checkbox({
 }: Named & {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  /** Whether it stands for a group partly checked, drawn as a dash and read as mixed. */
   mixed?: boolean;
   disabled?: boolean | undefined;
-  /** Whether it records a choice made, which no press or key changes. */
   readOnly?: boolean | undefined;
   name?: string | undefined;
   id?: string | undefined;
-  /** The id of the words that say more of what checking it does. */
   "aria-describedby"?: string | undefined;
-  /** What stands under its words, lined up with them, which a press on takes no part in the box's; none for words alone. */
   detail?: ReactNode;
 }): React.JSX.Element {
   const words = label === undefined;
@@ -115,13 +72,8 @@ export function Checkbox({
         readOnly={readOnly}
         aria-label={label}
         aria-describedby={describedBy}
-        // Note that a mixed box asks for checked whatever it would toggle
-        // to under the dash, while the box itself keeps the caller's
-        // `checked`, so a form it stands in still submits what the caller holds.
-        // A read-only box hands nothing on, so it stays as its caller holds it.
         onCheckedChange={(next) => {
           if (readOnly) return;
-          // Note that a box ticked springs up by its own tick, which outranks the pulse, so the pulse is an unticking's.
           if (box.current !== null) pulsePress(box.current);
           onChange(mixed ? true : next);
         }}

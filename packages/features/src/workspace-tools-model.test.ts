@@ -2,12 +2,6 @@ import { describe, expect, it } from "vitest";
 import { RUN_ON_MAC_REASON, runOnMacReason } from "./workspace-tools-model.js";
 import { RUN_ON_MAC_OFF } from "./workspace-tools-wire.js";
 
-/**
- * Why `run_on_mac` is off, in the order the popover says it: this Mac's
- * Settings first, since it is the one the reader can mend there and then,
- * but only where the service says it is off, since another Mac may listen;
- * on, or unread, says nothing.
- */
 describe("runOnMacReason", () => {
   it.each([
     {

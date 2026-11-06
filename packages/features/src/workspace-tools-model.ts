@@ -1,30 +1,7 @@
-/**
- * workspace-tools-model.ts -- what an agent's MCP popover says of our own tools: each one's group and one line of what it does, and whether `run_on_mac` is on for the agent and why not.
- *
- * Which of our tools an agent is offered is the service's answer
- * (`workspace-tools-wire.ts`), read off the same rules its runtime narrows the
- * list by, so it never drifts from what the agent is handed. What each tool
- * is called beside its name, and the group it stands under, is said here,
- * once, for every tool in `AGENT_TOOL`: a tool added there does not build
- * until it has its line. A name the service answers that this build does not
- * know, a tool added after it, stands under the last group with no words.
- *
- * `run_on_mac` is on for an agent unless one of three things stops it,
- * said in this order: this Mac's Settings › This Mac lets no agent run
- * commands on it, which only the agent's starter reading on a Mac can be
- * told; no Mac of the starter's is listening for commands; or someone
- * other than the starter has put words into the agent's conversation,
- * which turns it off for the rest of the agent's life. This Mac's setting
- * is the reason only where the service says `run_on_mac` is off, because
- * the service counts any listening Mac of the starter's: one set to Never
- * beside another that listens still runs the agent's commands there.
- */
-
 import { AGENT_TOOL, type AgentTool } from "./agent-tools.js";
 import { PRODUCT_NAME } from "./product-name.js";
 import { RUN_ON_MAC_OFF, type RunOnMacStanding } from "./workspace-tools-wire.js";
 
-/** The groups our tools stand under on their page, in the order they are drawn. */
 export const WORKSPACE_TOOL_GROUP = {
   MAC: "Your Mac",
   THREADS: "Threads",
@@ -42,13 +19,11 @@ export type WorkspaceToolGroup = (typeof WORKSPACE_TOOL_GROUP)[keyof typeof WORK
 
 const GROUP_ORDER: readonly WorkspaceToolGroup[] = Object.values(WORKSPACE_TOOL_GROUP);
 
-/** One of our tools as its page says it: its group, and one line of what it does. */
 interface WorkspaceToolWords {
   readonly group: WorkspaceToolGroup;
   readonly summary: string;
 }
 
-/** Every tool of ours, by its name: its group and one line of what it does. */
 const WORKSPACE_TOOL_WORDS = {
   [AGENT_TOOL.RUN_ON_MAC]: {
     group: WORKSPACE_TOOL_GROUP.MAC,
@@ -236,13 +211,11 @@ const WORKSPACE_TOOL_WORDS = {
   },
 } as const satisfies { readonly [Tool in AgentTool]: WorkspaceToolWords };
 
-/** One tool as our tools' page draws it: its name, and one line of what it does where this build knows it. */
 export interface WorkspaceToolRow {
   readonly name: string;
   readonly summary?: string;
 }
 
-/** One group of our tools' page: its heading and its tools, in the order the service answered them. */
 export interface WorkspaceToolSection {
   readonly heading: WorkspaceToolGroup;
   readonly tools: readonly WorkspaceToolRow[];
@@ -254,12 +227,10 @@ function wordsOf(name: string): WorkspaceToolWords | undefined {
     : undefined;
 }
 
-/** One line of what a tool of ours does; nothing for a name this build does not know. */
 export function workspaceToolSummary(name: string): string | undefined {
   return wordsOf(name)?.summary;
 }
 
-/** The tools the service named, under their groups in the page's order, each group's in the order named; no group stands empty. */
 export function workspaceToolSections(names: readonly string[]): readonly WorkspaceToolSection[] {
   return GROUP_ORDER.flatMap((heading) => {
     const tools = names
@@ -272,7 +243,6 @@ export function workspaceToolSections(names: readonly string[]): readonly Worksp
   });
 }
 
-/** Why `run_on_mac` is off for an agent, the service's reason and the one this Mac knows first. */
 export const RUN_ON_MAC_REASON = {
   SETTINGS_OFF: "settings-off",
   ...RUN_ON_MAC_OFF,
@@ -280,13 +250,11 @@ export const RUN_ON_MAC_REASON = {
 
 export type RunOnMacReason = (typeof RUN_ON_MAC_REASON)[keyof typeof RUN_ON_MAC_REASON];
 
-/** What we say of one reason: a short line for a row, and a sentence of detail for the tool's page where the short line leaves something unsaid. */
 interface RunOnMacReasonWords {
   readonly short: string;
   readonly detail?: string;
 }
 
-/** What we say of each reason. Settings off has no detail, since the Open settings beside its short line says the rest. */
 export const RUN_ON_MAC_REASON_WORDS = {
   [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {
@@ -295,28 +263,21 @@ export const RUN_ON_MAC_REASON_WORDS = {
   },
 } as const satisfies Record<RunOnMacReason, RunOnMacReasonWords>;
 
-/** What `run_on_mac`'s own page says it does, above why it is off where it is. */
 export const RUN_ON_MAC_DESCRIPTION =
   "Runs one shell command on the developer's own Mac, in their login shell from their home folder, and reads what it printed. It reaches what their account on the Mac reaches: local checkouts, uncommitted work, installed tools, and running servers. The Mac asks first unless Settings › This Mac says otherwise.";
 
-/** The sentence of detail `run_on_mac`'s page says under its reason, where it has one. */
 export function runOnMacDetail(reason: RunOnMacReason): string | undefined {
   const words: RunOnMacReasonWords = RUN_ON_MAC_REASON_WORDS[reason];
   return words.detail;
 }
 
-/** What decides whether `run_on_mac` is on: this Mac's setting, where the reader may be told it, and the service's answer. */
 export interface RunOnMacInput {
-  /** Whether this Mac's Settings let no agent run commands on it; false where the reader is not the agent's starter or reads on no Mac. */
   readonly settingsOff: boolean;
-  /** The service's answer; nothing while it is read or where it could not be. */
   readonly standing: RunOnMacStanding | undefined;
 }
 
-/** Why `run_on_mac` is off for the agent, the first of the three reasons that holds; nothing where it is on, or not known to be off. */
 export function runOnMacReason(input: RunOnMacInput): RunOnMacReason | undefined {
   const { standing } = input;
-  // Note that the service's answer comes first, because another Mac of the starter's may listen while this one is set to Never.
   if (standing === undefined || standing.on) return undefined;
   return input.settingsOff ? RUN_ON_MAC_REASON.SETTINGS_OFF : standing.reason;
 }

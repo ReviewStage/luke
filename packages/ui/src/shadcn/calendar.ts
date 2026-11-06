@@ -1,31 +1,3 @@
-/**
- * calendar.ts -- shadcn/ui's calendar (style `base-nova`), its drawing alone, in our month grid.
- *
- * What is kept of `shadcn add calendar` is the drawing its `classNames` hand
- * react-day-picker: the month, its caption, its nav, the weekday headings,
- * a day's cell and button, a range's start, middle, and end, today, and a
- * neighboring month's days, each a class string here, so a later `shadcn
- * add calendar` reads as a small diff against them. react-day-picker and
- * date-fns are left out, because `@repo/ui`'s `Calendar` is controlled on
- * `YYYY-MM-DD` days read in UTC, pages through the four-digit years alone,
- * and steps the keyboard into a month its caller shows renders later
- * (`components/calendar/calendar.tsx`), none of which react-day-picker's
- * local dates and own focus keep.
- *
- * Our changes, against shadcn's own strings: the grid is a table of
- * square cells a control's height across, the caption a label's semibold
- * at the start with the two steps at the end rather than a centered label
- * between them; a day's face is drawn behind its number (`before:`), lit
- * under the pointer, filled in the accent where it is a single pick or a
- * range's end, while the days between wash their cells edge to edge, the
- * ends washing their inner half, a band rounding where a week ends it;
- * today is the accent's ink with a dot under its number; and a
- * neighboring month's days are muted. The keyboard's ring, inside the
- * day since its neighbors stand against it, is `calendar.css`'s, the
- * day rounding to its face while the ring stands.
- */
-
-/** Where a day stands against the selection, which its cell's wash and its face are drawn from. */
 export const CALENDAR_PLACE = {
   SINGLE: "single",
   START: "start",
@@ -35,29 +7,21 @@ export const CALENDAR_PLACE = {
 
 export type CalendarPlace = (typeof CALENDAR_PLACE)[keyof typeof CALENDAR_PLACE];
 
-/** The month: its caption over its grid. */
 export const CALENDAR = "inline-flex flex-col gap-ui-8";
 
-/** The caption: the month's name at the start, its steps at the end. */
 export const CALENDAR_CAPTION = "flex items-center justify-between gap-control-gap ps-ui-6";
 
-/** The month's name. */
 export const CALENDAR_CAPTION_LABEL = "font-sans text-label font-section text-foreground";
 
-/** The previous and next steps, a hair apart. */
 export const CALENDAR_NAV = "flex gap-ui-2";
 
-/** The grid, its cells' spacing cleared to the seven columns, its borders apart so a band's ends round. */
 export const CALENDAR_MONTH_GRID = "table-fixed border-separate border-spacing-0";
 
-/** A weekday's heading over its column. */
 export const CALENDAR_WEEKDAY =
   "h-control w-control p-0 text-center font-sans text-tag font-tag text-muted-foreground";
 
-/** A day's cell, a control's height across. */
 export const CALENDAR_DAY = "w-control p-0";
 
-/** A cell's wash by where its day stands in a range: the days between edge to edge, the ends their inner half, rounding where a week ends the band. */
 export const CALENDAR_RANGE: Readonly<Record<CalendarPlace, string>> = {
   [CALENDAR_PLACE.SINGLE]: "",
   [CALENDAR_PLACE.START]:
@@ -67,17 +31,14 @@ export const CALENDAR_RANGE: Readonly<Record<CalendarPlace, string>> = {
   [CALENDAR_PLACE.BETWEEN]: "bg-fill-selected first:rounded-s-control last:rounded-e-control",
 };
 
-/** A day's button: its number over the face drawn behind it. */
 export const CALENDAR_DAY_BUTTON =
   "relative z-0 m-0 flex h-control w-full cursor-press items-center justify-center rounded-none border-0 bg-transparent p-0 font-sans focus-visible:rounded-control text-body tabular-nums before:absolute before:inset-0 before:-z-1 before:rounded-control before:transition-colors before:duration-(--ui-duration-hover) before:ease-motion-exit before:content-['']";
 
-/** A day's face: lit under the pointer, or filled in the accent where it is picked. */
 export const CALENDAR_DAY_FACE = {
   OPEN: "hover:before:bg-muted",
   PICKED: "before:bg-accent-fill",
 } as const;
 
-/** A day's ink: on the accent where picked, then today's accent, then a neighboring month's muted, then the text's own. */
 export const CALENDAR_DAY_INK = {
   PICKED: "text-on-accent",
   TODAY: "text-accent-ink",
@@ -85,6 +46,5 @@ export const CALENDAR_DAY_INK = {
   OWN: "text-foreground",
 } as const;
 
-/** Today: semibold, a dot under its number in whatever ink the number is. */
 export const CALENDAR_TODAY =
   "font-emphasis after:absolute after:bottom-ui-2 after:left-1/2 after:size-ui-4 after:-translate-x-1/2 after:rounded-full after:bg-current after:content-['']";

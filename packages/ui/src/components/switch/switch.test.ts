@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { LabeledSwitch, Switch, SwitchMark } from "./switch.js";
 
-/**
- * switch.test.ts -- a switch is a control of its own, named by its label,
- * toggled by a press, and described by the words its caller points it at;
- * its drawing alone, inside a row that is the switch, is hidden from a
- * reader and takes no press of its own.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -41,7 +34,6 @@ function switchNamed(page: HTMLElement, name: string): HTMLElement {
   );
 }
 
-/** A switch whose state the caller holds. */
 function Notify(): React.JSX.Element {
   const [on, setOn] = useState(false);
   return createElement(Switch, {

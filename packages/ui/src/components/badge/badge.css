@@ -1,16 +1,8 @@
-/* badge.css -- what the badge's utilities cannot say (`badge.tsx`, drawn by
-   `../../shadcn/badge.tsx` in the shared Tailwind theme): its words given up
-   under a room's width, and its figures. */
-
 @layer components {
-  /* A badge often holds a count or a time, which must not shift as it ticks. */
   .ui-badge {
     font-variant-numeric: tabular-nums;
   }
 
-  /* A badge given a step in a header too narrow for its words keeps them for
-     a reader, as `VisuallyHidden`'s `under` does. Note that these stay here,
-     because they answer a `ui-room` container the badge's caller draws. */
   /* off-scale: 520px, where a snug badge's words stop fitting (visually-hidden.css reads the same line) */
   @container ui-room (width < 520px) {
     .ui-badge-words[data-under="snug"] {

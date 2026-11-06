@@ -2,19 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { githubShapes, wholeRendering } from "./github-html.js";
 
-/**
- * github-html.test.ts -- GitHub's rendering reaches the window's HTML steps
- * whole, and what GitHub dresses its way is reshaped into what the window
- * draws its own: a highlighted block into a fenced one in its language, and
- * a diagram into a fenced mermaid block of its source, a themed picture
- * into its `<img>` alone, and a picture GitHub links to itself into the
- * picture alone. The trees are as the parse leaves them.
- */
-
-/** A node of the parsed tree, as the step reads it. */
 type HtmlNode = Parameters<ReturnType<typeof githubShapes>>[0];
 
-/** An element of the parsed tree. */
 function element(
   tagName: string,
   properties: NonNullable<HtmlNode["properties"]>,
@@ -27,7 +16,6 @@ function text(value: string): HtmlNode {
   return { type: "text", value };
 }
 
-/** The tree the step leaves of the children given. */
 function shaped(...children: HtmlNode[]) {
   const tree: HtmlNode = { type: "root", children };
   githubShapes()(tree);

@@ -1,21 +1,3 @@
-/* button.css -- Button and IconButton: a look per variant, the inks every
-   state sets, and the motions every look shares. The box, type, and edge
-   are Tailwind utilities on the vendored shadcn button (`button.tsx`,
-   `../../shadcn/button.tsx`); what stays here is what a container's sheet
-   restyles a button by from this same layer, which a utility would
-   outrank: the `--ui-button-*` inks, the fill and ink drawn from them,
-   the resting inset, least width, and glyph size; and what Tailwind has no
-   words for: a pseudo-element's hit area, a keyframe, and a press felt by
-   the face inside. The keyboard's ring is the app's reset's, as it is for
-   every control. */
-
-/* The fill is a registered color, so it eases (`../../shadcn/button.tsx`
-   lists it among the transitions) even where it is drawn as a gradient over
-   `--ui-button-ground`, which no transition reaches. Note that it must,
-   because the ground under it eases in from transparent: a fill that landed
-   at once would stand over whatever is behind the button until the ground
-   arrived, a light flash over the Mac's frosted title bar. It does not
-   inherit, because every button sets its own. */
 @property --ui-button-fill {
   syntax: "<color>";
   inherits: false;
@@ -23,9 +5,6 @@
 }
 
 @layer components {
-  /* Note that the inset and least width are a container's to change (a
-     dialog's actions, a narrow error's retry), so they rest here rather
-     than in a utility; a box with an inset of its own sets it in one. */
   .ui-button {
     --ui-button-fill: transparent;
     --ui-button-ink: var(--ui-color-text);
@@ -46,9 +25,6 @@
     --ui-button-ink: var(--ui-color-text-muted);
   }
 
-  /* A finger's target: on a coarse pointer a button takes a press
-     `--ui-touch-target` across at least, centered on it, while it draws at
-     its own size, so a row's 24px mark keeps its glyph and its place. */
   @media (pointer: coarse) {
     .ui-button::before {
       position: absolute;
@@ -65,7 +41,6 @@
     --ui-button-edge: var(--ui-color-border-strong);
   }
 
-  /* Subtle, a quiet press among quiet words: their muted ink. */
   .ui-button[data-variant="subtle"] {
     --ui-button-ink: var(--ui-color-text-muted);
   }
@@ -90,10 +65,6 @@
     --ui-button-ink: var(--ui-color-ground);
   }
 
-  /* Over a picture or a video's frame, as a player's controls stand: in the
-     words a veil carries, the same in either theme, since what is under it
-     is the frame's, not the window's, and a wash of that ink under the
-     pointer. */
   .ui-button[data-variant="media"] {
     --ui-button-fill: transparent;
     --ui-button-ink: var(--ui-color-on-veil);
@@ -119,8 +90,6 @@
     --ui-button-ink: var(--ui-color-danger-text);
   }
 
-  /* A failure's mark: no fill at rest, its glyph in the danger ink, which a
-     glyph-alone button's muted ink would otherwise take. */
   .ui-button[data-variant="danger-quiet"] {
     --ui-button-ink: var(--ui-color-danger-text);
   }
@@ -132,9 +101,6 @@
     --ui-button-fill: color-mix(in srgb, var(--ui-color-danger) 16%, transparent);
   }
 
-  /* A row, a card's act drawn as a menu's row (its box is the `row` size's),
-     lit by the menu row's fill under the pointer and the keyboard alike,
-     never ringed. */
   .ui-button[data-variant="row"]:is(:focus-visible, [aria-expanded="true"]):not(
     :disabled,
     [aria-disabled="true"]
@@ -150,7 +116,6 @@
     }
   }
 
-  /* A danger toggle is quiet while off, and on the danger tint while on. */
   .ui-button[data-variant="danger"][aria-pressed="false"] {
     --ui-button-fill: transparent;
     --ui-button-ink: var(--ui-color-text-muted);
@@ -161,16 +126,6 @@
     --ui-button-ink: var(--ui-color-danger-text);
   }
 
-  /* A quiet or outlined button lights under the pointer, while the menu or
-     popover it opens stands open, and while a toggle stands on; a filled
-     one brightens. One that shows and hides a pane says whether the pane is
-     out (`aria-expanded`) with no popup to light for, so it rests unlit, as
-     a Mac's sidebar toggle does: the pane beside it says it is open. Its
-     translucent fill, lit or pressed, is laid over `--ui-button-ground`,
-     which is nothing unless a container sets it: one whose buttons stand
-     still while something slides beneath them, as a window's title bar
-     does over its panes, names the opaque ground they rest on, so what
-     passes beneath never shows through the fill. */
   .ui-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
     [aria-haspopup][aria-expanded="true"],
     [aria-pressed="true"]
@@ -192,10 +147,6 @@
     }
   }
 
-  /* A quiet mark standing in a row, a compact one or a row's ⋯ at any
-     size (`button.tsx`'s `lights`), lights its glyph alone, under the
-     pointer, while its menu is open, and while a toggle stands on, because
-     the row it stands in is already lit. */
   .ui-button[data-icon-only="true"][data-lights="glyph"]:where(
     [aria-expanded="true"],
     [aria-pressed="true"]
@@ -217,9 +168,6 @@
     }
   }
 
-  /* A button that goes to the page on show reads in the full ink, as one
-     under the pointer does, without a fill: the page is where it stands,
-     not a state it holds. */
   .ui-button:is([data-variant="quiet"], [data-variant="outline"])[aria-current="page"] {
     --ui-button-ink: var(--ui-color-text);
   }
@@ -292,11 +240,6 @@
     filter: brightness(0.92);
   }
 
-  /* An ink fill is black or white, which a brightness does not move, so it
-     fades a little under the pointer and more under the press. Note that
-     the pointer's fade stands only where there is a hover, because a tap
-     on iOS leaves the button hovered, and a change a hover draws there
-     can spend the tap. */
   @media (hover: hover) {
     .ui-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
       opacity: 0.85;
@@ -307,31 +250,17 @@
     opacity: 0.7;
   }
 
-  /* A press sinks the button's face a little under the finger and lets it
-     spring back as the press leaves, by transform alone, so nothing beside
-     it moves. Note that the face moves, never the button, because a button
-     that shrank would pull its edge out from under a press made near it,
-     and the release would land on its container and be no click. A row is
-     a menu's row, lit rather than pressed, so it holds still; an
-     unavailable or busy one takes no press, so it gives none. */
   .ui-button-face {
     transition:
       transform var(--ui-duration-fast) var(--ui-spring-fast),
       opacity var(--ui-duration-quick) var(--ui-motion-exit);
   }
 
-  /* Note that the face goes down on the quick exit beat and comes back on
-     the spring, because a click holds the press for a tenth of a second,
-     which the spring's beat would spend before the face had moved. */
   .ui-button:active:not(:disabled, [aria-disabled="true"], [data-variant="row"]) .ui-button-face {
     transform: scale(0.9);
     transition: transform var(--ui-duration-exit) var(--ui-motion-exit);
   }
 
-  /* Every press a button takes is answered once it lands, so even a click
-     too quick to hold the press down is seen: its face springs back from
-     pressed, and a row, a menu's row, gives a little whole (`press-pulse.css`).
-     A submit's arrow lifts away as the message goes and drops back in. */
   .ui-button[data-submit="ready"][data-pulse="face"] svg {
     animation: ui-button-send var(--ui-duration-fast) var(--ui-spring-fast);
   }
@@ -347,9 +276,6 @@
     }
   }
 
-  /* A press an unavailable button refuses shakes it, once per press, so the
-     refusal reads as an answer rather than a press that went nowhere
-     (`button.tsx` restarts `data-denied` on each). */
   .ui-button[data-denied="true"] {
     animation: ui-button-deny var(--ui-duration-fast) var(--ui-motion-exit);
   }
@@ -369,27 +295,17 @@
     }
   }
 
-  /* Unavailable, a button fades to 45%: a disabled one whole (its
-     utilities'), but a read-only one, which records a press given and so
-     stands at full strength, and one that keeps the keyboard its fill and
-     its words alone, so the app's ring around it is drawn at full strength. */
   .ui-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"], [data-read-only]) {
     --ui-button-fill-faded: color-mix(in srgb, var(--ui-button-fill) 45%, transparent);
     background: var(--ui-button-fill-faded);
     color: color-mix(in srgb, var(--ui-button-ink) 45%, transparent);
   }
 
-  /* A read-only button records a press given rather than offering one, so
-     its words are read and select, as the window's words do (`base.css`
-     keeps a control's from selecting); a badge or a count beside them
-     stays out of a copy. */
   .ui-button[data-read-only] .ui-button-words {
     -webkit-user-select: text;
     user-select: text;
   }
 
-  /* A submit unavailable stands on the strong fill with a muted glyph rather
-     than fading, so the glyph stays a color apart from its disc. */
   .ui-button[data-submit]:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
     --ui-button-fill: var(--ui-color-fill-strong);
     --ui-button-ink: var(--ui-color-text-muted);
@@ -399,17 +315,7 @@
     filter: none;
   }
 
-  /* Done, its act landed: its words keep their room and its name, unseen, and a check
-     springs in where they stood, at full strength, since nothing is
-     unavailable about an act that has landed. The check's one beat is what
-     its owner waits on (`button.tsx`), so a dialog closes as it settles.
-     Note that the words fade (its face's utilities) rather than hide,
-     because a hidden face would take the button's name with it while its
-     check, which says nothing, stands. */
   .ui-button[data-done="true"] .ui-button-face {
-    /* Note that the words leave at once, because a busy button's words stood
-       hidden under its ring and would show through a fade as the check
-       lands; they come back on the face's own fade as the check goes. */
     transition: none;
   }
 
@@ -419,17 +325,10 @@
       ui-button-done-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
-  /* Note that the check wears the button's ink, over the green a connected
-     line draws it in, because it stands on the act's own fill. */
   .ui-button-done svg {
     color: inherit;
   }
 
-  /* A busy button's press landing: the check springs in where the ring
-     stood and holds, then goes, and its words fade back (`button.tsx`
-     waits on the hold). The hold is `--ui-confirm-delay`, how long a
-     Saved stands, which reduced motion keeps, so the check is still seen
-     there, only without its spring. */
   .ui-button-done[data-hold="true"] {
     animation:
       ui-button-done-hold var(--ui-confirm-delay) var(--ui-motion-exit),
@@ -437,8 +336,6 @@
       ui-button-done-spring var(--ui-duration-fast) var(--ui-spring-fast) backwards;
   }
 
-  /* Its hold done, the check fades out as the words fade back over it, on
-     the face's own beat, so the one hands over to the other. */
   .ui-button-done[data-leaving="true"] {
     animation: ui-button-done-leave var(--ui-duration-quick) var(--ui-motion-exit) forwards;
   }
@@ -449,16 +346,12 @@
     }
   }
 
-  /* Note that the hold moves nothing; it is a beat the check is waited on for. */
   @keyframes ui-button-done-hold {
     to {
       opacity: 1;
     }
   }
 
-  /* A button that turns, a refresh's or a retry's, turns its glyph once as
-     a press lands, on the spring, beside its face's pulse (`button.tsx`
-     restarts `data-turn` on each press). */
   .ui-button[data-turn="true"] .ui-button-face > svg:first-child {
     animation: ui-button-turn-once var(--ui-duration-shape) var(--ui-spring);
   }

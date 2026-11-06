@@ -9,15 +9,6 @@ import { PAGE_FRAME } from "../page-frame/page-frame.js";
 import { TextField } from "../text-field/text-field.js";
 import { COLLECTION_STATE, CollectionPage, type CollectionState } from "./collection-page.js";
 
-/**
- * collection-page.test.ts -- the page is named by its title, each state of
- * its content shows what that state says, a read in progress is announced by
- * name, and the header and filters a reader is using stay as they were while
- * the content changes state under them. Under the window's toolbar the page
- * draws no title of its own, stands the toolbar, and is named by its label.
- * Synthetic tasks.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +17,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** The browser's ResizeObserver, which jsdom lacks, silent since nothing here resizes; a row measures its title with one. */
 class StandInObserver {
   observe(): void {}
   disconnect(): void {}
@@ -42,7 +32,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The tasks page at `state`, its search held in the page's caller as an app holds it. */
 function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
   const [query, setQuery] = useState("");
   return createElement(CollectionPage, {
@@ -64,7 +53,6 @@ function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
   });
 }
 
-/** Draws the tasks page at `state`, and hands back a way to move it to another. */
 function draw(state: CollectionState): (next: CollectionState) => void {
   const container = document.createElement("div");
   document.body.append(container);
@@ -83,7 +71,6 @@ function search(): HTMLInputElement {
 }
 
 function typeInto(input: HTMLInputElement, value: string): void {
-  // Note that React reads a change from the value its tracker last saw, so the setter is the prototype's.
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setter?.call(input, value);
@@ -170,7 +157,6 @@ test("a search being typed keeps its words and its focus while the content chang
   expect(document.activeElement).toBe(input);
 });
 
-/** The tasks page under the window's toolbar at `state`, the toolbar holding the title and the act. */
 function drawUnderToolbar(state: CollectionState): (next: CollectionState) => void {
   const container = document.createElement("div");
   document.body.append(container);

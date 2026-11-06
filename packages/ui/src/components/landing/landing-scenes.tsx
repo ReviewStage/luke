@@ -92,24 +92,8 @@ import {
 import { LandingPhone, LandingWindow } from "./landing-devices.js";
 import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
 
-/**
- * landing-scenes.tsx -- the landing's moving screens: the app's own components, composed as the panel composes them, stepping through a short story each.
- *
- * Every scene is drawn from `@repo/ui`'s parts in the panel's own
- * arrangement, at the profile the screen stands for: a Mac window draws at
- * the desktop's, the phone at the site's on a phone. The Inbox answers an
- * agent's question in the draft under it; a task's page shows its agent's
- * log, folded calls and all, starting another agent and trading messages
- * with it, the plan's sub-tasks beside it; an automation's page fires a run;
- * the phone holds the same Inbox; and Settings › Agents connects Claude on
- * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
- * runs only while it is on screen (`landing-story.ts`).
- */
-
-/** How long each scene holds a step, in milliseconds. */
 const BEAT = { INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
 
-/** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
   INBOX: "inbox",
   AGENTS: "agents",
@@ -120,10 +104,8 @@ export const LANDING_SCENE = {
 
 export type LandingScene = (typeof LANDING_SCENE)[keyof typeof LANDING_SCENE];
 
-/** The Mac app's own surface, which a window's screen is drawn at. */
 const DESKTOP_SURFACE = surfaceAttributes(PROFILE.DESKTOP, THEME.DARK);
 
-/** An agent as a comment's writer: its name on the square of the harness it runs in. */
 function agentAuthor(name: string): CommentAuthor {
   return {
     name,
@@ -132,7 +114,6 @@ function agentAuthor(name: string): CommentAuthor {
   };
 }
 
-/** A pill naming an agent, its face before its name. */
 function AgentPill({
   name,
   look = INLINE_REF_LOOK.PILL,
@@ -145,7 +126,6 @@ function AgentPill({
   );
 }
 
-/** The Mac app's window: the desktop's surface holding `children` as the app on show. */
 function DesktopWindow({
   label,
   children,
@@ -162,7 +142,6 @@ function DesktopWindow({
   );
 }
 
-/** What a line of the Inbox asks: a decision, a to-do, or one that is settled. */
 const LINE = {
   DECIDE: "decide",
   DO: "do",
@@ -177,7 +156,6 @@ const LINE_GLYPH: Readonly<Record<Line, ReactNode>> = {
   [LINE.SETTLED]: <CheckIcon />,
 };
 
-/** One of the Inbox's items: its task, what it asks, its last line, and where the reader stands with it. */
 type InboxItem = {
   readonly id: string;
   readonly task: string;
@@ -190,7 +168,6 @@ type InboxItem = {
   readonly current?: boolean;
 };
 
-/** An Inbox row as the panel draws it: the task above, the ask's glyph before its last line, its age beside the title. */
 function InboxRow({ item }: { item: InboxItem }): React.JSX.Element {
   const open = item.kind !== LINE.SETTLED;
   return (
@@ -224,7 +201,6 @@ function InboxRow({ item }: { item: InboxItem }): React.JSX.Element {
   );
 }
 
-/** The question the Inbox's story turns on, its options, the one the reader picks, and the note they send with it. */
 const QUESTION = {
   TITLE: "Who can withdraw an invite?",
   TASK: "Teammate invitations",
@@ -279,7 +255,6 @@ const OTHER_ITEMS: readonly InboxItem[] = [
   },
 ];
 
-/** The Inbox's items at `step` of the story: the question arriving on top, opened, and settled once answered. */
 function inboxItems(step: number): readonly InboxItem[] {
   if (step < 1) return OTHER_ITEMS;
   const answered = step >= 5;
@@ -297,7 +272,6 @@ function inboxItems(step: number): readonly InboxItem[] {
   return [question, ...OTHER_ITEMS];
 }
 
-/** The thread's path in its bar: its task, then the agent that asked. */
 function ThreadPath(): React.JSX.Element {
   return (
     <Breadcrumbs
@@ -310,7 +284,6 @@ function ThreadPath(): React.JSX.Element {
   );
 }
 
-/** The ask's options as the thread holds them, `picked` checked; numbered while they wait on the reader. */
 function AskChoices({
   picked,
   readOnly,
@@ -332,7 +305,6 @@ function AskChoices({
   );
 }
 
-/** A composer's body: its one field, empty but for `placeholder` or holding `words`. */
 function ComposerField({
   label,
   placeholder,
@@ -358,7 +330,6 @@ function ComposerField({
   );
 }
 
-/** A reply's composer: its field over its foot of attach, dictate, and send. */
 function ReplyComposer({
   placeholder,
   words,
@@ -383,7 +354,6 @@ function ReplyComposer({
   );
 }
 
-/** The reader's draft under the question: its options in the composer, a note, and the new thread's choice. */
 function DraftAnswer({ picked, note }: { picked: boolean; note: string }): React.JSX.Element {
   return (
     <>
@@ -409,11 +379,6 @@ function DraftAnswer({ picked, note }: { picked: boolean; note: string }): React
   );
 }
 
-/**
- * The question's thread at `step` of the story: the agent's question over
- * the reader's draft, an option picked, a note written, and the answer sent,
- * a fresh draft waiting under it.
- */
 function QuestionThread({ step }: { step: number }): React.JSX.Element {
   const sent = step >= 5;
   return (
@@ -455,7 +420,6 @@ function QuestionThread({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The Inbox's page at `step`: the list, a question arriving, opened, answered in the draft under it, and sent. */
 function InboxPage({ step }: { step: number }): React.JSX.Element {
   const open = step >= 2;
   return (
@@ -524,7 +488,6 @@ function InboxScene(): React.JSX.Element {
   );
 }
 
-/** One call in an agent's log: its glyph, what it did, the agent or file it did it to, and what it said. */
 function CallRow({
   icon,
   verb,
@@ -550,7 +513,6 @@ function CallRow({
   );
 }
 
-/** Another agent's message in the log: its name over its words in a bubble. */
 function ReceivedMessage({ sender, words }: { sender: string; words: string }): React.JSX.Element {
   return (
     <MessageFrame className="ui-landing-received ui-landing-enter">
@@ -565,7 +527,6 @@ function ReceivedMessage({ sender, words }: { sender: string; words: string }): 
 const ACCEPT_PAGE = "Accept page";
 const INVITE_EMAILS = "Invite emails";
 
-/** A sub-task of the plan beside the log. */
 type SubTask = {
   readonly id: string;
   readonly name: string;
@@ -573,7 +534,6 @@ type SubTask = {
   readonly key: string;
 };
 
-/** The sub-tasks at `step`, each stepping toward done as the story goes. */
 function subTasks(step: number): readonly SubTask[] {
   const at = (from: number, to: number): TaskStatus =>
     step >= to ? TASK_STATUS.DONE : step >= from ? TASK_STATUS.IN_PROGRESS : TASK_STATUS.TODO;
@@ -590,7 +550,6 @@ function subTasks(step: number): readonly SubTask[] {
   ];
 }
 
-/** The task's tab strip: the agent on show, the one it started once it has, and the way to open another. */
 function TaskTabs({ step }: { step: number }): React.JSX.Element {
   return (
     <span className="ui-landing-tabs">
@@ -610,7 +569,6 @@ function TaskTabs({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The agent's log at `step`: its words, its folded calls, the other agent's messages, and its working line. */
 function AgentLog({ step }: { step: number }): React.JSX.Element {
   const calls = step >= 3 ? 3 : step >= 1 ? 2 : 1;
   return (
@@ -665,7 +623,6 @@ function AgentLog({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The log's foot at `step`: the pull request once opened, over the composer with the model the agent runs on. */
 function AgentFoot({ step }: { step: number }): React.JSX.Element {
   return (
     <div className="ui-landing-agent-foot">
@@ -720,7 +677,6 @@ function AgentFoot({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The side panel at `step`: the plan's tab, with its sub-tasks and agents. */
 function PlanPanel({ step }: { step: number }): React.JSX.Element {
   const tasks = subTasks(step);
   const done = tasks.filter((task) => task.status === TASK_STATUS.DONE).length;
@@ -793,7 +749,6 @@ function PlanPanel({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The task's page at `step`: its tabs, the agent's log over its foot, and the plan beside it. */
 function TaskPage({ step }: { step: number }): React.JSX.Element {
   return (
     <div className="ui-landing-app">
@@ -829,7 +784,6 @@ function AgentsScene(): React.JSX.Element {
   );
 }
 
-/** An automation's run: when it started, what it was, and how it went. */
 type Run = {
   readonly id: string;
   readonly ago: number;
@@ -843,14 +797,12 @@ const RUNS: readonly Run[] = [
   { id: "224", ago: 60 * 72, title: "Scheduled run", line: "Nothing flaky found" },
 ];
 
-/** The automation's trigger: weekdays at 2:00 AM in London. */
 const SCHEDULE = {
   kind: AUTOMATION_TRIGGER.SCHEDULE,
   cron: "0 2 * * 1-5",
   timezone: "Europe/London",
 } as const;
 
-/** A row's chip in a settings card: a field's chevron over `words`. */
 function FieldChip({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <Chip look={CHIP_LOOK.FIELD} width={CHIP_WIDTH.MIN_FIELD} chevron onClick={still}>
@@ -859,7 +811,6 @@ function FieldChip({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The automation's toolbar: the way back to Automations, and its state, run, save, switch, and more. */
 function AutomationBar(): React.JSX.Element {
   return (
     <div className="ui-landing-automation-bar">
@@ -893,7 +844,6 @@ function AutomationBar(): React.JSX.Element {
   );
 }
 
-/** The automation's settings: its title, its trigger, its prompt, and where it runs. */
 function AutomationSettings(): React.JSX.Element {
   return (
     <div className="ui-landing-automation-page">
@@ -936,7 +886,6 @@ function AutomationSettings(): React.JSX.Element {
   );
 }
 
-/** The automation's runs at `step`: a scheduled run firing, working, and finishing on top of the earlier ones. */
 function AutomationRuns({ step }: { step: number }): React.JSX.Element {
   const working = step >= 1 && step < 3;
   const latest: Run = {
@@ -980,7 +929,6 @@ function AutomationRuns({ step }: { step: number }): React.JSX.Element {
   );
 }
 
-/** The automation's page at `step`, its sidebar folded: its toolbar over its settings beside its runs. */
 function AutomationPage({ step }: { step: number }): React.JSX.Element {
   return (
     <div className="ui-landing-app ui-landing-app-folded">
@@ -1011,7 +959,6 @@ function AutomationsScene(): React.JSX.Element {
   );
 }
 
-/** The Inbox as a phone draws it: its bar, its search, its rows, and the bar of places at its foot. */
 function PhoneInbox(): React.JSX.Element {
   return (
     <div className="ui-landing-phone-app">
@@ -1078,7 +1025,6 @@ function DevicesScene(): React.JSX.Element {
   );
 }
 
-/** A harness's row in Settings › Agents: its mark, its name, the credential it connects with, and the step of the story it connects at. */
 type KeyRow = {
   readonly id: string;
   readonly name: string;
@@ -1104,11 +1050,6 @@ const KEY_ROWS: readonly KeyRow[] = [
   },
 ];
 
-/**
- * Note that the section stands in no device, so it is made a picture here as
- * a device makes its screen one: a reader is told what it shows, and its rows
- * are inert, since none of them is ever pressed.
- */
 function KeysScene(): React.JSX.Element {
   const [ref, step] = useStory(5, BEAT.KEYS);
   return (
@@ -1158,7 +1099,6 @@ const SCENES: Readonly<Record<LandingScene, () => React.JSX.Element>> = {
   [LANDING_SCENE.KEYS]: KeysScene,
 };
 
-/** The scene that shows `scene`'s feature. */
 export function LandingSceneView({ scene }: { scene: LandingScene }): React.JSX.Element {
   const Scene = SCENES[scene];
   return <Scene />;

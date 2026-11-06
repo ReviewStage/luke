@@ -11,24 +11,6 @@ import { type SelectionAct, SelectionBar } from "./selection-bar.js";
 import { selectionMenu } from "./selection-menu.js";
 import { SelectionRegion, selectionRun } from "./selection-region.js";
 
-/**
- * selection.test.ts -- a List asked to choose rows does so as a Mac's list
- * does: ⌘-click puts a row in and takes it out, ⇧-click chooses the run
- * from the row last pressed over what was chosen before it, ⇧↑↓ grow and
- * shrink the run from the row in hand and stop at the ends, ⌘A chooses
- * every row, and Esc none, going no further; an unavailable row is never
- * chosen by any of them, and a plain press still opens its row and
- * chooses nothing. A set its owner clears starts the next run afresh. A
- * list not asked opens its row on a ⌘-click as it always has. The bar
- * over the list says how many are chosen, does its acts, drops an act's
- * menu, and clears on Clear and on Esc; with none chosen it draws nothing.
- * A chosen row's menu offers the bar's acts, an act's choices as a submenu.
- * A region of the app's own lists chooses its card presses the same way,
- * across every list it holds, a ⇧-click reaching only across its own run
- * where the lists are runs; a card's box and X put it in or take it out
- * without opening it. Synthetic places.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -39,11 +21,8 @@ const PLACES = ["Inbox", "Tasks", "Board", "Automations", "Settings"] as const;
 
 const roots: Root[] = [];
 
-/** What hears keys on the document, taken down after each test. */
 const listening: ((event: KeyboardEvent) => void)[] = [];
 
-// Note that every row measures its title, so each test draws beside a
-// ResizeObserver, which jsdom lacks.
 beforeEach(() => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -62,7 +41,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws `element` into a container in the document and hands the container back. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -72,11 +50,6 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/**
- * Places whose rows are chosen, those named in `off` unavailable; the
- * chosen ones and each place opened are listed after the list, and a
- * button beside it clears the set as its owner would.
- */
 function Choosing({
   off = [],
   chosen = [],
@@ -112,7 +85,6 @@ function Choosing({
   );
 }
 
-/** The keys that reach the document, past whatever stands in front of it. */
 function heardBehind(): string[] {
   const heard: string[] = [];
   const hear = (event: KeyboardEvent) => heard.push(event.key);
@@ -121,7 +93,6 @@ function heardBehind(): string[] {
   return heard;
 }
 
-/** The button whose words or label are `name`. */
 function button(within: HTMLElement, name: string): HTMLButtonElement {
   const found = [...within.querySelectorAll("button")].find(
     (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === name,
@@ -130,17 +101,14 @@ function button(within: HTMLElement, name: string): HTMLButtonElement {
   return found;
 }
 
-/** The places chosen now, in alphabetical order. */
 function chosen(within: HTMLElement): string {
   return within.querySelector("[data-chosen]")?.textContent ?? "";
 }
 
-/** The places opened so far, in the order opened. */
 function opened(within: HTMLElement): string {
   return within.querySelector("[data-opened]")?.textContent ?? "";
 }
 
-/** Clicks `target` with `held` modifiers, as the pointer would. */
 function click(target: HTMLElement, held: MouseEventInit = {}): void {
   act(() => {
     target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, ...held }));
@@ -148,7 +116,6 @@ function click(target: HTMLElement, held: MouseEventInit = {}): void {
   });
 }
 
-/** Presses `name` on whatever holds the focus, answering whether something took it. */
 function key(name: string, held: KeyboardEventInit = {}): boolean {
   const target = document.activeElement ?? document.body;
   const event = new KeyboardEvent("keydown", {
@@ -280,11 +247,6 @@ test("a list not asked to choose rows opens its row on a ⌘-click, and leaves �
   expect(key("Escape")).toBe(false);
 });
 
-/**
- * A bar over `count` chosen rows of a list of places, what its acts did
- * listed after it; Archive takes the chosen rows away, Inbox, the list's
- * Tab stop, among them.
- */
 function Bar({ count }: { count: number }): React.JSX.Element {
   const [left, setLeft] = useState(count);
   const [places, setPlaces] = useState<readonly string[]>(PLACES);
@@ -409,11 +371,6 @@ test("the bar's buttons are one Tab stop, ←→ walking them", () => {
   expect(document.activeElement).toBe(button(container, "Clear selection"));
 });
 
-/**
- * Places split over two lists of card presses, each drawing its box, chosen
- * together in one region, the lists runs of their own where `runs`; each
- * place opened is listed after it.
- */
 function ChoosingCards({
   runs = false,
   off = [],
@@ -421,11 +378,8 @@ function ChoosingCards({
   broughtIn = [],
 }: {
   runs?: boolean;
-  /** The places whose cards are unavailable. */
   off?: readonly string[];
-  /** The places the region lists but draws no card for, as a run drawing only the rows near the view leaves them; the region is handed every place's order, run by run, where any is. */
   undrawn?: readonly string[];
-  /** Hears each place the region asks to be brought into view, which draws nothing here. */
   broughtIn?: string[];
 }): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -628,7 +582,6 @@ test("Clear in the bar over a region hands the focus to the region's first card 
   expect(document.activeElement).toBe(cards()[0]);
 });
 
-/** A row whose menu is the bar's acts on the places chosen, what they did listed after it. */
 function ChosenRowMenu(): React.JSX.Element {
   const [heard, setHeard] = useState<string[]>([]);
   const hear = (what: string) => () => setHeard((all) => [...all, what]);

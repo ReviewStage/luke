@@ -7,19 +7,6 @@ import { IconButton } from "../button/button.js";
 import type { MenuEntry } from "../menu/menu.js";
 import { LIST_DENSITY, List, ListRow, type ListRowMenu } from "./list-row.js";
 
-/**
- * list-row-menu.test.ts -- a row's one menu (`menu`) opens alike from its
- * ⋯, a right-click anywhere on the row, and the menu key or ⇧F10 on the
- * row's press or its ⋯: the same items, named for the row's thing, and an
- * item chosen does its act. The ⋯ is a Tab stop after the row's press and
- * its other acts, named "{Thing} actions" and described by the row's title,
- * and Escape hands focus back to the door the keyboard opened the menu
- * from. A row whose thing offers no acts now, or which is unavailable,
- * draws no ⋯ and opens nothing by any door. A row's ⋯ lights its glyph
- * alone while its menu is open, whatever its list's density, where a
- * header's fills. Synthetic tasks.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +17,6 @@ const TASK = "Fix the sign-in loop";
 
 const roots: Root[] = [];
 
-// Note that every row measures its title, which needs a ResizeObserver jsdom lacks.
 beforeEach(() => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -47,7 +33,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Draws `element` into a container in the document and hands the container back. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -57,7 +42,6 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The menu of a task's acts, its choices written to `chosen`. */
 function taskMenu(chosen: string[]): ListRowMenu {
   const groups: readonly (readonly MenuEntry[])[] = [
     [
@@ -69,7 +53,6 @@ function taskMenu(chosen: string[]): ListRowMenu {
   return { thing: "Task", groups };
 }
 
-/** One task's row in a list, with a Pin act beside its press, and what its press opened. */
 function TaskList({
   menu,
   disabled = false,
@@ -96,7 +79,6 @@ function TaskList({
   );
 }
 
-/** The button named `name`, by its label or its words. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll("button")].find(
     (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === name,
@@ -105,17 +87,14 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
-/** The row's press, named by its words. */
 function rowPress(): HTMLButtonElement {
   return button(`${TASK}2h`);
 }
 
-/** The menu standing open, or nothing. */
 function openMenu(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="menu"]');
 }
 
-/** What the open menu offers, by its items' words, and what it is named. */
 function offered(): { label: string | null; items: string[] } {
   const menu = openMenu();
   if (menu === null) throw new Error("No menu open");
@@ -125,7 +104,6 @@ function offered(): { label: string | null; items: string[] } {
   return { label: menu.getAttribute("aria-label"), items };
 }
 
-/** Presses `key` on `target`, with ⇧ where asked. */
 function key(target: HTMLElement, name: string, shiftKey = false): void {
   act(() => {
     target.dispatchEvent(
@@ -134,7 +112,6 @@ function key(target: HTMLElement, name: string, shiftKey = false): void {
   });
 }
 
-/** Closes the open menu by Escape, on whatever holds the focus. */
 function pressEscape(): void {
   key((document.activeElement as HTMLElement | null) ?? document.body, "Escape");
 }

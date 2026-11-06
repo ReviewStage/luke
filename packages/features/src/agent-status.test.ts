@@ -14,12 +14,10 @@ import { AGENT_STATUS } from "./agent-wire.js";
 
 const STARTED = 1_700_000_000_000;
 
-/** The agent read `sinceStart` after its Start, with the newest awaiting line written at `lineAt` where one stands. */
 function standing(sinceStart: number, lineAt?: number) {
   return { createdAt: STARTED, now: STARTED + sinceStart, awaitingLineAt: lineAt };
 }
 
-/** A newest turn queued a second after the Start, in the state given. */
 function turn(status: string, overrides: Partial<StatusTurn> = {}): StatusTurn {
   return {
     status,
@@ -70,14 +68,12 @@ test("a line awaiting its turn reads running inside its grace, counted from the 
   assert.equal(lineAwaitsTurn(settled, past), false, "Stop and archive read the agent idle");
   assert.equal(statusClockEdge(settled, past), undefined);
 
-  // A turn that ended after the line was written counts the grace from its end.
   const later = turn(TURN_STATUS.FAILED, { settledAt: lineAt + 60_000 });
   assert.equal(
     statusClockEdge(later, standing(20_000, lineAt)),
     lineAt + 60_000 + LINE_GRACE_MILLIS + 1,
   );
 
-  // With no turn at all, a line holds an agent running past the starting grace, for its own grace.
   const noTurn = standing(STARTING_GRACE_MILLIS * 2, STARTED + STARTING_GRACE_MILLIS * 2);
   assert.equal(agentStatusAt(undefined, noTurn), AGENT_STATUS.RUNNING);
 });

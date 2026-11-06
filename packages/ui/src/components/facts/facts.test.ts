@@ -5,11 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Fact, Facts } from "./facts.js";
 
-/**
- * facts.test.ts -- each fact reads as a term and its definition, in the
- * order they were handed.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -23,7 +18,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` on the page and hands back what it was drawn into. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

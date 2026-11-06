@@ -1,11 +1,3 @@
-/**
- * failure-note.test.ts -- a failure's line is one alert saying its words and,
- * where it is given a press, Retry, whose press tries again, then a second
- * act of the caller's where one is given, then Copy details where it is the
- * app's; a tool's error with no Retry says its words alone; its mark says
- * nothing to a reader; and one that is history is no alert.
- */
-
 // @vitest-environment jsdom
 
 import { act, createElement, type ReactElement } from "react";
@@ -19,7 +11,6 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** jsdom's stand-in observer: jsdom lays nothing out, so nothing ever reports a resize. */
 class SilentResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -28,7 +19,6 @@ class SilentResizeObserver {
 
 const WORDS = "The message could not be sent.";
 
-/** The failure beneath every line drawn here that is the app's. */
 const { failure: FAILURE } = recordedFailure();
 
 const roots: Root[] = [];
@@ -44,7 +34,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Draws `element` into the page and answers the one alert it says. */
 function mountAlert(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

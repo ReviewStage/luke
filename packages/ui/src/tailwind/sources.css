@@ -1,8 +1,1 @@
-/* sources.css -- what an app's Tailwind entry reads to keep the utilities `@repo/ui`'s components spell.
-
-   Tailwind generates only the utilities it finds in the sources it reads,
-   and an app's own sources stop at its own directory. This line is resolved
-   against this file, so an app that imports it reads every module of
-   `@repo/ui`, and a utility a vendored shadcn/ui component spells is not
-   dropped. */
 @source "../";

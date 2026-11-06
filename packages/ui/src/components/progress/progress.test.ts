@@ -6,12 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { Progress } from "./progress.js";
 
-/**
- * progress.test.ts -- a bar given a label is a progress bar a reader hears
- * by it, at its share held to the whole; one beside words that say the same
- * says nothing more.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

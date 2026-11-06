@@ -11,28 +11,10 @@ import {
 } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-/**
- * mac-command-client.ts -- the Mac's side of the commands the account's agents queue for it: the unclaimed ones of its kinds followed live, each claimed by its id, that the Mac listens, and each result posted back.
- *
- * Each is a procedure of the hosted contract (`contract/live.ts`,
- * `contract/mac-commands.ts`) over the one account call, so the bearer is
- * read fresh per attempt and a 401 is renewed and retried once. The Mac
- * asks for the unclaimed commands of its kinds sealed (or, polling, inline
- * and held until they move) for the account it started for, claims each it
- * hears of by its id, and says it listens. No call fails: a read refused as
- * signed out is `LIVE_SIGNED_OUT` and any other unanswered a failure the
- * caller asks again, a claim refused is `MAC_COMMAND_NOT_CLAIMED` and one
- * unanswered nothing, and a presence or a result not taken is false, its
- * call having given up on it.
- */
-
-/** What a claim the service refused answers: another Mac took the command, or it waited past the claim window. */
 export const MAC_COMMAND_NOT_CLAIMED = { claimed: false } as const;
 
 export interface HostedMacCommandClientOptions {
-  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
 }
 
@@ -46,7 +28,6 @@ export class HostedMacCommandClient {
     });
   }
 
-  /** One command's result posted back; whether the service took it. */
   settle(
     id: string,
     result: MacCommandResult,
@@ -57,13 +38,6 @@ export class HostedMacCommandClient {
     );
   }
 
-  /**
-   * The commands of the kinds named that no Mac of the account has claimed,
-   * sealed for following, or with `poll` their rows inline, held past
-   * `after` until they move, for the account `userId` names: signed out
-   * where the session is no longer that account's, a failure where the
-   * service answered none.
-   */
   live(
     kinds: readonly MacCommandKind[],
     userId: string,
@@ -90,12 +64,6 @@ export class HostedMacCommandClient {
     );
   }
 
-  /**
-   * One command heard of live, claimed for this Mac; `MAC_COMMAND_NOT_CLAIMED`
-   * where the service refused it (another took it, or it waited too long),
-   * and nothing where the claim was not answered, which the caller may ask
-   * again.
-   */
   claim(
     id: string,
   ): Effect.Effect<
@@ -111,7 +79,6 @@ export class HostedMacCommandClient {
     );
   }
 
-  /** That this Mac listens now for the kinds named; whether the service took it. */
   listening(
     kinds: readonly MacCommandKind[],
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {

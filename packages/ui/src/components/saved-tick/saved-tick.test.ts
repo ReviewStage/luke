@@ -8,13 +8,6 @@ import { holdExits } from "../../testing/held-exits.js";
 import { Announcer } from "../announcer/announcer.js";
 import { SavedTick } from "./saved-tick.js";
 
-/**
- * saved-tick.test.ts -- a tick says nothing for the writes that landed
- * before it watched, says Saved through the announcer once one lands, stands
- * through its motion and is taken once the motion ends, and starts over for a
- * write landing while it stands.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -23,7 +16,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** The tick's motion, which runs until the test ends it. */
 let motion: ReturnType<typeof holdExits>;
 
 beforeEach(() => {
@@ -36,7 +28,6 @@ afterEach(() => {
   motion.restore();
 });
 
-/** An autosave that has landed `start` writes, a button that lands one more, and one that falls back to none, as a refused write does. */
 function Autosave({ start }: { start: number }): React.JSX.Element {
   const [saves, setSaves] = useState(start);
   return createElement(
@@ -60,13 +51,10 @@ function render(start: number): HTMLElement {
   return page;
 }
 
-/** What the window's announcer says politely now. */
 const said = () => document.querySelector('[role="status"]')?.textContent;
-/** The tick's words while it stands, or nothing once it is taken. */
 const shown = (page: HTMLElement) => page.querySelector(".ui-saved-tick")?.textContent ?? "";
 const land = (page: HTMLElement) => act(() => page.querySelector("button")?.click());
 
-/** The tick's motion ending, its exit last. */
 const end = () => act(() => motion.finish());
 
 test("a tick says nothing for writes that landed before it watched, nor for a count that falls back", () => {

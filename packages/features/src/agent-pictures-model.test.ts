@@ -10,14 +10,6 @@ import {
 import { PICTURE_OMISSION } from "./conversation-picture-wire.js";
 import { INBOX_IMAGE_TYPE } from "./inbox-wire.js";
 
-/**
- * agent-pictures-model.test.ts -- the pictures a transcript's stored calls
- * name: a shown set read beside what its call asked for, each picture named
- * by the file it came from; an integration's answer read for its kept
- * pictures and the ones it left out, an image resource's among them; and
- * nothing read from a call that answered no list of blocks.
- */
-
 const MEMBERS = {
   id: "6f1c2a90-1b7e-4c3d-9a55-0d2e8b7c4f11",
   mediaType: INBOX_IMAGE_TYPE.PNG,

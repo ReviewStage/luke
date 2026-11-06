@@ -9,38 +9,23 @@ import { LINK_ORIGIN } from "../link-home.js";
 import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
-  /** Overrides the endpoint for local testing of the delivery path. */
   URL: "APP_FEEDBACK_URL",
 } as const;
 
 const FEEDBACK_DEFAULTS = {
-  /**
-   * The one place a submission goes: a small endpoint on our own site that
-   * forwards it as email to the founders. Fixed here rather than passed in, so
-   * the renderer names an intent and never an address.
-   */
   URL: `${LINK_ORIGIN}/api/feedback`,
-  // Generous next to the evaluator's timeout, because a submission can carry
-  // screenshots and a send that dies mid-upload costs the user a retry.
   REQUEST_TIMEOUT_MS: 30_000,
 } as const;
 
-/** What the send failed as, in words the composer can put under its field. */
 const FEEDBACK_REFUSAL = {
   UNREACHABLE: "Could not reach the feedback service. Check the connection and try again.",
   REFUSED: "The feedback service did not take that. Try again.",
 } as const;
 
-/** The content type a serialized body names, the one type this call sends. */
 const JSON_CONTENT_TYPE = "application/json";
 
-/** The name a deadline ends a request under, kept beside the timeout error it names. */
 const DEADLINE_ERROR_NAME = "TimeoutError";
 
-/**
- * The range a `Response` calls `ok`, restated because what is read here is a
- * status rather than a `Response`.
- */
 const OK_STATUS = {
   FIRST: 200,
   PAST: 300,
@@ -55,11 +40,6 @@ interface FeedbackDeliveryOptions {
   requestTimeoutMs?: number;
 }
 
-/**
- * What one send ended with before its status was read: a client that could
- * not carry it, or the deadline. The name is the error's kind and never its
- * words, which are never logged for a message that is the user's own.
- */
 class FeedbackTransportError extends Data.TaggedError("FeedbackTransportError")<{
   readonly errorName: string | undefined;
 }> {}
@@ -68,19 +48,10 @@ function errorName(cause: unknown): string | undefined {
   return cause instanceof Error ? cause.name : undefined;
 }
 
-/** A line about the path, on the console: the desktop's main process and a browser tab both have one, and only Node has `process`. */
 function report(message: string): void {
   console.error(message);
 }
 
-/**
- * Carries one submission to the fixed endpoint over the ambient `HttpClient`,
- * bounded by the call's own deadline, and answers in the user's terms. A
- * refusal is an answer, never a failure: sending feedback is the user's own
- * action, and what became of it belongs beside the field it left. Nothing
- * about the submission is ever logged — a message to the founders is the
- * user's words, and status codes alone diagnose the path.
- */
 interface FeedbackDeliveryEffects {
   readonly url: string;
   readonly requestTimeoutMs: number;
@@ -89,7 +60,6 @@ interface FeedbackDeliveryEffects {
   ): Effect.Effect<FeedbackResult, never, HttpClient.HttpClient>;
 }
 
-/** The delivery as effects over `effect/http`'s `HttpClient` tag, which the caller provides: a browser tab's is its own same-origin fetch. */
 export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
   const url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
   const requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
@@ -136,25 +106,13 @@ export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): Feedbac
 }
 
 export interface FeedbackDeliveryFetchOptions extends FeedbackDeliveryOptions {
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
 }
 
-/**
- * {@link FeedbackDeliveryEffects} with its `HttpClient` already provided, so
- * what a caller holds is one effect per submission and nothing left to hand
- * it. The run is the caller's own runtime edge.
- */
 export interface AmbientFeedbackDelivery {
   deliver(submission: FeedbackSubmission): Effect.Effect<FeedbackResult>;
 }
 
-/**
- * Builds the delivery every run gets. There is no key to be missing — the
- * endpoint is public and the destination is fixed — so unlike the evaluator
- * this never answers with nothing; only the address can be overridden, for
- * testing the path against a local server.
- */
 export function feedbackDeliveryFromEnvironment(
   options: FeedbackDeliveryFetchOptions = {},
 ): AmbientFeedbackDelivery {

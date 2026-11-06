@@ -7,27 +7,14 @@ import { ListMotion } from "../list-motion/list-motion.js";
 import { SettingsSection } from "../settings-section/settings-section.js";
 import { Reveal, RevealArea, RevealChoice, revealArea } from "./reveal.js";
 
-/**
- * reveal.test.ts -- the rows a setting brings unroll in as it turns on, the
- * rows under them gliding down from where they stood; turned off, they are
- * held drawn and roll up as the rows under them close over them, and are let
- * go once that has played; two reveals turned on in one change move the
- * rows under them once, as far as both moved them; a choice's rows roll up
- * as the next value's unroll; and outside a reveal area they come and go at
- * once. jsdom lays nothing out and plays nothing, so each row's place is
- * given and each motion recorded.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** How tall a row is drawn in the layout given. */
 const ROW = 40;
 
-/** The motion tokens the area reads, as an app's sheets set them. */
 const TOKENS = {
   "--ui-duration-exit": "90ms",
   "--ui-motion-exit": "ease",
@@ -37,11 +24,9 @@ const TOKENS = {
   "--ui-row-stagger": "32ms",
 } as const;
 
-/** The clips a reveal's rows unroll from and to. */
 const ROLLED_UP = { clipPath: "inset(0 0 100% 0)" };
 const UNROLLED = { clipPath: "inset(0)" };
 
-/** A motion played: the element, its keyframes and timing, and a way to have it finish. */
 interface Played {
   readonly element: Element;
   readonly keyframes: Keyframe[];
@@ -52,18 +37,15 @@ interface Played {
 let root: Root | undefined;
 let played: Played[] = [];
 
-/** Whether an element stands in the layout, rather than laid over it as it leaves. */
 function laidOut(element: Element): boolean {
   return element instanceof HTMLElement && element.style.position !== "absolute";
 }
 
-/** How tall the layout given draws an element: a row's height, or its laid-out children's together. */
 function heightOf(element: Element): number {
   if (element.matches("p")) return ROW;
   return [...element.children].filter(laidOut).reduce((sum, child) => sum + heightOf(child), 0);
 }
 
-/** Where the layout given draws an element's top: under what is laid out before it in its parent. */
 function topOf(element: Element): number {
   const parent = element.parentElement;
   if (parent === null || element.matches(".ui-settings-section-card")) return 0;
@@ -103,12 +85,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A row of the card, by its words. */
 function row(words: string): ReactNode {
   return createElement("p", { key: words }, words);
 }
 
-/** Draws `card` and hands back a way to draw it again. */
 function draw<Props extends object>(
   card: (props: Props) => ReactNode,
   props: Props,
@@ -120,7 +100,6 @@ function draw<Props extends object>(
   return (next) => act(() => root?.render(createElement(Card, next)));
 }
 
-/** A card of a switch's row, the two rows it brings while `on`, and a row under them. */
 function switchCard({ on }: { on: boolean }): ReactNode {
   return createElement(
     SettingsSection,
@@ -131,17 +110,14 @@ function switchCard({ on }: { on: boolean }): ReactNode {
   );
 }
 
-/** The element of the row drawn with `words`. */
 function rowOf(words: string): Element | undefined {
   return [...document.querySelectorAll("p")].find((each) => each.textContent === words);
 }
 
-/** The box a reveal draws its rows in, by the words of its first. */
 function boxOf(words: string): Element | null | undefined {
   return rowOf(words)?.closest(".ui-reveal");
 }
 
-/** The motions played on `element`, by their keyframes. */
 function motionsOf(element: Element | null | undefined): Keyframe[][] {
   return played.filter((each) => each.element === element).map((each) => each.keyframes);
 }

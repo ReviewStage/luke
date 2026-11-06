@@ -1,12 +1,4 @@
-/* card.css -- what of a card's frame Tailwind's utilities cannot say: the
-   transition of a card that lifts, four properties on four motion tokens.
-   The frame itself is utilities over the theme (`card.tsx`,
-   `../../shadcn/card.tsx`). */
-
 @layer components {
-  /* Note that a card that lifts is one that moves among others, as a board's
-     cards slide aside under a drag and fade as one is carried, so its slide
-     and its fade ride the motion tokens beside its lift. */
   .ui-card[data-hover="lift"] {
     transition:
       transform var(--ui-duration-fast) var(--ui-spring-fast),

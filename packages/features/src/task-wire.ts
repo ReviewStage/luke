@@ -22,83 +22,25 @@ import { type ReadMark, readMarkSchema } from "./read-mark.js";
 import { chosenIdSchema, countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { trimmedText } from "./text-schema.js";
 
-/**
- * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
- *
- * A task is its owner's name for it and one current document: one free
- * Markdown text (`description-document.ts`, `docs/TASKS.md`), answered as the
- * document's `body` with no title line, since the name is its own, and an
- * empty `assumptions` list, since its assumptions are a section of the text;
- * the list stays on the wire because a desktop through v0.11.0 requires it.
- * The text is written by the task's notetaker and its coding agents through
- * notes, and by the developer whole. The service keeps every save as a
- * revision of the description under the writer who made it, and a task carries its
- * newest as `lastEdit`, which is what the window's "Edited by" line reads,
- * and who last changed each section as `sectionEdits`, by heading.
- * A task may name the GitHub repository it is about, `owner/name` as
- * `github-repositories-wire.ts` spells it, which the service confirms the
- * account reaches through our GitHub App before it keeps it; null is a
- * task with no repository yet, and every task from before repositories.
- * A task may be pinned, which the sidebar lists first; the pin is the
- * account's, so it follows it to every Mac it signs in on. Tasks are no
- * longer archived: a service that still answers a task's `archivedAt` is
- * read with the key ignored.
- * A row of the list also says, in brief, what the task's coding agents are
- * doing and what they published (`taskAgentsSummarySchema`), so the sidebar
- * can mark a task at work or with a pull request without a read per row.
- * A task belongs to one workspace, which its summary names; a start names
- * the workspace it starts in, or none for the account's first one.
- * A task may be the child of another, to any depth, which its summary names
- * by id.
- * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
- * summary names.
- * A task opened whole also names, by id, the tasks it waits on and the tasks
- * that wait on it, as Linear's blocked-by and blocks.
- * The starting account and the conversation a task resumes in are the
- * service's own and never travel here.
- *
- * Every request refuses a key it does not name, as every request frame on
- * this wire does, so a body cannot smuggle an account or a task id past the
- * bearer and the path that name them. Declared directly with Effect's
- * `Schema.Struct` and exported under its own name.
- *
- * Note that `planId`, `plan`, and `plans` keep the wire's legacy spelling of a task, because a
- * released desktop sends and reads them; they are renamed with the wire in a
- * follow-up, with no alias.
- */
-
 export const TASK_BOUNDS = {
-  /** The most characters a task's name may spell. */
   MAX_NAME_CHARS: 200,
-  /** A document body past this is not a description a coding agent can take in one prompt. */
   MAX_BODY_CHARS: 200_000,
   MAX_ASSUMPTIONS: 200,
   MAX_ASSUMPTION_CHARS: 2_000,
-  /** The most characters a workspace's id may spell; the service mints them far shorter. */
   MAX_WORKSPACE_ID_CHARS: 200,
-  /** The most characters a task's brief may spell: as many as a coding agent's prompt (`AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
-  /** The most relations a start may make its task in, far past what New task's rows draw. */
   MAX_START_RELATIONS: 20,
 } as const;
 
-/** The name a plan started without one stands under until the developer renames it. */
 export const UNTITLED_TASK_NAME = "Untitled";
 
-/** A placeholder's angle brackets, as a model answering for nothing wraps the untitled name ("<untitled>"). */
 const PLACEHOLDER_BRACKETS = /^<(.*)>$/u;
 
-/** Whether a title names nothing: the untitled name, in any case, bare or in a placeholder's angle brackets. */
 export function titlesNothing(title: string): boolean {
   const bare = title.trim().replace(PLACEHOLDER_BRACKETS, "$1").trim();
   return bare.toLowerCase() === UNTITLED_TASK_NAME.toLowerCase();
 }
 
-/**
- * Where a task stands: filed for later, to do, under way, or settled one way
- * or the other. A task starts to do, and moves to in progress when a coding
- * agent first starts on it; archiving it is apart from where it stands.
- */
 export const TASK_STATUS = {
   BACKLOG: "backlog",
   TODO: "todo",
@@ -109,7 +51,6 @@ export const TASK_STATUS = {
 
 export type TaskStatus = (typeof TASK_STATUS)[keyof typeof TASK_STATUS];
 
-/** The order a menu lists the statuses in: the order work moves through them, the settled last. */
 export const TASK_STATUS_ORDER: readonly TaskStatus[] = [
   TASK_STATUS.BACKLOG,
   TASK_STATUS.TODO,
@@ -118,7 +59,6 @@ export const TASK_STATUS_ORDER: readonly TaskStatus[] = [
   TASK_STATUS.CANCELED,
 ];
 
-/** How much a task matters; none is a task no one has weighed yet. */
 export const TASK_PRIORITY = {
   NONE: "none",
   URGENT: "urgent",
@@ -129,7 +69,6 @@ export const TASK_PRIORITY = {
 
 export type TaskPriority = (typeof TASK_PRIORITY)[keyof typeof TASK_PRIORITY];
 
-/** The order a menu lists the priorities in: the most pressing first, the unweighed last. */
 export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
   TASK_PRIORITY.URGENT,
   TASK_PRIORITY.HIGH,
@@ -138,12 +77,6 @@ export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
   TASK_PRIORITY.NONE,
 ];
 
-/**
- * How a task is worked: by the agents its members start on it, or by one
- * pilot agent that breaks it into child tasks and runs agents on them. A
- * task's mode is fixed as it starts; every task from before it is worked by
- * agents.
- */
 export const TASK_MODE = {
   AGENT: "agent",
   PILOT: "pilot",
@@ -157,36 +90,23 @@ export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIOR
 
 export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
 
-/**
- * The member a task is assigned to, by their account's id, as a start or a
- * change names them: a member of the task's workspace, which the service
- * confirms before it keeps them.
- */
 export const taskAssigneeIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(200),
 );
 
-/** A task's number in its workspace, counted from one; its key is the workspace's prefix and this (`workspace-key.ts`). */
 export const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
-/**
- * A workspace's id as the service minted it: Better Auth's own generated
- * string rather than a UUID, so bounded text and nothing more.
- */
 export const workspaceIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(TASK_BOUNDS.MAX_WORKSPACE_ID_CHARS),
 );
 
 const descriptionAssumptionSchema = EffectSchema.Struct({
-  /** The assumption as one plain sentence. */
   text: trimmedText(TASK_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
-/** The one saved document of a task, replaced whole by every save. */
 const descriptionDocumentSchema = EffectSchema.Struct({
-  /** The description's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
   assumptions: EffectSchema.Array(descriptionAssumptionSchema).check(
     EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ASSUMPTIONS),
@@ -195,32 +115,12 @@ const descriptionDocumentSchema = EffectSchema.Struct({
 
 export type DescriptionDocument = typeof descriptionDocumentSchema.Type;
 
-/** A task's repository as a request names it: a full name, or null for none. */
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
-/**
- * Where a task's coding agents run, as a released desktop still names it on
- * a task's create or change, in a Start's own shape
- * (`agentRunsOnRequestSchema`). A task holds no place, each agent its own,
- * so the service reads it only for those builds: a create runs the agent it
- * starts there and keeps it as the starter's last pick, and a change ignores
- * it.
- */
 const taskRunsOnRequestSchema = agentRunsOnRequestSchema;
 
 export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 
-/**
- * The coding agent a task's start starts on it: an agent Start's own fields
- * (`agent-wire.ts`), its key, which a retry carries again, the choice,
- * a prompt and its files, the servers switched off, where it runs, the
- * repositories it works in beside the task's, the branch its checkout is
- * cloned at, and its title, held to the same
- * words-or-files rule, but never `from` or a note, since a new task has no
- * agent to take over from. The prompt travels as `prompt`, the key the
- * desktop's own Start params name it by: the `task` an agent Start's body
- * spells it as is a released desktop's, which never sends this.
- */
 const taskAgentStartSchema = EffectSchema.Struct({
   idempotencyKey: agentStartRequestFields.idempotencyKey,
   model: agentStartRequestFields.model,
@@ -237,12 +137,10 @@ const taskAgentStartSchema = EffectSchema.Struct({
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
 
-/** Whether a start asking for an agent asks for no planning phase beside it: the agent is the start, so no call is opened on the plan. */
 function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: boolean }): boolean {
   return request.agent === undefined || request.planning !== true;
 }
 
-/** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
 export const TASK_BLOCK_RELATION = {
   BLOCKED_BY: "blocked-by",
   BLOCKS: "blocks",
@@ -250,14 +148,6 @@ export const TASK_BLOCK_RELATION = {
 
 export type TaskBlockRelation = (typeof TASK_BLOCK_RELATION)[keyof typeof TASK_BLOCK_RELATION];
 
-/**
- * How a task starts related to another, from the new task's side: blocked by
- * the other or blocking it (`TASK_BLOCK_RELATION`, spelled the same), a
- * sub-task of the other, or the other's parent. Note that the tree kinds are
- * spelled from the new task's side, where `TASK_RELATION_KIND` spells a
- * relation as the other task stands to the one named, so a sub-task of X
- * here is what X's own relations list as its parent.
- */
 export const TASK_CREATE_RELATION_KIND = {
   ...TASK_BLOCK_RELATION,
   SUB_TASK_OF: "sub-task-of",
@@ -267,7 +157,6 @@ export const TASK_CREATE_RELATION_KIND = {
 export type TaskCreateRelationKind =
   (typeof TASK_CREATE_RELATION_KIND)[keyof typeof TASK_CREATE_RELATION_KIND];
 
-/** The relation a start makes its task in: the other task, which the starter reaches in the same workspace, and how the new task stands to it. */
 const taskCreateRelationSchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(TASK_CREATE_RELATION_KIND)),
   taskId: wireUuidSchema,
@@ -275,7 +164,6 @@ const taskCreateRelationSchema = EffectSchema.Struct({
 
 export type TaskCreateRelation = typeof taskCreateRelationSchema.Type;
 
-/** The relations a start asks, by either door: `relations`, or the old door's one `relation` as a list of one; none where it names neither. */
 export function startRelationsOf(request: {
   readonly relation?: TaskCreateRelation;
   readonly relations?: readonly TaskCreateRelation[];
@@ -284,7 +172,6 @@ export function startRelationsOf(request: {
   return request.relation === undefined ? [] : [request.relation];
 }
 
-/** Whether a start names its relations through one door at most: `relations`, or the old door's `relation`, never both. */
 function relationsThroughOneDoor(request: {
   relation?: TaskCreateRelation;
   relations?: readonly TaskCreateRelation[];
@@ -292,7 +179,6 @@ function relationsThroughOneDoor(request: {
   return request.relation === undefined || request.relations === undefined;
 }
 
-/** Whether a start names its parent one way at most: `parentTaskId`, or its relations, which say the same of a sub-task and more. */
 function relationNamedOnce(request: {
   parentTaskId?: string;
   relation?: TaskCreateRelation;
@@ -301,7 +187,6 @@ function relationNamedOnce(request: {
   return request.parentTaskId === undefined || startRelationsOf(request).length === 0;
 }
 
-/** Whether a start's relations name one parent at most, since a task has one, and each other task once, since a task takes one relation to another. */
 function relationsEachOnce(request: {
   relation?: TaskCreateRelation;
   relations?: readonly TaskCreateRelation[];
@@ -314,56 +199,6 @@ function relationsEachOnce(request: {
   return parents.length <= 1 && named.size === relations.length;
 }
 
-/**
- * Starting a plan (POST): its name where one is given, the repository it is
- * about where one is chosen, the workspace it starts in where one is named,
- * and the account's first workspace where none is; the document starts
- * empty, and `planning` false is a task started without its planning phase,
- * whose window opens no call on it. A name left out, or nothing but whitespace, starts the plan as
- * `UNTITLED_DESCRIPTION_NAME` until it is renamed. An `agent` starts a coding
- * agent on the task in the same request, as the agent's own Start would
- * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
- * refused, and the service refuses it without a repository, as it refuses
- * an agent's Start on a task with none, before anything is written. A
- * brief is the developer's own words about the task, which the app is handed
- * beside the description to plan from; one left out, or nothing but whitespace,
- * starts the task with none. A brief beside `planning: false` or an `agent`
- * is kept rather than refused, and goes unread until a call is opened on the
- * task, since that start opens none. A task starts to do and unweighed
- * unless `status` and `priority` say otherwise, and assigned to no one
- * unless `assigneeId` names a member of its workspace. A task holds no place
- * to run: the agent the start asks for runs where its own `runsOn` names,
- * else where the start's `runsOn` names, which only a released desktop sends
- * and which is kept as the starter's last pick where no agent is asked for,
- * else where any Start naming none runs (`agent-wire.ts`'s
- * `agentStartRequestFields`).
- * A `parentTaskId` makes it the child of a task the starter reaches in the
- * same workspace, to any depth: the child takes its parent's repository, so
- * a start naming another repository is refused
- * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and a parent the starter
- * cannot reach is not found. `relations` start the task related to others
- * the starter reaches in the same workspace, written in the start's own
- * transaction, so the task and every relation land together or not at all,
- * and one refused leaves no task behind. Each is one of: a sub-task of the
- * other, which is `parentTaskId` by another name, so naming both is
- * refused, as more than one is, since a task has one parent; the other's
- * parent, which takes that task's repository as a sub-task takes its
- * parent's (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), so every task of
- * the tree a start joins shares one, and is refused where that task has a
- * parent already (`HOSTED_API_ERROR.TASK_PARENT_HELD`), since a start
- * takes no parent's place; or a block on either side, under the blocks' own
- * rules (`taskBlockRequestSchema`). No task is named twice, since a task
- * takes one relation to another, and any other task out of reach is not
- * found. `relation` is the old door, which desktop builds already released
- * send: it reads as `relations` of one, and naming both is refused.
- * A task is worked by its agents unless `mode` names a pilot, which the
- * service refuses from an account without the Pilot experiment, and which
- * stands as the task was started.
- * A released desktop may still send `linearIssueId` or `issues`, from when a
- * task could link issues, which are accepted and ignored. An `id` makes the
- * task under the id its maker chose (`chosenIdSchema`); one sent again
- * answers the task it made, its agent started under the agent's own key.
- */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   id: EffectSchema.optionalKey(chosenIdSchema),
   name: EffectSchema.optionalKey(
@@ -383,7 +218,6 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
-  /** The old door, which released desktop builds send: one relation, read as `relations` of one. */
   relation: EffectSchema.optionalKey(taskCreateRelationSchema),
   relations: EffectSchema.optionalKey(
     EffectSchema.Array(taskCreateRelationSchema).check(
@@ -400,14 +234,12 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
-/** Renaming a task (PATCH): its new name, under the same rules as the name it started with. */
 export const taskRenameRequestSchema = EffectSchema.Struct({
   name: trimmedText(TASK_BOUNDS.MAX_NAME_CHARS),
 });
 
 export type TaskRenameRequest = typeof taskRenameRequestSchema.Type;
 
-/** Whether an update names anything to change: one that names nothing is refused rather than answered unchanged. */
 function updateNamesAChange(update: {
   name?: string;
   repository?: string | null;
@@ -424,31 +256,15 @@ function updateNamesAChange(update: {
   return Object.keys(update).length > 0;
 }
 
-/** Whether a position comes with the pin it places: a plan is given one only as it is pinned, never as it is unpinned. */
 function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): boolean {
   return update.pinPosition === undefined || update.pinned === true;
 }
 
-/**
- * Changing a task (PATCH): its name, its repository, whether it is pinned,
- * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
- * which comes only with `pinned: true` and pins a plan not yet pinned, the
- * asking member's own read mark (`read-mark.ts`),
- * whether it is archived, the workspace it moves to, where it stands, how
- * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
- * workspace before it is kept, and null clears it. An assignee is confirmed a
- * member of the task's workspace before it is kept, and null clears it. A move is the task's
- * owner's alone, into a workspace they are a member of whose GitHub reaches
- * the task's repository, and lets its assignee go where they are no member there.
- * A task holds no place to run, so `runsOn`, which a released desktop still
- * sends, is read so that build's change decodes, and changes nothing.
- */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   pinned: EffectSchema.optionalKey(EffectSchema.Boolean),
   pinPosition: EffectSchema.optionalKey(pinPositionSchema),
-  /** What the change makes of the asking member's own read mark (`read-mark.ts`). */
   readMark: EffectSchema.optionalKey(readMarkSchema),
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
@@ -460,10 +276,8 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
 export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
 
-/** Whether a block change adds the block or takes it away. */
 export const TASK_BLOCK_CHANGE = {
   ADD: "add",
   REMOVE: "remove",
@@ -471,13 +285,6 @@ export const TASK_BLOCK_CHANGE = {
 
 export type TaskBlockChange = (typeof TASK_BLOCK_CHANGE)[keyof typeof TASK_BLOCK_CHANGE];
 
-/**
- * One block of the task the path names, added or taken away (POST): the
- * other task, of the same workspace, and the side it stands on. A block is
- * advice, as Linear's is; one that would close a cycle is refused
- * (`HOSTED_API_ERROR.TASK_BLOCK_CYCLE`), and adding a block that stands, or
- * taking away one that does not, changes nothing.
- */
 export const taskBlockRequestSchema = EffectSchema.Struct({
   change: EffectSchema.Literals(Object.values(TASK_BLOCK_CHANGE)),
   relation: EffectSchema.Literals(Object.values(TASK_BLOCK_RELATION)),
@@ -486,26 +293,12 @@ export const taskBlockRequestSchema = EffectSchema.Struct({
 
 export type TaskBlockRequest = typeof taskBlockRequestSchema.Type;
 
-/**
- * Setting the parent of the task the path names (POST), or clearing it with
- * null: the parent, a task of the same workspace the caller reaches and
- * working in the task's own repository
- * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and neither the task nor one
- * of its descendants (`HOSTED_API_ERROR.TASK_PARENT_CYCLE`). Where the
- * task's agents run stays its own. A parent that stands so already changes
- * nothing, and clearing always lands.
- */
 export const taskParentRequestSchema = EffectSchema.Struct({
   parentTaskId: EffectSchema.NullOr(wireUuidSchema),
 });
 
 export type TaskParentRequest = typeof taskParentRequestSchema.Type;
 
-/**
- * How another task stands to the task a change names: one it waits on, one
- * that waits on it, its sub-task (a child of it), or its parent. The first
- * two are a block's sides (`TASK_BLOCK_RELATION`), spelled the same.
- */
 export const TASK_RELATION_KIND = {
   ...TASK_BLOCK_RELATION,
   SUB_TASK: "sub-task",
@@ -514,21 +307,10 @@ export const TASK_RELATION_KIND = {
 
 export type TaskRelationKind = (typeof TASK_RELATION_KIND)[keyof typeof TASK_RELATION_KIND];
 
-/** A relation's kind change names two kinds, since one moved to where it stands is no change. */
 function kindsDiffer(change: { readonly from: TaskRelationKind; readonly to: TaskRelationKind }) {
   return change.from !== change.to;
 }
 
-/**
- * One relation of the task the path names moved to another kind (POST): the
- * other task, the kind it stood in, and the kind it moves to, in one
- * transaction, so taking the old away and adding the new either both land
- * or neither does. A block added keeps the blocks' rules
- * (`HOSTED_API_ERROR.TASK_BLOCK_CYCLE`), and a parent set, the other's or the
- * task's own, keeps the parent's (`taskParentRequestSchema`). A relation that
- * did not stand in the kind it leaves is left alone, and the new one is
- * added still.
- */
 export const taskRelationChangeRequestSchema = EffectSchema.Struct({
   taskId: wireUuidSchema,
   from: EffectSchema.Literals(Object.values(TASK_RELATION_KIND)),
@@ -537,13 +319,6 @@ export const taskRelationChangeRequestSchema = EffectSchema.Struct({
 
 export type TaskRelationChangeRequest = typeof taskRelationChangeRequestSchema.Type;
 
-/**
- * A repository the account pinned in the sidebar, and the instant it was
- * pinned: a pinned repository's group of tasks stands above the others,
- * newest pinned first. A pin is the account's, so it follows it to every
- * Mac it signs in on, as a task's pin does, and it names the repository and
- * nothing more, so pinning one asks GitHub nothing.
- */
 export const repositoryPinSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
   pinnedAt: countedNumber,
@@ -552,20 +327,13 @@ export const repositoryPinSchema = EffectSchema.Struct({
 export type RepositoryPin = typeof repositoryPinSchema.Type;
 
 export const REPOSITORY_PIN_BOUNDS = {
-  /** The most repositories one account may hold pinned; a pin past it is refused, and nothing is written. */
   MAX_PINS: 50,
 } as const;
 
-/** The account's pinned repositories, newest pinned first (GET, and every PUT's answer). */
 export const repositoryPinsAnswerSchema = EffectSchema.Struct({
   pins: EffectSchema.Array(repositoryPinSchema),
 });
 
-/**
- * A pin's answer (PUT): the pins as they then stand, and the transaction
- * that wrote them, which a follower of the sidebar waits for before it draws
- * the pin as done; absent where the pin changed no row.
- */
 export const repositoryPinsWrittenSchema = EffectSchema.Struct({
   ...repositoryPinsAnswerSchema.fields,
   txid: EffectSchema.optionalKey(EffectSchema.String),
@@ -573,32 +341,19 @@ export const repositoryPinsWrittenSchema = EffectSchema.Struct({
 
 export type RepositoryPinsWritten = typeof repositoryPinsWrittenSchema.Type;
 
-/** Pinning a repository, or unpinning it (PUT): asking twice for either moves nothing, and a pin keeps the instant it was first made. */
 export const repositoryPinRequestSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
   pinned: EffectSchema.Boolean,
 });
 
-/**
- * The task list's query (GET): `archived=include` lists the archived tasks
- * among the rest, each carrying its `archivedAt`. Without it they are left
- * out, which is what a build from before archiving asks.
- */
 export const TASK_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** What the list's `archived` query may say. */
 export const TASK_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
-/**
- * Who wrote a revision of a description: the developer, the notetaker on a call
- * (whom the developer knows by the app's name), a coding agent, or, for the one
- * revision a description from before history starts with, nobody the service can
- * name.
- */
 export const DESCRIPTION_ACTOR = {
   DEVELOPER: "developer",
   NOTETAKER: "notetaker",
@@ -608,15 +363,8 @@ export const DESCRIPTION_ACTOR = {
 
 export type DescriptionActor = (typeof DESCRIPTION_ACTOR)[keyof typeof DESCRIPTION_ACTOR];
 
-/** Who made a task: its member by hand, the app on their call, or a coding agent acting for them; never `earlier`, which names no maker. */
 export type TaskCreatorActor = Exclude<DescriptionActor, typeof DESCRIPTION_ACTOR.EARLIER>;
 
-/**
- * Who made a task where its member did not make it by hand: the app on their
- * call, or a coding agent acting for them, by the agent's id while its row
- * stands, which the window reads its title, harness, automation, and task
- * from among the agents it already lists.
- */
 const taskOriginSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals([DESCRIPTION_ACTOR.NOTETAKER, DESCRIPTION_ACTOR.AGENT]),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
@@ -624,18 +372,6 @@ const taskOriginSchema = EffectSchema.Struct({
 
 export type TaskOrigin = typeof taskOriginSchema.Type;
 
-/**
- * Where a task's newest agent runs, kept for released desktops, which draw a
- * task's agent rows and Runs on chip from it; a task holds no place of its
- * own. Said only where that agent runs on a device: which one by its id,
- * whose it is, since only that member's agents run on it, and the name it
- * registered with, what kind of device it is, its platform, which its glyph
- * follows and which a service older than it leaves out, and the epoch
- * milliseconds it last beat, which a window does not judge by, since its own
- * clock may differ from the service's: it reads the beats from
- * `hosts.presence` (`deviceStanding`). The device and its owner are absent
- * once the device's row is gone.
- */
 const taskRunsOnSchema = EffectSchema.Struct({
   machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
   deviceId: EffectSchema.optionalKey(wireUuidSchema),
@@ -654,126 +390,49 @@ export type TaskRunsOn = typeof taskRunsOnSchema.Type;
 
 const taskSummaryFields = {
   id: wireUuidSchema,
-  /** The workspace the task belongs to. */
   workspaceId: workspaceIdSchema,
   name: trimmedText(TASK_BOUNDS.MAX_NAME_CHARS),
-  /** Epoch milliseconds the task was started. */
   createdAt: countedNumber,
-  /** Epoch milliseconds the document was last saved; the start, before any save. */
   updatedAt: countedNumber,
-  /** The GitHub repository the task is about, `owner/name`; null before one is chosen. */
   repository: repositoryChoiceSchema,
-  /**
-   * The start again, answered only for a desktop through v0.7.1, which
-   * refuses a summary without it; the list once ordered by the last open.
-   * Optional here so no later build needs it, and nothing reads it. It goes
-   * once a release that decodes it as optional has shipped and v0.7.1 is no
-   * longer supported.
-   */
   openedAt: EffectSchema.optionalKey(countedNumber),
-  /** Epoch milliseconds the task was pinned; absent while it is not, and from a service before pinning. */
   pinnedAt: EffectSchema.optionalKey(countedNumber),
-  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
-  /** Epoch milliseconds the reader read the task through (`read-mark.ts`), the service's instant; absent from a service before read marks were kept. */
   readThrough: EffectSchema.optionalKey(countedNumber),
-  /** Whether the reader marked the task unread and has not opened it since; absent from a service before read marks were kept. */
   markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
-   * The account that started the task, its owner, which alone may move it to
-   * another workspace; absent from a service before it was sent.
-   */
   ownerId: EffectSchema.optionalKey(EffectSchema.String),
-  /**
-   * The owner by id and the name their account holds now, as the task's ⋯
-   * menu says who created it; absent once their account is gone, and from a
-   * service before it was sent.
-   */
   createdBy: EffectSchema.optionalKey(memberRefSchema),
-  /**
-   * Who made the task for `createdBy`, where they did not make it by hand:
-   * the app on their call, or a coding agent; absent for a task its member made
-   * by hand, and from a service before it was sent.
-   */
   origin: EffectSchema.optionalKey(taskOriginSchema),
-  /** Where the task stands; absent from a service before tasks had one. */
   status: EffectSchema.optionalKey(taskStatusSchema),
-  /**
-   * Epoch milliseconds the task's status last moved to Done or Canceled;
-   * absent while it stands in any other, and from a service before this was
-   * kept, where a settled task counts as finished at `updatedAt`.
-   */
   completedAt: EffectSchema.optionalKey(countedNumber),
-  /** How much the task matters; absent from a service before tasks had one. */
   priority: EffectSchema.optionalKey(taskPrioritySchema),
-  /** The task's number in its workspace, which its key is drawn from with the workspace's prefix; absent from a service before tasks had one. */
   number: EffectSchema.optionalKey(taskNumberSchema),
-  /**
-   * The member the task is assigned to, by id and the name their account
-   * holds now; absent while no one is, and from a service before tasks could
-   * be assigned.
-   */
   assignee: EffectSchema.optionalKey(memberRefSchema),
-  /**
-   * Where the task's newest agent runs (`taskRunsOnSchema`), kept for
-   * released desktops alone: absent for the cloud, for a task with no agent,
-   * and from a service before tasks said.
-   */
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
-  /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
-  /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
   mode: EffectSchema.optionalKey(taskModeSchema),
-  /**
-   * True while a task it waits on (`blockedBy`) is neither done nor
-   * canceled, as its sidebar row is marked; absent while none is, and from a
-   * service before blocks.
-   */
   blocked: EffectSchema.optionalKey(EffectSchema.Literal(true)),
-  /**
-   * True where an automation's run made the task for itself alone, which
-   * the sidebar lets go once the run finished and holds nothing of the
-   * reader's; absent for any other task, a same-agent automation's standing
-   * task among them, and from a service before it.
-   */
   madeByRun: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 };
 
-/** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
 export const TASK_AGENTS_BOUNDS = {
-  /** The most agents a row names: those at work first, then the newest started. */
   MAX_AGENTS: 3,
-  /** The most pull requests a row names: the newest agent's first. */
   MAX_PULL_REQUESTS: 3,
 } as const;
 
-/** One of a task's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
 const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
   status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
-  /**
-   * Epoch milliseconds: when its run began while it works, and when its
-   * newest turn ended once it has; absent where neither is known.
-   */
   at: EffectSchema.optionalKey(countedNumber),
-  /**
-   * The member who started the agent, whose provider key pays for it and
-   * whose Mac its commands run on; absent once their account is gone, and
-   * from a service before it.
-   */
   startedBy: EffectSchema.optionalKey(memberRefSchema),
-  /** The automation whose run started the agent; absent for one started by hand, once that automation is deleted, and from a service before it. */
   automationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type TaskAgentLine = typeof taskAgentLineSchema.Type;
 
-/** A pull request one of a task's agents opened, as GitHub last answered the service: where it stands and its size. */
 export const taskPullRequestLineSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
@@ -781,13 +440,9 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
   checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
   additions: countedNumber,
   deletions: countedNumber,
-  /** Its page on GitHub, which the hover card opens; absent from a service before it was sent. */
   url: EffectSchema.optionalKey(EffectSchema.String),
-  /** The newest of the task's agents that opened it, whose Pull request tab a press on it opens; absent from a service before it was sent. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** True where it is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
   queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
-  /** The login of who opened it, their avatar, and whether they are an App's bot, which the hover card names; absent where GitHub named no one, and from a service before it was sent. */
   author: EffectSchema.optionalKey(EffectSchema.String),
   authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),
   authorBot: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -795,7 +450,6 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
 
-/** Every pull request of one plan, uncapped, in the order its row names them: what a card naming them all reads, where the row names the first few. */
 export const taskPullRequestsSchema = EffectSchema.Struct({
   taskId: EffectSchema.String,
   pullRequests: EffectSchema.Array(taskPullRequestLineSchema),
@@ -803,28 +457,14 @@ export const taskPullRequestsSchema = EffectSchema.Struct({
 
 export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
 
-/**
- * The pull request one agent opened, as its row keeps what the service last
- * read of it on GitHub, the agent on a plan or none, archived or not, and
- * the plan it stands on: what a plan's or an agent's own tabs and summary
- * offer the agent's Changes by.
- */
 export const listedPullRequestSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
-  /** The plan the agent stands on; null for one on none. */
   taskId: EffectSchema.NullOr(EffectSchema.String),
   pullRequest: agentPullRequestSchema,
 });
 
 export type ListedPullRequest = typeof listedPullRequestSchema.Type;
 
-/**
- * The reader's own pin of one agent on a plan (`agent_pin`), as a plan's
- * is: the agent, the plan it stands on, when they pinned it, and where they
- * dragged it in the sidebar's Pinned section (`pin-order.ts`), absent while
- * it stands by `pinnedAt`. An agent with no plan carries its pin on its own
- * row (`tasklessAgentSchema`).
- */
 export const taskAgentPinSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   taskId: EffectSchema.String,
@@ -834,25 +474,10 @@ export const taskAgentPinSchema = EffectSchema.Struct({
 
 export type TaskAgentPin = typeof taskAgentPinSchema.Type;
 
-/**
- * What a task's coding agents are doing and what they published, in brief:
- * how many agents it has, how many of them are at work and how many failed,
- * the few agents the row names, and the pull requests they opened, each
- * counted once by its number. A pull request is as the service last read it
- * from GitHub, so it may trail GitHub by as long as nothing has asked.
- */
 const taskAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
-  /** The agents starting or running now. */
   working: countedNumber,
-  /** The agents whose run failed, the archived left out. Absent from a service before it. */
   failed: EffectSchema.optionalKey(countedNumber),
-  /**
-   * Epoch milliseconds the plan's agents last did something settled, every
-   * agent's counted and not only those named: one started, or one's turn
-   * ended. A turn's start is none, so it holds still while a turn runs.
-   * Absent from a service before it.
-   */
   activityAt: EffectSchema.optionalKey(countedNumber),
   agents: EffectSchema.Array(taskAgentLineSchema).check(
     EffectSchema.isMaxLength(TASK_AGENTS_BOUNDS.MAX_AGENTS),
@@ -865,11 +490,6 @@ const taskAgentsSummarySchema = EffectSchema.Struct({
 
 export type TaskAgentsSummary = typeof taskAgentsSummarySchema.Type;
 
-/**
- * One row of the task list: everything but the document, and what its
- * coding agents are doing, which only the list answers, and only for a task
- * with an agent.
- */
 export const taskSummarySchema = EffectSchema.Struct({
   ...taskSummaryFields,
   agents: EffectSchema.optionalKey(taskAgentsSummarySchema),
@@ -877,59 +497,34 @@ export const taskSummarySchema = EffectSchema.Struct({
 
 export type TaskSummary = typeof taskSummarySchema.Type;
 
-/** The most saves by coding agents a task answers, newest last; the same bound the service keeps. */
 const MAX_AGENT_EDITS = 50;
 
-/** One save a coding agent made on the task, as the window reads it: the agent, how it is named now, and when. */
 const agentEditLineSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
-  /** The agent as its row names it now: its title where it has one, else its model. */
   label: trimmedText(TASK_BOUNDS.MAX_NAME_CHARS),
-  /** Epoch milliseconds of the save. */
   at: countedNumber,
 });
 
-/**
- * The member a revision names: the developer whose edit or restore it is, or
- * the one whose call the notetaker wrote it on, by their account's id and the
- * name it holds now, a member who has since left the workspace among them.
- * The window calls the member You only where the id is its own account's.
- */
 export const descriptionEditorSchema = memberRefSchema;
 
 export type DescriptionEditor = typeof descriptionEditorSchema.Type;
 
-/** The newest revision of a description, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
 export const descriptionLastEditSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(DESCRIPTION_ACTOR)),
-  /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
   by: EffectSchema.optionalKey(descriptionEditorSchema),
-  /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
-  /** The coding agent that wrote it, which the window finds among the task's agents; absent for any other writer and from a service before it. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** Epoch milliseconds of the revision's latest save. */
   at: countedNumber,
-  /** Always false, since the app takes no calls; a released desktop still requires it. */
   duringCall: EffectSchema.Boolean,
 });
 
 export type DescriptionLastEdit = typeof descriptionLastEditSchema.Type;
 
-/** Bounds on the sections of a description that is one document, as the window reads who last changed each. */
 export const DESCRIPTION_SECTION_BOUNDS = {
-  /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
   MAX_HEADING_CHARS: 1_000,
-  /** The most sections a description names a last save for. */
   MAX_SECTIONS: 500,
 } as const;
 
-/**
- * The revision that last changed one section of a description that is one document,
- * as the section's "Edited by" line reads it: the section is known by its
- * heading's words, and a heading renamed with nothing beneath it changed
- * keeps the revision that last changed them.
- */
 const descriptionSectionEditSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(
     EffectSchema.isMaxLength(DESCRIPTION_SECTION_BOUNDS.MAX_HEADING_CHARS),
@@ -939,36 +534,24 @@ const descriptionSectionEditSchema = EffectSchema.Struct({
 
 export type DescriptionSectionEdit = typeof descriptionSectionEditSchema.Type;
 
-/** One task with its saved document, its newest revision, who last changed each section, the saves coding agents made on it, oldest first, and the tasks it waits on and that wait on it. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
   document: descriptionDocumentSchema,
-  /** Optional on the wire so a task from a service without the journal still reads; none is no edits. */
   agentEdits: EffectSchema.optionalKey(
     EffectSchema.Array(agentEditLineSchema).check(EffectSchema.isMaxLength(MAX_AGENT_EDITS)),
   ),
-  /** Absent for a task nobody has written since history began, and from a service before it. */
   lastEdit: EffectSchema.optionalKey(descriptionLastEditSchema),
-  /** The save that last changed each section, for the sections a save has changed; absent from a service before documents. */
   sectionEdits: EffectSchema.optionalKey(
     EffectSchema.Array(descriptionSectionEditSchema).check(
       EffectSchema.isMaxLength(DESCRIPTION_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
-  /** The tasks this one waits on, by id, the earliest added first, each one the reader reaches; absent from a service before blocks. */
   blockedBy: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
-  /** The tasks that wait on this one, on the same terms as `blockedBy`. */
   blocks: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
 });
 
 export type Task = typeof taskSchema.Type;
 
-/**
- * The plan list (GET): every plan the account owns, newest started first,
- * and beside them every agent with no plan in the account's workspaces,
- * newest started first, the archived ones of each only where the query asks
- * for them. The agents are absent from a service before them.
- */
 export const taskListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(taskSummarySchema),
   planlessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
@@ -976,67 +559,33 @@ export const taskListAnswerSchema = EffectSchema.Struct({
 
 export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
-/**
- * The id of the transaction a write committed in, as Postgres counts it, in
- * decimal: present where the write changed a row, so the desktop following
- * the task list waits for it to arrive before it confirms the write, and
- * absent where nothing changed, as Neon's mutations guide says.
- */
 export const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 
-/**
- * A started, opened, or changed task (POST, GET, PATCH), with its document
- * as saved, and the transaction a write committed in. An open also answers
- * the brief the developer started the task with, where they gave one, as
- * the member MCP server's `read_task` does; a write answers none.
- */
 export const taskAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   txid: EffectSchema.optionalKey(taskTxidSchema),
   brief: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/**
- * A restored revision (POST): the plan as it now stands, and the id of the
- * transaction the restore's revision was written in, which a reader
- * following the history over Neon Realtime waits for; none where the
- * restore changed nothing.
- */
 export const taskRestoreAnswerSchema = EffectSchema.Struct({
   ...taskAnswerSchema.fields,
   txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/**
- * Why the agent a start asked for was not started beside the task it made,
- * in the service's own word, as the agent's Start would have refused it.
- * Note that it carries no `unreached`, because the start confirmed the
- * repository reachable as it made the task.
- */
-/** Why the agent a start asked for was refused, when a plan's reached limit resets where that is why and the provider said, the provider whose credential is missing where that is why, and why the task's device would not take it where that is why. */
 const taskAgentRefusalSchema = EffectSchema.Struct({
   error: EffectSchema.String,
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),
-  /** Why the task's device would not take the agent, where that is why. */
   localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
-  /** Why the repositories named beside the agent's own were refused, where that is why, and the repository where one is. */
   extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
   refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
 
-/**
- * A started task (POST): the task, and, where the start asked for an agent,
- * the agent started on it, or, the task made all the same, why the agent
- * was refused. A retry carrying the agent's key again answers the task and
- * the agent the first start made, and starts neither again.
- */
 export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   agent: EffectSchema.optionalKey(agentSummarySchema),
-  /** Retired, and kept optional so every answer decodes (`agentAnswerSchema`'s). */
   notice: EffectSchema.optionalKey(EffectSchema.String),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
   txid: EffectSchema.optionalKey(taskTxidSchema),
@@ -1044,43 +593,29 @@ export const taskStartAnswerSchema = EffectSchema.Struct({
 
 export type TaskStartAnswer = typeof taskStartAnswerSchema.Type;
 
-/** The task a link names by its workspace and its number (GET), by its id, which every other read names it by. */
 export const taskFoundAnswerSchema = EffectSchema.Struct({ taskId: EffectSchema.String });
 
 export type TaskFoundAnswer = typeof taskFoundAnswerSchema.Type;
 
-/** A deleted task (DELETE): its row, its document, and its association are gone. */
 export const taskDeleteAnswerSchema = EffectSchema.Struct({
   deleted: EffectSchema.Literal(true),
   txid: EffectSchema.optionalKey(taskTxidSchema),
 });
 
-/** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "an agent";
 
-/** How a description's history is read: the newest revisions first, a page at a time. */
 export const DESCRIPTION_HISTORY_BOUNDS = {
-  /** The most revisions one read of the history carries. */
   PAGE: 50,
 } as const;
 
-/** A revision's number within its description, from one. */
 export const descriptionRevisionSeqSchema = EffectSchema.Int.check(
   EffectSchema.isGreaterThanOrEqualTo(1),
 );
 
-/**
- * One revision as the version history lists it: its number, who wrote it and
- * when it last moved, the coding agent that wrote it where one did, when it began, how many changes its saves made, and, for the developer's restore
- * of an earlier revision, which one it brought back and that revision's
- * latest save.
- */
 const descriptionRevisionLineSchema = EffectSchema.Struct({
   seq: descriptionRevisionSeqSchema,
   lastEdit: descriptionLastEditSchema,
-  /** The coding agent that wrote it; absent for any other writer, once the agent's row is gone, and from a service before it. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
-  /** Epoch milliseconds of the revision's first save. */
   startedAt: countedNumber,
   changes: countedNumber,
   restoredFrom: EffectSchema.optionalKey(
@@ -1090,11 +625,6 @@ const descriptionRevisionLineSchema = EffectSchema.Struct({
 
 export type DescriptionRevisionLine = typeof descriptionRevisionLineSchema.Type;
 
-/**
- * A page of a description's history (GET `/api/plans/{id}/revisions`), the newest
- * first, before the revision the `before` query names where it names one;
- * `earlier` is what the next older page is read before, absent on the oldest.
- */
 export const descriptionRevisionsAnswerSchema = EffectSchema.Struct({
   revisions: EffectSchema.Array(descriptionRevisionLineSchema).check(
     EffectSchema.isMaxLength(DESCRIPTION_HISTORY_BOUNDS.PAGE),
@@ -1104,12 +634,6 @@ export const descriptionRevisionsAnswerSchema = EffectSchema.Struct({
 
 export type DescriptionRevisionsAnswer = typeof descriptionRevisionsAnswerSchema.Type;
 
-/**
- * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the description
- * as it stood after the revision and as it stood before it, null for the
- * first, each formatted under the task's name as it stands now, so a rename
- * since is no difference between them.
- */
 export const descriptionRevisionAnswerSchema = EffectSchema.Struct({
   revision: EffectSchema.Struct({
     seq: descriptionRevisionSeqSchema,
@@ -1120,27 +644,18 @@ export const descriptionRevisionAnswerSchema = EffectSchema.Struct({
 
 export type DescriptionRevisionAnswer = typeof descriptionRevisionAnswerSchema.Type;
 
-/** The most lines one code reference points at; a reference is a passage, not a file. */
 const CODE_REF_MAX_LINES = 200;
 
-/** The most characters of a path one code reference names: macOS's own bound. */
 export const CODE_PATH_MAX_CHARS = 1_024;
 
-/** A line of a file, counted from one. */
 export const codeLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
-/**
- * A commit as GitHub names it: its whole SHA-1 in lowercase hex, and nothing
- * a branch, a tag, or a path could spell, so a read pinned to one asks
- * GitHub for exactly that commit.
- */
 export const commitShaSchema = EffectSchema.String.check(
   EffectSchema.isMinLength(40),
   EffectSchema.isMaxLength(40),
   EffectSchema.isPattern(/^[0-9a-f]{40}$/u),
 );
 
-/** Whether a reference names both of its lines or neither, in order and within the bound. */
 function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boolean {
   if (ref.startLine === undefined || ref.endLine === undefined) {
     return ref.startLine === ref.endLine;
@@ -1148,10 +663,6 @@ function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boo
   return ref.endLine >= ref.startLine && ref.endLine - ref.startLine < CODE_REF_MAX_LINES;
 }
 
-/**
- * A place in the task's repository: a file, named relative to the checkout
- * root, and the lines pointed at, or the file whole with none.
- */
 export const codeRefSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -1163,30 +674,18 @@ export const codeRefSchema = EffectSchema.Struct({
 
 export type CodeRef = typeof codeRefSchema.Type;
 
-/** A file kept secret, refused wherever it sits in the repository: a `.env` file, or one whose name starts with `.env`. */
 const SECRET_FILE = /(^|\/)\.env[^/]*$/u;
 
-/** Whether a path names a secret file, which no reader reads, the service's or the window's asking. */
 export function isSecretFile(path: string): boolean {
   return SECRET_FILE.test(path);
 }
 
 export const TASK_FILE_BOUNDS = {
-  /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,
-  /** The most characters of one line that travel; a longer line is cut there. */
   MAX_LINE_CHARS: 400,
-  /** The longest text a raw read carries: the service reads a file of a megabyte at most, and its text, a character to a byte at least, is no longer. */
   MAX_TEXT_CHARS: 1024 * 1024,
 } as const;
 
-/**
- * Why a file of the task's repository was not read for the File tab, or a
- * folder not listed for its tree: a secret file, no regular file (or no
- * folder) at the path, a file too large or not text,
- * a task with no repository, a repository our GitHub App does not
- * reach for the account, or GitHub not answering just now.
- */
 export const TASK_FILE_REFUSAL = {
   SECRET: "secret",
   MISSING: "missing",
@@ -1198,7 +697,6 @@ export const TASK_FILE_REFUSAL = {
 
 export type TaskFileRefusal = (typeof TASK_FILE_REFUSAL)[keyof typeof TASK_FILE_REFUSAL];
 
-/** Whether a window names its lines in order and within the bound. */
 function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): boolean {
   return (
     window.lastLine >= window.firstLine &&
@@ -1206,14 +704,6 @@ function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): 
   );
 }
 
-/**
- * One window of a file of the task's repository, as the File tab asks it
- * (GET `/api/plans/{id}/file`): the path, and its first and last line; or,
- * with `raw`, the file's whole text, its lines uncut, as a copy or a
- * download of the file asks it, the window then standing for nothing. With
- * `ref`, the file is read as it stood at that commit, as an inbox item's
- * code reference pins it, rather than at the default branch's head.
- */
 export const taskFileRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -1227,14 +717,6 @@ export const taskFileRequestSchema = EffectSchema.Struct({
 
 export type TaskFileRequest = typeof taskFileRequestSchema.Type;
 
-/**
- * A window of a file of the task's repository as it stands now on its
- * default branch, or at the commit the request pinned, read through our
- * GitHub App: the path, the repository and the branch or commit read,
- * the commit the lines were read at where GitHub named one, the line the first carried line is, how
- * many lines the whole file has, and the lines, each cut to the bound. A
- * window past the file's end carries no lines.
- */
 export const taskFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
@@ -1247,17 +729,11 @@ export const taskFileWindowSchema = EffectSchema.Struct({
   ).check(EffectSchema.isMaxLength(TASK_FILE_BOUNDS.WINDOW_LINES)),
 });
 
-/**
- * Why the File tab's file is not shown, and, where GitHub found nothing at
- * the path, the branch it was read on: a link to the file may have come
- * from an agent's checkout, which may hold a file that branch does not.
- */
 export const taskFileRefusalSchema = EffectSchema.Struct({
   refusal: EffectSchema.Literals(Object.values(TASK_FILE_REFUSAL)),
   branch: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** A file of the task's repository read raw: the path, the repository and the branch read, and the whole text as the file holds it. */
 export const taskFileTextSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
@@ -1265,7 +741,6 @@ export const taskFileTextSchema = EffectSchema.Struct({
   text: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_FILE_BOUNDS.MAX_TEXT_CHARS)),
 });
 
-/** The File tab's read answered: the window, the whole text where it was read raw, or why the file is not shown. */
 export const taskFileAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ file: taskFileWindowSchema }),
   EffectSchema.Struct({ text: taskFileTextSchema }),
@@ -1274,26 +749,16 @@ export const taskFileAnswerSchema = EffectSchema.Union([
 
 export type TaskFileAnswer = typeof taskFileAnswerSchema.Type;
 
-/** What an entry of a folder of the task's repository is, as the File tab's tree draws it: a folder opens into its own entries, and anything else is a file, read as a File tab reads one. */
 export const TASK_TREE_ENTRY = {
   FILE: "file",
   FOLDER: "folder",
 } as const;
 
 export const TASK_TREE_BOUNDS = {
-  /** The most entries one folder's listing carries; a folder holding more is listed to here and says it was cut. */
   MAX_ENTRIES: 5_000,
-  /** The most entries a listing of everything under a folder carries, which the tree's search reads; one holding more is listed to here and says it was cut. */
   MAX_RECURSIVE_ENTRIES: 50_000,
 } as const;
 
-/**
- * One folder of the task's repository, as the File tab's tree asks it (GET
- * `/api/plans/{id}/tree`): its path from the repository's root, empty for
- * the root itself, and whether everything under it is asked, every entry
- * then named by its path from the folder, as the tree's search reads the
- * whole repository in one listing.
- */
 export const taskTreeRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS)),
   recursive: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -1301,7 +766,6 @@ export const taskTreeRequestSchema = EffectSchema.Struct({
 
 export type TaskTreeRequest = typeof taskTreeRequestSchema.Type;
 
-/** One entry of a folder: its name within the folder, its path from the folder in a recursive listing, and whether it is a folder or a file. */
 const taskTreeEntrySchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -1312,14 +776,6 @@ const taskTreeEntrySchema = EffectSchema.Struct({
 
 export type TaskTreeEntry = typeof taskTreeEntrySchema.Type;
 
-/**
- * A folder of the task's repository as it stands now on the branch the
- * File tab reads its files on, through our GitHub App: the path, the
- * repository and the branch read, its entries in GitHub's order, and
- * whether there were more than one listing carries. A secret file is
- * listed by name like any other, since it is its contents that are never
- * read.
- */
 export const taskTreeFolderSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
@@ -1330,7 +786,6 @@ export const taskTreeFolderSchema = EffectSchema.Struct({
   truncated: EffectSchema.Boolean,
 });
 
-/** The tree's read of one folder answered: its listing, or why it is not listed, in the File tab's own refusals. */
 export const taskTreeAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ folder: taskTreeFolderSchema }),
   taskFileRefusalSchema,
@@ -1339,21 +794,11 @@ export const taskTreeAnswerSchema = EffectSchema.Union([
 export type TaskTreeAnswer = typeof taskTreeAnswerSchema.Type;
 
 export const TASK_SKILL_BOUNDS = {
-  /** The most skills one read carries, which is as many as the service reads of a repository. */
   MAX_SKILLS: 64,
-  /** The Agent Skills convention's bound on a skill's name. */
   MAX_NAME_CHARS: 64,
-  /** The convention's bound on a description, past which the service cuts it. */
   MAX_DESCRIPTION_CHARS: 1024,
 } as const;
 
-/**
- * Where a skill the `/` list offers comes from: the task's repository, as
- * GitHub holds it, or a skill a member installed into the app for the whole
- * workspace or for themselves alone (`installed-skill-wire.ts`). Where two
- * share a name the earlier one here is offered and the later one is not,
- * as an agent's session merges them.
- */
 export const TASK_SKILL_SOURCE = {
   REPOSITORY: "repository",
   WORKSPACE: "workspace",
@@ -1362,13 +807,6 @@ export const TASK_SKILL_SOURCE = {
 
 export type TaskSkillSource = (typeof TASK_SKILL_SOURCE)[keyof typeof TASK_SKILL_SOURCE];
 
-/**
- * One skill a developer may choose by name: the name an agent loads it by,
- * the description a model routes on, where it comes from, and, for one of
- * the repository's, its `SKILL.md`, named from the repository's root, which
- * the File tab opens. An installed skill names no file, since its files are
- * the service's rather than the repository's.
- */
 const taskSkillSchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -1386,16 +824,6 @@ const taskSkillSchema = EffectSchema.Struct({
   ),
 });
 
-/**
- * The skills a developer may choose of a task (GET `/api/plans/{id}/skills`)
- * or of a workspace's repository (GET `/api/github/repositories/skills`):
- * the repository and the branch read, null where there is no repository,
- * and the skills, the repository's as they stand now on its default branch,
- * read through our GitHub App, then the member's enabled installed
- * skills, the workspace's and then their own, each source in name order and
- * a name an earlier source holds left out. A skill its `SKILL.md` says the
- * model alone loads is not one of them.
- */
 export const taskSkillsSchema = EffectSchema.Struct({
   repository: EffectSchema.NullOr(githubRepositoryFullNameSchema),
   branch: EffectSchema.NullOr(EffectSchema.String),
@@ -1406,13 +834,6 @@ export const taskSkillsSchema = EffectSchema.Struct({
 
 type TaskSkills = typeof taskSkillsSchema.Type;
 
-/**
- * The query a skills read carries to ask for the member's installed skills
- * beside the repository's (`installed=1`). A desktop from before installed
- * skills sends none and reads every skill as naming its file and every
- * answer as naming its repository, so without it the service answers the
- * repository's skills alone, and a task with no repository as refused.
- */
 export const TASK_SKILLS_INSTALLED = "1";
 
 export const taskSkillsQueryFields = {
@@ -1421,7 +842,6 @@ export const taskSkillsQueryFields = {
 
 export type TaskSkill = TaskSkills["skills"][number];
 
-/** The read of the skills answered: the skills, or why the repository's are not read, in the File tab's own refusals. */
 export const taskSkillsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ skills: taskSkillsSchema }),
   taskFileRefusalSchema,

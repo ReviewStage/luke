@@ -6,32 +6,15 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useDisclosureFold } from "../disclosure/disclosure.js";
 import { LIST_MOTION_WAY, ListMotion, motionKey, motionRows, useLeaving } from "./list-motion.js";
 
-/**
- * list-motion.test.ts -- a row arriving in a list slides in as it fades in,
- * a row leaving slides out where it stood and is let go once that has
- * played, a row listed again before it had gone stands again and comes back
- * the same way, a row moved from one list to another glides across rather
- * than leaving and arriving, a change landing while rows still move adds
- * onto what they play rather than stopping it, a row arriving while the
- * lists are still read only fades in, nothing plays where no motion is
- * to play, a row out of the reader's sight plays nothing, so a change
- * of thousands of rows plays a screenful, and the rows under a fold glide
- * up once its body has gone.
- * jsdom lays nothing out and plays nothing, so each row's place is given
- * and each motion recorded.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** How tall a row is drawn, and how far apart the lists stand, in the layout given. */
 const ROW = 40;
 const COLUMN = 200;
 
-/** The motion tokens the lists read, as an app's sheets set them. */
 const TOKENS = {
   "--ui-duration-exit": "90ms",
   "--ui-motion-exit": "ease",
@@ -42,7 +25,6 @@ const TOKENS = {
   "--ui-list-travel": "16px",
 } as const;
 
-/** A motion played: the element, its keyframes and timing, a way to have it finish, and whether it was stopped. */
 interface Played {
   readonly element: Element;
   readonly keyframes: Keyframe[];
@@ -76,12 +58,10 @@ beforeEach(() => {
       return motion;
     },
   });
-  // Note that each list stands in its own column, and each row under the rows before it still in the layout.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
     const list = this.parentElement;
-    // Note that a row taken out of the layout is drawn nowhere, as a browser draws it: an empty box at the window's corner.
     if (!this.matches("li") || list === null || this.style.display === "none") {
       return new DOMRect(0, 0, 0, 0);
     }
@@ -106,7 +86,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** One list's rows, each by its key, drawn on while it leaves. */
 function Rows({ keys }: { keys: readonly string[] }): React.JSX.Element {
   const drawn = useLeaving(keys, (key) => key);
   return createElement(
@@ -116,7 +95,6 @@ function Rows({ keys }: { keys: readonly string[] }): React.JSX.Element {
   );
 }
 
-/** Lists side by side, each by its rows' keys, under one motion where `moving`, still being read where `reading`, as the scene `scene`. */
 function Lists({
   lists,
   moving,
@@ -137,7 +115,6 @@ function Lists({
   return moving ? createElement(ListMotion, { root: box, reading, scene, children: drawn }) : drawn;
 }
 
-/** Draws `lists`, the motion's tokens set where `tokens`, and hands back a way to draw others, still being read where it says, as the scene it names. */
 function draw(
   lists: readonly (readonly string[])[],
   {
@@ -163,21 +140,18 @@ function draw(
     );
 }
 
-/** The rows drawn, each list's keys in its order. */
 function drawn(): string[][] {
   return [...document.querySelectorAll("ul")].map((list) =>
     [...list.children].map((row) => row.textContent ?? ""),
   );
 }
 
-/** The row of `key` drawn, and none where none is. */
 function rowOf(key: string, leaving = false): Element | undefined {
   return [...document.querySelectorAll(`li`)].find(
     (row) => row.textContent === key && row.hasAttribute("data-leaving") === leaving,
   );
 }
 
-/** The motions played on `element`, by their keyframes. */
 function motionsOf(element: Element | undefined): Keyframe[][] {
   return played.filter((each) => each.element === element).map((each) => each.keyframes);
 }
@@ -308,7 +282,6 @@ test("a row moved into another list glides across from where it stood rather tha
 });
 
 test("a row arriving or leaving below the window's foot plays nothing, and one leaving there goes at once", () => {
-  // Note that jsdom's window is 768px tall, so of these 40px rows the first stand in it and the last far below it.
   const many = Array.from({ length: 40 }, (_, at) => `R${at}`);
   const show = draw([["A"]]);
 
@@ -374,7 +347,6 @@ test("the rows under a fold glide down as a press opens it, and up once its body
   for (const [name, value] of Object.entries(TOKENS)) {
     document.documentElement.style.setProperty(name, value);
   }
-  // Note that the fold keeps its own state and its body is a row of the list, so only the fold draws the commits that move the row under it.
   let toggle = (): void => undefined;
   function Folded(): React.JSX.Element {
     const { state } = useDisclosureFold(false);

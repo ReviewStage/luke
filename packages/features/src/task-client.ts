@@ -130,55 +130,35 @@ import {
   type TasksPictureKeepAnswer,
 } from "./tasks-view.js";
 
-/**
- * task-client.ts -- the Tasks tab's side of the named tasks, as the host asks the service for them.
- *
- * Every call is the one account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. What the window has to say about a
- * call that did not answer is one of a few reasons: the service never
- * answered, the task is gone, or, on a call that names a repository, GitHub's
- * reach refused it.
- */
-
-/** A started task, and, where the start named an agent, the agent started on it or why it was not, as an agent's Start answers. */
 export interface TaskStarted {
   readonly task: Task;
   readonly agent?: AgentAgentAnswer;
-  /** The transaction the task was written in, which the task list followed live carries once it lands. */
   readonly txid?: string;
 }
 
-/** A task as a write answered it, and the transaction the write committed in where it changed a row. */
 export interface TaskWritten {
   readonly task: Task;
   readonly txid?: string;
 }
 
-/** One call's answer, or why there is none. */
 export type TaskCallResult<Answer, Failure> =
   | { readonly ok: true; readonly answer: Answer }
   | {
       readonly ok: false;
       readonly failure: Failure;
-      /** Why the device the call named would not take the task's agents, where that is why and the service said. */
       readonly localAgentRefusal?: LocalAgentRefusal;
-      /** How a call sent under an idempotency key went untaken, where it traveled as one (`keyed-write.ts`). */
       readonly untaken?: WriteUntaken;
-      /** The facts of what failed beneath a call no refusal named (`failure-facts.ts`), which a window reports and never draws. */
       readonly cause?: FailureFacts;
     };
 
 export interface HostedTaskClientOptions {
-  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
 }
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** Why a keep the service refused in band was not kept, as the editor hears it. */
 const KEEP_REFUSED = {
   [DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY]: PICTURE_KEEP_FAILURE.TOO_MANY,
   [DESCRIPTION_ATTACHMENT_REFUSAL.TOO_MANY_VIDEOS]: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS,
@@ -187,25 +167,20 @@ const KEEP_REFUSED = {
   (typeof PICTURE_KEEP_FAILURE)[keyof typeof PICTURE_KEEP_FAILURE]
 >;
 
-/** A comment call that answered nothing to draw. */
 const COMMENT_UNANSWERED = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** A comment call refused because the plan is not the account's to read or write. */
 const COMMENT_NOT_FOUND = { failure: DESCRIPTION_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
 
-/** What a task's mark names: pinned or not and where the pin stands, or the reader's read mark. */
 export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "readMark">;
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
 }
 
-/** The refusals a call that names a repository can answer with, by the service's own word for each. */
 const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
-/** The refusals a start can answer with: a repository out of reach, a workspace or a related task none of the account's, a device that would not take its agents, or a relation the tree's rules refuse. */
 const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
@@ -214,52 +189,40 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: TASK_PARENT_FAILURE.HELD,
 } as const;
 
-/** The refusals a move can answer with: the task or the workspace not the account's, or the workspace not reaching its repository. */
 const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
-/** The refusals a block change can answer with: a task not the account's, one of another workspace, or a cycle the block would close. */
 const BLOCK_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.INVALID_REQUEST]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: TASK_BLOCK_FAILURE.CYCLE,
 } as const;
 
-/** The refusals a parent write can answer with: a task not the account's or of another workspace, a parent in another repository, or one under which the task would descend from itself. */
 const PARENT_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: TASK_PARENT_FAILURE.CYCLE,
 } as const;
 
-/** The refusals a relation's move can answer with: a block change's, and a parent write's. */
 const RELATION_REFUSALS = { ...BLOCK_REFUSALS, ...PARENT_REFUSALS } as const;
 
-/** The refusal a read of one of the plan's own rows can answer with: the plan or the row not the account's. */
 const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
-/** The refusals a live read names: the task gone, or a session that is no longer the account's the read names (`live-wire.ts`). */
 const LIVE_REFUSALS = {
   ...NOT_FOUND_REFUSAL,
   [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
 } as const;
 
-/** A plan's write as the client answers it: the task as it then stands, and the transaction it was written in where it changed a row. */
 function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): TaskWritten {
   return changed.txid === undefined
     ? { task: changed.plan }
     : { task: changed.plan, txid: changed.txid };
 }
 
-/**
- * A procedure's failure as a result: its refusal where it is one the caller
- * names, unanswered for everything else, with the failure beneath it, which
- * the window reports and never draws.
- */
 function hostedRefusal<Failure extends string>(
   failed: HostedFailure,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -274,7 +237,6 @@ function hostedRefusal<Failure extends string>(
     : ({ ok: false, failure, localAgentRefusal } as const);
 }
 
-/** A procedure's answer as a result, as `hostedRefusal` reads a failure. */
 function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -289,7 +251,6 @@ function hostedResult<Answer, Failure extends string>(
   });
 }
 
-/** The refusals a Browser tab's open can answer with, by the service's own word for each. */
 const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>([
   [HOSTED_API_ERROR.NOT_FOUND, BROWSER_TAB_OPEN_FAILURE.NOT_FOUND],
   [HOSTED_API_ERROR.NOT_PERMITTED, BROWSER_TAB_OPEN_FAILURE.NOT_PERMITTED],
@@ -299,7 +260,6 @@ const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>
   [HOSTED_API_ERROR.UPSTREAM_ERROR, BROWSER_TAB_OPEN_FAILURE.UNREACHABLE],
 ]);
 
-/** A File tab's window as its query carries it, or nothing where it is not one the wire admits. */
 function fileWindowQuery(window: TaskFileRequest):
   | {
       readonly path: string;
@@ -320,10 +280,8 @@ function fileWindowQuery(window: TaskFileRequest):
   };
 }
 
-/** A write the wire refuses by shape, which never travels. */
 const UNTRAVELED = { ok: false, failure: WRITE_UNTAKEN.REFUSED } as const;
 
-/** A keyed write's answer, or how it ended untaken: refused, unanswered, or taken already under its key (`keyed-write.ts`). */
 function keyedWrite<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<TaskCallResult<Answer, WriteUntaken>, never, HttpClient.HttpClient> {
@@ -333,14 +291,12 @@ function keyedWrite<Answer>(
   });
 }
 
-/** A procedure's answer, or nothing where it reached none. */
 function orNothing<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient> {
   return Effect.orElseSucceed(asked, () => undefined);
 }
 
-/** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
 function refusedAs<Failure extends TaskCallFailure>(
   payload: UnparsedWireValue,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -350,13 +306,6 @@ function refusedAs<Failure extends TaskCallFailure>(
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
-/**
- * The Tasks tab's reads and its writes of the service: the list of tasks,
- * one task opened with its document, the repositories the account reaches,
- * and a task started, renamed, given its repository, pinned, archived, or deleted. Each
- * resolves to a result rather than failing, because every caller does the
- * same thing with a failure: draws why, and offers to try again.
- */
 export class HostedTaskClient {
   readonly #call: AccountCallEffects;
   readonly #hosted: HostedClient;
@@ -375,7 +324,6 @@ export class HostedTaskClient {
     });
   }
 
-  /** A thread started on the description, or one of its task's pages, with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
   startComment(
     planId: string,
     request: DescriptionCommentStart,
@@ -395,7 +343,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One thing done to one thread of the description, answered with the thread as it stands, its deletion, or why not. */
   actOnComment(
     planId: string,
     threadId: string,
@@ -413,28 +360,17 @@ export class HostedTaskClient {
     );
   }
 
-  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived agents among them. */
   list(): Effect.Effect<
     TaskCallResult<TaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
-    // Note that the query still asks for the archived, because the service reads it for the agents with no plan too, whose archive stands.
     return hostedResult(
       askHosted(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
       {},
     );
   }
 
-  /**
-   * The task list, its rows inline, read by the sync id the reader holds
-   * them at (`LIVE_POLL.SYNC`): whole, with the id to read past next, where
-   * `sync` is empty or the reader is too far behind; past an id, only the
-   * plans and agents that moved since, with the ids of those that stand no
-   * longer for it, held by the service until something moves. Without
-   * `sync`, every row whole as it stands, answered at once. Unanswered for
-   * anything that went wrong, which the caller answers by asking again.
-   */
   listLive(
     userId: string,
     sync: string | undefined,
@@ -447,14 +383,12 @@ export class HostedTaskClient {
       [LIVE_USER_QUERY]: userId,
       ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
     };
-    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
     return hostedResult(
       askLive(this.#hosted.live.tasks, read, true, undefined, sync !== undefined && sync !== ""),
       LIVE_REFUSALS,
     );
   }
 
-  /** The id of the task a link names by its workspace, by slug or id, and its number there; nothing where none the account reaches is found, or the service did not answer. */
   find(
     workspace: string,
     number: number,
@@ -467,7 +401,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task with its saved document; opening it moves no row of the list. */
   open(
     taskId: string,
   ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
@@ -477,13 +410,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Saves the developer's edit of the document, answering the task as saved,
-   * the text as it now stands where the edit no longer lands in it, or why
-   * it was refused; or why there is no answer: the service did not answer,
-   * or the task is gone. An edit the service would refuse by shape is
-   * refused here without traveling at all.
-   */
   edit(
     taskId: string,
     edit: DescriptionEditRequest,
@@ -505,12 +431,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * The repositories the account reaches through our GitHub App, or
-   * only those of the installation the workspace given stands for, with
-   * whether the App is installed anywhere for it and where to install it;
-   * or why there is none: the service did not answer.
-   */
   repositories(
     workspaceId?: string,
   ): Effect.Effect<
@@ -524,12 +444,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Gives one task its repository, or takes it away with null, answering
-   * the task as changed; or why it is unchanged: the service did not answer,
-   * or the App does not reach that repository for the account. A name the service would refuse by shape
-   * is refused here without traveling at all.
-   */
   setRepository(
     taskId: string,
     repository: string | null,
@@ -543,12 +457,6 @@ export class HostedTaskClient {
     return hostedResult(this.#update(taskId, admitted), REPOSITORY_REFUSALS);
   }
 
-  /**
-   * Moves one task to another of the account's workspaces, answering the
-   * task as moved; or why it stands where it was: the service did not
-   * answer, the task or the workspace is not the account's to move it to,
-   * or the workspace does not reach its repository.
-   */
   move(
     taskId: string,
     workspaceId: string,
@@ -558,13 +466,6 @@ export class HostedTaskClient {
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
   }
 
-  /**
-   * Adds one block of a task or takes it away, answering the task as it
-   * then stands; or why it is unchanged: the service did not answer, the
-   * other task is not the account's or not of the task's workspace, or the
-   * block would close a cycle. A change the service would refuse by shape
-   * is refused here without traveling at all.
-   */
   block(
     taskId: string,
     block: TaskBlockRequest,
@@ -580,14 +481,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Sets one task's parent, or clears it with null, answering the task as
-   * it then stands; or why it is unchanged: the service did not answer, the
-   * parent is not the account's or not of the task's workspace, works in
-   * another repository, or is the task itself or one of its descendants. A
-   * request the service would refuse by shape is refused here without
-   * traveling at all.
-   */
   setParent(
     taskId: string,
     parent: TaskParentRequest,
@@ -603,12 +496,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Moves one relation of a task to another kind in one call, answering the
-   * task as it then stands; or why it is unchanged, for a block's reasons
-   * (`block`) or a parent's (`setParent`). A change the service would refuse
-   * by shape is refused here without traveling at all.
-   */
   changeRelation(
     taskId: string,
     relation: TaskRelationChangeRequest,
@@ -624,13 +511,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Where one task's description and pages stand, sealed for following over Neon
-   * Realtime, or with `poll` their rows inline, for a reader polling while
-   * Realtime fails them, for the account `userId` names: not found where the
-   * account reaches no such task, signed out where the session is another's,
-   * unanswered for anything else, which the caller answers by sealing again.
-   */
   recordLive(
     taskId: string,
     userId: string,
@@ -647,11 +527,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * One task's pages, or one coding agent's on no task, each at its newest
-   * version, sealed for following over Neon Realtime, or with `poll` their
-   * rows inline at the poll address, on the terms a task's record's is.
-   */
   pagesLive(
     place: PagePlace,
     userId: string,
@@ -670,7 +545,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One agent's Browser tabs, or a task's agents' together, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
   browserTabsLive(
     place: BrowserTabsPlace,
     userId: string,
@@ -692,7 +566,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task's comments, its description's own threads or one page's where `subject` names one, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
   commentsLive(
     subject: TasksCommentsFollow,
     userId: string,
@@ -715,7 +588,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task's newest page of description history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
   historyLive(
     taskId: string,
     userId: string,
@@ -737,11 +609,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * One window of a file of the task's repository as GitHub holds it now,
-   * or why it is not shown; nothing where the service did not answer, or
-   * where the window asked is not one the wire admits.
-   */
   readFile(
     taskId: string,
     window: TaskFileRequest,
@@ -751,7 +618,6 @@ export class HostedTaskClient {
     return orNothing(askHosted(this.#hosted.taskFiles.file, { id: taskId, ...query }));
   }
 
-  /** One window of a file of a repository the workspace's installation reaches, as `readFile` reads a task's; nothing where the service did not answer, or where the window is not one the wire admits. */
   readRepositoryFile(
     place: RepositoryPlace,
     window: TaskFileRequest,
@@ -761,11 +627,6 @@ export class HostedTaskClient {
     return orNothing(askHosted(this.#hosted.github.repositoryFile, { ...place, ...query }));
   }
 
-  /**
-   * One folder of the task's repository as GitHub holds it now, or why it
-   * is not listed; nothing where the service did not answer, or where the
-   * folder asked is not one the wire admits.
-   */
   readTree(
     taskId: string,
     folder: TaskTreeRequest,
@@ -781,7 +642,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** The skills a developer may choose of the task's repository as GitHub holds it now, or why they are not read; nothing where the service did not answer. */
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
@@ -790,12 +650,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * One folder of a repository the workspace's installation reaches, as
-   * `readTree` reads a plan's, for a place with no plan to name it by;
-   * nothing where the service did not answer, or where the folder asked is
-   * not one the wire admits.
-   */
   readRepositoryTree(
     place: RepositoryPlace,
     folder: TaskTreeRequest,
@@ -813,7 +667,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** The skills a developer may choose of a repository the workspace's installation reaches, as `readSkills` reads a plan's; nothing where the service did not answer. */
   readRepositorySkills(
     place: SkillsPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
@@ -825,7 +678,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
   readRepositoryPullRequest(
     place: RepositoryPlace,
     number: number,
@@ -835,7 +687,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One issue of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
   readRepositoryIssue(
     place: RepositoryPlace,
     number: number,
@@ -845,12 +696,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Opens a Browser tab at the address in the browser of the coding agent
-   * named, on a task or on none, taken over by the account at once, under a deadline
-   * that outlasts the agent's sandbox resuming; or why none opened, a
-   * refusal it does not name as unanswered.
-   */
   openBrowserTab(
     params: TasksBrowserTabOpenParams,
   ): Effect.Effect<TasksBrowserTabOpenAnswer, never, HttpClient.HttpClient> {
@@ -873,7 +718,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** A page of one description's history, the newest or the one before a revision; nothing where the service did not answer it. */
   readRevisions(
     taskId: string,
     before?: number,
@@ -886,7 +730,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One revision of one description beside the one before it; nothing where the service did not answer it, or holds no such revision. */
   readRevision(
     taskId: string,
     seq: number,
@@ -903,15 +746,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * One attachment of one description, a picture its text names or a file one of
-   * its comments carries, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with a type a description's
-   * attachment may be (`DESCRIPTION_ATTACHMENT_TYPE`), a video among them; not found where the plan is not one the account
-   * reaches or holds no such attachment; unanswered for anything else,
-   * another media type included, so nothing a window draws is a type it did
-   * not expect.
-   */
   readPicture(
     taskId: string,
     attachmentId: string,
@@ -932,12 +766,6 @@ export class HostedTaskClient {
     });
   }
 
-  /**
-   * One picture or video kept on one description, sent as the `data:` URL the Mac
-   * made of it: the id the description's text then names it by; too many where the
-   * description holds its bound of pictures, or of videos for a video; not found where the plan is not one the account may
-   * write, an archived one among them; unanswered for anything else.
-   */
   keepPicture(
     taskId: string,
     picture: string,
@@ -962,7 +790,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** One version of one page of one plan, or of one coding agent on no task, with its HTML; nothing where the service did not answer it, or holds no such version. */
   readPageVersion(
     place: PagePlace,
     pageId: string,
@@ -976,7 +803,6 @@ export class HostedTaskClient {
     return Effect.map(orNothing(asked), (answer) => answer?.page);
   }
 
-  /** Puts one revision of a description back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
   restore(
     taskId: string,
     seq: number,
@@ -993,7 +819,6 @@ export class HostedTaskClient {
     );
   }
 
-  /** Deletes one task with its document and its agents' conversations; the transaction it went in, or nothing where the service deleted nothing. */
   delete(
     taskId: string,
   ): Effect.Effect<{ readonly txid?: string } | undefined, never, HttpClient.HttpClient> {
@@ -1003,12 +828,6 @@ export class HostedTaskClient {
     });
   }
 
-  /**
-   * Renames one task, under the idempotency key given where one is,
-   * answering it as renamed with its document, or how it went untaken
-   * (`keyed-write.ts`); a name the service would refuse by shape is refused
-   * here without traveling at all.
-   */
   rename(
     taskId: string,
     request: TaskRenameRequest,
@@ -1019,12 +838,6 @@ export class HostedTaskClient {
     return keyedWrite(this.#update(taskId, admitted, key));
   }
 
-  /**
-   * Sets where one task stands, how much it matters, who it is assigned
-   * to, or any of them, under the idempotency key given where one is,
-   * answering it as changed with its document, or how it went untaken; a
-   * change that names neither never travels.
-   */
   setStanding(
     taskId: string,
     standing: TaskStanding,
@@ -1035,11 +848,6 @@ export class HostedTaskClient {
     return keyedWrite(this.#update(taskId, admitted, key));
   }
 
-  /**
-   * Pins or unpins one task, or moves the reader's read mark on it, under the idempotency key given where one is,
-   * answering it as changed with its document, or how it went untaken; a
-   * change that names neither never travels.
-   */
   mark(
     taskId: string,
     marks: TaskMarks,
@@ -1050,7 +858,6 @@ export class HostedTaskClient {
     return keyedWrite(this.#update(taskId, admitted, key));
   }
 
-  /** One plan changed as the request names, answered as changed, sent under the idempotency key given where one is. */
   #update(
     taskId: string,
     changes: TaskUpdateRequest,
@@ -1067,13 +874,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Pins one repository or unpins it, under the idempotency key given where
-   * one is, answering the account's pins as they then stand and the
-   * transaction the pin was written in, none where it changed nothing, or
-   * how it went untaken. A repository the wire would refuse by shape never
-   * travels.
-   */
   pinRepository(
     repository: string,
     pinned: boolean,
@@ -1092,11 +892,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * The account's sidebar sealed for following over Neon Realtime, for the
-   * account named, or with each part's rows inline where `poll` asks for
-   * them; signed out where the session is another account's.
-   */
   sidebarLive(
     userId: string,
     poll = false,
@@ -1112,13 +907,6 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Writes one change to the account's sections, under the idempotency key
-   * given where one is, answering them all as they then stand and the
-   * transaction the change was written in, none where it changed nothing,
-   * or how it went untaken. A write the wire would refuse by shape never
-   * travels.
-   */
   writeTaskSection(
     write: TaskSectionWrite,
     key?: string,
@@ -1134,23 +922,12 @@ export class HostedTaskClient {
     );
   }
 
-  /**
-   * Starts a task with an empty description, on the repository the
-   * request names where it names one, and the agent it names on it where it
-   * names one, under the idempotency key given where one is; a request the
-   * service would refuse by shape is refused here without traveling at all,
-   * and a repository the service refused is answered as the refusal it was,
-   * with how it went untaken where it traveled. An agent the service refused
-   * beside the task it made is answered with the task, as a refused Start
-   * reads.
-   */
   create(
     request: TaskCreateRequest,
     key?: string,
   ): Effect.Effect<TaskCallResult<TaskStarted, StartCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    // Note that a start naming an agent waits as an agent's Start does, since it opens the agent's session too.
     const deadline = admitted.agent === undefined ? HOSTED_DEADLINE.USUAL : HOSTED_DEADLINE.START;
     return Effect.match(askHosted(this.#hosted.plans.create, admitted, deadline, key), {
       onSuccess: (started) => succeeded(taskStartedOf(started.body)),
@@ -1162,7 +939,6 @@ export class HostedTaskClient {
   }
 }
 
-/** A started task as the service answered it, with the agent started on it, or why it was not, where one was asked for. */
 function taskStartedOf(started: TaskStartAnswer): TaskStarted {
   const written = started.txid === undefined ? {} : { txid: started.txid };
   if (started.agent !== undefined) {
@@ -1174,7 +950,6 @@ function taskStartedOf(started: TaskStartAnswer): TaskStarted {
   return { task: started.plan, ...written };
 }
 
-/** A comment call's answer, or why there was none: not found where the service said so, unanswered for anything else. */
 function commentAnswer<Answer>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
 ): Effect.Effect<

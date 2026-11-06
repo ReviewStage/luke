@@ -1,10 +1,3 @@
-/**
- * workspace-sentry.ts -- a workspace's installations of our Sentry integration begun, read, and ended (`sentry-install-wire.ts`).
- *
- * Where Sentry returns the browser after an install (`triggers/sentry/installed`)
- * is a redirect, not a procedure, and stays a route of its own.
- */
-
 import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
@@ -19,10 +12,8 @@ import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { workspaceIdSchema } from "../task-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
-/** The most a request body may hold: a workspace id and an installation id. */
 const BODY_BYTES = 2_048;
 
-/** The installations read's query: the one workspace it names. */
 const workspaceSentryQuerySchema = EffectSchema.Struct({
   [WORKSPACE_SENTRY_QUERY.WORKSPACE_ID]: workspaceIdSchema,
 });

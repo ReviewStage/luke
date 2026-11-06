@@ -1,7 +1,3 @@
-/* facts.css -- a description list of facts: each a muted name taking the
-   room and its value in figures that line up, and a hairline over a list
-   set under what stands over it. */
-
 @layer components {
   .ui-facts {
     display: flex;

@@ -6,17 +6,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { PAGE_FRAME } from "../page-frame/page-frame.js";
 import { DetailPage, type DetailSecondary } from "./detail-page.js";
 
-/**
- * detail-page.test.ts -- the page is a region named by its title, its
- * secondary column a landmark of its own named by its label and holding only
- * its own content, a page with none has no such landmark, an empty slot draws
- * nothing, and each column takes the keyboard so it can be scrolled by its
- * keys. Its bar picks up its title once the header has scrolled away, as
- * words hidden from a reader while the header is in view. Under the window's
- * toolbar the page draws no title of its own, stands the toolbar, and is
- * named by its label. Synthetic plans.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -25,7 +14,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The plan's page drawn into the document, its secondary column `secondary`. */
 function draw({
   secondary,
   description = "A task in the platform workspace.",
@@ -52,14 +40,12 @@ function draw({
   return container;
 }
 
-/** The name a landmark is given, by its label or the element its label points at. */
 function nameOf(element: Element): string | null {
   const labelledBy = element.getAttribute("aria-labelledby");
   if (labelledBy !== null) return document.getElementById(labelledBy)?.textContent ?? null;
   return element.getAttribute("aria-label");
 }
 
-/** The one element `selector` finds in `container` whose words include `words`, failing the test if there is none. */
 function find(container: Element, selector: string, words = ""): HTMLElement {
   const found = [...container.querySelectorAll(selector)].find(
     (element) => element instanceof HTMLElement && (element.textContent ?? "").includes(words),
@@ -132,13 +118,10 @@ test("under the toolbar the page is a region named by its label, with no title o
   expect(nameOf(find(region, "aside"))).toBe("Details");
 });
 
-/** What an intersection observer reports of the heading it watches: in its root's view, or scrolled up past its top. */
 type HeadingSeen = (entries: readonly Partial<IntersectionObserverEntry>[]) => void;
 
-/** The headings the page's intersection observers watch, each with its observer's callback. */
 const headingsWatched = new Map<Element, HeadingSeen>();
 
-/** An intersection observer that reports nothing until a test scrolls the heading it watches, as the browser's would. */
 class HeadingObserver {
   readonly #callback: HeadingSeen;
   constructor(callback: HeadingSeen) {
@@ -153,7 +136,6 @@ class HeadingObserver {
   }
 }
 
-/** Scrolls the page's `h1` up out of its column's view, or back into it, as the observer over the column reports it. */
 function scrollHeading(container: Element, away: boolean): void {
   const heading = find(container, "h1");
   const seen = headingsWatched.get(heading);
@@ -170,7 +152,6 @@ function scrollHeading(container: Element, away: boolean): void {
   );
 }
 
-/** The bar's copy of the page's name, as a reader is handed it: its words, or none where it is hidden from them or not drawn. */
 function barName(container: Element): string | undefined {
   const bar = find(container, "header.ui-toolbar");
   const copy = [...bar.querySelectorAll(".ui-toolbar-pick-up")].find(

@@ -1,7 +1,3 @@
-/* corner-count.css -- a glyph with a count hung at its top end corner, on
-   the accent inside a ring of the window's ground, so it reads as standing
-   over the glyph rather than cut into it. */
-
 @layer components {
   .ui-corner-count {
     position: relative;

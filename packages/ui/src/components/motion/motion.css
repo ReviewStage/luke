@@ -1,17 +1,9 @@
-/* motion.css -- the keyframes a surface of an app's own draws its arrival on, where no shared component owns the surface.
-
-   Each is the ui's one statement of its motion: a fade is `ui-dialog-fade`,
-   `ui-menu-arrive`, or `ui-menu-leave`, and these are the travels they do
-   not cover. Their timing and easing belong to the rule that names them,
-   over the `--ui-duration-*` and `--ui-spring-fast` tokens. */
-
 @keyframes ui-card-grow {
   from {
     transform: scale(0.96);
   }
 }
 
-/* The way back of `ui-card-grow`, for a card leaving where it opened. */
 @keyframes ui-card-shrink {
   to {
     transform: scale(0.96);

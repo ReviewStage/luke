@@ -29,14 +29,6 @@ import {
   wireUuidSchema,
 } from "./service-wire.js";
 
-/**
- * inbox-asks.test.ts -- the inbox wire's asks: an ask on a thread's
- * message and the answer to it, how each reads off the wire, an answer
- * given against a response read as the answer to the ask it stands for, and
- * every answer an ask refuses.
- * Synthetic items throughout.
- */
-
 const ASKING_ID = "6f1c2a4e-1b9d-4c7e-9a52-3d8e0f4b7c11";
 const ITEM_ID = "a4b2c6d8-3e5f-4a7b-8c9d-1e2f3a4b5c6d";
 
@@ -61,7 +53,6 @@ const REGION = {
 
 const WORDS = { type: INBOX_ASK.ANSWER } as const;
 
-/** The agent's message asking, and a member's answering it, as a version 5 service writes them. */
 const ASKING = {
   id: ASKING_ID,
   author: INBOX_MESSAGE_AUTHOR.AGENT,
@@ -70,11 +61,6 @@ const ASKING = {
   createdAt: 1_000,
 };
 
-/**
- * A message as a desktop that reads a choice's one recommended label
- * declares it, written out as it stood, so the test reads what a released
- * build reads of a choice recommending several.
- */
 const oneRecommendedMessageSchema = Schema.Struct({
   id: wireUuidSchema,
   author: Schema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
@@ -93,7 +79,6 @@ const oneRecommendedMessageSchema = Schema.Struct({
   }),
 });
 
-/** What a desktop reads off the wire through the schema, or nothing where the read is refused. */
 function read<S extends Schema.Codec<unknown, unknown>>(
   schema: S,
   value: WireBoundaryInput,
@@ -227,7 +212,6 @@ test("an answer given against a response reads as the answer to the ask it stand
     ],
   ] as const;
   for (const [open, reply, answers] of cases) {
-    // The answer fits the response it was given against, and its reading fits the ask.
     const note: string | undefined = "note" in reply ? reply.note : undefined;
     assert.equal(inboxReplyRefusal(open.view, reply), undefined, reply.reply);
     const read = inboxReplyAnswers(open, reply);
@@ -290,7 +274,6 @@ test("a do takes Mark done once every step is ticked, or Couldn't do it with any
   assert.equal(inboxAnswersRefusal(SECRET, answer(INBOX_REPLY.DONE, [1, 0]), ""), undefined);
   assert.equal(inboxAnswersRefusal(SECRET, answer(INBOX_REPLY.NOT_DONE, [0]), ""), undefined);
   assert.equal(inboxAnswersRefusal(SECRET, answer(INBOX_REPLY.NOT_DONE), ""), undefined);
-  // A stored to-do maps to a do of no steps, which Mark done answers ticking none.
   const todo = { type: INBOX_ASK.DO, steps: [] };
   assert.equal(inboxAnswersRefusal(todo, answer(INBOX_REPLY.DONE), ""), undefined);
   const refusals = [

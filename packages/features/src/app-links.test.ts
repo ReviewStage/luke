@@ -3,13 +3,6 @@ import { test } from "vitest";
 import { appLinkClaim, appLinkInArguments, appLinkInbox, placeOfAppLink } from "./app-links.js";
 import { LINK_PLACE, type ReadLink, type ShownLink } from "./link-grammar.js";
 
-/**
- * A link of ours the system hands the app: read only as a place in the app, in
- * the app's own scheme; held until a panel can open it, then
- * opened in the order it came, and each later one as it comes; let go once
- * the launch is torn down. Synthetic ids.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const SECTION_LINK = `vespin://vespin.dev/acme/plan/${TASK_ID}#rollout`;
 const TASK_LINK = `vespin://vespin.dev/acme/plan/${TASK_ID}`;

@@ -2,27 +2,6 @@ import { MARK_ART } from "@repo/brand";
 import { useEffect, useRef } from "react";
 import { fitCanvas, paintLoop, roleChannels } from "../components/landing/landing-paint.js";
 
-/**
- * mark-orb.tsx -- the landing's hero: the product's mark as a machined copper ball, ordered-dithered into the theme's own copper.
- *
- * One continuous surface reflects a studio, a softbox overhead, a strip to
- * one side, a rim light behind, turning slowly, and a bevel along every edge
- * of the mark's cut catches it, so the disc's rim and the V's walls read as
- * cut metal. The cut is the mark itself: `MARK_ART`'s path drawn into a
- * texture the shader reads, so the ball and the logo never part. Every
- * pixel lands on one of five flat colors read off the page's own roles at
- * mount (the ground, a deep copper mixed from the accent and the ground, the
- * accent, the link copper, the ink), so there is no gradient and a theme's
- * brand layer carries the ball with it.
- *
- * The light leans toward a pointer only near the ball, on a critically
- * damped spring, and lets go as it leaves. Under reduced motion the ball is
- * drawn once and stands still; where WebGL 2 is missing, the canvas stays
- * empty and the hero reads as words alone. Decorative: a canvas with no
- * words of its own, which a reader passes over.
- */
-
-/** The roles the ball's five tones are read from, darkest first; the deep copper is mixed between the first two. */
 const TONE_ROLES = [
   "--ui-color-ground",
   "--ui-color-accent",
@@ -30,22 +9,16 @@ const TONE_ROLES = [
   "--ui-color-ink",
 ] as const;
 
-/** How much of the ground the deep copper takes beside the accent. */
 const DEEP_MIX = 0.55;
 
-/** How far, in ball radii, the pointer starts to count, and how far it counts fully. */
 const REACH = { START: 1.5, FULL: 1 } as const;
 
-/** The spring that carries the ball's idea of where the pointer is. */
 const SPRING = { STIFFNESS: 60, MAX_STEP: 0.033 } as const;
 
-/** The ball's diameter as a share of the canvas's shorter side. */
 const BALL_SHARE = 0.82;
 
-/** The dither's cell, in device pixels per canvas width: finer reads as polish. */
 const CELLS_ACROSS = 420;
 
-/** The mark's texture edge, in pixels, and the blur that turns it into the bevel's height. */
 const MASK = { SIZE: 1024, BEVEL_BLUR: "blur(14px)" } as const;
 
 const VERTEX = "#version 300 es\nin vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
@@ -91,7 +64,6 @@ void main(){
   o = vec4(col, 1.);
 }`;
 
-/** Where the pointer stands for the ball: its eased place and how much it counts. */
 interface Lean {
   x: number;
   y: number;
@@ -103,7 +75,6 @@ interface Lean {
   want: number;
 }
 
-/** The ball's five flat tones from the page's roles: the ground, deep copper, the accent, the link copper, the ink. */
 function paletteOf(canvas: HTMLCanvasElement): Float32Array {
   const [ground, accent, link, ink] = TONE_ROLES.map((role) => roleChannels(canvas, role));
   const deep = (accent ?? [0, 0, 0]).map(
@@ -118,7 +89,6 @@ function paletteOf(canvas: HTMLCanvasElement): Float32Array {
   ]);
 }
 
-/** The mark as a texture: its body in red and, blurred, the bevel's height in blue. */
 function markTexture(gl: WebGL2RenderingContext): void {
   const canvas = document.createElement("canvas");
   canvas.width = MASK.SIZE;
@@ -141,7 +111,6 @@ function markTexture(gl: WebGL2RenderingContext): void {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
-/** The ball's program, compiled, linked, and in use; whether it linked is the caller's to ask. */
 function ballProgram(gl: WebGL2RenderingContext): WebGLProgram {
   const program = gl.createProgram();
   for (const [kind, source] of [
@@ -156,12 +125,10 @@ function ballProgram(gl: WebGL2RenderingContext): WebGLProgram {
     }
   }
   gl.linkProgram(program);
-  // Note that the program is put in use through `call`, because its method's name reads to the linter as a React hook.
   gl.useProgram.call(gl, program);
   return program;
 }
 
-/** A drawer for the ball on `canvas`, or none where WebGL 2 is missing. */
 function ballDrawer(canvas: HTMLCanvasElement): ((t: number, lean: Lean) => void) | undefined {
   const gl = canvas.getContext("webgl2");
   if (!gl) return undefined;
@@ -188,7 +155,6 @@ function ballDrawer(canvas: HTMLCanvasElement): ((t: number, lean: Lean) => void
   };
 }
 
-/** Steps the lean one frame: a critically damped spring toward the pointer, and an eased rise and fall of how much it counts. */
 function stepLean(lean: Lean, dt: number): void {
   const damping = 2 * Math.sqrt(SPRING.STIFFNESS);
   lean.vx += ((lean.tx - lean.x) * SPRING.STIFFNESS - lean.vx * damping) * dt;
@@ -198,7 +164,6 @@ function stepLean(lean: Lean, dt: number): void {
   lean.near += (lean.want - lean.near) * Math.min(1, dt * 4);
 }
 
-/** The ball, filling the box its holder gives it. */
 export function MarkOrb(): React.JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -208,7 +173,6 @@ export function MarkOrb(): React.JSX.Element {
     if (!draw) return undefined;
     const lean: Lean = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, near: 0, want: 0 };
     let previous = 0;
-    // Note that the pointer is read on the window, because the ball's reach runs past its own box.
     const onMove = (event: PointerEvent): void => {
       const box = canvas.getBoundingClientRect();
       const half = (Math.min(box.width, box.height) * BALL_SHARE) / 2;

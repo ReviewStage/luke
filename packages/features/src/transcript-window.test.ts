@@ -11,15 +11,6 @@ import {
   windowMessagesOf,
 } from "./transcript-window.js";
 
-/**
- * A window followed by cursor joins each answer past the cursor onto the
- * rows it holds by message id, so the messages the answer names stand as it
- * names them, a message moved to a later place among them, and every other
- * message the window holds stands as it was, the newest `TRANSCRIPT_WINDOW`
- * kept.
- */
-
-/** A developer's line of the window, at its place, holding as many parts as it names. */
 function row(id: string, seq: number, partCount: number): TranscriptWindowRow {
   return {
     id,
@@ -49,7 +40,6 @@ function row(id: string, seq: number, partCount: number): TranscriptWindowRow {
   };
 }
 
-/** One part of a message, its words. */
 function part(messageId: string, index: number, text: string): TranscriptWindowPartRow {
   return {
     messageId,

@@ -1,56 +1,14 @@
-/**
- * agent-replay.ts -- a coding agent's transcript replayed in the first message of an agent started from it: as the service writes it, and as the desktop reads it back.
- *
- * eve opens a session with a user message and nothing before it, so an
- * agent started from another, to continue it or to fork it at one of its
- * messages, is handed that agent's transcript inside its first message:
- * the brief, then the replay under `REPLAY_HEADING`, then the developer's
- * note, if any, under its own heading (`START_NOTE_HEADING`). The replay is
- * a block between two marker comments. The opening one names the source
- * agent, the message it was forked at where it was, and how many of the
- * source's steps the block keeps of how many there were. A preamble follows
- * for the model, then each step behind a marker of its own naming its kind,
- * then the closing marker. Where the oldest steps could not be kept, a
- * summary we wrote of them stands after the preamble and before the
- * steps, behind a marker of its own saying whose words it is and how many
- * steps it stands for. The note stands under its heading behind a
- * marker of its own naming how many of the message's files are the note's,
- * text files apart from images and PDFs, and its length, which ends the
- * message, so a note is told from a brief whose prose holds its heading,
- * with a replay or without.
- *
- * A tool call's step marker also names where the call stood, its input's
- * length, and the tool it called, so its input and its output are read
- * apart from its words by length rather than by what they say, and the
- * call is drawn as the live transcript draws a call of that tool; a line's
- * names who sent it and when.
- *
- * Every marker that a run of text follows says that text's length in
- * `chars=N`, counted as JavaScript counts a string's length, in UTF-16
- * code units, on both sides. A reader then takes exactly that much text
- * and never looks inside it for a boundary, so a step whose words hold
- * Markdown, a fence, or a marker of its own can never be taken for the
- * next step. A step's text is its one-line summary, a newline, and its
- * words in full. A message whose markers do not add up reads as having no
- * replay at all, so a brief that only looks like one is drawn as it
- * stands.
- */
-
-/** The heading a start's note stands under, after the brief and any replay: the developer's, or that of the agent that started it. */
 export const START_NOTE_HEADING = {
   DEVELOPER: "## Note from the developer",
   AGENT: "## Note from the agent that started you",
 } as const;
 
-/** The agent's note heading as first messages written before it was reworded spell it, which stored transcripts still hold. */
 const RETIRED_AGENT_NOTE_HEADING = "## Note from the coding agent that started you";
 
 export type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEADING];
 
-/** The heading the replay stands under, after the brief. It reads the same for a continue and a fork. */
 const REPLAY_HEADING = "## The work you continue from";
 
-/** What one step of a replay is: a line sent to the agent, the agent's own words, or a tool call it made. */
 export const REPLAY_STEP_KIND = {
   LINE: "line",
   SAID: "said",
@@ -59,7 +17,6 @@ export const REPLAY_STEP_KIND = {
 
 type ReplayStepKind = (typeof REPLAY_STEP_KIND)[keyof typeof REPLAY_STEP_KIND];
 
-/** Where a tool call stood: done with its result, failed with its error, or still under way with none. */
 export const REPLAY_TOOL_STATE = {
   DONE: "done",
   FAILED: "failed",
@@ -68,7 +25,6 @@ export const REPLAY_TOOL_STATE = {
 
 export type ReplayToolState = (typeof REPLAY_TOOL_STATE)[keyof typeof REPLAY_TOOL_STATE];
 
-/** How a tool call's input or output is spelled in its words: as the text it was, or as the JSON of a value that was no text. */
 export const REPLAY_VALUE_FORM = {
   TEXT: "text",
   JSON: "json",
@@ -76,7 +32,6 @@ export const REPLAY_VALUE_FORM = {
 
 export type ReplayValueForm = (typeof REPLAY_VALUE_FORM)[keyof typeof REPLAY_VALUE_FORM];
 
-/** Who sent a line: a member of the workspace, the app, an automation, GitHub, another agent, or the developer where the row named none. */
 export const REPLAY_SENDER = {
   DEVELOPER: "developer",
   MEMBER: "member",
@@ -88,21 +43,11 @@ export const REPLAY_SENDER = {
 
 type ReplaySenderKind = (typeof REPLAY_SENDER)[keyof typeof REPLAY_SENDER];
 
-/** A line's sender, with the member's account where a member sent it. */
 interface ReplaySender {
   readonly kind: ReplaySenderKind;
   readonly memberId?: string;
 }
 
-/**
- * One step: its kind, its summary on one line, and its words as sent, a
- * tool call's input and result whole. A tool call also carries where it
- * stood, its input, and its output, its result or its error, none while it
- * ran, the tool it called, and whether its input and its output were text
- * or a value spelled as JSON; a line carries who sent it and when, in
- * milliseconds since the epoch. Each is read from the step's marker, so a
- * step written before the marker named them carries none of them.
- */
 export interface ReplayStep {
   readonly kind: ReplayStepKind;
   readonly summary: string;
@@ -117,7 +62,6 @@ export interface ReplayStep {
   readonly at?: number;
 }
 
-/** The words a tool call's step says, as the model reads them: its input, then its result, its failure, or that it had none yet. */
 const TOOL_WORDS = {
   INPUT: "Input: ",
   RESULT: "\nResult: ",
@@ -125,7 +69,6 @@ const TOOL_WORDS = {
   NO_RESULT: "(no result: the call was still under way)",
 } as const;
 
-/** A tool call as a step, its words spelled from where it stood, its input, and its output, and the tool it called where it is named. */
 export function toolStep(call: {
   readonly summary: string;
   readonly state: ReplayToolState;
@@ -154,13 +97,11 @@ export function toolStep(call: {
   };
 }
 
-/** A summary we wrote of the oldest steps the replay could not keep: its words, which are not the agent's own, and how many steps it stands for. */
 export interface ReplaySummary {
   readonly text: string;
   readonly steps: number;
 }
 
-/** A replay: the agent it replays, the message it was forked at where it was, the preamble the model reads, the summary of the steps left out where one was written, the steps kept, and how many steps there were. */
 export interface Replay {
   readonly agentId: string;
   readonly messageId?: string;
@@ -170,11 +111,6 @@ export interface Replay {
   readonly totalSteps: number;
 }
 
-/**
- * How many of a first message's files are its note's, in the two groups the
- * service hands files in: text files, inlined, and images and PDFs. The
- * note's are the last of each group, since the brief's go first.
- */
 export interface NoteFiles {
   readonly text: number;
   readonly other: number;
@@ -182,28 +118,21 @@ export interface NoteFiles {
 
 const NO_NOTE_FILES: NoteFiles = { text: 0, other: 0 };
 
-/** A note read back: whose it is, its words, and how many of the message's files are its own. */
 interface FirstMessageNote {
   readonly heading: StartNoteHeading;
   readonly text: string;
   readonly files: NoteFiles;
 }
 
-/** A first message read back: the brief, the replay where one follows it, and the note where one ends the message. */
 export interface FirstMessage {
   readonly brief: string;
   readonly replay?: Replay;
   readonly note?: FirstMessageNote;
 }
 
-/**
- * The namespace every marker is written under, and the one written before
- * it, which a message handed then still holds and is read in as well.
- */
 const MARKER_SPACE = "agent";
 const LEGACY_MARKER_SPACE = "luke";
 const MARKER_SPACES = [MARKER_SPACE, LEGACY_MARKER_SPACE] as const;
-/** Either namespace, as a marker's pattern reads it. */
 const SPACE = `(?:${MARKER_SPACE}|${LEGACY_MARKER_SPACE})`;
 
 const REPLAY_CLOSES = MARKER_SPACES.map((space) => `<!-- /${space}:replay -->`);
@@ -234,10 +163,8 @@ const ATTRIBUTE_VALUE = /^[A-Za-z0-9_.:@-]+$/u;
 const INSTANT_VALUE = /^\d+$/u;
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(REPLAY_TOOL_STATE));
 const SENDER_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_SENDER));
-/** The app's sender as a marker written before it was `app` spells it. */
 const LEGACY_APP_SENDER = "luke";
 const VALUE_FORMS: ReadonlySet<string> = new Set(Object.values(REPLAY_VALUE_FORM));
-/** Whose words a summary is, as its marker says: the app's, `luke` before it. */
 const SUMMARY_BY = "app";
 const SUMMARY_OPEN = new RegExp(
   `^<!-- ${SPACE}:summary by=(?:${SUMMARY_BY}|luke) steps=(\\d+) chars=(\\d+) -->\\n`,
@@ -245,41 +172,34 @@ const SUMMARY_OPEN = new RegExp(
 );
 
 const STEP_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_STEP_KIND));
-/** Each heading a note may stand under, as it is spelled and as it is read: today's, then the retired spelling. */
 const NOTE_HEADINGS: readonly (readonly [string, StartNoteHeading])[] = [
   ...Object.values(START_NOTE_HEADING).map((heading) => [heading, heading] as const),
   [RETIRED_AGENT_NOTE_HEADING, START_NOTE_HEADING.AGENT],
 ];
 
-/** Where the first of the needles stands in the text from `from`, in either namespace; -1 where none does. */
 function firstIndexOf(text: string, needles: readonly string[], from: number): number {
   const found = needles.map((needle) => text.indexOf(needle, from)).filter((at) => at >= 0);
   return found.length === 0 ? -1 : Math.min(...found);
 }
 
-/** A summary held to one line, since a step's first line is its summary. */
 function oneLine(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
 }
 
-/** A value the marker can spell as one attribute, or none where it cannot, which leaves the attribute out. */
 function spelled(key: string, value: string | undefined): string {
   return value !== undefined && ATTRIBUTE_VALUE.test(value) ? ` ${key}=${value}` : "";
 }
 
-/** When a line was sent as its marker spells it, or none where it is no whole moment. */
 function instant(at: number | undefined): string {
   return at !== undefined && Number.isSafeInteger(at) && at >= 0 ? ` at=${at}` : "";
 }
 
-/** What a step's marker names beside its kind: a tool call's state, its input's length, its tool, and the forms of its input and output, or a line's sender, member, and when it was sent. */
 function stepAttributes(step: ReplayStep): string {
   if (step.kind === REPLAY_STEP_KIND.TOOL && step.state !== undefined && step.input !== undefined) {
     const forms = `${spelled("input-form", step.inputForm)}${spelled("output-form", step.outputForm)}`;
     return ` state=${step.state} input-chars=${step.input.length}${spelled("tool", step.tool)}${forms}`;
   }
   if (step.kind !== REPLAY_STEP_KIND.LINE) return "";
-  // A member id the marker cannot spell is left out, and the line is still the member's.
   const sender =
     step.sender === undefined
       ? ""
@@ -287,19 +207,15 @@ function stepAttributes(step: ReplayStep): string {
   return `${sender}${instant(step.at)}`;
 }
 
-/** One step as the block spells it. */
 function stepText(step: ReplayStep): string {
   const body = `${oneLine(step.summary)}\n${step.words}`;
   return `<!-- ${MARKER_SPACE}:step kind=${step.kind}${stepAttributes(step)} chars=${body.length}${MARKER_END}${body}\n`;
 }
 
-/** A value's form read back from its marker; none where it names none it knows. */
 function formOf(value: string | undefined): ReplayValueForm | undefined {
-  // SAFETY: the value was checked against the vocabulary in the same expression.
   return value !== undefined && VALUE_FORMS.has(value) ? (value as ReplayValueForm) : undefined;
 }
 
-/** A tool call's state, input, output, tool, and the forms of its input and output read back from its marker and its words; none where they do not add up. */
 function toolFields(
   attributes: ReadonlyMap<string, string>,
   words: string,
@@ -318,7 +234,6 @@ function toolFields(
   };
 }
 
-/** A tool call's state, input, and output read back from its marker and its words; none where they do not add up. */
 function calledFields(
   attributes: ReadonlyMap<string, string>,
   words: string,
@@ -331,7 +246,6 @@ function calledFields(
   if (!words.startsWith(TOOL_WORDS.RESULT, inputEnd)) return {};
   const input = words.slice(TOOL_WORDS.INPUT.length, inputEnd);
   const result = words.slice(inputEnd + TOOL_WORDS.RESULT.length);
-  // SAFETY: the state was checked against the vocabulary just above.
   const known = state as ReplayToolState;
   if (known === REPLAY_TOOL_STATE.RUNNING) return { state: known, input };
   if (known === REPLAY_TOOL_STATE.DONE) return { state: known, input, output: result };
@@ -339,20 +253,17 @@ function calledFields(
   return { state: known, input, output: result.slice(TOOL_WORDS.FAILED.length) };
 }
 
-/** A line's sender and when it was sent read back from its marker; none of either where it names none it knows. */
 function lineFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender" | "at"> {
   const at = attributes.get("at") ?? "";
   const when = INSTANT_VALUE.test(at) && Number.isSafeInteger(Number(at)) ? { at: Number(at) } : {};
   return { ...senderFields(attributes), ...when };
 }
 
-/** A line's sender read back from its marker; none where it names none it knows. */
 function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep, "sender"> {
   const spelled = attributes.get("sender") ?? "";
   const kind = spelled === LEGACY_APP_SENDER ? REPLAY_SENDER.APP : spelled;
   if (!SENDER_KINDS.has(kind)) return {};
   const member = attributes.get("member");
-  // SAFETY: the kind was checked against the vocabulary just above.
   const sender = {
     kind: kind as ReplaySenderKind,
     ...(member === undefined ? undefined : { memberId: member }),
@@ -360,13 +271,11 @@ function senderFields(attributes: ReadonlyMap<string, string>): Pick<ReplayStep,
   return { sender };
 }
 
-/** The summary as the block spells it, marked as the app's words rather than the agent's. */
 function summaryText(summary: ReplaySummary | undefined): string {
   if (summary === undefined) return "";
   return `<!-- ${MARKER_SPACE}:summary by=${SUMMARY_BY} steps=${summary.steps} chars=${summary.text.length}${MARKER_END}${summary.text}\n`;
 }
 
-/** The replay as it follows the brief: the heading, the opening marker with the preamble, the summary where there is one, every step, and the closing marker. */
 function replayText(replay: Replay): string {
   const message = replay.messageId === undefined ? "" : ` message=${replay.messageId}`;
   const open =
@@ -376,28 +285,23 @@ function replayText(replay: Replay): string {
   return `${REPLAY_HEADING}\n\n${open}${replay.preamble}\n${summaryText(replay.summary)}${steps}${REPLAY_CLOSE}`;
 }
 
-/** The bytes a run of text takes in UTF-8, which is what a model's tokens are estimated from. */
 function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).byteLength;
 }
 
-/** The bytes the steps take as the block spells them. */
 export function stepsBytes(steps: readonly ReplayStep[]): number {
   return steps.reduce((sum, step) => sum + utf8Bytes(stepText(step)), 0);
 }
 
-/** The bytes a summary takes as the block spells it; none where there is none. */
 export function summaryBytes(summary: ReplaySummary | undefined): number {
   return utf8Bytes(summaryText(summary));
 }
 
-/** The note as it ends a first message: its heading, then a marker naming its files and its length, then its words. */
 function noteText(note: string, heading: StartNoteHeading, files: NoteFiles): string {
   const marker = `${NOTE_OPEN_START}text-files=${files.text} other-files=${files.other} chars=${note.length}${MARKER_END}`;
   return `${SECTION_GAP}${heading}${SECTION_GAP}${marker}${note}`;
 }
 
-/** The first message an agent is handed: the brief, the replay where there is one, and the note under its heading and marker where there is one, with how many of the message's files are the note's. */
 export function firstMessageText(
   brief: string,
   replay: Replay | undefined,
@@ -409,11 +313,6 @@ export function firstMessageText(
   return note === undefined ? replayed : `${replayed}${noteText(note, heading, noteFiles)}`;
 }
 
-/**
- * The newest steps whose block stays within the bound in UTF-8 bytes, in
- * order: the oldest are dropped first, so a long transcript keeps where it
- * ended.
- */
 export function newestStepsWithin(
   steps: readonly ReplayStep[],
   maximumBytes: number,
@@ -431,7 +330,6 @@ export function newestStepsWithin(
   return steps.slice(first);
 }
 
-/** A run of text of the marked length at `at`, followed by a newline, and where reading goes on; nothing where the text runs short or the newline is missing. */
 function markedRun(
   text: string,
   at: number,
@@ -442,7 +340,6 @@ function markedRun(
   return { run: text.slice(at, end), next: end + 1 };
 }
 
-/** The summary at `at` where one stands, and where reading goes on; nothing where its marker does not add up. */
 function summaryFrom(
   text: string,
   at: number,
@@ -455,7 +352,6 @@ function summaryFrom(
   return { summary: { text: body.run, steps: Number(steps) }, next: body.next };
 }
 
-/** The steps from `at` to the closing marker, and where the text goes on past it; nothing where a marker does not add up. */
 function stepsFrom(
   text: string,
   start: number,
@@ -476,7 +372,6 @@ function stepsFrom(
     );
     const words = body.run.slice(split + 1);
     steps.push({
-      // SAFETY: the kind was checked against the vocabulary just above.
       kind: kind as ReplayStepKind,
       summary: body.run.slice(0, split),
       words,
@@ -489,7 +384,6 @@ function stepsFrom(
   return { steps, next: at + close.length };
 }
 
-/** The marked note whose heading starts at `at` and that ends the message exactly; nothing where its marker does not add up. */
 function markedNoteAt(text: string, at: number): FirstMessageNote | undefined {
   for (const [spelled, heading] of NOTE_HEADINGS) {
     const lead = `${SECTION_GAP}${spelled}${SECTION_GAP}`;
@@ -505,12 +399,6 @@ function markedNoteAt(text: string, at: number): FirstMessageNote | undefined {
   return undefined;
 }
 
-/**
- * The note that ends the message from `at`, or none where nothing follows;
- * nothing where something follows that is no note. A note behind no
- * marker, as agents started before the marker were handed, is read as the
- * rest of the message, with none of the files.
- */
 function noteFrom(text: string, at: number): FirstMessageNote | null | undefined {
   if (at === text.length) return null;
   const marked = markedNoteAt(text, at);
@@ -518,8 +406,6 @@ function noteFrom(text: string, at: number): FirstMessageNote | null | undefined
   for (const [spelled, heading] of NOTE_HEADINGS) {
     const lead = `${SECTION_GAP}${spelled}${SECTION_GAP}`;
     if (!text.startsWith(lead, at)) continue;
-    // A whole marker that does not add up is a note damaged, never one from before the marker,
-    // whose words may still open with the marker's first words.
     const start = at + lead.length;
     if (NOTE_OPEN.test(text.slice(start, start + 96))) return undefined;
     return { heading, text: text.slice(at + lead.length), files: NO_NOTE_FILES };
@@ -527,11 +413,9 @@ function noteFrom(text: string, at: number): FirstMessageNote | null | undefined
   return undefined;
 }
 
-/** The first marked note that ends the message, with the brief before it; nothing where none adds up. */
 function markedNoteIn(text: string): FirstMessage | undefined {
   let at = firstIndexOf(text, NOTE_OPEN_STARTS, 0);
   while (at >= 0) {
-    // The marker stands after its heading, so the note starts at the gap before that heading.
     for (const [spelled] of NOTE_HEADINGS) {
       const lead = `${SECTION_GAP}${spelled}${SECTION_GAP}`;
       const from = at - lead.length;
@@ -544,7 +428,6 @@ function markedNoteIn(text: string): FirstMessage | undefined {
   return undefined;
 }
 
-/** The replay whose heading starts at `at`, and the note after it; nothing where the block does not add up. */
 function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undefined {
   const start = at + REPLAY_HEADING_LEAD.length;
   const open = REPLAY_OPEN.exec(text.slice(start, start + 256));
@@ -569,13 +452,6 @@ function replayAt(text: string, at: number): Omit<FirstMessage, "brief"> | undef
   return { replay, ...(note === null ? undefined : { note }) };
 }
 
-/**
- * A first message read back into its brief, its replay, and its note. The
- * first heading whose block adds up is the replay, so a brief that quotes
- * one is still read as the brief. With no replay, a note is read only
- * behind its marker, whose length must end the message exactly, so a brief
- * that only holds a note's heading in its prose is read whole.
- */
 export function firstMessageParts(text: string): FirstMessage {
   let at = firstIndexOf(text, REPLAY_LEADS, 0);
   while (at >= 0) {

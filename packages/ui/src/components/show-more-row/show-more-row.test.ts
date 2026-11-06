@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { ShowMoreRow } from "./show-more-row.js";
 
-/**
- * show-more-row.test.ts -- a capped list's foot says how many rows it
- * leaves out, shows them on its press and then offers to put them back,
- * and a list whose rows all fit has no foot. Synthetic tasks.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +20,6 @@ afterEach(() => {
 
 const CAP = 3;
 
-/** A list of `count` tasks capped at three rows, ending in its foot. */
 function CappedList({ count }: { count: number }): React.JSX.Element {
   const [shown, setShown] = useState(false);
   const tasks = Array.from({ length: count }, (_, index) => `Task ${index + 1}`);

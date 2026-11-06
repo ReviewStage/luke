@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TIME_LOOK, Time } from "./time.js";
 
-/** Oct 14, 2026, 6:00 PM, on the machine's own clock. */
 const NOW = new Date(2026, 9, 14, 18, 0).getTime();
 const AT = new Date(2026, 9, 14, 15, 42).getTime();
 

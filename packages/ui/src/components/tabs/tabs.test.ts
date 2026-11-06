@@ -8,40 +8,22 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { Announcer } from "../announcer/announcer.js";
 import { Tab, TabCard, Tabs, type TabsControls } from "./tabs.js";
 
-/**
- * tabs.test.ts -- however many tabs a strip holds and however it is
- * narrowed, chosen, or scrolled, it draws every tab and settles with no loop
- * of renders; a tab chosen past its end, or the one it opens on, is scrolled
- * into its own place, the strip's scroll alone; a dragged tab lands where
- * its place in the row says; the arrow keys, Home, and End move the focus
- * along, Delete closes the focused tab and hands focus to the one in its
- * place, an anchored tab stands out of every move, a tab's × names its close in a hint, with ⌘W on the chosen tab alone,
- * and an owner's step moves the focused tab and says so; a preview
- * tab is kept by a double-click; and a switcher's card is picked on the
- * press, or on the click or Return from a Tab stop of its own, as asked. jsdom lays nothing out, so a test that
- * scrolls lays the strip's boxes out itself. Synthetic throughout.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** As many tabs as a long day's agents and files might open in one strip. */
 const MANY = 60;
 
-/** Each tab's width, as laid out where a test lays the strip out, in CSS pixels. */
 const TAB_WIDTH = 100;
 
 const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-/** Every observer's callback, so a test can report the layout changed. */
 let observers: (() => void)[] = [];
 
-/** Every move the strip asked for, as its place before and after. */
 let moves: [number, number][] = [];
 
 beforeEach(() => {
@@ -67,7 +49,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A strip of `count` tabs, opened on the one `opensOn` names, choosing the one pressed, each but the first closing, which may be moved, the first anchored where `anchored` says. */
 function Strip({
   count,
   opensOn = 0,
@@ -105,7 +86,6 @@ function Strip({
   });
 }
 
-/** `element` drawn into the document. */
 async function render(element: ReactNode): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -114,7 +94,6 @@ async function render(element: ReactNode): Promise<HTMLElement> {
   return container;
 }
 
-/** The pill of the tab labeled `label`. */
 function pill(container: HTMLElement, label: string): HTMLElement {
   const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find(
     (each) => each.querySelector(".ui-tab-label")?.textContent === label,
@@ -122,21 +101,14 @@ function pill(container: HTMLElement, label: string): HTMLElement {
   return tab?.closest<HTMLElement>(".ui-tab") ?? assert.fail(`${label}'s tab stands`);
 }
 
-/** The tab labeled `label` itself, the press inside its pill. */
 function tabOf(container: HTMLElement, label: string): HTMLElement {
   return pill(container, label).querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("a tab");
 }
 
-/** The strip drawn in `container`. */
 function stripOf(container: HTMLElement): HTMLElement {
   return container.querySelector<HTMLElement>(".ui-tabs") ?? assert.fail("it stands");
 }
 
-/**
- * Lays the strip out `width` pixels wide, its tabs in a row from its start,
- * each `TAB_WIDTH` wide, scrolling no further than its tabs reach, as the
- * window's would: their places within the strip and on the screen alike.
- */
 function layOut(width: number, count: number): void {
   let scrolled = 0;
   vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
@@ -169,7 +141,6 @@ function layOut(width: number, count: number): void {
   });
 }
 
-/** A key pressed on `target`, as the keyboard would. */
 function press(target: HTMLElement, key: string, init: KeyboardEventInit = {}): void {
   act(() => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...init }));
@@ -214,12 +185,10 @@ test("the chosen tab, pinned at the strip's start after a scroll, dragged along 
   act(() => {
     strip.scrollLeft = 150;
   });
-  // Pinned at the strip's start, the chosen tab is drawn there, not at its own place in the row.
   const chosen = pill(container, "Tab 1");
   vi.spyOn(chosen, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: 0, width: TAB_WIDTH, height: 30 }),
   );
-  // jsdom captures no pointer; the drag asks the strip to, as the window's would.
   Object.assign(strip, {
     setPointerCapture: () => undefined,
     releasePointerCapture: () => undefined,
@@ -250,7 +219,6 @@ test("the arrow keys, Home, and End move the focus along the strip, wrapping at 
   assert.equal(focused(), "Tab 1");
   press(tabOf(container, "Tab 1"), "ArrowRight", { shiftKey: true, metaKey: true });
   assert.equal(focused(), "Tab 1");
-  // Only the chosen tab is the strip's one stop for Tab.
   const stops = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].map(
     (tab) => tab.tabIndex,
   );
@@ -353,7 +321,6 @@ test("a card picked on the press is picked as the press lands, and one picked on
   assert.deepEqual(picked, ["Held"]);
   act(() => clicked?.click());
   assert.deepEqual(picked, ["Held", "Clicked"]);
-  // Only the card picked on the click takes a Tab stop, and Return picks it there.
   assert.deepEqual([held?.tabIndex, clicked?.tabIndex], [-1, 0]);
   act(() => {
     clicked?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -361,7 +328,6 @@ test("a card picked on the press is picked as the press lands, and one picked on
   assert.deepEqual(picked, ["Held", "Clicked", "Clicked"]);
 });
 
-/** The pointer resting on `target` past the hint's wait, on a faked clock. */
 function restOn(target: Element): void {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -376,7 +342,6 @@ function restOn(target: Element): void {
   }
 }
 
-/** The × of the tab labeled `label`. */
 function closeOf(container: HTMLElement, label: string): HTMLElement {
   return (
     pill(container, label).querySelector<HTMLElement>(`button[aria-label="Close ${label}"]`) ??

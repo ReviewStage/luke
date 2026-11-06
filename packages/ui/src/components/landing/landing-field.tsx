@@ -2,18 +2,6 @@ import { bayerAt } from "@repo/brand";
 import { useEffect, useRef } from "react";
 import { fitCanvas, paintLoop } from "./landing-paint.js";
 
-/**
- * landing-field.tsx -- the landing's quiet grounds: a field of copper dots that drifts behind a stage.
- *
- * It is Canvas 2D, a grid of small square dots in the accent, each cell
- * lit or not by an ordered dither over a slowly moving value, so the field
- * reads as one flat color on the ground and never as a gradient. The
- * pattern is the stage's: a flow of soft bands, rings going out from below,
- * or waves across. Under reduced motion it is drawn once and stands still.
- * Decorative: a canvas with no words of its own, which a reader passes over.
- */
-
-/** What moves through a stage's field. */
 export const LANDING_FIELD = {
   FLOW: "flow",
   RINGS: "rings",
@@ -22,10 +10,8 @@ export const LANDING_FIELD = {
 
 export type LandingFieldPattern = (typeof LANDING_FIELD)[keyof typeof LANDING_FIELD];
 
-/** A cell's lit share, from 0 to 1, at a point of the box at a time. */
 type Shade = (x: number, y: number, t: number, width: number, height: number) => number;
 
-/** The cell of each field, in CSS pixels, and how much of it a dot fills. */
 const CELL = { FIELD: 7, DOT: 0.42 } as const;
 
 const PATTERNS: Readonly<Record<LandingFieldPattern, Shade>> = {
@@ -43,12 +29,10 @@ const PATTERNS: Readonly<Record<LandingFieldPattern, Shade>> = {
     0.16 + 0.14 * Math.sin(y * 0.03 + Math.sin(x * 0.006 + t * 0.35) * 3),
 };
 
-/** The accent the dots are drawn in, read off the canvas's own place in the page. */
 function accentOf(canvas: HTMLCanvasElement): string {
   return getComputedStyle(canvas).color;
 }
 
-/** Draws one frame of dots over `canvas`, each cell lit where `shade` passes its dither threshold. */
 function drawDots(
   canvas: HTMLCanvasElement,
   shade: Shade,
@@ -73,7 +57,6 @@ function drawDots(
   }
 }
 
-/** A canvas that paints `shade` in dots of `cell` while it is on screen. */
 function useDots(cell: number, shadeFor: (canvas: HTMLCanvasElement) => Shade) {
   const ref = useRef<HTMLCanvasElement>(null);
   const shadeRef = useRef(shadeFor);
@@ -87,7 +70,6 @@ function useDots(cell: number, shadeFor: (canvas: HTMLCanvasElement) => Shade) {
   return ref;
 }
 
-/** A stage's field of drifting dots, filling the stage behind what it holds. */
 export function LandingField({ pattern }: { pattern: LandingFieldPattern }): React.JSX.Element {
   const ref = useDots(CELL.FIELD, () => PATTERNS[pattern]);
   return <canvas ref={ref} className="ui-landing-field" />;

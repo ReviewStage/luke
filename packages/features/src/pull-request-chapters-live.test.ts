@@ -1,18 +1,8 @@
 import { expect, it } from "vitest";
 import { pullRequestChaptersOfLive } from "./pull-request-chapters-live.js";
 
-/**
- * pull-request-chapters-live.test.ts -- the live statement's row of a pull
- * request's newest claim is drawn as the agent's read answers it: none where
- * it was never generated, each state with the columns it draws, a failure's
- * stored kind, its stored chapters decoded with their wire schema so a key
- * the wire does not name is dropped, and a ready row without its model as
- * unavailable.
- */
-
 const HEADS = { headSha: "c0ffee1", baseSha: "ba5e000" } as const;
 
-/** Every column the statement selects, as the poll delivers a row, each state's own written over it. */
 const STORED = {
   ...HEADS,
   failureKind: null,

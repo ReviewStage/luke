@@ -1,15 +1,8 @@
-/* stepped-back.css -- the controls inside a stepped-back region, drawn as
-   a settled choice list draws the options nobody picked: an outline in
-   muted words, at full strength (stepped-back.tsx). */
-
 @layer components {
-  /* The region draws no box, so what holds it lays out its controls. */
   .ui-stepped-back {
     display: contents;
   }
 
-  /* A choice's rows step back to the outline a settled list's unpicked
-     rows wear, the same declarations as `.ui-choice[data-picked="false"]`. */
   .ui-stepped-back .ui-choice {
     background: none;
     box-shadow: inset 0 0 0 1px var(--ui-color-border);
@@ -20,8 +13,6 @@
     color: var(--ui-color-text-muted);
   }
 
-  /* A button keeps its shape, its words and edge going quiet rather than
-     the whole of it fading, as an unavailable one does. */
   .ui-stepped-back .ui-button {
     --ui-button-ink: var(--ui-color-text-muted);
   }

@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { INBOX_REPLY, inboxAnswerMessage, inboxTodoTicks } from "./inbox-wire.js";
 
-/**
- * inbox-lines.test.ts -- an answer to a to-do tells the agent which of its
- * steps were ticked, read off the ask it answers. Synthetic items throughout.
- */
-
 const ITEM = { key: "acting-for.v2", title: 'Ship "Billing agent for Dean"?' };
 
 test("an answer to a to-do tells the agent which steps were ticked, and steps ticked with neither press never say Not done", () => {

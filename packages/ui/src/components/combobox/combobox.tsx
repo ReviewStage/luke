@@ -31,76 +31,15 @@ import {
 } from "../virtual-rows/virtual-rows.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
-/**
- * combobox.tsx -- a text field whose words narrow a list of options under it, which the keys move through while the caret stays in the field.
- *
- * The field is controlled, as a TextField is: the caller owns the words and
- * answers every change. The caller owns the list too: which options stand,
- * whether the list is open, and which option is active, so a list that
- * filters, searches a service, or offers the words as typed as an option of
- * their own is the caller's to build and this control's to draw and steer.
- *
- * The caret never leaves the field. The active option is named to a reader
- * by the field's `aria-activedescendant` and the option's `aria-selected`,
- * and a press on an option is kept from taking focus, so the keys go on
- * arriving where the words are typed. While the list is open, ↑ and ↓ move
- * the active option, wrapping at either end, Home and End take it to the
- * first and the last, Enter chooses it, and Escape is handed to the caller
- * to shut the list, kept from the surface behind the field (a dialog's own
- * Escape would close it out from under the list). An Enter held with
- * Command or Control, or one pressed while the list is shut, chooses no
- * option and answers `onEnter` instead, for the words as typed.
- *
- * Keys an input method is composing with are its own: the Enter that
- * commits a composition and the Escape that dismisses its candidates never
- * reach the list, though an Escape is still kept from the surface behind.
- * The keys and the field's names are `useComboboxField`'s, which the
- * desktop's searchable menu steers its own rows with too.
- *
- * Options stand in groups, each with an optional heading, and the active
- * option counts across them, so a caller's index is one list's. Each option
- * draws a leading glyph, its name, a detail that gives way first, a hint
- * at its end, such as the chord that chooses it or why it cannot be chosen
- * now, and a chevron where choosing it opens a further list, or a check
- * where it is the one chosen now. An option that cannot be chosen now is
- * dimmed, and the pointer, a press, and the keys (where the caller skips
- * it) all pass it over.
- *
- * The list stands on its own too (`ComboboxList`), for a caller whose words
- * are typed in an editor of its own rather than a field this control owns:
- * the caller reads the keys, steers the active option, and places the list,
- * which draws the options as above, a note where none stands, and keeps
- * every press from taking the caret out of the editor. A list draws only the
- * options near its view, each group a run of `VirtualRows` in the list's own
- * scroller, so a picker of thousands of repositories lays out a screenful;
- * the active option is always drawn, brought in where the keys take it past
- * the drawn ones, since the field names it to a reader by its id. With no field at all,
- * as a list too short to search, the list takes the keys itself (`steer`):
- * it holds the focus and names the active option as a field would.
- *
- * Where a list engine of the app's (cmdk) owns the list box as well as its
- * rows, the box is drawn as `ComboboxListBox`, handed through the engine's
- * `asChild` as each row is drawn as `ComboboxOptionItem`: the engine's
- * role, names, keys, and ref pass through, its rows and headings stand
- * inside, and the box scrolls up and down as every list here does. It
- * stands at a list's capped height, or fills the column its caller gives
- * it, as a palette's results fill the card under its field.
- */
-
-/** How tall a list engine's box stands: capped as every list is, or filling the column it stands in. */
 export const COMBOBOX_LIST_HEIGHT = {
-  /** At most `--ui-combobox-list-max`, as a list under a field stands. */
   CAPPED: "capped",
-  /** Whatever room is left in the flex column it stands in, as a palette's results fill its card. */
   FILL: "fill",
 } as const;
 
 export type ComboboxListHeight = (typeof COMBOBOX_LIST_HEIGHT)[keyof typeof COMBOBOX_LIST_HEIGHT];
 
-/** How tall an option is taken to be before it is drawn, in pixels: a menu row's height (`--ui-menu-row-height`), which each option is measured at once drawn. */
 const OPTION_ESTIMATE_PX = 32;
 
-/** How wide the column an option's lead stands in is: a task's key's, or a pair of overlapping faces', as a commit's author and co-author lead a choice of who authors it. */
 export const COMBOBOX_LEAD = {
   KEY: "key",
   FACES: "faces",
@@ -108,77 +47,39 @@ export const COMBOBOX_LEAD = {
 
 export type ComboboxLead = (typeof COMBOBOX_LEAD)[keyof typeof COMBOBOX_LEAD];
 
-/** Each lead's column, at least as wide as the widest lead of its kind. */
 const LEAD_WIDTH: Record<ComboboxLead, string> = {
   [COMBOBOX_LEAD.KEY]: "min-w-combobox-lead",
   [COMBOBOX_LEAD.FACES]: "min-w-combobox-faces",
 };
 
-/** One option: what it is called, and what is drawn around its name. */
 export interface ComboboxOption {
-  /** The caller's own key for the option, stable while it stands. */
   readonly id: string;
   readonly label: ReactNode;
-  /** Its name in plain words, where `label` draws them marked, which names its card to a reader. */
   readonly words?: string | undefined;
-  /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
   readonly lead?: ReactNode;
-  /** How wide the lead's column stands: a task's key's where none is said. */
   readonly leadWidth?: ComboboxLead | undefined;
-  /**
-   * Its glyph; null keeps the glyph's room, empty, so an option with no
-   * glyph of its own names itself at the edge the glyphed options beside it
-   * do, and none draws no room, for a list whose options wear none.
-   */
   readonly icon?: ReactNode;
-  /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
-  /** Whether the option names a person's thing, kept masked in a screen recording whole, its glyph and lead with its words, whatever mark stands round its list. */
   readonly replayMasked?: boolean | undefined;
-  /** The detail in plain words, where `detail` draws them as a tree (marked for a screen recording), so its hint still says it whole. */
   readonly detailWords?: string | undefined;
-  /** At the option's end: the chord that chooses it, or any short mark. */
   readonly hint?: ReactNode;
-  /** Whether choosing it opens a further list rather than choosing it, which a chevron at its end says. */
   readonly opens?: boolean | undefined;
-  /** Whether it cannot be chosen now: dimmed, and passed over by the pointer and a press. */
   readonly disabled?: boolean | undefined;
-  /**
-   * Whether it is the one chosen now, which a check at its end says. An
-   * option not chosen keeps no room for the check, so its hint, a chord, a
-   * face, or why it cannot be chosen, ends at the row's edge where the check
-   * does rather than a column short of it beside an empty room.
-   */
   readonly current?: boolean | undefined;
-  /** The card hung beside the option while the pointer rests on it, as a row of ⌘K hangs its agent's; none hangs nothing. */
   readonly card?: ReactNode;
 }
 
-/** A run of options under a heading, or under none. */
 export interface ComboboxGroup {
-  /** The heading drawn over the run, which names it to a reader too. */
   readonly label?: string | undefined;
-  /** Whether the heading is the app's own words, which a screen recording shows as they read. */
   readonly replayUnmasked?: boolean | undefined;
   readonly options: readonly ComboboxOption[];
 }
 
-/** What a list engine hands the row it owns: its role, names, data, handlers, and ref, and never a class or a style. */
 export type ComboboxOptionEngineProps = Omit<
   ComponentPropsWithRef<"div">,
   "className" | "style" | "children"
 >;
 
-/**
- * One option as every list draws it: its lead, its glyph, its name, its
- * detail, its hint, and its end, lit while it is `aria-selected`. It is the row to use
- * where a list engine of the app's (cmdk) owns the item, handed through the
- * engine's `asChild`: the engine's role, names, handlers, and ref pass
- * through, and no class or style does, so the row is drawn only as here.
- * One that cannot be chosen now passes no press on to the engine. An option
- * in a run drawing only the options near the view (`VirtualRows`) wears its
- * place there (`place`), which stands it where the run places it.
- */
 export function ComboboxOptionItem({
   option,
   place,
@@ -191,13 +92,11 @@ export function ComboboxOptionItem({
     // biome-ignore lint/a11y/useKeyWithClickEvents: the field or the engine reads the keys and names this option active.
     <div
       role="option"
-      // Note that an option is focusable by a press alone, which the list keeps from taking focus.
       tabIndex={-1}
       aria-disabled={option.disabled === true ? "true" : undefined}
       aria-current={option.current === true ? "true" : undefined}
       {...place}
       {...engine}
-      // Note that an option that cannot be chosen now takes no press, whatever the engine handed it.
       onClick={
         option.disabled === true ? undefined : pulseOnPress(engine.onClick, PRESS_PULSE.QUIET)
       }
@@ -216,18 +115,14 @@ export function ComboboxOptionItem({
           {option.lead}
         </span>
       )}
-      {/* Note that a null glyph still stands, empty, so the names of a group whose options mix glyphs and none start at one edge. */}
       {option.icon === undefined ? null : (
         <span className={cn("ui-combobox-option-glyph", COMBOBOX_ITEM_GLYPH)}>{option.icon}</span>
       )}
-      {/* Note that the name and its detail fade where the row cuts them short, as every cut line of the app does, rather than ending in an ellipsis. */}
       <span className={cn("ui-combobox-option-label", COMBOBOX_ITEM_LABEL)}>
-        {/* A label drawn as a tree (marked for a recording, or a search's matches) is measured by its plain words, so its hint still says it whole. */}
         <OneLine words={typeof option.label === "string" ? undefined : option.words}>
           {option.label}
         </OneLine>
       </span>
-      {/* Note that the first of the detail, the hint, and the end to stand pushes the rest to the row's end. */}
       {option.detail === undefined ? null : (
         <span className={cn("ui-combobox-option-detail", COMBOBOX_ITEM_DETAIL, "ml-auto")}>
           <OneLine words={option.detailWords}>{option.detail}</OneLine>
@@ -259,7 +154,6 @@ export function ComboboxOptionItem({
   );
 }
 
-/** One option's row: a press chooses it and keeps the caret in the field, a pointer moving over it makes it active. */
 function OptionRow({
   id,
   place,
@@ -269,7 +163,6 @@ function OptionRow({
   onChoose,
 }: {
   id: string;
-  /** Where it stands in its group's run, which measures it and tells a reader its place. */
   place: VirtualRowPlace;
   option: ComboboxOption;
   active: boolean;
@@ -298,19 +191,10 @@ function OptionRow({
   );
 }
 
-/** The id of the option at `index` in the list `listId`, which a field names as the active one. */
 export function comboboxOptionId(listId: string, index: number): string {
   return `${listId}-option-${index}`;
 }
 
-/**
- * A list box as every list draws it, around rows a list engine of the
- * app's (cmdk) owns, handed through the engine's `asChild`: the engine's
- * role, names, keys, and ref pass through, no class or style does, and
- * the rows the engine hands it stand inside. It scrolls up and down and
- * never sideways, at the `height` its caller chose. Note that it calls no
- * hook, because an engine may draw it by calling it as a function.
- */
 export function ComboboxListBox({
   height = COMBOBOX_LIST_HEIGHT.CAPPED,
   children,
@@ -336,12 +220,6 @@ export function ComboboxListBox({
   );
 }
 
-/**
- * The `groups` of options as a listbox named `label`, `active` the one
- * washed: a pointer moving over an option makes it active, a press chooses
- * it, and no press anywhere on the list takes the caret from where the keys
- * are read. The active option is kept in the list's own view.
- */
 export function ComboboxList({
   id,
   label,
@@ -356,36 +234,24 @@ export function ComboboxList({
   fade = SCROLL_FADE.BOTH,
   ref,
 }: {
-  /** The listbox's id, which a field names in `aria-controls`; one is minted where none is given. */
   id?: string | undefined;
-  /** The list's accessible name, what its options are. */
   label: string;
   groups: readonly ComboboxGroup[];
-  /** The active option, from zero across every group; none where it stands outside them. */
   active: number;
   onActiveChange: (active: number) => void;
-  /** What a press on an option does, with its index across every group. */
   onChoose: (index: number, option: ComboboxOption) => void;
-  /** Whether each group's heading is drawn; a list standing under a title that names its one group draws none, its group still named to a reader. */
   headed?: boolean | undefined;
-  /** What the list says where it holds no option; nothing is said where none is given. */
   empty?: string | undefined;
-  /** Said after the options, whether or not any stand: that more are being read, or why they could not be. */
   note?: ReactNode;
-  /** The keys and names of a list with no field, which then holds the focus and names the active option itself. */
   steer?: ComboboxField | undefined;
-  /** Which of its edges fade where its rows run past them, as a scroller's do; both where none is named, none in a field's well, whose edge would fade with them. */
   fade?: ScrollFade | undefined;
-  /** The list itself, for a caller that hands it the focus. */
   ref?: Ref<HTMLDivElement> | undefined;
 }): React.JSX.Element {
   const minted = useId();
   const listId = id ?? minted;
   const list = useRef<HTMLDivElement>(null);
   useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => list.current, []);
-  // The box every group's run stands in, whose resizing moves where each run after the first stands.
   const runsBox = useRef<HTMLDivElement>(null);
-  // Each group's run, by the group's place in the list, held while the list stands.
   const runs = useRef<RefObject<VirtualRowsHandle | null>[]>([]);
   const runOf = (group: number): RefObject<VirtualRowsHandle | null> => {
     const held = runs.current[group];
@@ -395,22 +261,13 @@ export function ComboboxList({
     return made;
   };
   const options = groups.flatMap((group) => group.options);
-  // Note that the empty line is said as it appears, because a line drawn into a list is not itself a live region.
   useAnnounce(ANNOUNCE.POLITE, options.length === 0 ? (empty ?? "") : "");
-  // Note that an active index outside the options washes none, because a
-  // caller's highlight may stand past them, on a row of its own.
   const at = active >= 0 && active < options.length ? active : -1;
   const choose = (index: number) => {
     const option = options[index];
     if (option !== undefined) onChoose(index, option);
   };
 
-  // Note that the active option is scrolled into the list's own view by
-  // hand, because the caret stays where the keys are read, which no
-  // browser scrolls the list for, and `scrollIntoView` would scroll every
-  // box around it; one the pointer made active is where the pointer is, so
-  // the list stands still under it rather than scroll the row away, and
-  // the card the row hangs with it.
   const pointed = useRef(false);
   useLayoutEffect(() => {
     if (pointed.current) {
@@ -420,12 +277,10 @@ export function ComboboxList({
     const box = list.current;
     const row = at < 0 ? null : document.getElementById(comboboxOptionId(listId, at));
     if (box === null || at < 0) return;
-    // Note that an option the keys took past those drawn is brought in by its run, which draws it, and is kept in view as it draws.
     if (row === null) {
       bringIn(at);
       return;
     }
-    // Note that the row is brought clear of a faded edge too, which the list's scroll padding is as deep as.
     const clear = getComputedStyle(box);
     const top = row.offsetTop - (Number.parseFloat(clear.scrollPaddingTop) || 0);
     if (top < box.scrollTop) box.scrollTop = top;
@@ -444,7 +299,6 @@ export function ComboboxList({
     offset += group.options.length;
     return { group, start };
   });
-  // Brings in the option at `index` across every group, by its group's run.
   const bringIn = (index: number) => {
     const run = placed.findLastIndex(({ start }) => start <= index);
     const entry = placed[run];
@@ -453,7 +307,6 @@ export function ComboboxList({
   };
 
   return (
-    // Note that a press anywhere on the list keeps the caret where the keys are read.
     <div
       ref={list}
       id={listId}
@@ -527,7 +380,6 @@ export function ComboboxList({
   );
 }
 
-/** A field named `label`, holding `value`, over the `groups` of options it narrows while `open`. */
 export function Combobox({
   label,
   listLabel,
@@ -547,32 +399,22 @@ export function Combobox({
   keyShortcuts,
   ref,
 }: {
-  /** The field's accessible name. */
   label: string;
-  /** The list's accessible name, what its options are. */
   listLabel: string;
   value: string;
   onChange: (value: string) => void;
   groups: readonly ComboboxGroup[];
-  /** Whether the list stands under the field; it is drawn only while it holds an option. */
   open: boolean;
-  /** The active option, from zero across every group. */
   active: number;
   onActiveChange: (active: number) => void;
-  /** What choosing an option does, by Enter or a press, with its index across every group. */
   onChoose: (index: number, option: ComboboxOption) => void;
-  /** What an Enter that chooses no option does: one held with Command or Control, or pressed while the list is shut. */
   onEnter?: (() => void) | undefined;
-  /** What an Escape does while the list stands: shutting it, as a rule. */
   onEscape?: (() => void) | undefined;
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
   maxLength?: number | undefined;
-  /** Whether the system's spell check marks the words. */
   spellCheck?: boolean | undefined;
-  /** The chord the caller answers from the field, as `aria-keyshortcuts` names it. */
   keyShortcuts?: string | undefined;
-  /** The field itself, for a caller that moves the caret. */
   ref?: Ref<HTMLInputElement> | undefined;
 }): React.JSX.Element {
   const listId = useId();
@@ -601,7 +443,6 @@ export function Combobox({
       <input
         ref={ref}
         type="text"
-        // Note that the field's foot is square while the list stands, so the two read as one well.
         className={cn(INPUT_FIELD, INPUT_CONTROL, shown && "rounded-b-none")}
         {...keys.field}
         aria-label={label}

@@ -1,19 +1,4 @@
-/* choice-bar.css -- what of the choice bar its Tailwind utilities cannot hold: the thumb's measured box and the fold's sibling rules.
-
-   The bar, its options, its count, and its thumb's look are drawn in
-   utilities over the theme (`choice-bar.tsx`). What stays here is what
-   reads a box `choice-bar.tsx` measures or a structure no utility on one
-   element spells: the thumb's size and place, read from the custom
-   properties the row sets on itself as it measures its chosen option; and
-   the fold, which hides an option's name beside its glyph, and any part of
-   its count that folds with it (`data-folds`), by the bar's width in a
-   container query keyed by `:has()` on whether one is chosen, or by the
-   bar's measured `data-folded`. The panel's narrow tests read the
-   fold from this sheet with markup of their own. */
-
 @layer components {
-  /* The thumb stands where the row last measured its chosen option; it
-     slides on its transform alone, its box landing at once. */
   .ui-choice-bar-thumb {
     width: var(--ui-choice-bar-thumb-width);
     height: var(--ui-choice-bar-thumb-height);
@@ -21,12 +6,6 @@
       scale(var(--ui-choice-bar-thumb-scale-x), var(--ui-choice-bar-thumb-scale-y));
   }
 
-  /* Narrower than its options need, a fill bar shows an option other than
-     the chosen one by its glyph alone. Note that it does so only while one
-     is chosen, because a clearable bar with none chosen would otherwise
-     name none of its options; and that it marks the name it folds
-     (`--ui-choice-bar-name`), which `choice-bar.tsx` reads to raise the
-     name in the option's hint, since script cannot ask a container query. */
   /* off-scale: 520px, where a fill bar's options stop fitting */
   @container ui-choice-bar (width < 520px) {
     .ui-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
@@ -42,8 +21,6 @@
       white-space: nowrap;
     }
 
-    /* A count's words that fold (`data-folds`) leave every glyphed option
-       once the bar folds, the chosen one too, so the counts read alike. */
     .ui-choice-bar[data-fold="own"]:has(> :is([aria-selected="true"], [aria-checked="true"]))
       .ui-choice-bar-option:has(> .ui-choice-bar-icon)
       .ui-count-part[data-folds] {
@@ -56,15 +33,6 @@
     }
   }
 
-  /* A bar a finger works (`words`) scrolls sideways where its names run
-     past its end, and says so twice: its cut edge fades deeper than a
-     scroll area's, so the last option in view dissolves into it rather than
-     ending on a whole word that reads as the last option there is, and its
-     frame's chevron stands over that edge. The chevron reads the bar's own
-     scroll, named on the frame so its sibling can, standing whole at the
-     start and fading out over the last stretch, as the edge's fade does;
-     a bar with nothing past its end has no scroll to read, which leaves the
-     chevron unseen. */
   .ui-choice-bar[data-fold="words"] {
     --ui-scroll-fade: var(--ui-space-48);
   }
@@ -96,10 +64,6 @@
     }
   }
 
-  /* A bar folding together, once its options' names no longer fit
-     (`data-folded`, measured by `choice-bar.tsx`), shows every option by
-     its glyph alone, the chosen one too, so no option is named while its
-     neighbors are not; a reader still has every name. */
   .ui-choice-bar[data-fold="together"][data-folded="true"]
     .ui-choice-bar-icon
     + .ui-choice-bar-label,
@@ -114,7 +78,6 @@
     white-space: nowrap;
   }
 
-  /* A diff's counts grow as an agent works; the digits keep their width. */
   .ui-count-part {
     font-variant-numeric: tabular-nums;
   }

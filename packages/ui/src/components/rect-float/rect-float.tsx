@@ -15,41 +15,6 @@ import {
 } from "../anchored-popover/popover-place.js";
 import { type PressAway, usePressAway } from "../anchored-popover/press-away.js";
 
-/**
- * rect-float.tsx -- the layer that stands by a box in the window rather than by a button: words selected, or a caret, with a toolbar, a list, or a field floated over or under it.
- *
- * Its owner draws it inside a positioned box of its own, the room an editor
- * stands in say, and hands it the box to stand by in window coordinates
- * (`anchor`), read anew each time it is measured; the layer stands a small
- * gap off that box, from its leading edge, on the side asked. It turns to
- * the other side where the side asked cannot hold it and the other can, and
- * keeps inside what can be seen of it: what is seen of the window, cut to
- * each box that clips it, a scroller say (`clip-room.ts`). It is laid in its owner's box
- * rather than over the window, so a scroll carries it with the words it
- * stands by and a field in it is still inside the owner's box when it takes
- * the focus. It is measured as it is drawn, before it is painted, each time
- * it is drawn again, whenever it resizes or the window does, and whenever
- * anything scrolls, since a scroll may leave its side no room. The height
- * its side leaves it is handed to what it holds as `--ui-popover-room`,
- * as the anchored popover's is, which a tall list bounds itself by. A press
- * outside it is handed to its owner, who closes it unless the press lands
- * on what it `holds`, the field whose caret it stands by say
- * (`../anchored-popover/press-away.ts`). It stands at one of the popover's
- * three widths where its owner names one (`POPOVER_WIDTH`), never at a
- * width of the owner's own. What it holds draws its own surface (`MenuSurface`).
- *
- * Whether it stands is its owner's (`open`), as a popover's is. As `open`
- * falls it fades out on the exit token where it last stood, inert, hearing
- * no press away and measuring nothing, and still drawing what it last held
- * open, so an owner that let go of what it showed in the render that closed
- * it need keep nothing for the fade; it goes once the fade has run
- * (`useDisclosure`), and reduced motion and a capture run, which zero the
- * tokens, take it away at once. An owner that mounts it to open it and
- * unmounts it to close it passes `true`, and it goes at once. An owner whose
- * own body holds state while it is drawn hears `onExited` once it is gone.
- */
-
-/** Where the layer stands in its owner's box: its corner, the widest the room it keeps inside leaves it, and the height its side leaves it. */
 interface FloatPlace {
   readonly side: PopoverSide;
   readonly left: number;
@@ -58,7 +23,6 @@ interface FloatPlace {
   readonly room: number;
 }
 
-/** Whether two places draw the layer alike, so a scroll that moves nothing renders nothing. */
 function samePlace(a: FloatPlace | undefined, b: FloatPlace): boolean {
   return (
     a !== undefined &&
@@ -70,14 +34,6 @@ function samePlace(a: FloatPlace | undefined, b: FloatPlace): boolean {
   );
 }
 
-/**
- * Where `drawn` stands by `anchor` in `room`, in the coordinates of
- * `frame`, the box it is laid in: its top is the anchor's edge on its side,
- * and the stylesheet moves it the gap off and, above, its own height up.
- * Note that a margin an owner's rule gives it, as a rule spacing a box's
- * children does, is taken off, because a box laid absolutely stands by its
- * margin's edge.
- */
 function placeIn(
   drawn: HTMLElement,
   frame: HTMLElement,
@@ -110,12 +66,6 @@ function placeIn(
   };
 }
 
-/**
- * The layer by `anchor`, on `side`, above where none is said. Note that it
- * is never hidden while unplaced, because the placing lands before the
- * first paint, and a hidden layer would refuse the focus a field in it
- * takes as it mounts; where `anchor` answers none, it stays where it stood.
- */
 export function RectFloat({
   open,
   anchor,
@@ -126,14 +76,10 @@ export function RectFloat({
   onExited,
   children,
 }: PressAway & {
-  /** Whether it stands; falling, it fades out where it stood before it goes. */
   open: boolean;
-  /** The box to stand by, in window coordinates, as it stands now; none where it cannot be measured. */
   anchor: () => Box | undefined;
   side?: PopoverSide | undefined;
-  /** One of the three widths a popover asks for, drawn from its token; as wide as what it holds where none is named. */
   width?: PopoverWidth | undefined;
-  /** Its fade has run and it is gone, which an owner whose body holds state lets go of it on. */
   onExited?: (() => void) | undefined;
   children: React.ReactNode;
 }): React.JSX.Element | null {
@@ -148,7 +94,6 @@ export function RectFloat({
     },
     [held],
   );
-  // Note that what it held open is what it draws as it fades, because its owner may have let go of it in the render that closed it.
   const last = useRef(children);
   if (open) last.current = children;
   usePressAway(layer, () => undefined, { onPressAway: open ? onPressAway : undefined, holds });
@@ -160,7 +105,6 @@ export function RectFloat({
     const next = placeIn(element, frame, box, cutTo(visibleViewport(), clipsAround(element)), side);
     setPlace((was) => (samePlace(was, next) ? was : next));
   };
-  // Note that it is measured on every draw while it stands, because what it stands by moves with its owner's state, words selected anew say, and nothing else tells it.
   useLayoutEffect(() => {
     if (open) measure.current();
   });
@@ -174,7 +118,6 @@ export function RectFloat({
     const viewport = window.visualViewport;
     viewport?.addEventListener("resize", again);
     viewport?.addEventListener("scroll", again);
-    // Note that a scroll is heard while it is captured, because a scroll does not bubble and the scroller may be any box around the layer.
     document.addEventListener("scroll", again, { capture: true, passive: true });
     return () => {
       observer.disconnect();
@@ -185,7 +128,6 @@ export function RectFloat({
     };
   }, [open]);
 
-  // Note that the owner hears it gone only once it has stood, because one that never opened has left nothing to let go of.
   const stood = useRef(false);
   useEffect(() => {
     if (mounted) {
@@ -196,8 +138,6 @@ export function RectFloat({
     }
   }, [mounted, onExited]);
 
-  // Note that reduced motion and a capture run take it away in the render
-  // that closes it, rather than once its fade is found to run none.
   if (!mounted || (leaving && motionHeld())) return null;
   return (
     <div

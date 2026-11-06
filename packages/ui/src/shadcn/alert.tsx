@@ -3,43 +3,6 @@ import type * as React from "react";
 import { cn } from "../cn.js";
 import { STATUS_TONE, type StatusTone } from "../status-tone.js";
 
-/**
- * alert.tsx -- shadcn/ui's alert (style `base-nova`), vendored and drawn as our banner: a glyph, its words, and the presses that answer it on one row.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add alert` reads as a small diff. Its local
- * changes:
- *
- * - `Alert` is a `<section>` with no `role="alert"`, because a banner is a
- *   region named by its own words (`aria-labelledby`), which a reader finds
- *   rather than hears announced the moment it mounts. Its `variant`
- *   (`default`, `destructive`) is our `look` (`strip`, `card`, `row`, `inset`) and
- *   a status `tone` (`../status-tone.ts`), each kept on the section as
- *   `data-look`/`data-tone` too, so the tone's ink and tint
- *   (`tokens/status-tone.css`) reach its strip's mix and its card's disc.
- * - shadcn's grid of an icon beside a title and a description is our one
- *   flex row (`AlertRow`) of a glyph slot (`AlertGlyph`, which shadcn reaches
- *   as `*:[svg]`), the words (`AlertDescription`), and the presses
- *   (`AlertAction`), which stand in the row rather than absolutely at its
- *   corner, so they drop beneath the words where they would not fit beside
- *   them (`components/banner/banner.css`).
- * - Our inks, type, spacing, and radii from the theme rather than
- *   `bg-card` and `text-sm`, and no `text-balance`, link underline, or
- *   `md:` breakpoint, because a banner measures its own width.
- * - A card's glyph may be the bare mark a failure note wears rather than its
- *   disc (`AlertGlyph`'s `mark`), standing a heading's first line tall.
- * - `AlertTitle` is dropped, because a banner's words are one slot whose
- *   heading, where it has one, is the caller's own `Text`.
- * - Each part keeps the `ui-banner-*` class it wore before the move, which
- *   the sheet's narrow rules select. The words and the glyph do not go
- *   through `cn`, because
- *   tailwind-merge reads `text-body` (a size) and `text-body-foreground` (a
- *   color) as one group and would keep only the last.
- *
- * `@repo/ui`'s `Banner` (`components/banner/banner.tsx`) is what an app
- * draws; this is its inside.
- */
-
 const alertVariants = cva("ui-banner flex-none @container/ui-banner", {
   variants: {
     look: {
@@ -76,12 +39,10 @@ const alertGlyphVariants = cva(
         row: "h-control text-muted-foreground",
         inset: "",
       },
-      // Note that a neutral card's disc is the strong fill, and any other tone's is its tint in its ink.
       neutral: {
         true: "",
         false: "",
       },
-      // Whether a card's glyph is the bare mark a failure note wears, a heading's first line tall, rather than a disc.
       mark: {
         true: "",
         false: "",
@@ -94,7 +55,6 @@ const alertGlyphVariants = cva(
       { look: "card", mark: true, class: "h-banner-mark-row self-start" },
       { look: "card", mark: true, neutral: true, class: "text-muted-foreground" },
       { look: "card", mark: true, neutral: false, class: "text-tone-ink" },
-      // An inset line has no fill to tint, so its tone is its glyph's ink, and its words'.
       { look: "inset", neutral: true, class: "text-muted-foreground" },
       { look: "inset", neutral: false, class: "text-tone-ink" },
     ],

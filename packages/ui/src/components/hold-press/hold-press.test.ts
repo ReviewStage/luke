@@ -6,13 +6,6 @@ import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import { HoldPress } from "./hold-press.js";
 
-/**
- * hold-press.test.ts -- a press held on the control it wraps does its second
- * act and its release presses nothing, while a quick press is the control's
- * own; a right-click does what it asks in place of the system's menu; and an
- * unavailable control's held press counts for nothing.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -29,7 +22,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Back, wrapped, each of its acts recorded in order. */
 function mount(options: { disabled?: boolean; contextMenu?: boolean } = {}) {
   const done: string[] = [];
   function Back(): React.JSX.Element {

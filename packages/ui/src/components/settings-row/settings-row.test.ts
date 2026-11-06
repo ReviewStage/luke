@@ -11,15 +11,7 @@ import { Switch } from "../switch/switch.js";
 import { SettingsRow } from "./settings-row.js";
 import { SettingsRowsFold } from "./settings-row-fold.js";
 
-/** The failure beneath every refusal a row says here. */
 const { failure: FAILURE } = recordedFailure();
-
-/**
- * settings-row.test.ts -- a row's words are its control's: its label names
- * the control, its description and a failed write describe it, and the
- * failure marks it invalid and is announced in the region that stood empty
- * before it arrived.
- */
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -34,7 +26,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container in the document. */
 function mount(element: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -44,7 +35,6 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** The words the elements an attribute's ids name say, in order, as a reader reads them. */
 function wordsOf(element: Element, attribute: string): string {
   return (element.getAttribute(attribute) ?? "")
     .split(" ")
@@ -53,7 +43,6 @@ function wordsOf(element: Element, attribute: string): string {
     .join(" ");
 }
 
-/** A row whose switch's write is refused once pressed, as a settings write can be. */
 function RefusedRow(): React.JSX.Element {
   const [error, setError] = useState<ShownError | undefined>(undefined);
   return createElement(SettingsRow, {
@@ -200,7 +189,6 @@ test("a control as wide as the row stands under its words, named by the label an
     "Who Vespin appears as on video. The setting could not be saved.",
   );
   expect(group.getAttribute("aria-invalid")).toBe("true");
-  // It follows the words in reading order, and before the error that describes it.
   const words = container.querySelector(".ui-settings-row-description");
   const error = container.querySelector('[data-slot="field-error"]');
   if (words === null || error === null) throw new Error("no words or error");
@@ -208,7 +196,6 @@ test("a control as wide as the row stands under its words, named by the label an
   expect(group.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-/** A switch's row whose words label its switch, holding the switch's state as a settings write would. */
 function LabeledSwitchRow({ adornment }: { adornment?: string | undefined }): React.JSX.Element {
   const [checked, setChecked] = useState(false);
   return createElement(SettingsRow, {
@@ -242,7 +229,6 @@ test("a press on a switch row's words sets its switch, as a press on the switch 
   }
 });
 
-/** A row folded under another that counts its presses, as a row keeps what it waits on, such as a refusal still to be said. */
 function CountingRow(): React.JSX.Element {
   const [count, setCount] = useState(0);
   return createElement(SettingsRow, {

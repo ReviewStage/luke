@@ -20,18 +20,6 @@ import { sealedLiveQuerySchema } from "./live-wire.js";
 import { automationWebhookPath } from "./service-paths.js";
 import { countedNumber } from "./service-wire.js";
 
-/**
- * automation-live.ts -- a workspace's automations and runs, and one automation's runs, as the host follows them over the service's held poll: the statements the service answers, the rows they deliver, and the list and the histories as the held reads answer them, built from the rows at an instant.
- *
- * A run's agent's status turns on the clock (`agent-status.ts`), so
- * the reader builds each at the instant it reads, and again at
- * `automationsGraceEdge` or `automationRunsGraceEdge`, the next instant the
- * clock alone moves one. A webhook automation is answered with the address
- * its caller posts to on the service the reader reaches, as the held read's
- * client answers it. The rows come in no order, so the reader orders.
- */
-
-/** A workspace's automations sealed for following: the address, and one statement. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
 export const automationsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ automations: sealedLiveQuerySchema }),
@@ -39,7 +27,6 @@ export const automationsLiveAnswerSchema = EffectSchema.Struct({
 
 export type AutomationsLiveAnswer = typeof automationsLiveAnswerSchema.Type;
 
-/** An automation's runs sealed for following: the address, and one statement. The service answers `not-found` for an automation the account does not read. */
 export const automationRunsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ runs: sealedLiveQuerySchema }),
@@ -47,7 +34,6 @@ export const automationRunsLiveAnswerSchema = EffectSchema.Struct({
 
 export type AutomationRunsLiveAnswer = typeof automationRunsLiveAnswerSchema.Type;
 
-/** A workspace's runs sealed for following: the address, and one statement. The service answers `unavailable` where its deployment's Realtime is misconfigured. */
 export const automationWorkspaceRunsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ runs: sealedLiveQuerySchema }),
@@ -55,7 +41,6 @@ export const automationWorkspaceRunsLiveAnswerSchema = EffectSchema.Struct({
 
 export type AutomationWorkspaceRunsLiveAnswer = typeof automationWorkspaceRunsLiveAnswerSchema.Type;
 
-/** The agent a run started as its row delivers it, and what its status is read from; null throughout where it started none, or it is gone. */
 const runAgentFields = {
   agentId: EffectSchema.NullOr(EffectSchema.String),
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
@@ -71,7 +56,6 @@ const runAgentFields = {
   failureWord: EffectSchema.NullOr(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
 };
 
-/** One run as its row delivers it. */
 const runLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   firing: automationFiringSchema,
@@ -82,7 +66,6 @@ const runLiveRowSchema = EffectSchema.Struct({
   ...runAgentFields,
 });
 
-/** One automation as its row delivers it, its newest run's columns beside it, null where it has run none. */
 const automationLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   userId: EffectSchema.String,
@@ -97,7 +80,6 @@ const automationLiveRowSchema = EffectSchema.Struct({
   organizationId: EffectSchema.NullOr(EffectSchema.String),
   scope: automationScopeSchema,
   repositories: EffectSchema.Array(EffectSchema.String),
-  /** The task's repository, which an automation with none of its own works in, as the held read reads it. */
   taskRepository: EffectSchema.NullOr(EffectSchema.String),
   targetKind: automationTargetKindSchema,
   targetAgentId: EffectSchema.NullOr(EffectSchema.String),
@@ -114,21 +96,18 @@ const automationLiveRowSchema = EffectSchema.Struct({
   ...runAgentFields,
 });
 
-/** A workspace's automations as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const automationsLiveRowsSchema = EffectSchema.Struct({
   automations: EffectSchema.Array(automationLiveRowSchema),
 });
 
 export type AutomationsLiveRows = typeof automationsLiveRowsSchema.Type;
 
-/** An automation's runs as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const automationRunsLiveRowsSchema = EffectSchema.Struct({
   runs: EffectSchema.Array(runLiveRowSchema),
 });
 
 export type AutomationRunsLiveRows = typeof automationRunsLiveRowsSchema.Type;
 
-/** A workspace's runs as Realtime delivers them, each with the automation it is a run of, decoded at the boundary before anything reads them. */
 export const automationWorkspaceRunsLiveRowsSchema = EffectSchema.Struct({
   runs: EffectSchema.Array(
     EffectSchema.Struct({
@@ -145,7 +124,6 @@ type RunAgentRow = {
   readonly [Key in keyof typeof runAgentFields]: (typeof runAgentFields)[Key]["Type"];
 };
 
-/** The newest turn as the status rule reads it; none where the agent has none. */
 function turnOf(row: RunAgentRow): StatusTurn | undefined {
   return row.turnId === null || row.turnStatus === null
     ? undefined
@@ -158,11 +136,6 @@ function turnOf(row: RunAgentRow): StatusTurn | undefined {
       };
 }
 
-/**
- * A run's agent as the wire says it, its status read at `now` and why it
- * failed where it did, and finished where a later run went to the same
- * agent (`handedOnRuns`); none where the run started none.
- */
 function runAgentOf(
   row: RunAgentRow,
   now: number,
@@ -187,7 +160,6 @@ function runAgentOf(
   };
 }
 
-/** The next instant past `now` the clock alone moves a run's agent; none where only a row moves it. */
 function clockEdgeOf(row: RunAgentRow, now: number): number | undefined {
   if (row.agentCreatedAt === null) return undefined;
   return statusClockEdge(turnOf(row), {
@@ -197,13 +169,11 @@ function clockEdgeOf(row: RunAgentRow, now: number): number | undefined {
   });
 }
 
-/** The earliest of the edges given; none where there is none. */
 function earliest(edges: readonly (number | undefined)[]): number | undefined {
   const standing = edges.filter((edge): edge is number => edge !== undefined);
   return standing.length === 0 ? undefined : Math.min(...standing);
 }
 
-/** Latest fired first, and by id among those fired at one instant, as the held history orders runs. */
 function latestFired(
   a: { readonly id: string; readonly firedAt: number },
   b: { readonly id: string; readonly firedAt: number },
@@ -212,13 +182,6 @@ function latestFired(
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
-/**
- * The runs, latest fired first, whose agent a later run went to. Note that a
- * same-agent automation hands every run to one agent, whose newest turn is
- * its latest run's work, so the agent's status is said on that run alone,
- * and an earlier one reads as finished, rather than every run it ever took
- * reading as at work.
- */
 function handedOnRuns(
   rows: readonly { readonly id: string; readonly agentId: string | null }[],
 ): ReadonlySet<string> {
@@ -232,7 +195,6 @@ function handedOnRuns(
   return handedOn;
 }
 
-/** One automation's newest run as the list says it; none where it has run none. */
 function lastRunOf(
   row: typeof automationLiveRowSchema.Type,
   now: number,
@@ -256,7 +218,6 @@ function lastRunOf(
   };
 }
 
-/** A webhook automation with the address its caller posts to, on the service at `serviceBaseUrl`; any other as it came. */
 export function withWebhookUrl(
   serviceBaseUrl: string,
   automation: AutomationSummary,
@@ -265,11 +226,6 @@ export function withWebhookUrl(
   return { ...automation, webhookUrl: `${serviceBaseUrl}${automationWebhookPath(automation.id)}` };
 }
 
-/**
- * A workspace's automations as the held list answers them through a client
- * of the service at `serviceBaseUrl`, as the live rows stand at `now`:
- * newest made first, each with its newest run.
- */
 export function automationsOfLiveRows(
   rows: AutomationsLiveRows,
   now: number,
@@ -317,7 +273,6 @@ export function automationsOfLiveRows(
     );
 }
 
-/** An automation's runs as the held history answers them, as the live rows stand at `now`: latest fired first, an agent's status said on the latest run it took. */
 export function automationRunsOfLiveRows(
   rows: AutomationRunsLiveRows,
   now: number,
@@ -335,7 +290,6 @@ export function automationRunsOfLiveRows(
   }));
 }
 
-/** A workspace's runs as the Runs tab reads them, newest first, each run's agent read at `now` and said on the latest run it took. */
 export function automationWorkspaceRunsOfLiveRows(
   rows: AutomationWorkspaceRunsLiveRows,
   now: number,
@@ -354,12 +308,10 @@ export function automationWorkspaceRunsOfLiveRows(
   }));
 }
 
-/** The next instant past `now` the clock alone moves the automations' newest runs; none where only a row moves them. */
 export function automationsGraceEdge(rows: AutomationsLiveRows, now: number): number | undefined {
   return earliest(rows.automations.map((row) => clockEdgeOf(row, now)));
 }
 
-/** The next instant past `now` the clock alone moves an automation's runs; none where only a row moves them. */
 export function automationRunsGraceEdge(
   rows: AutomationRunsLiveRows,
   now: number,
@@ -367,7 +319,6 @@ export function automationRunsGraceEdge(
   return earliest(rows.runs.map((row) => clockEdgeOf(row, now)));
 }
 
-/** The next instant past `now` the clock alone moves a workspace's runs; none where only a row moves them. */
 export function automationWorkspaceRunsGraceEdge(
   rows: AutomationWorkspaceRunsLiveRows,
   now: number,

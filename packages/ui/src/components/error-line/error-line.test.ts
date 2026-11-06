@@ -10,14 +10,6 @@ import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import { TextField } from "../text-field/text-field.js";
 
-/**
- * error-line.test.ts -- what went wrong is said in one line wherever it is
- * said: a form field's error and a Settings row's each describe the control
- * it is about, and are said through the window's
- * announcer as it arrives: a form field's politely, a Settings row's as an
- * alert; and once nothing is wrong, its last words fade out before it goes.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -42,10 +34,8 @@ function render(element: ReactElement): HTMLElement {
 
 const REFUSED = "GitHub refused the token.";
 
-/** The failure beneath the refusal. */
 const { failure: FAILURE } = recordedFailure();
 
-/** A text field in a form field saying `error`. */
 function formField(error: string | undefined): ReactElement {
   return createElement(FormField, {
     label: "Token",
@@ -54,7 +44,6 @@ function formField(error: string | undefined): ReactElement {
   });
 }
 
-/** A text field in a Settings row saying `error`. */
 function settingsRow(error: string | undefined): ReactElement {
   return createElement(SettingsRow, {
     label: "Token",
@@ -69,7 +58,6 @@ function settingsRow(error: string | undefined): ReactElement {
   });
 }
 
-/** Fails unless the control's description names its error line. */
 function describedByErrorLine(container: HTMLElement): void {
   const input = container.querySelector("input");
   assert.ok(input);
@@ -85,7 +73,6 @@ test("a form field's error and a Settings row's each describe their control", ()
   describedByErrorLine(render(settingsRow(REFUSED)));
 });
 
-/** What the window's polite and alert regions say once `place` goes from no error to `REFUSED`. */
 function saidOnArrival(place: (error: string | undefined) => ReactElement): {
   polite: string | null | undefined;
   alert: string | null | undefined;

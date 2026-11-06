@@ -3,47 +3,6 @@ import { useRender } from "@base-ui/react/use-render";
 import type * as React from "react";
 import { cn } from "../cn.js";
 
-/**
- * breadcrumb.tsx -- shadcn/ui's breadcrumb (style `base-nova`, on Base UI), vendored and drawn in our path.
- *
- * The component is shadcn's own source, kept as close to it as the window
- * allows, so a later `shadcn add breadcrumb` reads as a small diff. Its
- * local changes:
- *
- * - `Breadcrumb` takes its name from the caller alone, since a path names
- *   itself ("Path").
- * - `BreadcrumbList` keeps its crumbs on one row, unwrapped, with no gap,
- *   type, or ink of its own, because a bar's path narrows crumb by crumb
- *   rather than wrapping and its look names its own spacing and type.
- * - `BreadcrumbItem` sets no display: `breadcrumbs.css` draws an item as a
- *   flex row and hides it at the bar's widths it is not drawn at, which a
- *   utility would outrank; and it sets no gap, which the toolbar's heading
- *   alone takes.
- * - `BreadcrumbLink` is the crumb's quiet pill a press reaches, rendered as
- *   a native button by its caller: the pill's padding, radius, and muted ink,
- *   lit in the selected fill under the pointer and while what it opens
- *   stands open, and drawn in the text ink while it is the current page. Its
- *   hover is Tailwind's, which only a pointer that hovers reaches. On the
- *   desktop it claims its presses back from the window's drag strip (`-webkit-app-region: no-drag`), because a bar it
- *   stands on, the toolbar's heading among them, drags the window, and
- *   Electron hands a drag region's clicks to the window rather than the page.
- * - `BreadcrumbPage` is a crumb of words: it says it is the current page
- *   only where the caller says so, and takes no `role="link"` or
- *   `aria-disabled`, because a crumb of words is words; its weight is
- *   inherited; and its classes are joined, not merged, because
- *   tailwind-merge reads a type role (`text-dialog`) as an ink and would drop
- *   the words' own ink beside it.
- * - `BreadcrumbSeparator` is a `span` inside the crumb after it rather than
- *   an `li` of its own, so a crumb and its chevron come and go together and
- *   the list's items are its crumbs alone; its chevron is lucide's
- *   `chevron-right` drawn inline, the package taking no icon library.
- * - `BreadcrumbEllipsis` is left out: a path's "…" is a crumb of its own,
- *   a press naming the folders it stands for.
- *
- * `@repo/ui`'s `Breadcrumbs` (`components/breadcrumbs/breadcrumbs.tsx`) is
- * what an app draws; this is its inside.
- */
-
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
   return <nav data-slot="breadcrumb" className={cn(className)} {...props} />;
 }

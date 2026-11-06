@@ -1,7 +1,3 @@
-/**
- * sentry-tracing.test.ts -- which requests a window traces: every one but its own reports to main.
- */
-
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { sentryTracesRequest } from "./sentry-tracing.js";

@@ -10,15 +10,6 @@ import {
   type CommandGroup,
 } from "./command-dialog.js";
 
-/**
- * command-dialog.test.ts -- a palette opened from a button takes the caret
- * in its field; typing narrows its rows to the ones whose words match, and
- * says so where none do; ↑ ↓ and Return choose a row, and a press chooses
- * one too; its groups stand under their headings, a group's note after its
- * rows; a list still read says it is reading; Escape puts it away and hands
- * focus back to the button, with no key reaching the window behind.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -27,7 +18,6 @@ const roots: Root[] = [];
 
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  // Note that jsdom lays nothing out: cmdk scrolls its lit row into view and measures its list, so both do nothing here.
   Element.prototype.scrollIntoView = () => undefined;
   globalThis.ResizeObserver = class {
     observe(): void {}
@@ -43,14 +33,12 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The rows chosen, by name, and the keys and presses the window behind the palette heard. */
 interface Heard {
   chosen: string[];
   keys: string[];
   presses: number;
 }
 
-/** Two groups of rows, each row saying it was chosen. */
 function groupsFor(heard: Heard): CommandGroup[] {
   const row = (id: string, words: string) => ({
     id,
@@ -73,7 +61,6 @@ function groupsFor(heard: Heard): CommandGroup[] {
   ];
 }
 
-/** A window holding the button that opens the palette over `groups`, listening for keys that leak out. */
 function Owner({
   heard,
   groups,
@@ -106,7 +93,6 @@ function Owner({
   );
 }
 
-/** The window drawn and the palette opened from its button. */
 function openPalette(
   groups: (heard: Heard) => readonly CommandGroup[] = groupsFor,
   extra?: Partial<CommandDialogProps>,
@@ -140,12 +126,10 @@ function field(): HTMLInputElement {
   return found;
 }
 
-/** The rows standing, by their words, in the order drawn. */
 function rows(): string[] {
   return [...document.querySelectorAll('[role="option"]')].map((row) => row.textContent ?? "");
 }
 
-/** The row lit now. */
 function lit(): string | undefined {
   return document.querySelector('[role="option"][aria-selected="true"]')?.textContent ?? undefined;
 }

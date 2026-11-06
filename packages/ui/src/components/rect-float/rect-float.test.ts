@@ -9,23 +9,12 @@ import { holdExits } from "../../testing/held-exits.js";
 import { POPOVER_SIDE, type PopoverSide } from "../anchored-popover/popover-place.js";
 import { RectFloat } from "./rect-float.js";
 
-/**
- * rect-float.test.ts -- the layer that stands by a box in the window: laid
- * in its owner's box at the box's leading edge, on the side asked unless
- * only the other has room, and moved again as a scroll moves the box; and
- * closed through `open`, fading where it stood before it goes. jsdom
- * lays nothing out, so the owner's box, the layer's size, and the window
- * are given: a 1024 by 768 window, the owner's box 100 in and 50 down, and
- * a 120 by 30 layer.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 const roots: Root[] = [];
 
-/** A resize observer that hears no resize, which jsdom lays out none of. */
 class QuietResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -39,7 +28,6 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", QuietResizeObserver);
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(1024);
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
-  // Note that jsdom has no layout, so the box a layer is laid in is its parent, as a positioned owner's box is.
   vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -58,12 +46,10 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** A box 80 wide and 20 tall, its top-left `left` in and `top` down the window. */
 function boxAt(left: number, top: number) {
   return { left, top, right: left + 80, bottom: top + 20 };
 }
 
-/** A layer by the box `anchor` answers, laid in an owner's box 100 in and 50 down the window. */
 function mount(anchor: () => ReturnType<typeof boxAt>, side?: PopoverSide): HTMLElement {
   const owner = document.body.appendChild(document.createElement("div"));
   owner.getBoundingClientRect = () => new DOMRect(100, 50, 600, 700);
@@ -94,7 +80,6 @@ test("a layer asked to stand under the box does so, and one over it turns under 
   assert.equal(under.dataset.side, POPOVER_SIDE.BELOW);
   assert.equal(under.style.top, "270px", "its top on the box's foot");
 
-  // 20 - 4 - 8 = 8 above is no room for 30, and the room below is.
   const turned = mount(() => boxAt(200, 20));
   assert.equal(turned.dataset.side, POPOVER_SIDE.BELOW);
 });
@@ -102,7 +87,6 @@ test("a layer asked to stand under the box does so, and one over it turns under 
 test("a layer by a box near the window's right edge is pushed back inside it", () => {
   const layer = mount(() => boxAt(980, 300));
 
-  // 1024 - 8 - 120 = 896 in the window is 796 into the owner's box.
   assert.equal(layer.style.left, "796px");
 });
 
@@ -131,7 +115,6 @@ test("a margin its owner's rule gives the layer, as one spacing a box's children
   }
 });
 
-/** What a closing layer's owner draws: the layer while `shown` answers what it holds, and nothing in it once that is let go. */
 function closing(told: { exited: number }) {
   const owner = document.body.appendChild(document.createElement("div"));
   owner.getBoundingClientRect = () => new DOMRect(100, 50, 600, 700);

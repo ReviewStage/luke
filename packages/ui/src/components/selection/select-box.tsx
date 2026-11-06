@@ -3,66 +3,19 @@ import { cn } from "../../cn.js";
 import { Checkbox as ShadcnCheckbox } from "../../shadcn/checkbox.js";
 import { ListSelectionContext } from "./list-selection.js";
 
-/**
- * select-box.tsx -- the box at the start of a row that can be chosen, which the pointer finds there: Linear's and Gmail's way into a selection.
- *
- * A row that can be chosen (`CardPress`'s `selectKey`) is chosen by ⌘- and
- * ⇧-clicks and by X, which nothing on screen says. Its box says it: it
- * comes in while the row is under the pointer or holds the keyboard's
- * focus, stays while the row is chosen or any row of its list is, so a list
- * being chosen from shows every box, and a press on it puts the row in or
- * takes it out without opening it, as X does. A plain press on the row
- * still opens it.
- *
- * The box is the pointer's alone: the keyboard chooses by X, and the row's
- * press already says it is selected, so the box takes no Tab stop and is
- * hidden from a reader, who would otherwise meet each row twice.
- *
- * It stands where the row says (`SELECT_BOX_PLACE`), laid over the row's
- * box rather than in its flow, so it moves nothing as it comes and goes: in
- * the gutter a list row keeps at its start (`--spacing-select-gutter`), or at
- * the start of a card's first line, where the card hides what it draws there
- * while the box shows. It is `CardPress`'s alone, which an app asks for by
- * place (`selectBox`), so the barrel offers the places and not the box.
- */
-
-/** Where a row's box stands. */
 export const SELECT_BOX_PLACE = {
-  /** In the gutter a list row keeps at its start, centered on the row (`ps-select-gutter`). */
   GUTTER: "gutter",
-  /**
-   * At the start of a card's first line, inside the card's row inset,
-   * centered on the column of the compact chip its next line starts with,
-   * which the card draws a step out past its list inset, as a board's card
-   * draws its status mark under its key (`desktop.css`).
-   */
   CARD_HEAD: "card-head",
-  /**
-   * Over a list row's unread gutter (`UnreadMark`), centered on its dot, on
-   * the row's first line where its marks stand there (`LIST_ROW_META.TITLE`)
-   * and its middle otherwise, in the room the row keeps before its words, so a list of mail adds no
-   * gutter of its own; the row hides its dot while the box shows
-   * (`list-row.css`), its words' weight still saying it is unread. It comes
-   * in while the row is under the pointer, the row being its hover's group.
-   */
   UNREAD_GUTTER: "unread-gutter",
 } as const;
 
 export type SelectBoxPlace = (typeof SELECT_BOX_PLACE)[keyof typeof SELECT_BOX_PLACE];
 
-/** The attribute a box wears while it stands at rest, its row chosen or its list being chosen from. */
 const SHOWN_ATTRIBUTE = "data-shown";
 
-/**
- * The box over its row, hidden until the row's press is hovered or focused
- * from the keyboard (the press is its peer, standing just before it), the
- * box itself is hovered, or it stands at rest. Note that it stands over the
- * press's reach, a layer up, so a press on it is its own.
- */
 const BOX =
   "ui-select-box absolute z-1 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit hover:opacity-100 peer-hover/card-press:opacity-100 peer-focus-visible/card-press:opacity-100 data-[shown=true]:opacity-100";
 
-/** Where each place stands the box in its row. */
 const PLACED: Record<SelectBoxPlace, string> = {
   [SELECT_BOX_PLACE.GUTTER]: "top-1/2 left-row-inset -translate-y-1/2",
   [SELECT_BOX_PLACE.CARD_HEAD]:
@@ -71,7 +24,6 @@ const PLACED: Record<SelectBoxPlace, string> = {
     "top-1/2 left-[calc(var(--ui-list-row-inset-inline)+(var(--spacing-status-dot)-var(--spacing-select-box))/2)] -translate-y-1/2 group-hover/list-row:opacity-100 group-data-[meta=title]/list-row:top-[calc(var(--ui-list-row-inset-block)+(var(--ui-list-row-head-leading)-var(--spacing-select-box))/2)] group-data-[meta=title]/list-row:translate-y-0",
 };
 
-/** The box of the row keyed `selectKey`, in the selection it stands in; nothing outside one. */
 export function SelectBox({
   selectKey,
   place,
@@ -89,7 +41,6 @@ export function SelectBox({
       tabIndex={-1}
       aria-hidden="true"
       {...{ [SHOWN_ATTRIBUTE]: String(selecting.selected.size > 0) }}
-      // Note that a press on it keeps the focus where it stood, so the box never holds a focus a reader is not told of.
       onMouseDown={(event) => event.preventDefault()}
       onCheckedChange={() => selecting.toggle(selectKey)}
     />

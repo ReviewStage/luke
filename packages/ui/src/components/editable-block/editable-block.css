@@ -1,8 +1,3 @@
-/* A block of a document edited in place (`editable-block.tsx`): its words
-   take the text cursor and nothing else marks them, since a press into them
-   edits them, and a block the keyboard selects wears a soft tint of the
-   focus color a little past its words, as a document editor marks a
-   selected block. */
 .ui-editable-block {
   position: relative;
   isolation: isolate;

@@ -17,26 +17,6 @@ import {
   useMenu,
 } from "./menu.js";
 
-/**
- * menu.test.ts -- a menu behaves as a system menu does: its button opens it
- * with focus on its first item, the arrows pass over an item that does not
- * apply now, a submenu opens beside its item and closes alone, choosing an
- * item acts, as does the key it prints as its shortcut, and Escape, Tab, or a press elsewhere closes it, the keys
- * handing focus back to what opened it. An item steered from a field, as
- * a searchable menu's pinned rows are, is a switch for a setting and says
- * whether the list it opens stands, keeps a press from taking the focus,
- * and takes no press where it does not apply now. A touch held still on
- * what a right-click opens a menu on opens the same menu at the touch,
- * once, and its release makes no click; a touch that moves or lets go
- * first, and a mouse held down, open nothing. An item hangs its card beside
- * itself on rest, which leaves the menu its focus, its arrows, and a press on
- * the card. An item may open a panel its owner draws beside the menu,
- * which takes the keyboard in and goes back to its item. In a phone's
- * layout the same menu rises as a sheet, a dialog holding its rows, a
- * submenu or a panel opening in its place with a way back, and Escape or a
- * press on the dimmed window putting it away with focus handed back.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -56,14 +36,12 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-ui-room");
 });
 
-/** What a test's menu chose, in the order it chose it. */
 type Chosen = string[];
 
 function action(label: string, chosen: Chosen, extra: { disabled?: boolean } = {}) {
   return { label, onSelect: () => chosen.push(label), ...extra };
 }
 
-/** A ⋯ that drops `groups`, a button after it, and a row a right-click opens the same menu on. */
 function Harness({ groups }: { groups: readonly (readonly MenuEntry[])[] }): React.JSX.Element {
   const menu = useMenu(true);
   return createElement(
@@ -83,7 +61,6 @@ function Harness({ groups }: { groups: readonly (readonly MenuEntry[])[] }): Rea
   );
 }
 
-/** A menu of Rename, a dimmed Move, and Archive, ruled from a red Delete. */
 function taskGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   return [
     [
@@ -95,7 +72,6 @@ function taskGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   ];
 }
 
-/** A menu of two submenus, as a sidebar's View options is: Group by over Order by. */
 function viewGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   const choice = (label: string) => ({ ...action(label, chosen), checked: false });
   return [
@@ -106,7 +82,6 @@ function viewGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   ];
 }
 
-/** A menu of Attachment over MCP servers, whose panel is a search field over Manage, as the agent box's + is. */
 function plusGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   return [
     [
@@ -135,12 +110,10 @@ function plusGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   ];
 }
 
-/** The servers' panel standing, if it is. */
 function serversPanel(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"][aria-label="Servers"]');
 }
 
-/** Whether the servers' search field holds the keyboard. */
 function searching(): boolean {
   return document.activeElement?.getAttribute("aria-label") === "Search servers";
 }
@@ -153,7 +126,6 @@ function mount(element: React.ReactElement): void {
   act(() => root.render(element));
 }
 
-/** The button whose words or name are `name`. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
@@ -162,7 +134,6 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
-/** The menu named `label` standing open, if it is: drawn and not on its way out. */
 function openMenu(label = "Task actions"): HTMLElement | null {
   return document.querySelector<HTMLElement>(
     `[role="menu"][aria-label="${label}"]:not([data-leaving])`,
@@ -173,7 +144,6 @@ function focused(): string | null | undefined {
   return document.activeElement?.textContent;
 }
 
-/** A key pressed on whatever has focus, as the keyboard sends it. */
 function key(name: string): void {
   act(() => {
     document.activeElement?.dispatchEvent(
@@ -186,21 +156,14 @@ function press(element: HTMLElement): void {
   act(() => element.click());
 }
 
-/** A press on whatever has focus, as Enter or Space on a menu's item gives. */
 function pressFocused(): void {
   const item = document.activeElement;
   if (!(item instanceof HTMLElement)) throw new Error("nothing has focus");
   press(item);
 }
 
-/** How long a mouse rests on a submenu's item before its submenu opens: past Base UI's 100 ms delay. */
 const SUBMENU_REST_MS = 150;
 
-/**
- * What a pointer over `element` lands on, as a browser finds it: the
- * element, unless the nearest box it stands in that says whether it takes
- * the pointer (`pointer-events`) takes none, when it lands on the document.
- */
 function under(element: HTMLElement): HTMLElement {
   for (let at: HTMLElement | null = element; at !== null; at = at.parentElement) {
     if (at.style.pointerEvents === "auto") return element;
@@ -209,14 +172,6 @@ function under(element: HTMLElement): HTMLElement {
   return element;
 }
 
-/**
- * The mouse moving from `from`, or from outside the window, to the point
- * `at` over `to`, with every event a browser sends for it, which Base UI's
- * hover reads; nothing is opened until it rests there (`rest`), on the
- * test's fake timers. It answers what the mouse landed on (`under`). Note
- * that a mouse keeps moving, so where landing let the pointer through to
- * `to`, as a submenu given up does, its next move lands on `to`.
- */
 function mouseMove(
   from: HTMLElement | null,
   to: HTMLElement,
@@ -244,14 +199,12 @@ function mouseMove(
   return landed !== to && under(to) === to ? mouseMove(landed, to, at) : landed;
 }
 
-/** The mouse resting where it last moved, long enough for a submenu to open. */
 function rest(): void {
   act(() => {
     vi.advanceTimersByTime(SUBMENU_REST_MS);
   });
 }
 
-/** The pointer moving onto `to`, from `from` or from outside the window, as a browser reports it. */
 function pointerMove(from: HTMLElement | null, to: HTMLElement): void {
   act(() => {
     from?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
@@ -339,7 +292,6 @@ test("a press elsewhere closes the menu and takes nothing it was offered", () =>
   expect(chosen).toEqual([]);
 });
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks and a card places itself by, reporting a box once as it is observed, as a first layout would. */
 function standInResizeObserver(): void {
   vi.stubGlobal(
     "ResizeObserver",
@@ -521,7 +473,6 @@ test("resting on one submenu's item after another's opens the second's submenu, 
   expect(openMenu("Order by")).not.toBeNull();
 });
 
-/** Where the menu of Group by over Order by stands, and Group by's submenu beside it, as `x`, `y`, width, and height. */
 const VIEW_LAYOUT = {
   menu: { "Task actions": [0, 0, 208, 72], "Group by": [212, 0, 208, 72] },
   item: {
@@ -532,13 +483,11 @@ const VIEW_LAYOUT = {
   },
 } as const satisfies Record<string, Record<string, readonly [number, number, number, number]>>;
 
-/** The view menu laid out as `VIEW_LAYOUT` says, as a browser lays it out, though jsdom lays out nothing. */
 function viewMenuLaidOut(): void {
   const measured = HTMLElement.prototype.getBoundingClientRect;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    // Note that a menu's positioner stands where the menu it holds does.
     const menu =
       this.getAttribute("role") === "menu" ? this : this.querySelector(':scope > [role="menu"]');
     const boxes: Readonly<Record<string, readonly [number, number, number, number]>> =
@@ -558,9 +507,6 @@ test("the mouse passing slowly over another submenu's item on its way into a sub
   expect(openMenu("Group by")).toBeNull();
   rest();
   expect(openMenu("Group by")).not.toBeNull();
-  // Note that the mouse heads down and right for None, over Order by's
-  // right end, slowly enough to be over Order by for longer than a rest,
-  // though it never stops there that long.
   const crossing = mouseMove(resting, button("Order by"), { clientX: 200, clientY: 37 });
   act(() => {
     vi.advanceTimersByTime(60);
@@ -607,7 +553,6 @@ test("a value that stays, pressed in the second submenu the pointer opened once 
     });
     press(button("High"));
     expect(chosen).toEqual(["High"]);
-    // Note that a menu closing is still drawn while its exit is held, so standing is read as not ending.
     const standing = (label: string) =>
       document.querySelector(`[role="menu"][aria-label="${label}"]:not([data-ending-style])`);
     expect(standing("Priority")).not.toBeNull();
@@ -747,7 +692,6 @@ test("the mouse resting on an item that opens a panel opens it with the keyboard
   expect(serversPanel()).toBeNull();
 });
 
-/** A menu of one submenu whose choice its owner holds: Group by, `chosen` checked. */
 function GroupBy({ chosen }: { chosen: string }): React.JSX.Element {
   const menu = useMenu(true);
   const choice = (label: string) => ({ label, checked: label === chosen, onSelect: () => {} });
@@ -832,7 +776,6 @@ test("the menu key or Shift-F10 on a row opens its menu under it on the first it
   expect(openMenu()).not.toBeNull();
 });
 
-/** Pinned rows steered from a field: Effort, opening its list, a Fast switch, and a dimmed Long context. */
 function mountSteered(chosen: Chosen) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -895,7 +838,6 @@ test("an item steered from a field is a switch for a setting, says its list stan
   expect(chosen).toEqual(["fast", "hover effort"]);
 });
 
-/** A row a right-click or a long press opens the task's menu on, whose press is counted in `opened`, with a switch in it that keeps the menu. */
 function HeldRow({ opened }: { opened: string[] }): React.JSX.Element {
   const menu = useMenu(true);
   return createElement(
@@ -918,10 +860,8 @@ function HeldRow({ opened }: { opened: string[] }): React.JSX.Element {
   );
 }
 
-/** Well past a long press's hold, in milliseconds, so no test leans on its exact length. */
 const HELD_MS = 2000;
 
-/** The held row drawn on a fake clock, its row, and the presses the row heard. */
 function heldRow() {
   vi.useFakeTimers();
   const opened: string[] = [];
@@ -929,7 +869,6 @@ function heldRow() {
   return { row: button("Row"), opened };
 }
 
-/** A pointer event of a `pointerType` at `x`, `y`, as the browser sends it. */
 function pointer(type: string, pointerType: string, x: number, y: number): PointerEvent {
   return new PointerEvent(type, {
     bubbles: true,
@@ -942,25 +881,18 @@ function pointer(type: string, pointerType: string, x: number, y: number): Point
   });
 }
 
-/** A press of a `pointerType` going down on `target` at `x`, `y`. */
 function down(target: HTMLElement, pointerType: string, x = 40, y = 20): void {
   act(() => {
     target.dispatchEvent(pointer("pointerdown", pointerType, x, y));
   });
 }
 
-/** Time passing on the fake clock. */
 function wait(ms: number): void {
   act(() => {
     vi.advanceTimersByTime(ms);
   });
 }
 
-/**
- * The press lifted at `x`, `y`, and the click its release makes, as the
- * browser makes it: for a touch, only where its touchend was not refused.
- * Answers whether the release made a click.
- */
 function lift(target: HTMLElement, pointerType: string, x = 40, y = 20): boolean {
   const touchEnd = new TouchEvent("touchend", { bubbles: true, cancelable: true });
   act(() => {
@@ -972,7 +904,6 @@ function lift(target: HTMLElement, pointerType: string, x = 40, y = 20): boolean
   return !touchEnd.defaultPrevented;
 }
 
-/** Where the open menu hangs, as its positioner places it, once Base UI has placed it. */
 async function hungAt(): Promise<[string, string] | undefined> {
   await placed();
   const menu = openMenu();
@@ -982,7 +913,6 @@ async function hungAt(): Promise<[string, string] | undefined> {
   return at === null ? undefined : [at[1] ?? "", at[2] ?? ""];
 }
 
-/** Base UI's placing settled, which it does over a few promises rather than in the render that opened the menu. */
 async function placed(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
@@ -1154,7 +1084,6 @@ test("a switch in the row that keeps its menu opens nothing, held or right-click
   expect(openMenu()).not.toBeNull();
 });
 
-/** Whether `element` is a menu or the positioner holding one, which a browser lays out the menu's size. */
 function menuBox(element: HTMLElement): boolean {
   return (
     element.getAttribute("role") === "menu" ||
@@ -1162,7 +1091,6 @@ function menuBox(element: HTMLElement): boolean {
   );
 }
 
-/** A menu drawn `width` by `height`, and whatever `laid` lays out, as a browser lays it out, though jsdom lays out nothing. */
 function menusMeasure(
   width: number,
   height: number,
@@ -1187,13 +1115,11 @@ function menusMeasure(
   });
 }
 
-/** A phone's keyboard up: the window as tall as before, only its top `height` seen. */
 function keyboardUp(height: number): void {
   const seen = { offsetTop: 0, offsetLeft: 0, width: window.innerWidth, height };
   vi.stubGlobal("visualViewport", Object.assign(new EventTarget(), seen));
 }
 
-/** The menu opened by a right-click at `y`, as far down the window as that. */
 function rightClickAt(y: number): HTMLElement {
   mount(createElement(Harness, { groups: taskGroups([]) }));
   const row = document.querySelector("p") ?? expect.fail("the row is drawn");
@@ -1217,7 +1143,6 @@ test("with a phone's keyboard up, a menu opened near the foot of what is seen st
 test("with no visual viewport, a menu opened near the window's foot stands where the window's height lets it", async () => {
   vi.stubGlobal("innerHeight", 800);
   vi.stubGlobal("visualViewport", undefined);
-  // Note that the page's root is the window's height, as a browser lays it out, though jsdom lays out nothing.
   vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
   vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(window.innerWidth);
   menusMeasure(160, 120);
@@ -1225,7 +1150,6 @@ test("with no visual viewport, a menu opened near the window's foot stands where
   expect((await hungAt())?.[1]).toBe("380px");
 });
 
-/** An 800px window with no visual viewport, as the desktop's is. */
 function desktopWindow(): void {
   vi.stubGlobal("innerHeight", 800);
   vi.stubGlobal("visualViewport", undefined);
@@ -1235,7 +1159,6 @@ function desktopWindow(): void {
 
 test("a menu with no room above or below the ⋯ it dropped from stands beside the ⋯, clear of it", async () => {
   desktopWindow();
-  // The ⋯ at a row's right end halfway down, under a menu 600px tall that fits neither under nor over it.
   const more = new DOMRect(900, 380, 24, 24);
   menusMeasure(160, 600, (element) => (element.textContent === "More" ? more : undefined));
   mount(createElement(Harness, { groups: taskGroups([]) }));
@@ -1246,7 +1169,6 @@ test("a menu with no room above or below the ⋯ it dropped from stands beside t
 
 test("a menu with no room below the ⋯ it dropped from, and room above, stands wholly above the ⋯", async () => {
   desktopWindow();
-  // The ⋯ at a row's right end near the window's foot, under a menu 300px tall.
   const more = new DOMRect(900, 690, 24, 24);
   menusMeasure(160, 300, (element) => (element.textContent === "More" ? more : undefined));
   mount(createElement(Harness, { groups: taskGroups([]) }));
@@ -1258,7 +1180,6 @@ test("a menu with no room below the ⋯ it dropped from, and room above, stands 
 
 test("a menu too tall for the room over a bar it keeps clear of stands above the bar", async () => {
   desktopWindow();
-  // A phone's places bar across the window's foot, its top 60px up.
   menusMeasure(160, 300, (element) =>
     element.hasAttribute("data-menu-keeps-clear") ? new DOMRect(0, 740, 1024, 60) : undefined,
   );
@@ -1280,18 +1201,15 @@ test("a menu too tall for the room over a bar it keeps clear of stands above the
   expect(top + 300).toBeLessThanOrEqual(740);
 });
 
-/** The window drawn in a phone's layout, as the panel's shell marks its root. */
 function inPhoneLayout(): void {
   document.documentElement.setAttribute("data-ui-room", "narrow");
 }
 
-/** jsdom has no ResizeObserver; the way back's fold, which measures by one, is not what these tests read. */
 class StandInResizeObserver {
   observe(): void {}
   disconnect(): void {}
 }
 
-/** The sheet a menu stands as in a phone's layout, while it does. */
 function sheet(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
@@ -1370,7 +1288,6 @@ test("Escape or a press on the dimmed window puts a sheet away and hands focus b
   expect(document.activeElement).toBe(more);
 });
 
-/** A ⋯ whose menu holds a Status submenu of two filter values, Todo and Done, each toggled on and off where it stays. */
 function FilterHarness(): React.JSX.Element {
   const [on, setOn] = useState<readonly string[]>([]);
   const toggle = (label: string) => ({
@@ -1387,7 +1304,6 @@ function FilterHarness(): React.JSX.Element {
 
 test("a sheet put away sinks out before it goes, held until its sink has played", () => {
   inPhoneLayout();
-  // Note that the dialog's card fades as the sheet sinks, both on one motion here, as a browser plays them on one beat.
   const sink = new EventTarget();
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
@@ -1441,7 +1357,6 @@ test("a choice in a sheet acts with focus already back on what opened it, so a d
   expect(held).toEqual([more]);
 });
 
-/** A ⋯ whose menu offers Retry, which stays and turns to a dimmed Reading… as it reads again, beside Archive. */
 function RetryHarness(): React.JSX.Element {
   const [reading, setReading] = useState(false);
   const stand = reading

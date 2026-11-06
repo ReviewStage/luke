@@ -6,14 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { TooltipCard, TooltipPill } from "./tooltip.js";
 
-/**
- * tooltip.test.ts -- a pill names its control and then its chord, as the
- * tooltip the control's description points at; a card's presses go no
- * further than the card, and a press on one of its buttons is a choice
- * where a press on its words is not.
- */
-
-/** jsdom's stand-in for the browser's ResizeObserver, which it lacks: a hint is placed once and never resized here. */
 class StillResizeObserver {
   observe(): void {}
   disconnect(): void {}

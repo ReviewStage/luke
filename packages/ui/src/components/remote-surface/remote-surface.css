@@ -1,5 +1,3 @@
-/* A remote page's surface (remote-surface.tsx): the page draws its own
-   focus, so the canvas wears no ring, and a driven one is edged. */
 .ui-remote-surface {
   display: block;
   outline: none;

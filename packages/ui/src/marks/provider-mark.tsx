@@ -2,32 +2,8 @@ import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_SITE } from "@repo/features/link-site";
 import React, { useId } from "react";
 
-// `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
-/**
- * provider-mark.tsx -- the official mark of every provider an account signs in with or connects, as its own brand publishes it.
- *
- * Brand marks, not glyphs of ours: each is the brand's own vector, verbatim
- * from the press kit cited above it, never redrawn, in the colors its usage
- * rules allow. A mark the brand shows monochrome is drawn in `currentColor`,
- * so it reads in the ink of whatever row or card it stands in; a brand that
- * names one ink per ground wears an `integration-mark-*` class, and each app
- * sets those inks for the grounds it draws (the desktop's `styles/desktop.css`
- * for both of its schemes, the site's `styles.css` for its dark cards).
- * `ProviderMark` is the one door to them, so GitHub's mark is traced once
- * whether it stands for an account's sign-in, its connected GitHub, a
- * workspace's organization, or the GitHub integration, in the desktop and on
- * the site alike. The harnesses a model runs in are not providers of this kind
- * and have their own marks (`harness-mark.tsx`).
- */
-
-/**
- * Every provider with a mark: the integrations, the two sign-in providers,
- * GitHub being both, and the well-known sites a link is drawn as a chip of.
- * An app's own account-provider set names the same strings, so the compiler
- * holds it to this one at the call site.
- */
 export const MARK_PROVIDER = {
   ...INTEGRATION_PROVIDER,
   ...LINK_SITE,
@@ -41,12 +17,6 @@ export const MARK_PROVIDER = {
 
 export type MarkProvider = (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER];
 
-/**
- * How big a mark stands: the glyph cell of the row, chip, or button it leads
- * (`slot`, which sizes it), or one of four sizes of its own: beside a
- * caption's words, as a control's icon, as a settings row's leading mark, and
- * as the tile a connection's card leads with.
- */
 export const PROVIDER_MARK_SIZE = {
   SLOT: "slot",
   CAPTION: "caption",
@@ -57,7 +27,6 @@ export const PROVIDER_MARK_SIZE = {
 
 export type ProviderMarkSize = (typeof PROVIDER_MARK_SIZE)[keyof typeof PROVIDER_MARK_SIZE];
 
-/** The class each size wears; a slot's mark wears the base alone. */
 const MARK_CLASS = {
   [PROVIDER_MARK_SIZE.SLOT]: "ui-provider-mark",
   [PROVIDER_MARK_SIZE.CAPTION]: "ui-provider-mark ui-provider-mark-caption",
@@ -70,11 +39,6 @@ interface MarkProps {
   readonly className: string;
 }
 
-/**
- * Google's G in its four official colors, as Google's sign-in branding
- * guidelines draw it (https://developers.google.com/identity/branding-guidelines),
- * on either ground.
- */
 function GoogleMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="0 0 18 18" aria-hidden="true" focusable="false">
@@ -98,13 +62,6 @@ function GoogleMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * OpenAI's mark as Sign in with ChatGPT's own button wears it, verbatim from
- * `/assets/siwc/chatgpt-logo-white.svg`, the asset OpenAI's UI guidelines
- * draw their button with (developers.openai.com/siwc/ui-ux-guidelines), its
- * white fill drawn in `currentColor` so it takes the button's ink on either
- * ground.
- */
 function ChatGptMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -119,12 +76,6 @@ function ChatGptMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Maps's pin in its five official colors, verbatim from the product
- * logo Google serves for Maps
- * (https://www.gstatic.com/images/branding/productlogos/maps/v7/192px.svg),
- * in a box cropped to the pin, on either ground.
- */
 function GoogleMapsMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -152,12 +103,6 @@ function GoogleMapsMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Docs's page in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/docs_2020q4/v12/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleDocsMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -173,12 +118,6 @@ function GoogleDocsMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Sheets's page in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/sheets_2020q4/v11/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleSheetsMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -195,12 +134,6 @@ function GoogleSheetsMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Slides's page in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/slides_2020q4/v12/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleSlidesMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -214,12 +147,6 @@ function GoogleSlidesMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Forms's page in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/forms_2020q4/v6/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleFormsMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -236,12 +163,6 @@ function GoogleFormsMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Drive's triangle in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/drive_2020q4/v10/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleDriveMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -273,12 +194,6 @@ function GoogleDriveMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Calendar's 31 in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/calendar_2020q4/v13/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -298,12 +213,6 @@ function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Google Meet's camera in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/meet_2020q4/v8/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GoogleMeetMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -324,12 +233,6 @@ function GoogleMeetMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Gmail's M in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/gmail_2020q4/v11/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function GmailMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -348,12 +251,6 @@ function GmailMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * YouTube's play button in its official colors, verbatim from the product logo
- * Google serves for it
- * (https://www.gstatic.com/images/branding/productlogos/youtube/v9/192px.svg),
- * in the box every Google mark here is cropped to, on either ground.
- */
 function YouTubeMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="8 8 176 176" aria-hidden="true" focusable="false">
@@ -366,12 +263,6 @@ function YouTubeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * X's logo, verbatim from the icon x.com serves
- * (https://abs.twimg.com/responsive-web/client-web/icon-svg.ea5ff4aa.svg);
- * X shows it in one color, black or white, so it is drawn in
- * `currentColor` for either ground, in a box cropped to the letter.
- */
 function XMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -390,11 +281,6 @@ function XMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * LinkedIn's "in" square, the glyph the About page's founder links drew, in
- * a box that is the square itself. LinkedIn shows its mark in one color on
- * a one-color ground, so it is drawn in `currentColor` for either ground.
- */
 function LinkedInMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -409,14 +295,6 @@ function LinkedInMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Executor's mark, its serif E on its disc, traced from `assets/executor-icon.png`
- * in Executor's own repository (https://github.com/UsefulSoftwareCo/executor),
- * the same artwork executor.sh serves as its logo, since Executor publishes
- * no vector of it. The site draws it black and inverts it on a dark ground,
- * so the E is cut out of the disc and the disc drawn in `currentColor`, with
- * `.integration-mark-executor` (`styles/desktop.css`) setting which.
- */
 function ExecutorMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -435,11 +313,6 @@ function ExecutorMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * GitHub's mark, the Octicon GitHub publishes as its logo
- * (https://github.com/logos); GitHub's guidance shows it in one color, so it
- * is drawn in `currentColor` for either ground.
- */
 function GitHubMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -454,14 +327,6 @@ function GitHubMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Granola's spiral in Granola's green, the spiral verbatim from
- * `logo-square.svg` in the Logos folder of Granola's press kit
- * (https://grano.la/press, the "Press" link on https://www.granola.ai) but
- * for its coordinates rounded to tenths of a unit, drawn alone in the
- * kit's lime (`#B2C248`, the green of its `Granola_lockup_green.svg`) on
- * no tile, in a box cropped to the spiral, on either ground.
- */
 function GranolaMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -479,13 +344,6 @@ function GranolaMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Linear's logomark, verbatim from `logo-light.svg` in Linear's brand assets
- * (https://linear.app/brand,
- * https://static.linear.app/design-assets/Linear-Brand-Assets.zip), which
- * Linear publishes as a single-color mark in light and dark; drawn in
- * `currentColor` for either ground.
- */
 function LinearMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -500,13 +358,6 @@ function LinearMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Mercury's logomark, verbatim from mercury.com's own icon
- * (https://mercury.com/icon.svg), which inks itself by the ground, dark on
- * light and near-white on dark; drawn in `currentColor` with
- * `.integration-mark-mercury` (`styles/desktop.css`) setting the same two
- * inks. Mercury publishes no press kit.
- */
 function MercuryMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -524,13 +375,6 @@ function MercuryMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Neon's logomark, verbatim from `neon-logomark-dark-color.svg` and
- * `neon-logomark-light-color.svg` on Neon's brand page
- * (https://neon.com/brand), which differ only in their green, one for each
- * ground; drawn in `currentColor` with `.integration-mark-neon`
- * (`styles/desktop.css`) setting which.
- */
 function NeonMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -545,14 +389,6 @@ function NeonMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Notion's block logomark, verbatim from `notion-logo-block-mono-black.svg`
- * in `notion-logos-2024.zip` from Notion's brand guidelines
- * (https://notion.notion.site/Notion-Brand-Guidelines-db8fda2d1f0048bba1f4e547dfc48830).
- * Notion publishes the mono mark in pure black and pure white and asks for
- * the white one on a dark ground, so it is drawn in `currentColor` with
- * `.integration-mark-notion` (`styles/desktop.css`) setting which.
- */
 function NotionMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -571,18 +407,6 @@ function NotionMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * PostHog's full-color logomark, verbatim from `posthog-logomark.svg` in
- * PostHog's brand package (https://github.com/PostHog/brand, served at
- * https://brand.posthog.com/logo/posthog-logomark.svg), in its gradients on
- * a white rounded square on either ground. PostHog's rules
- * (https://brand.posthog.com/logo) keep the gradient mark off a dark ground
- * and refuse a recolored part, such as the hedgehog's face turned white,
- * so the square is what lets the color mark stand on a dark row with its
- * face intact; on a light row it is the row's own white. Its gradients' ids
- * are this mark's own, so two marks on one page never paint with each
- * other's.
- */
 function PostHogMark({ className }: MarkProps): React.JSX.Element {
   const id = useId();
   return (
@@ -715,13 +539,6 @@ function PostHogMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Resend's logomark, verbatim from `resend-icon-black.svg` and
- * `resend-icon-white.svg` on Resend's brand page (https://resend.com/brand),
- * framed to the glyph's own square rather than the file's padded one. Resend
- * publishes it in pure black and pure white, so it is drawn in `currentColor`
- * with `.integration-mark-resend` (`styles/desktop.css`) setting which.
- */
 function ResendMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -736,14 +553,6 @@ function ResendMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Sentry's glyph, verbatim from the logo generator on Sentry's branding page
- * (https://sentry.io/branding/, Glyph with no clear space), whose brand guide
- * (https://live.standards.site/sentry) uses the glyph alone where space is
- * short. Sentry publishes it in one color, its dark blurple on a light
- * ground and white on a dark one, so it is drawn in `currentColor` with
- * `.integration-mark-sentry` (`styles/desktop.css`) setting which.
- */
 function SentryMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -758,13 +567,6 @@ function SentryMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Slack's mark, verbatim from `SLA-Slack-icon-RGB.svg` in the Slack Media Kit
- * logos (https://slack.com/media-kit, served from Salesforce's asset library
- * at https://salesforce.widencollective.com/c/yn6bxnam), in the four colors
- * Slack's logo rules keep (https://slack.com/terms-of-service/slack-brand:
- * "Don't use different colors", "Don't use old versions").
- */
 function SlackMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="0 0 400 400" aria-hidden="true" focusable="false">
@@ -804,14 +606,6 @@ function SlackMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Stripe's icon, verbatim from stripe.com's own favicon
- * (https://images.stripeassets.com/fzn2n1nzq965/1hgcBNd12BfT9VLgbId7By/01d91920114b124fb4cf6d448f9f06eb/favicon.svg),
- * its white mark on its own blurple tile on either ground. Stripe's logo kit
- * (https://stripe.com/newsroom/brand-assets) holds the wordmark alone. Its
- * clip's id is this mark's own, so two marks on one page never clip with
- * each other's.
- */
 function StripeMark({ className }: MarkProps): React.JSX.Element {
   const id = useId();
   return (
@@ -840,12 +634,6 @@ function StripeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Supabase's logomark, verbatim from `supabase-logo-icon.svg` in Supabase's
- * brand assets (https://supabase.com/brand-assets, `brand-assets.zip`), in
- * its own greens on either ground. Its gradients' ids are this mark's own,
- * so two marks on one page never paint with each other's.
- */
 function SupabaseMark({ className }: MarkProps): React.JSX.Element {
   const id = useId();
   return (
@@ -897,12 +685,6 @@ function SupabaseMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Vercel's logomark, verbatim from `vercel-icon-light.svg` in Vercel's
- * brand assets (https://vercel.com/geist/brands, `vercel-assets.zip`),
- * which Vercel publishes in black and in white; drawn in `currentColor` for either
- * ground.
- */
 function VercelMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -917,11 +699,6 @@ function VercelMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Y Combinator's mark, verbatim from the logo in ycombinator.com's own
- * header (https://www.ycombinator.com), its white Y on its orange square on
- * either ground.
- */
 function YCombinatorMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
@@ -934,10 +711,6 @@ function YCombinatorMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Claude's spark in its clay, verbatim from `Claude Spark - Clay.svg` in
- * Anthropic's press kit (anthropic.com/press-kit), on either ground.
- */
 function ClaudeMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg className={className} viewBox="0 0 94 94" aria-hidden="true" focusable="false">
@@ -949,11 +722,6 @@ function ClaudeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Cursor's cube, verbatim from `CUBE_2D_LIGHT.svg` in Cursor's brand assets
- * (cursor.com/brand), which ship it in one ink per ground, so it is drawn in
- * `currentColor`.
- */
 function CursorMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -968,13 +736,6 @@ function CursorMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/**
- * Visual Studio Code's mark in its three blues, verbatim from `vscode.svg` in
- * Microsoft's icon download (code.visualstudio.com/brand), cut by its own
- * mask, on either ground. Note that its two drop shadows and its overlay
- * sheen are left out, because at a glyph's size they draw nothing but a
- * filter each.
- */
 function VsCodeMark({ className }: MarkProps): React.JSX.Element {
   const id = useId();
   return (
@@ -1011,7 +772,6 @@ function VsCodeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/** One provider's mark, at `size`, or the size of the slot it stands in. */
 export function ProviderMark({
   provider,
   size = PROVIDER_MARK_SIZE.SLOT,

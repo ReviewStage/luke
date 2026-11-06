@@ -6,13 +6,6 @@ import { afterEach, expect, test } from "vitest";
 import { Card } from "../card/card.js";
 import { type ListRowMenu, useRowMenu } from "./row-menu.js";
 
-/**
- * row-menu.test.ts -- a row that is no `ListRow`, here a card, offers its
- * menu by the same three doors a `ListRow` does: the ⋯ `more` draws, a
- * right-click anywhere on the card, and the menu key or ⇧F10 on any control
- * in it. None is offered where the row has no acts or is unavailable.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -38,7 +31,6 @@ const MENU: ListRowMenu = {
   groups: [[{ label: "Rename", onSelect: () => undefined }]],
 };
 
-/** A card holding a press and a chip, with the menu its row hook offers. */
 function MenuCard({
   menu,
   disabled = false,

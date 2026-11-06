@@ -12,15 +12,6 @@ import {
 import { TERMINAL_REFUSAL } from "./terminal-view.js";
 import { SANDBOX_STATE } from "./terminal-wire.js";
 
-/**
- * A coding agent's terminals as the host asks the service for them, over a
- * service that answers from a script: each call travels to its own path
- * with its own body and answers what the service said; each refusal the
- * tab reads is answered as one, and any other as unanswered; and the relay
- * address names the agent, the shell, and the size on the socket origin.
- * Synthetic ids throughout.
- */
-
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SHELL_ID = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const SHELL = { id: SHELL_ID, title: "server", command: "node", cwd: "/workspace", running: true };

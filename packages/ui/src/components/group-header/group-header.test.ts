@@ -14,17 +14,6 @@ import {
   type GroupHeaderEditorHandle,
 } from "./group-header.js";
 
-/**
- * group-header.test.ts -- pressing a group's head folds and unfolds its
- * rows and says so in `aria-expanded`, open or folded from the start or as
- * its holder keeps it; an action beside the fold presses without folding;
- * a head that folds nothing draws its rows always and no fold control; the count is
- * drawn as its caller gives it; a folded group draws what it leaves
- * standing; and a head named in place keeps its rows and ends its edit on
- * Return, Escape, or the focus leaving it, though not for a layer its glyph's
- * control hung.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -175,7 +164,6 @@ test("what a folded group leaves standing is drawn once the rows fade, and not w
   );
 });
 
-/** A group being named in place over its rows, with a button in the glyph's cell, each end heard by `ends`. */
 function editing(ends: GroupHeaderEditEnd[], holding = false): HTMLElement {
   const editor = createElement(GroupHeaderEditor, {
     value: "Launch",
@@ -249,7 +237,6 @@ test("while a layer the glyph's control hung stands, the focus leaving the head 
   assert.deepEqual(ends, []);
 });
 
-/** A head named in place whose glyph's button hangs a panel, the panel's standing held as an owner holds it. */
 function EditingWithPanel({ ends }: { ends: GroupHeaderEditEnd[] }): ReactElement {
   const [open, setOpen] = useState(false);
   const handle = useRef<GroupHeaderEditorHandle | null>(null);

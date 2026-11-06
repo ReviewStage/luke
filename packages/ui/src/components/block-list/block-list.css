@@ -1,6 +1,3 @@
-/* block-list.css -- a box of blocks: one hairline and corner round them all,
-   a hairline between each, and each block's parts one under another. */
-
 @layer components {
   .ui-block-list {
     min-width: 0;

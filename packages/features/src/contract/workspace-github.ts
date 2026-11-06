@@ -1,11 +1,3 @@
-/**
- * workspace-github.ts -- a workspace's GitHub connected or disconnected by an owner or an admin of it (`workspace-wire.ts`).
- *
- * Disconnect takes any input, because it is refused to every signed-in
- * caller whatever its body says, as it always was; a Mac still sends the
- * workspace's id in it.
- */
-
 import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
@@ -17,7 +9,6 @@ import {
 } from "../workspace-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
-/** A workspace's id is a few dozen characters, so a body past this is not one. */
 const BODY_BYTES = 1_024;
 
 export const workspaceGithubContract = {

@@ -9,15 +9,6 @@ import {
   withoutAccessTokens,
 } from "./sentry-breadcrumbs.js";
 
-/**
- * sentry-breadcrumbs.test.ts -- a renderer's breadcrumbs, events, and spans as Sentry would carry them: LiveKit's token never among them.
- *
- * Spans go through a client of Sentry's own core, on its default streamed
- * lifecycle, over a transport that writes down what it would have sent, so
- * what is asserted is what would have left the process.
- */
-
-/** A DSN on a reserved domain, which the recording transport never posts to. */
 const FIXTURE_SENTRY_DSN = "https://public@sentry.invalid/1";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.participant-token-never-reported";
@@ -83,16 +74,13 @@ test("an event carrying no token is sent as it was", () => {
   assert.equal(eventWithoutAccessTokens(event), event);
 });
 
-/** A sent attribute's value, as Sentry's span protocol types it. */
 type AttributeValue = string | number | boolean | readonly string[];
 
-/** A span as it would have been sent: its name and its attributes' values. */
 interface SentSpan {
   readonly name: string;
   readonly attributes: Readonly<Record<string, AttributeValue>>;
 }
 
-/** What a streamed span item's payload is read for. */
 interface SpanContainer {
   readonly items?: readonly {
     readonly name: string;
@@ -100,7 +88,6 @@ interface SpanContainer {
   }[];
 }
 
-/** A client of Sentry's core, as the browser and Electron SDKs' clients are, building no error events, which these tests send none of. */
 class FixtureClient extends Sentry.Client {
   constructor(options: Sentry.ClientOptions) {
     super(options);
@@ -113,7 +100,6 @@ class FixtureClient extends Sentry.Client {
   }
 }
 
-/** The spans in a serialized envelope: a header line, then a line of item header and a line of payload per item. */
 function spansOf(body: string): SentSpan[] {
   const [, ...lines] = body.split("\n").filter((line) => line.length > 0);
   const spans: SentSpan[] = [];
@@ -132,11 +118,6 @@ function spansOf(body: string): SentSpan[] {
   return spans;
 }
 
-/**
- * Sentry started as a renderer and a tab start it, every trace kept, on the
- * SDK's default lifecycle, with the clients' span filters, over a
- * recording transport; answers every span sent once `traced` has run.
- */
 async function sentSpans(traced: () => void): Promise<SentSpan[]> {
   const sent: SentSpan[] = [];
   const client = new FixtureClient({
@@ -162,7 +143,6 @@ async function sentSpans(traced: () => void): Promise<SentSpan[]> {
   return sent;
 }
 
-/** Every word a sent span carries, its name and its attributes' values, as one text to search. */
 function sentText(spans: readonly SentSpan[]): string {
   return JSON.stringify(spans);
 }
@@ -199,7 +179,6 @@ test("a token in a span's fragment, path, or query is scrubbed from what is sent
   const pathToken = "0f".repeat(20);
   const spans = await sentSpans(() => {
     Sentry.startSpan({ name: "/app", op: "pageload" }, (page) => {
-      // Note that the page's own address is set once the span stands, as the SDK's HTTP context does.
       page.setAttribute("url.full", `https://app.example.test/app#access_token=${TOKEN}`);
       page.setAttribute("url.fragment", `access_token=${TOKEN}`);
       Sentry.startSpan(
@@ -270,7 +249,6 @@ test("an address in a span's name is scrubbed, and other words of the name are k
 test("the page's referrer, an array, is scrubbed, and so is a token in any array", async () => {
   const spans = await sentSpans(() => {
     Sentry.startSpan({ name: "/app", op: "pageload" }, (page) => {
-      // Note that the browser's HTTP context sets the referrer on the segment as a one-string array.
       page.setAttribute("http.request.header.referer", [
         `https://app.example.test/cb?access_token=${TOKEN}&code=fixture-code&state=fixture-state`,
       ]);

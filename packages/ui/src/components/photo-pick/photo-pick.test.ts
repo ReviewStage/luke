@@ -7,11 +7,6 @@ import { afterEach, test } from "vitest";
 import { useFilePicker } from "../file-picker/file-picker.js";
 import { PhotoPick } from "./photo-pick.js";
 
-/**
- * photo-pick.test.ts -- the tile is the press that picks a photo, and once
- * one stands, with a way to remove it, a press offers Replace and Remove.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

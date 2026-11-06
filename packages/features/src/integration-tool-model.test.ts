@@ -13,16 +13,6 @@ import {
   toolTitle,
 } from "./integration-tool-model.js";
 
-/**
- * How a list of an integration's tools orders, names, and badges them: one
- * alphabetical list, each called by its title where its server gave one,
- * its row reading the first sentence of what it does, and a badge only
- * where the server's own annotations earn one, never from a tool's name;
- * and what a tool's page says of its server's hints, each only where the
- * server sent it, and of its parameters, the required first.
- */
-
-/** Tools named `names`, each described as itself. */
 function named(...names: string[]): IntegrationTool[] {
   return names.map((name) => ({ name, description: name }));
 }
@@ -61,7 +51,6 @@ test("a tool's page says each hint its server sent, a write's only of a tool not
   assert.deepEqual(toolHints({ readOnlyHint: false, destructiveHint: false }), [
     TOOL_HINT.ADDITIVE,
   ]);
-  // Note that a write the server never said is additive is not called so, whatever the spec's defaults.
   assert.deepEqual(toolHints({ destructiveHint: false }), []);
   assert.deepEqual(toolHints({ readOnlyHint: false }), []);
   assert.deepEqual(toolHints({ readOnlyHint: true, openWorldHint: true }), [

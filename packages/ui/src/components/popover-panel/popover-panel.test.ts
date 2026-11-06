@@ -13,15 +13,6 @@ import {
   type PopoverPanelLook,
 } from "./popover-panel.js";
 
-/**
- * popover-panel.test.ts -- a hung panel is a dialog named by its title,
- * takes the focus as it opens, onto its owner's control or itself, keeps
- * Escape from the window and hands it to its owner, draws its × only where
- * named, tells its owner when focus leaves it, never when focus moves
- * inside it, and closed through `open` fades out before it goes, or goes
- * at once where motion is held.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -31,14 +22,12 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "getAnimations");
 });
 
-/** What a panel under test was told, and what it told back. */
 interface Heard {
   dismissed: number;
   left: (EventTarget | null)[];
   keys: string[];
 }
 
-/** A panel holding a field and a button, with a button outside it to take focus. */
 function Stage({
   heard,
   look,
@@ -78,12 +67,10 @@ function Stage({
   );
 }
 
-/** A fresh record of what a panel heard. */
 function heardNothing(): Heard {
   return { dismissed: 0, left: [], keys: [] };
 }
 
-/** `stage` mounted in the document. */
 function drawn(stage: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -93,27 +80,23 @@ function drawn(stage: ReactElement): HTMLElement {
   return container;
 }
 
-/** The dialog in `container`. */
 function dialogIn(container: HTMLElement): HTMLElement {
   const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
   assert.ok(dialog, "the panel is a dialog");
   return dialog;
 }
 
-/** The name a reader hears for `dialog`, read through what labels it. */
 function nameOf(dialog: HTMLElement): string | null | undefined {
   const by = dialog.getAttribute("aria-labelledby");
   return by === null ? dialog.getAttribute("aria-label") : document.getElementById(by)?.textContent;
 }
 
-/** The button in `container` named `name`. */
 function button(container: HTMLElement, name: string): HTMLButtonElement | undefined {
   return [...container.querySelectorAll("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
   );
 }
 
-/** Presses `key` on what holds focus, answering whether the window heard it. */
 function press(key: string, init: KeyboardEventInit = {}): boolean {
   let windowHeard = false;
   const listen = () => {
@@ -222,7 +205,6 @@ test("focus moving inside the panel is not a leaving", () => {
   assert.deepEqual(heard.left, []);
 });
 
-/** A button that opens and closes a panel through `open`, its field taking the focus each time it opens. */
 function OpenStage({ exits }: { exits?: { count: number } }): React.JSX.Element {
   const [open, setOpen] = useState(true);
   const field = useRef<HTMLInputElement>(null);
@@ -244,7 +226,6 @@ function OpenStage({ exits }: { exits?: { count: number } }): React.JSX.Element 
   );
 }
 
-/** The panel in `container`, while it stands. */
 function panelIn(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="dialog"]');
 }

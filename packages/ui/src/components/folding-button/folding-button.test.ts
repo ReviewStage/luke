@@ -7,28 +7,16 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { PlusIcon } from "../../face/glyphs.js";
 import { FoldingButton, type FoldingButtonHint } from "../../index.js";
 
-/**
- * folding-button.test.ts -- a folding button with its words drawn is named
- * by them, takes its press, and raises nothing in its hint; busy, it is
- * named by what it is doing and refuses its press; what its hint hands it
- * lands on the button a reader focuses; one that opens a popup says so, is
- * named in full, and hands its owner the button. Its words folded and
- * raised in the pill are the automation editor's toolbar test, through the
- * desktop's own hint.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** jsdom's stand-in observer: jsdom lays nothing out, so nothing ever reports a resize. */
 class SilentResizeObserver {
   observe(): void {}
   unobserve(): void {}
   disconnect(): void {}
 }
 
-/** A stand-in hint, saying what the button hands it beside the button. */
 const Hint: FoldingButtonHint = ({ label, children }) =>
   createElement("span", null, children, createElement("output", null, label ?? "none"));
 
@@ -48,7 +36,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A stand-in for an app's pill: it names a chord and hears focus arrive, through what it hands the control it wraps. */
 const ChordHint: FoldingButtonHint = ({ children }) =>
   cloneElement(children, {
     "aria-keyshortcuts": "Meta+[",
@@ -57,7 +44,6 @@ const ChordHint: FoldingButtonHint = ({ children }) =>
     },
   });
 
-/** Draws a Run now button, busy where asked, and answers it. */
 function draw(busy?: string, hint: FoldingButtonHint = Hint): HTMLButtonElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

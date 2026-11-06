@@ -2,15 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { startsLikeWebm, webmDimensions } from "./video-signature.js";
 
-/**
- * video-signature.test.ts -- a WebM told from its own bytes and its size
- * read off its video track: the head of a real recording Playwright's
- * `recordVideo` wrote at 800 by 600, cut before its first cluster as a
- * reader may hold it, and headers written by hand for the shapes a muxer
- * may leave, each against the size it states.
- */
-
-/** Playwright's `recordVideo` at 800 by 600, up to its first cluster: the EBML header, then the segment's seek head, info, tracks, and tags. */
 const PLAYWRIGHT_800_BY_600 = [
   "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAzyEU2bdLpNu4tTq4QVSalmU6yBoU27",
   "i1OrhBZUrmtTrIHhTbuMU6uEElTDZ1OsggExTbuMU6uEHFO7a1Osggzc7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -26,17 +17,14 @@ function decoded(base64: string): Uint8Array {
   return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
-/** One EBML element: its ID's bytes as written, its size in one byte, then its body. */
 function element(id: readonly number[], body: readonly number[]): number[] {
   return [...id, 0x80 | body.length, ...body];
 }
 
-/** An EBML header naming the doctype. */
 function ebmlHeader(docType: string): number[] {
   return element([0x1a, 0x45, 0xdf, 0xa3], element([0x42, 0x82], [...Buffer.from(docType)]));
 }
 
-/** A track entry whose video states the size, each as two bytes. */
 function videoTrack(width: number, height: number): number[] {
   const video = element(
     [0xe0],
@@ -48,7 +36,6 @@ function videoTrack(width: number, height: number): number[] {
   return element([0xae], [...element([0xd7], [1]), ...video]);
 }
 
-/** A segment of unknown size, as a live muxer leaves it, holding the children given. */
 function liveSegment(children: readonly number[]): number[] {
   return [0x18, 0x53, 0x80, 0x67, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, ...children];
 }

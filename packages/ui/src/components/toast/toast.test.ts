@@ -10,15 +10,6 @@ import { Toast } from "./toast.js";
 import { ToastActions } from "./toast-actions.js";
 import { ToastStack } from "./toast-stack.js";
 
-/**
- * toast.test.ts -- a toast with an action holds under the pointer and focus
- * apart, dismisses on Escape and on its ×, and presses its action after
- * dismissing; one without takes no press; a turn of tone changes its words
- * in place; a drag or a trackpad sweep past the threshold sends it away and
- * one short of it does not; the stack names itself and says the newest words through the
- * window's announcer.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -180,7 +171,6 @@ test("the stack is a named landmark that says the newest words through the windo
   assert.equal(container.querySelector('[role="alert"]')?.textContent, "Couldn't save");
 });
 
-/** A pointer's press, travel, or release on `target`, at `x` across and `y` down. */
 function pointer(target: Element, type: string, x: number, y = 0): void {
   act(() =>
     target.dispatchEvent(
@@ -189,7 +179,6 @@ function pointer(target: Element, type: string, x: number, y = 0): void {
   );
 }
 
-/** A toast with an action that records each dismissal in `dismissed`. */
 function swipeable(dismissed: string[]): HTMLLIElement {
   const view = render(
     createElement(
@@ -264,7 +253,6 @@ test("a trackpad's sideways sweep sends the toast away once it passes the thresh
   assert.deepEqual(dismissed, ["dismiss"]);
 });
 
-/** The words of the hint the pointer resting on `target` raises, past the hint's wait, on a faked clock. */
 function hintOn(target: Element): string | undefined {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

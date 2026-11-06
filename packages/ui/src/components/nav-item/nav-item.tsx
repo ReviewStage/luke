@@ -5,86 +5,19 @@ import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
 
-/**
- * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
- *
- * A NavItem is a press that goes somewhere,
- * in the sidebar's voice: no ground at rest, the column's hover fill under
- * the pointer, and the stronger fill on the place shown (`current`), which
- * is announced as the page (`aria-current="page"`), or as the spot within
- * one (`location`) for a search's result. Two looks, by what it is:
- *
- * - `row`, a place: a page, a way back. One control's height,
- *   its glyph and its name in the body's voice and the sidebar's ink, a
- *   step under the primary, as the task rows it heads are, until it is
- *   hovered or shown.
- * - `identity`, who or where: an account's picture and name, a
- *   workspace's tile and who shares it, a row tall enough for a face.
- * - `step`, a step of something read in order, a pull request's chapter:
- *   its name on up to two lines, cut short with an ellipsis past them, and
- *   its `detail` under it as a muted meta line rather than after it, so
- *   neither gives way to the other; its glyph and its end stand level with
- *   the name's first line.
- *
- * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
- * `count`, read with its noun ("3 waiting on you") and left out at none,
- * muted, or in the needs-you tone (`STATUS_TONE.ATTENTION`) where it counts
- * what waits on the reader. Its `shortcut`, the chord the app draws, stands there while it is
- * hovered or has the keyboard and takes the count's and the mark's place
- * then, so showing it moves nothing. A row's `detail`, the words after its name, steps back and
- * gives way first, so the name stays whole. An `unread` row reads in the
- * heavier weight and the primary ink until it is looked at. A `nested` row
- * stands under the place it belongs to, its start stepped in to where that
- * place's name starts, as a search's rows stand under the page holding them.
- *
- * A NavItemLink is a row's look on a link, for a place with an address of
- * its own: the browser follows it, so a modified click opens it in a new tab
- * as any link does, and its caller's `onClick` may take a plain one instead.
- * One that leaves the page (`newTab`) opens in a tab of its own, which
- * reaches nothing of this one.
- *
- * A row that drops a menu takes the props `useMenu().trigger()` hands out
- * (`menu`), and is lit while its menu stands. A row whose place has acts of
- * its own takes their ⋯ as `actions`, which stands beside the press rather
- * than inside it, over the row's end: hidden at rest, it comes in while the
- * row is hovered, holds the keyboard, or the menu it dropped stands, and
- * takes the count's and the mark's place then, as a task row's ⋯ does; a
- * right-click on the ⋯ opens the row's menu as one on the row does. A
- * row with both a chord and a ⋯ draws the chord beside the ⋯ rather than
- * under it, so a hover shows the row's chord and its acts together. It takes an app's hint's
- * handlers and chord as a Button does, and keeps the focus where it is
- * under a pointer's press (`keepFocus`) as a Button does too. It takes no
- * class or style; its outer spacing is its column's.
- *
- */
-
-/**
- * The row's box: a control tall (a face's height for who or where), its
- * glyph, name, and end a glyph's gap apart, its words in the body's size on
- * a label's line, pressed as a Mac's list is on the desktop, without the
- * web's pointing hand. Note that its inks, at rest, hovered, open, and
- * unread, stay in `nav-item.css`, which a strip's chosen tab is held to
- * (`tabs-frame.test.ts`), and so does what stands at its end, whose count
- * and chord trade places under the pointer and the keyboard.
- */
 const ROW =
   "ui-nav-item group/nav m-0 flex h-control w-full min-w-0 cursor-press items-center gap-icon-gap rounded-control border-0 px-row-inset data-[nested=true]:ps-nav-item-nest text-left font-sans text-body-size leading-label font-text no-underline transition-[background-color,color] duration-(--ui-duration-hover) ease-plain disabled:cursor-default disabled:opacity-disabled data-[variant=identity]:h-auto data-[variant=identity]:min-h-nav-identity data-[variant=identity]:py-ui-6 data-[variant=step]:h-auto data-[variant=step]:items-start data-[variant=step]:py-ui-6";
 
-/** A name cut short fades out over its last few pixels, as a browser's tab ends a long title; unread, or naming who or where, it reads in the heavier weight. */
 const NAME =
   "ui-nav-item-name min-w-0 flex-initial overflow-hidden whitespace-nowrap group-data-[unread=true]/nav:font-emphasis group-data-[variant=identity]/nav:font-emphasis";
 
-/** A step's name wraps to two lines and ends in an ellipsis past them, breaking a word too long for its line. */
 const STEP_NAME = "ui-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
 
-/** A step's name and its meta line, one over the other in the room the glyph and the end leave. */
 const STEP_WORDS = "ui-nav-item-words flex min-w-0 flex-1 flex-col";
 
-/** A menu's chevron at the end is the small, muted one a chip's is, centered in a glyph's room so it stands on the column the row ends' glyphs share. */
 const MARK =
   "ui-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-ui-2 [&>svg.settings-chevron]:size-ui-12 [&>svg.settings-chevron]:text-muted-foreground";
 
-/** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
   ROW: "row",
   IDENTITY: "identity",
@@ -93,7 +26,6 @@ export const NAV_ITEM_VARIANT = {
 
 export type NavItemVariant = (typeof NAV_ITEM_VARIANT)[keyof typeof NAV_ITEM_VARIANT];
 
-/** Which place a current item is: the page on show, or the spot within one a search found. */
 export const NAV_CURRENT = {
   PAGE: "page",
   LOCATION: "location",
@@ -101,7 +33,6 @@ export const NAV_CURRENT = {
 
 export type NavCurrent = (typeof NAV_CURRENT)[keyof typeof NAV_CURRENT];
 
-/** When a count stands: always, or only while the item is hovered or has the keyboard. */
 export const NAV_COUNT_SHOWN = {
   ALWAYS: "always",
   ON_HOVER: "on-hover",
@@ -109,24 +40,19 @@ export const NAV_COUNT_SHOWN = {
 
 export type NavCountShown = (typeof NAV_COUNT_SHOWN)[keyof typeof NAV_COUNT_SHOWN];
 
-/** A count at the item's end: its figure, what it counts as a reader hears it, when it stands, and its ink. */
 export interface NavCount {
   readonly value: number;
-  /** Said after the figure to a reader, "waiting on you", "tasks"; the figure alone where absent. */
   readonly noun?: string | undefined;
   readonly shown?: NavCountShown | undefined;
-  /** Its status tone: neutral, a tally in the muted ink, where absent; attention for what needs the reader. */
   readonly tone?: StatusTone | undefined;
 }
 
-/** What `useMenu().trigger()` hands the button its menu drops from. */
 export interface NavMenuTrigger {
   readonly "aria-haspopup": "menu";
   readonly "aria-expanded": boolean;
   readonly onClick: (event: MouseEvent<HTMLElement>) => void;
 }
 
-/** What an app's hint hands the item it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
   "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
@@ -134,56 +60,37 @@ type HintProps = Pick<
 
 export type NavItemProps = HintProps & {
   variant?: NavItemVariant | undefined;
-  /** The glyph before its name, decoration a reader is not told. */
   icon?: ReactNode;
-  /** Its name. */
   children: ReactNode;
-  /** Quieter words after its name, which give way first; a step's meta line, under its name. */
   detail?: ReactNode;
-  /** Whether, and as what, it is the place shown. */
   current?: NavCurrent | undefined;
-  /** Whether something arrived in it the developer has not looked at. */
   unread?: boolean | undefined;
-  /** Whether it stands under the row before it, its start stepped in to that row's name. */
   nested?: boolean | undefined;
-  /** The count at its end, left out at none. */
   count?: NavCount | undefined;
-  /** A mark at its end at rest: a failed run's glyph, a pin. */
   mark?: ReactNode;
-  /** The chord the app draws, shown at its end while it is hovered or has the keyboard. */
   shortcut?: ReactNode;
-  /** The menu it drops, from `useMenu().trigger()`, in place of `onClick`. */
   menu?: NavMenuTrigger | undefined;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  /** The menu a right-click or a long press opens on it (`useMenu`'s `contextMenu`). */
   contextMenu?: ContextMenuProps | undefined;
-  /** Its place's own acts, a `MoreButton`, standing over its end while it is hovered or reached for. */
   actions?: ReactNode;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
-  /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
-  /** Whether it is an item of a column a `useRovingKeys` box holds, whose one Tab stop the arrows walk. */
   roving?: boolean | undefined;
   id?: string | undefined;
   ref?: Ref<HTMLButtonElement> | undefined;
-  /** Its name, where the words drawn do not say the whole of it. */
   "aria-label"?: string | undefined;
-  /** The id of the words that say more of it, as an app's hint names its own. */
   "aria-describedby"?: string | undefined;
 };
 
-/** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
-/** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(node: ReactNode): boolean {
   return node !== undefined && node !== null && node !== false && node !== "";
 }
 
-/** The glyph's cell. */
 function Glyph({ icon }: { icon: ReactNode }): React.JSX.Element {
   return (
     <span
@@ -195,7 +102,6 @@ function Glyph({ icon }: { icon: ReactNode }): React.JSX.Element {
   );
 }
 
-/** Its name on one line, fading out at its end while the row cuts it short, as a browser's tab does. */
 function Name({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <ClippedLine className={NAME} as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
@@ -204,7 +110,6 @@ function Name({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** What stands at rest: the mark, then the count, read with its noun. */
 function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined }) {
   const counted = count !== undefined && count.value > 0;
   if (!said(mark) && !counted) return null;
@@ -227,7 +132,6 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
   );
 }
 
-/** A step's name over its meta line, the meta line left out where it says nothing. */
 function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): React.JSX.Element {
   return (
     <span className={STEP_WORDS}>
@@ -237,7 +141,6 @@ function StepWords({ name, detail }: { name: ReactNode; detail: ReactNode }): Re
   );
 }
 
-/** A place in a column at an address: `icon` and its name, going to `href` when pressed. */
 export function NavItemLink({
   href,
   icon,
@@ -249,19 +152,12 @@ export function NavItemLink({
   ...props
 }: {
   href: string;
-  /** The glyph before its name, decoration a reader is not told. */
   icon?: ReactNode;
-  /** Its name. */
   children: ReactNode;
-  /** Whether, and as what, it is the place shown. */
   current?: NavCurrent | undefined;
-  /** Its name as a pointer's hint, where its words are not drawn whole. */
   title?: string | undefined;
-  /** Whether it opens in a tab of its own rather than in this one. */
   newTab?: boolean | undefined;
-  /** Called as the press leaves, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
-  /** Its name, where the words drawn do not say the whole of it. */
   "aria-label"?: string | undefined;
 }): React.JSX.Element {
   return (
@@ -282,7 +178,6 @@ export function NavItemLink({
   );
 }
 
-/** A place in a column: `icon`, its name, and its end, going there on a press. */
 export function NavItem({
   variant = NAV_ITEM_VARIANT.ROW,
   icon,
@@ -301,7 +196,6 @@ export function NavItem({
   actions,
   ...props
 }: NavItemProps): React.JSX.Element {
-  // Note that a row standing in a frame beside its ⋯ carries its menu on the frame, so a right-click on either opens it too.
   const framed = said(actions);
   const press = (
     <button
@@ -321,7 +215,6 @@ export function NavItem({
       aria-keyshortcuts={props["aria-keyshortcuts"]}
       onPointerEnter={props.onPointerEnter}
       onPointerLeave={props.onPointerLeave}
-      // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onFocus={props.onFocus}
       onBlur={props.onBlur}

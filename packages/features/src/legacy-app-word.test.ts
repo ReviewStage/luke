@@ -1,7 +1,3 @@
-/**
- * legacy-app-word.test.ts -- what rows and lines stored before the app was named `app` name it by still reads as the app.
- */
-
 import assert from "node:assert/strict";
 import { USER_MESSAGE_METADATA } from "@repo/wire";
 import { Schema } from "effect";

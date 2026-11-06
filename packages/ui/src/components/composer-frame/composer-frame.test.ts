@@ -5,11 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { COMPOSER_ELEMENT, ComposerFrame } from "./composer-frame.js";
 
-/**
- * composer-frame.test.ts -- a composer's frame as a form sends what its
- * submit presses.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -23,7 +18,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` on the page and hands back what it was drawn into. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

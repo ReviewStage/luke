@@ -15,14 +15,6 @@ import {
   SettingsSectionsSkeleton,
 } from "./settings-section.js";
 
-/**
- * settings-section.test.ts -- a headed section is a region its heading
- * names, holding its rows; a section with no heading, or an empty one, draws
- * its rows with no heading and names no region; one with no card is still
- * the region its heading names; a line in the rows' place says its note;
- * and placeholder rows and sections tell a reader what is still being read.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -36,7 +28,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A section headed `title` holding a row for each label, drawn into the page. */
 function draw(title: string | undefined, labels: readonly string[]): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -53,7 +44,6 @@ function draw(title: string | undefined, labels: readonly string[]): HTMLElement
   return container;
 }
 
-/** The name a section's `aria-labelledby` gives it, or nothing when it names none. */
 function regionName(section: Element): string | undefined {
   const labelledBy = section.getAttribute("aria-labelledby");
   if (labelledBy === null) return undefined;
@@ -104,7 +94,6 @@ test("a section with no card is still a region named by its heading, holding the
   expect(section?.querySelector("button")?.textContent).toBe("Write the prompt");
 });
 
-/** Draws `element` into the page. */
 function mount(element: React.JSX.Element): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

@@ -1,29 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-/**
- * cn.ts -- the class-name joiner every Tailwind-written component is written against.
- *
- * What the shadcn registry's `@/lib/utils` is: conditional classes joined,
- * then merged so a caller's `className` wins over a component's own
- * utility for the same property. The desktop's AI Elements components and
- * the site's chart both call it.
- *
- * Note that the merge is told the type, length, and corner names
- * `tailwind/theme.css` adds, because tailwind-merge reads a name it does not
- * know as a color: `text-body` beside `text-foreground` would be dropped as
- * a second text color, and `px-control-inset` would outlive a later `p-0`.
- * The disabled fade (`opacity-disabled`) is told as an opacity, which it
- * would otherwise not read as one, so a later fade would not replace it,
- * and the two press cursors (`cursor-press`, `cursor-link`) as cursors, so a
- * later `cursor-default` on a control that takes no press replaces them.
- */
-
-/**
- * The names the panel places' block of the theme adds (Automations,
- * Settings, a version history, Admin, the sign-in), by the group
- * tailwind-merge reads each in.
- */
 const PANEL_PLACES = {
   spacing: [
     "automation-field",
@@ -36,11 +13,6 @@ const PANEL_PLACES = {
   ],
 } as const;
 
-/**
- * The names the panel work column's block of the theme adds (its layout's
- * spacing roles, a transcript's opening line, a tool's page, the find bar,
- * the version history), by the group tailwind-merge reads each in.
- */
 const PANEL_WORK_COLUMN = {
   "font-weight": ["ui-medium", "ui-regular", "ui-semibold"],
   leading: ["tool-description"],
@@ -50,12 +22,6 @@ const PANEL_WORK_COLUMN = {
   animate: ["edit-composer-in", "edit-composer-out"],
 } as const;
 
-/**
- * The names the feedback and display components' block of the theme adds
- * (badge, chip, avatar, toast, spinner, progress, skeleton, banner, card,
- * pagination, breadcrumbs, data table), by the group tailwind-merge reads
- * each in.
- */
 const FEEDBACK_DISPLAY = {
   text: ["dialog"],
   "font-weight": ["dialog"],
@@ -144,11 +110,6 @@ const FEEDBACK_DISPLAY = {
   container: ["progress"],
 } as const;
 
-/**
- * The names the content and text components' block of the theme adds (text,
- * text link, inline ref, code card, shortcut, glyph slot, saved tick,
- * working mark, thinking dots), by the group tailwind-merge reads each in.
- */
 const CONTENT_TEXT = {
   text: ["toolbar-title", "shortcut"],
   "font-weight": ["toolbar-title"],
@@ -159,11 +120,6 @@ const CONTENT_TEXT = {
   container: ["inline-ref-pill", "inline-ref-pill-stated"],
 } as const;
 
-/**
- * The names the panel window's block of the theme adds (its layout's
- * spacing roles, the sidebar's parts, an actor's mark, a press's corner
- * dot), by the group tailwind-merge reads each in.
- */
 const PANEL_WINDOW = {
   spacing: [
     "actor-badge",
@@ -188,11 +144,6 @@ const PANEL_WINDOW = {
   animate: ["offline-arrive"],
 } as const;
 
-/**
- * The names the rows and navigation block of the theme adds (list row, nav
- * item, disclosure, bar item, pane bar, toolbar, over pane, searchable
- * menu), by the group tailwind-merge reads each in.
- */
 const ROWS_NAVIGATION = {
   text: ["dialog-size", "tag-size"],
   leading: ["label"],
@@ -216,11 +167,6 @@ const ROWS_NAVIGATION = {
   radius: ["inherit"],
 } as const;
 
-/**
- * The names the panel Home and tasks block of the theme adds (the welcome, a row's context, New task's title, a
- * card's line, the Board's column, the List's row and maker), by the group
- * tailwind-merge reads each in.
- */
 const PANEL_HOME_TASKS = {
   spacing: [
     "card-line",
@@ -236,11 +182,6 @@ const PANEL_HOME_TASKS = {
   ],
 } as const;
 
-/**
- * The names the panel shell's block of the theme adds (the sidebar, a row's
- * end mark, a search's match, the call card, the settings rows), by the
- * group tailwind-merge reads each in.
- */
 const PANEL_SHELL = {
   tracking: ["identity"],
   spacing: [
@@ -256,21 +197,11 @@ const PANEL_SHELL = {
   radius: ["ui-14"],
 } as const;
 
-/**
- * The names the panel side panel's block of the theme adds (the plan's
- * summary, the side panel's widths, a note's share of the toolbar, the
- * summary card's motion), by the group tailwind-merge reads each in.
- */
 const PANEL_SIDE = {
   spacing: ["half-container", "side-panel", "summary", "summary-card-inset", "summary-rail"],
   animate: ["card-grow-in", "card-leave"],
 } as const;
 
-/**
- * The names the panel Inbox's block of the theme adds (its columns, its
- * list's held height, its thread's gutter, a pick, its fields), by the
- * group tailwind-merge reads each in.
- */
 const PANEL_INBOX = {
   spacing: [
     "attention-glyph-small",
@@ -284,11 +215,6 @@ const PANEL_INBOX = {
   ],
 } as const;
 
-/**
- * The names the chips and media block of the theme adds (attachment chip,
- * picture set and tile, page thumb, video player, provider button, composer
- * frame), by the group tailwind-merge reads each in.
- */
 const CHIPS_MEDIA = {
   text: ["label-inline"],
   spacing: [
@@ -315,10 +241,6 @@ const CHIPS_MEDIA = {
   aspect: ["picture"],
 } as const;
 
-/**
- * The names the panel's task surfaces' block of the theme adds (tasks.css,
- * moving onto utilities), by the group tailwind-merge reads each in.
- */
 const TASK_SURFACES = {
   text: ["section-inline", "picture-caption"],
   tracking: ["busy"],
@@ -373,12 +295,6 @@ const TASK_SURFACES = {
   shadow: ["floating-edge"],
 } as const;
 
-/**
- * The names the page patterns' block of the theme adds (layout, settings,
- * the collection, detail, public, and auth pages, the empty and error
- * states, the failure note, and the group header), by the group
- * tailwind-merge reads each in.
- */
 const PAGE_PATTERNS = {
   text: ["public-page-lead"],
   "font-weight": ["public-page-hero"],

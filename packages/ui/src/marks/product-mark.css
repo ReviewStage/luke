@@ -1,9 +1,3 @@
-/* product-mark.css -- the product's mark: its ink and the box it stands in.
-
-   Drawn in the primary ink because it is the product rather than one of the
-   things the product is watching, at the font's size until the app that
-   lays it out gives it one. */
-
 @layer components {
   .ui-product-mark {
     display: block;

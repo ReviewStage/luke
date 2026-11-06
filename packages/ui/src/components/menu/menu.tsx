@@ -49,72 +49,6 @@ import { MenuGlyph } from "./menu-surface.js";
 import { useSubmenuAim } from "./submenu-aim.js";
 import { useTouchHold } from "./touch-hold.js";
 
-/**
- * menu.tsx -- a drop-down menu hung at a point in the window: a thing's ⋯, its right-click, and an account's row all open one.
- *
- * It behaves as a system menu does: focus on its first item, the arrow keys
- * between items, and Escape, Tab, a press elsewhere, or the window losing
- * the keyboard closing it with focus back where it was. An item that does
- * not apply now is drawn dimmed and passed over, as a system menu's is. An
- * item may open a submenu beside it instead of acting, as a system menu's
- * does: resting on it, pressing it, or Right opens it, Left or Escape in it
- * closes it alone, and resting on another item closes it. A submenu is a
- * flyout, a second menu on its own surface beside the first, which stands
- * whole behind it; it is never a page drawn in the menu's place. Closing
- * hands focus back at once and plays the menu's exit after it: the menu is
- * held drawn, inert, until the exit is done, and opening it again in that
- * time takes it back as it stands.
- *
- * An item may open a panel its owner draws as its submenu instead of a menu
- * of items (`MenuPanel`), as the agent box's + opens its MCP servers: a
- * list with a search field of its own, hung beside the item where a submenu
- * hangs, the menu standing behind it with the item lit. Resting on the
- * item, pressing it, Right, or Enter opens it, and the pointer crossing the
- * menu's other items on its way there leaves it standing (`submenu-aim.ts`);
- * pressing, Right, or Enter takes the keyboard in, to its search field
- * first, as the pointer arriving in it does, while resting on the item
- * leaves the keyboard in the menu. Its keys are its own; Escape, or Left where it moves no caret,
- * goes back to the item, and Escape there closes the menu. It is handed
- * its way back and the menu's close, and the menu stands while the window
- * is away from it, as a sign-in it began in the browser takes it.
- *
- * It hangs at a point rather than from its button's box, which is what lets
- * a right-click hang it at the pointer; a popover hung from its own button,
- * as the desktop composer's chips hang theirs, is `AnchoredPopover`. A
- * shortcut an item takes is the app's: it hands the words it prints as the
- * item's `hint`.
- *
- * A label or a detail wider than the menu fades out over its last few
- * pixels, as every cut line of the app does. An item may hang its thing's
- * card beside itself while the pointer rests on it, as a picker's row does
- * (`card`): the item's description, which the keyboard never enters, so the
- * focus and the arrows stay the menu's while it stands, and a press on it
- * is a press on the menu rather than one that closes it.
- *
- * An item stands outside a menu too, among a searchable menu's pinned rows,
- * whose keys stay in the menu's field (`SteeredMenuItem`): a button the
- * field names while it holds the one highlight the arrows and the pointer
- * both move, which a press never takes focus to.
- *
- * It is shadcn/ui's dropdown menu over Base UI (`../../shadcn/dropdown-menu.tsx`),
- * which places it, keys it (the arrows, Home, End, and a typed name), and
- * draws it in the Tailwind theme. A right-click's menu is the same menu
- * hung at the pointer, so `useMenu`'s `contextMenu` stays the spread an
- * element carries rather than a Base UI context menu wrapped around it.
- * Each part keeps its `ui-menu*` name beside its classes, which the
- * panel's layer rule and the tests find it by.
- *
- * In a phone's layout, the narrow room the document's root says it stands
- * in (`data-ui-room`, the panel's `shell-room.ts`), the same menu rises
- * as a sheet from the window's foot instead (`MenuSheet`), whatever opened
- * it and whether a finger or a mouse did: a dialog over the dimmed window,
- * headed by what it acts on, its rows the menu's own at a finger's height,
- * a submenu or a panel opened in its place with a way back, and its
- * shortcuts left off. The room is read as the menu is hung, so one standing open stays
- * what it opened as.
- */
-
-/** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
 export const MENU_ALIGN = {
   START: "start",
   END: "end",
@@ -122,7 +56,6 @@ export const MENU_ALIGN = {
 
 type MenuAlign = (typeof MENU_ALIGN)[keyof typeof MENU_ALIGN];
 
-/** Which way from the point it hangs at a menu grows: down from it, or up to it. */
 const MENU_GROW = {
   DOWN: "down",
   UP: "up",
@@ -130,11 +63,8 @@ const MENU_GROW = {
 
 type MenuGrow = (typeof MENU_GROW)[keyof typeof MENU_GROW];
 
-/** The gap a menu keeps from the window's edges, in CSS pixels. */
 const MENU_MARGIN = 8;
-/** The menu's own padding around its items, `--ui-menu-inset`, which a submenu rises by so its first item is level with its opener. */
 const MENU_INSET = 4;
-/** How a setting in a menu says whether it is on: a check at its end while it is, or a switch. */
 export const MENU_ITEM_MARK = {
   CHECK: "check",
   SWITCH: "switch",
@@ -142,7 +72,6 @@ export const MENU_ITEM_MARK = {
 
 export type MenuItemMark = (typeof MENU_ITEM_MARK)[keyof typeof MENU_ITEM_MARK];
 
-/** Where an item's detail stands: a second line under its label, or beside it on the one line, as a picker's row says a person's email. */
 export const MENU_DETAIL = {
   UNDER: "under",
   BESIDE: "beside",
@@ -150,178 +79,107 @@ export const MENU_DETAIL = {
 
 export type MenuDetailPlace = (typeof MENU_DETAIL)[keyof typeof MENU_DETAIL];
 
-/** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
-/** The items the menu's keys move between: every one that applies now, a setting's as an action's. */
 const MENU_ITEM =
   ':is([role="menuitem"], [role="menuitemcheckbox"]):not(:disabled, [aria-disabled="true"])';
-/** How a submenu finds room: the menu's other side where its own has none, and rising to end level with its item where the window's foot leaves no room below. */
 const BESIDE_OR_ACROSS = { side: "flip", align: "flip", fallbackAxisSide: "none" } as const;
-/** How a menu is held inside what can be seen: never turned to its other side, only moved along either axis until it fits, as it was clamped. */
 const HELD_INSIDE = { side: "shift", align: "shift", fallbackAxisSide: "none" } as const;
 
-/** Where a menu hangs: a point in the window, and which ways from it the menu grows; down where no way is said. */
 export interface MenuPlacement {
   x: number;
   y: number;
   align: MenuAlign;
   grow?: MenuGrow;
-  /** The box of the button it drops from, where one did: a menu with no room on its side of the button grows from the button's other side, or stands beside it, rather than over it. */
   button?: ButtonBox;
 }
 
-/**
- * The props of a bar a menu never stands over, spread on it: a phone's
- * places bar at the window's foot. A menu is held inside what can be seen
- * less such a bar on screen, so one too tall for the room left scrolls
- * above the bar rather than running down over it.
- */
 export const MENU_KEEPS_CLEAR = { "data-menu-keeps-clear": "" } as const;
 
-/** Whether a key press is an item's shortcut, as the app that prints it reads its chord. */
 export type MenuKeyMatch = (event: React.KeyboardEvent) => boolean;
 
 export interface MenuAction {
   label: string;
-  /** What tells it from the other items of its menu, as a list's key, where its label may not: a value already its own, such as a repository's full name or a step's place on a trail; its label where none is given. */
   key?: string | number | undefined;
-  /** The glyph leading the label, drawn in a column every item in a menu keeps whether or not it has one; a field's pinned row without one keeps none, its label starting at the row's inset. */
   icon?: React.JSX.Element;
-  /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
   detail?: string | undefined;
-  /** A quiet mark right after the label, such as an experiment's Experimental tag; it names itself to a reader. */
   tag?: React.ReactNode;
-  /** Where the detail stands: under the label where none is said, or beside it. */
   detailPlace?: MenuDetailPlace | undefined;
   onSelect: () => void;
-  /** Drawn red: the action cannot be taken back, or ends what it acts on, as closing a pull request or canceling a task does. */
   danger?: boolean;
-  /** Printed muted at the item's end: the shortcut that takes the same action, as the app draws it. */
   hint?: React.ReactNode;
-  /** Whether a key press is the shortcut its hint prints, which chooses it while the menu stands. */
   pressedBy?: MenuKeyMatch | undefined;
-  /** Drawn dimmed and not chosen: the action does not apply now. */
   disabled?: boolean;
-  /** A setting rather than an action: whether it is on, a check at the item's end saying so. */
   checked?: boolean | undefined;
-  /** How a setting says whether it is on: a check (where none is said) or a switch. */
   mark?: MenuItemMark | undefined;
-  /** Whether choosing it opens a list beside it rather than acting, which a chevron at its end says. */
   opens?: boolean | undefined;
-  /** Whether choosing it leaves the menu standing, as one of several values a filter toggles is. */
   stays?: boolean | undefined;
-  /** The card hung beside the item while the pointer rests on it, as a person's in a people filter; none hangs nothing. */
   card?: React.ReactNode;
-  /** Whether its label and detail are a person's words, a repository's or a workspace's name, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
   replayMasked?: boolean | undefined;
 }
 
-/**
- * An item of a list whose keys stay in a field rather than moving focus, as
- * a searchable menu's pinned rows are: a button, or a switch for a setting,
- * that the field names while it holds the list's one highlight.
- */
 export interface SteeredMenuItem {
-  /** Its id, which the field names while it holds the highlight. */
   id: string;
   highlighted: boolean;
-  /** The pointer moved over it, which is the highlight's to answer. */
   onHover: () => void;
-  /** Whether the list it opens stands beside it now, for an item that `opens` one. */
   expanded?: boolean | undefined;
 }
 
-/** An item that opens a menu of its own beside it rather than acting. */
 export interface MenuSubmenu {
   label: string;
-  /** Whether its label names a person's thing, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
   replayMasked?: boolean | undefined;
   icon?: React.JSX.Element;
   items: readonly MenuAction[];
-  /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
   hint?: React.ReactNode;
-  /** Whether a key press is the shortcut its hint prints, which opens it while the menu stands. */
   pressedBy?: MenuKeyMatch | undefined;
 }
 
-/** What a panel standing as a menu's submenu is handed: the way back to its item, and the menu's close. */
 export interface MenuPanelDoors {
-  /** Goes back to the item that opened it, the menu standing, focus on the item. */
   readonly back: () => void;
-  /** Closes the whole menu, focus going back to what opened it. */
   readonly close: () => void;
-  /** Whether it opened with the keyboard taken in, as a press or a key opens it; the pointer resting on its item leaves the keyboard in the menu, so a panel that focuses its field as it opens does so only then. */
   readonly entered: boolean;
 }
 
-/**
- * An item that opens a panel its owner draws as its submenu rather than a
- * menu of items: a list with a search of its own, such as the MCP servers
- * or a task search, which holds its own keys.
- */
 export interface MenuPanel {
   label: string;
-  /** Whether its label names a person's thing, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
   replayMasked?: boolean | undefined;
   icon?: React.JSX.Element;
-  /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
   hint?: React.ReactNode;
-  /** How wide the panel stands, in pixels or by a popover's named width; a regular popover's where none is said. */
   width?: number | PopoverWidth | undefined;
-  /** The panel, drawn while it stands beside its item or in a phone's sheet's place. */
   panel: (doors: MenuPanelDoors) => React.ReactNode;
 }
 
-/** One line of a menu: an action, a submenu of them, or a panel its owner draws. */
 export type MenuEntry = MenuAction | MenuSubmenu | MenuPanel;
 
-/** Whether an entry opens a panel its owner draws rather than acting or opening a menu of items. */
 function isPanel(entry: MenuEntry): entry is MenuPanel {
   return "panel" in entry;
 }
 
-/** What tells an entry from the others of its group, as a list's key: an action's own key where it names one, else its label. */
 function entryKey(entry: MenuEntry): string | number {
   return "onSelect" in entry ? (entry.key ?? entry.label) : entry.label;
 }
 
-/** What tells a group from the others of its menu: its first entry's key. */
 function groupKey(group: readonly MenuEntry[]): string | number | undefined {
   const first = group[0];
   return first === undefined ? undefined : entryKey(first);
 }
 
-/**
- * What a menu acts on, as its thing's card reads: its mark, its name, and a
- * line under it ("relay · In progress · AL-42"), which head a phone's sheet
- * of the menu; a menu with none is headed by its own name.
- */
 export interface MenuSubject {
-  /** The thing's mark, decoration beside its name. */
   readonly mark?: React.ReactNode;
   readonly name: string;
   readonly detail?: string | undefined;
 }
 
-/** A menu standing open: where it hangs, and the control that opened it, which takes focus back. */
 export interface OpenMenu {
   placement: MenuPlacement;
   opener: HTMLElement;
 }
 
-/** A menu drawn: standing open, or on its way out, and the element its exit is waited on. */
 export interface DrawnMenu extends OpenMenu {
-  /** The id the menu stands under, which its trigger's `aria-controls` names. */
   id: string;
   leaving: boolean;
   ref: (element: HTMLElement | null) => void;
 }
 
-/**
- * The layer a menu stands in: over the window, or over the modal it was
- * opened from. A menu is drawn over `document.body`, so one opened from a
- * modal's card would otherwise stand under the window the modal dims.
- */
 const MENU_LAYER = {
   WINDOW: "window",
   DIALOG: "dialog",
@@ -329,12 +187,10 @@ const MENU_LAYER = {
 
 type MenuLayer = (typeof MENU_LAYER)[keyof typeof MENU_LAYER];
 
-/** The layer a menu opened from `opener` stands in. */
 function layerOf(opener: HTMLElement): MenuLayer {
   return opener.closest('[aria-modal="true"]') === null ? MENU_LAYER.WINDOW : MENU_LAYER.DIALOG;
 }
 
-/** The edges of the button a menu drops from. */
 interface ButtonBox {
   left: number;
   right: number;
@@ -342,12 +198,10 @@ interface ButtonBox {
   bottom: number;
 }
 
-/** A button's box as a placement keeps it. */
 function spanOf(bounds: DOMRect): ButtonBox {
   return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom };
 }
 
-/** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
 export function dropBelow(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
   return {
@@ -358,7 +212,6 @@ export function dropBelow(button: HTMLElement): MenuPlacement {
   };
 }
 
-/** Where a menu dropped from a row as wide as its column hangs: under it, its left edge on the row's. */
 export function dropBelowStart(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
   return {
@@ -369,7 +222,6 @@ export function dropBelowStart(button: HTMLElement): MenuPlacement {
   };
 }
 
-/** Where a menu raised from a button at the window's foot hangs: over it, its left edge on the button's. */
 export function riseAbove(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
   return {
@@ -381,7 +233,6 @@ export function riseAbove(button: HTMLElement): MenuPlacement {
   };
 }
 
-/** Where a menu raised from a button at a row's right end hangs: over it, its right edge on the button's. */
 export function riseAboveEnd(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
   return {
@@ -393,12 +244,6 @@ export function riseAboveEnd(button: HTMLElement): MenuPlacement {
   };
 }
 
-/**
- * Where a right-click's menu hangs: at the pointer, growing rightward from
- * it; or, for the menu key the system turned into a right-click, which says
- * no point of its own, where `place` hangs it from what was clicked, under
- * it from its start unless told otherwise.
- */
 export function atPointer(
   event: React.MouseEvent<HTMLElement>,
   place: (element: HTMLElement) => MenuPlacement = dropBelowStart,
@@ -407,12 +252,6 @@ export function atPointer(
   return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
 }
 
-/**
- * The props of an element whose menu a right-click opens (`useMenu`'s
- * `contextMenu`), spread on it: the right-click's handler, the long press
- * that opens the same menu from a touch, and the mark that keeps the
- * system's own callout off it while held.
- */
 export interface ContextMenuProps {
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
@@ -420,25 +259,17 @@ export interface ContextMenuProps {
   "data-long-press": "";
 }
 
-/**
- * The props of a control inside an element carrying a context menu that
- * keeps the menu its own press would otherwise open, as a row's switch
- * does: a right-click on it does not reach the row, and a long press that
- * starts on it never starts the row's hold.
- */
 export const NO_CONTEXT_MENU = {
   "data-no-context-menu": "",
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => event.stopPropagation(),
 } as const;
 
-/** The handlers of the events a context menu hears that an element carrying it may hear for itself too. */
 export interface ContextMenuCarrier<T extends HTMLElement> {
   onContextMenu?: React.MouseEventHandler<T> | undefined;
   onPointerDown?: React.PointerEventHandler<T> | undefined;
   onTouchEnd?: React.TouchEventHandler<T> | undefined;
 }
 
-/** Two handlers of one event, both heard, the carrier's first; whichever is given where one is not. */
 function heardBoth<E>(
   own: ((event: E) => void) | undefined,
   menu: ((event: E) => void) | undefined,
@@ -450,12 +281,6 @@ function heardBoth<E>(
   };
 }
 
-/**
- * The props an element spreads to carry a context menu beside handlers of
- * its own for the same events, as a card's press hears the same pointer:
- * each event heard by both, its own first; its own alone where it carries
- * no menu.
- */
 export function withContextMenu<T extends HTMLElement>(
   contextMenu: ContextMenuProps | undefined,
   own: ContextMenuCarrier<T>,
@@ -469,41 +294,10 @@ export function withContextMenu<T extends HTMLElement>(
   };
 }
 
-/** Whether a key opens what holds the keyboard's own menu, as a right-click would: the menu key, or ⇧F10. */
 export function opensMenu(event: React.KeyboardEvent): boolean {
   return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
 }
 
-/**
- * One control's menu: where it hangs while it stands open, the door that
- * opens it from an element, which takes focus back when it closes by key,
- * and the close; and `drawn`, the menu to draw, which goes on through its
- * exit at the last place it hung. A menu does not outlive the surface it
- * stands on, so it starts leaving in the render that finds the surface off
- * screen.
- *
- * It also hands out the doors every owner draws, so each opens its menu
- * the same way: `trigger`, the props of the button the menu drops from,
- * whose press opens it where `place` says (under the button, right edges
- * level, unless told otherwise) and closes it again while it stands; and
- * `contextMenu`, the props of what a right-click opens it on, which hang
- * it at the pointer, or where `place` says for the menu key's right-click,
- * which says no point, and hand focus back to `opener` where one is given,
- * the ⋯ or the row the keyboard reaches the menu from, else to what was
- * clicked; and `keyMenu`,
- * the same row's key handler, which hangs it under the row from its start
- * on the menu key or ⇧F10, for a row with no ⋯ to reach it by.
- *
- * A touch has no right-click, and iOS sends no contextmenu for a long
- * press, so `contextMenu` opens the menu on a touch held still for
- * `LONG_PRESS_MS` (`touch-hold.ts`) too, at the point it went down. Drifting past
- * `LONG_PRESS_SLOP`, a scroll, or the touch ending first lets it go. A
- * hold that opened the menu is not also a press, so its touch ends in no
- * mousedown or click, which would land on the menu now under the finger,
- * taking the focus off its first item; nor is it two, so the contextmenu
- * Android sends for the same hold while it is down opens nothing more. A
- * mouse and a pen have their right-click, and are left to it.
- */
 export function useMenu(shown: boolean) {
   const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
   const [standing, setStanding] = useState(false);
@@ -525,7 +319,6 @@ export function useMenu(shown: boolean) {
   const trigger = (place: (button: HTMLElement) => MenuPlacement = dropBelow) => ({
     "aria-haspopup": "menu" as const,
     "aria-expanded": standing,
-    // Note that the menu is named only while it stands open, as `aria-expanded` says, because one on its way out controls nothing.
     "aria-controls": standing && drawn !== undefined ? id : undefined,
     onClick: (event: React.MouseEvent<HTMLElement>) => {
       if (standing) close(true);
@@ -541,8 +334,6 @@ export function useMenu(shown: boolean) {
     onContextMenu: (event) => {
       event.preventDefault();
       if (hold.held.current) return;
-      // Note that Android's own contextmenu may come before the hold's
-      // timer, and opens the menu in its place.
       if (hold.counting()) hold.claim();
       show(atPointer(event, place), opener?.current ?? event.currentTarget);
     },
@@ -562,26 +353,15 @@ export function useMenu(shown: boolean) {
   return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu, keyMenu };
 }
 
-/** A point in the window as the box of no size a menu hangs from. */
 function pointAt(x: number, y: number): { getBoundingClientRect: () => DOMRect } {
   const box = { x, y, left: x, top: y, right: x, bottom: y, width: 0, height: 0 };
   return { getBoundingClientRect: () => ({ ...box, toJSON: () => box }) };
 }
 
-/** The room a menu has from `y` to the edge of `seen` it grows toward, less the margin. */
 function roomOf(y: number, grow: MenuGrow | undefined, seen: SeenRect): number {
   return grow === MENU_GROW.UP ? y - seen.y - MENU_MARGIN : seen.y + seen.height - MENU_MARGIN - y;
 }
 
-/**
- * Where a menu `width` by `height` hangs from `placement` in `seen`. A menu
- * with no room for it on its side of its opener is moved along until it
- * fits (`HELD_INSIDE`), over its opener. Dropped from a button, it keeps
- * clear of the button instead, as a system menu does: it grows from the
- * button's other side where that has the room, or else stands beside the
- * button, its end the drop's gap short of the button's near edge. Where
- * neither has room, or there is no button, it hangs where it was placed.
- */
 function settledOf(
   placement: MenuPlacement,
   size: { width: number; height: number },
@@ -606,7 +386,6 @@ function settledOf(
     : placement;
 }
 
-/** What can be seen of the window, as the rectangle a menu is held inside. */
 interface SeenRect {
   x: number;
   y: number;
@@ -614,31 +393,23 @@ interface SeenRect {
   height: number;
 }
 
-/**
- * What can be seen of the window, less a bar at its foot a menu keeps clear
- * of (`MENU_KEEPS_CLEAR`) where one stands on screen, as the rectangle a
- * menu is held inside.
- */
 function seenRect(): SeenRect {
   const seen = visibleViewport();
   let bottom = seen.bottom;
   for (const bar of document.querySelectorAll("[data-menu-keeps-clear]")) {
     const box = bar.getBoundingClientRect();
     if (box.height === 0 || bar.closest("[inert]") !== null) continue;
-    // Note that only a bar standing in the lower half of what is seen trims it, from its top down.
     if (box.top > (seen.top + seen.bottom) / 2 && box.top < bottom) bottom = box.top;
   }
   return { x: seen.left, y: seen.top, width: seen.right - seen.left, height: bottom - seen.top };
 }
 
-/** The items of one menu, its own and not a submenu's within it, that the keys move between now. */
 function itemsOf(menu: HTMLElement): HTMLElement[] {
   return [...menu.querySelectorAll<HTMLElement>(MENU_ITEM)].filter(
     (item) => item.closest('[role="menu"]') === menu,
   );
 }
 
-/** The action or submenu of `groups` whose shortcut a key pressed on `menu`'s own items is; nothing for a key pressed in a panel or submenu beside it. */
 function keyedEntryOf(
   groups: readonly (readonly MenuEntry[])[],
   event: React.KeyboardEvent,
@@ -656,13 +427,6 @@ function keyedEntryOf(
     );
 }
 
-/**
- * Whether a press landed on the card an item of one of `menus` hangs, or on
- * a card hung from a control on that card, as a person named on an agent's
- * card hangs their own. Each card stands apart from the menu, portaled to
- * the body, so it is traced back through the control it hangs from
- * (`hintedControlOf`), card by card, until one stands in a menu.
- */
 function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[]): boolean {
   const seen = new Set<Node>();
   let on = target;
@@ -676,7 +440,6 @@ function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[])
   return false;
 }
 
-/** The slot at a row's end, one glyph wide, after any hint; a setting's check in the text's own ink. */
 function endSlot(afterHint: boolean, setting: boolean): string {
   return cn(
     "ui-menu-item-end grid size-menu-glyph flex-none place-items-center text-muted-foreground [&>svg]:size-menu-glyph [&>svg]:flex-none [&>svg]:text-inherit [&>svg.settings-chevron]:size-menu-chevron",
@@ -685,7 +448,6 @@ function endSlot(afterHint: boolean, setting: boolean): string {
   );
 }
 
-/** What an item prints at its end: its hint, and after it a setting's switch, the chevron of a list it opens, or a setting's check while it is on. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   const hint =
     action.hint === undefined ? null : <span className="ui-menu-item-hint">{action.hint}</span>;
@@ -709,7 +471,6 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
       </>
     );
   }
-  // Note that a setting with a hint keeps its check's room while it is off, so the hints of a menu of them end in one line down it.
   if (action.checked === true || (action.checked === false && hint !== null)) {
     return (
       <>
@@ -723,12 +484,10 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   return hint;
 }
 
-/** Whether an item draws its detail as a second line under its label, which the item grows to hold. */
 function secondLine(action: MenuAction): boolean {
   return action.detail !== undefined && action.detailPlace !== MENU_DETAIL.BESIDE;
 }
 
-/** An item's words, marked for a screen recording as its menu and the item ask. */
 function ItemWords({
   masked,
   children,
@@ -743,10 +502,6 @@ function ItemWords({
   );
 }
 
-/**
- * An item's glyph, words, and end, as every row draws them; one that keeps
- * no `column` draws no glyph slot where it has no glyph.
- */
 function ItemBody({
   action,
   column = true,
@@ -807,7 +562,6 @@ function ItemBody({
   );
 }
 
-/** An item's button, with the card its action hangs beside it where it has one. */
 function Carded({
   action,
   children,
@@ -823,12 +577,6 @@ function Carded({
   );
 }
 
-/**
- * One item, as a menu draws it: Base UI's menu item (`shadcn/dropdown-menu`)
- * as a button, reached by the menu's keys rather than by Tab: its glyph's
- * column, its label and any detail under it, and at its end its check or
- * hint. A setting is a checkbox item, which says whether it is on.
- */
 export function MenuItem({
   action,
   onChoose,
@@ -836,10 +584,8 @@ export function MenuItem({
 }: {
   action: MenuAction;
   onChoose: () => void;
-  /** Where it stands among a field's pinned rows rather than in a menu. */
   steered?: SteeredMenuItem | undefined;
 }): React.JSX.Element {
-  // Note that a detail is heard after the label with a pause, because the two spans would otherwise run together.
   const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
   if (steered !== undefined) {
     return (
@@ -855,9 +601,6 @@ export function MenuItem({
   const pressed = pulseOnPress(onChoose, PRESS_PULSE.QUIET);
   const shared = {
     nativeButton: true,
-    // Note that a dimmed item is a disabled button outright, as it was,
-    // rather than Base UI's focusable `aria-disabled` one, so neither the
-    // keys (`useRovingKeys`) nor a press stop on it.
     render: <button type="button" disabled={action.disabled} />,
     ...rovingItem(),
     label: action.label,
@@ -865,16 +608,12 @@ export function MenuItem({
     className: "ui-menu-item",
     "aria-disabled": action.disabled === true ? true : undefined,
     "data-detail": secondLine(action) ? "true" : undefined,
-    // Note that the item's press is the menu's alone to answer (`Menu`'s
-    // `choose`), which closes it or leaves it standing, because Base UI's
-    // own would take focus back to the item after the menu handed it on.
     closeOnClick: false,
     onClick: (event: BaseUIEvent<React.MouseEvent<HTMLElement>>) => {
       event.preventBaseUIHandler();
       pressed(event);
     },
   } as const;
-  // A setting in a menu says whether it is on as a menu's check does.
   if (action.checked !== undefined) {
     return (
       <Carded action={action}>
@@ -897,13 +636,6 @@ export function MenuItem({
   );
 }
 
-/**
- * An item among a field's pinned rows: a button, or a switch for a setting,
- * drawn as a menu's row, that keeps a press from taking focus out of the
- * field, and that is dimmed rather than disabled where it does not apply
- * now, so it still hears the pointer that asks why. It stands in no menu,
- * so it is no Base UI item: the field holds the one highlight.
- */
 function SteeredItem({
   action,
   steered,
@@ -925,7 +657,6 @@ function SteeredItem({
     "aria-label": heard,
     "aria-disabled": off ? "true" : undefined,
     tabIndex: -1,
-    // Note that the field holds the one highlight, which the pointer moves too, so the pointer lights nothing of its own.
     className: cn("ui-menu-item", DROPDOWN_MENU_ITEM, "data-highlighted:bg-secondary"),
     "data-steered": "true",
     "data-highlighted": steered.highlighted ? "true" : undefined,
@@ -936,7 +667,6 @@ function SteeredItem({
     onMouseMove: off ? undefined : steered.onHover,
     onClick: off ? undefined : pulseOnPress(onChoose, PRESS_PULSE.QUIET),
   } as const;
-  // A setting is a switch for the keyboard and the reader, whatever its end draws.
   if (action.checked !== undefined) {
     return (
       <Carded action={action}>
@@ -959,7 +689,6 @@ function SteeredItem({
   );
 }
 
-/** What a line of a menu's column is: a rule between its groups, an item, or a note, as its heading or footer. */
 function kindOf(line: Element): MenuLine["kind"] {
   if (line.tagName === "HR" || line.getAttribute("role") === "separator") return MENU_LINE.RULE;
   return line.getAttribute("role")?.startsWith("menuitem") === true
@@ -967,7 +696,6 @@ function kindOf(line: Element): MenuLine["kind"] {
     : MENU_LINE.NOTE;
 }
 
-/** The lines of a menu's column, from its top; a line of no height, as a submenu's unseen focus guard, is none. */
 function linesOf(column: Element): MenuLine[] {
   const top = column.getBoundingClientRect().top;
   return [...column.children].flatMap((line) => {
@@ -977,7 +705,6 @@ function linesOf(column: Element): MenuLine[] {
   });
 }
 
-/** The sum of the lengths a style names, each as a number of CSS pixels. */
 function lengthsOf(style: CSSStyleDeclaration, names: readonly string[]): number {
   return names.reduce(
     (sum, name) => sum + (Number.parseFloat(style.getPropertyValue(name)) || 0),
@@ -985,13 +712,6 @@ function lengthsOf(style: CSSStyleDeclaration, names: readonly string[]): number
   );
 }
 
-/**
- * Cuts the rows of the menu scrolling in `area` where its fade lies over
- * words that go on past it (`menuCut`): the menu's surface is held shorter
- * than the room Base UI found for it where that room ends over no words.
- * Note that the hold is let go before the room is read, so the room is
- * Base UI's and never the hold's own.
- */
 function cutRows(area: HTMLElement): void {
   const popup = area.parentElement;
   const column = area.firstElementChild;
@@ -1011,15 +731,6 @@ function cutRows(area: HTMLElement): void {
   if (cut !== undefined) popup.style.maxHeight = `${cut + chrome}px`;
 }
 
-/**
- * A menu's rows, its heading and footer among them, scrolling inside its
- * surface where the room Base UI found for it cannot hold them all, the cut
- * edge fading as every scroller's does, so the surface keeps its edge,
- * corner, and shadow whole rather than being sliced by the window. The cut
- * lies through a line of words (`cutRows`), so its fade says the list goes
- * on, as a phone's taller rows already do; it is cut again as the room Base
- * UI finds, or the rows, change size.
- */
 function MenuRows({ children }: { children: React.ReactNode }): React.JSX.Element {
   const area = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
@@ -1040,11 +751,6 @@ function MenuRows({ children }: { children: React.ReactNode }): React.JSX.Elemen
   );
 }
 
-/**
- * How far a submenu stands from its item so it stands a drop beside its
- * menu's edge: the item stands the menu's inset and edge inside it, read
- * from where both are drawn as the submenu is placed.
- */
 function besideMenu(item: HTMLElement | null, side: string): number {
   const menu = item?.closest('[role="menu"]');
   if (item === null || menu === null || menu === undefined) return MENU_DROP;
@@ -1054,25 +760,6 @@ function besideMenu(item: HTMLElement | null, side: string): number {
   return within + MENU_DROP;
 }
 
-/**
- * A submenu, beside its item: Base UI's submenu, its trigger the item, with
- * its glyph, its name, and the chevron that says it opens a menu beside it
- * rather than acting. It stands to the menu's right, or its left where the
- * window leaves no room, its first item level with the item that opened
- * it, or its last where the window's foot leaves no room below. Whether it
- * stands is the menu's (`open`), so resting on another item, Left, or
- * Escape closes it alone, fading out as its menu does (`DROPDOWN_MENU_SURFACE`
- * on Base UI's ending state).
- *
- * The pointer is the menu's to follow, as a system menu's submenu follows
- * it, and never Base UI's, whose own path to a submenu shuts while the
- * pointer slows: resting on the item opens the submenu after a moment, so
- * passing over it on the way elsewhere opens nothing, and while the pointer
- * heads for the submenu, across the menu's other items, it stays open
- * (`submenu-aim.ts`). A finger's arrival opens nothing: iOS plays a tap's
- * arrival as a hover and spends the tap on what comes in with it, so the
- * tap itself opens it, the keyboard taken into it.
- */
 function Submenu({
   entry,
   open,
@@ -1087,26 +774,18 @@ function Submenu({
 }: {
   entry: MenuSubmenu;
   open: boolean;
-  /** Whether it stands open as its menu does, the keyboard taken into it (`MenuProps`'s `openOn`). */
   entering?: boolean;
-  /** The layer its menu stands in, which it stands in too. */
   layer: MenuLayer;
-  /** What can be seen of the window as its menu was hung, which it is held inside too. */
   seen: SeenRect;
   leaving: boolean;
-  /** The submenu's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
-  /** Opens it with the keyboard taken in, as a press or Right does. */
   onOpen: () => void;
-  /** Closes the submenu alone, where it is still the one standing. */
   onBack: () => void;
   onChoose: (action: MenuAction) => void;
 }): React.JSX.Element {
   const trigger = useRef<HTMLDivElement | null>(null);
   const focusInto = useRef(entering);
-  // Note that the popup is held in state too, because Base UI's portal draws it a render after the submenu opens.
   const [popup, setPopup] = useState<HTMLDivElement | null>(null);
-  // Note that a submenu gone lets the menu's surface go only while it is still its own, because the pointer opens the next submenu before this one's exit has played, and the next one's surface must stand.
   const drawn = useCallback(
     (node: HTMLDivElement) => {
       surface.current = node;
@@ -1118,15 +797,11 @@ function Submenu({
     },
     [surface],
   );
-  // Note that the keyboard is taken into the submenu once it stands, where it was opened by a press or Right.
   useEffect(() => {
     if (!open || popup === null || !focusInto.current) return;
     focusInto.current = false;
     itemsOf(popup)[0]?.focus();
   }, [open, popup]);
-  // Note that a press or Right on an item whose submenu the pointer already
-  // opened takes the keyboard in at once, because the submenu stands drawn
-  // and nothing renders again to take it there.
   const enter = () => {
     if (open && popup !== null) {
       itemsOf(popup)[0]?.focus();
@@ -1163,7 +838,6 @@ function Submenu({
         {...{ [SUBMENU_ITEM_ATTRIBUTE]: entry.label }}
         endClassName={endSlot(entry.hint !== undefined, false)}
         onClick={pulseOnPress((event: BaseUIEvent<React.MouseEvent<HTMLElement>>) => {
-          // Note that Base UI's own press would take focus back to the item after it went into the submenu.
           event.preventBaseUIHandler();
           enter();
         }, PRESS_PULSE.QUIET)}
@@ -1209,13 +883,10 @@ function Submenu({
   );
 }
 
-/** The attribute an item that opens a panel wears, naming it, so the panel finds the item it hangs beside and hands focus back to. */
 const PANEL_ATTRIBUTE = "data-menu-panel";
 
-/** The attribute an item that opens a submenu wears, naming it, so its shortcut finds the item to open it from. */
 const SUBMENU_ITEM_ATTRIBUTE = "data-menu-submenu";
 
-/** The item of `menu` wearing `attribute` that opens the panel or submenu named `label`. */
 function namedItemOf(
   menu: HTMLElement | null,
   attribute: typeof PANEL_ATTRIBUTE | typeof SUBMENU_ITEM_ATTRIBUTE,
@@ -1227,10 +898,8 @@ function namedItemOf(
   );
 }
 
-/** What in a panel may take the keyboard as it opens, after its search field. */
 const PANEL_CONTROL = 'button, [href], [tabindex]:not([tabindex="-1"])';
 
-/** Takes the keyboard into `panel`, where its own drawing has not already: its search field first, then its first control, else the panel. */
 function focusInto(panel: HTMLElement): void {
   if (panel.contains(document.activeElement)) return;
   const start =
@@ -1240,7 +909,6 @@ function focusInto(panel: HTMLElement): void {
   start.focus({ preventScroll: true });
 }
 
-/** Whether Left at `target` goes back out of a panel: anywhere but a field holding words, whose caret Left moves. */
 function leftLeaves(target: EventTarget): boolean {
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
     return target.value === "";
@@ -1248,19 +916,11 @@ function leftLeaves(target: EventTarget): boolean {
   return !(target instanceof HTMLElement && target.isContentEditable);
 }
 
-/** Where a panel stands, in the window's pixels. */
 interface PanelPlace {
   left: number;
   top: number;
 }
 
-/**
- * Where a panel `size` hangs beside `item` of `menu`, as a submenu does: a
- * drop off the menu's right edge, or its left where the window leaves no
- * room, its top level with the item's less the menu's inset, or rising to
- * end level with its foot where the window's foot leaves no room below,
- * and moved along until it fits where neither does.
- */
 function panelPlace(
   item: DOMRect,
   menu: DOMRect,
@@ -1280,16 +940,9 @@ function panelPlace(
   };
 }
 
-/** The layer a panel hangs in beside its menu, over what the menu stands over, fading out as the menu does. */
 const PANEL_LAYER =
   "ui-menu-panel fixed isolate z-menu data-[layer=dialog]:z-menu-over-dialog data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave";
 
-/**
- * An item that opens a panel beside it: Base UI's menu item, its glyph,
- * name, and the chevron a submenu's item ends in, lit while its panel
- * stands (`data-popup-open`), as a submenu's item is while it is open. A
- * press, Enter, or Right opens the panel with the keyboard in it.
- */
 function PanelItem({
   entry,
   open,
@@ -1298,7 +951,6 @@ function PanelItem({
 }: {
   entry: MenuPanel;
   open: boolean;
-  /** The panel's id, which the item names while it stands. */
   controls: string;
   onEnter: () => void;
 }): React.JSX.Element {
@@ -1332,15 +984,6 @@ function PanelItem({
   );
 }
 
-/**
- * A panel standing beside the item that opened it, drawn over the window
- * as the menu is, at the width it asks, placed once it is drawn and again
- * as it or its menu change size. Its keys are its own, never the menu's
- * nor its owner's: Escape, or Left where it moves no caret, goes back to
- * its item, unless the panel took the key itself, as one going back a
- * page of its own does. Focus leaving it for anywhere but its menu, the
- * menu's opener, or a card hung from either closes the menu.
- */
 function MenuPanelLayer({
   entry,
   id,
@@ -1356,15 +999,12 @@ function MenuPanelLayer({
 }: {
   entry: MenuPanel;
   id: string;
-  /** The menu it hangs beside. */
   menu: HTMLElement | null;
   opener: HTMLElement;
   layer: MenuLayer;
   seen: SeenRect;
   leaving: boolean;
-  /** The panel's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
-  /** Whether it takes the keyboard as it opens, as a press or a key opened it. */
   entered: boolean;
   onBack: () => void;
   onClose: (returnFocus: boolean) => void;
@@ -1403,7 +1043,6 @@ function MenuPanelLayer({
     resized.observe(menu);
     return () => resized.disconnect();
   }, [menu, entry.label, seen]);
-  // Note that a panel whose own drawing took the keyboard, as a search field taking it on mount does, keeps it where it went.
   const [enteredFirst] = useState(entered);
   useEffect(() => {
     if (enteredFirst && box.current !== null) focusInto(box.current);
@@ -1429,7 +1068,6 @@ function MenuPanelLayer({
         width: askedStyleWidth(entry.width ?? POPOVER_WIDTH.REGULAR),
         ...cssCustomProperties({ "--ui-popover-room": `${seen.height - 2 * MENU_MARGIN}px` }),
       }}
-      // The pointer arriving in a panel the pointer opened hands it the keyboard, as resting on a submenu's item focuses it.
       onPointerEnter={(event) => {
         if (event.pointerType !== "touch" && box.current !== null) focusInto(box.current);
       }}
@@ -1443,7 +1081,6 @@ function MenuPanelLayer({
         onBack();
       }}
       onBlur={(event) => {
-        // Note that focus dropped by a control the panel took away, as a page of its own going, goes nowhere, and closes nothing.
         const left = event.relatedTarget;
         if (leaving || !(left instanceof Node)) return;
         if (box.current?.contains(left) || menu?.contains(left) || opener.contains(left)) return;
@@ -1457,57 +1094,25 @@ function MenuPanelLayer({
   );
 }
 
-/** A menu's heading over its rows, muted and pressed by nothing: whose account it is about. */
 const MENU_HEADING =
   "ui-menu-heading flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit]";
 
-/** A menu's footer under its rows, on the same terms: who made what it is about. */
 const MENU_FOOTER =
   "ui-menu-footer flex flex-col gap-ui-2 px-row-inset py-ui-4 text-caption leading-[inherit] text-muted-foreground";
 
-/** What a menu is told: its name, where it hangs, what it acts on, its rows, and its close. */
 interface MenuProps {
   label: string;
-  /** Where it hangs, and whether it is on its way out (`useMenu`'s `drawn`). */
   menu: DrawnMenu;
-  /** What it acts on, which heads it as a phone's sheet; its name heads it where none is given. */
   subject?: MenuSubject | undefined;
   heading?: React.ReactNode;
   footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
-  /** Whether it opens on its checked item, as a pop-up opens on its value, rather than on its first. */
   openOnChecked?: boolean;
-  /** The submenu it opens standing on, by its label, the keyboard taken into it, as a key that opens a row's menu at its Status does; none opens it on its own items. */
   openOn?: string | undefined;
-  /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
-  /**
-   * Whether its items' labels and details are the app's own words, which a
-   * screen recording shows as they read, but for an item that is
-   * `replayMasked`; its subject, heading, footer, and panels are its
-   * caller's to mark (`@repo/ui/session-replay-marks`).
-   */
   replayUnmasked?: boolean | undefined;
 }
 
-/**
- * The menu itself, Base UI's menu (`shadcn/dropdown-menu`) drawn over the
- * window at the point it hangs from, held inside what can be seen of it. A
- * heading, where one is given, stands over the items, muted and pressed by
- * nothing: whose account the menu is about. A footer, where one is given,
- * stands under them on the same terms: who made what the menu is about.
- *
- * Base UI keys it: the arrows, Home, End, and a typed name move between the
- * items that apply now, but for a key an item prints as its shortcut
- * (`pressedBy`), which chooses that item, or opens that submenu. What closes it is this menu's own, as before:
- * Escape and Tab hand focus back to the opener, a press elsewhere (but on
- * the opener, which closes it itself, or on an item's card) or the window
- * losing the keyboard or its size closes it where it stands, and a choice
- * closes it unless the item `stays`. A panel standing beside an item
- * (`MenuPanelLayer`) is the menu's own to a press, and keeps it standing
- * while the window is away, since what the panel began may have sent it
- * there.
- */
 function FloatingMenu({
   label,
   menu,
@@ -1520,7 +1125,6 @@ function FloatingMenu({
 }: MenuProps): React.JSX.Element {
   const { id, placement, opener, leaving, ref: hold } = menu;
   const element = useRef<HTMLDivElement | null>(null);
-  // Note that the popup is held in state too, because Base UI's portal draws it a render after the menu's own.
   const [popup, setPopup] = useState<HTMLDivElement | null>(null);
   const drawn = useCallback(
     (node: HTMLDivElement | null) => {
@@ -1531,24 +1135,17 @@ function FloatingMenu({
     [hold],
   );
   const [submenu, setSubmenu] = useState<string | undefined>(openOn);
-  // Note that the keys walk the items the menu draws, and the tab order is Base UI's, since Tab closes a menu.
   const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const submenuElement = useRef<HTMLDivElement | null>(null);
   const panelElement = useRef<HTMLDivElement | null>(null);
   const panelId = useId();
-  // Whether the panel standing took the keyboard in as it opened, as a press or a key opens it, where resting on its item does not.
   const [panelEntered, setPanelEntered] = useState(false);
-  // Opened again while it was leaving, the menu stands as one opened anew does: on the submenu asked, or none.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
     if (!leaving) setSubmenu(openOn);
   }
-  // Note that what can be seen is read once as the menu is hung, because a
-  // rectangle new on every render would have Base UI place the menu again
-  // on every render, and every placing renders it again.
   const seen = useMemo(() => seenRect(), [placement]);
-  // Where the menu hangs, once it is drawn and measured: clear of the button it dropped from where it must otherwise stand over it (`settledOf`).
   const [settled, setSettled] = useState<
     { placement: MenuPlacement; hung: MenuPlacement } | undefined
   >();
@@ -1565,15 +1162,11 @@ function FloatingMenu({
     .find((entry): entry is MenuPanel => isPanel(entry) && entry.label === submenu);
   const panelStands = useRef(false);
   panelStands.current = panel !== undefined && !leaving;
-  // A move onto another item waits while the pointer heads for the submenu or panel standing beside its own.
   const aim = useSubmenuAim(
     panel === undefined ? submenuElement : panelElement,
     submenu !== undefined && !leaving,
   );
 
-  // Focus lands on the first item, or the checked one where it opens on
-  // that, as the menu stands, and again as it is opened while it was
-  // leaving.
   useEffect(() => {
     if (leaving || popup === null) return;
     const items = itemsOf(popup);
@@ -1583,10 +1176,6 @@ function FloatingMenu({
     (checked ?? items[0])?.focus();
   }, [popup, leaving, openOnChecked]);
 
-  // Note that a press on the opener is left to the opener, because the
-  // button's own press is what closes the menu it opened; that a press on
-  // an item's card is the menu's own, the card its item's words to read and
-  // select; and that a menu leaving hears nothing, since it has closed already.
   useEffect(() => {
     if (leaving) return;
     const pressed = (event: PointerEvent) => {
@@ -1598,7 +1187,6 @@ function FloatingMenu({
       onClose(false);
     };
     const leave = () => onClose(false);
-    // Note that a panel standing keeps the menu through the window going away, because a sign-in it began in the browser takes the window, and the panel waits on what comes back.
     const away = () => {
       if (!panelStands.current) onClose(false);
     };
@@ -1613,25 +1201,17 @@ function FloatingMenu({
   }, [onClose, opener, leaving]);
 
   const keyDown = (event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>) => {
-    // The menu is the nearest open layer, so Escape closes it alone and
-    // leaves whatever it was opened over open.
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
       onClose(true);
       return;
     }
-    // Note that Tab hands focus back before the browser moves it, because
-    // the browser's own move then goes on from the opener to its neighbor.
     if (event.key === "Tab") {
       event.stopPropagation();
       onClose(true);
       return;
     }
-    // Note that an item's printed shortcut chooses it here, because Base UI's
-    // typed name would take a letter to walk the items, and a chord let
-    // through would act on what the window has open rather than on what
-    // the menu is about.
     const keyed = keyedEntryOf(groups, event, element.current);
     if (keyed !== undefined) {
       event.preventDefault();
@@ -1642,22 +1222,15 @@ function FloatingMenu({
       else choose(keyed);
       return;
     }
-    // Walking the menu's own items leaves a submenu the pointer opened behind.
     if (!roving.onKeyDown(event)) return;
     event.preventBaseUIHandler();
     setSubmenu(undefined);
   };
 
-  // Note that a value a filter toggles leaves the menu standing, so several are chosen in one visit.
   const choose = (action: MenuAction) => {
     if (action.stays !== true) onClose(true);
     action.onSelect();
   };
-  // Resting on another of the menu's own items closes the submenu, as a
-  // system menu's does; resting on the submenu's items keeps it. Arriving
-  // on an item that opens a panel opens it, and resting on one that opens a
-  // submenu opens that, though a finger's arrival opens neither, so the tap
-  // is what opens it.
   const pointerOver = (event: React.PointerEvent<HTMLDivElement>) => {
     const item = event.target instanceof Element ? event.target.closest(MENU_ITEM) : null;
     if (item === null || item.closest('[role="menu"]') !== element.current) return;
@@ -1666,7 +1239,6 @@ function FloatingMenu({
     if (opens !== undefined && event.pointerType === "touch") return;
     aim(
       () => {
-        // Note that a panel going that held the keyboard hands it to the item the pointer rests on, so the arrows still walk the menu.
         const holds = panelElement.current?.contains(document.activeElement) === true;
         if (opens !== submenu && holds && item instanceof HTMLElement) item.focus();
         if (opens !== submenu) setPanelEntered(false);
@@ -1675,7 +1247,6 @@ function FloatingMenu({
       submenuOf === undefined ? undefined : item,
     );
   };
-  // Note that a press on an item whose panel the pointer already opened takes the keyboard in at once, since nothing draws again to take it there.
   const enterPanel = (label: string) => {
     if (submenu === label && panelElement.current !== null) {
       focusInto(panelElement.current);
@@ -1747,7 +1318,6 @@ function FloatingMenu({
                     leaving={leaving}
                     surface={submenuElement}
                     onOpen={() => setSubmenu(entry.label)}
-                    // Note that a late close of a submenu another has replaced leaves the other standing.
                     onBack={() =>
                       setSubmenu((standing) => (standing === entry.label ? undefined : standing))
                     }
@@ -1789,7 +1359,6 @@ function FloatingMenu({
   );
 }
 
-/** The item a sheet's page lands focus on: its checked one where it opens on that, else its first that applies now. */
 function startOf(list: HTMLElement, onChecked: boolean): HTMLElement | undefined {
   const items = itemsOf(list);
   const checked = onChecked
@@ -1798,22 +1367,14 @@ function startOf(list: HTMLElement, onChecked: boolean): HTMLElement | undefined
   return checked ?? items[0];
 }
 
-/** The attribute a sheet's row that opens a submenu wears, naming it, so going back lands focus on it. */
 const SUBMENU_ATTRIBUTE = "data-submenu";
 
-/**
- * One row of a sheet: the menu's own row (`DROPDOWN_MENU_ITEM`, lit as a
- * menu's rows are), standing in no Base UI menu, so a plain button the
- * sheet's keys walk. Its shortcut is left off, since a phone's layout has
- * no keys to press it on; a row that opens a submenu ends in its chevron.
- */
 function SheetItem({
   action,
   submenu,
   onChoose,
 }: {
   action: MenuAction;
-  /** The submenu it opens in the sheet's place, where it opens one. */
   submenu?: string | undefined;
   onChoose: () => void;
 }): React.JSX.Element {
@@ -1836,7 +1397,6 @@ function SheetItem({
     },
   } as const;
   const body = <ItemBody action={{ ...action, hint: undefined }} />;
-  // A setting says whether it is on as a menu's check does.
   if (action.checked !== undefined) {
     return (
       <Carded action={action}>
@@ -1859,7 +1419,6 @@ function SheetItem({
   );
 }
 
-/** The rows of one page of a sheet: a menu's groups, ruled apart, each submenu or panel a row that opens it in place. */
 function SheetRows({
   groups,
   onChoose,
@@ -1867,7 +1426,6 @@ function SheetRows({
 }: {
   groups: readonly (readonly MenuEntry[])[];
   onChoose: (action: MenuAction) => void;
-  /** Opens the submenu or panel of that name in the sheet's place. */
   onOpen: (label: string) => void;
 }): React.JSX.Element {
   return (
@@ -1893,12 +1451,6 @@ function SheetRows({
   );
 }
 
-/**
- * A panel standing in a sheet's place, under the sheet's head and its way
- * back: it takes the keyboard in as it opens, its search field first, and
- * Left where it moves no caret goes back, as a submenu's page does, unless
- * the panel took the key itself.
- */
 function SheetPanel({
   entry,
   onBack,
@@ -1932,23 +1484,6 @@ function SheetPanel({
   );
 }
 
-/**
- * The menu as a phone's sheet, in the frame every menu's sheet stands in
- * (`MenuSheetFrame`): a dialog risen from the window's foot over the dimmed
- * window, the page under it unmoved. Its head names what it acts on
- * (`subject`), else the menu itself, under a grip a finger swipes it down
- * by; its rows are the menu's, its groups,
- * glyphs, and red, at a finger's height and with no shortcuts, scrolling
- * under the fixed head and fading where they are cut, its heading over
- * them and its footer last. A submenu opens in the sheet's place, its head
- * the submenu's with a way back (and Left), which lands focus back on its
- * row; a panel opens there too, under the same head, holding its own keys
- * and taking the keyboard in (`SheetPanel`). It holds the keyboard as a dialog does, the arrows walking its rows;
- * Escape, a press on the dimmed window, a swipe down, or a choice puts it
- * away, focus going back to what opened it: at once for a choice, before it
- * acts, so a dialog it opens is opened from there; otherwise once the sheet
- * is gone.
- */
 function MenuSheet({
   label,
   menu,
@@ -1962,16 +1497,13 @@ function MenuSheet({
   replayUnmasked = false,
 }: MenuProps): React.JSX.Element {
   const { id, opener, leaving, ref: hold } = menu;
-  // Note that the submenu standing is held by its name and read from `groups` each render, so a value that stays reads and toggles as its owner now draws it.
   const [opened, setOpened] = useState<string | undefined>(openOn);
   const page = groups
     .flat()
     .find(
       (entry): entry is MenuSubmenu | MenuPanel => !("onSelect" in entry) && entry.label === opened,
     );
-  // The submenu just left, whose row takes focus back.
   const backTo = useRef<string | undefined>(undefined);
-  // Opened again while it was leaving, the sheet stands as one opened anew does: on the submenu asked, or its first page.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
@@ -1989,8 +1521,6 @@ function MenuSheet({
     },
     [roving.ref, openOnChecked],
   );
-  // Each page lands focus as it stands: the first page on its start, or on the row of the submenu just left.
-  // Note that it is keyed by the submenu's name, never the submenu its owner draws anew, so a value toggled where it stays keeps focus.
   useEffect(() => {
     if (list === null || leaving) return;
     const back =
@@ -2003,10 +1533,6 @@ function MenuSheet({
     (back ?? startOf(list, openOnChecked && opened === undefined))?.focus({ preventScroll: true });
   }, [list, opened, leaving, openOnChecked]);
 
-  // Note that a choice that stays may take its own row away (Retry turning
-  // to a dimmed Reading…), which drops focus on nothing; it goes back to the
-  // page's start, or to the sheet where no row applies now, so the keys still
-  // walk the rows.
   useEffect(() => {
     if (list === null || leaving) return;
     const now = document.activeElement;
@@ -2020,11 +1546,6 @@ function MenuSheet({
     backTo.current = page?.label;
     setOpened(undefined);
   };
-  // Note that a value a filter toggles leaves the sheet standing, so several
-  // are chosen in one visit; and that any other choice hands focus back to
-  // the opener before it acts, as the floating menu does, so a dialog the
-  // choice opens (Permanently delete's question) is opened from the row and
-  // hands focus back to it, never to a row of the sheet that is gone.
   const choose = (action: MenuAction) => {
     if (action.stays !== true) onClose(true);
     action.onSelect();
@@ -2040,7 +1561,6 @@ function MenuSheet({
   const title = subject?.name ?? label;
   const name = page?.label ?? title;
   const detail = page === undefined ? subject?.detail : title;
-  // Note that the head shows only where it names the menu itself or a submenu of its own words, because a subject is the caller's thing, as the floating menu keeps it.
   const headUnmasked = replayUnmasked && subject === undefined && page?.replayMasked !== true;
   return (
     <MenuSheetFrame
@@ -2093,12 +1613,6 @@ function MenuSheet({
   );
 }
 
-/**
- * A menu: hung at its point as a floating menu (`FloatingMenu`), or, in a
- * phone's layout, risen as a sheet from the window's foot (`MenuSheet`).
- * Note that the room is read once as the menu is hung, so a menu standing
- * open never turns into the other as the window is resized.
- */
 export function Menu(props: MenuProps): React.JSX.Element {
   const { placement } = props.menu;
   const sheet = useMemo(() => inNarrowRoom(), [placement]);

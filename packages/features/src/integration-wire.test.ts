@@ -10,14 +10,6 @@ import {
   mintIntegrationConnectionName,
 } from "./integration-wire.js";
 
-/**
- * The names an account at a provider goes by: a first account is named
- * after its provider, so every name stored before a second was possible
- * keeps naming it; another takes the lowest free place; and nothing that is
- * not a provider and its place reads as a connection, whatever eve or a
- * window sends.
- */
-
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 
 describe("an integration account's connection name", () => {
@@ -25,7 +17,6 @@ describe("an integration account's connection name", () => {
     assert.equal(mintIntegrationConnectionName(NOTION, []), "notion");
     assert.equal(mintIntegrationConnectionName(NOTION, ["notion"]), "notion-2");
     assert.equal(mintIntegrationConnectionName(NOTION, ["notion", "notion-3"]), "notion-2");
-    // An account named after the provider that went is the name the next one takes back.
     assert.equal(mintIntegrationConnectionName(NOTION, ["notion-2", "linear"]), "notion");
   });
 

@@ -1,22 +1,9 @@
-/**
- * held-exits.ts -- an exit that runs under jsdom until the test finishes it: jsdom runs no motion, so an element leaving would be taken at once.
- *
- * Every element marked `data-leaving`, or in Base UI's ending state
- * (`data-ending-style`), or that `exiting` names, answers `getAnimations`
- * with one running exit, as the engine would while its stylesheet's exit
- * plays; `finish` ends every exit handed out, both as a held disclosure
- * hears it (its `finish` event) and as Base UI does (its `finished`
- * promise), and `restore` takes the engine away.
- */
-
-/** Whether an element is leaving: marked so, as a held disclosure is, or ending, as a Base UI popup is. */
 function marked(element: Element): boolean {
   return (
     element.getAttribute("data-leaving") === "true" || element.hasAttribute("data-ending-style")
   );
 }
 
-/** One running exit, as much of an `Animation` as a held disclosure and Base UI read. */
 class HeldExit extends EventTarget {
   readonly pending = false;
   playState = "running";

@@ -1,18 +1,3 @@
-/**
- * errors.ts -- the one map of refusals every hosted procedure declares, keyed by the slug the wire spells.
- *
- * An oRPC error's code is the refusal's own slug, so the encoder writes it
- * back as `{ error: code }` unchanged and a desktop that reads `error` reads
- * the refusal as it always did. A refusal that carries more than its slug
- * declares the rest as the error's `data`, which the encoder writes beside
- * `error` at the top level, exactly where the old body carried it.
- *
- * Note that a `data` schema is flipped, because oRPC decodes an error's data
- * against it before the encoder writes it: flipped, that decode is the wire
- * schema's encode, so what is written is the wire's own encoded value
- * (`packages/service/src/orpc/base.ts` says the same of outputs).
- */
-
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import {
@@ -30,12 +15,6 @@ import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
 
-/**
- * What a repository out of reach carries beside its slug: why, which the
- * desktop reads for the failure's remedy. The client reads a refusal's
- * fields with this as it stands (`hosted-link.ts`); the map below declares
- * it flipped.
- */
 export const repositoryNotReachableDataSchema = EffectSchema.Struct({
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
 });
@@ -44,10 +23,6 @@ const repositoryNotReachableData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(repositoryNotReachableDataSchema),
 );
 
-/**
- * What an upstream that refused carries beside its slug: the status it
- * answered, and none of its body, for the alerts that watch the route.
- */
 const upstreamErrorDataSchema = EffectSchema.Struct({
   upstreamStatus: EffectSchema.optionalKey(EffectSchema.Int),
 });
@@ -56,11 +31,6 @@ const upstreamErrorData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(upstreamErrorDataSchema),
 );
 
-/**
- * What a plan's reached limit carries beside its slug: when it resets, in
- * epoch milliseconds, where the provider said, which the refusal's words
- * name. The client reads it with this as it stands (`hosted-link.ts`).
- */
 export const planLimitReachedDataSchema = EffectSchema.Struct({
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
 });
@@ -69,16 +39,10 @@ const planLimitReachedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(planLimitReachedDataSchema),
 );
 
-/**
- * What a missing credential carries beside its slug: the provider whose
- * subscription or API key would pay, which the refusal's words name. The
- * client reads it with this as it stands (`hosted-link.ts`).
- */
 export const credentialMissingDataSchema = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
 });
 
-/** What a refused local agent carries beside its slug: why, which the refusal's words name, and the device and its owner where it is another member's. */
 export const localAgentRefusedDataSchema = EffectSchema.Struct({
   localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
   refusedDevice: EffectSchema.optionalKey(refusedDeviceSchema),
@@ -88,7 +52,6 @@ const localAgentRefusedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(localAgentRefusedDataSchema),
 );
 
-/** What a refused Start naming repositories beside its agent's own carries beside its slug: why, and the repository where one is why. */
 export const extraRepositoryRefusedDataSchema = EffectSchema.Struct({
   extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
   refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
@@ -102,25 +65,20 @@ const credentialMissingData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(credentialMissingDataSchema),
 );
 
-/** What a refused bearer carries beside its slug where it was a device secret no standing host holds, which the host reads as removed. */
 const hostRemovedData = EffectSchema.toStandardSchemaV1(EffectSchema.flip(hostRemovedDataSchema));
 
-/** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes, which the daemon prints. */
 const hostUpgradeNeededData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(hostUpgradeNeededDataSchema),
 );
 
-/** What a held pairing guess carries beside its slug: when the account's guesses are taken again, which the panel names. */
 const hostPairingHeldData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(hostPairingHeldDataSchema),
 );
 
-/** What a refused install or update carries beside its slug: which skill, and why its files were refused. */
 const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(installedSkillRefusedDataSchema),
 );
 
-/** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: { data: hostRemovedData },
   [HOSTED_API_ERROR.INVALID_REQUEST]: {},

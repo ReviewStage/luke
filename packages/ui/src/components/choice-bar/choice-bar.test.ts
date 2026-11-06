@@ -15,23 +15,6 @@ import {
   type ChoiceItem,
 } from "./choice-bar.js";
 
-/**
- * choice-bar.test.ts -- a bar handed panels is a tablist whose tabs control
- * them, and one without is a radio group; a clearable bar's
- * chosen option pressed again takes the choice back, and a fixed one's
- * stands; a bar that takes no focus leaves no option for Tab to land on and
- * keeps the keyboard where it was when pressed; the arrows, Home, and End
- * choose as they move and take the keyboard along, ↑ and ↓ only in a radio
- * group, and neither with a modifier held nor in a disabled bar; a disabled
- * option is not chosen; a count's glyph says its state in words; the
- * app's `data-` attributes reach the bar; and a bar folding together folds
- * every option once their names no longer fit, and unfolds once they would,
- * and folds as a name grows past its width with nothing resized, each
- * folded option then naming itself in its hint; a row cut short of its
- * options brings the chosen one into view; and an option that says more
- * hangs the app's hint saying it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -51,7 +34,6 @@ const ITEMS: readonly ChoiceItem<View>[] = [
   { value: VIEW.FILES, label: "Files", count: linesCount(214, 38) },
 ];
 
-/** The same views, every one of them open to the keyboard, the checks failing. */
 const OPEN_ITEMS: readonly ChoiceItem<View>[] = [
   { value: VIEW.CONVERSATION, label: "Conversation" },
   {
@@ -77,7 +59,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** A bar the caller holds, over a panel for each view where it shows panels. */
 function Held({
   items = ITEMS,
   withPanels = false,
@@ -138,13 +119,11 @@ function option(page: HTMLElement, name: string): HTMLButtonElement {
   return found;
 }
 
-/** The options a reader hears as chosen, and the ones Tab lands on. */
 interface Reading {
   readonly chosen: string[];
   readonly tabStops: string[];
 }
 
-/** The name of the option the keyboard is on, if any. */
 function focused(): string | undefined {
   return document.activeElement?.querySelector(".ui-choice-bar-label")?.textContent ?? undefined;
 }
@@ -325,7 +304,6 @@ test("a count's glyph says its state in words beside the count", () => {
 });
 
 test("a bar folding together folds every option once their names no longer fit its width, and names them again once they would, measured as they stand", () => {
-  // Note that jsdom lays nothing out, so the bar's width, each option's, each name's, and when it resizes are the test's; a bar's scrollWidth is never less than its own width, as a browser's is not.
   const NAME = 40;
   let room = 500;
   let glyph = 90;
@@ -403,7 +381,6 @@ test("a bar folding together folds every option once their names no longer fit i
 });
 
 test("a row cut short of its options scrolls the least that brings the chosen one into view, as it stands and as another is chosen", () => {
-  // Note that jsdom lays nothing out and scrolls nothing, so each option's 100px, the bar's 150px and its scroll are the test's.
   const WIDE = 100;
   let scrolled = 0;
   const optionsOf = (element: HTMLElement) => [
@@ -461,7 +438,6 @@ test("an option that says more hangs the app's hint saying it, and one that says
 });
 
 test("a bar folding together folds once a name grows past its width, though nothing resized to say so, each folded option then naming itself in its hint unless it says more", () => {
-  // Note that jsdom lays nothing out and has no ResizeObserver, so each option is as wide as its glyph and its name at 10px a letter, and only a draw measures.
   const GLYPH = 20;
   const ROOM = 300;
   const folded = () =>

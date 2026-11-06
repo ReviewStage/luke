@@ -1,14 +1,3 @@
-/**
- * mac-command-client.test.ts -- the Mac's side of the commands its account's agents queue, as the Mac observes it.
- *
- * The live read names the kinds this Mac runs and the account it is for,
- * and reads a refused session as signed out; a claim answers the command
- * granted or nothing; a result is posted as the service reads it, and is
- * taken or not.
- *
- * Synthetic bearers, ids, and commands throughout.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";

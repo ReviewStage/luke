@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { CARD_ELEMENT, Card } from "./card.js";
 
-/**
- * card.test.ts -- a card offers its hint to a pointer resting on it, hands
- * its element to what measures against it, and is named and labeled by its
- * owner.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -24,7 +18,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` on the page and hands back what it was drawn into. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

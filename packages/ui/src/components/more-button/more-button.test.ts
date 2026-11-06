@@ -6,13 +6,6 @@ import { afterEach, expect, test } from "vitest";
 import { Menu, useMenu } from "../menu/menu.js";
 import { MoreButton } from "./more-button.js";
 
-/**
- * more-button.test.ts -- a header's ⋯ is named "{Thing} actions" for what
- * it acts on, drops the menu its owner keeps and says so, and closes it
- * again on a second press; one unavailable drops nothing. Synthetic
- * automation.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** An automation's header ⋯ and the menu it drops. */
 function Header({ disabled = false }: { disabled?: boolean }): React.JSX.Element {
   const menu = useMenu(true);
   return createElement(
@@ -68,7 +60,6 @@ test("pressing the ⋯ drops its menu and says so, and pressing it again closes 
   expect(more().getAttribute("aria-expanded")).toBe("false");
   act(() => more().click());
   expect(more().getAttribute("aria-expanded")).toBe("true");
-  // Note that a header's ⋯ fills while its menu is open, as a row's never does (`useRowMenu`).
   expect(more().dataset.lights).toBeUndefined();
   expect(document.querySelector('[role="menu"]')?.getAttribute("aria-label")).toBe(
     "Automation actions",

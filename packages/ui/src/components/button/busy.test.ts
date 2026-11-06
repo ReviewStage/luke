@@ -10,14 +10,6 @@ import { PROVIDER_BUTTON_SIZE, ProviderButton } from "../provider-button/provide
 import { SplitButton } from "../split-button/split-button.js";
 import { BUTTON_VARIANT, type BusyProps, Button, IconButton } from "./button.js";
 
-/**
- * busy.test.ts -- every kind of button is busy one way: given `busy` and the
- * `busyLabel` a reader hears, a Button, an IconButton, a SplitButton's main
- * part, a FoldingButton, and a ProviderButton in either size are named by
- * that label, say they are busy, and refuse their press at once, yet show
- * no ring until the press has been out the settle delay, and show it after.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +18,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** jsdom's stand-in for the browser's ResizeObserver, which a FoldingButton measures its fold by. */
 class StillResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -44,10 +35,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The busy shape every kind takes, saying it is saving. */
 const SAVING: BusyProps = { busy: true, busyLabel: "Saving" };
 
-/** Each kind of button, busy in the one shape, counting its presses into `presses`. */
 function kinds(presses: string[]): ReadonlyArray<readonly [string, ReactElement]> {
   const press = (kind: string) => () => presses.push(kind);
   return [
@@ -101,7 +90,6 @@ function kinds(presses: string[]): ReadonlyArray<readonly [string, ReactElement]
   ];
 }
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -110,14 +98,12 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** The busy button a kind draws, the one a reader is told is busy. */
 function busyButton(container: HTMLElement): HTMLButtonElement {
   const button = container.querySelector<HTMLButtonElement>('button[aria-busy="true"]');
   if (button === null) throw new Error("no busy button is drawn");
   return button;
 }
 
-/** Whether a turning ring stands in `button`. */
 function ringIn(button: HTMLElement): boolean {
   return button.querySelector(".ui-spinner-ring") !== null;
 }

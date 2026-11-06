@@ -2,35 +2,21 @@ import { harnessNameOf } from "./agent-runtime-models.js";
 import type { ModelProvider } from "./models-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
-/**
- * failure-remedy.ts -- why a failure stands, as a typed word beside its sentence, and what the press that mends it says.
- */
-
 export const FAILURE_REASON = {
-  /** The member's own API key was refused or cannot be read: its harness's row on Settings › Agents replaces it. */
   API_KEY: "api-key",
-  /** The task's workspace has no GitHub connected: Settings › Workspace connects it. */
   CONNECT_GITHUB: "connect-github",
-  /** The task's workspace's GitHub was uninstalled or suspended: Settings › Workspace connects it again. */
   RECONNECT_GITHUB: "reconnect-github",
-  /** The installation was not given the repository: its settings page on GitHub gives it. */
   ADD_REPOSITORY: "add-repository",
-  /** The repository is not one the workspace can reach at all: the task names another. */
   CHOOSE_REPOSITORY: "choose-repository",
-  /** The repository's owner is connected to another workspace of the account's: the task moves there. */
   MOVE_TASK: "move-description",
-  /** GitHub refused the member's own token: Settings › Profile replaces it. */
   GITHUB_TOKEN: "github-token",
-  /** The member's own token is not authorized for an organization's SAML SSO: GitHub's own page authorizes it. */
   AUTHORIZE_TOKEN: "authorize-token",
-  /** No subscription or API key of the member's pays for the model's provider: its harness's row on Settings › Agents connects one. */
   CONNECT_AGENTS: "connect-agents",
   OTHER: "other",
 } as const;
 
 export type FailureReason = (typeof FAILURE_REASON)[keyof typeof FAILURE_REASON];
 
-/** The remedies that mend a task's repository in the task's own place, and so name the task. */
 type TaskRemedyReason =
   | typeof FAILURE_REASON.CONNECT_GITHUB
   | typeof FAILURE_REASON.RECONNECT_GITHUB
@@ -41,30 +27,24 @@ export type Failure =
   | {
       readonly reason: typeof FAILURE_REASON.ADD_REPOSITORY;
       readonly text: string;
-      /** `owner/name`, which the press names. */
       readonly repository: string;
-      /** The installation's settings page on GitHub, where its repositories are chosen. */
       readonly settingsUrl: string;
     }
   | {
       readonly reason: typeof FAILURE_REASON.MOVE_TASK;
       readonly text: string;
       readonly taskId: string;
-      /** The workspace the task moves to, whose name the press says. */
       readonly workspace: { readonly id: string; readonly name: string };
     }
   | {
       readonly reason: typeof FAILURE_REASON.AUTHORIZE_TOKEN;
       readonly text: string;
-      /** The organization whose SAML SSO the token is authorized for, which the press names. */
       readonly organization: string;
-      /** GitHub's page that authorizes the token, from its `X-GitHub-SSO` header. */
       readonly authorizeUrl: string;
     }
   | {
       readonly reason: typeof FAILURE_REASON.API_KEY | typeof FAILURE_REASON.CONNECT_AGENTS;
       readonly text: string;
-      /** The provider whose harness the press connects, which it names and lands on; none where the service named none. */
       readonly provider?: ModelProvider | undefined;
     }
   | {
@@ -72,12 +52,10 @@ export type Failure =
       readonly text: string;
     };
 
-/** What a press that connects an agent's credential says: the harness it connects, or Settings where none is known. */
 function connectLabel(provider: ModelProvider | undefined): string {
   return provider === undefined ? "Open Settings" : `Connect ${harnessNameOf(provider)}`;
 }
 
-/** The remedy's label; none where only Retry answers. */
 export function remedyLabel(failure: Failure): string | undefined {
   switch (failure.reason) {
     case FAILURE_REASON.API_KEY:
@@ -103,11 +81,6 @@ export function remedyLabel(failure: Failure): string | undefined {
   }
 }
 
-/**
- * Whether Retry stands beside the remedy: a remedy finished somewhere we
- * cannot watch, on GitHub or in Settings, leaves the same send to be made
- * again once it is done.
- */
 export function retriesBesideRemedy(failure: Failure): boolean {
   return (
     failure.reason === FAILURE_REASON.CONNECT_GITHUB ||

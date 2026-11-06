@@ -11,13 +11,6 @@ import {
   EditableBlock,
 } from "./editable-block.js";
 
-/**
- * editable-block.test.ts -- a document's blocks are one Tab stop the arrows
- * step across, Return opens the block the keyboard selected, and a press on
- * a block's own words opens it where it landed, while a press portaled out
- * of it and a key from inside it are not the block's.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -33,7 +26,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws a title and two sections, each telling `heard` what opened it and how. */
 function drawDocument(heard: string[], portaled?: HTMLElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

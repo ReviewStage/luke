@@ -3,13 +3,8 @@
 import { afterEach, expect, test } from "vitest";
 import { MOTION_TOKEN, milliseconds, motionHeld, tokenTiming } from "./motion-timing.js";
 
-/**
- * motion-timing.test.ts -- a script's motion reads the same tokens a stylesheet does, so reduced motion and a capture run, which only zero the tokens, hold it still.
- */
-
 const root = document.documentElement;
 
-/** Stands the motion tokens as a stylesheet would draw them. */
 function stand(duration: string | undefined, easing: string | undefined): void {
   root.style.removeProperty(MOTION_TOKEN.DURATION_FAST);
   root.style.removeProperty(MOTION_TOKEN.SPRING_FAST);

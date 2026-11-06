@@ -7,15 +7,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { type InlineRename, useInlineRename } from "./use-inline-rename.js";
 
-/**
- * use-inline-rename.test.ts -- a surface's rename opens for the subject it
- * draws, asks for the name an edit ends on, reopens on a refusal holding the
- * name that was typed and says the refusal until the next edit, lets a refusal
- * a later ask replaced go unsaid, and says nothing of one subject's refusal
- * over another. The rename is a mutation of the surface's own, on a client of
- * each surface's own, its answers handed to React a tick after they land.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -29,7 +20,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A rename the service answers by hand: each ask waits on the test, in order. */
 function heldService() {
   const asks: { subjectId: string; name: string; answer: (renamed: boolean) => void }[] = [];
   const onRename = (subjectId: string, name: string) => {
@@ -40,13 +30,11 @@ function heldService() {
   return { asks, onRename };
 }
 
-/** A rename the surface asked, by the subject it was asked for. */
 interface Asked {
   readonly subjectId: string;
   readonly name: string;
 }
 
-/** Mounts a surface drawing `subjectId`, its rename a mutation of its own over `onRename`, answering the rename it holds now and a way to draw another subject. */
 function mount(subjectId: string, onRename: (subjectId: string, name: string) => Promise<boolean>) {
   let rename: InlineRename | undefined;
   const client = new QueryClient();
@@ -73,7 +61,6 @@ function mount(subjectId: string, onRename: (subjectId: string, name: string) =>
   };
 }
 
-/** Waits until the surface's rename stands as `check` asks, a tick or so after an answer lands. */
 async function until(check: () => void): Promise<void> {
   await vi.waitFor(check);
 }

@@ -12,7 +12,6 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const CONNECT_PAGE = "https://vespin.dev/connect-github.html?intent=opaque-intent-1";
 
-/** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
 function client(
   session: AccountSessionToken = {
     readSessionToken: () => Effect.succeed("session-1"),

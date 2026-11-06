@@ -9,84 +9,53 @@ import {
 } from "@repo/features/description-comment-wire";
 import { createContext, useContext } from "react";
 
-/**
- * description-comments.ts -- the open description's comment threads as one control the margin, the Comments tab, and the summary draw and press, and where each thread stands in the description's text and its margin.
- *
- * The panel holds the threads, read as the host holds them and written
- * through its doors (its `use-description-comments.ts`), and hands the control
- * down; the same control holds one of the task's pages' threads in the
- * description's place where it is handed the page.
- */
-
-/** What starting a thread came to: the thread as the service holds it, or why there is none. */
 type CommentStarted = { readonly thread: DescriptionCommentThread } | { readonly note: string };
 
-/** What the margin, the Comments tab, and the summary draw and press. */
 export interface DescriptionCommentsControl {
   readonly planId: string;
-  /** Every thread of the description, oldest first, resolved ones among them. */
   readonly threads: readonly DescriptionCommentThread[];
-  /** Whether a read has answered, so the threads are what the description holds rather than nothing yet. */
   readonly read: boolean;
   readonly failed: boolean;
   readonly onRetry: () => void;
-  /** Why the last write to a thread did not land, by thread, said on it until the next write. */
   readonly notes: ReadonlyMap<string, string>;
-  /** Starts a thread with its first comment, anchored to words of the text it names or on a page of the task, under the caller's key, which stays the same while a send is tried again. */
   readonly start: (start: DescriptionCommentStart) => Promise<CommentStarted>;
-  /** Does one thing to one thread; answers whether it landed. */
   readonly act: (threadId: string, action: DescriptionCommentActionRequest) => Promise<boolean>;
 }
 
-/** Whether a thread still stands in the margin. */
 export function openThread(thread: DescriptionCommentThread): boolean {
   return thread.status === DESCRIPTION_COMMENT_STATUS.OPEN;
 }
 
 const DescriptionCommentsContext = createContext<DescriptionCommentsControl | undefined>(undefined);
 
-/** The open description's comments, for the margin, the Comments tab, and the summary under it. */
 export const DescriptionCommentsProvider = DescriptionCommentsContext.Provider;
 
-/** The open description's comments; none outside a plan's page. */
 export function useDescriptionCommentsControl(): DescriptionCommentsControl | undefined {
   return useContext(DescriptionCommentsContext);
 }
 
-/** A stretch of a section's words a thread is anchored to, in the section's own offsets. */
 export interface CommentSpan {
   readonly from: number;
   readonly to: number;
   readonly thread: string;
   readonly active: boolean;
-  /** Whether the thread is on the whole block, drawn by its edge rather than over its words. */
   readonly block: boolean;
 }
 
-/** A thread not yet posted: where its words stand in the description's text, and whether it is on a whole block. */
 export interface PendingThread {
   readonly from: number;
   readonly to: number;
   readonly scope: DescriptionCommentStartRequest["scope"];
   readonly quote: string;
-  /** The text `from` and `to` are offsets in, where it is not the description's as saved: the open editor's, for words started on there. */
   readonly text?: string;
 }
 
-/** The id the thread being started is drawn under until the service names it. */
 export const PENDING_THREAD = "pending";
 
-/** The last laying of a thread being started's text over the description's, kept since every section asks it of the same two texts. */
 let laid:
   | { readonly from: string; readonly to: string; readonly change: ReturnType<typeof textChange> }
   | undefined;
 
-/**
- * A thread being started, where it stands in the description's text as saved: one
- * begun on the editor's words is measured in the editor's text, laid over
- * the saved text so its mark stands on the same words; nothing where none of
- * them is saved yet.
- */
 function pendingIn(
   pending: PendingThread,
   descriptionText: string | undefined,
@@ -109,11 +78,6 @@ function pendingIn(
   return span === undefined ? undefined : { ...pending, ...span };
 }
 
-/**
- * The open threads' words inside one section of the description's text, `from` to
- * `to`, in the section's own offsets, and the thread being started's among
- * them: what the read view marks.
- */
 export function commentSpansIn(
   threads: readonly DescriptionCommentThread[],
   section: { readonly from: number; readonly to: number },
@@ -161,36 +125,22 @@ export function commentSpansIn(
   });
 }
 
-/** One card the margin stands beside the words: its thread, where its words stand, and how tall it is drawn. */
 export interface MarginCard {
   readonly id: string;
   readonly top: number;
   readonly height: number;
 }
 
-/** The part of the page in view, in the cards' own coordinates: its top and its foot. */
 export interface MarginView {
   readonly top: number;
   readonly bottom: number;
 }
 
-/**
- * Where a card wanting to stand at `top` stands so its foot is in `view`:
- * there, or lifted until it is, but never lifted past the view's top. A
- * card whose words are scrolled out of the view, above or below, stays by
- * them.
- */
 export function keptInView(top: number, height: number, view: MarginView): number {
   if (top + height <= view.bottom || top >= view.bottom) return top;
   return Math.max(Math.min(top, view.top), view.bottom - height);
 }
 
-/**
- * Where a card hung under a line's words stands: `drop` below the line's
- * top while its foot is then in `view`, else flipped to end `gap` over the
- * line where it all fits there, else lifted until its foot is in view, never
- * past the view's top. A line scrolled out of the view keeps its card under it.
- */
 export function hungTop(
   line: number,
   drop: number,
@@ -204,13 +154,6 @@ export function hungTop(
   return above >= view.top ? above : Math.max(view.top, view.bottom - height);
 }
 
-/**
- * Where each card of the margin stands: level with its words, the open one
- * exactly so, and the others stepped aside by `gap` so no two overlap, as a
- * document's margin comments do. Given the `view`, the open one is lifted
- * until its foot is in it (`keptInView`), and the others step aside from
- * where it then stands. Answers each card's top by its thread.
- */
 export function marginTops(
   cards: readonly MarginCard[],
   active: string | undefined,

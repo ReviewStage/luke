@@ -5,14 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { TEXT_BUTTON_TONE, TextButton } from "./text-button.js";
 
-/**
- * text-button.test.ts -- a text button is a button a reader finds by its
- * words, or by the name it is handed, and a press acts without submitting
- * the form it stands in. One that shows a region says whether that stands
- * open and which it is. One that keeps focus leaves it on the field that
- * held it when a pointer presses it.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -20,7 +12,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -117,7 +108,6 @@ test("a text button that keeps focus, pressed with the pointer, leaves the focus
   if (field === null || quote === undefined || cancel === undefined) throw new Error("not drawn");
   act(() => field.focus());
 
-  // Note that jsdom moves no focus on a mousedown, so the browser's move is read as the press's default action.
   const press = (button: HTMLButtonElement) => {
     const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     act(() => {

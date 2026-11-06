@@ -3,17 +3,10 @@
 import { afterEach, expect, test } from "vitest";
 import { LANDED, LANDED_ANIMATION, land } from "./landed.js";
 
-/**
- * landed.test.ts -- a place landed on wears the landed mark until its own
- * light ends, a motion of its own or of what it holds ending first leaving
- * it lit; and landed on again while lit, it is lit afresh.
- */
-
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** An animation's end, named, as the engine tells it; jsdom has no AnimationEvent of its own. */
 function ended(target: Element, name: string): void {
   const end = new Event("animationend", { bubbles: true });
   Object.defineProperty(end, "animationName", { value: name });

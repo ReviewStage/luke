@@ -10,19 +10,6 @@ import {
   type DataTableColumns,
 } from "./data-table.js";
 
-/**
- * data-table.test.ts -- a table reads as its headings over its rows, named
- * for what it holds; a sortable heading is a button that sorts the rows by
- * its column, its first press the way the column says and the next flipping
- * it, its cell announcing the order chosen and its caller hearing it; an
- * order the caller puts before that choice stands through every press; a
- * press on a row opens it, unless its caller says it has nothing to open,
- * while a press on a control in its cells answers for that control alone; a
- * mark column's heading is read, not drawn; a long table draws only the rows
- * near the view, telling a reader how many it holds; and no rows show the
- * empty line in place of the table. Synthetic runs.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -42,7 +29,6 @@ const RUNS: readonly Run[] = [
   { id: "triage", name: "Issue triage", minutes: 19, pinned: false },
 ];
 
-/** The pinned runs first, before any order a heading chooses. */
 const PINNED_FIRST = [{ id: "pin", desc: true }];
 
 const column = createDataTableColumnHelper<Run>();
@@ -54,7 +40,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a container in the document and hands the container back. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -64,7 +49,6 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** The columns over a run, the pin a button of its own whose press `heard` records. */
 function columns(heard: string[]): DataTableColumns<Run> {
   return column.columns([
     column.accessor((run) => run.pinned, {
@@ -95,7 +79,6 @@ function columns(heard: string[]): DataTableColumns<Run> {
   ]);
 }
 
-/** Runs the table sorts by its headings, each order chosen heard and every row press recorded. */
 function SortedRuns({
   heard,
   leading,
@@ -119,7 +102,6 @@ function SortedRuns({
   });
 }
 
-/** The column heading reading `label`. */
 function heading(container: HTMLElement, label: string): HTMLElement {
   const found = [...container.querySelectorAll<HTMLElement>("th")].find((cell) =>
     cell.textContent?.startsWith(label),
@@ -128,7 +110,6 @@ function heading(container: HTMLElement, label: string): HTMLElement {
   return found;
 }
 
-/** Each body row's run name, top to bottom. */
 function order(container: HTMLElement): string[] {
   return [...container.querySelectorAll("tbody tr")].map(
     (row) => row.querySelectorAll("td")[1]?.textContent ?? "",
@@ -238,7 +219,6 @@ test("a long table draws only the rows near the view, telling a reader how many 
   expect(drawn.length).toBeGreaterThan(0);
   expect(drawn.length).toBeLessThan(many.length);
   expect(container.querySelector("table")?.getAttribute("aria-rowcount")).toBe("501");
-  // Note that the headings' row is the first a reader counts, so the body's first row is the second.
   expect(
     drawn.every(
       (row) =>

@@ -10,17 +10,6 @@ import { ComboboxList, comboboxOptionId } from "../combobox/combobox.js";
 import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { SEARCH_FIELD_LOOK, SearchField, type SearchTally } from "./search-field.js";
 
-/**
- * search-field.test.ts -- a search draws the query its caller holds and
- * hands every change back, answers Enter, Shift-Enter, and Escape with the
- * caller's callbacks and never while an input method is composing, keeps an
- * Escape it answers from the surface behind it, says its tally while a query
- * stands, shows its chord while empty, and clears a query through its clear
- * button, handing the caret back, the clear held out of reach through its
- * exit and the chord back once it is gone. A search that steers a list under it
- * is named as that list's combobox and hands its keys to it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -29,7 +18,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks, since a steered list draws its rows through a run that measures them. */
 class StandInResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -54,7 +42,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** Types `value` into `field` as the page would hand it to React. */
 function type(field: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -63,12 +50,10 @@ function type(field: HTMLInputElement, value: string): void {
   });
 }
 
-/** How a press went: whether it was kept from what stands behind the field. */
 interface Pressed {
   readonly stopped: boolean;
 }
 
-/** Presses a key in `field`, answering whether the press was kept from what stands behind it. */
 function press(field: HTMLElement, init: KeyboardEventInit): Pressed {
   let reached = false;
   const behind = () => {
@@ -82,7 +67,6 @@ function press(field: HTMLElement, init: KeyboardEventInit): Pressed {
   return { stopped: !reached };
 }
 
-/** A search the caller holds, writing down every key it answered. */
 function Held({
   tally,
   clears = false,
@@ -245,7 +229,6 @@ test("the clear leaves out of reach through its exit once the field is empty, an
   }
 });
 
-/** A menu's search over two rows, steering them while the caret stays in it, writing down what it chose. */
 function Steering({ chosen }: { chosen: string[] }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);

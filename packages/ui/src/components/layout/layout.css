@@ -1,13 +1,4 @@
-/* layout.css -- what a Stack and an Inline ask of the items they hold. The
-   arrangement itself, a flex box whose gap is a role and whose alignment is
-   a word, is utilities over the theme (`layout.tsx`); these rules stay in
-   the components layer, below the utilities, because each reaches into an
-   item, whose own sheet may say the last word about its width. */
-
 @layer components {
-  /* An item may give way below its content's width, so a long label
-     shrinks or wraps before the row overflows, breaking inside an unbroken
-     word where it has to rather than painting past its box. */
   :is(.ui-stack, .ui-inline) > * {
     min-width: 0;
     overflow-wrap: anywhere;

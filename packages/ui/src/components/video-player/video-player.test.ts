@@ -5,21 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { VIDEO_PLAYER_PLACE, VideoPlayer } from "../../index.js";
 
-/**
- * video-player.test.ts -- while focus is in a video's player, Space or K
- * plays and pauses it, the arrows seek five seconds within its length,
- * flashing how far, presses one way adding up, and
- * comma and period, like the bar's frame buttons, pause it and step one
- * frame of the length its header states, none of them reaching the place
- * around it, whose arrows may walk files; a button's own Space is left to
- * the button. In the viewer it starts at
- * once, unless motion is held still. The browser's media element is
- * the boundary, so a stand-in plays, pauses, seeks, and opens Safari's own
- * player as one does, telling its events, and the player is read by what its
- * bar shows. Full screen, where the browser fills the screen with no element,
- * as Safari on an iPhone and jsdom alike, opens the video in that player.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -29,23 +14,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The motion token reduced motion zeroes, which says motion is held still. */
 const DURATION_FAST = "--ui-duration-fast";
 
-/** A WebM's bytes as a picture read answers them; the stand-in element never decodes them. */
 const WEBM_URL = "data:video/webm;base64,GkXfow==";
 
-/**
- * A WebM header stating its frames a tenth of a second long: the EBML magic,
- * a DefaultDuration of 100,000,000 nanoseconds in four bytes
- * (`23 E3 83 84 05 F5 E1 00`), and a Cluster's id, where the header ends.
- */
 const TENTH_FRAME_URL = "data:video/webm;base64,GkXfoyPjg4QF9eEAH0O2dQ==";
 
-/** How long the stand-in runs, in seconds. */
 const LENGTH_S = 20;
 
-/** Makes the page's video a stand-in that plays, pauses, seeks, and opens Safari's own player as a browser's does, telling its events; answers where it stands. */
 function standInMedia(video: HTMLVideoElement): () => number {
   let paused = true;
   let at = 0;
@@ -84,7 +60,6 @@ function standInMedia(video: HTMLVideoElement): () => number {
   return () => at;
 }
 
-/** Draws a player inside a box that records every key reaching it, its video a stand-in. */
 function mountPlayer(onExpand?: () => void, dataUrl = WEBM_URL) {
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:recording");
   vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined);
@@ -93,7 +68,6 @@ function mountPlayer(onExpand?: () => void, dataUrl = WEBM_URL) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  // Note that the place around listens as the viewer's walk does, through React, which the player's keys stop short of.
   act(() =>
     root.render(
       createElement(
@@ -151,7 +125,6 @@ test("the arrows seek five seconds within the video's length, flashing how far, 
   press("ArrowRight");
   expect(seekAt()).toBe("10");
   expect(flash()).toBe("10 seconds");
-  // A turn starts the flash over, presses one way while it stands add up, and one at the start that moves nothing adds nothing.
   press("ArrowLeft");
   press("ArrowLeft");
   press("ArrowLeft");
@@ -195,7 +168,6 @@ test("comma and period, like the frame buttons, pause the video and step one fra
   );
   press("k");
   press(".");
-  // Each step lands in the middle of its frame: the second frame, a tenth long, spans 0.1 to 0.2.
   expect(toggleLabel()).toBe("Play");
   expect(playhead()).toBeCloseTo(0.15);
   press(".", undefined, true);
@@ -207,7 +179,6 @@ test("comma and period, like the frame buttons, pause the video and step one fra
   expect(playhead()).toBeCloseTo(0.05);
   pressButton("Next frame");
   expect(playhead()).toBeCloseTo(0.15);
-  // At its very end the last frame shows, so a step back lands on the one before it.
   press("End");
   press(",");
   expect(playhead()).toBeCloseTo(LENGTH_S - 0.15);
@@ -220,7 +191,6 @@ test("Full screen opens the video in the browser's own player where the browser 
   expect(Reflect.get(video, "webkitDisplayingFullscreen")).toBe(true);
 });
 
-/** Draws a player in the viewer, as the file viewer an Expand opens does, and answers its video. */
 function mountInViewer(): HTMLVideoElement {
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:recording");
   vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined);
@@ -245,7 +215,6 @@ test("in the viewer the video starts at once", () => {
 });
 
 test("in the viewer the video waits for Play where motion is held still", () => {
-  // Note that reduced motion holds motion at the tokens, which the setting's stylesheet would zero.
   document.documentElement.style.setProperty(DURATION_FAST, "1ms");
   expect(mountInViewer().autoplay).toBe(false);
 });

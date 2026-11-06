@@ -1,16 +1,3 @@
-/**
- * cli-inbox-answer.ts -- what `vespin inbox answer` sends for a thread's open ask, from the words and the `-F` input on its command line.
- *
- * The answer travels as the app's inbox sends one: a member's message on
- * the thread carrying the answer to its open ask (`inboxMessageRequestSchema`'s
- * `answers`). Each ask takes it its own way: a `decide` the labels of the
- * options picked, matched whatever their case; a `do` the word `done`,
- * which ticks every step as Mark done does, or `not-done`; an `answer`
- * with fields a JSON object of values by field label; and one without
- * fields its words. What the service would refuse is refused here first,
- * in the words `inboxAnswersRefusal` reads the ask with.
- */
-
 import {
   INBOX_ASK,
   INBOX_REPLY,
@@ -22,30 +9,25 @@ import {
   knownAsk,
 } from "./inbox-wire.js";
 
-/** The words a `do` ask is answered with on the command line. */
 export const CLI_DO_ANSWER = {
   DONE: "done",
   NOT_DONE: "not-done",
 } as const;
 
-/** What the command line gave: its words after the thread, and the `-F` input's text where it named one. */
 export interface CliAnswerInput {
   readonly words: readonly string[];
   readonly input?: string | undefined;
 }
 
-/** What to send, or why nothing can be. */
 export type CliAnswer =
   | { readonly text: string; readonly answers: InboxAnswers }
   | { readonly refusal: string };
 
-/** The label a name stands for among those offered, whatever its case; the name itself where none matches. */
 function labelOf(offered: readonly string[], name: string): string {
   const wanted = name.trim().toLowerCase();
   return offered.find((label) => label.toLowerCase() === wanted) ?? name;
 }
 
-/** A JSON object of field values as a form's values, each named by its field's label; none where it is not one. */
 function formValues(
   text: string,
   labels: readonly string[],
@@ -67,7 +49,6 @@ function formValues(
   return values;
 }
 
-/** The answer each ask takes from the command line, before it is checked against the ask. */
 function answerOf(ask: InboxAsk, id: string, given: CliAnswerInput): CliAnswer {
   switch (ask.type) {
     case INBOX_ASK.DECIDE: {
@@ -111,11 +92,6 @@ function answerOf(ask: InboxAsk, id: string, given: CliAnswerInput): CliAnswer {
   }
 }
 
-/**
- * The message that answers a thread's open ask, from the command line's
- * words and `-F` input, or why it cannot: no ask stands open, the words do
- * not fit the ask, or the ask would refuse the answer they make.
- */
 export function cliInboxAnswer(asking: InboxAsking | undefined, given: CliAnswerInput): CliAnswer {
   if (asking === undefined) return { refusal: "The thread holds no open ask." };
   const ask = knownAsk(asking.ask);

@@ -5,14 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { RELATED_TASK_CELLS, TASK_ROW_CELL, TaskRow, TaskRows } from "./task-row.js";
 
-/**
- * task-row.test.ts -- a list of task rows standing on its own folds a row's
- * nested rows by a chevron that is a control of its own beside the row's
- * press, and by → and ← on the press, and chooses its rows as a Mac's list
- * does, a ⌘-click choosing a row rather than opening it while a plain press
- * still opens it. Synthetic tasks.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -21,7 +13,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-// Note that a row's name measures whether it is cut short, so each test draws beside a ResizeObserver, which jsdom lacks.
 beforeEach(() => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -38,7 +29,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws a parent task folding one child, and a task beside them, recording what was opened and chosen. */
 function drawList(opened: string[], chosen: ReadonlySet<string>[]): HTMLElement {
   function Rows(): React.JSX.Element {
     const [open, setOpen] = useState(true);
@@ -79,7 +69,6 @@ function drawList(opened: string[], chosen: ReadonlySet<string>[]): HTMLElement 
   return container;
 }
 
-/** The press that opens the task named `name`. */
 function pressOf(container: HTMLElement, name: string): HTMLButtonElement {
   const press = [...container.querySelectorAll<HTMLButtonElement>("[data-card-press]")].find(
     (each) => each.textContent?.includes(name),
@@ -88,7 +77,6 @@ function pressOf(container: HTMLElement, name: string): HTMLButtonElement {
   return press;
 }
 
-/** The names of the rows drawn, in order. */
 function namesOf(container: HTMLElement): readonly string[] {
   return [...container.querySelectorAll("[data-card-press]")].map((each) => each.textContent ?? "");
 }

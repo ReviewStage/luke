@@ -15,22 +15,6 @@ import {
   nextRowOrHead,
 } from "./dialog.js";
 
-/**
- * dialog.test.ts -- a dialog opened from a button takes the keyboard and
- * keeps Tab among its own controls, links and selects among them and
- * whatever is out of the Tab order not; Escape, a press on the dimmed
- * window, or its owner taking it away puts it away and hands focus back to
- * the button; a press dragged out of the card puts nothing away; an input
- * method's keys stay the method's; no key or press inside reaches the window
- * behind; a busy dialog holds focus on its card until it is done, and
- * its owner still hears it asked away meanwhile; one
- * given a title and actions is named by the title, its answers after what
- * it holds; one its owner closes through `open` fades out before it
- * goes, or goes at once where motion is held, and hands focus back once it
- * has gone; and one whose act took its opener's row away hands focus to the
- * row after it, or to the list's head where none is left.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -51,14 +35,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** What the window behind the dialog heard, which should be nothing, and the keys the dialog heard. */
 interface Heard {
   keys: string[];
   presses: number;
   dialogKeys: string[];
 }
 
-/** A window holding the button that opens a dialog with a field and two answers, and a button that withdraws it. */
 function Owner({ heard, busy }: { heard: Heard; busy: boolean }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(true);
@@ -98,7 +80,6 @@ function Owner({ heard, busy }: { heard: Heard; busy: boolean }): React.JSX.Elem
   );
 }
 
-/** Draws `element` into the page. */
 function draw(element: React.ReactElement): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -106,24 +87,20 @@ function draw(element: React.ReactElement): void {
   act(() => root.render(element));
 }
 
-/** The button named `name`. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll("button")].find((each) => each.textContent === name);
   return found ?? expect.fail(`no ${name} button`);
 }
 
-/** The modal card of `role`, if one stands. */
 function card(role: string = DIALOG_ROLE.DIALOG): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[role="${role}"][aria-modal="true"]`);
 }
 
-/** The card's name, read from what its `aria-labelledby` points at. */
 function nameOf(element: HTMLElement): string | null | undefined {
   const id = element.getAttribute("aria-labelledby");
   return id === null ? undefined : document.getElementById(id)?.textContent;
 }
 
-/** A key pressed on whatever holds focus. */
 function key(name: string, init: KeyboardEventInit = {}): void {
   act(() => {
     (document.activeElement ?? document.body).dispatchEvent(
@@ -132,7 +109,6 @@ function key(name: string, init: KeyboardEventInit = {}): void {
   });
 }
 
-/** A press that goes down on `from` and comes up on `to`. */
 function press(from: Element, to: Element): void {
   act(() => {
     from.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
@@ -140,12 +116,10 @@ function press(from: Element, to: Element): void {
   });
 }
 
-/** Whether `element` holds the keyboard. */
 function holds(element: Element | null | undefined): boolean {
   return element !== null && element !== undefined && document.activeElement === element;
 }
 
-/** The owner drawn and its dialog opened from its button, which holds focus as it is pressed. */
 function opened(busy = false) {
   const heard: Heard = { keys: [], presses: 0, dialogKeys: [] };
   draw(createElement(Owner, { heard, busy }));
@@ -409,7 +383,6 @@ test("an owner asks its dialog away through its handle as Escape would, a draft 
   expect(dismissals).toBe(1);
 });
 
-/** A dialog that opens a second over itself, as a confirm asked from inside a settings card is. */
 function Stacked({ onOuter, onInner }: { onOuter: () => void; onInner: () => void }) {
   const [inner, setInner] = useState(false);
   return createElement(Dialog, {
@@ -454,7 +427,6 @@ test("a dialog opened over another is the one Escape puts away, and the one bene
   expect(dismissed).toEqual(["inner", "outer"]);
 });
 
-/** A window holding the button that opens a dialog through `open`, whose Done closes it the same way. */
 function OpenOwner({ onExited }: { onExited?: (() => void) | undefined }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return createElement(
@@ -471,7 +443,6 @@ function OpenOwner({ onExited }: { onExited?: (() => void) | undefined }): React
   );
 }
 
-/** The owner drawn, its dialog opened from its button, and then closed by Done. */
 function closedThroughOpen(onExited?: () => void): HTMLButtonElement {
   draw(createElement(OpenOwner, { onExited }));
   const opener = button("Rename");
@@ -538,7 +509,6 @@ test("a dialog that never opened has no exit to tell its owner of", () => {
   expect(gone).not.toHaveBeenCalled();
 });
 
-/** A list of rows, each with a Delete that asks first in a dialog whose answer takes the row away, focus handed on as `nextRowOrHead` says. */
 function RowsOwner({ names }: { names: readonly string[] }): React.JSX.Element {
   const [rows, setRows] = useState(names);
   const [asked, setAsked] = useState<string | undefined>(undefined);
@@ -576,7 +546,6 @@ function RowsOwner({ names }: { names: readonly string[] }): React.JSX.Element {
   );
 }
 
-/** The rows drawn, the one named `name` asked about from its own button, and the question answered Delete. */
 function deletedFromList(names: readonly string[], name: string): void {
   draw(createElement(RowsOwner, { names }));
   const opener = button(name);
@@ -609,7 +578,6 @@ test("a dialog whose act took the last row hands focus to the list's head", () =
   expect(holds(button("Alpha"))).toBe(true);
 });
 
-/** One row that asks before it is deleted, its question drawn inside it, so deleting it takes the question with it. */
 function AskingRow({ name, onDelete }: { name: string; onDelete: () => void }): React.JSX.Element {
   const [asked, setAsked] = useState(false);
   return createElement(
@@ -626,7 +594,6 @@ function AskingRow({ name, onDelete }: { name: string; onDelete: () => void }): 
   );
 }
 
-/** A list whose rows each hold their own question. */
 function AskingRows({ names }: { names: readonly string[] }): React.JSX.Element {
   const [rows, setRows] = useState(names);
   return createElement(
@@ -654,7 +621,6 @@ test("a dialog unmounted with the row its act took away hands focus to the row a
   expect(holds(button("Gamma"))).toBe(true);
 });
 
-/** Threads in a list, each holding its comments in a list of their own, and the one comment of the first thread asked about; deleting it takes its thread with it. */
 function ThreadsOwner(): React.JSX.Element {
   const [threads, setThreads] = useState(["First", "Second"]);
   const [asked, setAsked] = useState(false);

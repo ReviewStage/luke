@@ -1,13 +1,4 @@
-/* chip.css -- what the chip's utilities cannot say (`chip.tsx`, drawn in
-   the shared Tailwind theme): a tone's ink and the dot it draws where the
-   chip leads with no glyph, the motions a chip arrives and waits in, and
-   how a name cut in its middle keeps its end. */
-
 @layer components {
-  /* A compact chip a finger presses takes the press a finger's target
-     across at least, centered on it, while it draws at its own size, as a
-     compact button does (`../button/button.css`). A removable chip is a box
-     of two presses, its words and its ×, so it keeps each its own. */
   @media (pointer: coarse) {
     :is(button, a).ui-chip[data-size="compact"] {
       position: relative;
@@ -24,13 +15,6 @@
     }
   }
 
-  /* The end stands whole while the start can give way; once the start is
-     gone and the chip narrower still, the end gives way from its own start,
-     its last characters kept, rather than losing them at the chip's edge.
-     Note that it stays here, because the Pull request tab's narrow header
-     test lays this class in markup of its own
-     (`pull-request-header-narrow.test.ts`), and each part keeps its spaces,
-     because a flex item drops one at its edge. */
   .ui-chip-name-end {
     display: inline-flex;
     flex: none;
@@ -41,12 +25,6 @@
     white-space: pre;
   }
 
-  /* A removable chip was added to the field it stands in, so it springs in
-     from a smaller size as it arrives, its opacity over the quick beat and
-     its scale on the fast spring. One a `ListMotion` follows
-     (`data-motion-key`) arrives and leaves by the motion instead, which
-     scales it the same way, so the two never play at once. Note that the
-     keyframes stay here, because `attachment-chip.css` springs in by them. */
   .ui-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
       ui-chip-fade-in var(--ui-duration-quick) var(--ui-motion-exit) backwards,
@@ -65,19 +43,12 @@
     }
   }
 
-  /* A tone is said in the chip's mark alone, whatever its look: its leading
-     glyph wears the state's ink, or, where it leads with none, a dot of it
-     stands before its words, as a task's status mark says where it stands.
-     Note that these stay here, because whether the dot stands turns on what
-     the chip holds (`:has()`), and the glyph and the dot read one ink. */
   .ui-chip[data-tone] .ui-chip-face > :is(svg, img):first-child:not(.settings-chevron) {
     color: var(--ui-chip-tone);
   }
 
-  /* Note that the dot is drawn only where nothing but the chevron is a
-     glyph, because a leading mark already says the state in its color. */
   .ui-chip[data-tone]
-  .ui-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
+    .ui-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
     content: "";
     flex: none;
     width: 7px; /* off-scale: a status dot */
@@ -86,14 +57,10 @@
     background: var(--ui-chip-tone);
   }
 
-  /* Its leading mark and its dot are in its status tone's ink (`tokens/status-tone.css`). */
   .ui-chip[data-tone] {
     --ui-chip-tone: var(--ui-tone-ink);
   }
 
-  /* Busy, a change it made is out, and what it holds pulses until
-     answered, its face standing whole beneath. Note that it stays here for
-     its keyframes, held still with every loop (`--ui-loop-motion`). */
   .ui-chip[aria-busy="true"] > .ui-chip-face {
     animation: ui-chip-wait 1.2s ease-in-out infinite;
     animation-play-state: var(--ui-loop-motion);

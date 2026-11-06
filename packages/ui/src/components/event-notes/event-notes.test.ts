@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { EventNotes } from "./event-notes.js";
 
-/**
- * event-notes.test.ts -- notes past their first three wait behind
- * "Show 2 more", drawn hidden until found, and they open whole when a find's
- * match lands in one. Synthetic notes.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

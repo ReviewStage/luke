@@ -1,15 +1,3 @@
-/**
- * inbox.ts -- what an agent posted for the developer (`inbox-wire.ts`, `account-inbox-wire.ts`), read, answered, closed, messaged, and marked read, and a thread a member starts.
- *
- * The three reads, a task's, an agent's, and the account's, are held by the
- * service while nothing changed since the reader's cursor, and travel as
- * long-held JSON procedures rather than event iterators, so the wire is the
- * one the desktop already reads. A procedure that takes both an item's id
- * and a body is declared `detailed`, so the body is read whole as its own
- * schema; every output is its wire schema flipped
- * (`packages/service/src/orpc/base.ts`).
- */
-
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
@@ -34,14 +22,11 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
 
-/** A nod is a revision and a key, so a few hundred bytes hold it. */
 const NOD_BODY_BYTES = 1_024;
 
-/** A close is a revision, a key, and the note it may carry: the note's words at JSON's widest escape, its files, and room for the rest. */
 const CLOSE_BODY_BYTES =
   6 * INBOX_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048;
 
-/** A message is its words, the files a message may carry, and the answer it may carry: the words' and the answer's picks and values at JSON's widest escape, the files, and room for the key, the ask, and the steps. */
 const MESSAGE_BODY_BYTES =
   6 *
     (INBOX_BOUNDS.MAX_MESSAGE_CHARS +
@@ -51,19 +36,15 @@ const MESSAGE_BODY_BYTES =
   MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
 
-/** A new thread is a subject, its first message's words and files, and room for the agent's id and the key: the words at JSON's widest escape, the files, and the rest. */
 const START_BODY_BYTES =
   6 * (INBOX_BOUNDS.MAX_TITLE_CHARS + INBOX_BOUNDS.MAX_MESSAGE_CHARS) +
   MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
 
-/** A request to mark every item read names at most a workspace, so a few hundred bytes hold it. */
 const READ_ALL_BODY_BYTES = 1_024;
 
-/** A reminder is one instant or none, so a few hundred bytes hold it. */
 const REMIND_BODY_BYTES = 1_024;
 
-/** The public paths that name a task, an agent, or an item by its id. */
 const INBOX_PROCEDURE_PATH = {
   TASK: "/api/plans/{id}/inbox",
   AGENT: "/api/agents/{id}/inbox",
@@ -75,10 +56,8 @@ const INBOX_PROCEDURE_PATH = {
   ITEM_SNOOZE: "/api/inbox/{id}/snooze",
 } as const;
 
-/** The id a path names; one that is no UUID is answered as not found, so it is read as text here. */
 const pathIdSchema = EffectSchema.Struct({ id: EffectSchema.String });
 
-/** A held read past the reader's cursor, the start where it names none. */
 const pastCursorSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   after: EffectSchema.optionalKey(inboxCursorSchema),
@@ -166,7 +145,6 @@ export const inboxContract = {
     )
     .input(exactBodyInput(pathIdSchema, inboxRemindRequestSchema))
     .output(EffectSchema.flip(inboxReadStateSchema)),
-  /** `remindItem` under the path a desktop built before the rename still calls; goes once the releases after it are out. */
   snoozeItem: hostedProcedure
     .meta(bodyCap(REMIND_BODY_BYTES))
     .meta(

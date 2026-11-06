@@ -1,7 +1,3 @@
-/**
- * sentry-reporting.test.ts -- a desktop process's failures as Sentry would receive them: a client of Sentry's own core over a transport that writes down what it would have sent.
- */
-
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import * as Sentry from "@sentry/core";
@@ -12,25 +8,20 @@ import {
   sentryReporterLayer,
 } from "./sentry-reporting.js";
 
-/** A DSN on a reserved domain, which the recording transport never posts to. */
 const FIXTURE_SENTRY_DSN = "https://public@sentry.invalid/1";
 
-/** An event as the suite reads it: its level, and its exceptions' types and messages. */
 interface SentEvent {
   readonly level: string | undefined;
   readonly exceptions: readonly { readonly type: string; readonly value: string }[];
 }
 
-/** What a client is handed to build an event from: whatever was thrown, as Sentry types it. */
 type Thrown = Parameters<Sentry.Client["eventFromException"]>[0];
 
-/** What a suite reads back: every error event sent, and the capture a process hands its reporter. */
 interface RecordingSentry {
   readonly sent: SentEvent[];
   readonly sentry: SentryCapture;
 }
 
-/** A client of Sentry's core, which builds events as the Electron SDKs' clients do, for a suite. */
 class FixtureClient extends Sentry.Client {
   constructor(options: Sentry.ClientOptions) {
     super(options);
@@ -51,7 +42,6 @@ class FixtureClient extends Sentry.Client {
   }
 }
 
-/** The error events in a serialized envelope: a header line, then a line of item header and a line of payload per item. */
 function eventsOf(body: string): SentEvent[] {
   const [, ...lines] = body.split("\n").filter((line) => line.length > 0);
   const events: SentEvent[] = [];
@@ -70,12 +60,6 @@ function eventsOf(body: string): SentEvent[] {
   return events;
 }
 
-/**
- * Sentry started over a recording transport, as the current client, with
- * `beforeSend` where a test gives one. `delivered`, where given, is when each
- * send completes, so a test can hold a report in flight as a slow network
- * would.
- */
 function recordingSentry(
   options: {
     beforeSend?: Sentry.ClientOptions["beforeSend"];
@@ -177,7 +161,6 @@ it.effect(
 
 it.effect("a failed launch is sent as fatal, and returns only once its event has left", () =>
   Effect.gen(function* () {
-    // Note that the network is held by hand, because the quit after a failed launch takes whatever is still in flight.
     let release = () => {};
     const network = new Promise<void>((resolve) => {
       release = resolve;

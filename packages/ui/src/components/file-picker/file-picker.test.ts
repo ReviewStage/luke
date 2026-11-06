@@ -6,11 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useFilePicker } from "./file-picker.js";
 
-/**
- * file-picker.test.ts -- a press opens the hidden input, a pick hands its files over in order and
- * clears the input, and the input carries the accept and multiple it was given.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

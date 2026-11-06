@@ -1,50 +1,14 @@
-/* toolbar.css -- Toolbar: one row at the window's bar height, its parts at
-   the control gap; each edge inset by name, at its column's words or at the
-   column's own edge; the heading taking the room left so the actions end
-   the bar, and a tag after its title on its last baseline. The lead, the
-   title, the tag, and the actions are utilities (`toolbar.tsx`); the row,
-   the heading, and the picked-up name stay here, where the window's
-   custom properties, a style query, and a narrow room restyle them.
-
-   The window the bar stands in answers for what the bar cannot know, by
-   custom properties it sets on the room around a bar, which the bar reads
-   as it draws and no stylesheet of the window reaches into the bar to
-   change:
-
-   - `--ui-toolbar-height`, the row, and `--ui-toolbar-block-inset`,
-     what the row's top and bottom are padded by.
-   - `--ui-toolbar-start-at` and `--ui-toolbar-end-at`, where an edge
-     stands in place of its named inset: past the window's own buttons,
-     which stand over it, or at a column's edge.
-   - `--ui-toolbar-ground`, what the row is drawn on where it is not the
-     window's own.
-   - `--ui-toolbar-center: on`, the title centered over the bar's column
-     between what stands at each side; the bar's start is then where the
-     column's own inset stands and `--ui-toolbar-start-at` is room kept
-     for the window's buttons.
-   - `--ui-toolbar-wrap-start` and `--ui-toolbar-wrap-end`, where a tab
-     strip's bar stands its edges in a narrow room, which wraps the strip
-     to a row of its own. */
-
 @layer components {
-  /* A bar's height, a row and its hairline, where nothing names the
-     window's: the shell sets it level with its title bar. */
   :root {
     --ui-toolbar-height: calc(var(--ui-control-height) + 2 * var(--ui-space-8) + 1px);
   }
 
-  /* Where a column's controls start (the column's own edge), and where its
-     words start, a row's inset further in, which is where a row's padding
-     puts them; words on no row (a page's title) start there too, so a
-     column reads down one edge. */
   .ui-toolbar {
     --ui-toolbar-column-inset: var(--ui-space-12);
     --ui-toolbar-page-inset: calc(var(--ui-toolbar-column-inset) + var(--ui-row-inset));
     --ui-toolbar-start: var(--ui-toolbar-page-inset);
     --ui-toolbar-end: var(--ui-toolbar-page-inset);
     --ui-toolbar-edge-block: var(--ui-toolbar-block-inset, var(--ui-space-8));
-    /* A bar tucked under another may stand its controls flush with its top,
-       the room above them the bar over it already keeps (`--ui-toolbar-top-inset`). */
     --ui-toolbar-edge-top: var(--ui-toolbar-top-inset, var(--ui-toolbar-edge-block));
     --ui-toolbar-edge-start: var(--ui-toolbar-start-at, var(--ui-toolbar-start));
     --ui-toolbar-edge-end: var(--ui-toolbar-end-at, var(--ui-toolbar-end));
@@ -60,9 +24,6 @@
     background: var(--ui-toolbar-ground, transparent);
   }
 
-  /* Only the desktop's window is dragged by its bar, and what stands on the
-     bar keeps its presses: the actions, a title that opens what it names,
-     a title holding the page's menu, and the buttons of a lead. */
   [data-ui-profile="desktop"] .ui-toolbar {
     -webkit-app-region: drag;
   }
@@ -86,10 +47,6 @@
     flex: 1;
   }
 
-  /* A tag stands on the title's last baseline, as a devtool's Beta label
-     does: the last, because a title led by crumbs ends in its own name. A
-     detail stands there too, and the title beside it may be cut short once
-     the detail has given way. */
   .ui-toolbar-heading:has(> :is(.ui-toolbar-tag, .ui-toolbar-detail)) {
     display: flex;
     align-items: last baseline;
@@ -101,12 +58,7 @@
     min-width: 0;
   }
 
-  /* A phone's look: one control in each corner, one control wide, and the
-     title centered between them, cut where it meets them. Each part stands
-     in its own column, so a corner left empty leaves the title centered. */
   .ui-toolbar[data-look="phone"] {
-    /* The corners stand at the column's own edge: a phone draws no window
-       buttons over them. */
     --ui-toolbar-start-at: initial;
     --ui-toolbar-end-at: initial;
 
@@ -137,12 +89,6 @@
     justify-content: flex-end;
   }
 
-  /* A tab strip's bar leads with its strip, which a narrow room has no room
-     for beside the window's buttons and the actions, so the strip takes a row
-     of its own under them, as a phone's browser stands its tabs under its
-     address bar. The actions keep the top row's end, both rows clear of the
-     window's buttons at either edge, and the row beneath reaches past that
-     clearance to the column's own inset, its whole width. */
   [data-room="narrow"] .ui-toolbar[data-look="tabs"] {
     flex-wrap: wrap;
     padding-right: var(--ui-toolbar-wrap-end, var(--ui-toolbar-end));
@@ -174,24 +120,11 @@
     margin-left: auto;
   }
 
-  /* The bar's own width is what its slots' rules answer, so a control folds
-     before the title or the tabs beside it do. */
   .ui-toolbar[data-measure="true"] {
     container: ui-toolbar / inline-size;
   }
 
-  /* A bar whose heading may take a row of its own (`wrapHeading`) answers
-     its own width. Narrower than its lead, its crumbs, and its actions need
-     beside one another, the heading takes a row of its own under them, the
-     whole bar wide, each crumb cut short by its share as anywhere, and the
-     actions keep the top row's end; narrower still, the lead's labeled
-     controls draw their glyphs alone, named still. Note that it wraps only
-     by that rule, because the heading's basis is nothing until then. */
   .ui-toolbar[data-wrap-heading="true"] {
-    /* Where the heading's row stands its words: the column's words inset
-       at both edges, less a crumb's pill pad at the start
-       (`breadcrumb-pill-inline`), so the crumbs' words, not their pills,
-       start where the column's words do. */
     --ui-toolbar-wrap-heading-start: var(
       --ui-toolbar-wrap-heading-at,
       calc(var(--ui-toolbar-page-inset) - var(--ui-space-4))
@@ -206,14 +139,6 @@
     row-gap: 0;
   }
 
-  /* The top row keeps the bar's own height, its lead and actions centered in
-     it as in a bar of one row, so it stands level with every other bar and
-     the card under it starts where it always does. The heading's row stands
-     under it as a pane's bar does (`PaneBar`), one pane bar high with its
-     crumbs centered, at the top of what the bar heads rather than across its
-     edge, and reaches past any room the top row keeps for the window's
-     buttons to the column's words inset; it is what the bar heads, so the
-     window is not dragged by it. */
   .ui-toolbar[data-wrapped="true"] > :is(.ui-toolbar-lead, .ui-toolbar-actions) {
     min-height: calc(var(--ui-toolbar-height) - 2 * var(--ui-toolbar-edge-block));
     margin-bottom: var(--ui-toolbar-edge-block);
@@ -251,18 +176,10 @@
     }
   }
 
-  /* Every labeled control of the bar draws its glyph alone, named still. */
   .ui-toolbar[data-folded="true"] {
     --ui-fold: folded;
   }
 
-  /* Where the window sets the bar to center its title over a column (a list
-     whose first control stands past the window's buttons), the title stands
-     centered in the bar, each side holding at least what stands there: the
-     room kept for the window's buttons at the start, the actions at the end.
-     The title moves aside only once it would meet them, and is cut short only
-     once it no longer fits between them. The bar is inset alike on both
-     sides, so centered in the bar is centered in the column. */
   @container style(--ui-toolbar-center: on) {
     .ui-toolbar {
       display: grid;
@@ -290,12 +207,6 @@
     }
   }
 
-  /* A document's name, picked up from its header once that has scrolled
-     away: it stands where a title would, arriving over the quick duration
-     with a short rise on the spring, and leaving as a fade over the exit,
-     after which it is taken from the pointer and stands ready to rise
-     again. Reduced motion and a capture run zero the durations, so it
-     lands and leaves at once. */
   .ui-toolbar-pick-up {
     display: block;
     min-width: 0;

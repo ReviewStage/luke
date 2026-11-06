@@ -27,13 +27,6 @@ import {
   teammateCreator,
 } from "./actor-model.js";
 
-/**
- * Whoever did something is named in the reader's own words, "you" and
- * "your" for their own, a teammate by name, and a member read against the
- * workspace's members for their picture, or as having left where the read
- * no longer lists them. Synthetic accounts.
- */
-
 const DANA: WorkspaceMember = {
   userId: "user-dana",
   name: "Dana Reyes",
@@ -89,7 +82,6 @@ test("a member named on the wire is read against the workspace's members: their 
     name: "Lee Park",
     userId: "user-lee",
   });
-  // Before the members answer, the wire's name stands alone and nobody is taken for gone.
   assert.deepEqual(personActor({ userId: "user-lee", name: "Lee Park" }, undefined, SAM.userId), {
     kind: ACTOR_KIND.PERSON,
     userId: "user-lee",
@@ -115,12 +107,10 @@ test("an identity's hue is read off its id alone, so a rename keeps it, and its 
 const SAM_READS: EditReader = { members: [DANA, SAM], readerId: SAM.userId };
 const DANA_REF = { userId: DANA.userId, name: DANA.name };
 
-/** What an actor is called, as `actorName` says it; nothing for no actor. */
 function called(actor: Actor | undefined, possessive = false): string | undefined {
   return actor === undefined ? undefined : actorName(actor, { possessive });
 }
 
-/** An activity in a line, as `activityWords` says it; nothing for none. */
 function said(activity: ActorActivity | undefined): string | undefined {
   return activity === undefined ? undefined : activityWords(activity);
 }
@@ -214,7 +204,6 @@ test("two agents of one name each keep a face, told apart by their ids, and agen
 
   assert.equal(editors([edit("agent-1"), edit("agent-2"), edit("agent-1")]).length, 2);
   assert.equal(editors([edit(), edit()]).length, 1);
-  // An edit with no id never hides two agents its name matches, whichever section stands first.
   assert.equal(editors([edit(), edit("agent-1"), edit("agent-2")]).length, 3);
   assert.equal(editors([edit("agent-1"), edit("agent-2"), edit()]).length, 3);
 });
@@ -238,7 +227,6 @@ test("a task wears its creator only where someone other than the reader created 
   const dana = { createdBy: DANA_REF, ownerId: DANA.userId };
   assert.equal(called(teammateCreator(dana, SAM_READS)), "Dana Reyes");
   assert.equal(teammateCreator(dana, { ...SAM_READS, readerId: DANA.userId }), undefined);
-  // A member who left is drawn as having left, and an account that is gone sends only its id.
   assert.deepEqual(teammateCreator(dana, { members: [SAM], readerId: SAM.userId }), {
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,
@@ -249,7 +237,6 @@ test("a task wears its creator only where someone other than the reader created 
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.UNNAMED,
   });
-  // Nobody is worn where the row cannot tell the task is someone else's.
   assert.equal(teammateCreator({}, SAM_READS), undefined);
   assert.equal(teammateCreator(dana, { members: [DANA, SAM], readerId: undefined }), undefined);
 });
@@ -258,9 +245,7 @@ test("a task wears who is on it: a teammate assigned by their face, no one on th
   const assigned = { assignee: DANA_REF, createdBy: SAM, ownerId: SAM.userId };
   assert.equal(called(assigneeFace(assigned, SAM_READS)?.assignee), "Dana Reyes");
   assert.equal(assigneeFace(assigned, { ...SAM_READS, readerId: DANA.userId }), undefined);
-  // A task no one is on wears the unassigned mark, the reader's own included.
   assert.deepEqual(assigneeFace({ assignee: undefined }, SAM_READS), { assignee: undefined });
-  // An assignee who left is drawn as having left.
   assert.deepEqual(assigneeFace(assigned, { members: [SAM], readerId: SAM.userId })?.assignee, {
     kind: ACTOR_KIND.SOMEONE,
     reason: SOMEONE_REASON.FORMER,

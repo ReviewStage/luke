@@ -1,15 +1,4 @@
-/* disclosure.css -- what of a fold its utilities (`disclosure.tsx`: the
-   summary in each look, the body at each inset) leave here: a card, on the
-   hover's wash inside a hairline, which a frame wears as a fold does; a
-   head with controls of its own, laid out by subgrid and filled under the
-   pointer through `:has()`; the chevron turned down while open, which the
-   tests read here; and the motion a press plays as the body lands or
-   leaves, which any fold built on `useDisclosureFold` shares. */
-
 @layer components {
-  /* A card, clipped to its corners so its head's hover fill follows them and
-     a ring inside it is drawn inside its control, in the caption's type; a
-     card whose head holds controls is its frame, so they stand inside it. */
   :is(.ui-disclosure, .ui-disclosure-frame):is([data-look="card"], [data-look="dock"]) {
     --ui-focus-ring-offset: var(--ui-focus-ring-inset);
     overflow: clip;
@@ -19,17 +8,10 @@
     font-size: var(--ui-type-caption-size);
   }
 
-  /* A dock stands on the card ground a list's card does, so two docks stacked over the composer read as one system. */
   :is(.ui-disclosure, .ui-disclosure-frame)[data-look="dock"] {
     background: var(--ui-color-surface);
   }
 
-  /* A head with controls of its own (`DisclosureFrame`): one row of the
-     controls before the summary, the summary, and the controls after it,
-     the `details` laid into the frame by subgrid so its summary takes the
-     middle cell and its body the row under all three. Note that a closed
-     body's box is the platform's, hidden and no height, so a closed fold is
-     the row alone. */
   .ui-disclosure-frame {
     --ui-disclosure-gap: var(--ui-icon-gap);
     --ui-disclosure-inset-start: 0px;
@@ -89,9 +71,6 @@
     grid-column: 3;
   }
 
-  /* The row's inset, a summary's own at each end, goes to the cell standing
-     at that end (the summary drops its own there, `disclosure.tsx`), and the
-     summary meets the cell at the row's gap. */
   .ui-disclosure-frame:has(> details > .ui-disclosure-summary:not([data-look])) {
     --ui-disclosure-inset-start: var(--ui-space-4);
     --ui-disclosure-inset-end: var(--ui-space-4);
@@ -102,9 +81,6 @@
     --ui-disclosure-inset-end: var(--ui-space-12);
   }
 
-  /* A row's start is a step shorter than its end, because the chevron's
-     press there keeps a step of its own around its glyph, so the glyph and
-     the last words at the end stand the same inset from either edge. */
   .ui-disclosure-frame:has(> details > .ui-disclosure-summary[data-look="row"]) {
     --ui-disclosure-gap: var(--ui-space-8);
     --ui-disclosure-inset-start: var(--ui-space-8);
@@ -113,9 +89,6 @@
     white-space: nowrap;
   }
 
-  /* The row's fill under the pointer, across the cells and the summary
-     alike, as one row wears it; a transcript's line leaves its fill to its
-     fold's skin. The rule under an open file row is the frame's too. */
   .ui-disclosure-frame::before {
     z-index: -1;
     align-self: stretch;
@@ -134,23 +107,20 @@
     border-radius: 0;
   }
 
-  /* Note that each of these selectors holds no comma inside its brackets,
-     because the touch-density test reads a rule's selectors by its commas. */
   @media (hover: hover) {
     .ui-disclosure-frame:has(
-      > details > .ui-disclosure-summary:not([data-look="transcript"]):hover
-    )::before {
+        > details > .ui-disclosure-summary:not([data-look="transcript"]):hover
+      )::before {
       background: var(--ui-color-fill-strong);
     }
 
     .ui-disclosure-frame:has(> details > .ui-disclosure-summary:not([data-look="transcript"])):has(
-      > :not(details):hover
-    )::before {
+        > :not(details):hover
+      )::before {
       background: var(--ui-color-fill-strong);
     }
   }
 
-  /* A tap draws the press, since the hover above stands only where there is one. */
   .ui-disclosure-frame:has(
     > details > .ui-disclosure-summary:not([data-look="transcript"]):active
   )::before {
@@ -163,15 +133,10 @@
     box-shadow: inset 0 -1px 0 var(--ui-color-border);
   }
 
-  /* Inline, so that a chevron after words inside a line (a text button's
-     "3 tools") stays on the words' line rather than dropping under them as a
-     block would; in a summary, itself a flex row, it is a flex item either way. */
   .ui-disclosure-turn {
     display: inline-flex;
     flex: none;
     color: var(--ui-color-text-muted);
-    /* The chevron turns on the beat the body unrolls on, so the fold reads
-       as one gesture rather than two that settle apart. */
     transition: transform var(--ui-duration-pane) var(--ui-motion-pane);
   }
 
@@ -185,15 +150,6 @@
     transform: rotate(90deg);
   }
 
-  /* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in
-     the layout at once and rides in on the pair an arriving element rides: a
-     fade, and a clip unrolling it from its top edge, on the panes' plain
-     ease-out, since a clip that overshot would cut nothing. Closing, it fades
-     out first and the layout lands once the fade is done. Nothing moves a
-     height, so the words never re-wrap mid-motion, and a body still growing
-     as it streams is unrolled by a fraction of its own box rather than a size
-     it was measured at. Only the press marks the root, so a find opening a
-     fold onto a match, or a row drawn again, appears at once. */
   [data-disclosure="opening"] > .ui-disclosure-body {
     animation:
       ui-disclosure-fade var(--ui-duration-quick) var(--ui-motion-pane) backwards,
@@ -202,9 +158,6 @@
 
   [data-disclosure="closing"] > .ui-disclosure-body {
     animation: ui-disclosure-leave var(--ui-duration-exit) var(--ui-motion-exit) forwards;
-    /* Note that the hold waits on every motion the body runs, and a body that
-       held focus would start the scrollbar's own fade as it lost it, so the
-       exit is the one motion it has. */
     transition: none;
   }
 
@@ -214,8 +167,6 @@
     }
   }
 
-  /* Note that the clip names both ends, because a clip cannot be interpolated
-     from none: it would flip halfway through instead. */
   @keyframes ui-disclosure-unroll {
     from {
       clip-path: inset(0 0 100% 0);

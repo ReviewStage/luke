@@ -6,12 +6,6 @@ import { accountBearer } from "./account-call.js";
 import { HostedIntegrationsClient } from "./integration-client.js";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 
-/**
- * The account's integrations as the host asks the service about one
- * account: a call about an account other than a provider's first names it
- * in the query, and a Connect that adds one says so.
- */
-
 const client = new HostedIntegrationsClient({
   serviceBaseUrl: "https://vespin.dev",
   credential: accountBearer({

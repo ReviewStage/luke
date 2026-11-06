@@ -1,36 +1,3 @@
-/**
- * tab-strip-model.ts -- what a tab of the window's two strips is, and how a strip orders, remembers, and replaces its tabs, as an editor's does.
- *
- * The task's column and the side panel each hold a strip of tabs over the
- * open task (the desktop's `tasks/use-main-tabs.ts` and
- * `tasks/use-side-panel.ts`). A tab is either a word
- * its column names it by, such as the plan's own or the side panel's Board,
- * or an object naming what it shows: one coding agent, a draft agent not yet
- * started, one subagent, one file, one agent's changes, one agent's
- * terminal, one page, or one Browser tab in an agent's cloud browser. Two
- * tabs are the same where they name the same thing, so a tab rebuilt on
- * every render is still the tab it was.
- *
- * Each strip keeps, per task, the order the developer moved its tabs into
- * and the tabs they viewed, the latest last. What follows is how both
- * strips read and change those two lists alike: a tab the order does not
- * hold stands after those it does, in its kind's place (`inTaskOrder`); a
- * tab opened goes to the strip's end (`openedOrder`); a move takes the tab
- * out and puts it back before the tab standing at its new place
- * (`movedOrder`); and closing the chosen tab chooses the one viewed before
- * it that still stands, and only where none does its neighbor
- * (`replacementOf`), as a browser's tabs do. Each strip also keeps when each
- * tab was last viewed (`stampedViewed`), from which a tab left unviewed long
- * enough closes itself (`idleTabs`, the panel's `tasks/use-idle-tabs.ts`).
- */
-
-/**
- * What each kind of tab whose name is not its subject's is called, wherever
- * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox, the
- * thread the side panel holds beside the window's Inbox, the task's Overview, a draft agent's tab and the "+" row that opens one, an agent the window holds
- * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
- * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
- */
 export const TAB_WORDS = {
   INBOX: "Inbox",
   THREAD: "Thread",
@@ -43,7 +10,6 @@ export const TAB_WORDS = {
   BROWSER: "Browser",
 } as const;
 
-/** A Pull request tab's name once its pull request is read: the pull request's number, then its title, as GitHub names it. */
 export function pullRequestLabelOf(pullRequest: {
   readonly number: number;
   readonly title: string;
@@ -51,74 +17,53 @@ export function pullRequestLabelOf(pullRequest: {
   return `#${pullRequest.number} ${pullRequest.title}`;
 }
 
-/** One coding agent's tab, named by the agent it shows. */
 export interface AgentStripTab {
   readonly agent: string;
 }
 
-/** The tab of an agent not yet started, named by the key its first message will start it under. */
 export interface DraftStripTab {
   readonly draft: string;
 }
 
-/** A worker one of the task's agents delegated to, as its tab carries it: the agent, and the task it handed over, which the tab names itself by. */
 interface SubagentDelegation {
   readonly agent: string;
   readonly task: string;
 }
 
-/** One subagent's tab, named by the call that started it: on the open task's work, or, with the delegation, on one of its agents' turns. */
 export interface SubagentStripTab {
   readonly subagent: string;
-  /** Absent for the brain's worker, whose session the task's work holds. */
   readonly delegation?: SubagentDelegation;
 }
 
-/** One file's tab, named by the file's path in the open task's repository. */
 export interface FileStripTab {
   readonly file: string;
 }
 
-/**
- * One agent's Pull request tab, named by the agent whose pull request it
- * shows: its overview and its changed files. It is spelled `changes`, as
- * the tab that showed the files alone was, so what an earlier version kept
- * and pinned of it still reads. A tab naming a `number` shows that pull
- * request of the agent's repository rather than the one from the branch
- * the agent stands on, such as one it opened before moving to another
- * branch, or one no agent opened.
- */
 export interface ChangesStripTab {
   readonly changes: string;
   readonly number?: number;
 }
 
-/** One agent's Terminal tab, named by the agent in whose sandbox its shells run. */
 export interface TerminalStripTab {
   readonly terminal: string;
 }
 
-/** One cloud agent's Local tab, named by the agent whose files its shells on this Mac stand in. */
 export interface LocalStripTab {
   readonly local: string;
 }
 
-/** One page's tab, named by the page an agent wrote for the task. */
 export interface PageStripTab {
   readonly page: string;
 }
 
-/** One Browser tab in an agent's cloud browser, named by the id the service keeps it under. */
 export interface CloudBrowserStripTab {
   readonly cloudBrowser: string;
 }
 
-/** One coding agent's transcript and composer in the side panel, named by the agent, as an agent mention pressed beside the Inbox opens it. */
 export interface TranscriptStripTab {
   readonly transcript: string;
 }
 
-/** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
   | AgentStripTab
@@ -132,66 +77,46 @@ export type StripTab =
   | PageStripTab
   | CloudBrowserStripTab;
 
-/**
- * Whether a tab is one agent's. Note that each kind is told by the field
- * naming what it shows, which a word, having none, never holds.
- */
 export function isAgentTab(tab: StripTab): tab is AgentStripTab {
   return tab instanceof Object && "agent" in tab;
 }
 
-/** Whether a tab is a draft agent's. */
 export function isDraftTab(tab: StripTab): tab is DraftStripTab {
   return tab instanceof Object && "draft" in tab;
 }
 
-/** Whether a tab is one subagent's. */
 export function isSubagentTab(tab: StripTab): tab is SubagentStripTab {
   return tab instanceof Object && "subagent" in tab;
 }
 
-/** Whether a tab is one file's. */
 export function isFileTab(tab: StripTab): tab is FileStripTab {
   return tab instanceof Object && "file" in tab;
 }
 
-/** Whether a tab is one agent's changes. */
 export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
   return tab instanceof Object && "changes" in tab;
 }
 
-/** Whether a tab is one agent's transcript in the side panel. */
 export function isTranscriptTab(tab: StripTab): tab is TranscriptStripTab {
   return tab instanceof Object && "transcript" in tab;
 }
 
-/** Whether a tab is one agent's terminal. */
 export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
   return tab instanceof Object && "terminal" in tab;
 }
 
-/** Whether a tab is one agent's Local tab. */
 export function isLocalTab(tab: StripTab): tab is LocalStripTab {
   return tab instanceof Object && "local" in tab;
 }
 
-/** Whether a tab is one page's. */
 export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
 }
 
-/** Whether a tab is one of an agent's cloud Browser tabs. */
 export function isCloudBrowserTab(tab: StripTab): tab is CloudBrowserStripTab {
   return tab instanceof Object && "cloudBrowser" in tab;
 }
 
-/**
- * The agent whose tab follows its run now: the one the plan's column
- * shows, while the column is on screen, the plan's page shown and no panel
- * filling the window over it; none otherwise, since a tab out of sight
- * stops following its transcript, and what it last held is no longer the
- * agent's latest step.
- */
 export function followedAgent(
   tab: StripTab | undefined,
   column: { readonly shown: boolean; readonly covered: boolean },
@@ -201,11 +126,6 @@ export function followedAgent(
     : undefined;
 }
 
-/**
- * The coding agent a tab is one of the agent's own: its tab, its Changes
- * tab, its Terminal tab, or its Local tab, which is where a terminal
- * command means that agent (`terminal-entry.ts`); none for any other tab.
- */
 export function agentOfTab(tab: StripTab | undefined): string | undefined {
   if (tab === undefined) return undefined;
   if (isAgentTab(tab)) return tab.agent;
@@ -214,11 +134,6 @@ export function agentOfTab(tab: StripTab | undefined): string | undefined {
   return isTerminalTab(tab) ? tab.terminal : undefined;
 }
 
-/**
- * Whether two tabs are the same tab. A delegated worker's call names it
- * within its agent, as the service names its conversation, so its tab is the
- * pair. No tab, as a column showing its plan has, is the same as none.
- */
 export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boolean {
   if (a === undefined || b === undefined) return false;
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
@@ -238,11 +153,6 @@ export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boole
   return a === b;
 }
 
-/**
- * The key each agent's Terminal tab is drawn under, by agent, made the first
- * time it is asked for. Note that it is not the agent's id, because the
- * agent's Changes tab stands in the same strip under that.
- */
 const terminalKeys = new Map<string, string>();
 
 function terminalKey(agentId: string): string {
@@ -253,7 +163,6 @@ function terminalKey(agentId: string): string {
   return made;
 }
 
-/** The key each agent's Local tab is drawn under, by agent, made the first time it is asked for, apart from its other tabs'. */
 const localKeys = new Map<string, string>();
 
 function localKey(agentId: string): string {
@@ -264,7 +173,6 @@ function localKey(agentId: string): string {
   return made;
 }
 
-/** The key each agent's transcript tab in the side panel is drawn under, by agent, made the first time it is asked for, apart from its Changes tab's and its Terminal tab's. */
 const transcriptKeys = new Map<string, string>();
 
 function transcriptKey(agentId: string): string {
@@ -275,12 +183,6 @@ function transcriptKey(agentId: string): string {
   return made;
 }
 
-/**
- * The key each Pull request tab naming a pull request by its number is
- * drawn under, by agent and then by number, made the first time it is asked
- * for. Note that it is not the agent's id, which the agent's own Pull
- * request tab is keyed by in the same strip.
- */
 const numberedKeys = new Map<string, Map<number, string>>();
 
 function numberedKey(agentId: string, number: number): string {
@@ -293,15 +195,6 @@ function numberedKey(agentId: string, number: number): string {
   return made;
 }
 
-/**
- * A tab's key for a list that draws one element per tab: a word tab's word,
- * the agent's, call's, or draft's own id, which no word spells, or the
- * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by, one naming a
- * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
- * by a key made for its agent (`terminalKey`), a Local tab by another (`localKey`), a page's by the page's
- * own id, and a cloud Browser tab's by the id the service keeps it under.
- */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTranscriptTab(tab)) return transcriptKey(tab.transcript);
@@ -317,11 +210,6 @@ export function tabKey(tab: StripTab): string {
   return isSubagentTab(tab) ? tab.subagent : tab;
 }
 
-/**
- * `drawn` in the task's order: each tab `order` holds first, as it stands
- * there, then the rest as they stood. Note that a tab never moved, such as
- * one just opened, so stands after every tab that was.
- */
 export function inTaskOrder<T>(
   drawn: readonly T[],
   order: readonly StripTab[],
@@ -331,22 +219,10 @@ export function inTaskOrder<T>(
   return [...placed, ...drawn.filter((each) => !placed.includes(each))];
 }
 
-/**
- * The task's order written whole: the tabs `was` already held, those the
- * strip does not draw now among them, such as one closed, then the rest of
- * `strip`, the run of tabs the strip draws now, as it stands.
- */
 function wholeOrder<T extends StripTab>(was: readonly T[], strip: readonly T[]): T[] {
   return [...was, ...strip.filter((each) => !was.some((other) => sameTab(other, each)))];
 }
 
-/**
- * The task's order with the tab opened at the end of `strip`, the run of
- * tabs the strip draws now, as an editor opens a file: the order written
- * whole (`wholeOrder`), so every tab keeps the place it is drawn in, then
- * the tab, taken from wherever the order held it. Nothing where the tab
- * already stands in the strip, which an open only chooses.
- */
 export function openedOrder<T extends StripTab>(
   was: readonly T[],
   strip: readonly T[],
@@ -356,14 +232,6 @@ export function openedOrder<T extends StripTab>(
   return [...wholeOrder(was, strip).filter((other) => !sameTab(other, tab)), tab];
 }
 
-/**
- * The task's order with the tab moved to `to` in `strip`, the run of tabs
- * the strip draws now: the tabs the order already held, those the strip
- * does not draw now among them, such as one closed, then the rest of the
- * strip as it stands, the tab taken out and put back before the tab that
- * stands at `to` now, or after every one where none does. Nothing where the
- * tab does not move.
- */
 export function movedOrder<T extends StripTab>(
   was: readonly T[],
   strip: readonly T[],
@@ -380,11 +248,6 @@ export function movedOrder<T extends StripTab>(
   return place < 0 ? [...rest, own] : [...rest.slice(0, place), own, ...rest.slice(place)];
 }
 
-/**
- * The tabs viewed with `viewed` viewed last, in the order given, each taken
- * from where it stood before, and the oldest let go past `kept`; nothing
- * where they were already viewed so.
- */
 export function viewedLast<T extends StripTab>(
   before: readonly T[],
   viewed: readonly T[],
@@ -398,12 +261,6 @@ export function viewedLast<T extends StripTab>(
   return same ? undefined : recent;
 }
 
-/**
- * The tab chosen in place of the closed one: the latest of `recent` that
- * still stands in `standing`, the strip as the close leaves it, or where
- * none does, the tab after it in `strip`, the strip as it stood, or the one
- * before.
- */
 export function replacementOf<T extends StripTab>(
   standing: readonly T[],
   recent: readonly T[],
@@ -416,13 +273,11 @@ export function replacementOf<T extends StripTab>(
   return strip[place + 1] ?? strip[place - 1];
 }
 
-/** When a tab of a strip was last viewed, in epoch milliseconds: shown on screen, or first known to the strip, whichever is later. */
 export interface ViewedAt<T extends StripTab> {
   readonly tab: T;
   readonly at: number;
 }
 
-/** When the tab was last viewed, as `stamps` holds it; none where it holds nothing of it. */
 export function viewedAtOf<T extends StripTab>(
   stamps: readonly ViewedAt<T>[],
   tab: T,
@@ -430,14 +285,6 @@ export function viewedAtOf<T extends StripTab>(
   return stamps.find((each) => sameTab(each.tab, tab))?.at;
 }
 
-/**
- * The stamps with each of `viewed` viewed at `at`, and each of `standing`
- * that holds no stamp yet stamped at `at` too, as a tab never seen or kept
- * before stamps were counts as viewed now, the stamps newest last and the
- * oldest of tabs not standing let go past `kept`; nothing where every one
- * already stood so. Note that a standing tab's stamp is never let go,
- * because one stamped anew would never grow old enough to close.
- */
 export function stampedViewed<T extends StripTab>(
   before: readonly ViewedAt<T>[],
   viewed: readonly T[],
@@ -459,7 +306,6 @@ export function stampedViewed<T extends StripTab>(
   return all.filter((each) => !loose.includes(each));
 }
 
-/** The stamps without the tab's, as a close leaves them, so a tab opened again counts as viewed anew; the stamps as they are where none was its. */
 export function withoutViewedAt<T extends StripTab>(
   stamps: readonly ViewedAt<T>[],
   tab: T,
@@ -469,12 +315,6 @@ export function withoutViewedAt<T extends StripTab>(
     : stamps;
 }
 
-/**
- * The tabs of `strip` not viewed for `idle` or longer by `now`, those `keeps`
- * holds open left out, the last in the strip first, so each closes at the
- * place it stood and a reopen, latest closed first, stands each back there.
- * A tab with no stamp counts as viewed now.
- */
 export function idleTabs<T extends StripTab>(
   strip: readonly T[],
   stamps: readonly ViewedAt<T>[],

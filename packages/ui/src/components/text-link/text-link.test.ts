@@ -5,15 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { TEXT_LINK_CURRENT, TEXT_LINK_LOOK, TextLink } from "./text-link.js";
 
-/**
- * text-link.test.ts -- a TextLink is a link a reader finds by its words,
- * going where its address says; only the link to where the reader is is
- * announced as current, as the page or as the part of the site; an external
- * link in a new tab opens there and is still named by its words alone; a
- * link with no address is its words and no link; and its press is heard
- * before the browser follows it.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -21,7 +12,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -96,7 +86,6 @@ test("a press on a TextLink is heard, and the link is still followed", () => {
     }),
   );
   const link = container.querySelector("a");
-  // Note that jsdom cannot follow a link, so the page stops it once the press has bubbled past the component.
   document.addEventListener("click", (event) => event.preventDefault(), { once: true });
 
   act(() => link?.click());

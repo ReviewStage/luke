@@ -6,15 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { InlineEdit, type InlineEditEnd } from "./inline-edit.js";
 
-/**
- * inline-edit.test.ts -- words are shown until the caller edits them, then a
- * field named for a reader opens over them with all of them selected;
- * Return and the focus leaving keep what was typed, Escape keeps the words
- * it opened on and goes no further, an input method's Return and Escape end
- * nothing, words left empty or unchanged change nothing, and an edit ends
- * once.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -36,7 +27,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** Types `value` into `field` as the page would hand it to React. */
 function type(field: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -45,7 +35,6 @@ function type(field: HTMLInputElement, value: string): void {
   });
 }
 
-/** Presses a key in `field`, answering whether it went past the field. */
 function press(field: HTMLElement, init: KeyboardEventInit): boolean {
   let heard = false;
   const listen = () => {
@@ -63,10 +52,6 @@ function blur(field: HTMLElement): void {
   act(() => field.blur());
 }
 
-/**
- * A name a caller renames in place, as a list renames a row: Rename opens
- * the edit, every end is kept, and the edit closes on it unless `stays`.
- */
 function Renamed({
   start,
   ends,
@@ -109,7 +94,6 @@ function field(container: HTMLElement): HTMLInputElement | null {
   return container.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
 }
 
-/** The field, which must be open. */
 function opened(container: HTMLElement): HTMLInputElement {
   const input = field(container);
   assert.ok(input);

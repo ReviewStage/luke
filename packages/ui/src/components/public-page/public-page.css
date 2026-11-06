@@ -1,15 +1,4 @@
-/* public-page.css -- what a public page's utilities (`public-page.tsx`)
-   cannot say: the page's rhythm, which its own width steps; the hero's
-   size, which steps the same way; the sections' spacing, which a ruled list
-   undoes; and the fit of what a caller hands its media. The page queries
-   its own width rather than the viewport's, so it is drawn the same in a
-   frame as in a window; a container query cannot read a custom property,
-   so the widths it steps under are literals here, the ones the site steps
-   at. */
-
 @layer components {
-  /* The theme's `pt-public-page-start` and `pb-public-page-end` read the
-     first two. */
   .ui-public-page {
     --ui-public-page-start: var(--ui-space-48);
     --ui-public-page-end: var(--ui-space-64);
@@ -17,8 +6,6 @@
     --ui-public-page-ruled: var(--ui-space-48);
   }
 
-  /* Under 520px of room the page opens and closes nearer its words and
-     sets its sections closer, as the landing does on a phone. */
   /* off-scale: 520px, a phone's landing */
   @container (width < 520px) {
     .ui-public-page > * {
@@ -29,8 +16,6 @@
     }
   }
 
-  /* A page's title, in the landing's display face at a feature's size,
-     stepping down as the landing's headings do on a phone. */
   .ui-public-page-title[data-style="page"] {
     font-family: var(--ui-font-display);
     font-size: var(--ui-display-feature-size, var(--ui-type-title-size));
@@ -46,15 +31,10 @@
     }
   }
 
-  /* The landing's one line, in the site's display style. Note that the
-     window has no display type, so on the desktop profile it falls back to
-     the page title. */
   .ui-public-page-title[data-style="hero"] {
     font-size: var(--ui-display-hero-size, var(--ui-type-title-size));
   }
 
-  /* At 2.25rem the hero needs about 490px, so it steps down before the
-     column can squeeze it. */
   /* off-scale: 576px, where the hero's 2.25rem title needs about 490px and steps down before the column squeezes it */
   @container (width < 576px) {
     .ui-public-page-title[data-style="hero"] {
@@ -66,16 +46,12 @@
     margin-top: var(--ui-public-page-rhythm);
   }
 
-  /* Ruled sections each open under a rule across the column and keep their
-     room inside it, so the rule stands midway between two entries; the last
-     one closes on its own room, with no rule under it. */
   .ui-public-page-sections[data-sections="ruled"] > .ui-public-section {
     margin-top: 0;
     padding-block: var(--ui-public-page-ruled);
     border-top: 1px solid var(--ui-color-border);
   }
 
-  /* What a picture or a recording hands the media fills its frame. */
   .ui-public-media > * {
     display: block;
     width: 100%;

@@ -1,36 +1,18 @@
 import { MARK_ART } from "@repo/brand";
 import React from "react";
 
-// `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
-// Note that the disc spans 20 of a line glyph's 24 units, the span Lucide's
-// circles draw within, so it stands the size of the glyphs beside it.
 const GLYPH_VIEW_BOX = "-10 -10 120 120";
 
 interface ProductMarkProps {
-  /** Draws the mark in the muted text color, where it stands behind what is said over it. */
   muted?: boolean;
-  /** Fills the box that holds it rather than standing at the font's size. */
   fill?: boolean;
-  /** Draws the mark in its holder's ink, where the holder says what it is by its color. */
   inherit?: boolean;
-  /** Draws the small cut, its V opened wider, for a mark 32 pixels across or smaller. */
   small?: boolean;
-  /** Draws the mark inset to a line glyph's weight, at the size its seat gives line glyphs, for a seat it shares with them, such as a nav row's. */
   glyph?: boolean;
 }
 
-/**
- * The product's mark, drawn from `@repo/brand`'s generated `MARK_ART` so every
- * surface that wears it stays tied to the artwork the icons are cut from, in
- * one color, `currentColor`, so its holder decides the ink. Decorative:
- * whatever stands beside it already says the product's name.
- *
- * It stands at the font's size until its holder gives it a box, in the
- * primary ink because it is the product rather than one of the things the
- * product is watching.
- */
 export function ProductMark({
   muted = false,
   fill = false,

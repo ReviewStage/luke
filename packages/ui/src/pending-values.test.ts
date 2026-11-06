@@ -14,12 +14,10 @@ const TASK = "task-1";
 
 const same = (a: string, b: string) => a === b;
 
-/** The pending values of one task, as a press over `viewed` asked `value`. */
 function asked(value: string, viewed: string): PendingValues<string, string> {
   return new Map([[TASK, pendingValue(undefined, value, viewed, same)]]);
 }
 
-/** What stands drawn for the task once the view carries `viewed` at `now`. */
 function drawnAfter(
   held: PendingValues<string, string>,
   viewed: string | undefined,

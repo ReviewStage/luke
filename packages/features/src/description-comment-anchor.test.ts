@@ -5,14 +5,12 @@ import { type CommentSpan, spanWithin, textChange } from "./description-comment-
 const DESCRIPTION =
   "## Goal\n\nAn admin invites a teammate by email, and the invite lands as a single-use link that expires in seven days.\n\n## Approach\n\nThe invite email follows the mock Lee shared.\n";
 
-/** The span of the first place `words` stands in `text`. */
 function spanOf(text: string, words: string): CommentSpan {
   const from = text.indexOf(words);
   assert.ok(from >= 0, `"${words}" is not in the text`);
   return { from, to: from + words.length };
 }
 
-/** The words a span stands over. */
 function wordsAt(text: string, span: CommentSpan | undefined): string | undefined {
   return span === undefined ? undefined : text.slice(span.from, span.to);
 }

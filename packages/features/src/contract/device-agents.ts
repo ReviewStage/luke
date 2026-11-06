@@ -1,17 +1,3 @@
-/**
- * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, says which step a launch it claimed has reached, and settles a line or answers a request.
- *
- * A host joins first (`../host-wire.ts`), a box pairing with a code
- * (`startPairing`, then `pollPairing` until a member approves it) for its
- * device secret, or a member's own desktop enrolling its device on its
- * sign-in (`enrollOwn`), and calls every other procedure on that secret,
- * `leave` among them, which removes the host from its account.
- * Every procedure names the Mac's device id, in the query of a held read
- * and in the body of every other call. The outputs are the wire schemas
- * flipped, so oRPC's output check encodes the handler's value into the
- * bytes the wire carries (`packages/service/src/orpc/base.ts`).
- */
-
 import { openapi } from "@orpc/openapi";
 import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
@@ -42,10 +28,8 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
-/** A register's, a beat's, a claim's, or a settle's body: a few ids and paths, and room to spare. */
 const SMALL_BODY_BYTES = 4 * 1_024;
 
-/** An answer's body: a read at its bound in base64, or a command's two outputs at theirs, and room for the rest. */
 const ANSWER_BODY_BYTES =
   Math.ceil((DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES * 2 * 4) / 3) + 64 * 1_024;
 

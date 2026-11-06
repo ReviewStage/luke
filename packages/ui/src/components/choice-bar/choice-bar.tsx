@@ -1,68 +1,3 @@
-/**
- * choice-bar.tsx -- the one bar of options where you choose one: tabs over a few views of one thing, or a pick-one that sets a value, in a fill or a segmented trough.
- *
- * What it says to a reader follows from what it does, never from how it
- * looks. A bar handed `panels` switches what is shown: it is a tablist,
- * each tab selected while its view is shown and controlling that view's
- * panel, which the caller draws labeled by its tab. A bar without sets a
- * value: it is a radio group, each option checked while it is the value.
- * Either is one tab stop on the chosen option (the first while none is),
- * the arrows (and ↑/↓ for a radio group) moving along it and choosing as
- * they go, wrapping, Home and End going to either end, a disabled option
- * stepped past. A bar its owner drives from a field the keyboard stays in
- * (`focus: none`) takes no focus at all, a press on it leaving the keyboard
- * where it was. A `clearable` bar's chosen option, pressed again, takes the
- * choice back.
- *
- * Each option is its glyph, its name, and a count. The name is always
- * given. A bar narrower than its options need keeps them on one row and
- * scrolls sideways, its cut edges fading as a scroll area's do
- * (`scrollFadeMarks`), the chosen option brought into view as it is chosen;
- * a fill bar shows an option other than the chosen one by its glyph alone
- * too, its name left to a reader who cannot see it, and one standing in a
- * toolbar beside other controls folds every option at once instead, once
- * their names no longer fit (`fold`). An option drawn by its glyph alone
- * raises its name in the hint over it, for the pointer and the keyboard.
- * A count is words, or parts each in
- * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
- * `linesCount`'s, always green and red. An option may say more in the
- * hint over it (`hint`), such as the whole a count leaves out, which it says
- * in place of its name, folded or not.
- *
- * `look` is how the chosen option stands out. `fill` is the window's own
- * selected state, a sidebar row's and an open tab's: plain words at the
- * control's height, a fill under the one chosen. It draws no underline: a
- * bar heading a page or a column stands in its header's band, whose
- * hairline is the header's. `segmented` is a trough, the chosen option on a
- * thumb raised in it, hugging its options or, stretched (`stretch`),
- * filling its row, its options sharing it alike, as a pane switcher's. In either the fill or the thumb slides
- * from option to option. `size`
- * compact is a step smaller, in the caption's type. What finds the bar for an app (the
- * desktop's settings search) is the app's: it hands the bar the `data-`
- * attributes its search lands on.
- *
- * It is drawn by Base UI's toggle group (`@base-ui/react/toggle-group`),
- * single, each option one of its toggles: the bar is one element, one
- * roving tab stop over its options, a disabled option a native disabled
- * button, and a press on the pressed option let go, which `clearable`
- * takes as the choice taken back. Note that it is the toggle group rather
- * than Base UI's tabs or radio group, because tabs wrap their list in a
- * root element of their own and keep a disabled tab focusable, and a radio
- * stands a hidden input beside each option, each of which would change
- * what the bar is; the bar says it is a tablist or a radio group, and each
- * option a tab or a radio, over the group's own words. Its keys are our own
- * (`useRovingKeys`), Base UI's own composite keys refused, because a
- * tablist steps by ← and → alone where a radio group takes ↑ and ↓ too, and
- * an arrow chooses as it moves. The bar is one Tab stop, on the chosen
- * option or the first while none is, and each option is drawn out of the
- * tab order (-1), which quiets the toggle group's own roving tab stop, so
- * the stop the keys keep is the only one. It is drawn in Tailwind over the
- * theme (`tailwind/theme.css`), each look's and size's utilities chosen here so
- * no two stand for one property; `choice-bar.css` keeps the thumb's
- * measured box and the fold's container and sibling rules. It keeps the
- * `ui-choice-bar*` classes, which the apps' sheets and tests select it by.
- */
-
 import { Toggle as TogglePrimitive } from "@base-ui/react/toggle";
 import { ToggleGroup as ToggleGroupPrimitive } from "@base-ui/react/toggle-group";
 import { keepIdentity } from "@repo/wire";
@@ -96,7 +31,6 @@ import {
 import { SCROLL_AXIS, SCROLL_FADE, scrollFadeMarks } from "../scroll-area/scroll-area.js";
 import { Tooltip } from "../tooltip/hint.js";
 
-/** The role a bar's options carry, which decides the keys it steps by: a tab's, or a radio's. */
 const CHOICE_ROLE = {
   TAB: "tab",
   RADIO: "radio",
@@ -104,7 +38,6 @@ const CHOICE_ROLE = {
 
 type ChoiceRole = (typeof CHOICE_ROLE)[keyof typeof CHOICE_ROLE];
 
-/** How the bar draws its chosen option: a fill under it, or a thumb raised in a trough. */
 export const CHOICE_BAR_LOOK = {
   FILL: "fill",
   SEGMENTED: "segmented",
@@ -112,7 +45,6 @@ export const CHOICE_BAR_LOOK = {
 
 export type ChoiceBarLook = (typeof CHOICE_BAR_LOOK)[keyof typeof CHOICE_BAR_LOOK];
 
-/** How much room the bar keeps around its options: a page's, or a step smaller in the caption's type. */
 export const CHOICE_BAR_SIZE = {
   REGULAR: "regular",
   COMPACT: "compact",
@@ -120,7 +52,6 @@ export const CHOICE_BAR_SIZE = {
 
 export type ChoiceBarSize = (typeof CHOICE_BAR_SIZE)[keyof typeof CHOICE_BAR_SIZE];
 
-/** Whether the bar's options take the keyboard, one tab stop roving among them, or none, its owner driving the keys. */
 export const CHOICE_BAR_FOCUS = {
   ROVING: "roving",
   NONE: "none",
@@ -128,17 +59,6 @@ export const CHOICE_BAR_FOCUS = {
 
 export type ChoiceBarFocus = (typeof CHOICE_BAR_FOCUS)[keyof typeof CHOICE_BAR_FOCUS];
 
-/**
- * What folds a fill bar's options when the row is short of room: its own
- * width, each option but the chosen one drawn by its glyph alone below a
- * width; or their names not fitting (`together`), measured, every option
- * then drawn by its glyph alone at once, the chosen one too, so none is
- * named while the others are not. A bar folding together also takes its
- * options' room in where its toolbar sets `--ui-fold: tight`, which it
- * does before their names stop fitting. A bar a finger works (`words`) never
- * folds: every option is named in words alone, with no glyph a finger could
- * not hover for its name, and a row too long scrolls sideways.
- */
 export const CHOICE_BAR_FOLD = {
   OWN: "own",
   TOGETHER: "together",
@@ -147,63 +67,36 @@ export const CHOICE_BAR_FOLD = {
 
 export type ChoiceBarFold = (typeof CHOICE_BAR_FOLD)[keyof typeof CHOICE_BAR_FOLD];
 
-/** The ids a tab and the panel it controls carry. */
 export interface ChoicePanelIds {
   readonly tab: string;
   readonly panel: string;
 }
 
-/** The attributes an app hands the bar for finding it, its `data-` attributes alone. */
 export type ChoiceAppAttributes = { [attribute: `data-${string}`]: string | undefined };
 
-/** Where the thumb stands: hidden while nothing is chosen or drawn, placed at once, or sliding to a new option. */
 const THUMB = {
   PLACED: "placed",
   SLIDING: "sliding",
 } as const;
 
-/** The bar's thumb, of its own children. */
 const THUMB_ELEMENT = ":scope > .ui-choice-bar-thumb";
 
-/** An option's name beside its glyph, the one a fold draws nowhere. */
 const FOLDABLE_NAME = ".ui-choice-bar-icon + .ui-choice-bar-label";
 
-/** A part of a glyphed option's count that folds with its name (`CountPart.folds`). */
 const FOLDABLE_PART = ".ui-choice-bar-option:has(> .ui-choice-bar-icon) .ui-count-part[data-folds]";
 
-/** The custom property `choice-bar.css` sets on a name its own fold draws nowhere, and what it sets. */
 const NAME_FOLD = "--ui-choice-bar-name";
 const NAME_FOLDED = "folded";
 
-/** No option's name folded. */
 const NONE_FOLDED: ReadonlySet<string> = new Set();
 
-/** The option a bar's thumb stands under, of the bar's own options. */
 const CHOSEN = ':scope > [aria-selected="true"], :scope > [aria-checked="true"]';
 
-/**
- * The bar's box: one row of its options, never wider than its container,
- * scrolling sideways past it with no bar drawn, its cut edges fading
- * (`BAR_FADE`). A fill bar takes its container's width, and is the container
- * its narrow fold measures (`choice-bar.css`); a segmented one hugs its
- * options in a trough, or, stretched, fills its row. Note that a fill bar in
- * a PaneBar's middle grows to the middle's room, because the container it is
- * sizes itself as if it held nothing, so as a flex item that only hugs its
- * options it would stand 0px wide.
- */
 const BAR =
   "ui-choice-bar relative items-center flex-nowrap min-w-0 max-w-full [scrollbar-width:none]";
 
-/** The scroll area's sideways fade, which eases in only while the row has options past an edge. */
 const BAR_FADE = scrollFadeMarks(SCROLL_FADE.BOTH, SCROLL_AXIS.HORIZONTAL);
 
-/**
- * A bar a finger works (`words`) stands in a frame of its own, which takes
- * the bar's place in its row, the bar filling it but for a glyph's room at
- * its end, where a mark stands outside the bar's fade: a chevron saying
- * more options wait past the end, which `choice-bar.css` shows only while
- * they do. It is a mark, not a press: a finger swipes the row.
- */
 const WORDS_FRAME =
   "ui-choice-bar-frame relative flex min-w-0 max-w-full self-stretch items-center pe-control-icon [.ui-pane-bar-middle>&]:flex-1";
 const WORDS_BAR = "[.ui-choice-bar-frame>&]:flex-1";
@@ -215,36 +108,19 @@ const BAR_LOOK = {
   segmented: "inline-flex gap-0.5 p-0.5 rounded-control bg-muted",
 } as const satisfies Record<ChoiceBarLook, string>;
 
-/** A fill bar's room between its options: compact takes it in. */
 const FILL_GAP = {
   regular: "gap-0.5",
   compact: "gap-0",
 } as const satisfies Record<ChoiceBarSize, string>;
 
-/** A segmented bar's width: hugging its options, or filling its row. */
 const SEGMENTED_WIDTH = {
   hug: "flex-initial w-fit",
   stretch: "flex-auto w-auto",
 } as const;
 
-/**
- * A fill bar folding together, or named in words alone, takes its options'
- * room in where its toolbar says `--ui-fold: tight`. Note that each is
- * keyed on the bar's `data-fold`, which outweighs the room it takes in.
- */
 const FILL_TIGHT_BAR = "fold-tight:data-[fold]:gap-0";
 const FILL_TIGHT_OPTION = "fold-tight:[[data-fold]_&]:gap-1 fold-tight:[[data-fold]_&]:px-1.5";
 
-/**
- * An option: its glyph, name, and count in a row over the thumb, which is
- * drawn before it, in the muted ink, brightening to the text's own under
- * the pointer and while chosen, faded while disabled. Note that it draws
- * the keyboard's ring inside itself, because a scrolling row or a trough
- * leaves it no room outside; that its states are selectors of their own
- * rather than Tailwind's `hover:`, which a touch screen never answers; and
- * that the desktop's arrow cursor is keyed on its profile, which outweighs
- * the pointer.
- */
 const OPTION = cn(
   "ui-choice-bar-option relative inline-flex items-center justify-center m-0 [border:0] [background:none]",
   "outline-offset-[var(--ui-focus-ring-inset)] text-muted-foreground font-ui font-label whitespace-nowrap",
@@ -253,13 +129,6 @@ const OPTION = cn(
   "hover:not-disabled:text-foreground aria-selected:text-foreground aria-checked:text-foreground",
 );
 
-/**
- * Each look's option at each size. A fill option is the control's height,
- * lit under the pointer while not chosen; compact a step smaller, in the
- * caption's type. A segment sits inside its trough's inset, its corner the
- * trough's less that inset; on the site, whose muted ink holds AA on its
- * page's ground and not on the trough, it is drawn in the text's own ink.
- */
 const OPTION_LOOK = {
   fill: {
     regular: "h-control py-0 px-2 gap-1.5 text-label",
@@ -276,18 +145,11 @@ const OPTION_LOOK_STATE = {
   segmented: "rounded-choice-segment [[data-ui-profile=web]_&]:text-foreground",
 } as const satisfies Record<ChoiceBarLook, string>;
 
-/** A stretched segment shares its row alike with the others; any other option keeps its own width. */
 const OPTION_FLEX = {
   own: "flex-none",
   shared: "flex-[1_1_0]",
 } as const;
 
-/**
- * The thumb: hidden until the row has measured its chosen option, then
- * standing there (`choice-bar.css` reads the box), sliding on its transform
- * alone where motion is let run. A fill's is the strong fill; a segment's a
- * thumb raised on a hairline and a soft shadow.
- */
 const THUMB_BOX =
   "ui-choice-bar-thumb absolute top-0 left-0 hidden [[data-thumb]_&]:block origin-top-left pointer-events-none motion-safe:[[data-thumb=sliding]_&]:[transition:transform_var(--ui-duration-fast)_var(--ui-spring-fast)]";
 
@@ -297,20 +159,12 @@ const THUMB_LOOK = {
     "rounded-choice-segment bg-choice-thumb [box-shadow:0_0_0_0.5px_var(--ui-color-border-strong),0_1px_2px_var(--ui-color-shadow-soft)]",
 } as const satisfies Record<ChoiceBarLook, string>;
 
-/** The glyph slot says its size (`--ui-glyph-size`), which a glyph the app seats in it, a `GlyphSlot`, reads. */
 const ICON =
   "ui-choice-bar-icon inline-flex [--ui-glyph-size:var(--ui-control-icon)] [&>svg]:size-control-icon";
 
-/**
- * The count lays its parts out as a row centered on the option rather than
- * as words on a line, because a part is an inline box whose baseline is its
- * glyph's bottom edge, which set it a pixel or two above the option's name;
- * the gap stands for the space between parts, which a row drops.
- */
 const COUNT =
   "ui-choice-bar-count inline-flex items-center gap-1 text-muted-foreground text-caption tabular-nums font-caption";
 
-/** A box in a bar, in pixels from its padding edge. */
 interface ThumbBox {
   readonly x: number;
   readonly y: number;
@@ -318,7 +172,6 @@ interface ThumbBox {
   readonly height: number;
 }
 
-/** Sets where the thumb stands, its box, and the scale it is drawn at from its corner. */
 function setThumb(bar: HTMLElement, box: ThumbBox, scaleX: number, scaleY: number): void {
   const style = bar.style;
   style.setProperty("--ui-choice-bar-thumb-x", `${box.x}px`);
@@ -329,7 +182,6 @@ function setThumb(bar: HTMLElement, box: ThumbBox, scaleX: number, scaleY: numbe
   style.setProperty("--ui-choice-bar-thumb-scale-y", String(scaleY));
 }
 
-/** Whether the thumb already stands, unscaled, on `box`. */
 function thumbStands(bar: HTMLElement, box: ThumbBox): boolean {
   const style = bar.style;
   return (
@@ -342,20 +194,6 @@ function thumbStands(bar: HTMLElement, box: ThumbBox): boolean {
   );
 }
 
-/**
- * Stands `bar`'s thumb under its chosen option, sliding there where `slide`
- * asks and the thumb already shows, and at once otherwise.
- *
- * A slide is played FLIP-style, on `transform` alone, as the motion
- * contract has it (`docs/DESIGN.md`): the thumb lands in its new box at
- * once, drawn by a transform where it was drawn before, from wherever a
- * slide still running had it; then, with its transition on, the transform
- * is let go. Note that the attribute that turns the transition on or off is
- * set beside each step, because a transition starts from the style after a
- * change, so the step back is never seen and the let go always is; and that
- * a thumb already where it should be is left alone, so a resize the slide
- * itself set off does not cut it short.
- */
 function placeThumb(bar: HTMLElement, slide: boolean): void {
   const chosen = bar.querySelector<HTMLElement>(CHOSEN);
   const thumb = bar.querySelector<HTMLElement>(THUMB_ELEMENT);
@@ -382,19 +220,12 @@ function placeThumb(bar: HTMLElement, slide: boolean): void {
     };
     bar.setAttribute("data-thumb", THUMB.PLACED);
     setThumb(bar, from, drawn.width / box.width, drawn.height / box.height);
-    // Note that measuring the thumb settles its step back before the slide starts.
     thumb.getBoundingClientRect();
   }
   bar.setAttribute("data-thumb", slide && shown ? THUMB.SLIDING : THUMB.PLACED);
   setThumb(bar, box, 1, 1);
 }
 
-/**
- * Scrolls `bar` the least that brings its chosen option clear of the faded
- * edges, where the row is cut past it. Note that it moves the bar's own
- * scroll rather than calling `scrollIntoView`, which would scroll every box
- * around the bar too.
- */
 function revealChosen(bar: HTMLElement): void {
   const chosen = bar.querySelector<HTMLElement>(CHOSEN);
   if (chosen === null || bar.scrollWidth <= bar.clientWidth) return;
@@ -409,21 +240,8 @@ function revealChosen(bar: HTMLElement): void {
   else if (end > bar.scrollLeft) bar.scrollLeft = end;
 }
 
-/**
- * The ref the bar's own element takes and the one each option takes, which
- * keep its thumb under the chosen option, which a cut row brings into view
- * (`revealChosen`): sliding to it after a render that
- * chose another, or that changed which options stand (`placed`), and placed
- * at once when the bar or an option resizes (a narrow bar dropping its
- * names, a count growing, a hidden panel shown). Note that each element is
- * watched by an observer of its own, let go with `disconnect`, the one way
- * every observer has to stop; and that a render changing neither is left
- * alone, because reading where an option stands lays out the whole window,
- * and a bar is drawn again with everything around it.
- */
 function useThumb(chosen: string | undefined, placed: OptionsPlaced) {
   const bar = useRef<HTMLDivElement | null>(null);
-  // Note that the thumb is placed again only when the choice or the options standing change; a resize is the observers'.
   useLayoutEffect(() => {
     if (bar.current === null) return;
     placeThumb(bar.current, true);
@@ -451,12 +269,6 @@ function useThumb(chosen: string | undefined, placed: OptionsPlaced) {
   return { bar, barRef, optionRef };
 }
 
-/**
- * The width the options take as they stand, from the bar's start to the
- * last one's end and the bar's own inset after it. Note that this is read
- * from the options rather than the bar's `scrollWidth`, which is never less
- * than the bar's own width, so it says how little folded options take.
- */
 function optionsWidth(bar: HTMLElement): number {
   const options = bar.querySelectorAll<HTMLElement>(".ui-choice-bar-option");
   const last = options[options.length - 1];
@@ -465,7 +277,6 @@ function optionsWidth(bar: HTMLElement): number {
   return last.offsetLeft + last.offsetWidth + inset;
 }
 
-/** The room the folded options' names, and the count parts folding with them, would take back: each one's own width and the gap it would stand in. */
 function foldedNames(bar: HTMLElement): number {
   let room = 0;
   for (const folded of bar.querySelectorAll<HTMLElement>(`${FOLDABLE_NAME}, ${FOLDABLE_PART}`)) {
@@ -476,20 +287,8 @@ function foldedNames(bar: HTMLElement): number {
   return room;
 }
 
-/** How far short of the bar's width named options must stand before a folded bar names them again, so a width on the edge never sets it folding and unfolding in turn. */
 const UNFOLD_SLACK = 2;
 
-/**
- * Whether a bar folding together draws its options by their glyphs alone:
- * while their names do not fit its width. The width the names take is
- * measured from the options as they stand, drawn or folded (`optionsWidth`),
- * a folded name read by its own width (`foldedNames`), so a change that makes them fit, a tighter step's
- * padding among them, unfolds the bar at once. It is measured before the
- * frame is painted as it first draws and whenever the options' names or the
- * bar's look change (`named`), and whenever the bar or an option resizes.
- * Note that a draw changing neither reads nothing, because measuring lays out
- * the whole window, and a bar is drawn again with everything around it.
- */
 function useFoldTogether(
   on: boolean,
   bar: React.RefObject<HTMLDivElement | null>,
@@ -503,7 +302,6 @@ function useFoldTogether(
     setFolded(folded ? named > element.clientWidth - UNFOLD_SLACK : named > element.clientWidth);
   }, [on, bar, folded]);
   useLayoutEffect(measure, [measure, named]);
-  // Note that the options are found afresh as they change, so one that joined is watched too.
   useLayoutEffect(() => {
     const element = bar.current;
     if (!on || element === null || !("ResizeObserver" in globalThis)) return undefined;
@@ -515,7 +313,6 @@ function useFoldTogether(
   return on && folded;
 }
 
-/** `folded` with `value` folded or not, `now`. */
 function foldedAs(folded: ReadonlySet<string>, value: string, now: boolean): ReadonlySet<string> {
   const next = new Set(folded);
   if (now) next.add(value);
@@ -523,15 +320,6 @@ function foldedAs(folded: ReadonlySet<string>, value: string, now: boolean): Rea
   return next;
 }
 
-/**
- * Which options of a fill bar folding by its own width it draws by their
- * glyphs alone, by value, read as each option resizes, which folding its
- * name or naming it again does. Note that the name's own style is read,
- * where the sheet marks it folded (`--ui-choice-bar-name`), because a
- * container query decides it, which script cannot ask, as a folding button
- * reads its fold; and that an option is observed rather than its name,
- * because a name folded from the first frame reports no change of size.
- */
 function useOwnFold(on: boolean): {
   readonly optionRef: (option: HTMLElement | null) => (() => void) | undefined;
   readonly folded: ReadonlySet<string>;
@@ -557,15 +345,6 @@ function useOwnFold(on: boolean): {
   return { optionRef, folded };
 }
 
-/**
- * What the bar's own element says it is, and the keys it takes: a tablist,
- * or a radio group, over the toggle group's own `group`. Note that the
- * role, its name, and its handler are handed over together, because the bar
- * is one element whichever role it takes, and Biome's a11y rules read a
- * role only where it is a literal; and that the handler always refuses the
- * group's own composite keys, so a key the bar does not move by (↑ in a
- * tablist, a key held with a modifier, any in a disabled bar) moves nothing.
- */
 function groupAttributes(
   role: ChoiceRole,
   label: string,
@@ -581,11 +360,6 @@ function groupAttributes(
   };
 }
 
-/**
- * What an option says it is: a tab selected while chosen and controlling
- * its panel, or a radio checked while chosen, never the toggle's own
- * pressed state, which would say it a second way.
- */
 function optionAttributes(
   role: ChoiceRole,
   chosen: boolean,
@@ -602,27 +376,20 @@ function optionAttributes(
     : { role, "aria-checked": chosen, "aria-pressed": undefined };
 }
 
-/** Keeps the keyboard where it was when an option that takes no focus is pressed. */
 function keepFocus(event: ReactMouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
-/** One option: the value it chooses, its name, its glyph, what it counts, and whether it can be chosen. */
 export interface ChoiceItem<Value extends string> {
   readonly value: Value;
-  /** The option's name, read aloud and raised in its hint where a narrow bar shows its glyph alone. */
   readonly label: string;
   readonly icon?: ReactNode;
-  /** Words drawn quiet after the name, or parts each in its own tone. */
   readonly count?: string | readonly CountPart[] | undefined;
-  /** What the hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing, or its name while folded. */
   readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
-  /** Whether its name is a person's thing, a repository's or a branch's, kept masked in a screen recording even where the bar stands under `ReplayUnmask`. */
   readonly replayMasked?: boolean | undefined;
 }
 
-/** What a hint hands the option it wraps: when to show and go, and what it says of it. */
 interface ChoiceBarHintProps {
   "aria-describedby"?: string | undefined;
   onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
@@ -632,38 +399,30 @@ interface ChoiceBarHintProps {
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
 }
 
-/** The hint an app hangs from an option that has one, saying `label`. */
 export type ChoiceBarHint = ComponentType<{
   label: string | undefined;
   children: ReactElement<ChoiceBarHintProps>;
 }>;
 
 interface ChoiceBarBase<Value extends string> {
-  /** The bar's accessible name. */
   label: string;
   items: readonly ChoiceItem<Value>[];
-  /** The chosen option, or nothing while none is. */
   value: Value | undefined;
   look: ChoiceBarLook;
   size?: ChoiceBarSize | undefined;
-  /** The id of each tab and of the panel it shows, by value: given, the bar is a tablist; absent, a radio group. */
   panels?: ((value: Value) => ChoicePanelIds) | undefined;
   focus?: ChoiceBarFocus | undefined;
   fold?: ChoiceBarFold | undefined;
-  /** Whether a segmented bar fills its row on one line, its options sharing it alike, rather than hugging them. */
   stretch?: boolean | undefined;
-  /** The hint hung from each option that says one (`ChoiceItem.hint`) or that a fold draws by its glyph alone: the window's tooltip, unless the caller hangs one of its own. */
   hint?: ChoiceBarHint | undefined;
   disabled?: boolean | undefined;
 }
 
-/** A bar whose choice always stands once made. */
 interface ChoiceBarFixed<Value extends string> extends ChoiceBarBase<Value> {
   clearable?: false | undefined;
   onChange: (value: Value) => void;
 }
 
-/** A bar whose chosen option, pressed again, takes the choice back where `clearable` is on. */
 interface ChoiceBarClearable<Value extends string> extends ChoiceBarBase<Value> {
   clearable: boolean;
   onChange: (value: Value | undefined) => void;
@@ -675,25 +434,21 @@ export type ChoiceBarProps<Value extends string> = (
 ) &
   ChoiceAppAttributes;
 
-/** Whether an option's count is parts, each in its tone, rather than words. */
 function isParts(count: string | readonly CountPart[]): count is readonly CountPart[] {
   return Array.isArray(count);
 }
 
-/** What an option counts, drawn: words as one quiet part, parts each in its tone. */
 function countOf(count: ChoiceItem<string>["count"]): ReactNode {
   if (count === undefined) return undefined;
   return <CountParts parts={isParts(count) ? count : [{ text: count }]} />;
 }
 
-/** How the bar draws its options and which stand, in order: what moves the thumb without resizing what it watches. */
 interface OptionsPlaced {
   readonly look: ChoiceBarLook;
   readonly size: ChoiceBarSize;
   readonly values: readonly string[];
 }
 
-/** One option as a bar folding together is measured by: its glyph, name, and count. */
 interface OptionNamed {
   readonly value: string;
   readonly glyph: boolean;
@@ -701,19 +456,12 @@ interface OptionNamed {
   readonly count: string | readonly CountPart[] | null;
 }
 
-/** What a bar folding together is measured by: how it draws its options, and each option's glyph, name, and count; a change in any may fold or unfold it without resizing the bar. */
 interface OptionsNamed {
   readonly look: ChoiceBarLook;
   readonly size: ChoiceBarSize;
   readonly options: readonly OptionNamed[];
 }
 
-/**
- * `next`, or the value held from an earlier draw where the two are equal in
- * every part (`keepIdentity`), so a value built afresh on every draw changes
- * identity only when what it says changes, and an effect listing it runs
- * only then.
- */
 function useKept<Value>(next: Value): Value {
   const [held, setHeld] = useState(next);
   const kept = keepIdentity(held, next);
@@ -721,7 +469,6 @@ function useKept<Value>(next: Value): Value {
   return kept;
 }
 
-/** The bar over `items`, `value` chosen. */
 export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): React.JSX.Element {
   const {
     label,
@@ -770,7 +517,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
-  // An arrow chooses the next option along and takes the keyboard there; Home and End go to either end.
   const keys = useRovingKeys<HTMLDivElement>({
     orientation: role === CHOICE_ROLE.TAB ? ROVING_ORIENTATION.HORIZONTAL : ROVING_ORIENTATION.BOTH,
     stop: roving ? ROVING_STOP.CHOSEN : ROVING_STOP.NONE,
@@ -781,7 +527,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     },
   });
   const barRef = useMemo(() => joinRefs(thumb.barRef, keys.ref), [thumb.barRef, keys.ref]);
-  // A press on another option chooses it; one on the chosen option lets it go, which a clearable bar takes as the choice taken back.
   const press = (pressed: readonly Value[]) => {
     const next = pressed[0];
     if (next !== undefined) choose(next);
@@ -852,7 +597,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             {count === undefined ? null : <span className={COUNT}>{count}</span>}
           </TogglePrimitive>
         );
-        // Note that an option a fold may draw by its glyph alone always stands in its hint, which raises nothing while its name is drawn, so folding never mounts it afresh and takes the keyboard off it.
         const foldable = item.icon !== undefined && (together || ownFolds);
         const nameFolded = foldable && (folded || ownFold.folded.has(item.value));
         return item.hint === undefined && !foldable ? (

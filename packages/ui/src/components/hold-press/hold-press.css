@@ -1,6 +1,3 @@
-/* hold-press.css -- the wrapper that hears a held press lays nothing out of
-   its own: the control it wraps stands in its place. */
-
 @layer components {
   .ui-hold-press {
     display: contents;

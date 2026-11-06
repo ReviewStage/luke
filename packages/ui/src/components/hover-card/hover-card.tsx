@@ -7,65 +7,6 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
-/**
- * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
- *
- * A control with more to say than a pill hangs a card in the pill's place
- * (`TooltipCard`), and every card an app hangs says what it says in these
- * parts, so the same name reads at the same size wherever the pointer rests.
- * The head is the subject's glyph where it wears one, its name in the card's
- * one weight, wrapped to two lines, or on one line faded where it is cut
- * short as a tab's label is; under the name, a quieter line of what it runs
- * on, whose it is, or where it comes from; and at the head's right its
- * corner, muted, which holds one short word and nothing else: the subject's
- * age, how it ended, or how many wait. A role, an owner, or a source is no
- * corner's; it joins the line under the name. Under the head stand its notes, read whole
- * and so wrapped to three lines, or one line faded at its end, and a rule
- * before what a card lists under it. A card that counts things lists its
- * figures under that rule as a receipt does, each label muted at the card's
- * edge and its figure at the other in tabular numbers, a caption's size on a
- * caption's tight line, so a column of counts reads at a glance.
- *
- * A card's rows are set as a menu's rows are: a glyph on the head's glyph
- * column, words on one line fading out where cut short, and what stands at
- * the row's end, muted. A quieter row under the name (`DETAIL`) says where
- * the subject lives or who made it; a row of a list under a rule (`LINE`)
- * names one of the things the subject holds. Either is a button where a
- * press opens what it names and text where nothing does, in the same place
- * either way, washed under the pointer as a menu row is. A list names every
- * thing it holds, never a count of the rest: past a few rows' height it
- * scrolls within the card, fading at the edge where more stands
- * (`HoverCardScroll`), so whatever the subject holds can be reached.
- *
- * What is drawn here is the card's words alone. The surface it stands on,
- * when it shows, how long it lingers for the pointer to cross onto it, and
- * what its subject is read from are the app's.
- *
- * While what a card says is read, it stands as its skeleton
- * (`HoverCardSkeleton`): the head as the loaded card will draw it, its glyph
- * or its mark in the same slot, its name, and a line held where the line
- * under the name will stand, over a line for each note to come, so the card
- * is placed once at its size and its head does not move as the read lands.
- *
- * A card says what its subject is and offers no way to it, no "Open agent"
- * under a rule, because the control it hangs from opens the subject on a
- * press. Where that control's press does something else, as a group
- * header's folds, the card's own name is the way in; its rows may still
- * open what they name, another thing than the card's subject.
- */
-
-/**
- * The card's parts in one type scale, each still named by its `ui-hover-
- * card-*` class for what finds a part in the page. The head's glyph takes a
- * menu glyph's footprint on the name's first line, so the rows listed under
- * the head start their words on the name's column, and sizes whatever it
- * holds bar a face, which brings its own. The name is in the medium weight,
- * wrapped to two lines or on one faded at its end; the line under it and
- * the corner a size down, never under 12px under a finger. Notes wrap to
- * three lines, or one faded. A row is set as a menu's row is: its height
- * and corner, its wash off the card's edge by a menu's inset under the
- * pointer, its glyph on the head's glyph column.
- */
 const CARD = "ui-hover-card flex flex-col gap-1";
 const HEAD = "ui-hover-card-head flex items-baseline gap-icon-gap";
 const LEAD = "ui-hover-card-lead flex items-center gap-control-gap";
@@ -98,25 +39,19 @@ const FIGURE =
 const SCROLL = "ui-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
 const SCROLL_BODY = "ui-hover-card-scroll-body px-2";
 
-/** What a card's skeleton says to a reader while what the card shows is read. */
 const CARD_READING = "Reading…";
 
-/** How wide the line held under a skeleton's name stands, as a model's or a place's words would. */
 const SUB_WIDTH = "50%";
 
-/** How wide a skeleton's last note line stands, short of the card's edge as a note's last line ends; every line before it fills the card. */
 const LAST_NOTE_WIDTH = "80%";
 
-/** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
 
-/** One of a card's figures: what it counts, and the count as the card says it. */
 export interface HoverCardFigure {
   readonly label: string;
   readonly figure: ReactNode;
 }
 
-/** How a card's row is set: a quieter line under its name, or a row of a list under a rule. */
 export const HOVER_CARD_ROW_LOOK = {
   DETAIL: "detail",
   LINE: "line",
@@ -124,13 +59,11 @@ export const HOVER_CARD_ROW_LOOK = {
 
 export type HoverCardRowLook = (typeof HOVER_CARD_ROW_LOOK)[keyof typeof HOVER_CARD_ROW_LOOK];
 
-/** What a row hands on to a hint hung from it, its handlers and its description among them. */
 type HoverCardRowAnchor = Omit<
   HTMLAttributes<HTMLElement>,
   "className" | "style" | "children" | "role" | "tabIndex"
 >;
 
-/** A card's root: its parts in a column, one gap apart. */
 export function HoverCard({
   children,
   ...marks
@@ -142,12 +75,6 @@ export function HoverCard({
   );
 }
 
-/**
- * A card's head: its glyph where it wears one, its name and the line under
- * it, and its corner. A card about someone or somewhere leads instead with
- * their `mark` at a card's size, a face or a workspace's tile, the head
- * beside it and centered on it, as a profile card leads with its picture.
- */
 export function HoverCardHead({
   mark,
   glyph,
@@ -157,17 +84,12 @@ export function HoverCardHead({
   corner,
   cornerTone,
 }: {
-  /** What leads the head at a card's size, a face or a tile, beside the rest rather than on the name's first line. */
   mark?: ReactNode;
   glyph?: ReactNode;
   name: ReactNode;
-  /** Whether the name stands on one line, faded where it is cut short, rather than wrapping to two: a task standing in for a title. */
   oneLine?: boolean;
-  /** The quieter line under the name: what the subject runs on, whose it is, where it comes from, or when it ran. */
   sub?: ReactNode;
-  /** What stands muted at the head's right, one short word: the subject's age, how it ended, or how many wait. */
   corner?: ReactNode;
-  /** The corner's status tone, muted where absent: attention where it counts what waits on the reader. */
   cornerTone?: StatusTone | undefined;
 }): React.JSX.Element {
   const head = (
@@ -203,14 +125,6 @@ export function HoverCardHead({
   );
 }
 
-/**
- * A card while what it shows is read: its head as the loaded card will draw
- * it, `mark` or `glyph` in the slot the loaded card wears it in, and its
- * name, which the control it hangs from already knows; a line held under
- * the name where the loaded card says one; and `notes` lines standing for
- * what it says under its head. Its root is marked as a skeleton's for what
- * finds it, beside the marks the loaded card's root carries.
- */
 export function HoverCardSkeleton({
   mark,
   glyph,
@@ -219,14 +133,10 @@ export function HoverCardSkeleton({
   notes = 1,
   ...marks
 }: {
-  /** What leads the loaded card's head at a card's size, a face or a tile. */
   mark?: ReactNode;
-  /** The glyph on the loaded card's name's first line. */
   glyph?: ReactNode;
   name: ReactNode;
-  /** Whether the loaded card says a line under its name, which the skeleton holds. */
   sub?: boolean;
-  /** How many lines the loaded card says under its head. */
   notes?: number;
 } & HoverCardMarks): React.JSX.Element {
   const lines = Array.from({ length: notes }, (_, at) => at);
@@ -247,7 +157,6 @@ export function HoverCardSkeleton({
   );
 }
 
-/** Words under a card's head, wrapped to three lines, or on one line faded where it is cut short. */
 export function HoverCardNote({
   oneLine = false,
   children,
@@ -264,12 +173,10 @@ export function HoverCardNote({
   );
 }
 
-/** The hairline before what a card lists under its head. */
 export function HoverCardRule(): React.JSX.Element {
   return <hr className={RULE} />;
 }
 
-/** What a card counts, under a rule and named by `label`: each figure's label muted at the card's edge and its figure at the other, in tabular numbers. */
 export function HoverCardFigures({
   label,
   figures,
@@ -289,11 +196,6 @@ export function HoverCardFigures({
   );
 }
 
-/**
- * A row of a card: its glyph, its words on one line, and what stands at its
- * end; a button where a press opens what it names, and otherwise text. What
- * else it is handed, a hint's handlers and description, it hands on to the row.
- */
 export function HoverCardRow({
   look = HOVER_CARD_ROW_LOOK.LINE,
   glyph,
@@ -306,11 +208,8 @@ export function HoverCardRow({
   look?: HoverCardRowLook;
   glyph: ReactNode;
   label: ReactNode;
-  /** What stands muted at the row's end: a size, a time, or a mark. */
   end?: ReactNode;
-  /** Opens what the row names; a row without it is text. */
   onPress?: (() => void) | undefined;
-  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
 } & HoverCardRowAnchor): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
@@ -341,11 +240,6 @@ export function HoverCardRow({
   );
 }
 
-/**
- * What a card holds past a few rows' height, scrolling within the card and
- * fading at the edge where more stands, so a long list is read whole rather
- * than cut short. Its rows keep their wash to the card's edges.
- */
 export function HoverCardScroll({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <div className={SCROLL}>
@@ -356,7 +250,6 @@ export function HoverCardScroll({ children }: { children: ReactNode }): React.JS
   );
 }
 
-/** A list a card holds under a rule, named by `label`: every row it holds, each an `li` of the caller's, scrolling past a few rows' height. */
 export function HoverCardList({
   label,
   children,

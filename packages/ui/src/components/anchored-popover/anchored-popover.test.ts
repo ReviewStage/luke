@@ -7,16 +7,8 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { AnchoredPopover } from "./anchored-popover.js";
 import { POPOVER_ALIGN, POPOVER_SIDE } from "./popover-place.js";
 
-/**
- * anchored-popover.test.ts -- a popover its owner closes through `open`
- * keeps its layer, so what it holds can fade out in place, and hears no
- * press away until it opens again; and one hung inside a box that scrolls
- * keeps inside that box.
- */
-
 const roots: Root[] = [];
 
-/** jsdom has no ResizeObserver; the layer's measures are not what these tests read. */
 class StandInResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -33,7 +25,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A button whose popover opens and closes through `open`, counting the presses away it hears. */
 function Owner({ away }: { away: { count: number } }): React.JSX.Element {
   const [open, setOpen] = useState(true);
   return createElement(
@@ -51,7 +42,6 @@ function Owner({ away }: { away: { count: number } }): React.JSX.Element {
   );
 }
 
-/** A press going down on `target`. */
 function pressOn(target: Element): void {
   act(() => {
     target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
@@ -83,7 +73,6 @@ test("a popover closed through open keeps what it holds in its layer and hears n
 });
 
 test("a popover hung inside a card that scrolls turns below where the card leaves it no room above, though the window would", () => {
-  // The card stands 300 to 700 down the window, its button 320 to 340, and the layer is 120 tall.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -101,8 +90,6 @@ test("a popover hung inside a card that scrolls turns below where the card leave
   ) {
     return this.dataset.box === "card" ? 400 : 0;
   });
-  // Note that jsdom has no layout, so the layer is laid absolutely, as the app's stylesheet lays
-  // it, and the box it is laid in is its button's, as the positioned anchor is.
   vi.spyOn(HTMLElement.prototype, "offsetParent", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -135,6 +122,5 @@ test("a popover hung inside a card that scrolls turns below where the card leave
   const laid = layer === null ? undefined : getComputedStyle(layer).position;
   sheet.remove();
   assert.equal(laid, "absolute", "the layer is laid as the app lays it");
-  // 320 - 300 - 4 - 8 = 8 above inside the card cannot hold 120, and 700 - 340 - 4 - 8 below can.
   assert.equal(layer?.dataset.side, POPOVER_SIDE.BELOW);
 });

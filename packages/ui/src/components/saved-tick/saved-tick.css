@@ -1,8 +1,3 @@
-/* saved-tick.css -- an autosave's Saved tick, fading and springing in,
-   standing for the confirm delay, then fading out over the exit. The tick
-   is drawn in utilities (`saved-tick.tsx`); only its keyframes and the rule
-   that plays them stand here. */
-
 @layer components {
   .ui-saved-tick {
     animation:

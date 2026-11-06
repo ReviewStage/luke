@@ -6,14 +6,6 @@ import { afterEach, expect, test } from "vitest";
 import { Disclosure, DisclosureBody } from "../disclosure/disclosure.js";
 import { LINE_BUTTON_LOOK, LineButton, LineSummary } from "./line-button.js";
 
-/**
- * line-button.test.ts -- a line button is a button a reader finds by its
- * words, carrying the marks its caller finds it by, and a press acts
- * without submitting the form it stands in, in either look. A line summary
- * opens and closes the fold around it, says whether that stands open, and
- * draws the fold's body only while it does.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -27,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

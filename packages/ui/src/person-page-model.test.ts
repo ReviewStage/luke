@@ -4,13 +4,6 @@ import type { TaskAgentLine, TaskSummary } from "@repo/features/task-wire";
 import { test } from "vitest";
 import { agentStarter, personPage, personPageEmpty, personRef } from "./person-page-model.js";
 
-/**
- * A person's page lists what of theirs the listed workspace's task list
- * holds: their agents at work, the tasks assigned to them, the rest of the
- * tasks they created, and their other agents, each newest first, and
- * nobody else's. Synthetic accounts.
- */
-
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 const DANA = { userId: "user-dana", name: "Dana Reyes" };
 
@@ -117,7 +110,6 @@ test("a person's tasks assigned to them come apart from those they created, the 
     charles.created.map((summary) => summary.name),
     ["Cache eviction", "Relay retries", "Retry dashboard"],
   );
-  // Someone the list names only as an assignee has a page of what they are on, and is named by it.
   const sams = personPage(SAM.userId, [task(7, "Flaky test", 50, DANA, [], SAM)]);
   assert.deepEqual(
     sams.assigned.map((summary) => summary.name),

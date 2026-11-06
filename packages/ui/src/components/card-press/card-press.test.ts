@@ -10,13 +10,6 @@ import {
   type CardPressEvent,
 } from "./card-press.js";
 
-/**
- * card-press.test.ts -- a card's press is a real button the keyboard and a
- * reader reach, hands on the pointer's modifiers, refuses while unavailable,
- * and, through its card, presses on what is no control while a press on a
- * control stays that control's, unless the control presses the card too.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +23,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` on the page and hands back what it was drawn into. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -40,7 +32,6 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** A card holding words, a control of its own, a chip that presses the card too, and its press. */
 function card(
   presses: CardPressEvent[],
   props: { reach?: (typeof CARD_PRESS_REACH)[keyof typeof CARD_PRESS_REACH]; disabled?: boolean },

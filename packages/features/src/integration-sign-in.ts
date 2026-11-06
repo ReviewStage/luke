@@ -9,89 +9,46 @@ import {
   type IntegrationStatus,
 } from "./integration-wire.js";
 
-/**
- * integration-sign-in.ts -- a Connect sign-in the window waits on, from the press to how it ended: still waiting, failed, or never finished.
- *
- * Settings › Integrations and the composer's MCP servers popover draw it
- * alike (`packages/panel/src/integration-statuses.ts` holds it). A sign-in happens in the
- * browser, and the window learns how it went only from where the host's
- * read of the provider stands as it moves, so this is what each read says
- * of it. A read that
- * finds it connected ends it. A read that names it among the service's
- * sign-in failures ends it as failed with that reason: canceled on Vercel
- * Connect's own page, or refused with Connect's own line where the service
- * kept one, which the service learns from Connect even of a sign-in that
- * never came back. A read that finds it no longer pending otherwise ends it
- * as failed with no reason, as a sign-in the browser came back from without
- * a grant. The window also stops waiting on its own: each sign-in has its
- * own deadline, three minutes after the press, and the read as it stands
- * past it, still finding it pending, ends it as unfinished. A failed or unfinished sign-in stands
- * until it is begun again, until a later read says why it failed, or until
- * a later read finds the provider connected after all.
- */
-
-/** Where a sign-in the window waits on stands. */
 export const SIGN_IN = {
-  /** The browser is open on it and it has not ended. */
   WAITING: "waiting",
-  /** The browser came back from it without a grant. */
   FAILED: "failed",
-  /** It never came back: given up on after its wait. */
   UNFINISHED: "unfinished",
 } as const;
 
-/** Why a sign-in failed, as the service's read named it. */
 type SignInFailure = Omit<IntegrationSignInFailure, "provider">;
 
 export type SignIn =
   | {
       readonly kind: typeof SIGN_IN.WAITING;
-      /** The mark taken as it began; only a read issued after it says how it ended. */
       readonly since: number;
-      /** When the window gives up on it, in the runtime clock's milliseconds. */
       readonly deadline: number;
-      /**
-       * Whether the service answers it pending while it is under way, as it
-       * does a Connect sign-in; GitHub's own connect it answers disconnected
-       * until it lands, so a read can say only that it connected.
-       */
       readonly seenPending: boolean;
     }
   | {
       readonly kind: typeof SIGN_IN.FAILED;
-      /** The mark of the sign-in it ended, so a read issued before that sign-in says nothing of how it ended. */
       readonly since: number;
-      /** Why, where a read named it; nothing for a sign-in that came back without a grant. */
       readonly failure?: SignInFailure;
     }
   | {
       readonly kind: typeof SIGN_IN.UNFINISHED;
-      /** The mark of the sign-in it gave up on. */
       readonly since: number;
     };
 
-/** How long a sign-in waits on the browser before the window stops waiting on it. */
 export const SIGN_IN_WAIT = Duration.minutes(3);
 
-/** What a row offers for a sign-in. */
 export const SIGN_IN_ACTION = {
   CANCEL: "Cancel",
   REOPEN: "Reopen",
   TRY_AGAIN: "Retry",
 } as const;
 
-/** One read of where a provider stands, as a sign-in hears it. */
 export interface SignInRead {
   readonly status: IntegrationStatus | undefined;
-  /** Why the provider's sign-in failed, where the read named it among its sign-in failures. */
   readonly failure?: SignInFailure | undefined;
-  /** The mark taken as the read was issued. */
   readonly mark: number;
-  /** When it answered, in the runtime clock's milliseconds; a sign-in still pending past its deadline is given up on. */
   readonly at: number;
 }
 
-/** A sign-in begun at `at`, waited on for its whole wait. */
 export function signInBegun(mark: number, at: number, seenPending: boolean): SignIn {
   return {
     kind: SIGN_IN.WAITING,
@@ -101,16 +58,6 @@ export function signInBegun(mark: number, at: number, seenPending: boolean): Sig
   };
 }
 
-/**
- * What a read says of one provider's sign-in. A sign-in pending that the
- * window did not begin, from another surface or before a relaunch, is
- * waited on from the read that found it, and one that read names failed
- * stands failed whether the window waited on it or not; a read issued
- * before a sign-in began says nothing of it, nor of how it ended, so a slow
- * read never puts an earlier sign-in's reason over a later one's; one the service never
- * answers pending cannot be seen to fail, only to connect or to run out of
- * time.
- */
 export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): SignIn | undefined {
   if (read.status === INTEGRATION_STATUS.CONNECTED) return undefined;
   if (signIn !== undefined && read.mark <= signIn.since) return signIn;
@@ -129,22 +76,12 @@ export function signInAfterRead(signIn: SignIn | undefined, read: SignInRead): S
   return read.at >= signIn.deadline ? { kind: SIGN_IN.UNFINISHED, since: signIn.since } : signIn;
 }
 
-/** The line a row draws for a sign-in. */
 export interface SignInLine {
   readonly text: string;
-  /** Whether it is a problem, drawn in the attention tint. */
   readonly problem: boolean;
-  /** The sign-in's own words, quoted and naming it, for a line under `text`; none where it said none. */
   readonly said?: string;
 }
 
-/**
- * The line a failed sign-in draws: the developer's own cancel plainly, and a
- * refusal in our sentence, Connect's own line quoted under it where the read
- * carried one, else why in our words. Note that the line is said as the
- * sign-in's, because it is Connect's or the provider's, and which one is not
- * known here.
- */
 function failedLine(name: string, failure: SignInFailure | undefined): SignInLine {
   if (failure?.reason === INTEGRATION_SIGN_IN_FAILURE.CANCELED) {
     return { text: `You canceled connecting ${name}.`, problem: false };
@@ -161,7 +98,6 @@ function failedLine(name: string, failure: SignInFailure | undefined): SignInLin
   return { text: `${name} could not be connected: ${why}.`, problem: true };
 }
 
-/** The line a row draws for a sign-in. */
 export function signInLine(provider: IntegrationProvider, signIn: SignIn): SignInLine {
   const name = INTEGRATION_NAME[provider];
   switch (signIn.kind) {

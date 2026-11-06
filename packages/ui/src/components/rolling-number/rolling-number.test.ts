@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { RollingNumber } from "./rolling-number.js";
 
-/**
- * rolling-number.test.ts -- a count drawn first stands still; a change rolls
- * only the digits that changed, up as it grows and down as it falls, the
- * digit leaving never among the words a reader hears or copies, and gone
- * once its exit has run.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A count drawn into the page, and a way to draw it again at another value. */
 function drawn(value: number): { view: HTMLElement; to: (next: number) => void } {
   const view = document.body.appendChild(document.createElement("p"));
   const root = createRoot(view);
@@ -38,14 +30,12 @@ function drawn(value: number): { view: HTMLElement; to: (next: number) => void }
   };
 }
 
-/** The digits rolling in, by their way. */
 function rolling(view: HTMLElement): string[] {
   return [...view.querySelectorAll(".ui-rolling-number-digit[data-roll]")].map(
     (digit) => `${digit.textContent ?? ""}:${digit.getAttribute("data-roll") ?? ""}`,
   );
 }
 
-/** The digits leaving, by their way. */
 function leaving(view: HTMLElement): string[] {
   return [...view.querySelectorAll(".ui-rolling-number-leaving")].map(
     (digit) => `${digit.getAttribute("data-digit") ?? ""}:${digit.getAttribute("data-roll") ?? ""}`,
@@ -86,7 +76,6 @@ test("a digit leaving is taken out once its exit has run, the one arriving left 
   to(5);
   const exit = view.querySelector(".ui-rolling-number-leaving") ?? assert.fail("a digit leaving");
   act(() => {
-    // Note that React hears the end under whichever name the engine says it has, which jsdom leaves it to guess.
     for (const name of ["animationend", "webkitAnimationEnd"]) {
       exit.dispatchEvent(new Event(name, { bubbles: true }));
     }

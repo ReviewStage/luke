@@ -1,9 +1,3 @@
-/* copy-field.css -- a copy field's value fading under its Copy
-   (`copy-field.tsx`): the line scrolls sideways inside the block, and its
-   last pixels fade before the Copy as a long tab title does. The value ends
-   on room as wide as the fade, so a line that fits, and a long one scrolled
-   to its end, show their last letter whole. */
-
 @layer components {
   .ui-copy-field-value {
     padding-inline-end: var(--ui-scroll-fade);

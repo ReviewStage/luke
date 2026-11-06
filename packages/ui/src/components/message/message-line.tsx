@@ -1,30 +1,7 @@
-/**
- * message-line.tsx -- the line under a message: who sent it and when, at the edge of the column the message keeps to, and its actions on the side toward the middle.
- *
- * An agent's transcript and another agent's message both end a message on this line,
- * so the name, the time and the buttons never trade places from one
- * message to the next. The time is `Time`'s day and clock, a call's
- * words, after a dot where someone is named; the actions are a
- * `MessageActions` bar, hidden until the pointer rests on the message
- * (`MessageFrame`). Note that the actions stand inside the name and the
- * time, before them on a sent message's line and after them on a received
- * one's, because a bar that shows only on hover would otherwise leave a
- * gap at the column's edge at rest. A line with nothing to say draws
- * nothing.
- *
- * It is drawn in the Tailwind theme's utilities, in the caption's size and
- * the muted ink, held to the column: who sent it gives way, cut short, so
- * the time and the buttons keep their whole width, and a line that may wrap
- * breaks before the time rather than squeeze who sent it. A message that did
- * not go says so in who sent it's place (`status`), in the danger tone, as
- * a chat app writes "Not delivered" before the time under a bubble.
- */
-
 import type { ReactNode } from "react";
 import { STATUS_TONE } from "../../status-tone.js";
 import { TIME_LOOK, Time } from "../time/time.js";
 
-/** Which edge of the column the line keeps to: a sent message's right, a received one's left. */
 export const MESSAGE_LINE_ALIGN = {
   START: "start",
   END: "end",
@@ -32,7 +9,6 @@ export const MESSAGE_LINE_ALIGN = {
 
 export type MessageLineAlign = (typeof MESSAGE_LINE_ALIGN)[keyof typeof MESSAGE_LINE_ALIGN];
 
-/** Where the line's start stands: at a bubble's or a card's inset, or flush with words set on no ground, as an agent's own words are. */
 export const MESSAGE_LINE_INSET = {
   BUBBLE: "bubble",
   FLUSH: "flush",
@@ -40,27 +16,22 @@ export const MESSAGE_LINE_INSET = {
 
 export type MessageLineInset = (typeof MESSAGE_LINE_INSET)[keyof typeof MESSAGE_LINE_INSET];
 
-/** Whether a node draws anything: none, null, and a boolean, as a condition leaves it, draw nothing. */
 function drawsSomething(node: ReactNode): boolean {
   return node !== undefined && node !== null && typeof node !== "boolean";
 }
 
-/** Whether the line opens at a bubble's inset: at its start where it keeps to the left, unless its message's words stand on no ground. */
 function opensInset(align: MessageLineAlign, inset: MessageLineInset): boolean {
   return align === MESSAGE_LINE_ALIGN.START && inset === MESSAGE_LINE_INSET.BUBBLE;
 }
 
-/** The sender's inset: at its end, and at its start too unless the line opens flush with words on no ground. */
 function senderInset(inset: MessageLineInset): string {
   return inset === MESSAGE_LINE_INSET.BUBBLE ? "px-ui-4" : "pe-ui-4";
 }
 
-/** The time's inset: at its end, and at its start too where it opens a received message's line, so it stands at the bubble's inset as the head over it does (`MessageHead`). */
 function timeInset(named: boolean, align: MessageLineAlign, inset: MessageLineInset): string {
   return !named && opensInset(align, inset) ? "px-ui-4" : "pe-ui-4";
 }
 
-/** The line under a message: `sender` or `status`, `at`, and `actions`, each left out where the message has none, the actions on the side away from `align`'s edge. */
 export function MessageLine({
   sender,
   status,
@@ -70,18 +41,12 @@ export function MessageLine({
   inset = MESSAGE_LINE_INSET.BUBBLE,
   wrap = false,
 }: {
-  /** Who sent it, as the caller's own mark and name, or what else leads the line, such as how long a turn worked; none for the reader's own. */
   sender?: ReactNode;
-  /** What leads the line in the danger tone in the sender's place, where the message did not go, as a chat app says "Not delivered" before the time, said as an alert as it lands; none where it went. */
   status?: ReactNode;
-  /** When it was sent. */
   at?: number | undefined;
-  /** Its actions, a `MessageActions` bar. */
   actions?: ReactNode;
   align?: MessageLineAlign;
-  /** Where its start stands: at the bubble's inset, unless the message's words stand on no ground, as an agent's turn's do. */
   inset?: MessageLineInset;
-  /** Whether the time may break onto a line under a sender too long to share one. */
   wrap?: boolean;
 }): React.JSX.Element | null {
   const lead = drawsSomething(status) ? (

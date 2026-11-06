@@ -5,25 +5,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { DIALOG_SIZE, Dialog, PictureTile, usePictureExpand } from "./index.js";
 
-/**
- * picture-expand.test.ts -- a picture opened from its tile is put away
- * only once its flight back into the tile ends. A tile gone by the close,
- * reduced motion, and a viewer opened from no tile close at once, as every
- * dialog does.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** One flight a card or the dimmed window played: what moved and through which poses, and how it ends. */
 interface Played {
   readonly element: Element;
   readonly frames: Keyframe[];
   readonly animation: { onfinish: (() => void) | null };
 }
 
-/** Where each part stands on the page, as the browser would lay it out. */
 const RECT = {
   TILE: { left: 40, top: 300, width: 120, height: 80 },
   CARD: { left: 200, top: 100, width: 600, height: 440 },
@@ -41,8 +32,6 @@ beforeEach(() => {
   played = [];
   document.documentElement.style.setProperty("--ui-duration-fast", "280ms");
   document.documentElement.style.setProperty("--ui-spring-fast", "ease-out");
-  // Note that jsdom lays nothing out and plays no animation, so the browser's
-  // layout and its animation are what stand in here, at that boundary.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -72,7 +61,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A picture shown over the window as the viewer shows it, put away through its flight. */
 function Viewer({ onClosed }: { onClosed: () => void }): React.JSX.Element {
   const titleId = useId();
   const expand = usePictureExpand(true);
@@ -93,7 +81,6 @@ function Viewer({ onClosed }: { onClosed: () => void }): React.JSX.Element {
   });
 }
 
-/** A tile that opens the viewer, which a button withdraws, and the viewer while it stands. */
 function Page({ closed }: { closed: string[] }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [tiled, setTiled] = useState(true);
@@ -119,7 +106,6 @@ function Page({ closed }: { closed: string[] }): React.JSX.Element {
   );
 }
 
-/** Draws the page and answers its tile, its viewer's card, and a way to press Escape in it. */
 function mountPage(closed: string[]) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -146,7 +132,6 @@ function mountPage(closed: string[]) {
   };
 }
 
-/** The flights the card played. */
 function cardFlights(): Played[] {
   return played.filter((each) => each.element.classList.contains("ui-dialog"));
 }

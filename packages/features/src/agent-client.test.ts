@@ -48,14 +48,12 @@ function client(): HostedAgentClient {
   });
 }
 
-/** An answer without what failed beneath it, for a case about which failure it names; the Start's deadline case reads the cause whole. */
 function uncaused(answer: object): object {
   if (!("cause" in answer)) return answer;
   const { cause: _cause, ...named } = answer;
   return named;
 }
 
-/** The trace a failed answer's cause names, checked to be a trace id, since every ask mints its own. */
 function causeTraceOf(answer: object): unknown {
   const traceId =
     "cause" in answer &&
@@ -164,7 +162,6 @@ it.effect(
         unreached,
       });
       assert.deepEqual(newer, { failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
-      // A settings page off GitHub is not one the desktop would open.
       assert.deepEqual(elsewhere, {
         failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       });
@@ -221,7 +218,6 @@ it.effect(
         refusedDevice: { name: "Studio", owner: "Charles" },
       });
 
-      // A reason a build from before this one has no word for fails its data's decode, as one from a newer service does here.
       const unread = yield* refusedWith({
         error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED,
         localAgentRefusal: "a-reason-from-a-newer-service",

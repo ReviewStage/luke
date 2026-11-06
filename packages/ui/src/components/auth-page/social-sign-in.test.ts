@@ -6,10 +6,6 @@ import { afterEach, expect, test } from "vitest";
 import { UNREPORTED } from "../../reported-failure.js";
 import { SIGN_IN_UNFINISHED, SocialSignInCard } from "./social-sign-in.js";
 
-/**
- * social-sign-in.test.ts -- the card offers a button for every provider, a press names its provider, one opening holds the rest, and a failure is said in the alert region.
- */
-
 const roots: Root[] = [];
 
 afterEach(() => {

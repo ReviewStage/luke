@@ -3,29 +3,10 @@ import type { MouseEvent } from "react";
 import { pulsePress } from "../../press-pulse.js";
 import { ShadcnSwitch, SWITCH_THUMB, SWITCH_TRACK } from "../../shadcn/switch.js";
 
-/**
- * switch.tsx -- the app's one on/off switch: a pill whose thumb slides right and takes the switch's "on" ink while on.
- *
- * It comes in two forms that look alike and are kept apart by what they
- * are. A `Switch` is its own button, `role="switch"` with its label as its
- * name, as a Settings row's and an MCP server's are, drawn by shadcn/ui's
- * Base UI switch (`../../shadcn/switch.tsx`) rendered as a native button.
- * A `SwitchMark` is the drawing alone, inside a row button that is itself
- * the switch for the keyboard and the reader (a menu's switch row), so it
- * hides from the reader and carries no state but what it draws, in the
- * same classes. Either way it keys its look on its own `data-checked`.
- * What finds a switch for an app (the desktop's settings search) is the
- * app's: it hands the switch the attributes its search lands on.
- */
-
-/** The switch as a button of its own: `role="switch"`, named by `label`. */
 type SwitchProps = {
   checked: boolean;
-  /** Answers the state a press asks for, with the press, which a switch inside a pressable row stops from reaching the row. */
   onChange: (checked: boolean, event: MouseEvent<HTMLElement>) => void;
-  /** The switch's accessible name. */
   label: string;
-  /** The id of the words that say what the switch does, where some stand beside it. */
   describedBy?: string | undefined;
 } & Omit<
   SwitchRootProps,
@@ -42,7 +23,6 @@ type SwitchProps = {
   | "aria-label"
 >;
 
-/** The switch as a button of its own. */
 export function Switch({
   checked,
   onChange,
@@ -58,11 +38,7 @@ export function Switch({
       checked={checked}
       aria-label={label}
       aria-describedby={describedBy ?? button["aria-describedby"]}
-      // Note that the press answers through the click itself rather than
-      // Base UI's change callback, because a caller inside a pressable row
-      // stops the press from reaching the row (`agent-servers.tsx`).
       onClick={(event) => {
-        // Note that the thumb is what a press moves, so it is what gives as the press lands.
         const thumb = event.currentTarget.firstElementChild;
         if (thumb instanceof HTMLElement) pulsePress(thumb);
         onChange(!checked, event);
@@ -71,15 +47,9 @@ export function Switch({
   );
 }
 
-/** The switch and its words in one line, the words in the body's type, on the line's middle. */
 const LABELED_SWITCH =
   "inline-flex items-center gap-icon-gap min-w-0 font-ui text-body cursor-press has-disabled:cursor-default";
 
-/**
- * A `Switch` with its name written beside it, which takes a press for it as
- * the thumb does: a switch that stands in a row of chips, where no settings
- * row's label stands for it.
- */
 export function LabeledSwitch(props: SwitchProps): React.JSX.Element {
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is a native button, which the label's press reaches, which the rule cannot see through a component.
@@ -90,7 +60,6 @@ export function LabeledSwitch(props: SwitchProps): React.JSX.Element {
   );
 }
 
-/** The switch's drawing alone, hidden from a reader, inside a control that is the switch. */
 export function SwitchMark({ checked }: { checked: boolean }): React.JSX.Element {
   const state = checked ? { "data-checked": "" } : { "data-unchecked": "" };
   return (

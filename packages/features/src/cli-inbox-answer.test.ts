@@ -37,9 +37,6 @@ const FORM = asking({
 });
 const WORDS = asking({ type: INBOX_ASK.ANSWER });
 
-// Note that the regression these catch is the command line mapped onto an answer the service
-// refuses or misreads: an option's case not matched to its label, `done` sent without every
-// step ticked, a form's JSON sent as words, or words dropped from an answer of words alone.
 describe("cliInboxAnswer", () => {
   it.each([
     [

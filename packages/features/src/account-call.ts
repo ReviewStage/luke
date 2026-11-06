@@ -28,65 +28,19 @@ const ACCOUNT_CALL_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
 } as const;
 
-/**
- * The name a deadline ends a request under. The deadline is the runtime's own
- * timeout rather than an `AbortSignal.timeout`, and this is the name that
- * signal's reason carried, kept so a caller reporting an end reports the same
- * word it always did, and a reader of a failure can tell a call that got no
- * answer by it.
- */
 export const DEADLINE_ERROR_NAME = "TimeoutError";
 
-/** The content type a serialized body names, the one type this call sends. */
 const JSON_CONTENT_TYPE = "application/json";
 
-/**
- * How long the service must have answered nothing before an attempt that
- * ends with no answer says it is unreachable: the held deadline
- * (`hosted-link.ts`'s `HOSTED_DEADLINE.HELD`, 35 seconds), the longest a
- * live read waits on its answer, and a margin past it. Note that one
- * attempt is never enough, because a held read answers within its deadline
- * while the service is well, so an attempt that runs out its own, or a gap
- * no read was answered in that is shorter than this, says nothing of the
- * service.
- */
 const SILENCE_BEFORE_UNREACHABLE = Duration.seconds(45);
 
-/**
- * What authorizes one call, and what may be done about a refusal. Three
- * members rather than a token, because the three questions a refused call
- * asks — what header to send, who can renew it, and who it answers for — are
- * answered by three different owners.
- */
 export interface CallCredential {
-  /**
-   * The header one attempt carries. A credential with no `authorization` at
-   * all is an endpoint that takes no identity, so an attempt without a header
-   * is its own answer; a credential that has one and reads nothing is a call
-   * that cannot be made.
-   */
   authorization?: () => Effect.Effect<string | undefined>;
-  /** Asks whoever owns the credential to renew it; one with nothing to renew omits this. */
   renew?: () => Effect.Effect<void, AccountRefreshFailed>;
-  /**
-   * Who the credential answers for, as an opaque identity. Read before an
-   * attempt and again before its one retry, because the retry re-reads the
-   * credential: a sign-out and sign-in between the two must read as the
-   * caller's account gone, never as a fresh bearer to carry the old account's
-   * payload under.
-   */
   holder?: (() => Effect.Effect<string | undefined>) | undefined;
-  /**
-   * The credential this one stands for, read before every use: a caller built
-   * before the account it calls under holds one of these, and each call then
-   * reads what it resolves exactly as it would have read that credential
-   * itself, a header or none. A credential that resolves carries nothing else
-   * of its own.
-   */
   resolve?: (() => Effect.Effect<CallCredential>) | undefined;
 }
 
-/** The ends a call reaches before any status is read. */
 export const CALL_FAULT = {
   NO_CREDENTIAL: "no-credential",
   HOLDER_CHANGED: "holder-changed",
@@ -95,95 +49,51 @@ export const CALL_FAULT = {
 
 type CallFault = (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
 
-/** The service answered; every status, including a refusal, is the caller's to read. */
 interface CallResponse {
   response: Response;
 }
 
 interface CallFailure {
   fault: CallFault;
-  /**
-   * The kind of error a network fault ended with, never its words, which
-   * could carry a credential.
-   */
   errorName?: string;
 }
 
 export type CallAnswer = CallResponse | CallFailure;
 
-/** The service's reach as the calls found it. */
 export interface ServiceReachState {
-  /** Whether the service answers, as the calls last judged it. */
   readonly reachable: boolean;
-  /** When an attempt was last answered, in the clock's milliseconds; when the reach was first kept, before any was. */
   readonly answeredAt: number;
 }
 
-/**
- * Whether the service answers, for a client that keeps it (`@repo/host`'s
- * network watch): an attempt sets it reachable as soon as a status arrives,
- * a refusal among them, and unreachable where it ended before one did, a
- * transport fault or the deadline, only once no attempt has been answered
- * for `SILENCE_BEFORE_UNREACHABLE`. Optional, so a call made where none is
- * provided, as the service's own calls are, tells nobody.
- */
 export class ServiceReach extends Context.Service<
   ServiceReach,
   SubscriptionRef.SubscriptionRef<ServiceReachState>
 >()("@repo/features/ServiceReach") {}
 
-/** Whether the service answered at all, as distinct from the call never reaching it. */
 export function callAnswered(answer: CallAnswer): answer is CallResponse {
   return "response" in answer;
 }
 
-/** A response's body as JSON, or nothing where it is not JSON at all. */
 export function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
-/** One request, as the build fixes it: nothing here is composed from what a service answered. */
 export interface CallRequest {
   method: HttpMethod;
-  /** The path under the call's own base address. */
   path: string;
-  /** The serialized body, which is also what names the request's content type. */
   body?: string | undefined;
-  /** Extra headers the build fixes; the authorization and content type are the call's own. */
   headers?: Record<string, string> | undefined;
 }
 
 interface AccountCallOptions {
-  /** The service origin; any trailing separator is trimmed once. */
   baseUrl: string;
   credential: CallCredential;
   requestTimeoutMs?: number | undefined;
 }
 
-/**
- * One call to our own service, however it is authorized: the base address
- * trimmed once, the credential read fresh for every attempt, the header
- * written once, a request the ambient `HttpClient` carries under the call's
- * own deadline, a client that failed read as a network fault by the error's
- * kind alone, and one reading of a 401 — renew the credential and retry
- * exactly once, only on a credential that actually changed and only while it
- * still answers for the same holder. Nothing here retries a status other than
- * that one: a rate limit, a server error, and a refusal are each the caller's
- * to read. Each attempt tells the service's reach, where the client keeps one
- * (`ServiceReach`), whether it was answered.
- */
 export interface AccountCallEffects {
-  /**
-   * The deadline in force, for a caller that reports which deadline its
-   * requests are under.
-   */
   readonly requestTimeoutMs: number;
   send(request: CallRequest): Effect.Effect<CallAnswer, never, HttpClient.HttpClient>;
-  /**
-   * The whole of an answer a caller only wants read: anything but a body the
-   * answer's own schema admitted — a fault, a refusal, a body that is not
-   * JSON — is no answer.
-   */
   ask<Answer, Encoded>(
     request: CallRequest,
     answer: EffectSchema.Codec<Answer, Encoded>,
@@ -195,37 +105,22 @@ interface Identity {
   authorization: string | undefined;
 }
 
-/**
- * What a request ended with before any status was read, as the one failure the
- * attempt below raises: a client that could not carry it, a body that would
- * not decode, or the deadline. The name is the error's kind and never its
- * words, which could carry a credential.
- */
 class CallTransportError extends Data.TaggedError("CallTransportError")<{
   readonly errorName: string | undefined;
 }> {}
 
-/** How a caller reads one answer of the service, whatever its status. */
 type Reader<Answer> = (
   response: HttpClientResponse.HttpClientResponse,
 ) => Effect.Effect<Answer, CallTransportError>;
 
-/** One attempt's end: what the caller wanted read, or a 401 not yet decided about. */
 type Attempted<Answer> = { readonly answer: Answer } | Refused;
 
-/** A request that reached no status at all, as the failure it answers with. */
 type CallFailed = { readonly failure: CallFailure };
 
-/** What the call as a whole ended with, before a caller words it. */
 type Answered<Answer> = { readonly answer: Answer } | CallFailed;
 
-/** A 401 the retry has not been decided about yet. */
 type Refused = { readonly refusal: HttpClientResponse.HttpClientResponse };
 
-/**
- * The range a `Response` calls `ok`, restated because what is read here is a
- * status rather than a `Response`.
- */
 const OK_STATUS = {
   FIRST: 200,
   PAST: 300,
@@ -246,7 +141,6 @@ function transportFailure(error: CallTransportError): CallFailure {
   };
 }
 
-/** Changes the service's reach as of the clock's now, where the client keeps one. */
 function toldReach(
   change: (state: ServiceReachState, now: number) => ServiceReachState,
 ): Effect.Effect<void> {
@@ -262,10 +156,8 @@ function toldReach(
   );
 }
 
-/** An attempt the service answered, with any status. */
 const heardAnswer = toldReach((_, now) => ({ reachable: true, answeredAt: now }));
 
-/** An attempt that ended with no answer, which says the service is unreachable only once nothing was answered for `SILENCE_BEFORE_UNREACHABLE`. */
 const heardNoAnswer = toldReach((state, now) =>
   now - state.answeredAt > Duration.toMillis(SILENCE_BEFORE_UNREACHABLE)
     ? { ...state, reachable: false }
@@ -278,14 +170,12 @@ function readCredential(
   return read === undefined ? Effect.succeed(undefined) : read();
 }
 
-/** The credential a call reads: the one handed in, or what it resolves to, however many steps that takes. */
 export function resolvedCredential(credential: CallCredential): Effect.Effect<CallCredential> {
   return credential.resolve === undefined
     ? Effect.succeed(credential)
     : Effect.flatMap(credential.resolve(), resolvedCredential);
 }
 
-/** The call as effects over the ambient `HttpClient`. */
 export function accountCall(options: AccountCallOptions): AccountCallEffects {
   const baseUrl = text(options.baseUrl);
   if (!baseUrl) throw new Error("A call's base URL must not be empty");
@@ -317,9 +207,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
         ...request.headers,
         ...(authorization === undefined ? undefined : { authorization }),
       },
-      // The body a caller hands over is already the serialized text the
-      // service reads, so it travels as it came: `HttpBody.text` would encode
-      // it here, and the encoding is the client's own business.
       ...(request.body === undefined
         ? undefined
         : { body: HttpBody.raw(request.body, { contentType: JSON_CONTENT_TYPE }) }),
@@ -339,13 +226,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     );
   }
 
-  /**
-   * One attempt, read to whatever the caller wanted of the answer, telling
-   * the service's reach what it found: answered as soon as a status arrives,
-   * and not where it ended before one did. The deadline covers the reading
-   * as well as the request, because a body that never arrives is a request
-   * that never ended.
-   */
   function attempt<Answer>(
     request: CallRequest,
     authorization: string | undefined,
@@ -359,11 +239,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     ).pipe(Effect.tapError(() => heardNoAnswer));
   }
 
-  /**
-   * The first attempt, whose 401 is handed back unread because whether it
-   * stands is decided above; the retry takes the reader unconditionally, so a
-   * second refusal is read like any other status.
-   */
   function attemptDecidingRefusal<Answer>(
     request: CallRequest,
     authorization: string | undefined,
@@ -379,13 +254,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     );
   }
 
-  /**
-   * Who the credential answers for and what one attempt carries, read
-   * together. A credential that cannot be read at all — a store that failed,
-   * not an account that is absent — reads as nothing rather than failing,
-   * because a caller that took work off a queue to send it has to be able to
-   * put it back.
-   */
   const identify = (current: CallCredential): Effect.Effect<Identity | undefined> =>
     Effect.gen(function* () {
       const holder = yield* readCredential(current.holder);
@@ -397,13 +265,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
   const renew = (current: CallCredential): Effect.Effect<void> =>
     Effect.ignore(Effect.suspend(() => current.renew?.() ?? Effect.void));
 
-  /**
-   * The answer, read as the caller asked, under the one reading of a 401:
-   * renew the credential and retry exactly once, only on a credential that
-   * actually changed and only while it still answers for the same holder. A
-   * renewal that itself failed, or that produced the same credential, leaves
-   * the refusal standing, because retrying it would only repeat the no.
-   */
   function answered<Answer>(
     request: CallRequest,
     read: Reader<Answer>,
@@ -472,7 +333,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
   };
 }
 
-/** The signed-in account's bearer, read fresh for every attempt and renewed by the account lifecycle. */
 export function accountBearer(token: AccountToken): CallCredential {
   return {
     authorization: () =>
@@ -484,12 +344,6 @@ export function accountBearer(token: AccountToken): CallCredential {
   };
 }
 
-/**
- * The Mac's own Better Auth session as the bearer, for the calls that write
- * through Better Auth's organization endpoints: a refusal is answered by
- * asking for a new session, and the one retry runs on it while the account
- * is still the same.
- */
 export function sessionBearer(token: AccountToken & AccountSessionToken): CallCredential {
   return {
     authorization: () =>
@@ -501,16 +355,6 @@ export function sessionBearer(token: AccountToken & AccountSessionToken): CallCr
   };
 }
 
-/**
- * A call sent under the Mac's session (`sessionBearer`), whose credential
- * names who the session answers for and how a new one is asked for. A Mac
- * that holds no session yet has nothing for the call to carry, which the
- * account call answers without asking for anything, so the session is asked
- * for here and the call sent once more, but only while the account is the
- * one that asked: a sign-out and sign-in during the hand-off ends the call
- * rather than sending it under someone else. A session the service refuses
- * is asked for by the call's own renewal, which holds the same rule.
- */
 export function sendInSession(
   call: AccountCallEffects,
   session: Pick<CallCredential, "holder" | "renew" | "resolve">,
@@ -531,20 +375,13 @@ export function sendInSession(
     });
 }
 
-/** A credential the build or the developer fixed: one header, one attempt, nothing to renew. */
 export function fixedBearer(credential: string): CallCredential {
   const authorization = bearer(credential);
   return { authorization: () => Effect.succeed(authorization) };
 }
 
-/** An endpoint that takes no identity: nothing to send, nothing to renew, nobody to answer for. */
 export const NO_CREDENTIAL: CallCredential = {};
 
-/**
- * A credential that stands only once `credential` does, such as the account's
- * for a client built before the account is: every call waits for it, then goes
- * out as that credential would, a header or none.
- */
 export function lateCredential(credential: Effect.Effect<CallCredential>): CallCredential {
   return { resolve: () => credential };
 }

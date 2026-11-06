@@ -1,10 +1,3 @@
-/**
- * note-line.test.ts -- a note line is a plain line of words, with no press and
- * no alert; one a reader should hear land is a status, and one that is not
- * says nothing as it lands; and one a hint wraps hangs the hint's card, as a
- * finished turn's line hangs its turn's.
- */
-
 // @vitest-environment jsdom
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -32,7 +25,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Draws `element` into the page and answers the container it was drawn in. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -60,7 +52,6 @@ test("a note line not announced says its words without a live role", () => {
   expect(container.querySelector("[role]")).toBeNull();
 });
 
-/** A finger going `type` on `target`, as the browser sends it. */
 function press(target: Element, type: string): void {
   act(() => {
     target.dispatchEvent(

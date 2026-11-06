@@ -1,10 +1,3 @@
-/* status-dot.css -- a glyph wearing a status dot at its lower end corner,
-   with a hole cut under the dot a hair wider than it, so the dot reads apart
-   from the glyph's strokes on any ground: the menu's, a lit row's fill, a
-   dimmed row's, and under a tone whose ink is translucent. A mask rather
-   than a ring in the ground's color, which would have to know every
-   ground. The dot's size is set here once, where the hole reads it too. */
-
 @layer components {
   .ui-status-glyph {
     --status-glyph-dot: var(--ui-space-6);

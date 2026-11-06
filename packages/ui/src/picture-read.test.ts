@@ -22,17 +22,8 @@ import {
 import type { ReportedFailure } from "./reported-failure.js";
 import { recordedFailure } from "./testing/reported-failure.js";
 
-/**
- * picture-read.test.ts -- a picture's read as the place drawing it sees it:
- * one that did not land draws as failed until its retry lands it, and one
- * answered as gone draws as missing. Synthetic pictures, each on a client of
- * its own.
- */
-
-/** What a read that did not land is reported as. */
 const { failure: UNREAD } = recordedFailure();
 
-/** Builds the failure of a read that did not land. */
 const FAILED = () => UNREAD;
 
 const roots: Root[] = [];
@@ -41,7 +32,6 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
 });
 
-/** Draws the picture `id` read through `read` on a client of its own, keeping the state it was drawn in last. */
 async function drawPicture(
   id: string,
   read: () => Promise<PictureAnswer>,
@@ -108,7 +98,6 @@ test("a read whose call never reached the service is reported as the network's f
     () =>
       Promise.resolve({
         failure: "unanswered",
-        // The fault the account call names a request the network dropped under.
         cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: "network" },
       }),
     (unread) => {

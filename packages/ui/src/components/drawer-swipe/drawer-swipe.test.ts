@@ -6,28 +6,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useDrawerSwipe } from "./use-drawer-swipe.js";
 
-/**
- * drawer-swipe.test.ts -- a finger swiping in from the stage's left edge
- * opens the drawer; one let go short of half way puts it back,
- * unless it was flicked and not held still after; a finger at the screen's
- * very edge, one off the stage, one going up or down first, a mouse, and a stage where the swipe is off open nothing; an
- * open drawer swiped left shuts, and one the system took away stays open;
- * and a claimed swipe's moves and touches reach nothing under the finger.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-/** The drawer's width in the harness, in CSS pixels. */
 const DRAWER_WIDTH = 300;
 
 const roots: Root[] = [];
 
 beforeEach(() => {
-  // Note that jsdom lays nothing out, so the drawer is given its width and the stage its place at the screen's left.
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -42,7 +31,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A stage with a drawer at its left edge and a row under the finger, the drawer opening and shutting as the swipe asks. */
 function Harness({ enabled, opened }: { enabled: boolean; opened: boolean }): React.JSX.Element {
   const stage = useRef<HTMLDivElement>(null);
   const drawer = useRef<HTMLElement>(null);
@@ -79,7 +67,6 @@ function render(enabled = true, opened = false) {
   };
 }
 
-/** A finger's pointer event at `x`, `y`, stamped `at` milliseconds in, since the swipe reads the finger's speed off the stamps. */
 function finger(
   type: string,
   x: number,
@@ -100,14 +87,12 @@ function finger(
   return event;
 }
 
-/** The touch move a finger at `x`, `y` makes beside its pointer move, which the page would scroll by. */
 function touchMove(x: number, y: number): Event {
   const event = new Event("touchmove", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "touches", { value: [{ clientX: x, clientY: y }] });
   return event;
 }
 
-/** A finger going down on `target` at `from`, moving through `steps` 16ms apart, and lifted or taken away at the last. */
 function swipe(
   target: HTMLElement,
   from: readonly [number, number],

@@ -16,12 +16,10 @@ import {
   timeZoneSchema,
 } from "./date-mention.js";
 
-/** Monday, October 19, 2026, at 10:00 in the morning in Los Angeles. */
 const NOW = Date.parse("2026-10-19T10:00-07:00");
 const LOS_ANGELES = "America/Los_Angeles";
 const TOKYO = "Asia/Tokyo";
 
-/** The start the words name, from NOW in Los Angeles. */
 function startOf(words: string): string | undefined {
   return dateOfWords(words, NOW, LOS_ANGELES)?.start;
 }
@@ -33,7 +31,6 @@ test("a named day, typed in full or far enough to tell, is that day from today",
   assert.equal(startOf("tomo"), "2026-10-20");
   assert.equal(startOf("tmrw"), "2026-10-20");
   assert.equal(startOf("Yesterday"), "2026-10-18");
-  // Note that `tom` is a name as often as it is tomorrow, so it is no date.
   assert.equal(startOf("tom"), undefined);
 });
 
@@ -67,7 +64,6 @@ test("a month and its day is the nearest such day, unless a year is written", ()
   assert.equal(startOf("2/3/27"), "2027-02-03");
   assert.equal(startOf("feb 30"), undefined);
   assert.equal(startOf("2026-02-29"), undefined);
-  // A month's name alone names no day, so a person called May is not taken for one.
   assert.equal(startOf("may"), undefined);
 });
 
@@ -172,7 +168,6 @@ test("a chip says a day from the reader's today: named, a weekday this week or l
 test("a chip says a time in the reader's own zone, and a range's end on its start's day by its time", () => {
   const meeting = { start: "2026-10-20T15:00-07:00", end: "2026-10-20T17:00-07:00" };
   assert.equal(dateChipText(meeting, NOW, LOS_ANGELES), "Tomorrow 3:00 PM → 5:00 PM");
-  // Note that it is already Tuesday in Tokyo, so Wednesday morning there is tomorrow.
   assert.equal(dateChipText(meeting, NOW, TOKYO), "Tomorrow 7:00 AM → 9:00 AM");
   assert.equal(
     dateChipText({ start: "2026-10-23", end: "2026-10-26" }, NOW, LOS_ANGELES),

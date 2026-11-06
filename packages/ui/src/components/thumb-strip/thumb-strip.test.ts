@@ -5,12 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { ThumbStrip } from "../../index.js";
 
-/**
- * thumb-strip.test.ts -- a press on a thumb shows its file, and the shown
- * file's thumb alone is marked current and stops Tab, the focus following
- * it where it stood on the strip. Synthetic files.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

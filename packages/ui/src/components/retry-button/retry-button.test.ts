@@ -6,16 +6,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { RetryButton } from "../../index.js";
 
-/**
- * retry-button.test.ts -- a failure's Retry is named "Retry", or by the
- * words its caller gives it, and retries on a press.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-/** jsdom's stand-in observer: jsdom lays nothing out, so nothing ever reports a resize. */
 class SilentResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -36,7 +30,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Draws a Retry, counting its presses, and answers its button. */
 function draw(label?: string) {
   let presses = 0;
   const container = document.body.appendChild(document.createElement("div"));

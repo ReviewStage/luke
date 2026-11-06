@@ -17,131 +17,46 @@ import { LengthCounter } from "../length-counter/length-counter.js";
 import { SKELETON_SHAPE, Skeleton } from "../skeleton/skeleton.js";
 import { Tooltip } from "../tooltip/hint.js";
 
-/**
- * composer-foot.tsx -- the foot of every message box: its tools, how near its limit its words stand, the round send, and one note under them.
- *
- * Every box a message is written in ends the same way, under its field and
- * inside its `ComposerFrame`; the files handed to it stand over the field,
- * as the sent message draws them (`ComposerBody`). The foot is one bar: at its start the
- * tools the owner hands it (attach, mention, skill), and at its end the
- * length counter, which says nothing until the words reach four fifths of
- * the limit (`LengthCounter`), the owner's own presses (the microphone, a
- * model), and the round send last. While the box holds something in the
- * bar's place, a dictation's strip, the strip takes the bar's room.
- *
- * The send never changes size or place. It takes no press while the box is
- * empty or `held` (a file still being read), and while a send it made is
- * out it is busy, the shape every button shares: it refuses another press,
- * is named by its busy words, and turns its ring only once the send has
- * been out a moment, so one that lands at once never flashes it. Inside a
- * frame that is a form it submits the form, as Enter in the field does;
- * given `onSend` it acts on its own press instead. A box whose empty send
- * can say why it is empty, an answer still unfinished, hands it `refuses`:
- * the send then stays pressable while empty, read as unavailable
- * (`aria-disabled`), a press telling the owner, and what the owner says
- * stands under the bar in an `ErrorLine` that describes the send, said as
- * it lands, rather than a press that does nothing and says nothing.
- *
- * A send that settles something with no message to send, a notice's "Got it",
- * reads in words (`inWords`) rather than as the round glyph, and is the
- * same press otherwise; one that sends another way than the round send
- * would, an agent's Queue or Steer, wears its own glyph (`icon`) in the
- * same round place. One that may also send that other way hands `onHold`,
- * which a touch held on it does (`HoldPress`), as holding ⌘ turns it on a
- * keyboard. Where the owner hands a `stop`, as an agent's box
- * does while a turn runs and the box holds nothing, Stop stands in the
- * send's place, the same round button wearing Stop's glyph, busy while the
- * stop it asked for is out.
- *
- * Under the bar stands at most one note, the box's one line for what went
- * wrong or what it did to the words: why a post did not go, with Retry
- * where trying again can mend it or a remedy where it cannot ("Unarchive"),
- * a paste cut to the room left, or a file refused. It is a failure's line (`ErrorState`), said as it lands,
- * with what mends it under the line where that is more than one press
- * (`mends`), as a closed agent's Continue in new agent is, and the failure
- * beneath it, reported as it first stands and offered to copy.
- *
- * Why the empty send was refused ("Pick an option.") is the person's input
- * checked, so it is said in an `ErrorLine` that reports nothing.
- *
- * Where the foot stands in its frame is the frame's look: a card's foot at
- * a card's inset, a field's and an input's a step tighter, and a bare
- * frame's flush with the words over it. A box still
- * loading draws the same foot (`ComposerFootSkeleton`), its tools' and its
- * end's placeholders handed by the owner and the send's disc last, so the
- * placeholder lands where the foot does.
- *
- * It is drawn in Tailwind utilities over the theme.
- */
-
-/** The send's press: its name, whether the box has anything to send, and whether a send it made is still out. */
 export type ComposerSend = {
-  /** What it does, which is its name and its hint: "Send", "Reply", "Comment". */
   label: string;
-  /** Whether the box holds nothing to send, which leaves it taking no press. */
   empty: boolean;
-  /** Whether it takes no press for another reason, as a file still being read. */
   held?: boolean | undefined;
-  /** Its own press, where the frame is no form whose submit sends it. */
   onSend?: (() => void) | undefined;
-  /** Whether it reads as its label in words, where its press settles something and sends no message ("Got it"), or sends one another way than its round send would ("Queue"). */
   inWords?: boolean | undefined;
-  /** The glyph it wears in the send's round place, or before its words where it reads in words, where it sends another way than the round send would ("Queue", "Steer"). */
   icon?: ReactNode;
-  /** What a touch held on it does, where it may send another way than its press does: an agent's Queue where its press steers. */
   onHold?: (() => void) | undefined;
-  /** The key that sends where it is no bare Enter, drawn on its hint: ⌘↩ for a box whose Enter breaks the line. */
   chord?: ShortcutChord | undefined;
-  /** Where the box can say why it holds nothing to send: what its press while empty tells, and what it says, once said, under the bar. */
   refuses?: ComposerRefusal | undefined;
 } & BusyProps;
 
-/** Why an empty send takes no message: told on its press, and said under the bar. */
 export interface ComposerRefusal {
-  /** Hears a press of the send while the box is empty. */
   readonly onRefused: () => void;
-  /** Why the send was refused, as "Pick an option."; nothing until it has been. */
   readonly words: string | undefined;
 }
 
-/** Stop in the send's place: its name, its press, and whether the stop it asked for is still out. */
 export type ComposerStop = {
-  /** What it does, which is its name and its hint: "Stop". */
   label: string;
   onStop: () => void;
 } & BusyProps;
 
-/** The one line under the bar: what it says, and Retry where trying again can mend it. */
 export interface ComposerNote {
-  /** What went wrong or what happened to the words, as "Only the first 4,000 characters were pasted." */
   readonly words: string;
-  /** The failure beneath the words, as the app reports it, or the person's input checked (a paste cut to the room left). */
   readonly failure: ReportedFailure | Unreported;
-  /** Retry's press, for a send that was refused. */
   readonly onRetry?: (() => void) | undefined;
-  /** The press that mends what went wrong where trying again alone cannot, as "Unarchive". */
   readonly remedy?: ErrorStateRemedy | undefined;
-  /** What mends it under the line where that is more than one press, as a closed agent's Continue in new agent. */
   readonly mends?: ReactNode;
 }
 
-/**
- * The foot's own box, at its frame's inset: a card's at the card's, a
- * field's or an input's a step tighter in its well, and a bare frame's flush
- * with the words over it, since the card around it insets both.
- */
 const FOOT =
   "ui-composer-foot flex flex-col gap-tight-gap px-ui-12 pt-0 pb-ui-12 " +
   "group-data-[look=field]/composer:px-ui-6 group-data-[look=field]/composer:pt-ui-2 group-data-[look=field]/composer:pb-ui-6 " +
   "group-data-[look=input]/composer:px-ui-6 group-data-[look=input]/composer:pt-ui-2 group-data-[look=input]/composer:pb-ui-6 " +
   "group-data-[look=bare]/composer:px-0";
 
-/** The foot's own box: its bar and its note, stacked. */
 function FootBox({ children }: { children: ReactNode }): React.JSX.Element {
   return <div className={FOOT}>{children}</div>;
 }
 
-/** The bar: the tools at its start and the end's presses, or a strip in their place. */
 function FootBar({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <div className="ui-composer-foot-bar flex min-h-control items-center justify-between gap-block-gap">
@@ -150,14 +65,12 @@ function FootBar({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The bar's start, which gives way first as the bar narrows. */
 function FootTools({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <div className="ui-composer-foot-tools flex min-w-0 items-center gap-tight-gap">{children}</div>
   );
 }
 
-/** The bar's end: the counter, the owner's presses, and the send last. */
 function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <div className="ui-composer-foot-end ms-auto flex flex-none items-center gap-tight-gap">
@@ -166,7 +79,6 @@ function FootEnd({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** The send: the round submit in the panel's ink, busy while its send is out, pressable while empty where it says why (`refuses`), described by that line (`refusalId`), and held by a touch where it sends another way too (`onHold`). */
 function SendButton({
   send,
   refusalId,
@@ -183,7 +95,6 @@ function SendButton({
   );
 }
 
-/** The send's own press, in words or round. */
 function SendPress({
   send,
   refusalId,
@@ -194,7 +105,6 @@ function SendPress({
   const { label, empty, held = false, inWords = false, icon, onSend, chord, refuses } = send;
   const busy = send.busy === true ? { busy: true, busyLabel: send.busyLabel } : {};
   const type = onSend === undefined ? BUTTON_TYPE.SUBMIT : BUTTON_TYPE.BUTTON;
-  // Note that an empty send that can say why stays pressable, and a held one never is.
   const refusing =
     refuses === undefined
       ? {}
@@ -248,7 +158,6 @@ function SendPress({
   );
 }
 
-/** Stop, the round button in the send's place wearing Stop's glyph, busy while its stop is out. */
 function StopButton({ stop }: { stop: ComposerStop }): React.JSX.Element {
   const busy = stop.busy === true ? { busy: true, busyLabel: stop.busyLabel } : {};
   return (
@@ -265,7 +174,6 @@ function StopButton({ stop }: { stop: ComposerStop }): React.JSX.Element {
   );
 }
 
-/** A message box's foot: a bar of `tools`, the counter, `actions` and the send or `stop`, or `strip` in the bar's place, and `note` under it. */
 export function ComposerFoot({
   send,
   stop,
@@ -276,17 +184,11 @@ export function ComposerFoot({
   note,
 }: {
   send: ComposerSend;
-  /** Stop, which stands in the send's place while it is handed. */
   stop?: ComposerStop | undefined;
-  /** The presses at the bar's start: attach, mention, skill. */
   tools?: ReactNode;
-  /** The owner's own presses at the bar's end, before the send: the microphone, a model. */
   actions?: ReactNode;
-  /** How many characters the field holds of how many it takes, said from four fifths of the way. */
   counter?: { readonly length: number; readonly limit: number } | undefined;
-  /** What stands in the bar's place while it holds, a dictation's strip. */
   strip?: ReactNode;
-  /** The one line under the bar, where there is something to say. */
   note?: ComposerNote | undefined;
 }): React.JSX.Element {
   const refusalId = useId();
@@ -312,7 +214,6 @@ export function ComposerFoot({
           <div className="ui-composer-foot-strip flex min-w-0 flex-1 items-center">{strip}</div>
         )}
       </FootBar>
-      {/* Note that the line stands, empty, for as long as the send can refuse, so what it says lands as said. */}
       {send.refuses === undefined ? null : (
         <ErrorLine id={refusalId} error={inputProblem(send.refuses.words)} />
       )}
@@ -328,14 +229,11 @@ export function ComposerFoot({
   );
 }
 
-/** A box's foot while the box is still loading: the same bar, its tools and its end holding the placeholders the owner hands, and the send's disc where the send will stand. */
 export function ComposerFootSkeleton({
   tools,
   actions,
 }: {
-  /** The placeholders of the presses at the bar's start. */
   tools?: ReactNode;
-  /** The placeholders of the owner's own presses at the bar's end, before the send. */
   actions?: ReactNode;
 }): React.JSX.Element {
   return (

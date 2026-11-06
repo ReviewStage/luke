@@ -8,13 +8,6 @@ import {
   taskSectionIconSchema,
 } from "./task-section-wire.js";
 
-/**
- * A section's icon as the service takes it: any Lucide glyph by its
- * kebab-case name, in a color of the palette or none, and every glyph a
- * section could wear before every one could be chosen; a name spelled any
- * other way, or past its bound, and a color off the palette, are refused.
- */
-
 const isIcon = EffectSchema.is(taskSectionIconSchema);
 
 const glyph = (name: string, color?: string) => ({

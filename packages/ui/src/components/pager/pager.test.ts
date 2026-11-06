@@ -6,12 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PAGER_AXIS, PAGER_COUNT, Pager } from "./pager.js";
 
-/**
- * pager.test.ts -- the pager says where the item stands, before its arrows
- * or between them, and an arrow with nowhere to go stays in the keyboard's
- * reach but steps nowhere, while the other steps.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -33,7 +27,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** What the pager reads as, its place and its arrows' names in order. */
 function reading(container: HTMLElement): string[] {
   return [...container.querySelectorAll<HTMLElement>(".ui-pager > *")].map(
     (each) => each.getAttribute("aria-label") ?? each.textContent ?? "",

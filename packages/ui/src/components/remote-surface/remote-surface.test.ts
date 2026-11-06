@@ -12,13 +12,6 @@ import {
   type RemoteWheel,
 } from "./remote-surface.js";
 
-/**
- * remote-surface.test.ts -- while it is driven, what the member does over
- * the surface is handed on: a mouse's point held inside it, a wheel in
- * pixels, a key only the owner takes kept from the window, a paste as its
- * words; while it is watched, nothing is.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -34,7 +27,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A 200 by 100 surface at the page's corner, everything it hands on recorded. */
 function mount(driving: boolean, takes: (key: RemoteKey) => boolean = () => true) {
   const pointers: RemotePointer[] = [];
   const wheels: RemoteWheel[] = [];

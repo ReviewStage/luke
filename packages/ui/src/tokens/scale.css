@@ -1,10 +1,3 @@
-/* scale.css -- the base values: one length, corner, and weight per step, meaning the same in every app.
-
-   A base value is named by what it is, so `--ui-space-16` is sixteen
-   pixels on the desktop and on the site alike. A component never picks one
-   at its call site: it reads a role (`profiles.css`), and the role is what
-   one profile sets differently from the other. */
-
 :root {
   --ui-space-0: 0px;
   --ui-space-2: 2px;
@@ -27,13 +20,11 @@
   --ui-radius-14: 14px;
   --ui-radius-full: 9999px;
 
-  /* The seats an icon stands in (`icons/icon-size.ts`): beside a caption's words, in a button or a menu row, as a row's lead, over an empty state. */
   --ui-icon-12: 12px;
   --ui-icon-16: 16px;
   --ui-icon-20: 20px;
   --ui-icon-40: 40px;
 
-  /* Body and captions, labels, section and dialog headings, page titles. */
   --ui-weight-regular: 400;
   --ui-weight-medium: 500;
   --ui-weight-semibold: 600;

@@ -14,17 +14,8 @@ import {
   HoverCardRule,
 } from "./hover-card.js";
 
-/**
- * hover-card.test.ts -- a card reads its subject's name, the line under it,
- * and its corner, then its notes, in that order; a part left out says
- * nothing; the rule before what it lists is a separator to a reader; and
- * its rows open what they name where they can, in a list named and counted.
- * Synthetic plans.
- */
-
 const roots: Root[] = [];
 
-/** jsdom's stand-in observer: jsdom lays nothing out, so nothing ever reports a resize. */
 class SilentResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -40,7 +31,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The element `card` draws, mounted in the document. */
 function drawn(card: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);

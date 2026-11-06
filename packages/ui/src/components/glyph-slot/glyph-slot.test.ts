@@ -6,12 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { GLYPH_INK, GlyphSlot } from "./glyph-slot.js";
 
-/**
- * glyph-slot.test.ts -- a glyph that only repeats its line's words is
- * hidden from a reader, and one that says more than they do is an image
- * named by what it says.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -25,7 +19,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into a fresh container on the page. */
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

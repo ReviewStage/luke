@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../../index.js";
 
-/**
- * scroll-area.test.ts -- an area is the scroller its caller reaches: the
- * caller's ref, its scroll and key handlers, and its focus land on the
- * area itself, and a tab panel drawn as one is named by its tab and holds
- * what the caller put in it.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

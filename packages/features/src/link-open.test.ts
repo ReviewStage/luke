@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { LINK_OPEN, LINK_PLATFORM, linkOpenTarget } from "./link-open.js";
 
-/**
- * Whether a web page showing a link of ours hands it to the Mac app: only for
- * an account that chose the app, on a Mac, and an address naming a place in
- * a workspace, and then in the desktop's own scheme. Synthetic ids.
- */
-
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const TASK_ADDRESS = `https://vespin.dev/acme/plan/${TASK_ID}#rollout`;
 

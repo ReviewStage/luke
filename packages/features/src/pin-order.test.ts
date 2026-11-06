@@ -19,7 +19,6 @@ const place = (pin: Pin): PinPlace => pin;
 
 const names = (pins: readonly Pin[]) => pins.map((pin) => pin.name);
 
-/** The pins with the positions a move answered written in, drawn again: what the section shows once they land. */
 function afterMove(pins: readonly Pin[], from: number, to: number): Pin[] {
   const order = inPinOrder(pins, place);
   const positions = pinPositionsForMove(order, from, to, place);
@@ -135,7 +134,6 @@ describe("pinPositionsForMove", () => {
   });
 });
 
-/** The pins with `fresh` dropped among them at `to` and the positions the insert answered written in, drawn again. */
 function afterInsert(pins: readonly Pin[], fresh: Pin, to: number): Pin[] {
   const order = inPinOrder(pins, place);
   const positions = pinPositionsForInsert(order, fresh, to, place);

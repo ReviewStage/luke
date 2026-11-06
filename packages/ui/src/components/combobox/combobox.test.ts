@@ -5,27 +5,10 @@ import { MOTION_DELAY_MS } from "@repo/brand";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-// Note that the row a list engine owns is reached through the barrel, as an app reaches it.
 import { ComboboxListBox, ComboboxOptionItem } from "../../index.js";
 import { Announcer } from "../announcer/announcer.js";
 import { Combobox, ComboboxList, type ComboboxOption, comboboxOptionId } from "./combobox.js";
 import { useComboboxField } from "./use-combobox-field.js";
-
-/**
- * combobox.test.ts -- the keys move the active option through the list and
- * Enter chooses it while the caret stays in the field, the active option is
- * the one a reader is told of, Escape shuts the list and is kept from what
- * stands behind it, an Enter held with Command passes the options by, and
- * keys an input method is composing with never reach the list. A list
- * standing alone, under an editor of its caller's, names its one group to a
- * reader without drawing its heading, says so where nothing matches, and
- * keeps a press from taking the caret; a headed list draws each group's
- * name over its options in the group role. An option that cannot be chosen now
- * is passed over by the pointer and a press, the one chosen now is told as
- * current, a note stands after the options, and a list with no field holds
- * the focus and reads the keys itself. A row and a box a list engine owns
- * take the engine's names, keys, handlers, and ref.
- */
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -35,7 +18,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks, since every option's name and detail measure whether they are cut short. */
 class StandInResizeObserver {
   observe(): void {}
   unobserve(): void {}
@@ -54,7 +36,6 @@ afterEach(() => {
 
 const FRUIT = ["Apple", "Apricot", "Banana", "Cherry"];
 
-/** A field over the fruit its words start, as a caller would hold it, with what it chose and what Enter passed by. */
 function Fruit({ chosen, entered }: { chosen: string[]; entered: string[] }): React.JSX.Element {
   const [value, setValue] = useState("");
   const [active, setActive] = useState(0);
@@ -85,8 +66,6 @@ function mount() {
   const chosen: string[] = [];
   const entered: string[] = [];
   const escapedPast: string[] = [];
-  // Note that the page behind the field listens a box above React's root,
-  // because a press kept from it still reaches the root's own listeners.
   const page = document.body.appendChild(document.createElement("div"));
   const container = page.appendChild(document.createElement("div"));
   page.addEventListener("keydown", (event) => {
@@ -100,7 +79,6 @@ function mount() {
   return { container, field, chosen, entered, escapedPast };
 }
 
-/** Types `value` into `field` as the page would hand it to React. */
 function type(field: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -115,7 +93,6 @@ function press(field: HTMLElement, init: KeyboardEventInit): void {
   });
 }
 
-/** The option a reader is told is active: the one the field names, as it reads, and whether it says it is selected. */
 function announced(field: HTMLInputElement) {
   const id = field.getAttribute("aria-activedescendant");
   const option = id === null ? null : document.getElementById(id);
@@ -242,7 +219,6 @@ test("an Escape an input method is composing with is kept from what stands behin
   assert.equal(escapedPast.length, 0);
 });
 
-/** Lays `element` out as the browser would, which jsdom does not. */
 function layOut(element: HTMLElement, box: Record<string, number>): void {
   for (const [name, value] of Object.entries(box)) {
     Object.defineProperty(element, name, { configurable: true, value });
@@ -287,7 +263,6 @@ test("an option the pointer makes active is where the pointer is, so the list st
   assert.equal(list.scrollTop, 0, "the list does not scroll the pointed row away");
 });
 
-/** A list standing alone over `options`, as an editor's caller would hang it, with what it chose. */
 function mountList(options: readonly string[], headed: boolean) {
   const chosen: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));
@@ -385,7 +360,6 @@ test("a group's heading, drawn over its own options, says its name in the group 
   assert.equal(heading?.textContent, "Stone fruit");
 });
 
-/** Fruit where Banana cannot be chosen now and Cherry is the one chosen, with no field: the list steers itself. */
 function Steered({ chosen }: { chosen: string[] }): React.JSX.Element {
   const [active, setActive] = useState(0);
   const options: ComboboxOption[] = [

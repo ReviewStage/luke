@@ -1,12 +1,4 @@
-/* inline-ref.css -- the room a box cutting a token's wash leaves its ring
-   (`inline-ref.tsx`); the token itself is drawn in utilities. */
-
 @layer components {
-  /* A wash bleeds past its box by a ring, which a box cutting the words
-     right around it would slice off at the box's edge, its corners filled
-     in square; so that box leaves the ring its room. Note that the room is
-     kept only where the box cuts by `overflow: clip`, as `Text`'s cut does,
-     because `overflow: hidden` ignores it. */
   :has(> .ui-inline-ref[data-look="wash"]) {
     overflow-clip-margin: var(--ui-inline-ref-bleed);
   }

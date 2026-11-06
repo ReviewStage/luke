@@ -8,15 +8,6 @@ import { layTitle } from "../../testing/laid-title.js";
 import type { MenuEntry } from "../menu/menu.js";
 import { PaneBar } from "./pane-bar.js";
 
-/**
- * pane-bar.test.ts -- a tab's bar draws its left pane's toggle, its lead,
- * its middle, its actions, its ⋯, and its right pane's toggle in that
- * order, and leaves out a slot that says
- * nothing; the ⋯ drops the menu it was handed, named as the ⋯ is, and a
- * choice in it acts and closes it; a title the bar would cut under the
- * readable floor stands on a row of its own, still read whole.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -44,7 +35,6 @@ function barOf(container: HTMLElement): HTMLElement {
   return container.querySelector("header") ?? assert.fail("the bar");
 }
 
-/** The button named `name`. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
@@ -52,7 +42,6 @@ function button(name: string): HTMLButtonElement {
   return found ?? assert.fail(`a button named ${name}`);
 }
 
-/** The menu named `label` standing open, if it is: drawn and not on its way out. */
 function openMenu(label: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(
     `[role="menu"][aria-label="${label}"]:not([data-leaving])`,

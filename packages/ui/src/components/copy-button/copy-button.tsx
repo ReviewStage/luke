@@ -10,46 +10,6 @@ import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../chip/chip.js"
 import { TOAST_HOLD } from "../toast/toast.js";
 import { Tooltip } from "../tooltip/hint.js";
 
-/**
- * copy-button.tsx -- the window's one Copy: a glyph button named "Copy {what}" that copies the words it is given and answers on itself.
- *
- * Every copy button wears the copy glyph (`GLYPH.COPY`) and is named for
- * what it copies, "Copy code" or "Copy link", which its hint says too. A
- * press hands its words to the copy act its caller passes in, the shell's
- * clipboard, so this package reaches no platform of its own. Once the act
- * answers, the glyph turns to the check, the one a landed button shows, in
- * the success color, and the window's `Announcer` says "Copied"
- * politely; a clipboard that refused turns it to the alert, in the danger
- * color, and the announcer says so as an alert. Either stands for the
- * toast's short hold (`TOAST_HOLD.DONE`), so a copy answered on its button
- * and one answered by a toast last the same, then the copy glyph comes back
- * and the announcer's words are taken back with it, as they are by a later
- * answer, so a refusal a retry answered is left nowhere for a reader. Its name stays as it was throughout, so
- * nothing beside it shifts, and only its hint says what came of the copy
- * while the answer stands.
- *
- * A copy button comes in two looks (`look`): the glyph button, which is its
- * own face, and a chip (`COPY_LOOK.CHIP`) for a name that is shown and
- * copied, a pull request's branch: the compact pill's face, the words it
- * copies in the code face, cut in their middle where long, with its own
- * glyph (`lead`) before them. The lead stands at rest; under the pointer or
- * the keyboard it gives way to the copy glyph, saying what a press does,
- * and the answer's check or alert stands in the same square for its hold,
- * so the chip never moves. A chip's hint is the whole name at rest.
- *
- * A second press starts the hold over from its own answer, and only the
- * last press's answer is shown, however the clipboard orders them. The hold
- * is an atom's work on the registry the app's root provides, as a hint's
- * rest is (`../tooltip/hint.tsx`), so nothing here arms a timer of its own
- * and a test moves it on a faked clock.
- *
- * The glyph is drawn in the Tailwind theme's utilities, in the complete ink
- * once a copy lands and the danger ink once one is refused, and a chip's
- * lead stacks its own glyph and the copy's in one square. What answers the
- * chip's pointer and keyboard, and the glyph's turn, are `copy-button.css`'s.
- */
-
-/** The looks a copy button comes in: a glyph alone, or a chip that names what it copies. */
 export const COPY_LOOK = {
   ICON: "icon",
   CHIP: "chip",
@@ -57,7 +17,6 @@ export const COPY_LOOK = {
 
 export type CopyLook = (typeof COPY_LOOK)[keyof typeof COPY_LOOK];
 
-/** What a copy button shows: its resting glyph, the check, or the alert. */
 const COPY_STATE = {
   IDLE: "idle",
   COPIED: "copied",
@@ -66,54 +25,38 @@ const COPY_STATE = {
 
 type CopyState = (typeof COPY_STATE)[keyof typeof COPY_STATE];
 
-/** What a copy button's hint, and its reader's line, say while its answer stands. */
 const COPY_ANSWER = {
   [COPY_STATE.COPIED]: "Copied",
   [COPY_STATE.FAILED]: "Could not copy",
 } as const;
 
-/** How loudly each answer is said: a copy made politely, a refused one as an alert. */
 const COPY_SAID = {
   [COPY_STATE.COPIED]: ANNOUNCE.POLITE,
   [COPY_STATE.FAILED]: ANNOUNCE.ALERT,
 } as const satisfies Record<keyof typeof COPY_ANSWER, Announce>;
 
-/** The glyph each state draws. */
 const COPY_GLYPH = {
   [COPY_STATE.IDLE]: GLYPH.COPY,
   [COPY_STATE.COPIED]: CheckIcon,
   [COPY_STATE.FAILED]: GLYPH.FAILED,
 } as const;
 
-/**
- * One button's hold, as an atom whose work is the wait: it hands the glyph
- * back once the hold has run out. A new answer starts it afresh, and an
- * interrupt calls it off. Note that the way to say so is handed inside a
- * record, because a function handed to an atom's setter is read as an update
- * of its value and called at once.
- */
 function copyHold() {
   return Atom.fn(({ settle }: { readonly settle: () => void }) =>
     Effect.andThen(Effect.sleep(TOAST_HOLD.DONE), Effect.sync(settle)),
   );
 }
 
-/** The name of a copy button: "code" makes "Copy code". */
 function copyLabel(what: string): string {
   return `Copy ${what}`;
 }
 
-/** The glyph's ink in each state: the button's at rest, the complete ink once a copy lands, the danger ink once one is refused. */
 const GLYPH_INK = {
   [COPY_STATE.IDLE]: "",
   [COPY_STATE.COPIED]: " text-complete",
   [COPY_STATE.FAILED]: " text-danger",
 } as const satisfies Record<CopyState, string>;
 
-/**
- * The glyph for `state`, keyed by how many times it has turned, so each
- * turn springs the new glyph in and the first draw stands still.
- */
 function CopyGlyph({ state, turns }: { state: CopyState; turns: number }): React.JSX.Element {
   const Drawn = COPY_GLYPH[state];
   return (
@@ -129,15 +72,10 @@ function CopyGlyph({ state, turns }: { state: CopyState; turns: number }): React
   );
 }
 
-/** What every copy button takes, whatever its look. */
 interface CopyButtonBase {
-  /** The words a press copies. */
   text: string;
-  /** What it copies, as a sentence goes on after "Copy": "code", "link", "lines". */
   what: string;
-  /** The caller's platform act that puts words on the clipboard; a rejection is a refused copy. */
   copy: (text: string) => Promise<void>;
-  /** Whether there is nothing to copy now. */
   disabled?: boolean | undefined;
 }
 
@@ -148,14 +86,11 @@ export type CopyButtonProps = CopyButtonBase &
         size?: ButtonSize | undefined;
       }
     | {
-        /** A chip names `text` itself, in the code face, so it is drawn for a name. */
         look: typeof COPY_LOOK.CHIP;
-        /** The glyph a chip leads with at rest: a branch's. */
         lead: () => React.JSX.Element;
       }
   );
 
-/** A chip's lead: its own glyph at rest, the copy's own answer in the same square under the pointer, the keyboard, and once it lands. */
 function ChipLead({
   Lead,
   state,
@@ -178,7 +113,6 @@ function ChipLead({
   );
 }
 
-/** A button that copies `text` through `copy`, named "Copy {what}", and shows what came of it. */
 export function CopyButton(props: CopyButtonProps): React.JSX.Element {
   const { text, what, copy, disabled } = props;
   const label = copyLabel(what);
@@ -187,10 +121,7 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
     state: COPY_STATE.IDLE,
     turns: 0,
   });
-  // Note that this is a ref, because an answer reads it as it lands, which
-  // no render stands between; leaving bumps it, so a late answer lands nowhere.
   const latest = useRef(0);
-  // What the last answer said, taken back once the glyph turns back or a later answer lands.
   const said = useRef<Retire>(() => undefined);
   useEffect(
     () => () => {
@@ -216,9 +147,6 @@ export function CopyButton(props: CopyButtonProps): React.JSX.Element {
         },
       });
     };
-    // Note that the act is called within the press, because a browser's
-    // clipboard takes a write only while the press's activation stands, and
-    // one that throws before it hands a promise back is a refused copy too.
     let asked: Promise<void>;
     try {
       asked = copy(text);

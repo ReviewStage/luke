@@ -1,12 +1,3 @@
-/* styles.css -- every shared component's stylesheet, in the order they
-   cascade, each in the `components` layer.
-
-   The layer is where a shared control's own rules sit between the two that
-   surround it in every app: above the element resets (the desktop's
-   `base.css`, the site's Tailwind preflight, both in `base`) and below
-   utilities, so a reset never undoes a control and an app's own rule always
-   can. An app imports this after its reset and before its utilities. */
-
 @import "./components/motion/motion.css";
 @import "./components/visually-hidden/visually-hidden.css";
 @import "./components/layout/layout.css";
@@ -71,9 +62,7 @@
 @import "./components/spinner/spinner.css";
 @import "./components/skeleton/skeleton.css";
 @import "./components/shimmer/shimmer.css";
-/* After the button's, whose edge and corners it joins. */
 @import "./components/split-button/split-button.css";
-/* After the button's, whose glyph button its × is. */
 @import "./components/tabs/tabs.css";
 @import "./components/settings-row/settings-row.css";
 @import "./components/auth-page/auth-page.css";
@@ -85,15 +74,11 @@
 @import "./components/remote-surface/remote-surface.css";
 @import "./components/editable-block/editable-block.css";
 @import "./components/editable-heading/editable-heading.css";
-/* After the choice list's and the button's, whose fills it lays over a ground. */
-/* After the controls it steps back: the choice list, checkbox, field, and button. */
 @import "./components/stepped-back/stepped-back.css";
-/* After the button's and the menu's, whose pressed look and surface they draw on. */
 @import "./components/menu-keys/menu-keys.css";
 @import "./components/block-menu/block-menu.css";
 @import "./components/format-toolbar/format-toolbar.css";
 @import "./components/link-field/link-field.css";
 @import "./components/rect-float/rect-float.css";
 @import "./components/landed/landed.css";
-/* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

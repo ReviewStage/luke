@@ -29,12 +29,6 @@ import {
 } from "./automation-wire.js";
 import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
-/**
- * The Automations list as a window draws it: the workspace's automations
- * before the account's personal ones, a schedule said in words, a newest
- * run's standing, and when each runs next. Synthetic ids and words.
- */
-
 const SCHEDULE = {
   kind: AUTOMATION_TRIGGER.SCHEDULE,
   cron: "0 9 * * 1-5",
@@ -273,7 +267,6 @@ test("a run is titled by its agent where the agent has a title, else by what fir
 test("an agent's run is placed among the runs that started an agent, each agent once, counted from the oldest", () => {
   const started = (id: string, agentId: string) =>
     run({ id, agent: { id: agentId, title: null, status: AGENT_STATUS.COMPLETED } });
-  // Newest first, as the runs are read: a skipped run, and an agent handed two runs.
   const runs = [
     started("r5", "agent-c"),
     run({ id: "r4", status: AUTOMATION_RUN_STATUS.SKIPPED }),
@@ -328,7 +321,6 @@ test("a run's line says why it did not start, else where its agent stands, or th
   );
   assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.RUNNING) })), "Working");
   assert.equal(automationRunLine(run({ agent: agent(AGENT_STATUS.COMPLETED) })), "Finished");
-  // A run that started a fresh agent in place of a gone one still says where that agent stands.
   assert.equal(
     automationRunLine(
       run({
@@ -395,7 +387,6 @@ test("a run's line says why it did not start, else where its agent stands, or th
   );
 });
 
-/** A Sentry trigger on the event given, keeping to the filters given. */
 function sentry(
   event: (typeof SENTRY_TRIGGER_EVENT)[keyof typeof SENTRY_TRIGGER_EVENT],
   filters?: Extract<AutomationTrigger, { kind: "integration" }>["filters"],

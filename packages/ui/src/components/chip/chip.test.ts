@@ -6,14 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../../index.js";
 
-/**
- * chip.test.ts -- a row of filter chips announces the one pressed, and a
- * press moves it there; a chip drawn as its mark alone keeps its words as
- * its name; a removable chip's × alone is a press, which lifts it; and a
- * compact count says it is busy while the change it made is out. A long
- * name cut in its middle keeps its end.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -24,7 +16,6 @@ const FILTERS = ["All", "Tasks", "Files"] as const;
 
 const roots: Root[] = [];
 
-/** Stands in for the browser's ResizeObserver, which jsdom lacks, since a chip's words measure whether they are cut short. */
 class StandInResizeObserver {
   observe(): void {}
   disconnect(): void {}
@@ -47,7 +38,6 @@ function render(element: ReactElement): void {
   act(() => root.render(element));
 }
 
-/** A row of filters whose caller holds the one pressed, as ⌘K's does. */
 function Filters(): React.JSX.Element {
   const [chosen, setChosen] = useState<string>(FILTERS[0]);
   return createElement(
@@ -74,7 +64,6 @@ function chip(name: string): HTMLButtonElement {
   return found;
 }
 
-/** The names of the filters that say they stand pressed. */
 function pressed(): string[] {
   return [...document.querySelectorAll("button")]
     .filter((each) => each.getAttribute("aria-pressed") === "true")
@@ -107,7 +96,6 @@ test("a chip drawn as its mark alone is still named by its words", () => {
   assert.equal(chip("feature/expiry").textContent, "feature/expiry");
 });
 
-/** A removable chip whose caller lifts it, as the sidebar's view filter does. */
 function Removable(): React.JSX.Element | null {
   const [standing, setStanding] = useState(true);
   if (!standing) return null;
@@ -131,7 +119,6 @@ test("a removable chip is no press of its own, and its × named for what it does
   assert.equal(document.body.textContent, "");
 });
 
-/** A reaction's count as a compact filter whose press gives the reader's own and waits until it is answered. */
 function Reaction(): React.JSX.Element {
   const [mine, setMine] = useState(false);
   const [out, setOut] = useState(false);

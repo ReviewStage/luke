@@ -6,11 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { TEXT_ELEMENT, TEXT_TRUNCATE, TEXT_VARIANT, Text } from "./text.js";
 
-/**
- * text.test.ts -- words cut to one line still hold every word, so a heading
- * is named by its whole title rather than by what fits.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

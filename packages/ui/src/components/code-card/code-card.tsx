@@ -8,59 +8,15 @@ import { OneLine } from "../one-line/one-line.js";
 import { TextButton } from "../text-button/text-button.js";
 import { wholeWordsHint } from "../tooltip/hint.js";
 
-/**
- * code-card.tsx -- the window's one card for a block of code: a header naming its language or file with the one Copy, its lines in the host's colors, and a cut at 40 lines.
- *
- * Every block of code the window draws (a reply's fenced block, an Inbox
- * item's) stands in this card,
- * so each reads the same: a quiet header in the caption's type naming what
- * the lines are, the language they are written in or the file they came
- * from, with the one Copy at its end (`CopyButton`, "Copy code"), over the
- * lines on the code's own ground. The lines keep whole and scroll sideways
- * inside the card rather than widening the column they stand in.
- *
- * The card colors nothing itself. Its lines are colored by the one
- * highlighter the window has, the host's, which the File tab and
- * a reply's blocks are colored by (`CodeLines`), handed in once they land;
- * until then, or where nothing colors them, the lines are drawn plain in
- * the code's own ink. A run keeps its color in each appearance as custom
- * properties its runs pick between (`light-dark()`, the theme's
- * `code-run`), so the code follows the appearance
- * without being drawn again.
- *
- * A block longer than 40 lines shows its first 40 over a line offering the
- * rest ("Show all"), which then offers to cut it again ("Show less"), so a
- * long block never buries what comes after it. The rest is still drawn,
- * under `hidden="until-found"`, so a find over the page reaches it, the
- * browser's own and the window's alike (`find-matches.ts`), and the card
- * opens whole when a match lands there (`beforematch`), as a closed
- * `<details>` opens. Copy copies the whole block
- * whichever way it stands. Its lines are left out of the screen recording
- * (`ph-no-capture`), a second line behind the recording's text masking,
- * since their colors draw the code's shape.
- *
- * It is drawn in the Tailwind theme's utilities: the header on the hover
- * fill over a hairline, a glyph before its title where it wears one, its title holding to one line and fading where the
- * header cuts it (`OneLine`), its controls and the Copy flush with its right
- * edge; the lines in mono at the caption's size and the reading leading,
- * tabs two wide; a block drawn as rows, a suggestion's or a diff's, its
- * rows as wide as the widest and inset as the lines are, so a tint runs
- * edge to edge.
- */
-
-/** How many lines a block shows before the rest waits behind Show all. */
 const CODE_CARD_CUT_LINES = 40;
 
-/** What the line under a cut block says, cut and whole. */
 const CUT_LABEL = {
   CUT: "Show all",
   WHOLE: "Show less",
 } as const;
 
-/** What a block's Copy copies, as "Copy code". */
 const COPY_WHAT = "code";
 
-/** What a line of a block drawn as rows does, which tints it: a line added, one removed, or one standing as it was. */
 export const CODE_ROW = {
   ADDED: "added",
   REMOVED: "removed",
@@ -69,7 +25,6 @@ export const CODE_ROW = {
 
 export type CodeRow = (typeof CODE_ROW)[keyof typeof CODE_ROW];
 
-/** What a header's title is: a name, set in mono (a language or a file), or words, set as the window's own (a suggestion's "Suggested change"). */
 export const CODE_CARD_TITLE = {
   NAME: "name",
   WORDS: "words",
@@ -77,32 +32,26 @@ export const CODE_CARD_TITLE = {
 
 export type CodeCardTitle = (typeof CODE_CARD_TITLE)[keyof typeof CODE_CARD_TITLE];
 
-/** Each row's tint, by what it does. */
 const ROW_CLASS = {
   [CODE_ROW.ADDED]: "ui-code-card-row block px-list-inset bg-code-added",
   [CODE_ROW.REMOVED]: "ui-code-card-row block px-list-inset bg-code-removed",
   [CODE_ROW.CONTEXT]: "ui-code-card-row block px-list-inset",
 } as const satisfies Record<CodeRow, string>;
 
-/** Each title's face: a name in mono, words in the label's weight and the text's ink. */
 const TITLE_CLASS = {
   [CODE_CARD_TITLE.NAME]: "ui-code-card-title flex min-w-0 items-center font-mono",
   [CODE_CARD_TITLE.WORDS]:
     "ui-code-card-title flex min-w-0 items-center font-label text-foreground",
 } as const satisfies Record<CodeCardTitle, string>;
 
-/** A glyph before the title, at an icon's size on the title's line. */
 const GLYPH = "ui-code-card-glyph mr-icon-gap inline-flex flex-none [&>svg]:size-icon-16";
 
-/** The lines, whole and scrolling sideways, each run in its color for the appearance it stands in. */
 const BODY =
   "ui-code-card-body m-0 overflow-x-auto overscroll-x-contain py-row-inset font-mono text-caption leading-reading wrap-normal whitespace-pre text-code [tab-size:2] [&_span]:text-code-run [&>code]:[font:inherit]";
 
-/** The lines of a block drawn plain, inset as the card is; and of one drawn as rows, each row inset itself. */
 const BODY_LINES = `${BODY} px-list-inset`;
 const BODY_ROWS = `${BODY} px-0 [&>code]:block [&>code]:min-w-fit`;
 
-/** A run's color in each appearance, as the properties the sheet picks between; nothing for the code's own ink. */
 function runColors({ color, lightColor }: CodeToken): React.CSSProperties | undefined {
   if (color === undefined && lightColor === undefined) return undefined;
   const colors: Record<string, string> = {};
@@ -111,7 +60,6 @@ function runColors({ color, lightColor }: CodeToken): React.CSSProperties | unde
   return cssCustomProperties(colors);
 }
 
-/** One line's runs, each in its color where the host colored them. */
 function lineRuns(tokens: CodeLines[number]): ReactNode {
   return tokens.map((token, at) => (
     <span key={at} style={runColors(token)}>
@@ -120,10 +68,6 @@ function lineRuns(tokens: CodeLines[number]): ReactNode {
   ));
 }
 
-/**
- * A block's lines as rows, each tinted by what it does and as wide as the
- * widest. Note that an empty row holds a newline, so it stands a line tall.
- */
 function CodeRows({
   text,
   lines,
@@ -136,7 +80,6 @@ function CodeRows({
   return text.map((words, at) => {
     const tokens = lines?.[at];
     return (
-      // Note that a row's place is its identity: a block's rows never reorder.
       <span
         key={at}
         className={ROW_CLASS[rows[at] ?? CODE_ROW.CONTEXT]}
@@ -148,7 +91,6 @@ function CodeRows({
   });
 }
 
-/** The block's lines, each run in its color where the host colored them. */
 function CodeRuns({
   text,
   lines,
@@ -158,7 +100,6 @@ function CodeRuns({
 }): ReactNode {
   if (lines === undefined) return text.join("\n");
   return lines.map((tokens, line) => (
-    // Note that a line's place is its identity: the lines of one block never reorder.
     <Fragment key={line}>
       {line > 0 ? "\n" : null}
       {lineRuns(tokens)}
@@ -166,20 +107,16 @@ function CodeRuns({
   ));
 }
 
-/** What a block's own words are, or what a caller draws in their place. */
 type CodeCardLines =
   | {
-      /** The block's words, drawn as its lines and cut at 40; Copy copies them whole unless `copied` says otherwise. */
       code: string;
       body?: never;
     }
   | {
-      /** The block as the caller draws it, in place of lines of words: never cut, and copied only as `copied` says. */
       body: ReactNode;
       code?: never;
     };
 
-/** A block of code in its card: `title` and the Copy over its lines, cut at 40 until the rest is asked for. */
 export function CodeCard({
   glyph,
   title,
@@ -194,30 +131,19 @@ export function CodeCard({
   data,
   copy,
 }: CodeCardLines & {
-  /** A glyph before the title, such as the language's file icon; none for a title alone. */
   glyph?: ReactNode;
-  /** What the lines are: the language they are written in, or the file they came from or a chip naming it. */
   title: ReactNode;
-  /** Whether a text title is a name, in mono, or words. */
   titleIs?: CodeCardTitle;
-  /** The block's lines as the host colored them; none while they are asked for, or for lines drawn plain. */
   lines?: CodeLines | undefined;
-  /** What each line does, to tint it; none for lines that stand as they are. */
   rows?: readonly CodeRow[] | undefined;
-  /** What Copy copies where it is not the block's words; none with no words, which draws no Copy. */
   copied?: string | undefined;
-  /** Controls of the header's own, before its Copy. */
   actions?: ReactNode;
-  /** The card's accessible name, where its header's words do not make one. */
   label?: string | undefined;
-  /** Data attributes the caller finds the card by, as the call a card shows is. */
   data?: Readonly<Record<`data-${string}`, string>> | undefined;
-  /** The caller's platform act that puts words on the clipboard (`CopyButton`). */
   copy: (text: string) => Promise<void>;
 }): React.JSX.Element {
   const bodyId = useId();
   const [whole, setWhole] = useState(false);
-  // Note that the newline a block ends on closes its last line rather than opening one more, but a block drawn as rows names each row itself, so an empty last row is a row.
   const text = (rows === undefined ? (code ?? "").replace(/\n$/u, "") : (code ?? "")).split("\n");
   const cut = code !== undefined && text.length > CODE_CARD_CUT_LINES;
   const rest = useUntilFound<HTMLSpanElement>(cut && !whole, () => setWhole(true));
@@ -268,7 +194,6 @@ export function CodeCard({
             {drawLines(0, lead)}
             {cut ? (
               <>
-                {/* Note that the newline closes the lead's last line, so the rest's first is never read run on to it. */}
                 {rows === undefined ? "\n" : null}
                 <span ref={rest} className="ui-code-card-rest block">
                   {drawLines(lead, text.length)}

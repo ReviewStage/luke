@@ -9,12 +9,6 @@ import { FormField } from "../form-field/form-field.js";
 import { TextField } from "../text-field/text-field.js";
 import { LengthCounter } from "./length-counter.js";
 
-/**
- * length-counter.test.ts -- a field with a limit says nothing of it until
- * its words reach four fifths of it, then counts them on its label's line,
- * and once the words draw back it leaves through its exit.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -30,7 +24,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** A name field of ten characters at most, as a workspace's name is bounded. */
 function Named(): React.JSX.Element {
   const [name, setName] = useState("");
   return createElement(FormField, {

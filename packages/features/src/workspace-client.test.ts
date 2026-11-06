@@ -25,7 +25,6 @@ const ACME = {
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=opaque-intent";
 
-/** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
 function client(
   session: AccountSessionToken = {
     readSessionToken: () => Effect.succeed("session-1"),
@@ -44,7 +43,6 @@ function client(
   });
 }
 
-/** A session the hand-off replaces: none or `before` until asked for, then `after`. */
 function handedOff(before: string | undefined, after: string) {
   let current = before;
   let asked = 0;
@@ -61,7 +59,6 @@ function handedOff(before: string | undefined, after: string) {
   };
 }
 
-/** A service that refuses the request with the word given. */
 function refusing(route: string, error: string, status: number) {
   return fakeCloudApi({ [route]: { answer: () => ({ error }), status } });
 }
@@ -150,7 +147,6 @@ it.effect(
 
       assert.deepEqual(remaining, { ok: true, answer: [ADA] });
       assert.deepEqual(left, { ok: true, answer: ACME.id });
-      // Both write through Better Auth, so both carry the Mac's session, never its OAuth token.
       assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
       assert.deepEqual(
         api.requests().map(({ method, pathname, body }) => ({
@@ -216,7 +212,6 @@ it.effect(
       assert.deepEqual(transferred, { ok: true, answer: handedOver });
       const notPermitted = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
       assert.deepEqual(refused, [notPermitted, notPermitted]);
-      // Both write through Better Auth, so both carry the Mac's session, never its OAuth token.
       assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
       assert.deepEqual(
         api.requests().map(({ method, pathname, body }) => ({
@@ -425,7 +420,6 @@ it.effect("an account that changes during the hand-off sends nothing under the n
       sessionCredential: sessionBearer({
         ...token,
         readSessionToken: () => Effect.sync(() => session),
-        // Another account signs in while the hand-off's browser page is open, holding a session of its own.
         obtainSession: () =>
           Effect.sync(() => {
             holder = "bob@example.com";
@@ -528,7 +522,6 @@ it.effect(
     }),
 );
 
-/** The photo of `org-acme-1` read against a service answering `response`, and the paths it asked. */
 const photoAgainst = (response: () => Response) =>
   Effect.gen(function* () {
     const service = recordingHttpClient(response);

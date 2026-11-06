@@ -7,31 +7,6 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 
-/**
- * task-list-model.ts -- how the sidebar's task list is grouped and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
- *
- * The list is one section of the sidebar, the work under way, its tasks
- * drawn by repository or in one run, newest updated first, browsing left
- * to the Tasks page. Home's Recent and ⌘K order tasks by the same last
- * activity (`taskTime`), which is the time each row shows, so the order
- * and the label never disagree.
- *
- * A row of the sidebar's list is a task, or an agent an automation started
- * with no task, which stands among the tasks by the same rules rather than
- * in a group of its own: under its repository, as the reader's where the
- * reader started it, and in the order of its last activity.
- *
- * The list holds the reader's own tasks until they choose Anyone or a
- * teammate (`ASSIGNED_TO`): those assigned to them, and those no one is on
- * that they created, so a task of theirs nobody picked up never leaves it.
- * It holds the tasks to do and in progress alone (`SHOWN_STATUSES`), so a
- * filed backlog and the settled tasks stay out of the way of the work under
- * way; an agent with no task, and a task from a service before statuses,
- * has no status to leave it out by and always stands. The Tasks page lays
- * the same tasks out its own way (`tasks-page-model.ts`).
- */
-
-/** How the list groups its tasks. */
 export const TASK_GROUPING = {
   REPOSITORY: "repository",
   NONE: "none",
@@ -39,7 +14,6 @@ export const TASK_GROUPING = {
 
 export type TaskGrouping = (typeof TASK_GROUPING)[keyof typeof TASK_GROUPING];
 
-/** How the Tasks page and a row's time order tasks; the sidebar orders by last update alone. */
 export const TASK_ORDER = {
   UPDATED: "updated",
   CREATED: "created",
@@ -48,26 +22,22 @@ export const TASK_ORDER = {
 
 export type TaskOrder = (typeof TASK_ORDER)[keyof typeof TASK_ORDER];
 
-/** Whose tasks the list holds: the reader's, anyone's, or one teammate's. */
 export const ASSIGNED_TO = {
   ME: "me",
   ANYONE: "anyone",
   MEMBER: "member",
 } as const;
 
-/** Whose tasks the list holds, a teammate by account id. */
 export type AssignedTo =
   | { readonly kind: typeof ASSIGNED_TO.ME }
   | { readonly kind: typeof ASSIGNED_TO.ANYONE }
   | { readonly kind: typeof ASSIGNED_TO.MEMBER; readonly userId: string };
 
-/** How a workspace's list is drawn: by repository, the reader's own tasks, until it is changed. */
 export interface TaskListView {
   readonly grouping: TaskGrouping;
   readonly assignedTo: AssignedTo;
 }
 
-/** The statuses the list shows: the work to do and under way, the backlog and the settled left out. */
 export const SHOWN_STATUSES: readonly TaskStatus[] = [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS];
 
 export const DEFAULT_TASK_LIST_VIEW: TaskListView = {
@@ -75,83 +45,61 @@ export const DEFAULT_TASK_LIST_VIEW: TaskListView = {
   assignedTo: { kind: ASSIGNED_TO.ME },
 };
 
-/** What a row of the list stands for: a task, or an agent with no task. */
 export const TASK_ROW = {
   TASK: "task",
   AGENT: "agent",
 } as const;
 
-/** One row of the list: a task, or an agent an automation started with no task. */
 export type TaskRow =
   | { readonly kind: typeof TASK_ROW.TASK; readonly task: TaskSummary }
   | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: TasklessAgent };
 
-/** The rows of one repository, as the sidebar groups them under its header; null is the rows with none. */
 export interface RepositoryGroup {
   readonly repository: string | null;
   readonly rows: readonly TaskRow[];
 }
 
-/** The key a row is followed by, out of one list and into another: its task's id, or its agent's. */
 export function taskRowKey(row: TaskRow): string {
   return row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id;
 }
 
-/** A task as a row of the list. */
 export function taskRow(task: TaskSummary): TaskRow {
   return { kind: TASK_ROW.TASK, task };
 }
 
-/** An agent with no task as a row of the list. */
 export function agentRow(agent: TasklessAgent): TaskRow {
   return { kind: TASK_ROW.AGENT, agent };
 }
 
-/** The row's name: its task's, or its agent's as its tab names it (`agentName`). */
 export function taskRowName(row: TaskRow): string {
   return row.kind === TASK_ROW.TASK ? row.task.name : agentName(row.agent);
 }
 
-/** The repository the row works in; null for a task with none chosen yet. */
 export function taskRowRepository(row: TaskRow): string | null {
   return row.kind === TASK_ROW.TASK ? row.task.repository : row.agent.repository;
 }
 
-/** Who created a plan, by account id: the creator the wire names, else its owner. */
 function creatorIdOf(task: TaskSummary): string | undefined {
   return task.createdBy?.userId ?? task.ownerId;
 }
 
-/** Who created the row, by account id: a task's creator, or whoever started the agent, whose automation it ran on. */
 function taskRowCreatorId(row: TaskRow): string | undefined {
   return row.kind === TASK_ROW.TASK ? creatorIdOf(row.task) : row.agent.startedBy?.userId;
 }
 
-/**
- * The time a row shows and is ordered by: when it was started under
- * Created, else when it last saw activity, the later of its description's last save
- * and its agents' last settled activity (`agents.activityAt`: one started,
- * or a turn ended), so a task an agent worked through stands with the tasks
- * worked on lately, as "last activity" does in Linear and Cursor. Neither
- * moves when an agent's turn starts or while it runs, so a row holds its
- * place, and its time, while the agent works.
- */
 export function taskTime(task: TaskSummary, order: TaskOrder): number {
   if (order === TASK_ORDER.CREATED) return task.createdAt;
   return Math.max(task.updatedAt, task.agents?.activityAt ?? 0);
 }
 
-/** The time a row shows and is ordered by: its task's last activity (`taskTime`), or its agent's. */
 export function taskRowTime(row: TaskRow): number {
   return row.kind === TASK_ROW.TASK ? taskTime(row.task, TASK_ORDER.UPDATED) : row.agent.activityAt;
 }
 
-/** The rows newest active first. */
 export function orderTaskRows(rows: readonly TaskRow[]): TaskRow[] {
   return rows.toSorted((a, b) => taskRowTime(b) - taskRowTime(a));
 }
 
-/** The rows split by a key, each run kept in the order it was handed. */
 function grouped<K>(rows: readonly TaskRow[], keyOf: (row: TaskRow) => K): Map<K, TaskRow[]> {
   const groups = new Map<K, TaskRow[]>();
   for (const row of rows) {
@@ -163,37 +111,27 @@ function grouped<K>(rows: readonly TaskRow[], keyOf: (row: TaskRow) => K): Map<K
   return groups;
 }
 
-/** The latest time among a group's rows. */
 function latest(rows: readonly TaskRow[]): number {
   return Math.max(...rows.map(taskRowTime));
 }
 
-/** What every surface calls the state of naming no repository: a task's, a group's, a filter's, a pick's. */
 export const NO_REPOSITORY = "No repository";
 
-/** A repository's two parts, `acme` and `relay` of `acme/relay`; a name with no owner is its name alone. */
 export interface RepositoryParts {
   readonly owner: string | undefined;
   readonly name: string;
 }
 
-/** A repository's owner and its name, split at the slash GitHub writes between them. */
 export function repositoryParts(repository: string): RepositoryParts {
   const slash = repository.indexOf("/");
   if (slash <= 0) return { owner: undefined, name: repository };
   return { owner: repository.slice(0, slash), name: repository.slice(slash + 1) };
 }
 
-/** A repository's name without its owner: `relay` of `acme/relay`. */
 function nameOf(repository: string): string {
   return repositoryParts(repository).name;
 }
 
-/**
- * The rows grouped by their repository, newest updated first: the group
- * holding the latest row first, and the rows with none last whatever their
- * age.
- */
 export function repositoryGroups(rows: readonly TaskRow[]): readonly RepositoryGroup[] {
   const groups = [...grouped(orderTaskRows(rows), taskRowRepository)].map(
     ([repository, members]) => ({ repository, rows: members }),
@@ -206,11 +144,6 @@ export function repositoryGroups(rows: readonly TaskRow[]): readonly RepositoryG
   });
 }
 
-/**
- * What a group's header says for its repository: the repository's name
- * alone, its owner left to the hover, unless another group's repository
- * shares the name, where both say `owner/name` so neither is mistaken.
- */
 export function repositoryLabel(
   repository: string,
   groups: readonly Pick<RepositoryGroup, "repository">[],
@@ -225,7 +158,6 @@ export function repositoryLabel(
   return shared ? repository : name;
 }
 
-/** The plans one member created, or every plan where the view names nobody. */
 export function createdByOnly(
   tasks: readonly TaskSummary[],
   createdBy: string | undefined,
@@ -233,21 +165,10 @@ export function createdByOnly(
   return createdBy === undefined ? tasks : tasks.filter((task) => creatorIdOf(task) === createdBy);
 }
 
-/**
- * Who the row is assigned to, by account id: a task's assignee, none for a
- * task no one is on, or whoever started an agent with no task, which is
- * theirs.
- */
 function taskRowAssigneeId(row: TaskRow): string | undefined {
   return row.kind === TASK_ROW.TASK ? row.task.assignee?.userId : row.agent.startedBy?.userId;
 }
 
-/**
- * The rows the view's Assigned to holds: every row for Anyone; one
- * teammate's (`taskRowAssigneeId`); and for Me the reader's, and the tasks
- * no one is on that the reader created, so their own unassigned work never
- * leaves the list. A reader not yet known filters nothing.
- */
 export function taskRowsAssignedTo(
   rows: readonly TaskRow[],
   assignedTo: AssignedTo,
@@ -267,12 +188,10 @@ export function taskRowsAssignedTo(
   }
 }
 
-/** The status a row is left out by: its task's, or none for an agent with no task or a task from a service before statuses. */
 function taskRowStatus(row: TaskRow): TaskStatus | undefined {
   return row.kind === TASK_ROW.TASK ? row.task.status : undefined;
 }
 
-/** Whether the view draws a row: one of a status shown, one with no status to leave it out by, or a parent a child task keeps open (`openParentIds`). */
 export function taskRowInStatuses(
   row: TaskRow,
   statuses: readonly TaskStatus[],
@@ -286,7 +205,6 @@ export function taskRowInStatuses(
   );
 }
 
-/** The rows the view draws by status (`taskRowInStatuses`). */
 export function taskRowsInStatuses(
   rows: readonly TaskRow[],
   statuses: readonly TaskStatus[],
@@ -295,13 +213,11 @@ export function taskRowsInStatuses(
   return rows.filter((row) => taskRowInStatuses(row, statuses, openParents));
 }
 
-/** How many of the rows each status the view leaves out holds, in `TASK_STATUS_ORDER`, a status holding none left unsaid. */
 export interface HiddenStatus {
   readonly status: TaskStatus;
   readonly count: number;
 }
 
-/** The rows the statuses shown leave out, counted by status, a parent a child task keeps open not among them; none where every row stands. */
 export function hiddenStatuses(
   rows: readonly TaskRow[],
   statuses: readonly TaskStatus[],
@@ -315,22 +231,17 @@ export function hiddenStatuses(
   });
 }
 
-/** One row as a list nesting child tasks draws it: how deep it stands, and whether the child tasks under it stand open. */
 export interface DrawnTaskRow {
   readonly row: TaskRow;
-  /** How deep it stands: 0 at the top, one more for each parent above it. */
   readonly depth: number;
-  /** Whether its child tasks stand open under it; undefined where the list holds none of them. */
   readonly open: boolean | undefined;
 }
 
-/** One row and the rows standing under it, each a tree of its own. */
 interface TaskRowNode {
   readonly row: TaskRow;
   readonly children: readonly TaskRowNode[];
 }
 
-/** The parent a row stands under where `rows` holds it: a task's parent task; none for an agent, a task at the top, one naming itself, or a pinned one, which stands on its own pin. */
 function parentIn(row: TaskRow, held: ReadonlySet<string>): string | undefined {
   if (row.kind !== TASK_ROW.TASK || row.task.pinnedAt !== undefined) return undefined;
   const { id, parentTaskId } = row.task;
@@ -339,12 +250,6 @@ function parentIn(row: TaskRow, held: ReadonlySet<string>): string | undefined {
     : undefined;
 }
 
-/**
- * The rows as a tree, each in the order `rows` hands it. Note that a loop
- * of parents, which nothing writes, is reached from no row at the top, so
- * its first row is stood at the top, the loop cut where it closes, rather
- * than the loop leaving the list.
- */
 function taskRowTree(rows: readonly TaskRow[]): TaskRowNode[] {
   const held = new Set(rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : [])));
   const childrenOf = new Map<string, TaskRow[]>();
@@ -368,22 +273,10 @@ function taskRowTree(rows: readonly TaskRow[]): TaskRowNode[] {
   return tree;
 }
 
-/** Whether a row or any row under it is one `standing` keeps drawn. */
 function holdsStanding(node: TaskRowNode, standing: (row: TaskRow) => boolean): boolean {
   return standing(node.row) || node.children.some((child) => holdsStanding(child, standing));
 }
 
-/**
- * The rows as a list nesting child tasks draws them, in order: each row,
- * then the child tasks under it while `opened` says it stands open, to any
- * depth, each in the order `rows` hands it. A task stands under its parent
- * where `rows` holds that parent, which the sidebar sees to across its
- * lists (`homedTaskRows`); one whose parent `rows` leaves out, as a fold
- * leaves out all but the open task, stands at the top, so it is never out
- * of reach, and no row stands twice. A row folded shut still draws the one
- * `standing` keeps (the open task), and the rows between it and that one,
- * so the task worked on never leaves the list, as a folded group keeps it.
- */
 export function drawnTaskRows(
   rows: readonly TaskRow[],
   opened: (taskId: string) => boolean,
@@ -403,16 +296,6 @@ export function drawnTaskRows(
   return drawn;
 }
 
-/**
- * The sidebar's lists, each as it draws its rows: Pinned, a section, or a
- * group under Tasks. A child task stands only under its parent, wherever a
- * list holds that parent, so each is moved out of the list it would sort
- * into and into the list holding its top task, or its nearest pinned one,
- * after that list's own rows, where `drawnTaskRows` nests it; and one with
- * an ancestor no list holds, finished and hidden by the view, filtered out,
- * or out of the reader's sight, is drawn nowhere, never at the top. A
- * pinned task stays in Pinned, under no parent.
- */
 export function homedTaskRows(lists: readonly (readonly TaskRow[])[]): TaskRow[][] {
   const listOf = new Map<string, number>();
   const byId = new Map<string, TaskSummary>();
@@ -427,7 +310,6 @@ export function homedTaskRows(lists: readonly (readonly TaskRow[])[]): TaskRow[]
     if (row.kind !== TASK_ROW.TASK) return list;
     const walked = new Set([row.task.id]);
     let at = row.task;
-    // Note that a loop of parents, which nothing writes, ends the walk where it closes, at the last task it reached.
     while (at.pinnedAt === undefined && at.parentTaskId !== undefined) {
       const parent = byId.get(at.parentTaskId);
       if (parent === undefined) return undefined;
@@ -446,18 +328,15 @@ export function homedTaskRows(lists: readonly (readonly TaskRow[])[]): TaskRow[]
   ]);
 }
 
-/** How many of a task's child tasks are finished, of all of them. */
 export interface ChildTaskCount {
   readonly finished: number;
   readonly total: number;
 }
 
-/** Whether a task has settled: done, or canceled, which is as settled as done. */
 export function taskFinished(task: TaskSummary): boolean {
   return task.status === TASK_STATUS.DONE || task.status === TASK_STATUS.CANCELED;
 }
 
-/** A task's direct sub-tasks, oldest first, so they read in the order they were made; never itself, which no one writes. */
 export function subTasksOf(
   tasks: readonly TaskSummary[],
   parentId: string,
@@ -467,18 +346,10 @@ export function subTasksOf(
     .toSorted((one, other) => one.createdAt - other.createdAt);
 }
 
-/** How many of `subTasks` are finished (done or canceled), of all of them. */
 export function subTaskCount(subTasks: readonly TaskSummary[]): ChildTaskCount {
   return { finished: subTasks.filter(taskFinished).length, total: subTasks.length };
 }
 
-/**
- * How many of each parent's child tasks are finished (done or canceled),
- * by the parent's id, for the parents with any. Note that only a task's
- * direct children count, never theirs, and that `tasks` is every task the
- * workspace holds rather than the rows a view draws, since the view
- * hides the finished ones by default and the count is how many of them there are.
- */
 export function childTaskCounts(
   tasks: readonly TaskSummary[],
 ): ReadonlyMap<string, ChildTaskCount> {
@@ -495,15 +366,6 @@ export function childTaskCounts(
   return counts;
 }
 
-/**
- * The tasks a child task keeps in the list whatever their own status: each
- * parent of a task of a status the view shows, or of none to leave it out
- * by, and every parent above it, so a parent stays in the sidebar with its
- * child tasks for as long as the view shows any of them, as a done parent
- * with a child task still to do or under way. Note that `tasks` is every
- * task the workspace holds rather than the rows a view draws, since a child
- * task the view would draw only under its parent still keeps that parent.
- */
 export function openParentIds(
   tasks: readonly TaskSummary[],
   statuses: readonly TaskStatus[],
@@ -512,7 +374,6 @@ export function openParentIds(
   const open = new Set<string>();
   for (const task of tasks) {
     if (task.status !== undefined && !statuses.includes(task.status)) continue;
-    // Note that a loop of parents, which nothing writes, ends the walk where it closes.
     let parentId = task.parentTaskId;
     while (parentId !== undefined && parentId !== task.id && !open.has(parentId)) {
       open.add(parentId);

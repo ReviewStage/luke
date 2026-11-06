@@ -14,22 +14,6 @@ import {
 } from "./description-comment-wire.js";
 import { countedNumber } from "./service-wire.js";
 
-/**
- * description-comment-live.ts -- one subject of a task's comments, its description's own threads or one page's, followed over the service's held poll: the statements the service answers, the rows they deliver, and the threads as the held read answers them.
- *
- * A read follows one subject, as the held read does: the description's threads
- * with no page named, or one page's threads on every version, resolved ones
- * among them, never the task's whole, since nothing bounds how many pages
- * a task has. It is three statements, the threads, their entries with the
- * writer's name as the account names itself now, and the files their
- * comments carry without their bytes, which the reader joins, because a
- * row aggregating its children reads functions Realtime refuses. Each row
- * carries the column its rows are ordered by, since Realtime keeps no
- * order: a thread its start and id, an entry its place in its thread, and
- * a file its place on its comment.
- */
-
-/** One subject of a task's comments sealed for following: the address, and its threads, entries, and files, one statement each. The service answers `not-found` for a task the account does not reach. */
 export const taskCommentsLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({
@@ -41,7 +25,6 @@ export const taskCommentsLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskCommentsLiveAnswer = typeof taskCommentsLiveAnswerSchema.Type;
 
-/** One thread as its row delivers it: its anchor null once its words were deleted and on a page, and its page, version, and element null on the description. */
 const threadLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   scope: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
@@ -58,7 +41,6 @@ const threadLiveRowSchema = EffectSchema.Struct({
   updatedAt: countedNumber,
 });
 
-/** One entry as its row delivers it, with its place in its thread and its member's name as their account holds it now, null once the account is gone. */
 const entryLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   threadId: EffectSchema.String,
@@ -75,7 +57,6 @@ const entryLiveRowSchema = EffectSchema.Struct({
   editedAt: EffectSchema.NullOr(countedNumber),
 });
 
-/** One file a comment carries as its row delivers it, with its place on the comment, null for none kept, which Postgres orders last. */
 const fileLiveRowSchema = EffectSchema.Struct({
   attachmentId: EffectSchema.String,
   entryId: EffectSchema.String,
@@ -84,7 +65,6 @@ const fileLiveRowSchema = EffectSchema.Struct({
   position: EffectSchema.NullOr(countedNumber),
 });
 
-/** One subject's threads, entries, and files as Realtime delivers them: none for a task the account no longer reaches. */
 export const taskCommentsLiveRowsSchema = EffectSchema.Struct({
   threads: EffectSchema.Array(threadLiveRowSchema),
   entries: EffectSchema.Array(entryLiveRowSchema),
@@ -99,12 +79,10 @@ type EntryLiveRow = TaskCommentsLiveRows["entries"][number];
 
 type FileLiveRow = TaskCommentsLiveRows["files"][number];
 
-/** Two ids compared as Postgres orders them. */
 function byId(one: string, other: string): number {
   return one < other ? -1 : one > other ? 1 : 0;
 }
 
-/** Each row under the key `keyOf` reads, in the order they came. */
 function groupedBy<Row>(rows: readonly Row[], keyOf: (row: Row) => string): Map<string, Row[]> {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
@@ -116,7 +94,6 @@ function groupedBy<Row>(rows: readonly Row[], keyOf: (row: Row) => string): Map<
   return groups;
 }
 
-/** Whom an ask sent the thread to, as the wire names them; nothing for any other entry. */
 function askedOf(row: EntryLiveRow): DescriptionCommentAsked | undefined {
   if (row.askedActor === DESCRIPTION_COMMENT_ACTOR.APP)
     return { actor: DESCRIPTION_COMMENT_ACTOR.APP };
@@ -125,7 +102,6 @@ function askedOf(row: EntryLiveRow): DescriptionCommentAsked | undefined {
     : undefined;
 }
 
-/** An entry as the wire carries it, each absent field left out rather than null, its files in the order they were attached. */
 function entryOf(row: EntryLiveRow, files: readonly FileLiveRow[]): DescriptionCommentEntry {
   const by =
     row.actor === DESCRIPTION_COMMENT_ACTOR.MEMBER && row.userId !== null && row.userName !== null
@@ -157,7 +133,6 @@ function entryOf(row: EntryLiveRow, files: readonly FileLiveRow[]): DescriptionC
   };
 }
 
-/** A thread as the wire carries it, with its entries in the order they were written. */
 function threadOf(
   row: ThreadLiveRow,
   entries: readonly EntryLiveRow[],
@@ -189,7 +164,6 @@ function threadOf(
   };
 }
 
-/** The subject's threads as the held read answers them, from their rows: the oldest started first, then by id, each with its entries and their files. */
 export function threadsOfLiveRows(rows: TaskCommentsLiveRows): readonly DescriptionCommentThread[] {
   const entriesOf = groupedBy(rows.entries, (entry) => entry.threadId);
   const filesOf = groupedBy(rows.files, (file) => file.entryId);

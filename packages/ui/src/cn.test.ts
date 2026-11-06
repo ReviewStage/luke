@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { cn } from "./cn.js";
 
-/**
- * cn.test.ts -- the joiner keeps a theme's type size beside a text color,
- * and lets a later length, padding, corner, width, motion, or disabled fade
- * from the theme replace an earlier one, as it does Tailwind's own.
- */
-
 test("a theme's type size and a text color both stand, and a later size replaces an earlier", () => {
   assert.equal(cn("text-body text-foreground"), "text-body text-foreground");
   assert.equal(cn("text-label text-button-ink"), "text-label text-button-ink");

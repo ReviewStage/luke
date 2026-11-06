@@ -1,18 +1,4 @@
-/* collection-page.css -- what a collection page's utilities
-   (`collection-page.tsx`) cannot say: the page's measure and inset, which
-   its profile and its own width set, or under the window's toolbar the
-   room's whole width at the toolbar's edges; the filter line's `:has()`; the
-   notice's room; the rows of blocks a read stands, whose classes name only
-   themselves; and the reach of what the caller lays in. The page queries
-   its own width rather than the viewport's, so a page in a narrow pane
-   narrows its inset as it would in a narrow window; a container query
-   cannot read a custom property, so the width it narrows under is a
-   literal here. */
-
 @layer components {
-  /* The measure is the page's, a description's reading width in the window and the
-     admin's wider column on the web; the theme's `max-w-collection-page`
-     and `px-collection-page-inset` read them. */
   .ui-collection-page {
     --ui-collection-page-width: var(--ui-page-measure);
     --ui-collection-page-inset: var(--ui-page-inset);
@@ -22,31 +8,17 @@
     --ui-collection-page-width: 1040px;
   }
 
-  /* Under 480px of room a desktop page gives back half its inset. */
   @container (width < 480px) {
     .ui-collection-page > * {
       --ui-collection-page-inset: var(--ui-page-inset-narrow);
     }
   }
 
-  /* Under the window's toolbar the page is a workspace's rather than a
-     document's: its filters and its content stand across the room on the
-     toolbar's own edges, where its title's words start and its actions end
-     (`toolbar.css`'s page inset, a column's inset and a row's), in any
-     room, so the bar lines up with what it heads rather than with a
-     measure centered under it. Note that it says so in the page's own
-     properties, the measure as wide as the room, so whatever reads them
-     answers it. */
   .ui-collection-page[data-frame="toolbar"] > * {
     --ui-collection-page-width: 100%;
     --ui-collection-page-inset: calc(var(--ui-space-12) + var(--ui-row-inset));
   }
 
-  /* Note that the filter line's display stays here rather than in a
-     utility, because a filter line whose filters all stand hidden, a line
-     of chips waiting for its first, takes no room, so the line can stand
-     ready for a chip to arrive into without a gap where none is, and a rule
-     in this layer cannot undo a utility. */
   .ui-collection-page-filters {
     display: flex;
   }
@@ -55,31 +27,23 @@
     display: none;
   }
 
-  /* A filter's search field stands at a search's width, not the line's. */
   .ui-collection-page-filters > [data-slot="input"],
   .ui-collection-page-filters > .ui-search-field {
     flex: 0 1 240px;
     min-width: 0;
   }
 
-  /* A list reaches past the column by its rows' inset, so a row's words
-     open on the title's edge and its fill runs out either side. */
   .ui-collection-page-content > .ui-list,
   .ui-collection-page-skeleton {
     margin-inline: calc(-1 * var(--ui-space-12));
   }
 
-  /* The rows of blocks a read in progress stands, where the caller hands no
-     skeleton: a skeleton's elements wear only classes naming themselves a
-     skeleton's (`anti-slop/skeleton-through-components`), so they are laid
-     out here. */
   .ui-collection-page-skeleton {
     display: flex;
     flex-direction: column;
     gap: var(--ui-list-gap);
   }
 
-  /* A loading row stands as tall as a ListRow with a line under its title. */
   .ui-collection-page-skeleton-row {
     display: flex;
     flex-direction: column;
@@ -97,8 +61,6 @@
     line-height: var(--ui-type-caption-leading);
   }
 
-  /* An empty or failed collection stands its notice a little above the
-     room's middle, shared two to three as an empty state stands alone. */
   .ui-collection-page-notice::before,
   .ui-collection-page-notice::after {
     content: "";
@@ -112,9 +74,6 @@
     flex: 3 1 0;
   }
 
-  /* An EmptyState, a centered ErrorState among them, stands itself a little
-     above the middle of the room it fills, so the notice hands it the whole
-     room rather than a sixth of it, which clipped a way on under its line. */
   .ui-collection-page-notice:has(> .ui-empty-state)::before,
   .ui-collection-page-notice:has(> .ui-empty-state)::after {
     content: none;

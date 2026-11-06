@@ -5,14 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Pagination, type PaginationStep } from "./pagination.js";
 
-/**
- * pagination.test.ts -- the steps are links named for where they go and a
- * step with nowhere to go is not read at all; the current page is held, not
- * linked, and announced as current; every page shows while they fit, and the
- * far ones elide once they don't; one page draws no pagination; and steps
- * without numbers carry their words beside the arrow. Synthetic addresses.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -26,12 +18,10 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The address of page `page`. */
 function pageHref(page: number): string {
   return `/notes/page/${page}`;
 }
 
-/** Draws page `current` of `count` with its two steps and hands its container back. */
 function drawPages(current: number, count: number): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -52,7 +42,6 @@ function drawPages(current: number, count: number): HTMLElement {
   return container;
 }
 
-/** What the row reads, item by item, as a reader meets it. */
 function items(container: HTMLElement): string[] {
   const nav = container.querySelector("nav");
   return [...(nav?.children ?? [])]

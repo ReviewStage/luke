@@ -35,22 +35,11 @@ import {
   valueCounts,
 } from "./tasks-page-model.js";
 
-/**
- * tasks-page-model.test.ts -- the Tasks page's filter narrows the tasks by
- * each field it keeps, and-ed; its display groups them, orders each group,
- * stands empty groups or not, shows the settled finished within a window
- * (ending a settled group on how many older it leaves out), and leads the List
- * with the pins and sections; the Board stands columns by status, by
- * priority, or by assignee alone; and a display an earlier build kept draws
- * the properties offered since as the view's own display does.
- */
-
 const DEAN = "user-dean";
 const MAYA = "user-maya";
 const ARLO = "user-arlo";
 const ZOE = "user-zoe";
 
-/** The instant the page is read at. */
 const NOW = Date.UTC(2026, 9, 21, 12);
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -62,7 +51,6 @@ const NAMES = new Map([
   [ZOE, "Zoe Park"],
 ]);
 
-/** A task by name, with what it stands at; `updatedAt` doubles as its start where none is given. */
 function task(
   name: string,
   {
@@ -104,7 +92,6 @@ function task(
   };
 }
 
-/** What a group stands for: its kind, and the value it heads where it heads one. */
 function headOf(head: TasksGroupHead): readonly (string | null)[] {
   switch (head.kind) {
     case TASKS_GROUP.PINNED:
@@ -125,11 +112,9 @@ function headOf(head: TasksGroupHead): readonly (string | null)[] {
   }
 }
 
-/** Each group as what it stands for and its tasks' names. */
 const drawn = (groups: readonly TasksGroup[]) =>
   groups.map((group) => [headOf(group.head), group.tasks.map((each) => each.name)]);
 
-/** The List's groups with no pins and no sections. */
 const listed = (
   tasks: readonly TaskSummary[],
   display: Partial<TasksDisplay> = {},
@@ -383,7 +368,6 @@ test("the completed window keeps the settled finished within it, by when each wa
     task("Open", { status: TASK_STATUS.IN_PROGRESS, updatedAt: NOW - 90 * DAY }),
     task("Shipped Monday", { status: TASK_STATUS.DONE, completedAt: NOW - 2 * DAY }),
     task("Older service, saved Sunday", { status: TASK_STATUS.DONE, updatedAt: NOW - 3 * DAY }),
-    // Saved today, but finished ten days ago: when it was finished is what counts.
     task("Shipped last week", {
       status: TASK_STATUS.DONE,
       updatedAt: NOW,
@@ -621,7 +605,6 @@ test("a display kept before rows offered the assignee draws it, and keeps its cr
   const listKept = without(EARLIER_LIST_PROPERTIES, TASK_PROPERTY.UPDATED);
   const boardKept = without(EARLIER_BOARD_PROPERTIES, TASK_PROPERTY.STATUS);
 
-  // A List display kept by a build that said what it offered, and one kept before builds said so.
   for (const offered of [EARLIER_LIST_PROPERTIES, undefined]) {
     const kept = keptTasksDisplay(
       { properties: listKept, ...(offered === undefined ? {} : { offered }) },
@@ -665,7 +648,6 @@ test("a display kept since rows offered the assignee keeps it off where its read
 });
 
 test("a List narrowing folds its columns away one by one, creator, agents, sub-tasks, repository, key, then waiting, so its name keeps its room, and never its chips or its time", () => {
-  // The sub-tasks' count stands before the time, as a row draws it.
   const every = Object.values(TASK_PROPERTY).flatMap((property) =>
     property === TASK_PROPERTY.UPDATED ? [LIST_COLUMN.SUB_TASKS, property] : [property],
   );

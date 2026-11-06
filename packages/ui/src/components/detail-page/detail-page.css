@@ -1,17 +1,3 @@
-/* detail-page.css -- what a detail page's utilities (`detail-page.tsx`)
-   cannot say: its measure, inset, and the room either side of them, which
-   its profile and its own width set; the columns' grid, scrolls, and
-   insets, which a narrow pane's container query and the secondary column's
-   `:has()` undo, so they stay in this layer, which cannot undo a utility;
-   and the reach of what the caller lays in. The measure is a collection
-   page's, a description's reading width in the window and the admin's wider
-   column on the web, and the secondary column takes its share from the
-   measure's end. The page queries its own width rather than the
-   viewport's, so a page in a narrow pane narrows as it would in a narrow
-   window; a container query cannot read a custom property, so the widths
-   it narrows under are literals here. Under the window's toolbar the page
-   stands across the room on the toolbar's edges. */
-
 @layer components {
   .ui-detail-page {
     --ui-detail-page-width: var(--ui-page-measure);
@@ -24,10 +10,6 @@
     --ui-detail-page-secondary-width: 320px;
   }
 
-  /* What stands either side of the measure: the inset, or more in a room
-     wider than the measure and its insets. It is worked out on the page's
-     children, where the room is the page's own width and the inset is the
-     one the narrow rule below may change. */
   .ui-detail-page > * {
     --ui-detail-page-side: max(
       var(--ui-detail-page-edge, var(--ui-detail-page-inset)),
@@ -36,47 +18,28 @@
     );
   }
 
-  /* At a column's inset the words stand as far in from the sides as tabs
-     read at the measure stand theirs, whatever the room; the page keeps its
-     own inset above and below. */
   .ui-detail-page[data-inset="reading"] > * {
     --ui-detail-page-edge: var(--ui-space-12);
   }
 
-  /* Across the whole room, the inset alone stands either side. */
   .ui-detail-page[data-width="full"] > * {
     --ui-detail-page-side: var(--ui-detail-page-edge, var(--ui-detail-page-inset));
   }
 
-  /* Under the window's own toolbar the page is a workspace's rather than a
-     document's: its columns stand across the room on the toolbar's edges,
-     where its title's words start and its actions end (`toolbar.css`'s page
-     inset, a column's inset and a row's), in any room, so the bar lines up
-     with what it heads rather than with a measure centered under it. A page
-     framed by a bar outside it, a tab's, keeps its measure. Note that the
-     columns are named after the toolbar rather than as any child of a page
-     that `:has()` one, because a `:has()` over a page whose subject is any
-     child makes the browser restyle the whole window for every element
-     added under it. */
   .ui-detail-page[data-frame="toolbar"] > .ui-toolbar ~ .ui-detail-page-body {
     --ui-detail-page-side: calc(var(--ui-space-12) + var(--ui-row-inset));
   }
 
-  /* Under 480px of room a desktop page gives back half its inset. */
   @container (width < 480px) {
     .ui-detail-page > * {
       --ui-detail-page-inset: var(--ui-page-inset-narrow);
     }
   }
 
-  /* Beside the header, the secondary column opens level with the title. */
   .ui-detail-page[data-frame="page"] .ui-detail-page-secondary > .ui-detail-page-content {
     padding-top: var(--ui-detail-page-inset);
   }
 
-  /* The columns under the bar: the main one takes what the secondary
-     leaves, and each reaches the page's edge on its own side, so the wheel
-     moves it from anywhere over it. */
   .ui-detail-page-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -98,8 +61,6 @@
     padding-inline: var(--ui-detail-page-side);
   }
 
-  /* Beside a secondary column the main one ends a section's gap short of
-     it. */
   .ui-detail-page-main:has(+ .ui-detail-page-secondary) {
     padding-inline-end: var(--ui-space-32);
   }
@@ -108,11 +69,6 @@
     padding-inline-end: var(--ui-detail-page-side);
   }
 
-  /* A plain list in the content, straight or under one of its sections,
-     reaches past the column by its rows' inset, so a row's words open on
-     the title's edge and its fill runs out either side; its rows of blocks
-     while it is read reach as far. A card's list keeps to the column, its
-     edge the card's. */
   .ui-detail-page-content > .ui-list[data-variant="plain"][data-density="regular"],
   .ui-detail-page-content
     > .ui-skeleton-region
@@ -125,16 +81,10 @@
     margin-inline: calc(-1 * var(--ui-space-12));
   }
 
-  /* Under a toolbar each column opens a section's gap below its hairline,
-     inside its own scroll so the wheel works right up to it. */
   .ui-detail-page[data-frame="toolbar"] .ui-detail-page-content {
     padding-top: var(--ui-section-gap);
   }
 
-  /* A main column holding nothing but an empty or failed state (an
-     `EmptyState`, or a centered `ErrorState` where the thing could not be
-     read) fills the column, so the state stands a little above the room's
-     middle, as a collection's empty or failed state does. */
   .ui-detail-page-main:has(> .ui-detail-page-content > .ui-empty-state:only-child) {
     display: flex;
     flex-direction: column;
@@ -146,13 +96,10 @@
     flex-direction: column;
   }
 
-  /* Content across the room scrolls sideways in its own column. */
   .ui-detail-page[data-width="full"] .ui-detail-page-main {
     overflow-x: auto;
   }
 
-  /* In a pane too narrow for two columns, the secondary one follows the
-     main in the one scroll, both at the page's inset. */
   @container (width < 720px) {
     .ui-detail-page-body,
     .ui-detail-page-body:has(> .ui-detail-page-secondary) {
@@ -170,8 +117,6 @@
       padding-inline: var(--ui-detail-page-side);
     }
 
-    /* A lone empty or failed state fills the one scroll, as it fills the
-       main column above. */
     .ui-detail-page-body:has(
         > .ui-detail-page-main > .ui-detail-page-content > .ui-empty-state:only-child
       ) {
@@ -183,7 +128,6 @@
       flex: 1 0 auto;
     }
 
-    /* The secondary column follows the main one's end gap, no more. */
     .ui-detail-page[data-frame] .ui-detail-page-secondary > .ui-detail-page-content {
       padding-top: 0;
     }

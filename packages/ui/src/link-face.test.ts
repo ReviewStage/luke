@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { linkFace, shortUrl } from "./link-face.js";
 
-/**
- * link-face.test.ts -- a bare address says its host and path, folded past
- * the bound, and a labeled link says its label. Synthetic addresses.
- */
-
 test("an address says its host and path, without its scheme, its www., or its fragment", () => {
   assert.equal(
     shortUrl("https://docs.stripe.com/guides/idempotent_requests"),

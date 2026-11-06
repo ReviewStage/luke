@@ -7,19 +7,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { MARKDOWN_LOOK, Markdown, type MarkdownProps, markdownStep, TaskBox } from "./markdown.js";
 
-/**
- * markdown.test.ts -- the one renderer as a place meets it: a note draws its
- * headings as paragraphs, its pictures as their words, and raw HTML as text;
- * a document draws real headings and no root of its own; a line draws its
- * inline Markdown and its blocks' words as one run with no root; a
- * transcript's line draws its blocks' words on one line; a step a place
- * hands in draws with the values it was handed, however many places hand
- * the same step; a note follows a new address rewriter; a task box a
- * reader may tick is named by its item, asks with its item's place, and
- * flips back when the change is not saved; and one a reader may not tick is
- * the same box, read-only. Synthetic words.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -33,12 +20,10 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The markup some words draw as. */
 function markup(props: MarkdownProps): string {
   return renderToStaticMarkup(createElement(Markdown, props));
 }
 
-/** Words drawn into the page, with the root that redraws them. */
 function drawn(props: MarkdownProps): { container: HTMLElement; root: Root } {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -47,7 +32,6 @@ function drawn(props: MarkdownProps): { container: HTMLElement; root: Root } {
   return { container, root };
 }
 
-/** A step that writes what a function it closes over answers on every paragraph, as a place's drawer would be read. */
 function stamp(answer: () => string) {
   return (tree: { children: { type: string; properties?: Record<string, unknown> }[] }) => {
     for (const child of tree.children) {

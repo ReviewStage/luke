@@ -1,38 +1,8 @@
-/**
- * turn-rows.ts -- what every transcript's turn shares: how its calls are named on their rows, and how its rows fold.
- *
- * An agent's tab draws a coding agent's turns from the message its
- * journal stored, read into blocks of its own. What every transcript
- * shares is decided here, so none drifts: a call is one of a few kinds,
- * each with the verb its row says and whether its subject is code; and a
- * turn's blocks fold one way (Stagent's walk, Stage's chat panel): calls
- * and subagents next to one another, and the reasoning between and beside
- * them, are one group that is open while it is the
- * turn's latest work on a turn that moves and folded once the model moved
- * on, its line counting the calls and subagents and never the thoughts;
- * and a finished turn folds everything ahead of its last words into one
- * line saying how much it holds, its subagents and the coding agents it
- * started named apart from its other calls, so it reads as its answer. That
- * fold is the one grouping its calls get: a run of calls is folded once,
- * never a group inside the fold that already holds it. A lead with no call
- * is not folded: its reasoning and words stand as they did while it moved.
- * Nor is a lead of one call and nothing else: a fold saying "1 tool call"
- * over the one row it hides only costs a click, so the call stands on its
- * own row, as a run of one call does in a turn that moves.
- * A message that reached a turn while it ran, a steer from whoever sent
- * it, stands where it arrived: it ends the group before it, and it splits
- * a finished turn's fold, the work before it folded above it and the work
- * after it below, as Claude Code and Cursor draw a message sent mid-turn.
- */
-
 import { countWords } from "./words.js";
 
-/** The kinds of call a row can be, across both tabs. */
 export const CALL_KIND = {
   COMMAND: "command",
-  /** A command an agent ran on the developer's own Mac (`run_on_mac`), drawn as a command with where it ran beside it. */
   MAC_COMMAND: "mac-command",
-  /** Actions an agent took in the browser in its own sandbox (`browser`), its line saying what it did and in which tab, with where it ran beside it. */
   BROWSER: "browser",
   READ_FILE: "read-file",
   WRITE_FILE: "write-file",
@@ -48,14 +18,11 @@ export const CALL_KIND = {
   INBOX_CLOSE: "inbox-close",
   INBOX_READ: "inbox-read",
   INBOX_REPLY: "inbox-reply",
-  /** An ask on one of the agent's inbox threads taken back with why (`withdraw_ask`), its row naming the thread's key. */
   INBOX_WITHDRAW: "inbox-withdraw",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
-  /** More sent to one of a native harness's subagents (Claude Code's `SendMessage`), its row naming the subagent. */
   WORKER_MESSAGE: "worker-message",
-  /** A background command, monitor, or subagent stopped (Claude Code's `TaskStop`), its row naming it by its id. */
   STOP_BACKGROUND: "stop-background",
   LIST_AGENTS: "list-agents",
   READ_AGENT: "read-agent",
@@ -63,71 +30,43 @@ export const CALL_KIND = {
   START_AGENT: "start-agent",
   ARCHIVE_AGENT: "archive-agent",
   UNARCHIVE_AGENT: "unarchive-agent",
-  /** A list of the models a coding agent may be started on (`list_models`). */
   LIST_MODELS: "list-models",
   STOP_AGENT: "stop-agent",
-  /** A coding agent renamed, moved to another model, pinned, or given other servers (`update_agent`), its row naming it by its chip. */
   UPDATE_AGENT: "update-agent",
-  /** One task of the workspace read with its description (`read_task`), its row naming the task once answered. */
   READ_TASK: "read-task",
-  /** A section made in the member's sidebar (`create_section`), its row naming its title. */
   CREATE_SECTION: "create-section",
-  /** A section of the member's sidebar deleted (`delete_section`), its row naming its title once answered. */
   DELETE_SECTION: "delete-section",
-  /** The workspace's automations listed, or one read whole (`list_automations`). */
   LIST_AUTOMATIONS: "list-automations",
-  /** An automation made (`create_automation`), its row naming it. */
   CREATE_AUTOMATION: "create-automation",
-  /** An automation changed, paused, or resumed (`update_automation`), its row naming it once answered. */
   UPDATE_AUTOMATION: "update-automation",
-  /** An automation deleted (`delete_automation`), its row naming it once answered. */
   DELETE_AUTOMATION: "delete-automation",
-  /** An automation run now (`run_automation`), its row naming it once answered. */
   RUN_AUTOMATION: "run-automation",
-  /** A task moved into a section of the member's sidebar or out of them (`move_task`), its row naming the task once answered. */
   MOVE_TASK: "move-task",
-  /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
   UPDATE_TASK: "update-task",
-  /** The workspace's issues listed (`list_issues`, retired with our own issues; an older transcript still names it). */
   LIST_ISSUES: "list-issues",
-  /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), retired with `list_issues`, its row naming it by its identifier and title once answered. */
   READ_ISSUE: "read-issue",
   CREATE_ISSUE: "create-issue",
   UPDATE_ISSUE: "update-issue",
-  /** A task made in the workspace (`create_task`), its row naming it once answered. */
   CREATE_TASK: "create-task",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
-  /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
   SHOW_IMAGE: "show-image",
-  /** A pull request a coding agent opened (`open_pull_request`), its row naming it by its number and title, which opens its Pull request tab; a refusal folds open its reason instead. */
   OPEN_PULL_REQUEST: "open-pull-request",
-  /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
   SLEEP: "sleep",
-  /** The workspace's tasks listed (`list_tasks`). */
   LIST_TASKS: "list-tasks",
-  /** A fact kept in the workspace's shared memory (`save_memory`, or `remember` in an older transcript), its row saying it. */
   REMEMBER: "remember",
-  /** The workspace's shared memory searched (`search_memory`, or `recall` in an older transcript), its row naming the query where there was one. */
   RECALL: "recall",
-  /** The description's comment threads read (`read_comments`). */
   READ_COMMENTS: "read-comments",
-  /** An answer written in one of the description's comment threads (`reply_to_comment`), its row saying it. */
   REPLY_TO_COMMENT: "reply-to-comment",
-  /** A comment thread of the description resolved (`update_comment`, or `resolve_thread` in an older transcript). */
   RESOLVE_THREAD: "resolve-thread",
-  /** A resolved comment thread of the description brought back (`update_comment`, or `reopen_thread` in an older transcript). */
   REOPEN_THREAD: "reopen-thread",
-  /** A connection's tools searched (`connection_search`), its row naming the server it searched. */
   SEARCH_TOOLS: "search-tools",
-  /** A tool of an MCP server or an integration run (`connection_execute`, an integration's own call, a native harness's MCP call), its row naming the tool and the server it ran on. */
   MCP_TOOL: "mcp-tool",
   OTHER: "other",
 } as const;
 
 export type CallKind = (typeof CALL_KIND)[keyof typeof CALL_KIND];
 
-/** How a call of each kind says what it did, and whether its subject is code (a command, a path) rather than words. */
 export const CALL_WORDS = {
   [CALL_KIND.COMMAND]: { verb: "Ran", code: true },
   [CALL_KIND.MAC_COMMAND]: { verb: "Ran", code: true },
@@ -193,13 +132,10 @@ export const CALL_WORDS = {
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
-/** What a row of a call that ran on the developer's own Mac says of where it ran, beside its line. */
 const ON_YOUR_MAC = "On your Mac";
 
-/** What a row of a call in the agent's own browser says of where it ran, beside its line. */
 const IN_THE_BROWSER = "Browser";
 
-/** What each of the browser's actions says it did, on a browser call's line. */
 const BROWSER_ACTION_WORDS: Readonly<Record<string, string>> = {
   list: "listed the tabs",
   open: "opened",
@@ -219,12 +155,6 @@ const BROWSER_ACTION_WORDS: Readonly<Record<string, string>> = {
   stop_recording: "stopped recording",
 };
 
-/**
- * What a browser call's line says it did, in place of its kind's verb: each
- * action it named once, in the order first named, and "in" where the tab it
- * acted on follows as the subject; nothing where it named no action this
- * build knows, so the kind's own verb stands.
- */
 export function browserCallWords(
   actions: readonly string[],
   tabNamed: boolean,
@@ -237,14 +167,6 @@ export function browserCallWords(
   return tabNamed ? `${line} in` : line;
 }
 
-/**
- * How a call about one coding agent says what it did where its row names
- * the agent by its chip: the verb alone, the chip standing in the place of
- * "the coding agent", and whether the row still says its subject after the
- * chip. Note that a read, an archive, an unarchive, and a stop say none, because
- * their subject is the agent itself, which the chip already names, while a
- * message and a start keep the words they sent as the line's preview.
- */
 const AGENT_CALL_WORDS = {
   [CALL_KIND.READ_AGENT]: { verb: "Read", subject: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged", subject: true },
@@ -257,25 +179,15 @@ const AGENT_CALL_WORDS = {
 
 type AgentCallKind = keyof typeof AGENT_CALL_WORDS;
 
-/** Whether a call is about one coding agent, which its row may name by the agent's chip. */
 export function isAgentCallKind(kind: CallKind): kind is AgentCallKind {
   return Object.hasOwn(AGENT_CALL_WORDS, kind);
 }
 
-/** How the line of a call about one coding agent reads where the agent's chip follows its verb: the verb alone, then the words it sent where it sent any. */
 export function agentCallLine(kind: AgentCallKind, subject: string | undefined): CallLine {
   const words = AGENT_CALL_WORDS[kind];
   return { verb: words.verb, subject: words.subject ? subject : undefined, code: false };
 }
 
-/**
- * How a call says what it did where its row names what it made or is about
- * by that thing's chip: the verb alone, the chip standing in the place of
- * "a page", "the description", "a thread", "the task", or "pull request", so the
- * row reads "Showed" then the page's chip. Note that an edit of the description
- * says no count, because the chip is its description's, and the body under the row
- * says what changed.
- */
 const MADE_CALL_WORDS = {
   [CALL_KIND.SHOW_PAGE]: "Showed",
   [CALL_KIND.READ_PAGE]: "Read",
@@ -295,49 +207,30 @@ const MADE_CALL_WORDS = {
 
 export type MadeCallKind = keyof typeof MADE_CALL_WORDS;
 
-/** Whether a call's row may name what it made or is about by that thing's chip. */
 export function isMadeCallKind(kind: CallKind): kind is MadeCallKind {
   return Object.hasOwn(MADE_CALL_WORDS, kind);
 }
 
-/** How the line of a call reads where the chip of what it made follows its verb: the verb alone. */
 export function madeCallLine(kind: MadeCallKind): CallLine {
   return { verb: MADE_CALL_WORDS[kind], subject: undefined, code: false };
 }
 
-/** Whether a call is a shell command, wherever it ran: its line may say its description, and its body draws it behind a prompt. */
 export function isCommandKind(kind: CallKind): boolean {
   return kind === CALL_KIND.COMMAND || kind === CALL_KIND.MAC_COMMAND;
 }
 
-/**
- * Where a call ran, as its row says beside its line, or nothing for a call
- * that ran where its tab says. A command on a Mac ran on the Mac of the
- * agent's starter, whom a row that knows them draws in these words' place;
- * a call of an MCP server's tool ran on the server it names.
- */
 export function callPlace(kind: CallKind, server?: string): string | undefined {
   if (kind === CALL_KIND.MCP_TOOL || kind === CALL_KIND.SEARCH_TOOLS) return server;
   if (kind === CALL_KIND.MAC_COMMAND) return ON_YOUR_MAC;
   return kind === CALL_KIND.BROWSER ? IN_THE_BROWSER : undefined;
 }
 
-/** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
 export interface CallLine {
   readonly verb: string;
   readonly subject: string | undefined;
   readonly code: boolean;
 }
 
-/**
- * How a call's line reads: its kind's verb before its subject; or, for a
- * command the model said the purpose of, those plain words in the verb's
- * place, as Claude Code and Cursor name a command, and the command's first
- * line after them as its preview, the whole of it in the row's body; or,
- * for a browser call, what it did (`browserCallWords`) before the tab's
- * title, which is words; or, for a pull request that was refused, that it
- * opened none, before the title it asked for.
- */
 export function callLine(
   kind: CallKind,
   subject: string | undefined,
@@ -355,7 +248,6 @@ export function callLine(
   };
 }
 
-/** A command's first line of words, as a line too short for the rest previews it. */
 function firstLine(text: string): string {
   return (
     text
@@ -365,53 +257,34 @@ function firstLine(text: string): string {
   );
 }
 
-/**
- * The plain words a command's input says it is for, on one line, or nothing
- * where it says none, as an older call or another harness's does not. Note
- * that a break inside them is a space, because they are a row's one line and
- * a copied call's one bullet.
- */
 export function commandDescription(description: string | undefined): string | undefined {
   const words = description?.replace(/\s+/gu, " ").trim();
   return words === undefined || words === "" ? undefined : words;
 }
 
-/** A page's address as a reader names it: its host and path, without the scheme. */
 export function pageName(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-/** What a block is to the fold. */
 export const ROW_PART = {
-  /** The model's words: they end a run of calls, and a finished turn folds down to its last. */
   WORDS: "words",
-  /** A call, which runs together with the calls beside it, and which a group and a fold count. */
   CALL: "call",
-  /** A call that stands on a row of its own, as an agent's to-do list does. */
   LONE_CALL: "lone-call",
-  /** A subagent, which runs together with the calls beside it, and which a group and a fold count apart from the calls. */
   SUBAGENT: "subagent",
-  /** A call that started an agent, which runs together with the calls beside it as a call does, and which a fold counts apart from them. */
   AGENT: "agent",
-  /** Reasoning, which runs with the calls beside it but is never counted, and stands on its own row where no call is beside it. */
   NOTE: "note",
-  /** A message that reached the turn while it ran, from whoever sent it: it ends a run of calls, and a finished turn's fold splits around it, so it stands where it arrived. */
   ARRIVED: "arrived",
 } as const;
 
 type RowPart = (typeof ROW_PART)[keyof typeof ROW_PART];
 
-/** How a fold reads a tab's own blocks. */
 export interface RowReading<B> {
   readonly key: (block: B, index: number) => string;
   readonly part: (block: B) => RowPart;
-  /** Whether the block still moves, which a group of calls shimmers for. */
   readonly running: (block: B) => boolean;
-  /** Whether the block stays out of a finished turn's fold, drawn after it, because it is still worth reading unasked; none stays out where unsaid. */
   readonly kept?: (block: B) => boolean;
 }
 
-/** The kinds of row a turn is drawn as. */
 export const TURN_ROW = {
   BLOCK: "block",
   GROUP: "group",
@@ -424,9 +297,7 @@ export type TurnRow<B> =
       readonly kind: typeof TURN_ROW.GROUP;
       readonly key: string;
       readonly blocks: readonly B[];
-      /** What its line says it holds. */
       readonly summary: string;
-      /** Open while it is the turn's latest work and the turn still moves. */
       readonly open: boolean;
       readonly running: boolean;
     }
@@ -437,20 +308,10 @@ export type TurnRow<B> =
       readonly rows: readonly TurnRow<B>[];
     };
 
-/** Whether a value is a record of its own keys, rather than an array or a primitive. */
 function isRecordValue(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Whether two values read alike, `depth` records deep: the same value;
- * arrays alike item by item; or records with the same keys, each value
- * alike one record less deep, where a record past the depth is alike only
- * as the same value. Note that it names no field, so a field added to a
- * shape it compares is compared with the rest, never missed, and that
- * arrays cost no depth, so a fold's rows inside a row are read as the row
- * is.
- */
 export function sameShape(a: unknown, b: unknown, depth: number): boolean {
   if (Object.is(a, b)) return true;
   if (Array.isArray(a) || Array.isArray(b)) {
@@ -469,11 +330,6 @@ export function sameShape(a: unknown, b: unknown, depth: number): boolean {
   );
 }
 
-/**
- * Whether two records hold the same values under the same keys, each the
- * same value unless `by` names how that key is read: a memoised component's
- * props, every one compared, so a prop added later is never missed.
- */
 export function sameFieldsBy<T extends object>(
   a: T,
   b: T,
@@ -492,15 +348,12 @@ export function sameFieldsBy<T extends object>(
   );
 }
 
-/** How deep a turn's row is read: the row, a fold's rows inside it, then each block's own fields, a part read again from the same stored part reading alike. */
 export const TURN_ROW_DEPTH = 3;
 
-/** Whether two of a turn's rows draw alike: every field of the row, its fold's rows, and its blocks' own fields (`sameShape`). */
 export function sameTurnRow<B>(a: TurnRow<B>, b: TurnRow<B>): boolean {
   return sameShape(a, b, TURN_ROW_DEPTH);
 }
 
-/** What a lead's blocks hold, as its fold's line counts them. */
 interface Held {
   readonly calls: number;
   readonly subagents: number;
@@ -508,7 +361,6 @@ interface Held {
   readonly messages: number;
 }
 
-/** What a finished turn's folded lead says it holds. */
 function foldedSummary({ calls, subagents, startedAgents, messages }: Held): string {
   const line = [
     ...(calls > 0 ? [countWords(calls, { one: "tool call", many: "tool calls" })] : []),
@@ -521,7 +373,6 @@ function foldedSummary({ calls, subagents, startedAgents, messages }: Held): str
   return line.join(", ");
 }
 
-/** What a group's line says it holds: its calls, a coding agent's start among them, then its subagents, in the words its fold says them in once the turn has finished. */
 function groupSummary({ calls, subagents, startedAgents }: Held): string {
   const tools = calls + startedAgents;
   const said = [
@@ -531,32 +382,19 @@ function groupSummary({ calls, subagents, startedAgents }: Held): string {
   return said.join(", ");
 }
 
-/** Whether a block is work a group gathers: a call, a subagent, or a start of an agent. */
 function isWork(part: RowPart): boolean {
   return part === ROW_PART.CALL || part === ROW_PART.SUBAGENT || part === ROW_PART.AGENT;
 }
 
-/** Whether a block runs together with the work beside it: that work, or a thought. */
 function runsWithCalls(part: RowPart): boolean {
   return isWork(part) || part === ROW_PART.NOTE;
 }
 
-/** A block with the key its row is drawn under. */
 interface Keyed<B> {
   readonly key: string;
   readonly block: B;
 }
 
-/**
- * A turn's blocks as rows: the words and lone calls as they are, and calls
- * and subagents next to one another grouped with the thoughts between and
- * beside them, the group open while it is the turn's latest work on a turn
- * that moves. A run of thoughts with no work in it stands as its rows. A
- * run of one call or subagent is its own row, unless it is that latest
- * work, which is drawn as a group so the work after it joins it rather
- * than redraw it. Not grouped, as a lead the fold already holds is not,
- * every block stands on a row of its own.
- */
 function groupedRows<B>(
   blocks: readonly Keyed<B>[],
   read: RowReading<B>,
@@ -599,7 +437,6 @@ function groupedRows<B>(
   return rows;
 }
 
-/** How many calls, subagents, agents started, and of the model's messages a lead's blocks hold. */
 function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
   let calls = 0;
   let subagents = 0;
@@ -615,60 +452,31 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
   return { calls, subagents, startedAgents, messages };
 }
 
-/**
- * A turn's blocks as the rows a tab draws, folded:
- * calls grouped, and, once the turn is done, everything ahead of its last
- * words folded into one line saying what it holds, each call inside it on
- * a row of its own. A lead without a call has no work to fold away, so it
- * keeps its rows, its reasoning drawn at the top level as on a moving turn.
- * A block the reading keeps out of the fold, as an agent's newest to-do
- * list is, is drawn right after the fold, ahead of the last words, so it
- * keeps its order against them; a finished turn with no last words folds
- * its work all the same where it keeps one, which then ends the turn.
- */
 export function turnRows<B>(
   blocks: readonly B[],
   read: RowReading<B>,
   turn: {
     readonly key: string;
-    /** Whether the turn still moves, which keeps its latest group open. */
     readonly moving: boolean;
-    /** Whether the turn ended as it meant to, which folds its lead; a turn cut off keeps its rows as they were. */
     readonly done: boolean;
   },
 ): readonly TurnRow<B>[] {
   const keyed = blocks.map((block, index) => ({ key: read.key(block, index), block }));
   const words = blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
-  // Note that a finished turn with no last words still folds its work where it
-  // keeps a block out, because the block it keeps would otherwise stand inside
-  // a closed group of the calls beside it.
   const keepsOne = keyed.some((each) => read.kept?.(each.block) === true);
   const last = words < 0 && turn.done && keepsOne ? blocks.length : words;
   if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true);
-  // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const held = counted(lead, read);
   const rest = groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true);
   if (foldable(held) === 0) {
-    // Note that a lead with no call is not folded, but a block kept out still
-    // stands apart from it, because grouped with the lead's reasoning it would
-    // close with it.
     if (kept.length === 0) return groupedRows(keyed, read, turn.moving, true);
     return [...groupedRows(lead, read, turn.moving, true), ...rest];
   }
   return [...foldedLead(lead, read, turn.key), ...rest];
 }
 
-/**
- * A finished turn's lead folded: each stretch of work between the messages
- * that reached the turn while it ran is one fold, and each message stands
- * on its own row between them; a stretch with no call keeps its rows, as a
- * lead with none does, and a stretch of one call alone stands as that
- * call's row. Inside a fold every block stands on a row of its own. Note
- * that the first fold keeps the turn's own key, so a turn no message
- * reached folds under the key it always had.
- */
 function foldedLead<B>(
   lead: readonly Keyed<B>[],
   read: RowReading<B>,
@@ -703,22 +511,14 @@ function foldedLead<B>(
   return rows;
 }
 
-/** How much of what blocks hold a finished turn folds away: their work. */
 function foldable(held: Held): number {
   return held.calls + held.subagents + held.startedAgents;
 }
 
-/** A stretch of a finished turn's lead: a message that reached the turn, on its own row, or the work between two such messages. */
 type LeadRun<B> =
   | { readonly arrived: TurnRow<B>; readonly blocks?: undefined }
   | { readonly arrived?: undefined; readonly blocks: readonly Keyed<B>[] };
 
-/**
- * A finished turn's lead cut at every message that reached the turn while
- * it ran, so the work before a message folds above it and the work after
- * it below, as Claude Code and Cursor draw a message sent mid-turn; a lead
- * no message reached is one stretch.
- */
 function splitAtArrivals<B>(lead: readonly Keyed<B>[], read: RowReading<B>): readonly LeadRun<B>[] {
   const runs: LeadRun<B>[] = [];
   let blocks: Keyed<B>[] = [];

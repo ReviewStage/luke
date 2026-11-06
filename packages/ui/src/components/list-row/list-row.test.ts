@@ -16,33 +16,6 @@ import {
   type ListRowHint,
 } from "./list-row.js";
 
-/**
- * list-row.test.ts -- a row's press and its acts are separate buttons, never
- * one inside the other, and an act is pressed without pressing its row. A
- * row reads as its words, title first, and Tab meets it before its acts. A
- * list is one Tab stop, at its first row or the one last focused: ↑↓ step
- * between its rows and wrap at the ends, Home and End go to the first and
- * the last, an unavailable row is stepped over, an arrow held with a
- * modifier is left to the app, and a row that says its own Tab stop is left
- * out of the walk. The
- * open one is announced as current, whether it opens something or not; and a
- * row that opens nothing is no control, though its acts still are. A
- * keyboard-driven list can hand focus back to a row through its ref, hear
- * the keys pressed on it. A row
- * current as the page beside the list is announced so, and the app's hint
- * hung from a row's press raises its words for the press. A row whose
- * metadata stands on its title's line reads it after the title and before
- * the line under it, and one whose lead names what it belongs to reads it
- * between the two, on the line under the title, before the description's
- * words or on a line of its own. A row that keeps
- * focus leaves it on the field that held it; one out of the tab order still
- * takes the focus it is handed; one unavailable refuses its press; one a
- * field drives is found by its id; a chevron says nothing to a reader; acts
- * shown on hover are still a Tab stop after the row; and an app hears
- * whether the title is cut short, and a regular row's description says
- * whether it is. Synthetic members.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -54,13 +27,10 @@ const MEMBERS = [
   { id: "grace", name: "Grace Hopper", role: "Admin" },
 ] as const;
 
-/** A handler that hears nothing a test asks about. */
 const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Note that every row measures its title, so each test draws beside a
-// ResizeObserver, which jsdom lacks; one that resizes stubs its own.
 beforeEach(() => {
   standInResizeObserver();
 });
@@ -72,7 +42,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Draws `element` into a container in the document and hands the container back. */
 function draw(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -82,12 +51,10 @@ function draw(element: React.ReactElement): HTMLElement {
   return container;
 }
 
-/** A glyph standing in for an act's icon. */
 function glyph(): React.ReactElement {
   return createElement("svg");
 }
 
-/** Members whose rows open one and whose ⋯ is pressed, what was pressed listed after them. */
 function Members(): React.JSX.Element {
   const [open, setOpen] = useState<string | undefined>(undefined);
   const [heard, setHeard] = useState<string[]>([]);
@@ -120,7 +87,6 @@ function Members(): React.JSX.Element {
   );
 }
 
-/** The button whose words or label are `name`. */
 function button(within: HTMLElement, name: string): HTMLButtonElement {
   const found = [...within.querySelectorAll("button")].find(
     (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === name,
@@ -133,14 +99,12 @@ function press(target: HTMLElement): void {
   act(() => target.click());
 }
 
-/** The buttons Tab stops on, in the order it meets them. */
 function tabStops(within: HTMLElement): HTMLButtonElement[] {
   return [...within.querySelectorAll<HTMLButtonElement>(".ui-list button")].filter(
     (each) => each.tabIndex >= 0 && !each.disabled,
   );
 }
 
-/** Presses `name` on whatever holds the focus, as the keyboard would. */
 function key(name: string, held: KeyboardEventInit = {}): void {
   const target = document.activeElement ?? document.body;
   act(() => {
@@ -150,7 +114,6 @@ function key(name: string, held: KeyboardEventInit = {}): void {
   });
 }
 
-/** A list of places, each a row that opens it, those named in `off` unavailable. */
 function walked(names: readonly string[], off: readonly string[] = []): React.ReactElement {
   return createElement(List, {
     label: "Places",
@@ -165,7 +128,6 @@ function walked(names: readonly string[], off: readonly string[] = []): React.Re
   });
 }
 
-/** Places, each with a button beside the list that turns its row unavailable. */
 function Unavailable({ names }: { names: readonly string[] }): React.JSX.Element {
   const [off, setOff] = useState<readonly string[]>([]);
   return createElement(
@@ -222,7 +184,6 @@ test("a row reads as its words, title first, its leading mark hidden from a read
   const container = draw(createElement(Members));
   const row = button(container, "Ada Lovelaceada@example.comOwner");
   expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
-  // Note that nothing names the row over its words, because a voice says what it sees.
   expect([row.getAttribute("aria-label"), row.getAttribute("aria-labelledby")]).toEqual([
     null,
     null,
@@ -415,7 +376,6 @@ test("a row that says its own Tab stop is left out of the arrows' walk", () => {
   expect(document.activeElement).toBe(button(container, "create_issue"));
 });
 
-/** Two lists of places in one box, as a rail's groups stand, whose rows join the box's walk. */
 function Rail(): React.JSX.Element {
   const roving = useRovingKeys<HTMLDivElement>();
   return createElement(
@@ -536,7 +496,6 @@ test("a key pressed on a row reaches its handler", () => {
   expect(heard).toEqual(["key j"]);
 });
 
-/** A parent row folding the rows nested under it, what was pressed listed after it. */
 function Folding(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [heard, setHeard] = useState<string[]>([]);
@@ -653,7 +612,6 @@ test("a row current as the page shown beside the list is announced as the page",
   expect(button(container, "Review the release").getAttribute("aria-current")).toBe("page");
 });
 
-/** A hint that says its words beside the press while the press holds the keyboard. */
 const SayingHint: ListRowHint = ({ label, children }) => {
   const [shown, setShown] = useState(false);
   return createElement(
@@ -713,7 +671,6 @@ test("a row that keeps focus, pressed with the pointer, leaves the focus on the 
   const field = container.querySelector("input");
   if (field === null) throw new Error("not drawn");
   act(() => field.focus());
-  // Note that jsdom moves no focus on a mousedown, so the browser's move is read as the press's default action.
   const pointerPress = (row: HTMLButtonElement) => {
     const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     act(() => {
@@ -807,12 +764,6 @@ test("a row's chevron says nothing to a reader, so the row still reads as its wo
   expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
-/**
- * Stands in for the browser's ResizeObserver, which jsdom lacks, since it
- * lays nothing out: the widths it would measure are stubbed by each test,
- * and the function handed back fires every observer still watching, as a
- * resize would.
- */
 function standInResizeObserver(): () => void {
   const watching = new Set<() => void>();
   vi.stubGlobal(
@@ -927,8 +878,6 @@ test("a row a run draws stands where the run places it, at the top level and nes
   );
   const rows = [...container.querySelectorAll<HTMLElement>("li[data-row-key]")];
   expect(rows.map((row) => row.dataset.rowKey)).toEqual(keys);
-  // Note that the run places each row out of the flow and writes its top itself, so a row the flow stands is drawn below its own place.
   expect(rows.map((row) => row.style.position)).toEqual(["absolute", "absolute", "absolute"]);
-  // Note that jsdom lays nothing out, so each row is as tall as the run takes one to be (`estimate`), one under another.
   expect(rows.map((row) => row.style.top)).toEqual(["0px", "40px", "80px"]);
 });

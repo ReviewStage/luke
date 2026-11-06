@@ -17,20 +17,6 @@ import {
   TextField,
 } from "./text-field.js";
 
-/**
- * text-field.test.ts -- a text entry draws the value its caller holds and
- * hands every change back, a number field a number or nothing, answers
- * Enter, and a text area its submit key, only when no input method is
- * composing, answers the caret leaving, says its chord, holds a busy text
- * area's words and keys still, stays out of spell check and autofill where asked, holds its
- * form back while empty where required, hands a paste to a
- * caller that takes pasted files itself, inside a field is named, described, and marked invalid by
- * the field's words, and standing alone in a settings row is described by the row's words
- * and marked invalid while the row says its error, selects its words as the
- * caret arrives and stays out of the system's corrections where asked, and
- * names its return key's label.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -52,7 +38,6 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-/** Types `value` into `field` as the page would hand it to React. */
 function type(field: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   const prototype =
     field instanceof HTMLTextAreaElement
@@ -71,7 +56,6 @@ function press(field: HTMLElement, init: KeyboardEventInit): void {
   });
 }
 
-/** A name the caller holds, with a way to clear it and a count of Enters. */
 function Name(): React.JSX.Element {
   const [name, setName] = useState("");
   const [enters, setEnters] = useState(0);
@@ -378,7 +362,6 @@ test("a text entry answers the caret leaving it, and says the chord that acts on
   assert.equal(title.getAttribute("aria-keyshortcuts"), "Meta+Enter");
 });
 
-/** A text area submitting with `submitKey`, counting its submits. */
 function submitsOf(submitKey: TextAreaSubmit | undefined, presses: KeyboardEventInit[]): number {
   let submits = 0;
   const page = render(

@@ -1,25 +1,3 @@
-/**
- * transcript-window.ts -- the newest messages of a coding agent's transcript as Neon Realtime delivers them, one row a message, and each row as the tab draws it.
- *
- * The service's live statement (`transcript-live.ts`'s `window`) answers
- * the newest `TRANSCRIPT_WINDOW` messages by sequence, each row the message
- * as stored and beside it, joined in rather than read after, what the
- * service's page carries for it (`transcript.ts`'s `transcriptMessageOf`):
- * what sent a developer's line and where in a turn under way it arrived,
- * and for a turn's journal when the turn began and what it ran on and
- * spent. Note that the row still carries `turnId`, and `askTurnId` and
- * `askAfterStep`, always null, for a released desktop that decodes them;
- * this build reads none of them. The rows are
- * keyed by the message's id, as Neon's guide asks. Its parts are rows of
- * their own (`windowParts`), keyed by the message's id and the part's index,
- * the heavy ones cut as a page asked cut cuts them, so a journal that grows
- * in place moves only the parts it added. A reader draws the messages from
- * both with `windowMessagesOf`, with nothing read again. A reader that
- * follows the window by cursor is answered only the messages written or
- * amended past it, which it joins onto the rows it holds
- * (`joinedWindowRows`).
- */
-
 import { isRecord, LEGACY_APP_WORD, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@repo/wire";
 import { Schema } from "effect";
 import {
@@ -35,10 +13,8 @@ import { PRODUCT_NAME } from "./product-name.js";
 import { countedNumber } from "./service-wire.js";
 import { turnRecordOf } from "./turn-record.js";
 
-/** How many of the newest messages the live window holds. */
 export const TRANSCRIPT_WINDOW = 100;
 
-/** The names a line is sent under where no member's account names it: the app's, and a member's whose account is gone. */
 const SENDER_NAME = {
   APP: PRODUCT_NAME,
   FORMER_MEMBER: "Former member",
@@ -47,34 +23,25 @@ const SENDER_NAME = {
 const NullableString = Schema.NullOr(Schema.String);
 const NullableNumber = Schema.NullOr(countedNumber);
 
-/** One message of the window as Realtime delivers its row, decoded at the boundary before anything reads it. */
 export const transcriptWindowRowSchema = Schema.Struct({
   id: Schema.String,
   seq: countedNumber,
   clientId: Schema.String,
   role: Schema.Literals(Object.values(MESSAGE_ROLE)),
-  /** How many parts the message holds, which `windowParts` carries a row each. */
   partCount: countedNumber,
   metadata: Schema.NullOr(storedObjectSchema),
   placedAt: countedNumber,
   finishedAt: NullableNumber,
-  /** What sent a developer's line (`MESSAGE_SENDER`), and the names the row kept of it. */
   sender: NullableString,
   senderName: NullableString,
   senderModel: NullableString,
-  /** The member who sent the line, while their account stands. */
   memberId: NullableString,
   memberName: NullableString,
-  /** The coding agent that sent the line, while it stands. */
   agentId: NullableString,
-  /** The automation that sent the line, where the line kept it; absent from a service older than it. */
   automationId: Schema.optionalKey(NullableString),
-  /** That agent's task, which the window reads no more, since a link names the agent; still selected while desktops that decode it as required stand. */
   agentTaskId: NullableString,
-  /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
   journalId: NullableString,
   afterStep: NullableNumber,
-  /** The turn the row was written in: when it began as a working line counts it, and what it ran on and spent. */
   turnStartedAt: NullableNumber,
   turnStatus: NullableString,
   turnModel: NullableString,
@@ -86,12 +53,6 @@ export const transcriptWindowRowSchema = Schema.Struct({
 
 export type TranscriptWindowRow = typeof transcriptWindowRowSchema.Type;
 
-/**
- * One part of a window's message as Realtime delivers its row, keyed by the
- * message's id and the part's index: the part, and where a page asked cut
- * would cut it, which field it leaves out, that field's size in bytes, and
- * its two ends (`cutParts`).
- */
 export const transcriptWindowPartRowSchema = Schema.Struct({
   messageId: Schema.String,
   index: countedNumber,
@@ -104,7 +65,6 @@ export const transcriptWindowPartRowSchema = Schema.Struct({
 
 export type TranscriptWindowPartRow = typeof transcriptWindowPartRowSchema.Type;
 
-/** What sent a line, as the page names it; none where the row kept no sender, or one it names nothing of. */
 function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
   switch (row.sender) {
     case MESSAGE_SENDER.MEMBER:
@@ -112,7 +72,6 @@ function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
         ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
         : { userId: row.memberId, name: row.memberName, kind: AGENT_SENDER.MEMBER };
     case MESSAGE_SENDER.APP:
-    // Note that a row from before the app was named `app` keeps `luke`, which still reads as the app (a legacy read).
     case LEGACY_APP_WORD:
       return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION: {
@@ -143,7 +102,6 @@ function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
   }
 }
 
-/** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
 function spokenOnCall(row: TranscriptWindowRow): boolean {
   return (
     row.role !== MESSAGE_ROLE.SYSTEM &&
@@ -152,13 +110,6 @@ function spokenOnCall(row: TranscriptWindowRow): boolean {
   );
 }
 
-/**
- * A row of the window as the tab draws it, the message the service's page
- * would carry for it: for a developer's line what sent it, when, and where
- * in a turn under way it arrived; for a line said on a call when its words
- * began; and for a turn's journal when the turn began and what it ran on
- * and, once the journal closed, when it did and what it spent.
- */
 function windowMessageOf(
   row: TranscriptWindowRow,
   partRows: readonly TranscriptWindowPartRow[],
@@ -213,13 +164,6 @@ function windowMessageOf(
   };
 }
 
-/**
- * The window's messages as the tab draws them, oldest first, from the rows
- * of both its statements as they last stood. Note that the two arrive apart,
- * so a message whose part rows are not all in yet, as a journal that grew a
- * part a moment before its row did, is left out until they are, and the
- * reader keeps what it drew of it before.
- */
 export function windowMessagesOf(
   rows: readonly TranscriptWindowRow[],
   partRows: readonly TranscriptWindowPartRow[],
@@ -238,22 +182,11 @@ export function windowMessagesOf(
     });
 }
 
-/** The rows a window is drawn from, beside whatever else the read that carries them answers. */
 interface WindowRows {
   readonly window: readonly TranscriptWindowRow[];
   readonly windowParts: readonly TranscriptWindowPartRow[];
 }
 
-/**
- * The rows held, with an answer's newest messages past the reader's cursor
- * joined on by message id: each message it answers in place of the one held,
- * the parts it answers of a message in place of the parts held of it, and
- * everything else as it answers it, the newest `TRANSCRIPT_WINDOW` messages
- * kept. Note that a message the answer moved to a later sequence stays one
- * row, since it keeps its id, and that a message whose row and parts the
- * answer read apart is left out of the drawing until both agree
- * (`windowMessagesOf`), as it would be in a whole answer.
- */
 export function joinedWindowRows<Rows extends WindowRows>(held: Rows, past: Rows): Rows {
   const rowsAnswered = new Set(past.window.map((row) => row.id));
   const partsAnswered = new Set([...rowsAnswered, ...past.windowParts.map((row) => row.messageId)]);

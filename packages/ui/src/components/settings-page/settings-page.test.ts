@@ -13,20 +13,10 @@ import {
 import { TOOLBAR_LOOK } from "../toolbar/toolbar.js";
 import { SettingsPage } from "./settings-page.js";
 
-/**
- * settings-page.test.ts -- the page's title is its one `h1`, each headed
- * section under it is a region its `h2` names, what acts on the whole
- * page stands in the page's head beside the title, or on a phone the bar
- * names the page and ends with its acts, and a section still
- * reading leaves the rest of the page drawn, its placeholder alone busy.
- */
-
 const roots: Root[] = [];
 
-/** A member's placeholder row: their name alone and a button. */
 const MEMBER_ROW = { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] };
 
-/** A section headed `title` holding one row whose control is a button. */
 function section(title: string): React.JSX.Element {
   return createElement(SettingsSection, {
     key: title,
@@ -38,7 +28,6 @@ function section(title: string): React.JSX.Element {
   });
 }
 
-/** Draws `element` into a fresh container in the document. */
 async function render(element: React.JSX.Element): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -49,7 +38,6 @@ async function render(element: React.JSX.Element): Promise<HTMLElement> {
   return container;
 }
 
-/** The text of the element `id` names, as a region's accessible name reads it. */
 function named(id: string | null): string | undefined {
   return id === null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
 }
@@ -131,7 +119,6 @@ test("a page with no actions holds only its title in its head", async () => {
   expect(head?.querySelector("button")).toBeNull();
 });
 
-/** A page whose one section reads its rows until `read`, placeholder rows standing in their place, under a section already drawn. */
 function ReadingPage({ read }: { read: boolean }): React.JSX.Element {
   return createElement(SettingsPage, {
     title: "Workspace",
@@ -154,7 +141,6 @@ function ReadingPage({ read }: { read: boolean }): React.JSX.Element {
   });
 }
 
-/** What the page marks busy, by role: only a placeholder's status region, never the page or its sections. */
 function busy(container: HTMLElement): readonly (string | null)[] {
   return [...container.querySelectorAll('[aria-busy="true"]')].map((each) =>
     each.getAttribute("role"),

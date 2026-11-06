@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { browserAddressOf, chordIsWindows, isBrowserAddress } from "./browser-acts.js";
 
-/**
- * What a line typed into a Browser tab's bar opens, as a browser's address
- * bar reads it, and which chords pressed over its page the window answers.
- */
-
 test("an http or https address opens as written", () => {
   assert.equal(
     browserAddressOf("https://github.com/ReviewStage"),

@@ -6,12 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { CornerCount } from "./corner-count.js";
 
-/**
- * corner-count.test.ts -- a count at a glyph's corner is drawn only while
- * something waits, and is hidden from a reader, who hears it in the press's
- * name.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

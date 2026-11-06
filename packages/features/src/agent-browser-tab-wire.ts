@@ -1,36 +1,8 @@
-/**
- * agent-browser-tab-wire.ts -- the Browser tabs open in coding agents' browsers, as the service keeps them and a member's window reads them.
- *
- * Each coding agent, whose workers share its sandbox, runs one browser in
- * its own sandbox, and the service keeps a line for each tab open in it, so
- * every window of a member who sees the agent lists them, on any client and
- * across a relaunch, whether the agent is on a task or on none. A tab says
- * whose browser it is in, who opened it, and the member driving it, where
- * one took it over: a takeover is held until an instant the member's window
- * keeps moving on, so one whose window went away lapses on its own, and two
- * members never drive one tab at once. The address and title are cut where
- * the Browser tab cuts them (`browser-acts.ts`), since they are only drawn.
- *
- * `GET /api/agents/{id}/browser-tabs` lists one agent's tabs, and `GET
- * /api/plans/{id}/browser-tabs` a task's, every one of its agents' tabs
- * together; `POST` on either opens one. `POST
- * /api/plans/{id}/browser-tabs/{tab}/driver` takes one over or renews the
- * caller's own takeover, and `DELETE` on that path hands it back, each
- * answering the tab as it then stands, so a takeover another member holds
- * answers their name as the driver rather than a refusal.
- *
- * A tab the agent has pointed at carries its cursor: where the agent's
- * pointer last went, in the page's CSS pixels of its visible area, what it
- * did there, that area's size so a view drawn at another scale places it,
- * and when. The window draws it over the live view, never in the page.
- */
-
 import { Schema as EffectSchema } from "effect";
 import { BROWSER_SHOWN_MAX_CHARS } from "./browser-acts.js";
 import { BROWSER_CURSOR_KIND } from "./browser-agent-actions.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
-/** Who opened a tab: the agent whose browser it is in, or a member. */
 export const AGENT_BROWSER_TAB_OPENER = {
   AGENT: "agent",
   MEMBER: "member",
@@ -39,13 +11,10 @@ export const AGENT_BROWSER_TAB_OPENER = {
 export type AgentBrowserTabOpener =
   (typeof AGENT_BROWSER_TAB_OPENER)[keyof typeof AGENT_BROWSER_TAB_OPENER];
 
-/** An address or a title as a tab is drawn with it: cut, never refused, at the Browser tab's own bound. */
 const shownSchema = EffectSchema.String.check(EffectSchema.isMaxLength(BROWSER_SHOWN_MAX_CHARS));
 
-/** A member's account, by its id. */
 const memberIdSchema = EffectSchema.String.check(EffectSchema.isNonEmpty());
 
-/** Who opened a tab: its agent, or a member by their account's id, null once that account is gone. */
 const agentBrowserTabOpenedBySchema = EffectSchema.Union([
   EffectSchema.Struct({ kind: EffectSchema.Literal(AGENT_BROWSER_TAB_OPENER.AGENT) }),
   EffectSchema.Struct({
@@ -54,13 +23,11 @@ const agentBrowserTabOpenedBySchema = EffectSchema.Union([
   }),
 ]);
 
-/** The member driving a tab, and the epoch milliseconds their takeover lapses at unless their window renews it. */
 const agentBrowserTabDriverSchema = EffectSchema.Struct({
   userId: memberIdSchema,
   heldUntil: countedNumber,
 });
 
-/** Where the agent's pointer last went on a tab: the point, what it did there, the visible page's size, and when, in epoch milliseconds. */
 const agentBrowserTabCursorSchema = EffectSchema.Struct({
   x: EffectSchema.Finite,
   y: EffectSchema.Finite,
@@ -71,35 +38,22 @@ const agentBrowserTabCursorSchema = EffectSchema.Struct({
 
 export type AgentBrowserTabCursor = typeof agentBrowserTabCursorSchema.Type;
 
-/** One tab open in a coding agent's browser. */
 const agentBrowserTabSchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  /** The coding agent whose browser holds the tab. */
   agentId: wireUuidSchema,
   address: shownSchema,
   title: shownSchema,
   openedBy: agentBrowserTabOpenedBySchema,
-  /** The member driving the tab; null while the agent has it. */
   driver: EffectSchema.NullOr(agentBrowserTabDriverSchema),
-  /** Epoch milliseconds the tab opened. */
   createdAt: countedNumber,
-  /** Epoch milliseconds its agent last acted on it. */
   lastActedAt: countedNumber,
-  /** Where the agent's pointer last went on it; absent until it first points. */
   cursor: EffectSchema.optionalKey(agentBrowserTabCursorSchema),
 });
 
 export type AgentBrowserTab = typeof agentBrowserTabSchema.Type;
 
-/**
- * A tab as the service keeps it, every instant in epoch milliseconds and
- * every value as its column holds it: what the held list and the live read
- * (`live-wire.ts`) each build a tab from (`agentBrowserTabOf`), so the two
- * never answer one tab apart.
- */
 export const agentBrowserTabLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  /** The coding agent whose browser holds the tab. */
   agentId: wireUuidSchema,
   address: EffectSchema.String,
   title: EffectSchema.String,
@@ -119,7 +73,6 @@ export const agentBrowserTabLineSchema = EffectSchema.Struct({
 
 export type AgentBrowserTabLine = typeof agentBrowserTabLineSchema.Type;
 
-/** Where the agent's pointer last went on the tab; none until every cursor column is written. */
 function cursorOfLine(line: AgentBrowserTabLine): AgentBrowserTabCursor | undefined {
   const { cursorX, cursorY, cursorKind, cursorViewportW, cursorViewportH, cursorAt } = line;
   if (cursorX === null || cursorY === null || cursorKind === null) return undefined;
@@ -133,13 +86,6 @@ function cursorOfLine(line: AgentBrowserTabLine): AgentBrowserTabCursor | undefi
   };
 }
 
-/**
- * A kept tab as a member's window reads it at the instant given, in epoch
- * milliseconds: its driver only while their takeover stands then, and its
- * cursor once the agent has pointed at it. Note that a takeover lapsing
- * changes no column, so a reader that follows the rows reads them again
- * at the instant one lapses.
- */
 export function agentBrowserTabOf(line: AgentBrowserTabLine, now: number): AgentBrowserTab {
   const driving =
     line.driverUserId !== null && line.heldUntil !== null && line.heldUntil > now
@@ -162,28 +108,19 @@ export function agentBrowserTabOf(line: AgentBrowserTabLine, now: number): Agent
   };
 }
 
-/** A holder's tabs, the oldest first: one agent's, or a task's agents' together (GET). */
 export const agentBrowserTabsAnswerSchema = EffectSchema.Struct({
   tabs: EffectSchema.Array(agentBrowserTabSchema),
 });
 
-/** A tab a member opens in a coding agent's browser: the agent, and the http or https address it opens at. */
 export const agentBrowserTabOpenRequestSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   address: EffectSchema.String,
 });
 
-/** A tab a member opens in the browser of the agent the path names: the http or https address it opens at. */
 export const agentBrowserTabAddressRequestSchema = EffectSchema.Struct({
   address: EffectSchema.String,
 });
 
-/**
- * What a list of Browser tabs is read for, as a window names it: one coding
- * agent's browser, or every browser of a task's agents together, by its id
- * alone, the field naming which. An agent's tabs are its own wherever it
- * works, so an agent on no task lists them as well as one on a task.
- */
 export const browserTabsPlaceSchema = EffectSchema.Union([
   EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString }),
   EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString }),
@@ -191,12 +128,10 @@ export const browserTabsPlaceSchema = EffectSchema.Union([
 
 export type BrowserTabsPlace = typeof browserTabsPlaceSchema.Type;
 
-/** The id a list of tabs is read for, a task's or an agent's, which never collide, as a key of what is held of it. */
 export function browserTabsPlaceId(place: BrowserTabsPlace): string {
   return "taskId" in place ? place.taskId : place.agentId;
 }
 
-/** What a list of Browser tabs is read for, by kind: a task's agents' together, or one agent's. */
 export const BROWSER_TABS_PLACE = {
   TASK: "task",
   AGENT: "agent",
@@ -204,10 +139,8 @@ export const BROWSER_TABS_PLACE = {
 
 export type BrowserTabsPlaceKind = (typeof BROWSER_TABS_PLACE)[keyof typeof BROWSER_TABS_PLACE];
 
-/** The kind of what `place` lists the tabs of, as the host holds them by it and then its id. */
 export function browserTabsPlaceKind(place: BrowserTabsPlace): BrowserTabsPlaceKind {
   return "taskId" in place ? BROWSER_TABS_PLACE.TASK : BROWSER_TABS_PLACE.AGENT;
 }
 
-/** One tab as it stands after it opened, a takeover, a renewal, or a hand-back (POST, DELETE). */
 export const agentBrowserTabAnswerSchema = EffectSchema.Struct({ tab: agentBrowserTabSchema });

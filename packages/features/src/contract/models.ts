@@ -1,10 +1,3 @@
-/**
- * models.ts -- the models a coding agent may run on (`models-wire.ts`), as one procedure.
- *
- * The output is the wire schema flipped, so oRPC's output check encodes the
- * handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
- */
-
 import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";

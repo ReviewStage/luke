@@ -7,13 +7,6 @@ import { UNREPORTED } from "../../reported-failure.js";
 import { recordedFailure } from "../../testing/reported-failure.js";
 import { ComposerFoot } from "./composer-foot.js";
 
-/**
- * composer-foot.test.ts -- a message box's foot takes no send while the box
- * is empty, or refuses it saying why where it can, says its one note,
- * shows its counter from four fifths of the limit, offers a remedy beside
- * its note and a mend under it, and stands Stop in the send's place.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -27,7 +20,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws a foot with `props` and hands back its root, to draw it again, and what it was drawn into. */
 function draw(props: React.ComponentProps<typeof ComposerFoot>): {
   container: HTMLElement;
   redraw: (next: React.ComponentProps<typeof ComposerFoot>) => void;
@@ -43,7 +35,6 @@ function draw(props: React.ComponentProps<typeof ComposerFoot>): {
   };
 }
 
-/** The button named `name`, which the test fails without. */
 function button(container: HTMLElement, name: string): HTMLButtonElement {
   const found = [...container.querySelectorAll("button")].find(
     (each) => each.getAttribute("aria-label") === name || each.textContent === name,
@@ -52,7 +43,6 @@ function button(container: HTMLElement, name: string): HTMLButtonElement {
   return found;
 }
 
-/** Whether a button takes no press, as a reader is told it. */
 function unavailable(element: HTMLButtonElement): boolean {
   return element.disabled || element.getAttribute("aria-disabled") === "true";
 }
@@ -109,7 +99,6 @@ test("a send still out is named by its busy words and takes no second press", ()
   expect(sent).toEqual([]);
 });
 
-/** The failure beneath a note that says one. */
 const { failure: FAILURE } = recordedFailure();
 
 test("the note line says a cut paste as it lands", () => {

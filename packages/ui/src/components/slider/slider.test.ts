@@ -6,8 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { Slider } from "./slider.js";
 
-/** slider.test.ts -- a slider is a named range input at its value, and tells of a change, a drag's or a key's, as a number. */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

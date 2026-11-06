@@ -7,12 +7,6 @@ import { afterEach, beforeAll, test } from "vitest";
 import { Dialog } from "./dialog.js";
 import { DIALOG_TONE, DialogActions } from "./dialog-actions.js";
 
-/**
- * dialog-actions.test.ts -- a dialog's foot draws Cancel and then the act,
- * Cancel stilled with the act while it runs, and a dialog that only shows
- * draws Done alone, which puts it away.
- */
-
 const roots: Root[] = [];
 
 beforeAll(() => {
@@ -26,7 +20,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Draws `element` into the page. */
 function draw(element: React.ReactElement): void {
   const container = document.createElement("div");
   document.body.append(container);
@@ -35,7 +28,6 @@ function draw(element: React.ReactElement): void {
   act(() => root.render(element));
 }
 
-/** The card's foot's answers, by what each says, in order. */
 function answers(): string[] {
   const card = document.querySelector('[role="dialog"]') ?? assert.fail("no dialog");
   const body = card.querySelector('[data-slot="dialog-body"]');
@@ -44,7 +36,6 @@ function answers(): string[] {
     .map((each) => each.getAttribute("aria-label") ?? each.textContent ?? "");
 }
 
-/** The button that says `name`. */
 function button(name: string): HTMLButtonElement {
   return (
     [...document.querySelectorAll("button")].find(
@@ -53,7 +44,6 @@ function button(name: string): HTMLButtonElement {
   );
 }
 
-/** A dialog that asks to archive a task, its act running once pressed. */
 function Asking(): React.JSX.Element {
   const [running, setRunning] = useState(false);
   return createElement(Dialog, {
@@ -74,7 +64,6 @@ function Asking(): React.JSX.Element {
   });
 }
 
-/** A dialog that only shows a result, put away by its Done. */
 function Showing(): React.JSX.Element | null {
   const [open, setOpen] = useState(true);
   if (!open) return null;

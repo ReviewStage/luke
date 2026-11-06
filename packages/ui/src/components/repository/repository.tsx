@@ -11,58 +11,22 @@ import { OneLine } from "../one-line/one-line.js";
 import type { MenuRow } from "../searchable-menu/searchable-menu.js";
 import { Tooltip } from "../tooltip/hint.js";
 
-/**
- * repository.tsx -- a GitHub repository as every surface draws it: its owner's picture, then its name.
- *
- * The owner's picture, an organization's logo or a person's avatar, is how
- * GitHub itself and every devtool beside it tells repositories apart at a
- * glance, so a repository's name is led by it wherever one is named: the
- * sidebar's and the Tasks page's headers and rows, a board's card, the
- * repository chip and the rows of its menu, a task's card, Settings. The
- * words are the repository's name alone, unless another repository the same
- * view names shares it, where they are `owner/name` (`repositoryLabel`); the
- * hover names it whole, through the tooltip or the card of whatever holds it.
- * Where one repository is being set, the composer's chip and the task's
- * path, the words are its whole `owner/name`, the picture before them. No
- * repository is one state, a crossed-out folder and "No repository", and a
- * picture that cannot be drawn is the repository's own glyph.
- *
- * Prose is the exception and keeps `owner/name` as plain words: a sentence,
- * a pull request's key, a file's path, an admin table's cell.
- */
-
-/** The mark beside a repository the developer's own GitHub token reaches rather than the App. */
 const TOKEN_LABEL = "Token";
 
-/** The mark beside the first of several repositories picked, where an agent starts and its pull requests open by default. */
 const PRIMARY_LABEL = "Primary";
 
-/** The marks a repository's row wears after its owner: whether the developer's own token reaches it, and whether it is the primary of several picked. */
 export interface RepositoryRowMarks {
   readonly token?: boolean | undefined;
   readonly primary?: boolean | undefined;
 }
 
-/**
- * A repository's owner's picture, a tile of `Avatar`, edged, blank until it
- * has loaded, sized by the glyph slot it stands in. Where there is no
- * picture to draw, the repository's own glyph stands in its place: where it
- * fails to load, and in a fixture run, whose frames ask nothing of the
- * network. A picture that fails is remembered by its address for as long as
- * this one stands, so another repository gets its own chance. It loads
- * lazily, so a menu of a thousand repositories asks for the few rows in
- * sight rather than every row it holds.
- */
 export function RepositoryPicture({
   repository,
   pictures,
   size = AVATAR_SIZE.INLINE,
 }: {
-  /** The repository, `owner/name`. */
   repository: string;
-  /** Whether owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
-  /** The tile's size, the glyph slot's it stands in. */
   size?: AvatarSize;
 }): React.ReactNode {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
@@ -83,26 +47,17 @@ export function RepositoryPicture({
   );
 }
 
-/** The mark of a place that names no repository, a crossed-out folder. */
 export function NoRepositoryGlyph(): React.JSX.Element {
   return <FolderXIcon />;
 }
 
-/**
- * A repository named in a line: its owner's picture in a glyph's slot, then
- * its words, cut short where the line ends, the whole `owner/name` hung over
- * them on hover; or, for none, the crossed-out folder and "No repository".
- */
 export function RepositoryName({
   repository,
   label,
   pictures,
 }: {
-  /** The repository, `owner/name`, or none. */
   repository: string | null;
-  /** The words the view says for it (`repositoryLabel`): its name alone where none is given. */
   label?: string | undefined;
-  /** Whether owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
 }): React.JSX.Element {
   const words = repository === null ? NO_REPOSITORY : (label ?? repositoryParts(repository).name);
@@ -132,14 +87,11 @@ export function RepositoryName({
   );
 }
 
-/** A repository's card: its owner's picture and its name, and its owner under the name. */
 export function RepositoryCard({
   repository,
   pictures,
 }: {
-  /** The repository, `owner/name`. */
   repository: string;
-  /** Whether owners' pictures are drawn at all: not in a fixture run. */
   pictures: boolean;
 }): React.JSX.Element {
   const { owner, name } = repositoryParts(repository);
@@ -156,14 +108,6 @@ export function RepositoryCard({
   );
 }
 
-/**
- * A repository's row in a searched menu or a picker: its owner's picture,
- * its name, its owner muted after it, since the owner is the part rows most
- * often share and a narrow menu cuts the end of a row, and after the owner
- * the Token mark, where the developer's own GitHub token reaches it rather
- * than the App, and the Primary mark, where it is the first of several
- * picked; found by its whole `owner/name` all the same.
- */
 export function repositoryMenuRow(
   repository: string,
   pictures: boolean,

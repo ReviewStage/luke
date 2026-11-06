@@ -2,26 +2,10 @@ import { LEGACY_APP_WORD, literalsReadingLegacy } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
-/**
- * page-wire.ts -- a plan's pages: the interactive HTML documents an agent shows the developer, each kept as its versions.
- *
- * A page is one self-contained HTML document an agent wrote for a plan, under
- * a title. Writing the same page again makes its next version rather than a
- * second page, and every version stands as it was written, so an earlier one
- * reads exactly as it was shown. Versions count from one within their page.
- *
- * The service answers a page's HTML inside JSON and never as a document of
- * its own origin, so nothing an agent wrote ever runs as vespin.dev; the Mac
- * draws it in a sandboxed frame of its own scheme.
- */
-
-/** The tool every agent writes a page with, by the name its calls carry. */
 export const SHOW_PAGE_TOOL_NAME = "show_page";
 
 export const PAGE_BOUNDS = {
-  /** The most characters a page's title may spell. */
   MAX_TITLE_CHARS: 80,
-  /** The most characters one version's HTML may spell: a document with its scripts and styles inline. */
   MAX_HTML_CHARS: 1024 * 1024,
 } as const;
 
@@ -35,15 +19,10 @@ const pageHtmlSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(PAGE_BOUNDS.MAX_HTML_CHARS),
 );
 
-/** A version's number within its page, from one. */
 export const pageVersionNumberSchema = EffectSchema.Int.check(
   EffectSchema.isGreaterThanOrEqualTo(1),
 );
 
-/**
- * What an agent writes of a page: its title and whole HTML, as the next
- * version of the page it names, or as a new page's first where it names none.
- */
 export const pageWriteSchema = EffectSchema.Struct({
   pageId: EffectSchema.optionalKey(wireUuidSchema),
   title: pageTitleSchema,
@@ -52,19 +31,11 @@ export const pageWriteSchema = EffectSchema.Struct({
 
 export type PageWrite = typeof pageWriteSchema.Type;
 
-/** Who showed a version of a page: the app, from a call, or one of the plan's coding agents. */
 export const PAGE_SHOWER = {
   APP: "app",
   AGENT: "agent",
 } as const;
 
-/**
- * Who showed a version of a page: the app, or a coding agent by its id alone,
- * so whoever reads it names the agent by what its row says now, as a plan's
- * agent edits are named (`description-notes.ts`'s `descriptionAgentEditSchema`). Note
- * that a version shown before the app was named `app` names it `luke`, which
- * still reads as the app (a legacy read).
- */
 export const pageShowerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: literalsReadingLegacy([PAGE_SHOWER.APP], LEGACY_APP_WORD, PAGE_SHOWER.APP),
@@ -74,29 +45,20 @@ export const pageShowerSchema = EffectSchema.Union([
 
 export type PageShower = typeof pageShowerSchema.Type;
 
-/**
- * One page as its plan lists it: its newest version's number and title,
- * when that version was written, in epoch milliseconds, and who showed it.
- * Every version from one to `version` stands, so the number alone names
- * each earlier one.
- */
 export const pageLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   title: pageTitleSchema,
   version: pageVersionNumberSchema,
   at: countedNumber,
-  /** Who showed this version; absent for one shown before who showed it was kept, and from a service older than it. */
   shownBy: EffectSchema.optionalKey(pageShowerSchema),
 });
 
 export type PageLine = typeof pageLineSchema.Type;
 
-/** A plan's pages (GET `/api/plans/{id}/pages`), the most recently written first. */
 export const taskPagesAnswerSchema = EffectSchema.Struct({
   pages: EffectSchema.Array(pageLineSchema),
 });
 
-/** One version of a page with its HTML (GET `/api/plans/{id}/pages/{page}/versions/{version}`), titled as that version was. */
 const pageVersionSchema = EffectSchema.Struct({
   ...pageLineSchema.fields,
   html: pageHtmlSchema,
@@ -106,31 +68,19 @@ export type PageVersion = typeof pageVersionSchema.Type;
 
 export const taskPageVersionAnswerSchema = EffectSchema.Struct({ page: pageVersionSchema });
 
-/** What a page stands on: the task it was shown on, or the coding agent on no task that showed it. */
 export const PAGE_OWNER = {
   TASK: "task",
   AGENT: "agent",
 } as const;
 
-/**
- * What a page stands on, by its id: a task, whose pages every agent on it
- * and the app show and revise, or a coding agent on no task, whose pages are
- * its own. Its rule of who may read the page is the owner's.
- */
 export type PageOwner =
   | { readonly kind: typeof PAGE_OWNER.TASK; readonly taskId: string }
   | { readonly kind: typeof PAGE_OWNER.AGENT; readonly agentId: string };
 
-/** The task as what its pages stand on. */
 export function taskPageOwner(taskId: string): PageOwner {
   return { kind: PAGE_OWNER.TASK, taskId };
 }
 
-/**
- * What a reader names a page's owner by as it crosses to the window: a
- * task, or a coding agent on no task, by its id alone, the field naming
- * which, as a frame's address and a page's link name it.
- */
 export const pagePlaceSchema = EffectSchema.Union([
   EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString }),
   EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString }),
@@ -138,7 +88,6 @@ export const pagePlaceSchema = EffectSchema.Union([
 
 export type PagePlace = typeof pagePlaceSchema.Type;
 
-/** The id a page's owner is named by, a task's or an agent's, which never collide, as a key of what is held of it. */
 export function pagePlaceId(place: PagePlace): string {
   return "taskId" in place ? place.taskId : place.agentId;
 }

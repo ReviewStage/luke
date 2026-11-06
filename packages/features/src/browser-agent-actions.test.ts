@@ -8,11 +8,6 @@ import {
   browserAgentActionsSchema,
 } from "./browser-agent-actions.js";
 
-/**
- * Which actions an agent's call may carry: an address is http or https
- * alone, a click and a scroll say where, and a sequence is short.
- */
-
 const readsAction = Schema.is(browserAgentActionSchema);
 const readsActions = Schema.is(browserAgentActionsSchema);
 

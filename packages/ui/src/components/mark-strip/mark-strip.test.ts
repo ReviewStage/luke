@@ -6,12 +6,6 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { STATUS_TONE } from "../../status-tone.js";
 import { MARK_STRIP_LOOK, MarkStrip } from "./mark-strip.js";
 
-/**
- * mark-strip.test.ts -- a hidden rail's strip is hidden from assistive
- * technology; a press anywhere on it shows the rail; and a strip that takes
- * no press is rested on instead, the pointer's coming and going heard.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

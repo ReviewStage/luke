@@ -4,39 +4,20 @@ import { openTargetOf } from "./open-address.js";
 import { parsedUrl } from "./parsed-url.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
-/**
- * link-open.ts -- where the account opens a link of ours, and whether a web page showing one hands it to the Mac app.
- *
- * As Linear's "Open links in the desktop app" does, an account chooses
- * whether a link of ours opened in a browser stays there or goes to the Mac
- * app. The choice is the account's (`@repo/settings`' `linkOpen`, its own
- * part of the preferences snapshot), so the web reads it on a signed-in
- * load and decides here. The hand-off is the web app's "Open in the Mac
- * app" link (`open-address.ts`): the place the address names, written again in the
- * desktop's scheme, so nothing else the address carried reaches the app.
- * The browser is the default, because it works without the app.
- */
-
-/** Where an account opens a link of ours. */
 export const LINK_OPEN = {
-  /** Stay on the web, which works wherever there is a browser. */
   BROWSER: "browser",
-  /** Hand the link to the Mac app through its own scheme. */
   MAC_APP: "mac-app",
 } as const;
 
 export type LinkOpen = (typeof LINK_OPEN)[keyof typeof LINK_OPEN];
 
-/** Every choice, in the order a control offers them. */
 export const LINK_OPEN_LIST: readonly LinkOpen[] = [LINK_OPEN.BROWSER, LINK_OPEN.MAC_APP];
 
-/** What a choice reads as on a control. */
 export const LINK_OPEN_LABEL = {
   [LINK_OPEN.BROWSER]: "Browser",
   [LINK_OPEN.MAC_APP]: `${PRODUCT_NAME} for Mac`,
 } as const satisfies Record<LinkOpen, string>;
 
-/** The platform a browser runs on, as far as a hand-off cares: the app is a Mac's alone. */
 export const LINK_PLATFORM = {
   MAC: "mac",
   OTHER: "other",
@@ -44,22 +25,14 @@ export const LINK_PLATFORM = {
 
 export type LinkPlatform = (typeof LINK_PLATFORM)[keyof typeof LINK_PLATFORM];
 
-/**
- * The query a link of ours carries where our own Open in browser
- * opened it, so the web page it lands on stays there rather than hand it
- * straight back to the Mac app, and drops it from the address once read
- * (`mac-app-handoff.ts`). It is the flag's alone, and names no place.
- */
 const STAY_ON_WEB = { QUERY: "stay", VALUE: "web" } as const;
 
-/** A link of ours as Open in browser opens it: flagged to stay on the web. */
 export function stayingOnWeb(link: string): string {
   const url = new URL(link);
   url.searchParams.set(STAY_ON_WEB.QUERY, STAY_ON_WEB.VALUE);
   return url.href;
 }
 
-/** The address with Open in browser's flag taken out of it, where it carried one; nothing where it carried none. */
 export function withoutStayOnWeb(address: string): string | undefined {
   const url = parsedUrl(address);
   if (url?.searchParams.get(STAY_ON_WEB.QUERY) !== STAY_ON_WEB.VALUE) return undefined;
@@ -69,18 +42,10 @@ export function withoutStayOnWeb(address: string): string | undefined {
 
 const readsLinkOpen = Schema.is(Schema.Literals(LINK_OPEN_LIST));
 
-/** Whether a value is one of the choices, as one arriving from storage or the wire is read. */
 export function isLinkOpen(value: UnparsedWireValue): value is LinkOpen {
   return readsLinkOpen(value);
 }
 
-/**
- * The link a web page showing `address` hands to the Mac app, or nothing
- * where it stays on the web: the account chose the browser, the browser is
- * on no Mac, or the address names no place in a workspace. The address is
- * the page's own, on our home or a preview alike, read as
- * `open-address.ts` reads it.
- */
 export function linkOpenTarget(
   preference: LinkOpen,
   platform: LinkPlatform,

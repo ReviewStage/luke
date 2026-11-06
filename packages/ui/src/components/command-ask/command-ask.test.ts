@@ -6,13 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { CommandAsk } from "./command-ask.js";
 
-/**
- * command-ask.test.ts -- the ask lands on Deny, names itself, says what
- * Allow all commands lets through and where it is undone, and shows the
- * command as written; each answer is heard as its own; and Escape, which
- * waves the card away, denies rather than runs.
- */
-
 const COMMAND = "git -C ~/code/app status";
 
 const roots: Root[] = [];
@@ -28,7 +21,6 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The button whose name is `name`, wherever it stands. */
 function button(name: string): HTMLButtonElement {
   return (
     [...document.querySelectorAll("button")].find((each) => each.textContent === name) ??
@@ -36,7 +28,6 @@ function button(name: string): HTMLButtonElement {
   );
 }
 
-/** The ask drawn, each answer counted under its name. */
 function asked(): Record<"once" | "always" | "deny", number> {
   const heard = { once: 0, always: 0, deny: 0 };
   const container = document.createElement("div");

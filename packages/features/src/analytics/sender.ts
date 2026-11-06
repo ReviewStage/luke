@@ -18,31 +18,14 @@ import {
 } from "./product-events.js";
 
 const PRODUCT_EVENT_DEFAULTS = {
-  /**
-   * A minute between flushes. Long enough that a launch, a sign-in, and a
-   * first observation ride one request rather than three; short enough that a
-   * quit loses at most a minute of counts.
-   */
   FLUSH_INTERVAL_MS: 60_000,
-  /**
-   * How many events wait for a network at most. Past this the oldest go: a
-   * long stretch offline should keep recent behavior, and the one event that
-   * would hurt to lose — the day marker — is recorded again the next day
-   * anyway.
-   */
   QUEUE_LIMIT: 200,
 } as const;
 
-/** The one discriminator the day marker dedups on; the day itself is the key. */
 const DAY_ACTIVE_KEY = "day";
 
-/**
- * The account a sender whose credential names no holder counts every day under:
- * with no identity to tell two accounts apart, they are one holder.
- */
 const UNNAMED_ACCOUNT = "";
 
-/** A sender handed no store remembers a day for the run alone. */
 const UNKEPT_DAYS: RecordedDayStore = {
   lastRecordedDay: () => Effect.succeed(undefined),
   keepRecordedDay: () => Effect.void,
@@ -52,22 +35,13 @@ function utcDay(at: number): string {
   return new Date(at).toISOString().slice(0, 10);
 }
 
-/** One once-a-day event as sent: which event, for what, for whom, and on which UTC day. */
 export interface RecordedDay {
   readonly name: ProductEventName;
   readonly discriminator: string;
-  /** The holder the sender's credential named when the event was queued. */
   readonly account: string;
-  /** `YYYY-MM-DD`, in UTC. */
   readonly day: string;
 }
 
-/**
- * Where the day a once-a-day event was last sent is kept across launches.
- * The host hands in its own state store, so the guard outlives the run that
- * set it. Neither side fails: a day that could not be read is counted again,
- * and one that could not be kept is the next launch's to count.
- */
 export interface RecordedDayStore {
   readonly lastRecordedDay: (
     name: ProductEventName,
@@ -77,39 +51,20 @@ export interface RecordedDayStore {
   readonly keepRecordedDay: (recorded: RecordedDay) => Effect.Effect<void>;
 }
 
-/** A queued event, and the day it marks when it is a once-a-day one. */
 interface QueuedEvent {
   readonly event: ProductEvent;
   readonly recorded?: RecordedDay;
 }
 
 export interface ProductEventSenderOptions {
-  /**
-   * What authorizes a batch on the signed-in account; its holder is also the
-   * account a once-a-day count is kept for.
-   */
   credential: CallCredential;
-  /**
-   * Settles the credential on the account the service names now, before a
-   * batch's day marks are read against its holder, for a credential whose
-   * account can change without this sender hearing of it (a cookie another
-   * tab signed in under). One whose account changes only through its own
-   * host omits it.
-   */
   confirmAccount?: (() => Effect.Effect<void>) | undefined;
-  /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The running build's version, as the packaged app reports it. */
   appVersion: string;
-  /** Whether this build runs from a packaged bundle rather than a development checkout. */
   packaged: boolean;
-  /** Which app this is, for the service to label every count with. */
   platform: ProductClientPlatform;
-  /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** Where once-a-day events keep their day across launches; the run alone without one. */
   recordedDays?: RecordedDayStore;
   now?: () => number;
   requestTimeoutMs?: number;
@@ -117,38 +72,10 @@ export interface ProductEventSenderOptions {
   queueLimit?: number;
 }
 
-/**
- * Counts how our own features are used, and sends nothing else. The
- * vocabulary is core's: every event is run through the same reader the service
- * runs before it is even queued, so a bad emitter is dropped on this machine
- * rather than becoming a refusal over the wire, and nothing observed can reach
- * a property in the first place.
- *
- * The pipeline is lossy on purpose. Any outcome — accepted, refused,
- * unreachable — drops the batch, and nothing is ever retried: counts undercount
- * on a flaky network in exchange for never retry-storming our own service
- * and never double-counting a day. {@link ProductEventSender.drop} clears the
- * queue rather than flushing it, because a request in `will-quit` either
- * delays the quit or is killed mid-flight, and an instant quit is worth a
- * minute of counts. Nothing outlives a run but the day a once-a-day event was
- * last sent for an account: a count made while no account is signed in waits
- * on the queue for a sign-in in this run, and goes with the run if none
- * comes.
- *
- * No identity travels with an event. The service resolves the account from the
- * bearer token this sender already holds for the voice and review endpoints,
- * so there is nothing here to name a person with.
- *
- * It runs nothing itself. {@link ProductEventSender.make} builds one in the
- * scope its caller is already composing in, forks the flush cadence into that
- * scope, and answers a sender whose flush is an effect the caller yields, so
- * the fibers the counts ride are the host's own.
- */
 export class ProductEventSender {
   readonly #hosted: HostedClient;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #appVersion: string;
-  /** What every batch says about the build it came from, for the service to stamp on each event. */
   readonly #build: ProductEventBuild;
   readonly #sends: boolean;
   readonly #now: () => number;
@@ -158,45 +85,18 @@ export class ProductEventSender {
   readonly #confirmAccount: () => Effect.Effect<void>;
   readonly #keptDays: RecordedDayStore;
   readonly #queue: QueuedEvent[] = [];
-  /**
-   * This run's own guard, by name, then discriminator, then account: nested
-   * rather than an interpolated key, so the three stay apart. It is set when
-   * an event is queued, while the kept day is written only once it is sent,
-   * so a tick a minute later does not queue the day a second time.
-   */
   readonly #recordedDays = new Map<ProductEventName, Map<string, Map<string, string>>>();
   #armed = false;
-  /**
-   * One request at a time, as the queue's splice assumes: a second flush
-   * asked for while one is under way waits for it and then carries whatever
-   * is queued by then.
-   */
   readonly #gate = Semaphore.makeUnsafe(1);
 
-  /**
-   * One flush, delayed by the cadence and then repeated on it — never an
-   * immediate one, so the events a caller queues right after the sender is
-   * built ride the first tick rather than an empty flush ahead of it.
-   */
   readonly #tick: Effect.Effect<void> = Effect.suspend(() =>
     Effect.andThen(this.markDayActive(), this.flush),
   );
 
-  /**
-   * Sends what is queued, at most one request at a time. Never fails: a
-   * request `accountCall` could not carry is a count nobody has, which is the
-   * trade this whole pipeline makes.
-   */
   readonly flush: Effect.Effect<void> = Effect.suspend(() =>
     this.#gate.withPermits(1)(Effect.provide(this.#flushEffect(), this.#client)),
   );
 
-  /**
-   * The queue dropped, which is the whole of a quit's stop: what it has to
-   * guarantee is that nothing further is sent, never that a request already
-   * under way has ended. The cadence ends with the scope the sender was built
-   * in, for the same reason canceling a timer never awaited one.
-   */
   readonly drop: Effect.Effect<void> = Effect.sync(() => {
     this.#queue.length = 0;
   });
@@ -230,20 +130,11 @@ export class ProductEventSender {
     this.#queueLimit = positiveInteger(options.queueLimit, PRODUCT_EVENT_DEFAULTS.QUEUE_LIMIT);
   }
 
-  /**
-   * One sender, with its flush cadence forked into the scope this is built
-   * in: a run that sends no network forks none, since every tick of it would
-   * be a no-op.
-   */
   static make(
     options: ProductEventSenderOptions,
   ): Effect.Effect<ProductEventSender, never, Scope.Scope> {
     return Effect.gen(function* () {
       const sender = new ProductEventSender(options);
-      // The day is marked on the tick rather than at launch alone, because an
-      // app left running crosses midnight without relaunching — which is the
-      // whole case this event exists for, and marking it only at launch would
-      // make it a second, worse copy of `app:launch`.
       if (options.sends) {
         const interval = Duration.millis(sender.#flushIntervalMs);
         yield* scheduleRepeat(Schedule.spaced(interval), Effect.delay(sender.#tick, interval));
@@ -252,15 +143,10 @@ export class ProductEventSender {
     });
   }
 
-  /** The build's version, so an emitter never has to hold it to report it. */
   get appVersion(): string {
     return this.#appVersion;
   }
 
-  /**
-   * Queues one event. Synchronous and never throws, so an emit site can sit
-   * on any path without ordering itself around it.
-   */
   record<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -268,28 +154,12 @@ export class ProductEventSender {
     this.#enqueue(name, properties, undefined);
   }
 
-  /**
-   * Marks today active, at most once per account per UTC day, across
-   * launches. The app can run for a week on one launch, so launches alone would
-   * undercount the days he was used, and relaunching must not count one day
-   * twice.
-   */
   markDayActive(): Effect.Effect<void> {
     return this.recordOncePerDay(PRODUCT_EVENT.APP_DAY_ACTIVE, DAY_ACTIVE_KEY, {
       app_version: this.#appVersion,
     });
   }
 
-  /**
-   * Queues one event per discriminator per account per UTC day. The day is
-   * kept in the store the host handed over once the batch carrying it was
-   * answered, so a relaunch the same day finds it, while a launch quit before
-   * its first flush leaves the day for the next launch to count.
-   *
-   * Nobody signed in is nobody's day: nothing is queued, and the next tick
-   * asks again, so an account that signs in later the same day is counted.
-   * Another account signing in the same day is counted for its own.
-   */
   recordOncePerDay<Name extends ProductEventName>(
     name: Name,
     discriminator: string,
@@ -303,32 +173,17 @@ export class ProductEventSender {
       const accounts = this.#recordedDaysOf(name, discriminator);
       if (accounts.get(account) === day) return;
       const kept = yield* this.#keptDays.lastRecordedDay(name, discriminator, account);
-      // Note that we look again after the read, because another mark may have
-      // queued this day while it was under way.
       if (accounts.get(account) === day) return;
       accounts.set(account, day);
-      // Note that only the very day counts as kept, because a clock that was
-      // wrong must never hide a real day: it costs one count at most instead.
       if (kept === day) return;
       this.#enqueue(name, properties, { name, discriminator, account, day });
     });
   }
 
-  /**
-   * Arms counting. The sender comes up disarmed rather than assuming, so
-   * nothing recorded while the app is still standing itself up can be sent
-   * before the launch has decided whether this run counts at all.
-   */
   arm(): void {
     this.#armed = true;
   }
 
-  /**
-   * Stops counting mid-run, as the developer turning usage data off does:
-   * what is queued is dropped and nothing more is queued until armed again.
-   * This run's day guard goes too, so a re-arm asks the kept day again rather
-   * than taking a dropped mark for one sent.
-   */
   disarm(): void {
     this.#armed = false;
     this.#queue.length = 0;
@@ -339,7 +194,6 @@ export class ProductEventSender {
     return this.#sends && this.#armed;
   }
 
-  /** One event read against the allowlist and queued, with the day it marks. */
   #enqueue<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -352,7 +206,6 @@ export class ProductEventSender {
     this.#trimQueue();
   }
 
-  /** This run's guard for one event and discriminator, by account. */
   #recordedDaysOf(name: ProductEventName, discriminator: string): Map<string, string> {
     let byDiscriminator = this.#recordedDays.get(name);
     if (!byDiscriminator) {
@@ -372,21 +225,11 @@ export class ProductEventSender {
       if (this.#queue.length === 0) return;
       yield* this.#confirmAccount();
       const holder = yield* this.#readHolder();
-      // Gone whatever becomes of the request, save for the one end that never
-      // authenticated at all.
       const queued = this.#ownDays(this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT), holder);
       if (queued.length > 0) yield* this.#send(queued);
     });
   }
 
-  /**
-   * The batch without the day marks of an account no longer signed in. The
-   * service counts a batch for whoever its bearer names, so a mark queued
-   * before a sign-out and another sign-in would count the first account's day
-   * for the second; it goes instead, and this run's guard forgets it, so the
-   * first account is counted if it signs in again today. Signed out, the
-   * batch is kept whole for the sign-in it waits on.
-   */
   #ownDays(queued: QueuedEvent[], holder: string | undefined): QueuedEvent[] {
     if (holder === undefined) return queued;
     return queued.filter(({ recorded }) => {
@@ -396,7 +239,6 @@ export class ProductEventSender {
     });
   }
 
-  /** Posts one batch. */
   #send(queued: QueuedEvent[]): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.suspend(() =>
       Effect.flatMap(
@@ -406,23 +248,13 @@ export class ProductEventSender {
             build: this.#build,
           }),
           {
-            // A call that ended before any status names its fault; anything
-            // else, a refusal or an answer this build cannot read among it,
-            // is the service having answered.
             onFailure: (failure) =>
               failure instanceof HostedUnanswered ? failure.fault : undefined,
             onSuccess: () => undefined,
           },
         ),
         (fault) => {
-          // The service answered, so whatever it made of the batch, a day it
-          // carried is not to be sent again: kept for the next launch.
           if (fault === undefined) return this.#keepRecordedDays(queued);
-          // Signed out is temporary and nobody's fault, and nothing was asked
-          // of the service, so the batch waits rather than being spent. An
-          // account that changed under a refreshed token is not that case:
-          // those counts were queued by an account this request can no longer
-          // name, and they go.
           if (fault === CALL_FAULT.NO_CREDENTIAL) {
             this.#queue.unshift(...queued);
             this.#trimQueue();

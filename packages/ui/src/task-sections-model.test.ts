@@ -20,12 +20,6 @@ import {
   workspaceSections,
 } from "./task-sections-model.js";
 
-/**
- * The sidebar's sections as a drop or a menu leaves them: every write a
- * drag asks for is applied as the service would keep it, and the tasks and
- * sections are read back in the order the sidebar draws them.
- */
-
 const WORKSPACE = "workspace-1";
 const LAUNCH = "0a1b2c3d-0000-4000-8000-000000000001";
 const LATER = "0a1b2c3d-0000-4000-8000-000000000002";
@@ -44,7 +38,6 @@ const create = (id: string, title: string): TaskSectionWrite => ({
   title,
 });
 
-/** Launch holding tasks 1, 2, and 3 top to bottom, put there one after another, and Later empty. */
 function launchWithThree(): TaskSections {
   let state = applyAll(NO_TASK_SECTIONS, [create(LAUNCH, "Launch")], 1);
   state = applyAll(state, [create(LATER, "Later")], 2);
@@ -232,7 +225,6 @@ describe("an agent with no task in a section", () => {
       21,
     );
     assert.deepEqual(tasksIn(dragged, LAUNCH), [TASK(1), TASK(2), TASK(3), AGENT(1)]);
-    // A task dragged below the agent is placed past it, as past any task.
     const onTop = applyAll(
       dragged,
       placeWrites(sectionOrder(dragged, LAUNCH), task(TASK(3)), LAUNCH, 3, 22),

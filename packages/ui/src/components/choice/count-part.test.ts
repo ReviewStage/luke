@@ -7,12 +7,6 @@ import { afterEach, test } from "vitest";
 import { STATUS_TONE } from "../../status-tone.js";
 import { CountParts, linesCount } from "./count-part.js";
 
-/**
- * count-part.test.ts -- a diff's line count is two parts, the lines added
- * and the lines removed, read as one count; a part's glyph says its state in
- * words.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }

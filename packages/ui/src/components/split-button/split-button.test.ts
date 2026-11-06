@@ -6,16 +6,6 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { Menu, useMenu } from "../menu/menu.js";
 import { SplitButton } from "./split-button.js";
 
-/**
- * split-button.test.ts -- a split button's main part does its act and its
- * chevron opens the options' menu, focus on its first item; the keys walk
- * the menu, a choice acts and closes it, and Escape closes it with focus back
- * on the chevron. Unavailable, both halves refuse their press yet stay Tab
- * stops; busy, the main part is named by what it is doing and refuses its
- * press while the chevron still opens the menu. A main part whose press
- * succeeded lands on a check as its ring leaves; one that failed does not.
- */
-
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
@@ -31,10 +21,8 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** What a test's split button was asked to do, in the order it was asked. */
 type Done = string[];
 
-/** A Save split button whose chevron drops Save as draft and Save and close. */
 function Harness({
   done,
   disabled,
@@ -81,7 +69,6 @@ function mount(element: React.ReactElement): void {
   act(() => root.render(element));
 }
 
-/** The button whose name is `name`. */
 function button(name: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => (each.getAttribute("aria-label") ?? each.textContent) === name,
@@ -219,7 +206,6 @@ test("every press but the chevron's is heard as it lands, one the busy main part
 });
 
 test("a split button's main part whose press succeeded wears a check as its ring leaves, and one that failed does not", () => {
-  // Note that the check's hold is a motion this DOM has no engine for, so one is lent that never ends.
   Object.defineProperty(HTMLElement.prototype, "getAnimations", {
     configurable: true,
     value(this: HTMLElement) {

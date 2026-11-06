@@ -21,15 +21,6 @@ import {
   switchedServers,
 } from "./agent-servers-model.js";
 
-/**
- * What the MCP servers popover draws of a connected integration, from what
- * its server answered when asked for its tools: its switch and tools where
- * it answered with them, and its reason with Reconnect where it answered
- * why not, so a grant the server will not take never reads as working;
- * which section each server stands under; and what a search finds.
- */
-
-/** Slack's row, connected, with its server's tools read answering `read`. */
 function slackRow(read: IntegrationToolsView | undefined) {
   const rows = serverRows({
     statusOf: (server: string) =>
@@ -107,7 +98,6 @@ test("a connection is checked until its server answers, and says its tools could
   assert.equal(failed.tools, undefined);
 });
 
-/** Every offered server's row where each stands as `standing` says, Linear's server answering `tools`. */
 function rowsWhere(
   standing: Partial<
     Record<IntegrationProvider, (typeof INTEGRATION_STATUS)[keyof typeof INTEGRATION_STATUS]>
