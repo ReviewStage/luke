@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { readFirewallLaunch } from "@repo/database/models/sandbox-firewall-store";
 import { user } from "@repo/database/schemas/auth";
-import { getTestDB } from "@repo/database/testing";
+import { getTestDB, openTaskAgent, openWorkspace } from "@repo/database/testing";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Effect, Layer, Redacted } from "effect";
 import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
@@ -73,21 +73,27 @@ const swapOf = (domain: string, placeholder: string, value: string) =>
     value: Redacted.make(value),
   });
 
-/** A launch of the fixture agent holding the runner's bearer alone. */
-const bearerLaunch = {
-  agentId: "agent-fixture",
+/** A launch of the agent given holding the runner's bearer alone. */
+const bearerLaunch = (agentId: string) => ({
+  agentId,
   swaps: new Map([
     [LAUNCH_SWAP.RUNNER, swapOf(SERVICE_HOST, "Bearer runner-placeholder-fixture", BEARER)],
   ]),
-};
+});
 
-/** A sandbox session of its own, in a sandbox of its own, under an account of its own. */
+/** A sandbox session of its own, in a sandbox of its own, of an agent of an account of its own. */
 const ownSession = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
   );
-  return { userId, name: `sandbox-${randomUUID()}`, sandboxSessionId: `sbs_${randomUUID()}` };
+  const agentId = yield* openTaskAgent(userId, yield* openWorkspace(userId), null);
+  return {
+    userId,
+    agentId,
+    name: `sandbox-${randomUUID()}`,
+    sandboxSessionId: `sbs_${randomUUID()}`,
+  };
 });
 
 /** Vercel as the scenario has it: the session's sandbox found running it, and each policy kept as it lands, in that order. */
@@ -133,7 +139,7 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
         const { firewall, services } = yield* firewallOver(api.layer);
 
         const kept = yield* Effect.gen(function* () {
-          yield* firewall.keepLaunch(session, bearerLaunch);
+          yield* firewall.keepLaunch(session, bearerLaunch(session.agentId));
           yield* firewall.write(session, { github: write });
           yield* firewall.write(session, { github: write, clone: read });
           return yield* readFirewallLaunch(session);
@@ -158,7 +164,7 @@ it.layer(getTestDB())("a sandbox session's firewall", (it) => {
           },
         ]);
         assert.ok(kept !== undefined);
-        assert.equal(kept.agentId, "agent-fixture");
+        assert.equal(kept.agentId, session.agentId);
         for (const value of [BEARER, "runner-placeholder-fixture"]) {
           assert.equal(kept.sealedEntries.includes(value), false);
         }

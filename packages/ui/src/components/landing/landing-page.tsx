@@ -1,13 +1,17 @@
 import { type ReactNode, useId } from "react";
-import { MarkOrb } from "../../marks/mark-orb.js";
 import { LANDING_FIELD, LandingField, type LandingFieldPattern } from "./landing-field.js";
-import { LANDING_SCENE, type LandingScene, LandingSceneView } from "./landing-scenes.js";
+import {
+  LANDING_SCENE,
+  LandingHeroScene,
+  type LandingScene,
+  LandingSceneView,
+} from "./landing-scenes.js";
 import { SiteFrame, SiteRule } from "./site-frame.js";
 
 export { SiteBarPages } from "./site-frame.js";
 
 /**
- * landing-page.tsx -- the product's landing: a bar that floats once the page scrolls, the one line beside the copper ball, a section per feature each over a moving screen, and a close over the wordmark in dots.
+ * landing-page.tsx -- the product's landing: a bar that floats once the page scrolls, the one line beside the Inbox at work, a section per feature each over a moving screen, and a close over the wordmark in dots.
  *
  * It stands in the site's frame (`site-frame.tsx`): the margin grid's
  * rails, the bar that floats once the page scrolls, and the foot over the
@@ -93,7 +97,7 @@ export function LandingFacts({
   );
 }
 
-/** The landing: `bar` over the hero's `title`, `lead`, and `actions` beside the ball, the sections, the `close`, and the `footer` over the wordmark. */
+/** The landing: `bar` over the hero's `title`, `lead`, and `actions` beside the Inbox, the sections, the `close`, and the `footer` over the wordmark. */
 export function LandingPage({
   bar,
   barCall,
@@ -132,7 +136,7 @@ export function LandingPage({
             <div className="ui-landing-actions">{actions}</div>
           </div>
           <div className="ui-landing-hero-art">
-            <MarkOrb />
+            <LandingHeroScene />
           </div>
         </div>
         {children}

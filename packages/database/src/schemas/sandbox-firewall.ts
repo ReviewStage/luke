@@ -1,5 +1,6 @@
 import { index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
 
 /**
@@ -15,7 +16,8 @@ import { user } from "./auth.js";
  * under the deployment's key ring, bound to that account and session
  * (`../models/sandbox-firewall-store.ts`, `@repo/service`'s
  * `agents/sandbox-firewall.ts`). The scheduled sweep drops a row left past
- * the longest a session can run. Every row goes with its account.
+ * the longest a session can run. Every row goes with its agent and its
+ * account.
  */
 export const sandboxFirewall = pgTable(
   "sandbox_firewall",
@@ -27,8 +29,8 @@ export const sandboxFirewall = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** Minted as the launch is kept. Nothing reads it now; the code this replaced compared it, so it stays until no deployment runs that code. */
     version: uuid("version").notNull(),
-    /** The agent the launch runs, whose repository credential a write made apart from the launch mints; none in a row kept before agents were named here. */
-    agentId: text("agent_id"),
+    /** The agent the launch runs, whose repository credential a write made apart from the launch mints, and with which the row goes; none in a row kept before agents were named here. */
+    agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "cascade" }),
     /** The launch's swaps as the service sealed them. */
     sealedEntries: text("sealed_entries").notNull(),
     /** When the row was last written, from the writer's own clock. */
@@ -39,6 +41,8 @@ export const sandboxFirewall = pgTable(
     primaryKey({ columns: [table.userId, table.sandboxSessionId] }),
     // Nothing reads by the session alone now; the index stays until a migration drops it.
     index("sandbox_firewall_session").on(table.sandboxSessionId),
+    // An agent's deletion finds its rows by it.
+    index("sandbox_firewall_agent").on(table.agentId),
     // The sweep drops the rows of sessions long gone by age.
     index("sandbox_firewall_updated").on(table.updatedAt),
   ],
