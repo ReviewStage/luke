@@ -72,8 +72,8 @@ import {
 } from "@repo/features/trigger-catalog";
 import {
   andList,
-  INTEGRATION_LABEL,
   IRREVERSIBLE_WORDS,
+  MCP_SERVER_LABEL,
   noMatchWords,
   readFailedWords,
   readingWords,
@@ -630,14 +630,14 @@ function ServersRow({
   if (!mine) {
     return (
       <SettingsRow
-        label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+        label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
         description={
           <ReplayUnmask>
             {disabled.length === 0 ? (
-              "All of its creator's connected integrations."
+              "All of its creator's connected MCP servers."
             ) : (
               <>
-                Its creator's connected integrations, but{" "}
+                Its creator's connected MCP servers, but{" "}
                 <ReplayMask>{andList(disabled.map(switchedOffName))}</ReplayMask> switched off.
               </>
             )}
@@ -677,14 +677,14 @@ function UnreadServersRow({
   if (failed) {
     return (
       <SettingsRow
-        label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+        label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
         below={() => (
           <ReplayUnmask>
             <ErrorState
               onRetry={onRetry}
               failure={unreadShown(FAILURE_SURFACE.AUTOMATION_INTEGRATIONS_READ)}
             >
-              Your connected integrations could not be read.
+              Your connected MCP servers could not be read.
             </ErrorState>
           </ReplayUnmask>
         )}
@@ -698,11 +698,11 @@ function UnreadServersRow({
 function ServersRowSkeleton(): React.JSX.Element {
   return (
     <SettingsRow
-      label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+      label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
       description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}
     >
       {() => (
-        <SkeletonRegion label="Reading your connected integrations…">
+        <SkeletonRegion label="Reading your connected MCP servers…">
           <SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SELECT} />
         </SkeletonRegion>
       )}
@@ -733,13 +733,13 @@ function OwnServersRow({
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
     <SettingsRow
-      label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
+      label={<ReplayUnmask>{MCP_SERVER_LABEL.many}</ReplayUnmask>}
       description={
         <ReplayUnmask>
           {connected.length === 0
             ? "None connected yet."
             : off.length === 0
-              ? "Every connected integration is on."
+              ? "Every connected MCP server is on."
               : `${namesSaid(off)} off.`}
         </ReplayUnmask>
       }

@@ -35,8 +35,8 @@ import { taskCardOf } from "./task-card.js";
 
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
- * glyph and the name its tab wears in either strip are the ones its row in
- * that strip's "+" menu wears, the Plan tab is the task's own name and
+ * glyph and the name its tab wears in the side panel's strip are the ones its
+ * row in that strip's "+" menu wears, the Plan tab is the task's own name and
  * status, the task's own tab hangs the task's card, and a page's tab hangs a
  * card previewing the page.
  */
@@ -237,30 +237,6 @@ function rowLooks(column: Element): Map<string, Look> {
   act(() => add.click());
   return new Map(rows);
 }
-
-test("the column's + offers a working agent and the draft in the look their tabs wear: the agent's mark wearing where it stands, and the draft named New agent", async () => {
-  const column = (await mount({ main: { agent: WORKING.id } })).querySelector(".main-tabs");
-  assert.ok(column, "the task's column's strip");
-  const tabs = tabLooks(column);
-  const rows = rowLooks(column);
-  for (const name of [WORKING.title, TAB_WORDS.NEW_AGENT]) {
-    assert.ok(tabs.has(name ?? ""), `the strip has a tab named ${name}`);
-    assert.deepEqual(rows.get(name ?? ""), tabs.get(name ?? ""), `${name} looks the same in the +`);
-  }
-  assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
-});
-
-test("the column's + offers New agent, then each agent, and no New voice chat, which a draft's Call starts", async () => {
-  const column = (await mount({ main: { agent: WORKING.id } })).querySelector(".main-tabs");
-  assert.ok(column, "the task's column's strip");
-  const rows = [...rowLooks(column).keys()];
-  assert.equal(rows[0], TAB_WORDS.NEW_AGENT);
-  assert.ok(rows.indexOf(WORKING.title ?? "") > 0, "the agents stand after New agent");
-  assert.equal(
-    rows.some((row) => row?.includes("voice chat")),
-    false,
-  );
-});
 
 test("the side panel's + offers an agent's Pull request in the look its tab wears, named by its number and title rather than its agent's name", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");

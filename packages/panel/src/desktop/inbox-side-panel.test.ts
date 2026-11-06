@@ -20,6 +20,7 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import { pageFrameUrl } from "@repo/features/page-frame";
+import { PAGE_PICK_TYPE } from "@repo/features/page-pick";
 import type { PageLine } from "@repo/features/page-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
@@ -196,6 +197,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -541,4 +543,46 @@ test("a link to a page of the item's task, pressed in a transcript beside the In
   assert.deepEqual(panelTabs(container), ["▸ Invite funnel"], "the page took the preview's place");
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
+});
+
+test("an element of a page beside the Inbox opens its comment in the item's box's editor, its words a quote block rather than a line of plain text", async () => {
+  const { container } = await inbox();
+  await pressChip(container, "Invite funnel");
+  const panel = container.querySelector('aside[aria-label="Panel"]') ?? assert.fail();
+  const frame = panel.querySelector("iframe") ?? assert.fail("the page is drawn");
+  act(() => {
+    frame.dispatchEvent(new Event("load"));
+  });
+  const comment = await vi.waitFor(
+    () =>
+      panel.querySelector<HTMLButtonElement>('button[aria-label="Comment on the page"]') ??
+      assert.fail("the page offers Comment"),
+  );
+  await act(async () => comment.click());
+  // The press in the frame is the developer's, which the window holds as the pick lands; the editor still reads the platform.
+  const { platform, userAgent } = navigator;
+  vi.stubGlobal("navigator", { platform, userAgent, userActivation: { isActive: true } });
+  const box = { left: 10, top: 20, right: 200, bottom: 40 };
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          type: PAGE_PICK_TYPE,
+          picked: { path: "body > h2:nth-of-type(1)", quote: "Totals", section: "", box },
+        },
+        source: frame.contentWindow,
+      }),
+    );
+  });
+  const started = panel.querySelector(".page-comment-float") ?? assert.fail("the comment starts");
+  assert.equal(
+    started.querySelector("textarea") === null,
+    true,
+    "no plain field stands in the editor's place",
+  );
+  // The editor mounts once its bundle lands, and draws the words picked as the boxes' quote block.
+  const quote = await vi.waitFor(
+    () => started.querySelector(".composer-quote") ?? assert.fail("the quote stands as a block"),
+  );
+  assert.equal(quote.textContent, "Totals");
 });

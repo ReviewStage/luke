@@ -8,19 +8,15 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
-import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment, useEffect, useState } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import type { InboxBoardView } from "../tasks/inbox-model.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { agentsControl, tasksControl } from "../testing/tasks-control.js";
@@ -114,13 +110,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The summary of a task whose running agent opened the pull request, the task's column showing `shown`, drawn beside `beside`; every agent it opens recorded. */
-function mount(
-  shown: "agent" | "plan",
-  linkWorkspace?: string,
-  inbox: InboxBoardView = { open: [], waiting: [], settled: [] },
-  beside?: React.ReactNode,
-) {
+/** The summary of a task whose running agent opened the pull request, the task's column showing `shown`; every agent it opens recorded. */
+function mount(shown: "agent" | "plan", linkWorkspace?: string) {
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
@@ -145,21 +136,15 @@ function mount(
       onRegistry(
         AtomRegistry.make(),
         createElement(
-          Fragment,
-          null,
-          beside,
-          createElement(
-            LinkWorkspaceProvider,
-            { value: linkWorkspace },
-            createElement(TaskSummary, {
-              tasks,
-              layout: PINNED,
-              cardId: "summary-card",
-              inbox,
-              held: HELD,
-              onOpenAgent: (agentId) => opened.push(agentId),
-            }),
-          ),
+          LinkWorkspaceProvider,
+          { value: linkWorkspace },
+          createElement(TaskSummary, {
+            tasks,
+            layout: PINNED,
+            cardId: "summary-card",
+            held: HELD,
+            onOpenAgent: (agentId) => opened.push(agentId),
+          }),
         ),
       ),
     ),
@@ -207,7 +192,6 @@ test("a page's row hangs the page's tab's card, previewing its newest version", 
           tasks,
           layout: PINNED,
           cardId: "summary-card",
-          inbox: { open: [], waiting: [], settled: [] },
           held: HELD,
           onOpenAgent: () => undefined,
         }),
@@ -256,61 +240,24 @@ test("the agent's card hung from a Changes card previews its running step while 
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
 });
 
-test("an agent's row in the summary draws the agent's one menu, Copy link copying the agent's own link", async () => {
-  const copied: string[] = [];
-  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
-  const { page } = mount("plan", "acme");
-  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
-    each.textContent?.includes(AGENT.title ?? ""),
-  );
-  assert.ok(row, "the agent's row is listed");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-  });
-  const items = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  const labels = items.map((each) => each.textContent);
-  const copy = items.find((each) => each.textContent === "Copy link");
-  assert.ok(copy);
-  await act(async () => copy.click());
-
-  assert.deepEqual(labels, ["Copy link", "Rename", "Archive", "Permanently delete"]);
-  assert.deepEqual(copied, [`https://vespin.dev/acme/agent/${AGENT.id}`]);
-});
-
-test("under a finger, an agent's row in the summary draws no ⋯, and held it offers the agent's menu", () => {
-  underAFinger();
-  const { page } = mount("plan");
-  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
-    each.textContent?.includes(AGENT.title ?? ""),
-  );
-  assert.ok(row, "the agent's row is listed");
-  assert.ok(page.querySelector('[aria-label="Agent actions"]') === null, "the row draws no ⋯");
-
-  longPress(row);
-  const labels = [...document.querySelectorAll('[role="menuitem"]')].map(
-    (each) => each.textContent,
-  );
-  assert.ok(labels.includes("Rename"), "the long press offers the agent's menu");
-});
-
 test("a heading folds its rows away, counting them, and stands folded as the summary is drawn again", () => {
   fakeAppPlatform(QUIET_PANEL);
   const heading = (page: HTMLElement) =>
     [...page.querySelectorAll<HTMLButtonElement>(".task-summary button[aria-expanded]")].find(
-      (button) => button.textContent?.startsWith("Agents"),
-    ) ?? assert.fail("Agents is a fold");
-  const agentRow = (page: HTMLElement) =>
+      (button) => button.textContent?.startsWith("Pull requests"),
+    ) ?? assert.fail("Pull requests is a fold");
+  const pullRequestRow = (page: HTMLElement) =>
     page
-      .querySelector('.task-summary [aria-label="Agents"]')
-      ?.textContent?.includes(AGENT.title ?? "") === true;
+      .querySelector('.task-summary [aria-label="Pull requests"]')
+      ?.textContent?.includes(PULL_REQUEST.title) === true;
   const { page } = mount("plan");
   assert.equal(heading(page).getAttribute("aria-expanded"), "true");
-  assert.ok(agentRow(page), "the agent is listed");
+  assert.ok(pullRequestRow(page), "the pull request is listed");
 
   act(() => heading(page).click());
   assert.equal(heading(page).getAttribute("aria-expanded"), "false");
-  assert.equal(heading(page).textContent, "Agents1 agent");
-  assert.ok(!agentRow(page), "the agent is folded away");
+  assert.equal(heading(page).textContent, "Pull requests1 pull request");
+  assert.ok(!pullRequestRow(page), "the pull request is folded away");
 
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -318,76 +265,11 @@ test("a heading folds its rows away, counting them, and stands folded as the sum
   assert.equal(heading(again).getAttribute("aria-expanded"), "false", "it stands as it was left");
 });
 
-/** An item of the plan's inbox that waits on the reader. */
-const ASKING: InboxItem = {
-  id: "6c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
-  agentId: AGENT.id,
-  key: "3e4f",
-  revision: 1,
-  version: INBOX_WIRE_VERSION,
-  title: "Expire after 7 days?",
-  needsReply: true,
-  status: INBOX_STATUS.OPEN,
-  postedAt: 1_000,
-  updatedAt: 1_000,
-};
-
-/** Writes `draft` into an inbox item's box, as typing an answer or picking on its card would. */
-function DraftOnItem({ item, draft }: { item: InboxItem; draft: Draft }): null {
-  const writer = useDraftWriter();
-  useEffect(() => {
-    const place = {
-      kind: DRAFT_PLACE.INBOX,
-      planId: AGENT.planId,
-      agentId: item.agentId,
-      itemId: item.id,
-    };
-    writer.update(place, () => draft);
-  }, [writer, item, draft]);
-  return null;
-}
-
-test("the Inbox's row counts what needs the reader in the attention tone its rows' marks wear", () => {
-  const asking = ASKING;
-  const { page } = mount("plan", undefined, { open: [asking], waiting: [asking], settled: [] });
-  const count =
-    page.querySelector<HTMLElement>(".task-summary .inbox-row-count") ??
-    assert.fail("the Inbox's row counts what needs the reader");
-  assert.equal(count.textContent, "1 needs you");
-});
-
-test("the Inbox's row wears the Draft pencil beside its count while one of its items' boxes holds a draft, and none for picks made on an ask since changed", () => {
-  const board = { open: [ASKING], waiting: [ASKING], settled: [] };
-  const marks = (draft?: Draft) => {
-    const beside =
-      draft === undefined ? undefined : createElement(DraftOnItem, { item: ASKING, draft });
-    const { page } = mount("plan", undefined, board, beside);
-    const drawn = {
-      drafted: page.querySelector('.task-summary .draft-mark[aria-label="Draft"]') !== null,
-      count: page.querySelector(".task-summary .inbox-row-count")?.textContent,
-    };
-    act(() => root?.unmount());
-    page.remove();
-    return drawn;
-  };
-
-  assert.deepEqual(marks(), { drafted: false, count: "1 needs you" });
-  assert.deepEqual(marks({ ...EMPTY_DRAFT, text: "Seven days, yes" }), {
-    drafted: true,
-    count: "1 needs you",
-  });
-  const stale = { ...EMPTY_DRAFT, choices: ["Seven days"], revision: ASKING.revision - 1 };
-  assert.equal(marks(stale).drafted, false);
-});
-
-/** What the plan's own inbox holds in these tests: nothing. */
-const NO_INBOX = { open: [], waiting: [], settled: [] };
-
 /** The plan's column as the shell lays it out: the summary, laid out by the column's own width. */
 function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  const layout = useSummaryLayout(pin, column, false, summaryHolds(tasks, NO_INBOX));
+  const layout = useSummaryLayout(pin, column, false, summaryHolds(tasks));
   return createElement(
     "div",
     { ref: setColumn },
@@ -395,7 +277,6 @@ function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       tasks,
       layout,
       cardId: "summary-card",
-      inbox: NO_INBOX,
       held: HELD,
       onOpenAgent: () => undefined,
     }),

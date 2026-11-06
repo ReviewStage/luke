@@ -10,7 +10,8 @@ import { ThreadsDock } from "./threads-dock.js";
 /**
  * threads-dock.test.ts -- the line over an agent's box names the one thread
  * waiting on the developer, or how many wait and the next of them, and
- * opens the next one, the oldest posted, in the Inbox. Synthetic items.
+ * opens the next one, the oldest posted; once none waits it stays, quiet,
+ * counting every thread, and opens the latest changed. Synthetic items.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -38,8 +39,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The dock drawn over the threads given, its words, and what its press opened. */
-function dock(threads: readonly InboxItem[]) {
+/** The dock drawn over the threads given, those waiting and every one posted, the latest changed first; its words, and what its press opened. */
+function dock(threads: readonly InboxItem[], posted: readonly InboxItem[] = threads) {
   const opened: string[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -47,24 +48,33 @@ function dock(threads: readonly InboxItem[]) {
   act(() =>
     root.render(
       createElement(ThreadsDock, {
-        threads: { waiting: threads, onOpen: (item) => opened.push(item.title) },
+        threads: { waiting: threads, posted, onOpen: (item) => opened.push(item.title) },
       }),
     ),
   );
   const row = container.querySelector<HTMLElement>('[role="button"], button');
-  return { words: container.textContent, row, opened };
+  const press = () => {
+    assert.ok(row, "the dock presses");
+    act(() => row.click());
+  };
+  return { words: container.textContent, press, opened };
 }
 
-test("the dock names the one thread waiting, or how many and the next, and opens the oldest in the Inbox", () => {
+test("the dock names the one thread waiting, or how many and the next, and opens the oldest", () => {
   const one = dock([waiting(1, "Expire after 7 days?")]);
   assert.equal(one.words, "Expire after 7 days?Needs you");
 
   const many = dock([waiting(1, "Expire after 7 days?"), waiting(2, "Who can withdraw?")]);
   assert.equal(many.words, "2 threads need youExpire after 7 days?");
-  const { row } = many;
-  assert.ok(row, "the dock presses");
-  act(() => row.click());
+  many.press();
   assert.deepEqual(many.opened, ["Expire after 7 days?"]);
 
-  assert.equal(dock([]).words, "", "nothing waits, so nothing is docked");
+  assert.equal(dock([]).words, "", "the agent posted nothing, so nothing is docked");
+});
+
+test("once none waits, the dock stays quiet, counting every thread the agent posted, and opens the latest changed", () => {
+  const settled = dock([], [waiting(2, "Who can withdraw?"), waiting(1, "Expire after 7 days?")]);
+  assert.equal(settled.words, "2 threads");
+  settled.press();
+  assert.deepEqual(settled.opened, ["Who can withdraw?"]);
 });

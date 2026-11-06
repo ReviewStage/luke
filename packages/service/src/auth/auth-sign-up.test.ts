@@ -11,9 +11,10 @@ import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { ConfigProvider, Effect, Layer, Schema } from "effect";
+import { Clock, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { WELCOME_MAIL_ENVIRONMENT, welcomeMailFromEnvironment } from "../accounts/welcome-mail.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { authApp } from "./auth-app.js";
@@ -37,6 +38,9 @@ const WELCOME_FROM = "Charles <charles@app.test>";
 
 const ADA = { name: "Ada Lovelace", email: "ada@example.com", password: "a-password-long-enough" };
 
+/** When the test signs up, a day past the epoch, so the email's hour is counted from it. */
+const SIGNED_UP_AT = Date.parse("1970-01-02T00:00:00.000Z");
+
 const decodeSignedUp = Schema.decodeUnknownSync(
   Schema.Struct({ user: Schema.Struct({ id: Schema.String }) }),
 );
@@ -45,6 +49,7 @@ it.effect(
   "a new account signed up through the auth route owns its personal workspace and is welcomed once",
   () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(SIGNED_UP_AT);
       const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
         Effect.promise(() => opened.close()),
       );
@@ -75,6 +80,7 @@ it.effect(
         const services = Layer.mergeAll(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
+          Layer.succeed(Clock.Clock, yield* Clock.Clock),
           welcomeMail,
         );
         const { handler, dispose } = HttpRouter.toWebHandler(
@@ -102,12 +108,21 @@ it.effect(
 
         const emails = resend.requests.map(
           (request) =>
-            JSON.parse(request.body ?? "{}") as { from: string; to: string[]; text: string },
+            JSON.parse(request.body ?? "{}") as {
+              from: string;
+              to: string[];
+              scheduled_at: string;
+              template: { id: string; variables: { GREETING: string } };
+            },
         );
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, WELCOME_FROM);
         assert.deepEqual(emails[0]?.to, [ADA.email]);
-        assert.ok(emails[0]?.text.startsWith("Hey Ada,"));
+        assert.deepEqual(emails[0]?.template, {
+          id: "founder-welcome",
+          variables: { GREETING: "Hey Ada," },
+        });
+        assert.equal(emails[0]?.scheduled_at, "1970-01-02T01:00:00.000Z");
 
         const [personal, ...others] = yield* Database.use((db) =>
           db
