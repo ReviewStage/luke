@@ -5,8 +5,6 @@ import {
   DetailPage,
   ErrorState,
   List,
-  NOTE_LINE_LOOK,
-  NoteLine,
   PAGE_FRAME,
   STATUS_TONE,
   useRovingKeys,
@@ -20,7 +18,7 @@ import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { InboxItemRow, inboxRowDraft } from "../tasks/inbox-list.js";
-import { type InboxListed, NEEDS_YOU, needsYou } from "../tasks/inbox-model.js";
+import { type InboxListed, needsYou } from "../tasks/inbox-model.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
@@ -43,8 +41,10 @@ import { RecentTasks } from "./recent-tasks.js";
  * on it; then Recent, the listed workspace's tasks with the latest activity,
  * each the Tasks page's row as a person's page lists it (`recent-tasks.tsx`),
  * a press opening it. Its sections are a person's page's (`person-frame.tsx`),
- * whose voice was Home's to begin with. Nothing waiting says so in the
- * Inbox's own words. An account with nothing yet is greeted as new.
+ * whose voice was Home's to begin with. Inbox stands only while something
+ * waits, so a new account's page is its greeting and composer alone, and a
+ * cleared one's Recent rises under the composer. An account with nothing yet
+ * is greeted as new.
  * Nothing here names the sidebar, which may be folded away.
  *
  * The composer starts the task in the listed workspace, as the dialog
@@ -132,8 +132,8 @@ function useArriving(tasks: TasksControl, read: WaitingItems, waiting: number): 
 
 /**
  * Inbox: the items waiting on the reader, a teammate's left to the Inbox,
- * as the Dock's badge counts them, or what stands in their place while they
- * are read, failed, or none. A press on a row opens the Inbox on its item.
+ * as the Dock's badge counts them, or a refused read's Retry; nothing while
+ * none waits. A press on a row opens the Inbox on its item.
  */
 function HomeInbox({
   tasks,
@@ -146,8 +146,8 @@ function HomeInbox({
 }): React.JSX.Element | null {
   const drafts = useInboxRowDrafts();
   const open = (listed: InboxListed) => tasks.inboxView.onOpenItem(choiceOf(listed));
-  // Note that a refused list read says nothing here, because what waits hangs on the list, which Recent says could not be read.
-  if (waiting.length === 0 && tasks.listFailed) return null;
+  // Note that nothing waiting draws nothing, while a read is still out or the list was refused too, because an empty section would only say what the page already shows; a refused list is Recent's to say.
+  if (waiting.length === 0 && (tasks.listFailed || !read.failed)) return null;
   if (read.failed) {
     return (
       <div className="home-note my-tight-gap">
@@ -157,34 +157,28 @@ function HomeInbox({
       </div>
     );
   }
-  // Note that a read still out draws nothing, because the Inbox lands as it is read, over Recent.
-  if (waiting.length === 0 && read.reading) return null;
   return (
     <PersonSectionFrame
       label={TAB_WORDS.INBOX}
       title={TAB_WORDS.INBOX}
-      count={waiting.length === 0 ? undefined : waiting.length}
+      count={waiting.length}
       tone={STATUS_TONE.ATTENTION}
     >
-      {waiting.length === 0 ? (
-        <NoteLine look={NOTE_LINE_LOOK.ROWS}>{NEEDS_YOU.NONE}</NoteLine>
-      ) : (
-        <ReplayMask>
-          <List label={TAB_WORDS.INBOX} joinsWalk>
-            {waiting.map((listed) => (
-              <InboxItemRow
-                key={listed.item.id}
-                listed={listed}
-                chosen={false}
-                {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-                models={tasks.agents.models}
-                readerId={tasks.me}
-                onChoose={open}
-              />
-            ))}
-          </List>
-        </ReplayMask>
-      )}
+      <ReplayMask>
+        <List label={TAB_WORDS.INBOX} joinsWalk>
+          {waiting.map((listed) => (
+            <InboxItemRow
+              key={listed.item.id}
+              listed={listed}
+              chosen={false}
+              {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
+              models={tasks.agents.models}
+              readerId={tasks.me}
+              onChoose={open}
+            />
+          ))}
+        </List>
+      </ReplayMask>
     </PersonSectionFrame>
   );
 }

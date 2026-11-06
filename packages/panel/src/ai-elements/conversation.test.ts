@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { askScroll } from "@repo/ui/scroll-asked";
-import { Activity, act, createElement } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { relayout } from "../testing/resize-observer.js";
 import {
   Conversation,
   ConversationContent,
@@ -14,10 +12,10 @@ import {
 } from "./conversation.js";
 
 /**
- * conversation.test.ts -- a log following its newest line scrolls to it
- * when a line comes in or grows, and a render that changes no line leaves
- * the scroll alone. jsdom lays nothing out, so the log's heights are stood
- * in for and every write to its scroll position is heard.
+ * conversation.test.ts -- a log opens on its newest line, offers the way
+ * back to it once the reader scrolls away, and asks for older lines as the
+ * reader nears its top. jsdom lays nothing out, so the log's heights are
+ * stood in for.
  */
 
 declare global {
@@ -32,443 +30,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
   vi.restoreAllMocks();
-});
-
-/** The log's box as the window would lay it out: its height, the room it shows, whether a page around it is hidden, and every scroll written to it. */
-interface StandInBox {
-  height: number;
-  room: number;
-  /** Whether the box is laid out at all, which a page hidden around it (`display: none`) takes away. */
-  hidden?: boolean;
-  readonly writes: number[];
-}
-
-/** Lays out `box` as `layout` says, hearing every write to its scroll position. */
-function layOut(box: HTMLElement, layout: StandInBox): void {
-  let top = 0;
-  // Note that a box hidden reads as empty and scrolled to its top, and keeps its scroll for when it is shown again, as Chromium's does.
-  const laidOut = (value: number) => (layout.hidden === true ? 0 : value);
-  Object.defineProperty(box, "scrollHeight", {
-    configurable: true,
-    get: () => laidOut(layout.height),
-  });
-  Object.defineProperty(box, "clientHeight", {
-    configurable: true,
-    get: () => laidOut(layout.room),
-  });
-  Object.defineProperty(box, "scrollTop", {
-    configurable: true,
-    get: () => laidOut(top),
-    set: (to: number) => {
-      layout.writes.push(to);
-      top = to;
-    },
-  });
-}
-
-/** Scrolls `box` to `top` as the browser would of its own accord, so the log hears it. */
-function scroll(box: HTMLElement, top: number): void {
-  box.scrollTop = top;
-  act(() => {
-    box.dispatchEvent(new Event("scroll", { bubbles: true }));
-  });
-}
-
-/** Scrolls `box` to `top` as the reader's wheel would. */
-function readerScroll(box: HTMLElement, top: number): void {
-  act(() => {
-    box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: top - box.scrollTop }));
-  });
-  scroll(box, top);
-}
-
-/** Draws a log of `lines` in `root`, asking for older lines through `onNearTop` where one is handed. */
-function draw(root: Root, lines: readonly string[], onNearTop?: () => void): void {
-  act(() =>
-    root.render(
-      createElement(
-        Conversation,
-        { onNearTop },
-        createElement(
-          ConversationContent,
-          null,
-          lines.map((line) => createElement("p", { key: line }, line)),
-        ),
-      ),
-    ),
-  );
-}
-
-/** Draws a log of `lines`, then lays its box out, so what follows is heard from a log at rest. */
-function mount(lines: readonly string[], onNearTop?: () => void) {
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  draw(root, lines, onNearTop);
-  const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
-  const layout: StandInBox = { height: 300, room: 100, writes: [] };
-  layOut(box, layout);
-  return { root, box, layout };
-}
-
-test("a render with the same lines leaves the scroll alone, and a new line is scrolled to", () => {
-  const { root, layout } = mount(["one", "two"]);
-  draw(root, ["one", "two"]);
-  draw(root, ["one", "two"]);
-  assert.deepEqual(layout.writes, [], "a re-render with the same lines scrolls nowhere");
-  layout.height = 400;
-  draw(root, ["one", "two", "three"]);
-  assert.deepEqual(layout.writes, [400], "a new line is scrolled to");
-});
-
-test("a line that grows while the log follows is scrolled to when the window reports it", () => {
-  const { root, layout } = mount(["one"]);
-  layout.height = 500;
-  draw(root, ["one"]);
-  assert.deepEqual(layout.writes, []);
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [500], "the grown line is scrolled to");
-});
-
-test("a reader scrolled up to an earlier line is left there when a new line comes in", () => {
-  const { root, box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  readerScroll(box, 0);
-  layout.writes.splice(0);
-  layout.height = 400;
-  draw(root, ["one", "two", "three"]);
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [], "the reader's place stands");
-});
-
-/** The lines shrinking 80px under a reader 50px short of the end, long after their wheel, and the browser pulling the scroll up to their new end. */
-function shrunkPast(layout: StandInBox): void {
-  layout.height = 220;
-}
-
-test.each([
-  {
-    how: "the window reporting the shrink before the scroll",
-    shrink: (box: HTMLElement, layout: StandInBox) => {
-      shrunkPast(layout);
-      box.scrollTop = 120;
-      act(() => relayout());
-      lateScroll(box, 120, 2000);
-    },
-  },
-  {
-    how: "the scroll heard before the window reports the shrink",
-    shrink: (box: HTMLElement, layout: StandInBox) => {
-      shrunkPast(layout);
-      lateScroll(box, 120, 2000);
-      act(() => relayout());
-    },
-  },
-  {
-    how: "the lines shrinking to just where the reader stands, which scrolls nothing",
-    shrink: (_box: HTMLElement, layout: StandInBox) => {
-      layout.height = 250;
-      act(() => relayout());
-    },
-  },
-  {
-    how: "a press in the log just before, as a fold closed",
-    shrink: (box: HTMLElement, layout: StandInBox) => {
-      act(() => {
-        box.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-        box.dispatchEvent(new Event("pointerup", { bubbles: true }));
-      });
-      shrunkPast(layout);
-      scroll(box, 120);
-      act(() => relayout());
-    },
-  },
-])(
-  "a reader scrolled up near the newest line is not taken to it when the lines shrink under them, $how, and grow back",
-  ({ shrink }) => {
-    const { box, layout } = mount(["one", "two"]);
-    scroll(box, 200);
-    readerScroll(box, 150);
-    shrink(box, layout);
-    layout.writes.splice(0);
-    layout.height = 300;
-    act(() => relayout());
-    assert.deepEqual(layout.writes, [], "the log stays off its newest line");
-  },
-);
-
-test("a reader scrolled up to an earlier line is left there when the page around the log is hidden and shown again", () => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  readerScroll(box, 50);
-  layout.writes.splice(0);
-  layout.hidden = true;
-  act(() => relayout());
-  layout.hidden = false;
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [], "the reader's place stands");
-});
-
-test("a log on its newest line goes on following it once a page kept hidden around it is shown again", () => {
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  const log = createElement(
-    Conversation,
-    null,
-    createElement(ConversationContent, null, createElement("p", null, "one")),
-  );
-  const shown = (mode: "visible" | "hidden") =>
-    act(() => root.render(createElement(Activity, { mode, children: log })));
-  shown("visible");
-  const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
-  const layout: StandInBox = { height: 300, room: 100, writes: [] };
-  layOut(box, layout);
-  shown("hidden");
-  shown("visible");
-  layout.writes.splice(0);
-  layout.height = 500;
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [500], "the grown line is scrolled to");
-});
-
-test("a log the browser shifts down to hold its place, as lines above it grow, still follows its newest line", () => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  // A line above grows 200px, and the browser's scroll anchoring moves the log down 150px of it.
-  layout.height = 500;
-  scroll(box, 350);
-  layout.writes.splice(0);
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [500], "the log is taken the rest of the way to its end");
-});
-
-/** Grows the log's box to `room` as lines land to `height` in the same frame, and hears the scroll the browser sends a frame later, its position pulled back to the box's end before the lines landed. */
-function grownAsLinesLand(
-  box: HTMLElement,
-  layout: StandInBox,
-  room: number,
-  height: number,
-): void {
-  const pulledTo = layout.height - room;
-  layout.room = room;
-  layout.height = height;
-  scroll(box, pulledTo);
-}
-
-test("a log on its newest line stays on it when the window grows its box as lines land, the browser pulling its scroll up", () => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  layout.writes.splice(0);
-  grownAsLinesLand(box, layout, 160, 420);
-  assert.deepEqual(layout.writes, [140, 420], "the log is taken back to its new end");
-  layout.writes.splice(0);
-  layout.height = 480;
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [480], "and goes on following its newest line");
-});
-
-test("a reader's wheel just before a scroll up takes the log off its newest line, though its box grew", () => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  act(() => {
-    box.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -60 }));
-  });
-  grownAsLinesLand(box, layout, 160, 420);
-  layout.writes.splice(0);
-  layout.height = 480;
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [], "the reader's place stands");
-});
-
-/** A scroll heard `after` milliseconds past the moment it is sent, as one heard long after the reader's last input is. */
-function lateScroll(box: HTMLElement, top: number, after: number): void {
-  box.scrollTop = top;
-  const event = new Event("scroll", { bubbles: true });
-  Object.defineProperty(event, "timeStamp", { value: event.timeStamp + after });
-  act(() => {
-    box.dispatchEvent(event);
-  });
-}
-
-test.each([
-  {
-    how: "a key, Page Up or Home",
-    input: () => new KeyboardEvent("keydown", { bubbles: true, key: "PageUp" }),
-    after: 0,
-  },
-  {
-    how: "a scroll bar's thumb held a while before it is dragged",
-    input: () => new Event("pointerdown", { bubbles: true }),
-    after: 2000,
-  },
-])("a reader's scroll up by $how takes the log off its newest line", ({ input, after }) => {
-  const { root, box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  act(() => {
-    box.dispatchEvent(input());
-  });
-  lateScroll(box, 50, after);
-  layout.writes.splice(0);
-  layout.height = 400;
-  draw(root, ["one", "two", "three"]);
-  assert.deepEqual(layout.writes, [], "the reader's place stands");
-});
-
-/** Draws a frame, a page, in `box`, standing in for whether the window draws it while it stays in the document. */
-function drawnFrame(box: HTMLElement): HTMLIFrameElement {
-  const frame = box.appendChild(document.createElement("iframe"));
-  Object.defineProperty(frame, "checkVisibility", { value: () => frame.isConnected });
-  return frame;
-}
-
-test("a reader's wheel over a page drawn in the log, which its frame takes, takes the log off its newest line", () => {
-  const { root, box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  const page = drawnFrame(box);
-  act(() => {
-    page.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-  });
-  lateScroll(box, 150, 2000);
-  layout.writes.splice(0);
-  layout.height = 400;
-  draw(root, ["one", "two", "three"]);
-  assert.deepEqual(layout.writes, [], "the reader's place stands");
-});
-
-test("a layout's scroll up after the page under the pointer is taken away keeps the log on its newest line", () => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  const page = drawnFrame(box);
-  act(() => {
-    page.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-  });
-  page.remove();
-  layout.writes.splice(0);
-  lateScroll(box, 0, 2000);
-  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
-});
-
-test.each([
-  {
-    how: "a press elsewhere, on a rail's row",
-    input: (_box: HTMLElement) => {
-      const row = document.body.appendChild(document.createElement("div"));
-      row.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    },
-  },
-  {
-    how: "a press on the log released over another window",
-    input: (box: HTMLElement) => {
-      box.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-      window.dispatchEvent(new Event("blur"));
-    },
-  },
-])("a layout's scroll up after $how keeps the log on its newest line", ({ input }) => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  act(() => input(box));
-  layout.writes.splice(0);
-  lateScroll(box, 0, 2000);
-  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
-});
-
-test("a log on its newest line stays on it when rows hidden and shown again in one frame leave its scroll at its first line", () => {
-  const { box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  layout.writes.splice(0);
-  // The hidden rows clamped the scroll to the top, and stand again as tall as they were.
-  scroll(box, 0);
-  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
-});
-
-test("a scroll up a script asks for takes the log off its newest line", () => {
-  const { root, box, layout } = mount(["one", "two"]);
-  scroll(box, 200);
-  askScroll(box);
-  scroll(box, 50);
-  layout.writes.splice(0);
-  layout.height = 400;
-  draw(root, ["one", "two", "three"]);
-  assert.deepEqual(layout.writes, [], "the line the script scrolled to stands");
-});
-
-test("the way back to the newest line floats over the log without changing how its box is drawn", () => {
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      createElement(
-        Conversation,
-        null,
-        createElement(ConversationContent, null, createElement("p", null, "one")),
-        createElement(ConversationScrollButton),
-      ),
-    ),
-  );
-  const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
-  layOut(box, { height: 300, room: 100, writes: [] });
-  scroll(box, 200);
-  const drawn = () => box.getAttributeNames().map((name) => [name, box.getAttribute(name)]);
-  const atNewest = drawn();
-  readerScroll(box, 0);
-  assert.ok(
-    container.querySelector("[aria-label='Scroll to the newest line']"),
-    "the way back shows",
-  );
-  assert.deepEqual(drawn(), atNewest, "the log's box, its fade among it, is drawn as it was");
-});
-
-/** Stands in for each line's place in the log: 50px a line, one under another. */
-function linesLaidOut(): void {
-  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    const siblings = this.parentElement === null ? [] : [...this.parentElement.children];
-    return siblings.indexOf(this) * 50;
-  });
-}
-
-test("lines put before the first keep the line the reader was on where it stood, and the log asks for them as the reader nears its top", () => {
-  linesLaidOut();
-  const asked: string[] = [];
-  const older = () => void asked.push("older");
-  const { root, box, layout } = mount(["c", "d", "e", "f"], older);
-  scroll(box, 120);
-  asked.splice(0);
-  readerScroll(box, 30);
-  assert.deepEqual(asked, ["older"], "a reader scrolling up near the top asks for older lines");
-
-  layout.writes.splice(0);
-  layout.height = 400;
-  draw(root, ["a", "b", "c", "d", "e", "f"], older);
-  // "c" stood 30px above the box's top; two lines of 50px landed above it.
-  assert.deepEqual(layout.writes, [130], "the line the reader was on stays where it stood");
-  const first = box.querySelector("p:nth-child(3)") as HTMLElement;
-  assert.equal(first.offsetTop - box.scrollTop, -30);
-});
-
-test("a log that follows its newest line stays on it as lines are put before the first", () => {
-  linesLaidOut();
-  const { root, layout } = mount(["c", "d"], () => undefined);
-  layout.writes.splice(0);
-  layout.height = 400;
-  draw(root, ["a", "b", "c", "d"], () => undefined);
-  assert.deepEqual(layout.writes, [400]);
-});
-
-test("a fold the reader opens on the newest line grows under them without the log following it", () => {
-  const { root, box, layout } = mount(["one", "two"]);
-  draw(root, ["one", "two"]);
-  const fold = document.createElement("details");
-  const summary = fold.appendChild(document.createElement("summary"));
-  box.firstElementChild?.appendChild(fold);
-  act(() => summary.click());
-  layout.writes.splice(0);
-  layout.height = 900;
-  act(() => relayout());
-  assert.deepEqual(layout.writes, [], "the lines above the fold stay where they stood");
+  Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
 });
 
 /** Lays out every log drawn from now on as 2000px of lines in a 600px box, its rows' block 16px down it. */
@@ -488,7 +50,7 @@ function logsLaidOut(): void {
   vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.hasAttribute("data-virtual-rows") ? 16 : 0;
+    return this.classList.contains("ui-virtual-rows") ? 16 : 0;
   });
   vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
     return tops.get(this) ?? 0;
@@ -501,41 +63,74 @@ function logsLaidOut(): void {
   });
 }
 
-test("a long log opens on its newest line, and stays following it once the virtualizer takes its box", () => {
+/** The way back to the newest line, where it shows. */
+const WAY_BACK = "[aria-label='Scroll to the newest line']";
+
+/** Scrolls `box` to `top` as the browser would, so the log hears it. */
+function scroll(box: HTMLElement, top: number): void {
+  box.scrollTop = top;
+  act(() => {
+    box.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+}
+
+/** Draws a long log of ten lines, asking for older lines through `onNearTop` where one is handed, and answers its box. */
+function mountLog(onNearTop?: () => void) {
   logsLaidOut();
+  // jsdom has no `scrollTo` on an element, which the virtualizer writes through.
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+    configurable: true,
+    value(this: HTMLElement, options?: ScrollToOptions) {
+      if (options?.top !== undefined) this.scrollTop = options.top;
+    },
+  });
   const keys = Array.from({ length: 10 }, (_, index) => `line-${index}`);
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const log = () =>
-    createElement(
-      Conversation,
-      null,
+  act(() =>
+    root.render(
       createElement(
-        ConversationContent,
-        null,
-        createElement(ConversationRows, {
-          keys,
-          estimate: 160,
-          gap: 12,
-          children: (index: number) => createElement("p", null, keys[index]),
-        }),
+        Conversation,
+        { onNearTop },
+        createElement(
+          ConversationContent,
+          null,
+          createElement(ConversationRows, {
+            keys,
+            estimate: 160,
+            gap: 12,
+            children: (index: number) => createElement("p", null, keys[index]),
+          }),
+        ),
+        createElement(ConversationScrollButton),
       ),
-      createElement(ConversationScrollButton),
-    );
-  act(() => root.render(log()));
+    ),
+  );
   const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
-  // jsdom scrolls nothing by `scrollTo`, which the virtualizer writes through.
-  box.scrollTo = ((options?: ScrollToOptions) => {
-    if (options?.top !== undefined) box.scrollTop = options.top;
-  }) as HTMLElement["scrollTo"];
-  // Drawn again, as any patch to the window's state draws it, by when the virtualizer takes the box.
-  act(() => root.render(log()));
+  return { container, box };
+}
+
+test("a long log opens on its newest line, and offers the way back to it once the reader scrolls away", () => {
+  const { container, box } = mountLog();
   scroll(box, box.scrollTop);
   assert.equal(box.scrollTop, 1400, "the log stands at its end");
-  assert.equal(
-    container.querySelector("[aria-label='Scroll to the newest line']"),
-    null,
-    "the log still follows its newest line",
-  );
+  assert.equal(container.querySelector(WAY_BACK), null, "at its end it offers no way back");
+  scroll(box, 300);
+  const back = container.querySelector<HTMLButtonElement>(WAY_BACK) ?? assert.fail("the way back");
+  act(() => back.click());
+  scroll(box, box.scrollTop);
+  assert.equal(box.scrollTop, 1400, "the way back takes the log to its end");
+  assert.equal(container.querySelector(WAY_BACK), null);
+});
+
+test("a log asks for its older lines as the reader scrolls up near its top", () => {
+  const asked: string[] = [];
+  const { box } = mountLog(() => void asked.push("older"));
+  scroll(box, 1400);
+  asked.splice(0);
+  scroll(box, 1000);
+  assert.deepEqual(asked, [], "a scroll up far from the top asks for nothing");
+  scroll(box, 400);
+  assert.deepEqual(asked, ["older"], "a scroll up within a screen of the top asks for older lines");
 });

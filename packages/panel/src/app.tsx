@@ -33,9 +33,11 @@ import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
 import { forgetPictures } from "@repo/ui/picture-cache";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
+import { actMutation } from "./act-mutations.js";
 import { appBridge } from "./app-bridge.js";
 import {
   runAppCommand,
@@ -224,7 +226,14 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  const { act, press, tell, updateSetting } = useAct();
+  // Note that `act`, `press`, and `tell` stay for the tasks' own acts (`useTasksTab`) and the reads below, which the task-surface and read leaves move.
+  const { act, press, tell } = useAct();
+  const { mutateAsync: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
+  const { mutateAsync: sendSignOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
+  const { mutateAsync: sendDeleteAccount } = useMutation(actMutation(ACT_KIND.ACCOUNT_DELETE));
+  const { mutateAsync: requestMicrophoneAccess } = useMutation(
+    actMutation(ACT_KIND.MICROPHONE_REQUEST),
+  );
   // What main holds, each slice read on its own, so the window is drawn again
   // for a slice it draws from and for no other: a setting that moves draws
   // Settings and ⌘K, which read their own (`app-settings.ts`), and leaves the
@@ -360,18 +369,20 @@ function AppWindow(): React.JSX.Element {
   useAppCommand(APP_COMMAND.REDO, undo.redoes ? () => void redoLast() : undefined);
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(useAppSlice(ZOOM), (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
+  useWindowZoom(useAppSlice(ZOOM), (zoom) =>
+    updateSetting({ field: APP_SETTING_SCHEMA.zoom.field, value: zoom }),
+  );
   // In full screen the sidebar's toggle stands where the hidden traffic lights were.
   useWindowFullScreen(useAppSlice(FULL_SCREEN));
 
   const signOut = useCallback(async () => {
-    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-  }, [act]);
+    await sendSignOut();
+  }, [sendSignOut]);
   // The delete happens at the service before anything local moves,
   // so a failure resolves to why and the account is still standing.
   const deleteAccount = useCallback(async (): Promise<ActionResult> => {
     try {
-      await act(ACT_KIND.ACCOUNT_DELETE);
+      await sendDeleteAccount();
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     } catch {
       return {
@@ -379,7 +390,7 @@ function AppWindow(): React.JSX.Element {
         reason: "The account could not be deleted. Try again.",
       };
     }
-  }, [act]);
+  }, [sendDeleteAccount]);
 
   // The room the stage's width gives, on the desktop the window's: whether
   // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
@@ -585,11 +596,11 @@ function AppWindow(): React.JSX.Element {
   // Note that the request is the one dictation makes, and answers once macOS has, which is how Allow knows to stop waiting; the answer also arrives as the microphone's status.
   const requestMicrophone = useCallback(
     () =>
-      act(ACT_KIND.MICROPHONE_REQUEST).then(
+      requestMicrophoneAccess().then(
         () => undefined,
         () => undefined,
       ),
-    [act],
+    [requestMicrophoneAccess],
   );
   const leftWorkspace = useSteadyDoor((workspaceId: string) => {
     tasks.onLeftWorkspace(workspaceId);

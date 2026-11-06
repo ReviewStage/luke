@@ -287,7 +287,7 @@ export function composeThisMacHost(
      * This Mac turned off, its agents' folders deleted or kept as asked: the
      * install's own uninstall run, which takes the host off this Mac and out
      * of the account, and the record removed where no install was there to
-     * remove it. Never another account's host. Note that kept folders are
+     * remove it. Never another account's host, nor one another service enrolled. Note that kept folders are
      * kept by letting go of the
      * record of which ones the host made, which every release's uninstall
      * reads to find them. Whether it is off.
@@ -296,7 +296,9 @@ export function composeThisMacHost(
       oneAtATime(
         Effect.gen(function* () {
           if (!host.runsHost) return false;
-          const record = Option.filter(yield* ownServiceRecord, (kept) => kept.refused !== true);
+          const device = yield* readHostDevice(host.stateRoot);
+          if (Option.isSome(device) && !ownService(device.value)) return false;
+          const record = Option.filter(device, (kept) => kept.refused !== true);
           if (Option.isSome(record) && !(yield* accountOwns(record.value))) return false;
           // Note that we stop the host before forgetting its folders, because a running host marks each agent's folder it makes, and the uninstall deletes every marked one.
           if (!deleteFolders) {

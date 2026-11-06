@@ -1420,10 +1420,14 @@ first words of their opening's first line, with no model call, and its
 replays carried without a summary.
 
 The sandbox is one Vercel Sandbox per agent
-(`src/agents/machine/vercel-machine.ts`), opened from Vespin's own template
-of the agent's image (`src/agents/native-sandbox-template.ts`, prepared with
-the code tooling, pnpm, and Python beside the image's Node and git), and kept
-alive while the runner reports. As it opens, the agent's repository is
+(`src/agents/machine/vercel-machine.ts`), booted from the agents' custom image
+(`apps/web/agent-image/Dockerfile`: Node, git, pnpm, Python, Playwright's
+Chromium, Claude Code, Codex, `gh`, and the runner itself), which CI pushes
+to the project's registry before the deploy that names it, and kept alive
+while the runner reports. The runner starts as the SDK's own `agent` user
+(`createUser`, `asUser`), whose environment the SDK writes on `sudo`'s
+command line, so the placeholders in it are readable there by any process in
+the sandbox while it runs. As it opens, the agent's repository is
 checked out at its default branch, from the workspace's snapshot of the
 repository where one stands or by a whole clone through the firewall-scoped
 clone of `repository-shell.ts` (`cloneRepository`), on a token
@@ -2573,7 +2577,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs eighteen sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs seventeen sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2589,10 +2593,9 @@ the rest still run, and any failure fails the cron's check-in. In order:
 - `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
   that stopped beating within their lease, and local runners left warm past
   their device's window.
-- `sandboxes`, `terminals`, `nativeSandboxes`, `eveSandboxes`, and
-  `sandboxRetention`: the Vercel Sandboxes queued for deletion deleted, and
-  agents' sandboxes stopped once no run and no terminal holds them, their
-  snapshot retention bounded.
+- `sandboxes` and `nativeSandboxes`: the Vercel Sandboxes queued for
+  deletion deleted, and native agents' turns whose runner died mid-turn
+  settled as failed. An idle sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
 - `withdrawnLines`: withdrawn lines no turn took within an agent's turn
@@ -2606,9 +2609,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   GitHub token, which no webhook reaches, read on that token, their reviews,
   comments, and checks among them, and the agent woken with what changed
   (`src/github/token-pull-request-sweep.ts`).
-- `imageTemplates` and `repositorySnapshots`: the native agents' image
-  template moved on, and workspaces' repository snapshots past their age
-  deleted.
 - `agentQueues`: unpaused queues of idle agents handed on.
 - `hostPairings`: lapsed host pairings, and approved hosts that never
   collected their secret, deleted.

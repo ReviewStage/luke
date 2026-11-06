@@ -81,6 +81,7 @@ import { hitRangesIn, LOOSE_FROM, type SearchSubject, searchHit } from "@repo/ui
 import { searchTokens } from "@repo/ui/search-tokens";
 import { type SkillOption, skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
+import { queryOptions, skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -94,7 +95,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { type RefObject, useEffect, useId, useMemo, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { useAutomations } from "../desktop/use-automations.js";
 import { unreadShown } from "../failure-report.js";
@@ -107,6 +108,7 @@ import {
   listAria,
   type MentionNode,
 } from "../plan-editor/contract.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
@@ -1497,6 +1499,40 @@ function treeKey(
   return { workspaceId, repository };
 }
 
+/** What a repository's paths are read by. */
+type TreeKey = NonNullable<ReturnType<typeof treeKey>>;
+
+/** The repository's paths as one recursive listing names them. */
+async function repositoryPaths(key: TreeKey): Promise<readonly RepositoryPath[]> {
+  const answer = await askAct(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true });
+  if (!("folder" in answer)) throw new Error("The repository's paths were not read.");
+  return answer.folder.entries.map((entry) => ({
+    path: entry.name,
+    folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
+  }));
+}
+
+/**
+ * The repository's paths, the whole tree at its default branch, read once
+ * per repository: a repository's files rarely move while a word is typed,
+ * so they are held for the window's life. A refusal and a rejection both
+ * fail the read, never an empty repository, and are answered at once.
+ */
+function repositoryPathsQueryOptions(place: {
+  readonly taskId: string | undefined;
+  readonly workspaceId: string | undefined;
+  readonly repository: string | null;
+}) {
+  const key = treeKey(place.taskId, place.workspaceId, place.repository);
+  return queryOptions({
+    // Note that a plan's repository may change under it, so the paths are kept by the repository too.
+    queryKey: [QUERY_ROOT.REPOSITORY_PATHS, place.taskId, place.workspaceId, place.repository],
+    queryFn: key === undefined ? skipToken : () => repositoryPaths(key),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
 /**
  * The kinds the place offers, in the list's order: the workspace's agents
  * where it reads them, its other tasks where it holds any, its people where
@@ -1688,7 +1724,6 @@ export function useMentionPicker({
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
 }): MentionPicker {
-  const { act } = useAct();
   const directory = useMemberDirectory();
   const { readerId } = directory;
   const now = useMinute();
@@ -1697,13 +1732,6 @@ export function useMentionPicker({
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closed, setClosed] = useState<Closed | undefined>(undefined);
   const [narrowing, setNarrowing] = useState<Held | undefined>(undefined);
-  const [paths, setPaths] = useState<{
-    planId: string | undefined;
-    workspaceId: string | undefined;
-    repository: string | null;
-    /** The paths read; none where the read failed, which Retry clears to read again. */
-    paths: readonly RepositoryPath[] | undefined;
-  }>();
 
   const holder = source?.holder;
   const taskId = holderTaskId(holder);
@@ -1722,49 +1750,23 @@ export function useMentionPicker({
     setNarrowing(undefined);
   }, [inWord]);
 
-  // The repository's paths are read the first time the list opens on the task, and again once its repository changes or Retry asks.
-  const readOf =
-    paths !== undefined &&
-    paths.planId === taskId &&
-    paths.workspaceId === workspaceId &&
-    paths.repository === repository
-      ? paths
-      : undefined;
-  const read = readOf?.paths;
+  // The repository's paths are read the first time the list opens on the task, and again once its repository changes or Retry asks; a failed read is read again by the next word that opens the list.
+  const paths = useQuery({
+    ...repositoryPathsQueryOptions({ taskId, workspaceId, repository }),
+    enabled: open,
+  });
+  // Each editor reads the paths afresh, since the default branch may have moved since another read them, so a new editor or a new place marks them stale.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    // Note that refetchOnMount cannot do it, because the query stays off until the list opens and only staleness is weighed then.
+    const { queryKey } = repositoryPathsQueryOptions({ taskId, workspaceId, repository });
+    void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  }, [queryClient, taskId, workspaceId, repository]);
+  const read = paths.data;
   // Note that the paths are searched through one search per read, which keeps what each word found, rather than ranking every path on each render.
   const pathsSearched = useMemo(() => (read === undefined ? undefined : pathSearch(read)), [read]);
-  const pathsFailed = readOf !== undefined && readOf.paths === undefined;
-  useEffect(() => {
-    if (!open || readOf !== undefined) return;
-    const key = treeKey(taskId, workspaceId, repository);
-    if (key === undefined) return;
-    let live = true;
-    // Note that a refusal and a rejection both leave the paths unread and the read failed, never an empty repository.
-    const failed = () => {
-      if (live) setPaths({ planId: taskId, workspaceId, repository, paths: undefined });
-    };
-    act(ACT_KIND.TASKS_TREE, { ...key, path: "", recursive: true }).then((answer) => {
-      if (!live) return;
-      if (!("folder" in answer)) return failed();
-      setPaths({
-        planId: taskId,
-        workspaceId,
-        repository,
-        paths: answer.folder.entries.map((entry) => ({
-          path: entry.name,
-          folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
-        })),
-      });
-    }, failed);
-    return () => {
-      live = false;
-    };
-  }, [open, readOf, act, taskId, workspaceId, repository]);
-
-  // A failed read of the paths is read again by the next word that opens the list.
-  useEffect(() => {
-    if (!open && pathsFailed) setPaths(undefined);
-  }, [open, pathsFailed]);
+  const pathsFailed = paths.isError && !paths.isFetching;
+  const readPathsAgain = paths.refetch;
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.
@@ -1926,7 +1928,7 @@ export function useMentionPicker({
         ...(readAgents !== undefined && agentsFailed
           ? [{ read: MENTION_READ.AGENTS, retry: () => setWorkspaceAgents(undefined) }]
           : []),
-        ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => setPaths(undefined) }] : []),
+        ...(pathsFailed ? [{ read: MENTION_READ.FILES, retry: () => void readPathsAgain() }] : []),
         ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
         ...(threadsAsked && feed.status === HOST_READ_STATUS.FAILED
           ? [{ read: MENTION_READ.THREADS, retry: feed.retry }]

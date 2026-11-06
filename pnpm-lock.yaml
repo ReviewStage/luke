@@ -434,6 +434,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.106.1
         version: 5.106.1(@types/react@19.2.18)(react@19.2.8)
+      '@tanstack/react-router':
+        specifier: 'catalog:'
+        version: 1.170.46(react-dom@19.2.8)(react@19.2.8)
       '@vercel/functions':
         specifier: 3.10.1
         version: 3.10.1(ws@8.22.0)
@@ -1082,9 +1085,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
-      eve:
-        specifier: 0.74.0
-        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -1187,6 +1187,9 @@ importers:
       '@repo/wire':
         specifier: workspace:*
         version: link:../wire
+      '@tanstack/react-table':
+        specifier: 9.3.1
+        version: 9.3.1(react-dom@19.2.8)(react@19.2.8)
       '@tanstack/react-virtual':
         specifier: 3.14.26
         version: 3.14.26(react-dom@19.2.8)(react@19.2.8)
@@ -1316,9 +1319,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@repo/service':
-        specifier: workspace:*
-        version: link:../../packages/service
       '@repo/wire':
         specifier: workspace:*
         version: link:../../packages/wire
@@ -4218,6 +4218,12 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
+  '@tanstack/react-table@9.3.1':
+    resolution: {integrity: sha512-E6Ya5TnY6EaGyZYIUqig/29Lr/gJSAubQkLJFqiWkUl5nRCr0Xr9hvJot+NiRTtG+TzGxHTiqUW3bnLtQxlHug==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      react: '>=18'
+
   '@tanstack/react-virtual@3.14.26':
     resolution: {integrity: sha512-HUDlfsrYH6ko5xH56L62Mcl/uzT+AGVNMHFuDNqDJMdZWc1AQa2oeVKNUvZ/RWBZQ4TYtyQerFrNvLnp39h65A==}
     peerDependencies:
@@ -4230,6 +4236,10 @@ packages:
 
   '@tanstack/store@0.11.2':
     resolution: {integrity: sha512-sJ4mjol8uQsHV0gOJzzjwXfh2Fwm+Sz0+8deqiTm4jGbMdjzNSW+xZCFm0kUa870uhd8yi+DpKnZb5Kc4apa0Q==}
+
+  '@tanstack/table-core@9.3.1':
+    resolution: {integrity: sha512-zQvlxSNi2qGM3L4jh85Z6hqMfdIR5qOfD9KHOU32nuKFJGN0RlJ7UvV1lsPb1fPVhpFYI0VP3jJGxLdLDpTKjQ==}
+    engines: {node: '>=20'}
 
   '@tanstack/virtual-core@3.19.11':
     resolution: {integrity: sha512-/5iHb0RHBvj8Di59FDs4ESNm45jls33aZAi4zccVXZjc/6ZvwQP6nzEYeT6weXjTf9E6/vrp2JhYWRyO+ZP13A==}
@@ -9542,7 +9552,8 @@ snapshots:
 
   '@oxc-project/types@0.148.0': {}
 
-  '@oxc-project/types@0.149.0': {}
+  '@oxc-project/types@0.149.0':
+    optional: true
 
   '@oxc-project/types@0.152.0': {}
 
@@ -9945,7 +9956,8 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-beta.53': {}
 
-  '@rolldown/pluginutils@1.0.1': {}
+  '@rolldown/pluginutils@1.0.1':
+    optional: true
 
   '@rollup/rollup-android-arm-eabi@4.62.4':
     optional: true
@@ -10476,6 +10488,14 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       use-sync-external-store: 1.7.0(react@19.2.8)
 
+  '@tanstack/react-table@9.3.1(react-dom@19.2.8)(react@19.2.8)':
+    dependencies:
+      '@tanstack/react-store': 0.11.2(react-dom@19.2.8)(react@19.2.8)
+      '@tanstack/table-core': 9.3.1
+      react: 19.2.8
+    transitivePeerDependencies:
+      - react-dom
+
   '@tanstack/react-virtual@3.14.26(react-dom@19.2.8)(react@19.2.8)':
     dependencies:
       '@tanstack/virtual-core': 3.19.11
@@ -10490,6 +10510,10 @@ snapshots:
       seroval-plugins: 1.7.7(seroval@1.7.7)
 
   '@tanstack/store@0.11.2': {}
+
+  '@tanstack/table-core@9.3.1':
+    dependencies:
+      '@tanstack/store': 0.11.2
 
   '@tanstack/virtual-core@3.19.11': {}
 
@@ -11546,7 +11570,8 @@ snapshots:
 
   concat-map@0.0.1: {}
 
-  consola@3.4.2: {}
+  consola@3.4.2:
+    optional: true
 
   content-disposition@2.0.1: {}
 
@@ -11599,6 +11624,7 @@ snapshots:
   crossws@0.4.12(srvx@1.0.4):
     optionalDependencies:
       srvx: 1.0.4
+    optional: true
 
   css-tree@3.2.1:
     dependencies:
@@ -11800,7 +11826,8 @@ snapshots:
 
   dayjs@1.11.23: {}
 
-  db0@0.4.1: {}
+  db0@0.4.1:
+    optional: true
 
   debug@4.4.3:
     dependencies:
@@ -12042,6 +12069,7 @@ snapshots:
       exsolve: 1.1.1
       httpxy: 0.5.5
       srvx: 1.0.4
+    optional: true
 
   err-code@2.0.3: {}
 
@@ -12178,6 +12206,7 @@ snapshots:
       undici: 8.10.2
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
+    optional: true
 
   eventemitter3@5.0.4: {}
 
@@ -12250,7 +12279,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  exsolve@1.1.1: {}
+  exsolve@1.1.1:
+    optional: true
 
   extend@3.0.2: {}
 
@@ -12467,6 +12497,7 @@ snapshots:
     optionalDependencies:
       crossws: 0.4.12(srvx@1.0.4)
       ocache: 0.3.0
+    optional: true
 
   hachure-fill@0.5.2: {}
 
@@ -12582,7 +12613,8 @@ snapshots:
 
   hono@4.13.13: {}
 
-  hookable@6.1.1: {}
+  hookable@6.1.1:
+    optional: true
 
   hosted-git-info@4.1.0:
     dependencies:
@@ -12634,7 +12666,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  httpxy@0.5.5: {}
+  httpxy@0.5.5:
+    optional: true
 
   human-signals@2.1.0: {}
 
@@ -13439,7 +13472,8 @@ snapshots:
       - babel-plugin-macros
     optional: true
 
-  nf3@0.3.24: {}
+  nf3@0.3.24:
+    optional: true
 
   nitro@3.0.260903-beta:
     dependencies:
@@ -13456,6 +13490,7 @@ snapshots:
       srvx: 1.0.4
       unenv: 2.0.0-rc.24
       unstorage: 2.0.0-alpha.10
+    optional: true
 
   node-abi@4.33.0:
     dependencies:
@@ -13521,7 +13556,8 @@ snapshots:
 
   obug@2.2.1: {}
 
-  ocache@0.3.0: {}
+  ocache@0.3.0:
+    optional: true
 
   on-finished@2.4.1:
     dependencies:
@@ -13686,7 +13722,8 @@ snapshots:
 
   path-to-regexp@8.4.2: {}
 
-  pathe@2.0.3: {}
+  pathe@2.0.3:
+    optional: true
 
   pe-library@0.4.1: {}
 
@@ -14163,6 +14200,7 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.8
       '@rolldown/binding-win32-arm64-msvc': 1.2.8
       '@rolldown/binding-win32-x64-msvc': 1.2.8
+    optional: true
 
   rollup@4.62.4:
     dependencies:
@@ -14417,7 +14455,8 @@ snapshots:
   sprintf-js@1.1.3:
     optional: true
 
-  srvx@1.0.4: {}
+  srvx@1.0.4:
+    optional: true
 
   stackback@0.0.2: {}
 
@@ -14692,13 +14731,15 @@ snapshots:
 
   undici@7.29.0: {}
 
-  undici@8.10.2: {}
+  undici@8.10.2:
+    optional: true
 
   undici@8.11.2: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
       pathe: 2.0.3
+    optional: true
 
   unicode-emoji-json@0.9.0: {}
 
@@ -14741,7 +14782,8 @@ snapshots:
 
   unpipe@1.0.0: {}
 
-  unstorage@2.0.0-alpha.10: {}
+  unstorage@2.0.0-alpha.10:
+    optional: true
 
   update-browserslist-db@1.3.1(browserslist@4.28.8):
     dependencies:

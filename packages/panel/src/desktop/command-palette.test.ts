@@ -69,7 +69,7 @@ import {
   holdAutomations,
   registryWith,
 } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
@@ -156,7 +156,9 @@ function openPalette(
     readFiles,
     page,
   });
-  act(() => root.render(registry === undefined ? palette : onRegistry(registry, palette)));
+  act(() =>
+    root.render(withQueryClient(registry === undefined ? palette : onRegistry(registry, palette))),
+  );
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
@@ -646,7 +648,7 @@ function OffersPlaces(): null {
 function openPaletteOverPlaces(): void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(OffersPlaces)));
+  act(() => root.render(withQueryClient(createElement(OffersPlaces))));
   openPalette();
 }
 
@@ -701,7 +703,7 @@ test("the menu bar's Back and Forward, a mouse's side buttons among them, leave 
   const moves: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(MenuWindow, { moves })));
+  act(() => root.render(withQueryClient(createElement(MenuWindow, { moves }))));
   openPalette();
 
   act(() => menuListener?.(APP_COMMAND.BACK));
@@ -1638,7 +1640,7 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   document.body.append(host);
   const root = createRoot(host);
   roots.push(root);
-  act(() => root.render(createElement(OffersMyTasks, { ran })));
+  act(() => root.render(withQueryClient(createElement(OffersMyTasks, { ran }))));
   openPalette();
   type("my tasks");
   assert.ok(rows().includes("Show my tasks"), "Show my tasks is listed");
@@ -1659,7 +1661,7 @@ test("a command whose only key is Esc is no row in ⌘K, though it is still offe
   const ran: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(createElement(OffersEscapes, { ran })));
+  act(() => root.render(withQueryClient(createElement(OffersEscapes, { ran }))));
   openPalette();
   chooseFilter("Commands");
   type("exit settings");
@@ -1786,7 +1788,7 @@ function drawToasts(): void {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   roots.push(root);
-  act(() => root.render(createElement(ToastHost)));
+  act(() => root.render(withQueryClient(createElement(ToastHost))));
 }
 
 const LINKED_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -3174,7 +3176,7 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
 test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", () => {
   const places = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(places);
-  act(() => places.render(createElement(OffersPlaces)));
+  act(() => places.render(withQueryClient(createElement(OffersPlaces))));
   paletteOverTask()(DOCUMENT_TASK);
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");

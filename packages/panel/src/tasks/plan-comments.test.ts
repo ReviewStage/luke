@@ -37,7 +37,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { AGENT } from "../testing/desktop-inbox.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -1310,17 +1310,19 @@ async function caretInThread() {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        PlanCommentsProvider,
-        { value: control },
-        createElement(CommentFocusScope, {
-          reveal: undefined,
-          children: createElement(PlanBody, {
-            task: PLAN,
-            sectionLinks: PAGE_LINKS,
-            onEdit: () => Promise.resolve({ saved: true } as const),
+      withQueryClient(
+        createElement(
+          PlanCommentsProvider,
+          { value: control },
+          createElement(CommentFocusScope, {
+            reveal: undefined,
+            children: createElement(PlanBody, {
+              task: PLAN,
+              sectionLinks: PAGE_LINKS,
+              onEdit: () => Promise.resolve({ saved: true } as const),
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );
@@ -1467,7 +1469,7 @@ function Keymap(): null {
 test("⌥⌘M starts a thread on the words selected, as the bubble over them does, and nothing with none selected", async () => {
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(keys);
-  act(() => keys.render(createElement(Keymap)));
+  act(() => keys.render(withQueryClient(createElement(Keymap))));
   const { container, started } = wide(() => drawn("page", []));
   const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
   const pressComment = () =>
@@ -1533,7 +1535,7 @@ test("⌥⌘M starts a thread on the words selected, as the bubble over them doe
 test("words selected in a plan whose tab is then hidden take the bubble and ⌥⌘M with them, and bring them back as it is shown again", async () => {
   const keys = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(keys);
-  act(() => keys.render(createElement(Keymap)));
+  act(() => keys.render(withQueryClient(createElement(Keymap))));
   const { container } = wide(() => drawn("page", []));
   const words = "withdraw an invite";
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);

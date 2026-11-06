@@ -11,14 +11,17 @@ import {
 import { formatCount } from "@repo/features/number-format";
 import { formatDayHeading } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
+import { partialDayKey } from "@repo/ui/daily-series";
 import {
+  createDataTableColumnHelper,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
-  type DataTableColumn,
-} from "@repo/ui";
-import { partialDayKey } from "@repo/ui/daily-series";
+  type DataTableColumns,
+  DataTableSkeleton,
+} from "@repo/ui/data-table";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminDayQuery, useAdminSignOut } from "../admin-queries.js";
@@ -29,7 +32,6 @@ import { AdminViewOptions } from "../chrome/controls.js";
 import { DayActivityNote, DayNote, retiredTitle } from "../chrome/notes.js";
 import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, dayReadQuery } from "../routing.js";
 
 const DAY_ERROR = readFailedWords("this day");
@@ -78,25 +80,27 @@ function activityStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>
   ];
 }
 
+const activeAccountColumn = createDataTableColumnHelper<AdminDayActiveAccount>();
+
 /** The live table's columns: who acted, then how many of each kind. */
 function activeAccountColumns(
   onOpen: (id: string) => void,
-): readonly DataTableColumn<AdminDayActiveAccount>[] {
-  return [
-    {
-      key: ACCOUNT_COLUMN,
-      label: "Account",
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
-    ...Object.values(DAY_ACCOUNT_COUNT).map(
-      (kind): DataTableColumn<AdminDayActiveAccount> => ({
-        key: kind,
-        label: DAY_ACCOUNT_COUNT_LABEL[kind],
-        kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-        cell: (row) => formatCount(row.counts[kind]),
+): DataTableColumns<AdminDayActiveAccount> {
+  return activeAccountColumn.columns([
+    activeAccountColumn.display({
+      id: ACCOUNT_COLUMN,
+      header: "Account",
+      cell: ({ row: { original: row } }) => <AccountCell account={row} onOpen={onOpen} />,
+    }),
+    ...Object.values(DAY_ACCOUNT_COUNT).map((kind) =>
+      activeAccountColumn.display({
+        id: kind,
+        header: DAY_ACCOUNT_COUNT_LABEL[kind],
+        meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+        cell: ({ row: { original: row } }) => formatCount(row.counts[kind]),
       }),
     ),
-  ];
+  ]);
 }
 
 /**
@@ -121,23 +125,23 @@ function hostedStats(stillFilling: boolean): readonly StatSpec<AdminDayDetail>[]
   ];
 }
 
+const dayAccountColumn = createDataTableColumnHelper<AdminDayAccount>();
+
 /** The day's two columns: who called, and how many times. */
-function dayAccountColumns(
-  onOpen: (id: string) => void,
-): readonly DataTableColumn<AdminDayAccount>[] {
-  return [
-    {
-      key: ACCOUNT_COLUMN,
-      label: "Account",
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
-    {
-      key: "calls",
-      label: "Calls",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatCount(row.calls),
-    },
-  ];
+function dayAccountColumns(onOpen: (id: string) => void): DataTableColumns<AdminDayAccount> {
+  return dayAccountColumn.columns([
+    dayAccountColumn.display({
+      id: ACCOUNT_COLUMN,
+      header: "Account",
+      cell: ({ row: { original: row } }) => <AccountCell account={row} onOpen={onOpen} />,
+    }),
+    dayAccountColumn.display({
+      id: "calls",
+      header: "Calls",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatCount(row.calls),
+    }),
+  ]);
 }
 
 /**
@@ -153,12 +157,13 @@ function ActiveAccountsTable({
   accounts: readonly AdminDayActiveAccount[];
   onOpen: (id: string) => void;
 }): React.JSX.Element {
+  const activeColumns = useMemo(() => activeAccountColumns(onOpen), [onOpen]);
   return (
     <DataTable
       label="Accounts active this day"
-      columns={activeAccountColumns(onOpen)}
+      columns={activeColumns}
       rows={accounts}
-      rowKey={(row) => row.id}
+      getRowId={(row) => row.id}
       empty="No tasks, description revisions, or agents recorded on this day."
       minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
       onRowPress={(row) => onOpen(row.id)}
@@ -174,12 +179,13 @@ function DayAccountsTable({
   accounts: readonly AdminDayAccount[];
   onOpen: (id: string) => void;
 }): React.JSX.Element {
+  const dayColumns = useMemo(() => dayAccountColumns(onOpen), [onOpen]);
   return (
     <DataTable
       label="Hosted-tier accounts this day"
-      columns={dayAccountColumns(onOpen)}
+      columns={dayColumns}
       rows={accounts}
-      rowKey={(row) => row.id}
+      getRowId={(row) => row.id}
       empty="No hosted-tier calls recorded on this day."
       minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
       onRowPress={(row) => onOpen(row.id)}
@@ -203,6 +209,8 @@ function DaySections({
   detail: AdminDayDetail | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
+  const dayColumns = useMemo(() => dayAccountColumns(onOpenAccount), [onOpenAccount]);
+  const activeColumns = useMemo(() => activeAccountColumns(onOpenAccount), [onOpenAccount]);
   const stillFilling = partialDayKey([{ day }], detail?.generatedAt ?? Date.now()) !== undefined;
   return (
     <>
@@ -214,7 +222,7 @@ function DaySections({
         {detail === undefined ? (
           <DataTableSkeleton
             label="Accounts active this day"
-            columns={activeAccountColumns(onOpenAccount)}
+            columns={activeColumns}
             rows={ACCOUNT_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             cells={{ [ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}
@@ -244,7 +252,7 @@ function DaySections({
         {detail === undefined ? (
           <DataTableSkeleton
             label="Hosted-tier accounts this day"
-            columns={dayAccountColumns(onOpenAccount)}
+            columns={dayColumns}
             rows={ACCOUNT_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
             cells={{ [ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}

@@ -61,7 +61,7 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
@@ -111,16 +111,18 @@ test("a task the service will not hand the reader, as a link to another workspac
   const root = createRoot(container);
   act(() =>
     root.render(
-      createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
-        looks: NO_LOOKS,
-        tasks: tasksControl({
-          page: TASKS_PAGE.DOCUMENT,
-          activeTaskId: TASK.id,
-          region: { kind: DOCUMENT_REGION.MISSING },
-          onLeaveTask: () => left.push(TASK.id),
+      withQueryClient(
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.MISSING },
+            onLeaveTask: () => left.push(TASK.id),
+          }),
         }),
-      }),
+      ),
     ),
   );
   const close = [...container.querySelectorAll("button")].find(
@@ -193,7 +195,7 @@ test("a task's comments are held from its open, so its first ready frame marks t
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
 
-  act(() => root.render(opened({ kind: DOCUMENT_REGION.READING })));
+  act(() => root.render(withQueryClient(opened({ kind: DOCUMENT_REGION.READING }))));
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
@@ -201,10 +203,12 @@ test("a task's comments are held from its open, so its first ready frame marks t
 
   act(() =>
     root.render(
-      opened({
-        kind: DOCUMENT_REGION.READY,
-        task: { ...TASK, document: { body, assumptions: [] } },
-      }),
+      withQueryClient(
+        opened({
+          kind: DOCUMENT_REGION.READY,
+          task: { ...TASK, document: { body, assumptions: [] } },
+        }),
+      ),
     ),
   );
   assert.equal(
@@ -220,30 +224,32 @@ test("a task with no agent tab draws a new agent's draft", () => {
   const drawn = () => {
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
-      createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
-        looks: NO_LOOKS,
-        tasks: tasksControl({
-          page: TASKS_PAGE.DOCUMENT,
-          activeTaskId: TASK.id,
-          region: { kind: DOCUMENT_REGION.READY, task: TASK },
-          mainTabs: {
-            ...tasksControl().mainTabs,
-            tabs: [{ draft: DRAFT_ID }],
-            tab: { draft: DRAFT_ID },
-          },
-          agents: agentsControl({
-            agentIds: [],
-            draft: {
-              id: DRAFT_ID,
-              prompt: "",
-              attachments: [],
-              choice: undefined,
-              disabledServers: [],
+      withQueryClient(
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            mainTabs: {
+              ...tasksControl().mainTabs,
+              tabs: [{ draft: DRAFT_ID }],
+              tab: { draft: DRAFT_ID },
             },
+            agents: agentsControl({
+              agentIds: [],
+              draft: {
+                id: DRAFT_ID,
+                prompt: "",
+                attachments: [],
+                choice: undefined,
+                disabledServers: [],
+              },
+            }),
           }),
         }),
-      }),
+      ),
     );
     return page;
   };
@@ -303,22 +309,24 @@ const DRAFT_TAB = { draft: "draft" };
 /** The task's page with the side panel open on `tab`, as markup. */
 function panelTab(): HTMLElement {
   const markup = renderToStaticMarkup(
-    createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
-      looks: NO_LOOKS,
-      tasks: tasksControl({
-        page: TASKS_PAGE.DOCUMENT,
-        activeTaskId: TASK.id,
-        region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        // Note that the panel stands beside an agent's tab, since the task's details take its room.
-        mainTabs: {
-          ...tasksControl().mainTabs,
-          tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
-          tab: DRAFT_TAB,
-        },
-        sidePanel: DOCUMENT_PANEL,
+    withQueryClient(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          // Note that the panel stands beside an agent's tab, since the task's details take its room.
+          mainTabs: {
+            ...tasksControl().mainTabs,
+            tabs: [MAIN_TAB.OVERVIEW, DRAFT_TAB],
+            tab: DRAFT_TAB,
+          },
+          sidePanel: DOCUMENT_PANEL,
+        }),
       }),
-    }),
+    ),
   );
   const page = document.createElement("div");
   page.innerHTML = markup;

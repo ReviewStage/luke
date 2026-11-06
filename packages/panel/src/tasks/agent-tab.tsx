@@ -119,6 +119,7 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
+import { AgentForward } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -3054,7 +3055,12 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
+            tools={(narrow) => (
+              <>
+                <AgentPlace agent={agent} narrow={narrow} />
+                <AgentForward agent={agent} narrow={narrow} />
+              </>
+            )}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its plan or
             // task, so the box takes a follow up even before the transcript is read.

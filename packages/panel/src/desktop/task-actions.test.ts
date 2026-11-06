@@ -33,7 +33,7 @@ import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, readExperiments, registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -149,7 +149,7 @@ function mount(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(element));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 
@@ -300,7 +300,13 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   const draw = (control: TasksControl) =>
     act(() =>
       root.render(
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+        withQueryClient(
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: control,
+          }),
+        ),
       ),
     );
   draw(tasks);
@@ -338,7 +344,13 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
   const draw = (control: TasksControl) =>
     act(() =>
       root.render(
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+        withQueryClient(
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: control,
+          }),
+        ),
       ),
     );
   draw(asked(false));

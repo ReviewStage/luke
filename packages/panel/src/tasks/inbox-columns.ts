@@ -20,7 +20,6 @@
 
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { TOOLBAR_LOOK } from "@repo/ui";
-import { askScroll } from "@repo/ui/scroll-asked";
 import { useVirtualRuns, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
@@ -230,7 +229,6 @@ export function useInboxColumns(chosen: string | undefined, choosing: InboxChoos
     if (chosen === undefined || pressed.current || stepped.current) return;
     const kept = scrolls.current.get(chosen);
     if (kept !== undefined) {
-      askScroll(list);
       list.scrollTop = kept;
       return;
     }

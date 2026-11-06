@@ -131,10 +131,7 @@ import {
   startAgent,
 } from "./coder-host/start.js";
 import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
-import {
-  stoppedAgent,
-  standingsOf as turnStandingsOf,
-} from "./coder-host/stop.js";
+import { stoppedAgent, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
 import { deploymentSandboxStops } from "./session-sandboxes.js";
@@ -400,8 +397,6 @@ export const START_AGENT_REFUSAL = {
     "Not started: the GitHub installation connected to the workspace does not reach the repository the agent would work in.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
-  IMAGE_PREPARING:
-    "Not started: the agent's sandbox image is still being prepared; start it again in a minute or two.",
   PLAN_SIGNED_OUT:
     "Not started: the plan that would pay for it is signed out; its starter signs in again in Settings.",
   PLAN_UNREACHABLE:
@@ -461,7 +456,6 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_AGENT_REFUSAL.NO_BRANCH],
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_AGENT_REFUSAL.IMAGE_PREPARING],
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_AGENT_REFUSAL.PLAN_SIGNED_OUT],
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_AGENT_REFUSAL.PLAN_UNREACHABLE],
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_AGENT_REFUSAL.PLAN_LIMIT_REACHED],

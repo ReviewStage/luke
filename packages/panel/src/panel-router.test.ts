@@ -6,6 +6,7 @@ import {
   linkOf,
   PULL_REQUEST_THREAD_VIEW,
 } from "@repo/features/link-grammar";
+import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, type RouteIds } from "@tanstack/react-router";
 import { describe, expect, it } from "vitest";
 import { createPanelRouter, type PanelRouter } from "./panel-router.js";
@@ -220,7 +221,10 @@ const LINKS: readonly (readonly [LinkPlace, Landing])[] = [
 
 /** The deepest route the router matches `address` to, read as a window's router reads the address it opens at. */
 function landingOf(address: string): Landing {
-  const router = createPanelRouter(createMemoryHistory({ initialEntries: [address] }));
+  const router = createPanelRouter(
+    createMemoryHistory({ initialEntries: [address] }),
+    new QueryClient(),
+  );
   const { pathname, search } = router.latestLocation;
   const leaf = router.matchRoutes(pathname, search).at(-1);
   if (leaf === undefined) throw new Error(`No route matched ${address}`);

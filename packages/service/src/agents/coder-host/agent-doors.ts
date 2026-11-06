@@ -67,6 +67,7 @@ import {
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
+import { plansOnFor } from "../plans-on.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { runMessageAgent } from "./agent-message.js";
@@ -203,6 +204,10 @@ export function runAgentEditPlan(
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return planEditRejected(found.failure);
+    // Note that no agent whose starter has Plans off is listed the tool; a harness may call it anyway, and this refuses it.
+    if (!(yield* plansOnFor(found.success.userId, found.success.kind))) {
+      return planEditRejected(PLAN_EDIT_REFUSAL.OFF);
+    }
     const taskId = editedTaskOf(input);
     if (taskId === undefined) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK_NAMED);
     const task = yield* agentTaskOf(admitted, found.success, taskId);
@@ -223,8 +228,11 @@ export function runAgentLookAtPicture(
   input: UnparsedWireValue,
 ): Effect.Effect<PictureLookResult, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
+    const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return pictureNotLooked(found.failure);
+    if (!(yield* plansOnFor(found.success.userId, found.success.kind))) {
+      return pictureNotLooked(PICTURE_LOOK_REFUSAL.OFF);
+    }
     const taskId = lookedTaskOf(input);
     if (taskId === undefined) return pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE);
     if (Option.isNone(yield* agentTaskOf(admitted, found.success, taskId))) {
@@ -261,8 +269,9 @@ export function runAgentOpenPullRequest(
 
 /**
  * Runs one call of a comment tool (`tasks/comment-tools.ts`) on the plan of
- * the task it names, in the agent's workspace, as the member whose turn it
- * is, written under the agent.
+ * the task it names, or one of its pages, in the agent's workspace, as the
+ * member whose turn it is, written under the agent; the plan's threads only
+ * where the agent's starter has Plans on (`plansOnFor`).
  */
 export function runAgentComment(
   admitted: AdmittedConversation,
@@ -283,7 +292,9 @@ export function runAgentComment(
       userId: admitted.caller,
       agentId,
     } as const;
-    return yield* runCommentTool(name, { taskId, writer }, input);
+    // A page's threads stand whatever the starter's Plans; the plan's are left out while it is off.
+    const plansOn = yield* plansOnFor(found.success.userId, found.success.kind);
+    return yield* runCommentTool(name, { taskId, writer, plansOn }, input);
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(commentToolRejected(COMMENT_TOOL_REFUSAL.UNAVAILABLE))),

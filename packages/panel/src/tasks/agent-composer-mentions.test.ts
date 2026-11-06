@@ -339,6 +339,14 @@ async function settle(): Promise<void> {
   });
 }
 
+/** Settles, then waits for an open @ list to stop reading, since it draws the repository's files only once their read lands. */
+async function listSettled(): Promise<void> {
+  await settle();
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('.mention-menu [role="status"]') === null, true),
+  );
+}
+
 /** What a task's page hands its places, every mention a chip was asked to open kept. */
 function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
@@ -484,13 +492,13 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   const { container, sent } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   const offered = listed(container);
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(offered, ["Rollout", "rollout-store.ts"]);
   assert.deepEqual(chips.map(chipName), ["Rollout"]);
@@ -503,10 +511,10 @@ test("a word that finds an agent and a file leads the @ list with the agent, whi
   const { container } = await box({ ...planPage([]), agents: [SELF_AGENT, agent] });
 
   typeInComposer(container, "Ask @roll");
-  await settle();
+  await listSettled();
   const offered = groupsListed(container).map(([group]) => group);
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(offered, ["Agents", "Description", "Files and folders"]);
   assert.deepEqual(
@@ -550,13 +558,13 @@ test("the @ list closes on a press outside it and the box, stays open for a pres
     });
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   press(composerEditor(container));
   const keptByTheBox = listed(container);
   press(document.body);
   const afterAway = container.querySelector(".mention-menu") !== null;
   typeInComposer(container, "o");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(keptByTheBox, ["Rollout", "rollout-store.ts"]);
   assert.equal(afterAway, false, "a press outside closes it");
@@ -567,7 +575,7 @@ test("the box is a combobox naming the @ list it opened and the row highlighted 
   const { container } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   const field = composerEditor(container);
   const list = container.querySelector('.mention-menu [role="listbox"]');
   const highlighted = () => list?.querySelector('[role="option"][aria-selected="true"]')?.id;
@@ -601,7 +609,7 @@ test("on the page of an agent no plan holds an @ offers its repository's files, 
   const { container } = await box(page);
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(listed(container), ["rollout-store.ts"]);
   assert.deepEqual(
@@ -668,12 +676,12 @@ test("off a plan's page a sent message's mention is still its chip, which opens 
 test("once the plan's repository changes, the box offers the new repository's files", async () => {
   const { container, redraw } = await box(planPage([]));
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
   const before = listed(container);
 
   standing = "acme/next";
   redraw(planPage([], "acme/next"));
-  await settle();
+  await listSettled();
 
   assert.deepEqual(before, ["Rollout", "rollout-store.ts"]);
   assert.deepEqual(listed(container), ["Rollout", "rollout-next.ts"]);
@@ -804,7 +812,7 @@ test("an @ whose read of the skills came back unread says they could not be read
   const { container } = await box(planPage([]), flaky);
 
   typeInComposer(container, "Run @releas");
-  await settle();
+  await listSettled();
 
   const failed = listNote(container);
   assert.match(failed.words, /Skills could not be read\./u);
@@ -813,7 +821,7 @@ test("an @ whose read of the skills came back unread says they could not be read
 
   reachable = true;
   act(() => (failed.retry ?? assert.fail("no Retry")).click());
-  await settle();
+  await listSettled();
 
   assert.equal(listNote(container).words, "");
   assert.deepEqual(
@@ -1106,7 +1114,7 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
   const { container } = await box(planPage([]));
 
   typeInComposer(container, "Follow @roll");
-  await settle();
+  await listSettled();
 
   const failed = listNote(container);
   assert.match(failed.words, /The repository's files could not be read\./u);
@@ -1116,10 +1124,9 @@ test("an @ whose read of the repository's files was refused ends its reading, sa
 
   refusing.clear();
   act(() => (failed.retry ?? assert.fail("no Retry")).click());
-  await settle();
+  await vi.waitFor(() => assert.deepEqual(listed(container), ["Rollout", "rollout-store.ts"]));
 
   assert.equal(listNote(container).words, "");
-  assert.deepEqual(listed(container), ["Rollout", "rollout-store.ts"]);
 });
 
 it.effect(
@@ -1254,7 +1261,7 @@ async function workspaceMemberBox() {
     ),
     undefined,
   );
-  await settle();
+  await listSettled();
   return container;
 }
 
@@ -1317,7 +1324,7 @@ it.effect(
 async function cardOfRow(page: TaskMentionsValue, typed: string, section: string) {
   const { container } = await box(page);
   typeInComposer(container, typed);
-  await settle();
+  await listSettled();
   const option =
     container.querySelector<HTMLElement>(
       `.mention-menu [aria-label="${section}"] [role="option"]`,
@@ -1617,14 +1624,14 @@ test("files found by a word typed on are those the longer word finds, and the wo
   const { container } = await wideBox();
 
   typeInComposer(container, "See @files:invite-");
-  await settle();
+  await listSettled();
   const typed = listed(container);
   const typedCount = listedCount(container);
   typeInComposer(container, "5");
-  await settle();
+  await listSettled();
   const typedOn = listed(container);
   eraseInComposer(container, 1);
-  await settle();
+  await listSettled();
 
   assert.equal(typedCount, 50);
   assert.deepEqual(
@@ -1640,10 +1647,10 @@ test("typing @files: narrows the list to the repository's paths, listing up to f
   const { container } = await wideBox();
 
   typeInComposer(container, "See @invite");
-  await settle();
+  await listSettled();
   const wide = groupsListed(container).find(([group]) => group === "Files and folders");
   typeInComposer(container, " and @files:invite");
-  await settle();
+  await listSettled();
 
   assert.equal(wide?.[1].length, 4);
   assert.equal(crumb(container), "Files and folders");
@@ -1655,17 +1662,17 @@ test("→ on a folder walks into it, its first row the folder and the rest what 
   const { container } = await wideBox();
 
   typeInComposer(container, "See @files:");
-  await settle();
+  await listSettled();
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   const inApps = [crumb(container), listed(container)];
   highlightRow(container, "apps", "web/");
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   const inWeb = [crumb(container), listed(container).slice(0, 3), listedCount(container)];
   const keys = footKeys(container);
   pressInComposer(container, "Backspace");
-  await settle();
+  await listSettled();
 
   assert.deepEqual(inApps, ["apps", ["apps/", "web/"]]);
   assert.deepEqual(inWeb, ["apps/web", ["web/", "invite-01.ts", "invite-02.ts"], 50]);
@@ -1678,28 +1685,28 @@ test("a file or a folder picked from a narrowed list is sent as the same link th
   const { container, sent } = await wideBox();
 
   typeInComposer(container, "Ship @invite-07");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   typeInComposer(container, "and @files:");
-  await settle();
+  await listSettled();
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   highlightRow(container, "apps", "web/");
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   typeInComposer(container, "invite-07");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   typeInComposer(container, "in @files:");
-  await settle();
+  await listSettled();
   pressInComposer(container, "ArrowRight");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
   pressInComposer(container, "Enter");
-  await settle();
+  await listSettled();
 
   const file = mentionMarkdown(
     { kind: MENTION_KIND.FILE, path: "apps/web/invite-07.ts" },

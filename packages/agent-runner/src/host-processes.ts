@@ -2,8 +2,8 @@
  * host-processes.ts -- `processes.ts`'s question asked on a host, where the runner runs straight on the box: whether a process the agent started still runs beside the runner.
  *
  * On a host the runner runs as the box's own user, beside the host's own
- * process, the developer's, and every other agent's runner, so neither a
- * bounding set nor a user marks the agent's processes. They are told apart
+ * process, the developer's, and every other agent's runner, so no user of
+ * its own marks the agent's processes, as one does in a sandbox. They are told apart
  * by where they came from instead: a process descended from the runner, or
  * one in the runner's own process group where the runner leads one, as the
  * host starts it (`@repo/host`'s `compose-local-agents.ts`), so a server

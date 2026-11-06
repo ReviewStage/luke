@@ -89,7 +89,6 @@ import { webmDimensions } from "@repo/features/video-signature";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@repo/wire";
 import { describeWire, readEither } from "@repo/wire/effect";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
-import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
 import { AgentBrowser, type BrowserUnreachable } from "./agent-browser.js";
@@ -747,14 +746,26 @@ function withoutPictures(output: UnparsedWireValue, forModel: boolean): Unparsed
   });
 }
 
+/** One part of what the model is shown: words, or a picture's base64 and its type. */
+type BrowserModelPart =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "file";
+      readonly data: { readonly type: "data"; readonly data: string };
+      readonly mediaType: string;
+    };
+
+/** What the model is shown of a call's result: the JSON it is, or its parts in order. */
+type BrowserModelOutput =
+  | { readonly type: "json"; readonly value: UnparsedWireValue }
+  | { readonly type: "content"; readonly value: readonly BrowserModelPart[] };
+
 /**
  * What the model is shown of a call's result: the result as JSON with each
  * screenshot's picture beside it as an image, never its base64 spelled out
- * as text; anything else as the JSON it is. Note that the output is eve's
- * literal shape, spelled here rather than built with eve's helpers, as
- * `pictureLookModelOutput` spells it.
+ * as text; anything else as the JSON it is.
  */
-export function browserModelOutput(output: UnparsedWireValue): ToolModelOutput {
+export function browserModelOutput(output: UnparsedWireValue): BrowserModelOutput {
   if (!isRecord(output) || !isRan(output) || !Array.isArray(output.steps)) {
     return { type: "json", value: output };
   }

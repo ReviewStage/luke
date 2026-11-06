@@ -15,6 +15,7 @@ import type { AnyAct, FakeActAnswer } from "../testing/app-bridge.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { MarkdownEditor, type MarkdownEditorProps } from "./markdown-editor.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
@@ -105,17 +106,19 @@ function mounted(markdown: string, options: Partial<MarkdownEditorProps> = {}) {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(MarkdownEditor, {
-        markdown,
-        label: "Description",
-        roomLabel: "Editing the description",
-        placeholder: "Add a description",
-        className: "markdown",
-        onDraft: (draft) => drafts.push(draft),
-        onFinish: () => undefined,
-        handle,
-        ...options,
-      }),
+      withQueryClient(
+        createElement(MarkdownEditor, {
+          markdown,
+          label: "Description",
+          roomLabel: "Editing the description",
+          placeholder: "Add a description",
+          className: "markdown",
+          onDraft: (draft) => drafts.push(draft),
+          onFinish: () => undefined,
+          handle,
+          ...options,
+        }),
+      ),
     ),
   );
   const element = container.querySelector<TiptapEditorHTMLElement>(".ProseMirror");

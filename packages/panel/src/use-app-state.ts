@@ -301,6 +301,7 @@ export const APP_SLICE = {
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),
   SESSION_REPLAY: sliceAtom("sessionReplay"),
+  PORT_FORWARDING: sliceAtom("portForwarding"),
   WINDOW: sliceAtom("window"),
 } as const;
 

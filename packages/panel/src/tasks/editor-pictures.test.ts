@@ -18,6 +18,7 @@ import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { readExperiments } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
 import { PlanBody } from "./plan-body.js";
@@ -111,7 +112,9 @@ function drawn(node: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
+  act(() =>
+    root.render(withQueryClient(createElement(TaskMentions, { value: PAGE, children: node }))),
+  );
   return container;
 }
 

@@ -14,9 +14,10 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
@@ -33,7 +34,7 @@ import {
   setupSteps,
 } from "./setup-model.js";
 import { TeamForm, useTeamForm } from "./setup-team.js";
-import { ToolRows } from "./setup-tools.js";
+import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
 
 /**
  * setup-steps.tsx -- a new account's setup, alone in the window after sign-in: who it is for, a team's workspace where there is one, an agent, GitHub, and the tools, one card each.
@@ -42,8 +43,9 @@ import { ToolRows } from "./setup-tools.js";
  * and each offers a quiet Sign out, since setup stands with no sidebar.
  * An account invited into a team's workspace starts on Connect an agent
  * alone. An agent is required: its step goes on only once Claude or Codex
- * is connected. The team's workspace and GitHub may be skipped, and the
- * tools need nothing done. Finish
+ * is connected. A team's workspace is required too, once With my team is
+ * chosen, since Back leads to Just me for anyone who changed their mind.
+ * GitHub may be skipped, and the tools need nothing done. Finish
  * lets the app in and keeps, on the
  * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
  * stands once on every machine.
@@ -157,7 +159,8 @@ interface SetupStepsProps {
 
 /** The step setup stands at. */
 function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { mutate: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
+  const { mutateAsync: signOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
@@ -191,7 +194,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   const finish = () => {
     // Finished, the account's place is let go of, as setup stands no more on any machine.
     // Note that nothing waits on the write: the window lets the app in at once, and a write lost asks for setup again next time.
-    tell(ACT_KIND.SETTING_UPDATE, { field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
+    updateSetting({ field: APP_SETTING_SCHEMA.setupFinished.field, value: true });
     keepFinished((finished) => [...finished, accountId]);
     changePlaces(({ [accountId]: _done, ...rest }) => rest);
     onFinish();
@@ -215,7 +218,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     label: "Sign out",
     onPress: () =>
       void signOutSayingFailure(async () => {
-        await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+        await signOut();
       }),
   };
   const teamForm = useTeamForm({
@@ -264,7 +267,6 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
               at={at + 1}
               total={steps.length}
               onBack={back}
-              onSkip={teamForm.busy ? undefined : forward}
               next={{
                 label: "Create",
                 onPress: teamForm.create,
@@ -279,7 +281,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
         }
       >
         {forming ? (
-          <TeamForm form={teamForm} />
+          <TeamForm form={teamForm} disabled={teamForm.busy} />
         ) : (
           <>
             <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
@@ -327,6 +329,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     <AuthPage
       mark={<ProductMark />}
       title="Connect your tools"
+      description={TOOLS_PURPOSE}
       foot={foot(true, "Finish")}
       exit={exit}
     >

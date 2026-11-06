@@ -278,5 +278,6 @@ export function initialAppState(
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true, reachable: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
+    portForwarding: null,
   };
 }

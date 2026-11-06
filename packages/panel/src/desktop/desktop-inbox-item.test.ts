@@ -125,7 +125,6 @@ import {
 } from "../testing/desktop-inbox.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { relayout } from "../testing/resize-observer.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 
@@ -1897,9 +1896,20 @@ function layOutBoards(layout: { height: number }): void {
       get(this: Element) {
         return board(this) ? (tops.get(this) ?? 0) : jsdom("scrollTop").get?.call(this);
       },
+      // Note that a write that moves the board is heard as a scroll, as the browser hears one, whoever wrote it.
       set(this: Element, to: number) {
         if (!board(this)) return jsdom("scrollTop").set?.call(this, to);
-        tops.set(this, Math.max(0, Math.min(to, layout.height - BOARD_ROOM)));
+        const held = Math.max(0, Math.min(to, layout.height - BOARD_ROOM));
+        if (held === (tops.get(this) ?? 0)) return;
+        tops.set(this, held);
+        this.dispatchEvent(new Event("scroll"));
+      },
+    },
+    // jsdom has no `scrollTo` on an element, which the thread's run of rows writes through.
+    scrollTo: {
+      configurable: true,
+      value(this: Element, options?: ScrollToOptions) {
+        if (options?.top !== undefined) this.scrollTop = options.top;
       },
     },
   });
@@ -1907,6 +1917,7 @@ function layOutBoards(layout: { height: number }): void {
     for (const [name, descriptor] of jsdoms) {
       if (descriptor !== undefined) Object.defineProperty(Element.prototype, name, descriptor);
     }
+    Reflect.deleteProperty(Element.prototype, "scrollTo");
   });
 }
 
@@ -1952,27 +1963,17 @@ test("a thread scrolled up offers the transcript's way back to its newest messag
   layOutBoards({ height: 1200 });
   const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
   const board = boardOf(pane);
+  // Note that the thread hears where it stands as each scroll settles, which the virtualizer waits a moment of no scrolling for.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(() => void vi.useRealTimers());
   scrollBoard(board, 300);
+  act(() => vi.runAllTimers());
   const back = scrollButton(pane) ?? assert.fail("scrolled up, the way back is offered");
 
   act(() => back.click());
+  act(() => vi.runAllTimers());
   assert.equal(board.scrollTop, 800, "the thread is at its newest message again");
   assert.equal(scrollButton(pane), null, "at its end, the way back goes");
-});
-
-test("a thread that grows while the reader is at its end, a message or a picture landing late, keeps to its end; scrolled up, the reader is left where they are", async () => {
-  const layout = { height: 1200 };
-  layOutBoards(layout);
-  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
-  const board = boardOf(pane);
-  layout.height = 1400;
-  act(() => relayout());
-  assert.equal(board.scrollTop, 1000, "at its end, it keeps to its end");
-
-  scrollBoard(board, 300);
-  layout.height = 1600;
-  act(() => relayout());
-  assert.equal(board.scrollTop, 300, "scrolled up, the reader's place stands");
 });
 
 /** Selects the words drawn under `within` as `words`, from `from` through `to`, as a drag lets them go. */
