@@ -890,6 +890,20 @@ which is the intended state for a Preview. Signing in again, or linking
 GitHub to an account, emails nothing, and a send Resend refuses is logged by
 its status alone while the sign-up stands.
 
+## Onboarding emails
+
+The notes a new account is sent on days 3, 7, and 14 are Resend's automation
+"Founder onboarding emails", edited in Resend rather than here. The service
+only tells it what it reads (`packages/service/src/accounts/onboarding-events.ts`):
+at sign-up it makes the account's Resend contact and sends the event
+`vespin.signed_up` with a `greeting`; an accepted workspace invitation sends
+`vespin.invite_accepted`, which ends the sequence within its first hour; and
+each task made through the app, `create_task`, or `start_agent` sets the
+contact's `has_task`, `task_days`, and `last_task_day`, days counted from the
+sign-up with its first 24 hours as day 0. It runs where the welcome email does,
+under `RESEND_API_KEY` and only where `WELCOME_FROM` is set, so a Preview
+starts no sequence, and a call Resend refuses is logged by its status alone.
+
 ## Sentry
 
 The functions report to Sentry's `vespin-web` project, set
