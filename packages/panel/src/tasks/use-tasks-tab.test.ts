@@ -2167,6 +2167,45 @@ test("an agent's page opened over a workspace not there for the reader takes its
 
   act(() => tab.control().agentView.onOpen("agent-9"));
   assert.equal(tab.control().unknownWorkspace.open, false);
+  assert.equal(tab.control().agentView.agentId, "agent-9");
+});
+
+test("the Inbox opened over a workspace not there for the reader takes its place", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onOpenLink({ workspace: "xyz", place: { kind: LINK_PLACE.BOARD } }));
+  assert.equal(tab.control().unknownWorkspace.open, true);
+
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().unknownWorkspace.open, false);
+  assert.equal(tab.control().inboxView.open, true);
+});
+
+test("a start refused after another agent's page was opened leaves that page standing rather than the one the start was pressed on", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().agentView.onOpen("agent-a"));
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Sweep the tests.",
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  };
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed });
+  });
+  act(() => tab.control().agentView.onOpen("agent-b"));
+  await act(async () => {
+    await vi.waitFor(() => assert.ok(answers.length > 0));
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await note;
+  });
+
+  assert.equal(tab.control().agentView.agentId, "agent-b");
 });
 
 test("a person's page is theirs in the workspace it opened in: another listed in its place closes it, and one opened from another workspace lists that one first", async () => {

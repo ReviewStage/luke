@@ -3381,6 +3381,8 @@ export function useTasksTab(input: {
     const listed = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
     const workspace = standing ?? home ?? listed;
     if (workspace === undefined) return;
+    // Note that the page is a navigation of its own, so a start's refusal answering late opens nothing over it.
+    navigations.current += 1;
     setUnknownWorkspace(false);
     input.agentView.onOpen(agentId, workspace);
   };
@@ -3395,6 +3397,7 @@ export function useTasksTab(input: {
   // The Inbox opened on `chosen`, or on its list where nothing is chosen, at `at`: a version history or an agent's page there giving way, as the Inbox is the router's.
   const standInbox = (at: InboxAt | undefined, chosen: InboxChoice | undefined) => {
     if (at === undefined) return;
+    setUnknownWorkspace(false);
     timeInboxOpen();
     closeHistory();
     if (chosen === undefined) input.inboxView.onOpen(at);
