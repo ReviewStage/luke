@@ -13,9 +13,14 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, type ReactElement } from "react";
 import { afterEach, beforeEach } from "vitest";
 
-/** A client as the Testing guide makes one: a failed read is not tried again. */
+/** A client as the Testing guide makes one, a failed read not tried again, sending as the window's does whatever the online mark says. */
 function freshQueryClient(): QueryClient {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return new QueryClient({
+    defaultOptions: {
+      queries: { networkMode: "always", retry: false },
+      mutations: { networkMode: "always" },
+    },
+  });
 }
 
 let testQueryClient = freshQueryClient();
