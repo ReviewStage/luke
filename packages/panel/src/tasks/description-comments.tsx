@@ -776,7 +776,7 @@ function CommentEntry({
     // Note that words as the comment holds them, or none, keep no draft, so the box reopens on the comment as it stands.
     edited.update((was) => ({
       ...was,
-      text: words.trim() === "" || words === entry.words ? "" : words,
+      text: words.trim() === "" || words === shown ? "" : words,
     }));
   };
   const save = () => {
@@ -3457,19 +3457,27 @@ export function PendingPageComment({
   const trigger = menu.trigger();
   const words = heldWords(comment);
   const { clientKey, element } = comment;
-  const groups: MenuAction[][] = busy
-    ? []
-    : [
-        [{ label: COMMENT_WORDS.EDIT, icon: <GLYPH.RENAME />, onSelect: () => setEditing(words) }],
-        [
-          {
-            label: COMMENT_WORDS.DELETE,
-            icon: <TrashIcon />,
-            danger: true,
-            onSelect: () => review.remove(clientKey),
-          },
-        ],
-      ];
+  // Note that one a send posted already is the service's as it stood, so it offers neither.
+  const groups: MenuAction[][] =
+    busy || comment.landed === true
+      ? []
+      : [
+          [
+            {
+              label: COMMENT_WORDS.EDIT,
+              icon: <GLYPH.RENAME />,
+              onSelect: () => setEditing(words),
+            },
+          ],
+          [
+            {
+              label: COMMENT_WORDS.DELETE,
+              icon: <TrashIcon />,
+              danger: true,
+              onSelect: () => review.remove(clientKey),
+            },
+          ],
+        ];
   // Note that an edit emptied deletes the comment, as a posted one's does, here at once with Undo.
   const save = () => {
     const next = editing?.trim() ?? "";
@@ -3674,6 +3682,10 @@ export function PageCommentLayer({
   const [heldOpen, setHeldOpen] = useState<string | undefined>(undefined);
   const heldThere =
     heldOpen === undefined ? [] : (heldByElement(review?.held ?? []).get(heldOpen) ?? []);
+  // Note that the last held comment on the element deleted lets the element go, so the next held there opens nothing until its pin is pressed.
+  useEffect(() => {
+    if (heldOpen !== undefined && heldThere.length === 0) setHeldOpen(undefined);
+  }, [heldOpen, heldThere.length]);
   const pins = [...byElement].flatMap(([path, threads]) => {
     const box = marks.get(path);
     // Note that an element scrolled up out of the frame is pinned nowhere until it comes back, and one below it stands past the room's foot, which clips it.

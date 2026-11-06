@@ -116,6 +116,8 @@ export interface HeldComment {
     | undefined;
   readonly words: string;
   readonly attachments: readonly AgentAttachment[];
+  /** Whether a send that stopped part way posted it held already, so it is sent no more, and neither edited nor deleted, since the service holds it as it stood. */
+  readonly landed?: true;
 }
 
 /** A held comment as the renderer's storage keeps it: all of it but its files. */
@@ -133,6 +135,7 @@ const keptHeldSchema = Schema.Struct({
     }),
   ),
   words: Schema.String,
+  landed: Schema.optionalKey(Schema.Literal(true)),
 });
 
 /** Every comment held in a review, the account signed in's alone, in the order they were held, kept across a relaunch but for their files. */
@@ -166,20 +169,24 @@ function startOf(comment: HeldComment): DescriptionCommentStart {
 
 /**
  * Sends a review: each comment but the last started held, in the order
- * held, then the last naming them all along. Answers whether every start
- * landed, stopping at the first that did not.
+ * held, but those a send before posted already, each told to `onLanded` as
+ * it lands, then the last naming them all along. Answers whether every
+ * start landed, stopping at the first that did not.
  */
 async function sendReview(
   control: DescriptionCommentsControl,
   comments: readonly HeldComment[],
+  onLanded: (clientKey: string) => void,
 ): Promise<boolean> {
   const last = comments.at(-1);
   if (last === undefined) return true;
   const earlier = comments.slice(0, -1);
   for (const comment of earlier) {
+    if (comment.landed === true) continue;
     // Note that each waits on the one before, so the threads stand in the order they were held.
     const answer = await control.start({ ...startOf(comment), held: true });
     if ("note" in answer) return false;
+    onLanded(comment.clientKey);
   }
   const along = earlier.map((comment) => comment.clientKey);
   const answer = await control.start({
@@ -246,7 +253,14 @@ export function usePageReview(
     if (last.length > 0) setAll((now) => [...now, ...last]);
     setSending(true);
     setFailed(false);
-    const sent = await sendReview(control, comments);
+    // Note that a comment posted held is marked so, so a send that stops after it neither sends it again nor lets it change under the service's copy.
+    const sent = await sendReview(control, comments, (clientKey) =>
+      setAll((now) =>
+        now.map((comment) =>
+          comment.clientKey === clientKey ? { ...comment, landed: true } : comment,
+        ),
+      ),
+    );
     setSending(false);
     if (!sent) {
       setFailed(true);
@@ -260,7 +274,7 @@ export function usePageReview(
   const remove = (clientKey: string) => {
     const at = all.findIndex((comment) => comment.clientKey === clientKey);
     const gone = all[at];
-    if (gone === undefined) return;
+    if (gone === undefined || gone.landed === true) return;
     drop((comment) => comment.clientKey !== clientKey);
     // Note that Undo puts the comment back where it stood among the rest, its files with it, unless it stands there again already.
     const undo = () =>
@@ -280,7 +294,11 @@ export function usePageReview(
     },
     edit: (clientKey, words) =>
       setAll((now) =>
-        now.map((comment) => (comment.clientKey === clientKey ? { ...comment, words } : comment)),
+        now.map((comment) =>
+          comment.clientKey === clientKey && comment.landed !== true
+            ? { ...comment, words }
+            : comment,
+        ),
       ),
     remove,
     discard: () => {
@@ -346,7 +364,12 @@ export function PageReviewPress({
         note={
           review.failed ? (
             <FailureNote
-              onRetry={() => void review.send("")}
+              // Note that a retry that lands closes the panel, as Send does.
+              onRetry={() =>
+                void review.send("").then((sent) => {
+                  if (sent) panel.setOpen(false);
+                })
+              }
               failure={failureShown({
                 surface: FAILURE_SURFACE.DESCRIPTION_COMMENT_SEND,
                 cause: FAILURE_CONDITION.REFUSED,

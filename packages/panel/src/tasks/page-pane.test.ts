@@ -597,8 +597,10 @@ test("Comment asks the frame for an element, an element holding threads is pinne
   assert.ok(standing === null, "the comment being started goes");
 });
 
-test("a comment held in a review stands in the Review panel under its element's words, never in the comments column, and Send review starts it held, then the summary on the whole page naming it along", async () => {
+test("a comment held in a review stands in the Review panel under its element's words, never in the comments column; Send review starts it held, then the summary naming it along, and a summary refused leaves the comment posted fixed, so Retry sends the summary alone and closes the panel", async () => {
   const starts: DescriptionCommentStart[] = [];
+  // Note that the service refuses the summary the first time it is sent.
+  let refusals = 1;
   const control: DescriptionCommentsControl = {
     planId: TASK,
     threads: [],
@@ -608,6 +610,10 @@ test("a comment held in a review stands in the Review panel under its element's 
     notes: new Map(),
     start: async (start) => {
       starts.push(start);
+      if (start.words === "Ship it once these are in." && refusals > 0) {
+        refusals -= 1;
+        return { note: "The service is unavailable." };
+      }
       return {
         thread: {
           id: start.id ?? start.clientKey,
@@ -692,6 +698,18 @@ test("a comment held in a review stands in the Review panel under its element's 
   await act(async () => buttonNamed(panel, "Send review").click());
   // Note that each start waits on the one before, so the summary goes once the held comment has landed.
   await vi.waitFor(() => assert.equal(starts.length, 2));
+  await vi.waitFor(() => assert.match(panel.textContent ?? "", /could not be sent/u));
+  // Note that the refused summary now stands held after it, editable as any comment not yet sent.
+  const posted = held.querySelector("li");
+  assert.match(posted?.textContent ?? "", /Per week\?/u);
+  assert.equal(
+    posted?.querySelector('button[aria-label="Comment actions"]') === null,
+    true,
+    "the comment posted already is neither edited nor deleted",
+  );
+
+  await act(async () => buttonNamed(panel, "Retry").click());
+  await vi.waitFor(() => assert.equal(starts.length, 3));
 
   assert.deepEqual(
     starts.map((start) => ({
@@ -708,7 +726,17 @@ test("a comment held in a review stands in the Review panel under its element's 
         held: undefined,
         along: [starts[0]?.clientKey],
       },
+      {
+        element: undefined,
+        words: "Ship it once these are in.",
+        held: undefined,
+        along: [starts[0]?.clientKey],
+      },
     ],
+  );
+  assert.equal(starts[2]?.clientKey, starts[1]?.clientKey, "the summary goes again under its key");
+  await vi.waitFor(() =>
+    assert.equal(document.querySelector('[role="dialog"]'), null, "the panel closes"),
   );
 });
 
