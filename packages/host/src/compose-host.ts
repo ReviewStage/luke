@@ -428,9 +428,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
      * and only once the account is signed in, so the Keychain is never read
      * before the tokens' own read. It is the encrypted SQLite store where the
      * shell hands a driver and the deployment's rollout keeps it on for the
-     * account, read afresh before it opens (`entity-store-rollout.ts`), and
-     * the sealed file's store otherwise, as it is too where the database
-     * cannot be had.
+     * account (`entity-store-rollout.ts`): read afresh before the store
+     * opens only where the answer kept says on, and behind the sealed store's
+     * opening otherwise. It is the sealed file's store otherwise, as it is
+     * too where the database cannot be had.
      */
     const openEntities = Effect.gen(function* () {
       const signedInId = account.signedIn() ? accountId() : undefined;
@@ -439,26 +440,33 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       if (!kernel.runMode.requiresAccount) return;
       const directory = kernel.stateRoot;
       const driver = Option.getOrUndefined(sqliteDriver);
-      const databaseOn =
-        driver !== undefined &&
-        (yield* entityDatabaseChosen({
-          directory,
-          accountId: signedInId,
-          read: account.readEntityDatabase,
-        }).pipe(Effect.provideContext(fileSystemContext)));
       const scope = yield* Scope.make();
+      const choice =
+        driver === undefined
+          ? undefined
+          : yield* entityDatabaseChosen({
+              directory,
+              accountId: signedInId,
+              read: account.readEntityDatabase,
+            }).pipe(Effect.provideContext(fileSystemContext));
+      // Note that a Mac outside the rollout reads it behind the store's opening, for its next launch, for as long as the store stands.
+      if (choice !== undefined) {
+        yield* Effect.forkIn(Effect.provideContext(choice.refreshed, fileSystemContext), scope);
+      }
+      const databaseOn = choice?.on === true;
       const options = {
         directory,
         cipher: tokenCipher,
         accountId: signedInId,
         queued: pool.queued,
       };
-      const database = databaseOn
-        ? yield* openEntityStore({ ...options, driver }).pipe(
-            Scope.provide(scope),
-            Effect.provideContext(fileSystemContext),
-          )
-        : undefined;
+      const database =
+        databaseOn && driver !== undefined
+          ? yield* openEntityStore({ ...options, driver }).pipe(
+              Scope.provide(scope),
+              Effect.provideContext(fileSystemContext),
+            )
+          : undefined;
       const store =
         database ??
         (yield* openSealedEntityStore(options).pipe(
