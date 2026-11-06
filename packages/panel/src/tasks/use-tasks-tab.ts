@@ -67,12 +67,9 @@ import {
   agentTab,
   changesTab,
   draftTab,
-  isAgentTab,
-  isDraftTab,
-  isFileTab,
-  isTranscriptTab,
   pageTab,
   pullRequestLabelOf,
+  STRIP_TAB_KIND,
   type StripTab,
   sameTab,
   subagentTab,
@@ -114,6 +111,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { absurd } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
@@ -1996,7 +1994,12 @@ export function useTasksTab(input: {
   // stood in view, because by the render that leaves it the open task's draft may be another's.
   const shownTab = mainTabs.tab;
   const draftInView =
-    columnInView && shownTab !== undefined && isDraftTab(shownTab) ? shownTab.draft : undefined;
+    columnInView &&
+    shownTab !== undefined &&
+    !isOverviewTab(shownTab) &&
+    shownTab.kind === STRIP_TAB_KIND.DRAFT
+      ? shownTab.draft
+      : undefined;
   const blankDraft =
     agents.draft !== undefined && holdsNothing(agents.draft) ? agents.draft.id : undefined;
   const columnSettled = shownTab !== undefined;
@@ -2022,7 +2025,8 @@ export function useTasksTab(input: {
     inboxView !== undefined &&
     sidePanel.open &&
     sidePanel.tab !== undefined &&
-    isTranscriptTab(sidePanel.tab)
+    typeof sidePanel.tab !== "string" &&
+    sidePanel.tab.kind === STRIP_TAB_KIND.TRANSCRIPT
       ? sidePanel.tab.transcript
       : undefined;
   // Note that an agent's card showing its threads keeps its transcript out of sight, so its end is still unseen.
@@ -2033,7 +2037,8 @@ export function useTasksTab(input: {
         ? inboxTranscript
         : columnShown &&
             mainTabs.tab !== undefined &&
-            isAgentTab(mainTabs.tab) &&
+            !isOverviewTab(mainTabs.tab) &&
+            mainTabs.tab.kind === STRIP_TAB_KIND.AGENT &&
             mainTabs.tab.agent !== threadsShown
           ? mainTabs.tab.agent
           : null;
@@ -3859,8 +3864,20 @@ export function useTasksTab(input: {
   const dozeColumnTab = useCallback(
     (tab: MainTab) => {
       keepColumnClosed(tab);
-      if (isAgentTab(tab)) dozeMainTab(tab);
-      else closeMainTab(tab);
+      if (isOverviewTab(tab)) {
+        closeMainTab(tab);
+        return;
+      }
+      switch (tab.kind) {
+        case STRIP_TAB_KIND.AGENT:
+          dozeMainTab(tab);
+          return;
+        case STRIP_TAB_KIND.DRAFT:
+          closeMainTab(tab);
+          return;
+        default:
+          absurd(tab);
+      }
     },
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
@@ -3874,7 +3891,10 @@ export function useTasksTab(input: {
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
       if (task !== undefined && at >= 0 && stripTabReopens(tab)) {
-        const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
+        const file =
+          typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.FILE
+            ? panelFiles.find((each) => each.path === tab.file)
+            : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
       }
@@ -3958,7 +3978,8 @@ export function useTasksTab(input: {
             keeps: (tab) =>
               !stripTabClosesIdle(tab) ||
               pinnedHere(tab) ||
-              (isAgentTab(tab) &&
+              (!isOverviewTab(tab) &&
+                tab.kind === STRIP_TAB_KIND.AGENT &&
                 (awakeAgents.includes(tab.agent) || input.unseenAgents.includes(tab.agent))),
           },
     panel:
@@ -4300,7 +4321,7 @@ export function useTasksTab(input: {
       }
       if (pin.task !== tasks.activeTaskId) select(pin.task);
       clearStandIn();
-      if (!isAgentTab(tab)) {
+      if (typeof tab === "string" || tab.kind !== STRIP_TAB_KIND.AGENT) {
         sidePanel.onShow(pin.task, tab);
         return;
       }

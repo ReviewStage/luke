@@ -53,9 +53,8 @@ import {
   changesTab,
   draftTab,
   fileTab,
-  isAgentTab,
-  isDraftTab,
   pageTab,
+  STRIP_TAB_KIND,
   subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -964,7 +963,10 @@ test("a column whose last agent is archived opens a new agent's draft in its pla
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
   const shown = column().tab;
-  assert.ok(shown !== undefined && isDraftTab(shown), "a draft, as a task with no agent opens on");
+  assert.ok(
+    shown !== undefined && typeof shown !== "string" && shown.kind === STRIP_TAB_KIND.DRAFT,
+    "a draft, as a task with no agent opens on",
+  );
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, shown]);
 });
 
@@ -3265,7 +3267,9 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
   tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
   await settle();
   assert.ok(
-    !tab.control().mainTabs.tabs.some((each) => isAgentTab(each)),
+    !tab
+      .control()
+      .mainTabs.tabs.some((each) => typeof each !== "string" && each.kind === STRIP_TAB_KIND.AGENT),
     "the agent leaves at once",
   );
 

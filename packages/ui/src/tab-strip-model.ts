@@ -283,56 +283,6 @@ export function storedStripTab<K extends ObjectStripTabKind, F extends Schema.St
   return Schema.Struct({ kind: Schema.tagDefaultOmit(kind), ...fields });
 }
 
-/** Whether a tab is one agent's. */
-export function isAgentTab(tab: StripTab): tab is AgentStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.AGENT;
-}
-
-/** Whether a tab is a draft agent's. */
-export function isDraftTab(tab: StripTab): tab is DraftStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.DRAFT;
-}
-
-/** Whether a tab is one subagent's. */
-export function isSubagentTab(tab: StripTab): tab is SubagentStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.SUBAGENT;
-}
-
-/** Whether a tab is one file's. */
-export function isFileTab(tab: StripTab): tab is FileStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.FILE;
-}
-
-/** Whether a tab is one agent's changes. */
-export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.CHANGES;
-}
-
-/** Whether a tab is one agent's transcript in the side panel. */
-export function isTranscriptTab(tab: StripTab): tab is TranscriptStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.TRANSCRIPT;
-}
-
-/** Whether a tab is one agent's terminal. */
-export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.TERMINAL;
-}
-
-/** Whether a tab is one agent's Local tab. */
-export function isLocalTab(tab: StripTab): tab is LocalStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.LOCAL;
-}
-
-/** Whether a tab is one page's. */
-export function isPageTab(tab: StripTab): tab is PageStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.PAGE;
-}
-
-/** Whether a tab is one of an agent's cloud Browser tabs. */
-export function isCloudBrowserTab(tab: StripTab): tab is CloudBrowserStripTab {
-  return stripTabKind(tab) === STRIP_TAB_KIND.CLOUD_BROWSER;
-}
-
 /**
  * The agent whose tab follows its run now: the one the plan's column
  * shows, while the column is on screen, the plan's page shown and no panel
@@ -344,7 +294,11 @@ export function followedAgent(
   tab: StripTab | undefined,
   column: { readonly shown: boolean; readonly covered: boolean },
 ): string | undefined {
-  return column.shown && !column.covered && tab !== undefined && isAgentTab(tab)
+  return column.shown &&
+    !column.covered &&
+    tab !== undefined &&
+    typeof tab !== "string" &&
+    tab.kind === STRIP_TAB_KIND.AGENT
     ? tab.agent
     : undefined;
 }
