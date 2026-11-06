@@ -3,7 +3,7 @@ import { githubImageOf } from "@repo/features/github-image";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { ProviderMark, SKELETON_SHAPE, Skeleton } from "@repo/ui";
-import { linksToPicture } from "@repo/ui/github-html";
+import { type RenderingPicture, renderingPictures } from "@repo/ui/github-html";
 import { PICTURE_STATE, type PictureRead, usePicture } from "@repo/ui/picture-read";
 import { useQueries } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
@@ -44,13 +44,6 @@ const PICTURE_WORDS = {
   UNNAMED: "Picture",
 } as const;
 
-/** A picture an entry's words name: its address, the address GitHub linked it to where it did, and its words. */
-interface EntryPicture {
-  readonly src: string;
-  readonly original: string;
-  readonly alt: string;
-}
-
 /** How a picture drawn in an entry's words opens that entry's viewer. */
 interface EntryViewerDoor {
   readonly open: (agentId: string, src: string) => void;
@@ -68,40 +61,19 @@ export function useGitHubImageRead(): PictureReader {
 }
 
 /**
- * The link a picture stands alone in, as GitHub wraps every picture it
- * renders: the one `@repo/ui/github-html` lets go of where it leads to the
- * picture or to GitHub's own image addresses. None where the picture
- * stands in no link, or shares its link with anything else.
- */
-function soleLinkOf(image: Element): Element | undefined {
-  const link = image.parentElement;
-  if (link?.tagName !== "A") return undefined;
-  const held = [...link.childNodes].filter(
-    (child) => child.nodeType !== Node.TEXT_NODE || (child.textContent ?? "").trim() !== "",
-  );
-  return held.length === 1 && held[0] === image ? link : undefined;
-}
-
-/**
  * The pictures GitHub's rendering names that the tab reads and draws with
  * a press of their own, in the order they stand, each once, beside the
  * address GitHub linked each to, which Open on GitHub opens: a lasting
  * upload's page where the picture is drawn from a signed address that
- * expires. A picture inside a link the words keep is the link's. Note that
- * the rendering is parsed into an inert document, which loads none of its
- * pictures and runs none of its scripts.
+ * expires. A picture inside a link the words keep is the link's
+ * (`renderingPictures`).
  */
-function picturesOf(html: string): readonly EntryPicture[] {
-  const document = new DOMParser().parseFromString(html, "text/html");
+function picturesOf(html: string): readonly RenderingPicture[] {
   const seen = new Set<string>();
-  return [...document.images].flatMap((image) => {
-    const src = image.getAttribute("src") ?? "";
-    const link = image.closest("a");
-    const href = soleLinkOf(image)?.getAttribute("href") ?? "";
-    if (link !== null && !linksToPicture(href, src)) return [];
-    if (seen.has(src) || githubImageOf(src) === undefined) return [];
+  return renderingPictures(html).filter(({ src }) => {
+    if (seen.has(src) || githubImageOf(src) === undefined) return false;
     seen.add(src);
-    return [{ src, original: link === null ? src : href, alt: image.getAttribute("alt") ?? "" }];
+    return true;
   });
 }
 
@@ -119,7 +91,7 @@ function mediaTypeOf(url: string): string {
 
 /** An entry's pictures that landed, each read as `reads` answers it at its place, as the viewer takes files, each beside its address. */
 function heldFiles(
-  pictures: readonly EntryPicture[],
+  pictures: readonly RenderingPicture[],
   reads: readonly (PictureRead | undefined)[],
 ): readonly { readonly src: string; readonly original: string; readonly file: FileChip }[] {
   return pictures.flatMap(({ src, original, alt }, index) => {
@@ -140,7 +112,7 @@ function EntryViewer({
   onClose,
 }: {
   agentId: string;
-  pictures: readonly EntryPicture[];
+  pictures: readonly RenderingPicture[];
   src: string;
   onSrc: (src: string) => void;
   onClose: () => void;
