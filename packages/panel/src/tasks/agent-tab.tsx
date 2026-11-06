@@ -49,8 +49,6 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FAILURE_NOTE_TIME,
-  FailureNote,
   GlyphSlot,
   INLINE_REF_LOOK,
   InlineRef,
@@ -59,8 +57,6 @@ import {
   MESSAGE_LINE_INSET,
   MessageHead,
   MessageLine,
-  NOTE_LINE_LOOK,
-  NoteLine,
   OneLine,
   STATUS_TONE,
   SUBJECT_FIT,
@@ -70,10 +66,11 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TurnEnd,
   useAnnounce,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@repo/ui/actor-model";
-import { AlarmClockCheckIcon, ICON_SIZE, RotateCcwIcon } from "@repo/ui/icons";
+import { AlarmClockCheckIcon, GLYPH, ICON_SIZE } from "@repo/ui/icons";
 import { skillWord } from "@repo/ui/skill-mention";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
@@ -1752,81 +1749,6 @@ export function AgentMessage({
 }
 
 /**
- * The line a transcript ends on once its turn was stopped or failed: a
- * failure is a `FailureNote`; a stop's words are a quiet `NoteLine`. A turn failed on
- * the reader's own refused key offers its API keys after the words, inside
- * the note.
- */
-function AgentEndLine({
-  ended,
-  endReason,
-  keyProvider,
-  onOpenApiKeys,
-  about,
-}: {
-  ended: EndLineParts;
-  endReason: FailureReason | undefined;
-  keyProvider: ModelProvider | undefined;
-  onOpenApiKeys: (() => void) | undefined;
-  /** The agent and task the failure is about, which its copied details name. */
-  about: FailureAbout;
-}): React.JSX.Element {
-  // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
-  const remedy =
-    endReason === FAILURE_REASON.API_KEY
-      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words, provider: keyProvider })
-      : undefined;
-  const remedyButton =
-    remedy === undefined ? null : (
-      <span className="ml-control-gap align-middle">
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
-          {remedy}
-        </Button>
-      </span>
-    );
-  if (ended.failed) {
-    return (
-      <div className={END_LINE_CLASS} data-ended="" data-failed="">
-        <FailureNote
-          failure={failureShown({
-            surface: FAILURE_SURFACE.AGENT_TURN,
-            // Note that the service's word for the failure is its code, so a report names what failed rather than what mends it.
-            cause:
-              (ended.failure === undefined ? undefined : TURN_FAILURE_CAUSE.get(ended.failure)) ??
-              FAILURE_CONDITION.UNREAD,
-            about,
-          })}
-          time={FAILURE_NOTE_TIME.PAST}
-        >
-          {ended.words}
-          {remedyButton}
-        </FailureNote>
-      </div>
-    );
-  }
-  return (
-    <NoteLine look={NOTE_LINE_LOOK.INSET} data-ended="">
-      <span className="agent-end-words">{ended.words}</span>
-      {remedyButton}
-    </NoteLine>
-  );
-}
-
-/**
- * A failed end line's frame: a failure's mark, its words, then what the
- * turn cost after a dot, flowing as one sentence in the caption role, so a
- * long failure wraps under its own words. Only a failure is drawn in the
- * danger ink (`FailureNote`): a stop is the developer's own doing, said in
- * a quiet note line.
- */
-const END_LINE_CLASS = "agent-end-line m-0 text-caption text-muted-foreground";
-
-/**
- * The end line's row: the line, then the press it ends on (Continue in new
- * agent), on one row, centered on the line's words, which wraps the press
- * under them only where the column is too narrow for both.
- */
-/**
  * Says the turn's end, a stop or a failure, once, as it lands. Note that it
  * is said by the transcript rather than its end line, because the line
  * mounts with its words and its failure is history, no alert; and that only
@@ -1840,6 +1762,12 @@ function useTurnEndSaid(ended: EndLineParts | undefined, pageRuns: boolean): voi
   useAnnounce(ANNOUNCE.POLITE, sawRunning ? (ended?.words ?? "") : "");
 }
 
+/**
+ * The line a transcript ends on once its turn was stopped or failed, and
+ * the press on its row (`TurnEnd`): a failure reported under its cause, a
+ * stop's words alone. A turn failed on the reader's own refused key offers
+ * its harness's row in Settings after the words, inside the line.
+ */
 function AgentEndRow({
   ended,
   endReason,
@@ -1853,25 +1781,42 @@ function AgentEndRow({
   endReason: FailureReason | undefined;
   keyProvider: ModelProvider | undefined;
   onOpenApiKeys: (() => void) | undefined;
+  /** The agent and task the failure is about, which its copied details name. */
   about: FailureAbout;
   press: ReactNode;
   /** Whether it stands in the empty state's own centered column, centered as its column is. */
   centered?: boolean;
 }): React.JSX.Element {
-  // Note that the line is one flex item, so a failure too long to share the row takes it whole and the press wraps under it, never between its words.
+  // Note that a key refused is mended at its harness's row in Settings, so its line offers that row after the words.
+  const remedy =
+    endReason === FAILURE_REASON.API_KEY
+      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words, provider: keyProvider })
+      : undefined;
+  const failure = ended.failed
+    ? failureShown({
+        surface: FAILURE_SURFACE.AGENT_TURN,
+        // Note that the service's word for the failure is its code, so a report names what failed rather than what mends it.
+        cause:
+          (ended.failure === undefined ? undefined : TURN_FAILURE_CAUSE.get(ended.failure)) ??
+          FAILURE_CONDITION.UNREAD,
+        about,
+      })
+    : undefined;
   return (
-    <div
-      className={`agent-end-row flex max-w-full flex-wrap items-center gap-control-gap${centered ? " justify-center" : ""}`}
+    <TurnEnd
+      failure={failure}
+      remedy={
+        remedy === undefined ? undefined : (
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+            {remedy}
+          </Button>
+        )
+      }
+      press={press}
+      centered={centered}
     >
-      <AgentEndLine
-        ended={ended}
-        endReason={endReason}
-        keyProvider={keyProvider}
-        onOpenApiKeys={onOpenApiKeys}
-        about={about}
-      />
-      {press}
-    </div>
+      {ended.words}
+    </TurnEnd>
   );
 }
 
@@ -3220,12 +3165,7 @@ function TryAgainPress({ onPress }: { onPress: () => void }): React.JSX.Element 
     onPress();
   };
   return (
-    <Button
-      variant={BUTTON_VARIANT.OUTLINE}
-      icon={<RotateCcwIcon aria-hidden="true" />}
-      disabled={sent}
-      onClick={press}
-    >
+    <Button variant={BUTTON_VARIANT.OUTLINE} icon={<GLYPH.RETRY />} disabled={sent} onClick={press}>
       {TRY_AGAIN_LABEL}
     </Button>
   );
