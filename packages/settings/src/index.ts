@@ -34,7 +34,6 @@ export {
   experimentChoicesFrom,
   experimentOn,
   experimentScope,
-  experimentsAnywhere,
   experimentsIn,
   isExperiment,
   isWorkspaceExperiment,

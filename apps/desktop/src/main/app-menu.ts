@@ -11,15 +11,24 @@
  * What it does hold is the drawer's: the update item, the account's
  * experiments, and a development build's developer tools, each told on its
  * own clock, since a gated feature's items stand only while its experiment
- * is on.
+ * is on. A workspace experiment's are the focused window's own workspace's
+ * to say, which only that window knows: its items stand only while the
+ * focused panel offers their commands, and none while no panel has told what
+ * it offers, rather than standing dimmed (`menuGate`).
  */
 
 import { PUSH } from "@repo/host/contract";
-import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@repo/settings";
+import {
+  type ExperimentChoices,
+  experimentsIn,
+  type HostCapability,
+  NO_EXPERIMENTS,
+} from "@repo/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
   type AppCommand,
+  experimentsOffered,
   type KeyedCommand,
   MENU_COMMAND_LABELS,
   type MenuCommand,
@@ -28,6 +37,7 @@ import {
   shortcutAccelerator,
   shortcutLabel,
   shortcutShown,
+  shortcutWorkspaceExperiment,
 } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
@@ -486,6 +496,33 @@ export type MenuBarChange =
   | { readonly offered: readonly AppCommand[] | undefined };
 
 /**
+ * Whether a command's item stands, and what it is called, for the account's
+ * own experiments, the platform's capabilities, and the commands the focused
+ * panel offers. A workspace experiment's command stands only where that panel
+ * offers it, which it does only while its own workspace has the experiment
+ * on, so another workspace's choice never shows it; and a command an
+ * experiment renames is called as the focused window's workspace has it, as
+ * the commands that panel offers show. The account's own store of a
+ * workspace experiment is never read.
+ */
+function menuGate(
+  experiments: ExperimentChoices,
+  capabilities: readonly HostCapability[],
+  offered: readonly AppCommand[] | undefined,
+): {
+  readonly shown: (command: KeyedCommand) => boolean;
+  readonly named: (command: KeyedCommand) => string;
+} {
+  const choices = experimentsIn(experiments, experimentsOffered(offered ?? []));
+  return {
+    shown: (command) =>
+      shortcutShown(command, choices, capabilities) &&
+      (shortcutWorkspaceExperiment(command) === undefined || offered?.includes(command) === true),
+    named: (command) => shortcutLabel(command, choices),
+  };
+}
+
+/**
  * The menu bar's one drawer: it draws the menus from what it was last told,
  * and draws again only when a change moves them, since the updater and the
  * account's experiments each tell it on their own clocks and neither knows
@@ -525,15 +562,16 @@ export function menuBarDrawer(
     if (drawn && !moved) return;
     state = next;
     drawn = true;
+    const gate = menuGate(state.experiments, state.capabilities, state.offered);
     draw(
       appMenuTemplate(
         build.appName,
         state.update,
-        (command) => shortcutShown(command, state.experiments, state.capabilities),
+        gate.shown,
         !build.packaged && state.developerTools,
         state.panel,
         state.reload,
-        (command) => shortcutLabel(command, state.experiments),
+        gate.named,
         state.buildLabel,
         offeredBy(state.offered),
       ),
