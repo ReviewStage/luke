@@ -108,7 +108,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("entity-store-");
-      const { store } = yield* opened(directory, DANA);
+      const { store, closed } = yield* opened(directory, DANA);
+      // Note that the store closes before its folder is removed, whatever the assertions find.
+      yield* Effect.addFinalizer(() => closed);
       yield* store.keep(KEPT_READ.TASK_LIST, LIST);
 
       yield* TestClock.adjust("30 seconds");
@@ -126,6 +128,7 @@ it.effect("a write waiting for the service is written within two seconds of its 
     const directory = yield* temporaryDirectoryScoped("entity-store-");
     const waiting: QueuedEntry[] = [];
     const scope = yield* Scope.make();
+    yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     yield* Scope.provide(scope)(
       openEntityStore({ directory, cipher: testCipher(), accountId: DANA, queued: () => waiting }),
     );
@@ -135,7 +138,6 @@ it.effect("a write waiting for the service is written within two seconds of its 
     yield* writtenText(directory);
 
     assert.deepEqual(JSON.parse(yield* openedText(directory)).queue, waiting);
-    yield* Scope.close(scope, Exit.void);
   }).pipe(Effect.provide(files)),
 );
 
