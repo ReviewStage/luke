@@ -39,7 +39,7 @@ import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { type HeldShell, shellsAsked } from "./terminal-held.js";
-import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
+import { TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -451,7 +451,7 @@ test("an agent with no shell yet has its files mirrored and a shell opened in th
   });
   assert.deepEqual(
     tab.rows().map((row) => row.name),
-    ["Shell 1"],
+    ["Terminal 1"],
   );
 });
 
@@ -472,7 +472,7 @@ test("a shell that ended takes any key for a new one, and is let go", async () =
   ]);
   assert.deepEqual(
     tab.rows().map((row) => row.name),
-    ["Shell 1"],
+    ["Terminal 1"],
   );
 });
 
@@ -748,7 +748,7 @@ test("the list's + opens a shell in the same agent's mirror and shows it", async
     [
       ["zsh", false],
       ["dev server", false],
-      ["Shell 1", true],
+      ["Terminal 1", true],
     ],
   );
 });
@@ -893,14 +893,6 @@ test("the shells list folds away beside the screen, and its toggle asks the pane
   assert.equal(tab.container.querySelector(".terminal-shells"), null);
   await tab.press("Show shells");
   assert.equal(tab.toggled(), 1);
-});
-
-test("the tab's card counts the agent's shells the window holds", async () => {
-  const tab = await mount();
-  const foot = renderToStaticMarkup(
-    onRegistry(tab.registry, createElement(TerminalCardFoot, { agentId: AGENT.id })),
-  );
-  assert.equal(foot, "Terminal in this agent’s files on this Mac · 2 shells");
 });
 
 test("a terminal's row in the panel's + counts the agent's shells, leaving whether the agent works to its glyph", async () => {

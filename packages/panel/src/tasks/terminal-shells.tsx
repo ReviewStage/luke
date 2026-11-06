@@ -48,9 +48,6 @@ import type { TerminalSession } from "./use-terminal-session.js";
  * repeats it (`state-glyph.tsx`).
  */
 
-/** What a Terminal tab's card says under its agent's, before the count of its shells. */
-const CARD_FOOT = "Terminal in this agent’s files on this Mac";
-
 /** What a shell's row is, which names its ⋯ and its menu. */
 const SHELL_THING = "Shell";
 
@@ -273,25 +270,6 @@ export function TerminalShells({
   );
 }
 
-/** How many shells the agent holds, as a terminal's card and its row in the panel's "+" say it. */
-function shellCount(count: number): string {
-  return `${count} ${count === 1 ? "shell" : "shells"}`;
-}
-
-/**
- * The line a Terminal tab's card says under its agent's: where the shells
- * run, and how many this window holds, a count it says only once it has one.
- */
-export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.Element {
-  const count = useAtomValue(shellsHeld(agentId)).length;
-  return (
-    <>
-      {CARD_FOOT}
-      {count === 0 ? "" : ` · ${shellCount(count)}`}
-    </>
-  );
-}
-
 /**
  * The agent's shells, as a terminal's row in the panel's "+" says them
  * after the agent's name: how many this window holds, nothing before the
@@ -299,5 +277,5 @@ export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.El
  */
 export function TerminalStanding({ agentId }: { agentId: string }): React.JSX.Element {
   const count = useAtomValue(shellsHeld(agentId)).length;
-  return <>{count === 0 ? null : shellCount(count)}</>;
+  return <>{count === 0 ? null : `${count} ${count === 1 ? "shell" : "shells"}`}</>;
 }

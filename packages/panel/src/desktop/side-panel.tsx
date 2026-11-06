@@ -842,7 +842,6 @@ export function panelEntries(input: {
         ? undefined
         : hungCard({
             kind: TAB_KIND.TERMINAL,
-            agentId: agent.id,
             subject: agentSubject(
               cards.agents,
               agent.id,
@@ -942,7 +941,7 @@ function terminalOffers(
   panel: Pick<SidePanelControl, "tab" | "lastTerminal">,
 ): readonly TerminalOffer[] {
   const listed = agents.agents ?? [];
-  const target = terminalTarget(TERMINAL_ASK.SHOW, {
+  const target = terminalTarget({
     here: panel.tab === undefined ? undefined : agentOfTab(panel.tab),
     agents: listed.map((agent) => agent.id),
     lastUsed: panel.lastTerminal,
@@ -1115,7 +1114,7 @@ function stripTabs(input: {
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.TERMINAL, agent: subject.agent }),
         detail: subject.name,
-        card: hungCard({ kind: TAB_KIND.TERMINAL, agentId: tab.terminal, subject, models }),
+        card: hungCard({ kind: TAB_KIND.TERMINAL, subject, models }),
       }),
       close: () => panel.onClose(tab),
     };

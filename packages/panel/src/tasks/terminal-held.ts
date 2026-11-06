@@ -90,12 +90,12 @@ export const shellsHeld = Atom.family((agentId: string) =>
  */
 export const shellsAsked = Atom.family((_agentId: string) => Atom.keepAlive(Atom.make(0)));
 
-/** The name a new shell takes: "Shell" and the next number past every name of that shape the agent's shells hold. */
+/** The name a new shell takes: "Terminal" and the next number past every name of that shape the agent's shells hold. */
 export function nextShellTitle(shells: readonly HeldShell[]): string {
-  const taken = shells.map((shell) => /^Shell (\d+)$/u.exec(shell.title)?.[1]).map(Number);
+  const taken = shells.map((shell) => /^Terminal (\d+)$/u.exec(shell.title)?.[1]).map(Number);
   const highest = taken.reduce(
     (most, each) => (Number.isFinite(each) ? Math.max(most, each) : most),
     0,
   );
-  return `Shell ${highest + 1}`;
+  return `Terminal ${highest + 1}`;
 }
