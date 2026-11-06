@@ -42,5 +42,9 @@ export default defineConfig({
     server: { deps: { inline: ["streamdown", "@pierre/diffs"] } },
     // CI's shards split the files by their recorded time (`scripts/lib/test-shards.mjs`).
     sequence: { sequencer: DurationSharding },
+    // Temporary diagnostic for #7124's runner shutdowns on CI: each test as it ends and each file's heap; reverted before merge.
+    ...(process.env.CI === undefined
+      ? {}
+      : { reporters: ["verbose", "hanging-process"], logHeapUsage: true }),
   },
 });
