@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import { AGENT_BOUNDS, type AgentSummary, type TasklessAgent } from "@repo/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -2186,14 +2186,41 @@ test("an agent the workspace's list no longer holds stays the pick it was saved 
   standing = [following];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
   await settle();
-  assert.equal(picked(page, "Agent"), "The agent it goes to now");
+  assert.equal(picked(page, "Agent"), "An agent no longer listed");
 
   pick(page, "Agent", "CI digest");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
-  pick(page, "Agent", "The agent it goes to now");
+  pick(page, "Agent", "An agent no longer listed");
 
-  assert.equal(picked(page, "Agent"), "The agent it goes to now");
+  assert.equal(picked(page, "Agent"), "An agent no longer listed");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+});
+
+test("the agent a same-agent automation was saved with is named as the task list carries it once the newest no longer hold it", async () => {
+  const older = onLedger({
+    ...CI_DIGEST,
+    id: "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d90",
+    title: "Onboarding analysis",
+  });
+  workspaceAgents = [
+    ...Array.from({ length: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS }, (_, at) =>
+      onLedger({
+        ...CI_DIGEST,
+        id: `8c1a6a4f-3d2e-4d8b-8b66-${String(at).padStart(12, "0")}`,
+        createdAt: 2 + at,
+      }),
+    ),
+    older,
+  ];
+  const following = automation(10, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: older.id },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+
+  assert.equal(picked(page, "Agent"), "Onboarding analysis");
 });
 
 test("the agent a same-agent automation was saved with is not offered once its repository is changed", async () => {
@@ -2436,7 +2463,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   await settle();
   act(() => picker(page, "Agent").click());
   const names = () => agentRows().map((row) => row.name);
-  assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
+  assert.deepEqual(names(), ["Started by its first run", "An agent no longer listed", "CI digest"]);
 
   const search = () =>
     document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input');
@@ -2446,7 +2473,7 @@ test("the agent a same-agent automation was saved with, once the list no longer 
   type(search(), "");
   await settle();
 
-  assert.deepEqual(names(), ["Started by its first run", "The agent it goes to now", "CI digest"]);
+  assert.deepEqual(names(), ["Started by its first run", "An agent no longer listed", "CI digest"]);
 });
 
 /** What each row's glyph draws, in order: Sentry's or GitHub's mark, or the lucide icon's name. */
