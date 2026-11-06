@@ -19,6 +19,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { stripTabKept, stripTabStays } from "./strip-tab-kinds.js";
 
 /**
  * use-main-tabs.ts -- the task's column's tabs: its Overview, each of its agents, and its draft agent, which is chosen, and the order they stand in, kept per task across launches.
@@ -538,7 +539,7 @@ function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs):
  * idle, opens again as the agent wakes; one closed by hand does not.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs, dozing = false): HeldState {
-  if (isOverviewTab(tab)) return held;
+  if (stripTabStays(tab)) return held;
   const before = stripOf(held, drawn);
   const closed = isAgentTab(tab)
     ? {
@@ -569,7 +570,7 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs, dozing = fa
  * as the task's order (`movedOrder`); Overview leads where it stands.
  */
 function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs): HeldState {
-  if (isOverviewTab(tab)) return held;
+  if (stripTabStays(tab)) return held;
   const movable = movableOf(held, drawn);
   const was = choicesOn(held, drawn.taskId).order ?? NO_TABS;
   const order = movedOrder(was, movable, tab, to);
@@ -578,9 +579,9 @@ function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs):
     : withChoices(held, drawn.taskId, (choices) => ({ ...choices, order }));
 }
 
-/** Whether a tab is kept across a launch: Overview or an agent's, the kinds that stand again after it. */
+/** Whether a tab is kept across a launch (`stripTabKept`): Overview or an agent's, the kinds that stand again after it. */
 function keptTab(tab: MainTab): tab is Exclude<MainTab, DraftStripTab> {
-  return !isDraftTab(tab);
+  return stripTabKept(tab).column;
 }
 
 /** What is kept of the state: every task's choices without a draft's tab, and neither list where a task has none. */

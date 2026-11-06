@@ -10,10 +10,7 @@ import {
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
   type AgentInboxAnswerParams,
-  type AgentInboxAttachmentView,
   type AgentInboxCloseParams,
-  type AgentInboxCloseReleasedView,
-  type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
   type AgentInboxReadAllParams,
@@ -38,23 +35,17 @@ import {
   agentDefaultWriteParamsSchema,
   agentGitHubImageParamsSchema,
   agentInboxAnswerParamsSchema,
-  agentInboxAttachmentParamsSchema,
   agentInboxCloseParamsSchema,
-  agentInboxCloseReleaseParamsSchema,
-  agentInboxItemHomeParamsSchema,
-  agentInboxMessageParamsSchema,
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
   agentInboxRemindParamsSchema,
   agentInboxScopeSchema,
-  agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMarkReadParamsSchema,
   agentMessageParamsSchema,
   agentMessagesParamsSchema,
   agentPageParamsSchema,
   agentPartParamsSchema,
-  agentPictureParamsSchema,
   agentPinParamsSchema,
   agentPullRequestActionParamsSchema,
   agentPullRequestParamsSchema,
@@ -174,7 +165,7 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { ACCOUNT_ASK_ACTS, CHAPTERS_ACTS } from "./contract/index.js";
+import type { ACCOUNT_ASK_ACTS, AGENT_INBOX_ACTS, CHAPTERS_ACTS } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostActTable } from "./host-acts.js";
@@ -380,9 +371,14 @@ export interface AgentsDependencies {
   repositoriesMoved?: Effect.Effect<void>;
 }
 
+/** The acts this composer answers: the account's own asks and the Inbox's. */
+type AgentsActs = HostActTable<typeof ACCOUNT_ASK_ACTS> &
+  HostActTable<typeof AGENT_INBOX_ACTS> &
+  HostActTable<typeof CHAPTERS_ACTS>;
+
 export interface AgentsComposer extends Composer {
-  /** The account's own asks and a pull request's chapters generated, answered directly as the panel's port asks them. */
-  readonly acts: HostActTable<typeof ACCOUNT_ASK_ACTS & typeof CHAPTERS_ACTS>;
+  /** The account's own asks, the Inbox's acts, and a pull request's chapters generated, answered directly as the panel's port asks them. */
+  readonly acts: AgentsActs;
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
@@ -423,6 +419,20 @@ const HELD_CLOSE_BOUND = Duration.minutes(1);
 
 /** What a held close its window took back answers: refused, so the pool takes back what it drew and keeps nothing to send again, and the window that undid it reads nothing of it. */
 const CLOSE_UNDONE: AgentInboxAnsweredView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+
+/**
+ * The names the Inbox's writes that may wait are queued under, which were
+ * their Gateway methods' ids. Note that each is kept byte for byte, and
+ * a reminder keeps Snooze's, because a write queued offline is kept on disk
+ * by its name, and one under a name no host declares is dropped.
+ */
+const INBOX_QUEUED_WRITE = {
+  ANSWER: "agents.inboxAnswer",
+  CLOSE: "agents.inboxClose",
+  READ_STATE: "agents.inboxReadState",
+  REMIND: "agents.inboxSnooze",
+  READ_ALL: "agents.inboxReadAll",
+} as const;
 
 /** Whether a commit names a read, by the rule a File tab's read at a commit is held to. */
 const isCommitSha = Schema.is(commitShaSchema);
@@ -1091,26 +1101,18 @@ function composed(
       readonly input: Schema.Codec<Input, unknown>;
       readonly queued: (input: Input) => Answer;
     },
-  ): WriteDeclaration<InboxItem, InboxChange, Input, WireValue> => {
-    const keptAs =
-      queue === undefined ? undefined : (input: Input) => carried<Answer>(queue.queued(input));
-    return {
-      kind: INBOX_ITEM,
-      keys,
-      change,
-      send: (input, { key, waited }) =>
-        Effect.map(send(input, key, waited), (answer) => {
-          const answered = carried<Answer>(answer);
-          if (keptAs === undefined || !("failure" in answer)) {
-            return inboxSent(answered, writtenOf(answer));
-          }
-          return untaken(writeUntakenOf(answer.cause), { kept: keptAs(input), refused: answered });
-        }),
-      ...(queue === undefined || keptAs === undefined
-        ? undefined
-        : { queue: { name: queue.name, input: queue.input, queued: keptAs } }),
-    };
-  };
+  ): WriteDeclaration<InboxItem, InboxChange, Input, Answer> => ({
+    kind: INBOX_ITEM,
+    keys,
+    change,
+    send: (input, { key, waited }) =>
+      Effect.map(send(input, key, waited), (answer) =>
+        queue === undefined || !("failure" in answer)
+          ? inboxSent(answer, writtenOf(answer))
+          : untaken(writeUntakenOf(answer.cause), { kept: queue.queued(input), refused: answer }),
+      ),
+    ...(queue === undefined ? undefined : { queue }),
+  });
   /** A nod or a close that waits, answered as taken over the item as the reads now draw it, or unanswered where none holds it. */
   const settledAs = ({ itemId }: { readonly itemId: string }): AgentInboxAnsweredView => {
     const item = dependencies.pool.row(INBOX_ITEM, itemId);
@@ -1130,7 +1132,7 @@ function composed(
     },
     ({ itemId, ...request }, key) => asked(client.answerInbox(itemId, request, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
+      name: INBOX_QUEUED_WRITE.ANSWER,
       input: agentInboxAnswerParamsSchema,
       queued: settledAs,
     },
@@ -1231,7 +1233,7 @@ function composed(
         return decided === false ? Effect.succeed(CLOSE_UNDONE) : send;
       }),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_CLOSE,
+      name: INBOX_QUEUED_WRITE.CLOSE,
       input: agentInboxCloseParamsSchema,
       queued: settledAs,
     },
@@ -1271,7 +1273,7 @@ function composed(
         unread ? client.markInboxItemUnread(itemId, key) : client.markInboxItemRead(itemId, key),
       ),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_READ_STATE,
+      name: INBOX_QUEUED_WRITE.READ_STATE,
       input: agentInboxReadStateParamsSchema,
       queued: ({ itemId, unread }) => ({ id: itemId, unread }),
     },
@@ -1282,7 +1284,7 @@ function composed(
     ({ itemId, until }) => ({ kind: INBOX_CHANGE.REMINDED, itemId, until, at: kernel.now() }),
     ({ itemId, until }, key) => asked(client.remindInboxItem(itemId, until, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_REMIND,
+      name: INBOX_QUEUED_WRITE.REMIND,
       input: agentInboxRemindParamsSchema,
       queued: ({ itemId }) => ({
         id: itemId,
@@ -1296,7 +1298,7 @@ function composed(
     ({ itemIds }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set(itemIds), unread: false }),
     ({ itemIds: _listed, ...request }, key) => asked(client.markInboxRead(request, key)),
     {
-      name: GATEWAY_METHOD.AGENTS_INBOX_READ_ALL,
+      name: INBOX_QUEUED_WRITE.READ_ALL,
       input: agentInboxReadAllParamsSchema,
       queued: ({ itemIds }) => ({ marked: itemIds.length }),
     },
@@ -1359,8 +1361,8 @@ function composed(
       answer,
     );
 
-  /** The account's own asks and a pull request's chapters generated, answered as the panel's port asks them (`ACCOUNT_ASK_ACTS`, `CHAPTERS_ACTS`). */
-  const acts: HostActTable<typeof ACCOUNT_ASK_ACTS & typeof CHAPTERS_ACTS> = {
+  /** The account's own asks (`ACCOUNT_ASK_ACTS`), the Inbox's acts, and a pull request's chapters generated (`CHAPTERS_ACTS`), answered as the panel's port asks them. */
+  const acts: AgentsActs = {
     PROVIDER_KEYS_SAVE: (save) => Effect.flatMap(asked(client.saveProviderKey(save)), keysWritten),
     PROVIDER_KEYS_REMOVE: (removal) =>
       Effect.flatMap(asked(client.removeProviderKey(removal)), keysWritten),
@@ -1387,6 +1389,45 @@ function composed(
     // Note that the clip passes through once and is noted nowhere, because its words are the developer's voice.
     DICTATION_TRANSCRIBE: (clip) => asked(client.transcribeDictation(clip)),
     CHAPTERS_GENERATE: ({ agentId, number }) => asked(client.generateChapters(agentId, number)),
+    // The Inbox's acts (`AGENT_INBOX_ACTS`): each row write drawn over the pool the moment it is asked.
+    AGENTS_INBOX_ANSWER: declaredWrite(dependencies.pool, nodded),
+    AGENTS_INBOX_CLOSE: declaredWrite(dependencies.pool, closed),
+    AGENTS_INBOX_CLOSE_RELEASE: ({ clientKey, send }) =>
+      Effect.gen(function* () {
+        const held = heldCloses.get(clientKey);
+        if (held !== undefined) {
+          heldCloses.delete(clientKey);
+          yield* Deferred.succeed(held.told, send);
+          return { held: true };
+        }
+        if (letGoAt.has(clientKey)) return { held: false };
+        // Note that a close not yet come to be sent, behind an earlier write on its item or among those waiting for the service, goes by this decision once it is.
+        const now = kernel.now();
+        forgetStale(now);
+        decidedEarly.set(clientKey, { send, at: now });
+        return { held: true };
+      }),
+    AGENTS_INBOX_MESSAGE: declaredWrite(dependencies.pool, messaged),
+    AGENTS_INBOX_START: (start) =>
+      Effect.tap(asked(client.startInboxThread(start)), (answer) =>
+        accountWide.confirm("failure" in answer ? undefined : answer.txid),
+      ),
+    AGENTS_INBOX_READ_STATE: declaredWrite(dependencies.pool, marked),
+    AGENTS_INBOX_REMIND: declaredWrite(dependencies.pool, reminded),
+    AGENTS_INBOX_ITEM_HOME: ({ itemId }) => asked(client.inboxItemHome(itemId)),
+    AGENTS_INBOX_READ_ALL: declaredWrite(dependencies.pool, markedAll),
+    AGENTS_INBOX_ATTACHMENT: ({ itemId, attachmentId }) =>
+      keptAsked(
+        new InboxAttachmentKey({ itemId, attachmentId }),
+        client.inboxAttachment(itemId, attachmentId),
+        (attachment) => ("base64" in attachment ? attachment : undefined),
+      ),
+    AGENTS_PICTURE: ({ agentId, pictureId, callId }) =>
+      keptAsked(
+        new AgentPictureKey({ agentId, pictureId, callId }),
+        client.agentPicture(agentId, pictureId, callId),
+        (picture) => ("base64" in picture ? picture : undefined),
+      ),
   };
 
   const methods: HostMethodTable = {
@@ -1938,34 +1979,6 @@ function composed(
         yield* holders.retry(new InboxScopeKey(scope));
         return {};
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT]: (params) =>
-      Effect.gen(function* () {
-        const { itemId, attachmentId } = yield* readParams(
-          agentInboxAttachmentParamsSchema,
-          params,
-          "reading an inbox item's image names the item and the attachment",
-        );
-        const answer = yield* keptAsked(
-          new InboxAttachmentKey({ itemId, attachmentId }),
-          client.inboxAttachment(itemId, attachmentId),
-          (attachment) => ("base64" in attachment ? attachment : undefined),
-        );
-        return carried<AgentInboxAttachmentView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_PICTURE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, pictureId, callId } = yield* readParams(
-          agentPictureParamsSchema,
-          params,
-          "reading an agent's picture names the agent and the picture",
-        );
-        const answer = yield* keptAsked(
-          new AgentPictureKey({ agentId, pictureId, callId }),
-          client.agentPicture(agentId, pictureId, callId),
-          (picture) => ("base64" in picture ? picture : undefined),
-        );
-        return carried<AgentInboxAttachmentView>(answer);
-      }),
     [GATEWAY_METHOD.AGENTS_PART]: (params) =>
       Effect.gen(function* () {
         const { agentId, messageId, index, callId } = yield* readParams(
@@ -1976,106 +1989,6 @@ function composed(
         const answer = yield* asked(client.agentPart(agentId, messageId, index, callId));
         return carried<AgentPartView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_ANSWER]: declaredMethod(
-      dependencies.pool,
-      nodded,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxAnswerParamsSchema,
-          params,
-          "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgment, and the nod's key",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_CLOSE]: declaredMethod(
-      dependencies.pool,
-      closed,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxCloseParamsSchema,
-          params,
-          "closing an inbox item names the item, the revision it closes, the close's key, and the note it may carry",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE]: (params) =>
-      Effect.gen(function* () {
-        const { clientKey, send } = yield* readParams(
-          agentInboxCloseReleaseParamsSchema,
-          params,
-          "letting a held close go names the close's key and whether it is sent",
-        );
-        const held = heldCloses.get(clientKey);
-        if (held !== undefined) {
-          heldCloses.delete(clientKey);
-          yield* Deferred.succeed(held.told, send);
-          return carried<AgentInboxCloseReleasedView>({ held: true });
-        }
-        if (letGoAt.has(clientKey)) return carried<AgentInboxCloseReleasedView>({ held: false });
-        // Note that a close not yet come to be sent, behind an earlier write on its item or among those waiting for the service, goes by this decision once it is.
-        const now = kernel.now();
-        forgetStale(now);
-        decidedEarly.set(clientKey, { send, at: now });
-        return carried<AgentInboxCloseReleasedView>({ held: true });
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(
-      dependencies.pool,
-      messaged,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxMessageParamsSchema,
-          params,
-          "a message on an inbox item names the item, the words or files, and the message's key",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_START]: (params) =>
-      Effect.gen(function* () {
-        const request = yield* readParams(
-          agentInboxStartParamsSchema,
-          params,
-          "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
-        );
-        const answer = yield* asked(client.startInboxThread(request));
-        yield* accountWide.confirm("failure" in answer ? undefined : answer.txid);
-        return carried<AgentInboxMessagedView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_READ_STATE]: declaredMethod(
-      dependencies.pool,
-      marked,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxReadStateParamsSchema,
-          params,
-          "marking an inbox item names the item and whether it reads as unread",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_REMIND]: declaredMethod(
-      dependencies.pool,
-      reminded,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxRemindParamsSchema,
-          params,
-          "setting an inbox item's reminder names the item and when, or none to cancel it",
-        ),
-    ),
-    [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
-      Effect.gen(function* () {
-        const { itemId } = yield* readParams(
-          agentInboxItemHomeParamsSchema,
-          params,
-          "finding where an inbox item stands names the item",
-        );
-        return carried<AgentInboxItemHomeView>(yield* asked(client.inboxItemHome(itemId)));
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_READ_ALL]: declaredMethod(
-      dependencies.pool,
-      markedAll,
-      (params: WireRecord) =>
-        readParams(
-          agentInboxReadAllParamsSchema,
-          params,
-          "marking the inbox read names the workspace it lists, where it lists one, and the items it lists there",
-        ),
-    ),
     [GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
         const tell = (answer: AgentAccountInboxAnswerView) =>
