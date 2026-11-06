@@ -459,6 +459,31 @@ test("with the sidebar folded, New task stands beside its toggle over Home and t
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
 });
 
+test("with the sidebar folded away, its toggle tells a reader how many wait on them in the Inbox, and says nothing of it while the sidebar is shown", () => {
+  const waiting: Partial<TasksControl> = {
+    tasks: [DOCUMENT_TASK],
+    inbox: [
+      {
+        taskId: DOCUMENT_TASK.id,
+        items: ["Retry?", "Alert at 80%?", "Ship it?"].map((title, at) => ({
+          id: `item-${at}`,
+          agentId: "agent-1",
+          title,
+          postedAt: at,
+        })),
+      },
+    ],
+  };
+  assert.deepEqual(titleBarButtons(mount(false, waiting)), [
+    "Show sidebar, 3 need you",
+    "New task",
+  ]);
+  act(() => root?.unmount());
+  root = undefined;
+  const shown = mount(false, waiting, PANEL_TAB.TASKS, ignore, { collapsed: false });
+  assert.deepEqual(titleBarButtons(shown), ["Hide sidebar"]);
+});
+
 test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
   const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
   assert.ok(controls, "the title bar's buttons stand");
