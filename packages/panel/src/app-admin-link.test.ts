@@ -7,6 +7,7 @@ import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
+import { createMemoryHistory } from "@tanstack/react-router";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -15,11 +16,12 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 // (`admin-route.lazy.tsx`), so the module is read here first and its load settles
 // within the test's own ticks rather than on a clock a busy machine outruns.
 import "./desktop/admin-route.lazy.js";
+import "./desktop/person-route.lazy.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
-import { windowRouter } from "./testing/window-router.js";
+import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 
 /**
  * app-admin-link.test.ts -- a link to the Admin place the system hands the
@@ -27,7 +29,9 @@ import { windowRouter } from "./testing/window-router.js";
  * account's access is still being read, the place waiting on that read, and
  * stands it once the account is an admin; the place gives the window back
  * once the read says it is not, and a link opened for an account known to be
- * no admin opens nothing.
+ * no admin opens nothing. A person's page loaded under a workspace the
+ * reader is not in, as a reload of another's address is, opens the same
+ * person under the workspace listed, as a link to them does.
  */
 
 const ACME = {
@@ -107,10 +111,14 @@ async function settle(): Promise<void> {
   });
 }
 
-async function drawWindow(): Promise<void> {
+async function drawWindow(at?: string): Promise<TestWindowRouter> {
+  const router = windowRouter(
+    at === undefined ? undefined : createMemoryHistory({ initialEntries: [at] }),
+  );
   root = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => root?.render(onRegistry(AtomRegistry.make(), windowRouter().drawn())));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), router.drawn())));
   await settle();
+  return router;
 }
 
 /** Delivers `snapshot` as main would, and lets the window draw what it draws. */
@@ -163,4 +171,11 @@ test("an Admin link handed to an account known to be no admin opens nothing", as
   await settle();
 
   assert.equal(adminOpen(), false);
+});
+
+test("a person's page loaded under a workspace the reader is not in opens the same person under the workspace listed", async () => {
+  const router = await drawWindow("/left/person/user-ada");
+  await settle();
+
+  assert.equal(router.history.location.pathname, "/acme/person/user-ada");
 });

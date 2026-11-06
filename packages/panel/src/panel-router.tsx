@@ -285,16 +285,22 @@ const automationRunRoute = createRoute({
 });
 
 /**
- * A person's page in one of the reader's workspaces, on the same terms as
- * the Board: its page a chunk of its own, read ahead as the pointer comes
+ * A person's page in one of the reader's workspaces: an address naming none
+ * of theirs opens the same person under the workspace listed, as a link to
+ * them does. Its page is a chunk of its own, read ahead as the pointer comes
  * to a person's name, its frame standing while it loads.
  */
 const personRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: "person/$userId",
   beforeLoad: ({ context, params }) => {
-    if (workspaceRouteStands(params.workspace, context.access)) return;
-    throw redirect({ to: "/$workspace", params: { workspace: params.workspace }, replace: true });
+    const { listed } = context.access;
+    if (workspaceRouteStands(params.workspace, context.access) || listed === undefined) return;
+    throw redirect({
+      to: "/$workspace/person/$userId",
+      params: { workspace: listed, userId: params.userId },
+      replace: true,
+    });
   },
   pendingComponent: PersonRouteLoading,
   ...LAZY_ROUTE,

@@ -14,6 +14,7 @@ import { type ExperimentChoices, NO_EXPERIMENTS } from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import type { RegisteredRouter, RouteIds } from "@tanstack/react-router";
 import { useMemo, useRef } from "react";
+import { useKeptChoice } from "./desktop/chosen-workspace.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import {
   APP_SLICE,
@@ -39,6 +40,8 @@ export interface RouteAccess {
   readonly experimentsRead: boolean;
   /** The reader's workspaces, none before their first read lands, which a workspace's place waits on rather than giving way. */
   readonly workspaces: readonly GateWorkspace[];
+  /** The step the listed workspace's address names it by, which a person's page naming none of the reader's opens under; none while none is listed. */
+  readonly listed: string | undefined;
 }
 
 /** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
@@ -51,7 +54,14 @@ export function routeAccessNow(): RouteAccess {
     experiments: state?.settings?.experiments ?? NO_EXPERIMENTS,
     experimentsRead: state?.settings !== undefined,
     workspaces: state?.tasks?.workspaces ?? NO_WORKSPACES,
+    // Note that the router is made before the window chooses, so its first reading lists the first workspace, as the window does with none kept.
+    listed: stepOf(state?.tasks?.workspaces?.[0]),
   };
+}
+
+/** The step a workspace's address names it by: its slug, or its id where an older service answered none. */
+function stepOf(workspace: GateWorkspace | undefined): string | undefined {
+  return workspace === undefined ? undefined : (workspace.slug ?? workspace.id);
 }
 
 /** Whether two lists of slugs are the same slugs in the same order. */
@@ -87,9 +97,16 @@ export function useRouteAccess(): RouteAccess {
   const held = useRef(read);
   if (!sameWorkspaces(held.current, read)) held.current = read;
   const workspaces = held.current;
+  const listed = stepOf(useKeptChoice(workspaces));
   return useMemo(
-    (): RouteAccess => ({ admin: admin || adminPending, experiments, experimentsRead, workspaces }),
-    [admin, adminPending, experiments, experimentsRead, workspaces],
+    (): RouteAccess => ({
+      admin: admin || adminPending,
+      experiments,
+      experimentsRead,
+      workspaces,
+      listed,
+    }),
+    [admin, adminPending, experiments, experimentsRead, workspaces, listed],
   );
 }
 

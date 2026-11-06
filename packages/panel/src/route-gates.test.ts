@@ -17,6 +17,7 @@ test("a page an experiment holds stands while the account's settings are unread,
     experiments: NO_EXPERIMENTS,
     experimentsRead: false,
     workspaces: [],
+    listed: undefined,
   };
 
   assert.equal(settingsPageRouteStands(SETTINGS_VIEW.MEMORY, unread), true);
@@ -32,6 +33,7 @@ test("a workspace's place stands while the reader's workspaces are unread, under
     experiments: NO_EXPERIMENTS,
     experimentsRead: true,
     workspaces: [],
+    listed: undefined,
   };
   const read = {
     ...unread,

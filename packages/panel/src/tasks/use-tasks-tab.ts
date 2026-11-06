@@ -1540,20 +1540,26 @@ export function useTasksTab(input: {
     input.personView.workspace === undefined
       ? undefined
       : workspaceOfSlug(viewed.workspaces, input.personView.workspace)?.id;
+  // Note that an address naming none of the reader's workspaces is its route's gate's to answer (`route-gates.ts`).
   const personElsewhere =
     input.personView.userId !== undefined &&
     listedWorkspace !== undefined &&
+    personWorkspace !== undefined &&
     personWorkspace !== listedWorkspace.id;
   const closePerson = input.personView.onClose;
   useEffect(() => {
     if (personElsewhere) closePerson();
   }, [personElsewhere, closePerson]);
   // The Board is the listed workspace's, so another listed in its place stands its Board in the step's place.
+  const boardWorkspace =
+    input.boardView.standingIn === undefined
+      ? undefined
+      : workspaceOfSlug(viewed.workspaces, input.boardView.standingIn)?.id;
   const boardElsewhere =
     input.boardView.open &&
     listedWorkspace !== undefined &&
-    input.boardView.standingIn !== undefined &&
-    workspaceOfSlug(viewed.workspaces, input.boardView.standingIn)?.id !== listedWorkspace.id;
+    boardWorkspace !== undefined &&
+    boardWorkspace !== listedWorkspace.id;
   const listedStep = listedWorkspace === undefined ? undefined : stepOf(listedWorkspace);
   const turnBoard = input.boardView.onTurn;
   useEffect(() => {
