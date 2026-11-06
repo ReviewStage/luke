@@ -49,6 +49,7 @@
     "@sentry/esbuild-plugin": "5.4.0",
     "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",
+    "@tanstack/react-router": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
