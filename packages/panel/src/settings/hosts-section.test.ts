@@ -58,6 +58,8 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 20; tick += 1) await new Promise((done) => setTimeout(done, 0));
   });
+  // Note that the account the list is read under reaches the page on Query's timing, which no count of ticks keeps up with.
+  await vi.waitFor(() => assert.equal(pageText().includes("Reading your hosts"), false));
 }
 
 /**

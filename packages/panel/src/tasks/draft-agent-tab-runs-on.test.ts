@@ -19,7 +19,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handBeats, handState } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { DraftAgentTab } from "./draft-agent-tab.js";
@@ -134,6 +134,7 @@ async function mount(draft: AgentDraft, agents: readonly AgentSummary[] = AGENTS
     });
     return createElement(DraftAgentTab, { draft: held, control });
   }
+  await writeHandedAppState();
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);

@@ -58,7 +58,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
-import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient, writeHandedAppState } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
@@ -157,6 +157,7 @@ async function mount(
 ) {
   const { list, ...chose } = chooser;
   if (list !== undefined) holdRepositoryLists(handHostReads({}).deliverRepositoryLists, list);
+  await writeHandedAppState();
   const starts: [string, string | null][] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];

@@ -47,7 +47,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, writeHandedAppState } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
@@ -662,6 +662,8 @@ async function settle(): Promise<void> {
 
 test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
+  await writeHandedAppState();
   mount(false);
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), false);
@@ -669,6 +671,7 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   document.body.innerHTML = "";
 
   handCapabilities(DESKTOP_CAPABILITIES);
+  await writeHandedAppState();
   mount(false);
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
@@ -1291,6 +1294,8 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   let opened = 0;
   const adminView = { ...tasksControl().adminView, onOpen: () => (opened += 1) };
   handState({}, { access: { admin: false } });
+  // Note that a command is asked once, so the document it is offered by is in the client from the first frame.
+  await writeHandedAppState();
   mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), false);
@@ -1298,6 +1303,7 @@ test("⌘K's Admin opens the Admin place for an admin alone, and is offered noth
   document.body.innerHTML = "";
 
   handState({}, { access: { admin: true } });
+  await writeHandedAppState();
   mount(false, { adminView });
   await settle();
   assert.equal(runAppCommand(APP_COMMAND.ADMIN), true);
