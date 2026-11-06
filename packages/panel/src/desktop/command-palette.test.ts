@@ -1165,7 +1165,8 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
   const pulls = rows().filter((row) => row.startsWith("#42"));
   chooseFilter("Files");
   type("accept");
-  await act(async () => undefined);
+  // Note that the files land through a query, so they are looked for once the palette no longer reads them.
+  await vi.waitFor(() => assert.notEqual(emptyLine(), "Reading the repository's files"));
   if (rows().includes("accept.ts")) press("accept.ts");
   return { opened, pulls };
 }
