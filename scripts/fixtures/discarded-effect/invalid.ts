@@ -6,6 +6,7 @@ declare const services: Layer.Layer<never>;
 
 export async function clearConversation(sessionKey: string): Promise<void> {
   void deleteConversation(sessionKey);
+  // An Effect is not thenable: this answers the description and runs nothing.
   await deleteConversation(sessionKey);
   Effect.logInfo("cleared");
   Stream.runDrain(frames);
