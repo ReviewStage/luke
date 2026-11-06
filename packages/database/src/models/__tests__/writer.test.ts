@@ -497,20 +497,22 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
   );
 
   it.effect(
-    "a line whose hand-over answered nothing stays until a coding agent's turn bound has passed, then the conversation's next line deletes it, and one a turn took after all stays",
+    "a line whose hand-over answered nothing stays until a coding agent's turn bound has passed, then the conversation's next line deletes it, and one a turn took after all, or another conversation's, stays",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
         const target = yield* openConversation(CONVERSATION_KIND.AGENT);
+        const other = yield* openConversation(CONVERSATION_KIND.AGENT);
         const writer = yield* storeWriter({ tools: TOOLS });
-        const withdrawn = (text: string) =>
+        const withdrawn = (text: string, into = target) =>
           writer.writeAwaitingLine(
-            target,
+            into,
             { text, clientKey: text, sender: { kind: MESSAGE_SENDER.APP } },
             Effect.succeed(false),
           );
         yield* withdrawn("Rerun the tests.");
         yield* withdrawn("Push the branch.");
+        yield* withdrawn("Rebase the stack.", other);
         const turnId = randomUUID();
         yield* writer.enqueueTurn(target, {
           turnId,
@@ -518,13 +520,15 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
           runtimeTurnId: "t_0",
         });
         yield* writer.takeAwaitingLine(target, { text: "Push the branch.", turnId });
-        const standing = Effect.map(
-          db
-            .select({ clientId: messages.clientId })
-            .from(messages)
-            .where(eq(messages.conversationId, target.conversationId)),
-          (rows) => rows.map((row) => row.clientId).sort(),
-        );
+        const standingIn = (conversationId: string) =>
+          Effect.map(
+            db
+              .select({ clientId: messages.clientId })
+              .from(messages)
+              .where(eq(messages.conversationId, conversationId)),
+            (rows) => rows.map((row) => row.clientId).sort(),
+          );
+        const standing = standingIn(target.conversationId);
 
         yield* TestClock.adjust(TURN_ABANDON.AGENT_AFTER_MS);
         yield* withdrawn("Open the PR.");
@@ -540,6 +544,9 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
           yield* standing,
           ["Push the branch.", "Open the PR.", "Merge it."].map(sentLineId).sort(),
         );
+        assert.deepEqual(yield* standingIn(other.conversationId), [
+          sentLineId("Rebase the stack."),
+        ]);
       }),
   );
 });
