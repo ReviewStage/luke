@@ -3,6 +3,7 @@ import {
   Badge,
   BUTTON_SIZE,
   COMMENT_ELEMENT,
+  COMMENT_PIN_LOOK,
   Comment,
   CommentPin,
   CommentSkeleton,
@@ -22,7 +23,8 @@ import { CatalogSection } from "../section";
  * status and an action at a head's end, a line of what happened to the
  * thread, said after its writer's name, a draft not yet sent, which says
  * no time, a comment while it is read, and the pins of comments on what
- * they are on: one thread, a person's, and three, an agent's first.
+ * they are on: one thread, a person's, three, an agent's first, and two
+ * held in the reader's review, unsent.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -120,6 +122,16 @@ function Comments(): React.JSX.Element {
               label="3 comments"
               preview="Rerunning the spec on WebKit."
               open
+              onPress={() => undefined}
+              onHover={() => undefined}
+            />
+            <CommentPin
+              author={{ name: "Grace Hopper", id: "user-grace" }}
+              count={2}
+              label="2 comments in your review"
+              preview="Say who the invite goes to."
+              open={false}
+              look={COMMENT_PIN_LOOK.HELD}
               onPress={() => undefined}
               onHover={() => undefined}
             />
