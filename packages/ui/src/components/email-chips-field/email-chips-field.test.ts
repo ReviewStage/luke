@@ -131,5 +131,17 @@ test("why an address is wrong is its chip's description, and no line under the f
   const describedBy = chip?.getAttribute("aria-describedby");
   assert.ok(describedBy !== null && describedBy !== undefined, "the chip's words are described");
   assert.equal(document.getElementById(describedBy)?.textContent, "Not an email address");
-  assert.equal(words.getAttribute("aria-describedby"), null, "the words typed carry no reason of their own");
+  assert.equal(
+    words.getAttribute("aria-describedby"),
+    null,
+    "the words typed carry no reason of their own",
+  );
+
+  const remove = document.querySelector<HTMLButtonElement>('[aria-label="Remove dana"]');
+  act(() => remove?.click());
+  assert.equal(
+    document.activeElement,
+    words,
+    "the caret comes back to the words once the chip is lifted",
+  );
 });

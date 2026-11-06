@@ -18,7 +18,7 @@ import { appStateQuery, selectAccount } from "./use-app-state.js";
  * stands once.
  */
 
-/** Why an address typed is not sent, said under the field. */
+/** Why an address typed is not sent, its chip's hint. */
 const NOT_AN_ADDRESS = "Not an email address";
 const YOURS = "That's you";
 
@@ -48,7 +48,7 @@ export interface Invitees {
   readonly remove: (id: string) => void;
   /** Lets every address go, as a form opened again starts empty. */
   readonly clear: () => void;
-  /** Keeps only `emails` as addresses still to send, as a run that stopped leaves the rest. */
+  /** Keeps only `emails` of the addresses still to send, as a run that stopped leaves the rest, and every chip not to send as it stands. */
   readonly keep: (emails: readonly string[]) => void;
   /**
    * Turns the words typed into chips, as a press reads them, and answers
@@ -124,7 +124,10 @@ export function useInvitees(yours: string | undefined): Invitees {
       setInvitees([]);
       setTyped("");
     },
-    keep: (emails) => setInvitees((now) => now.filter((one) => emails.includes(one.email))),
+    keep: (emails) =>
+      setInvitees((now) =>
+        now.filter((one) => one.state !== EMAIL_CHIP_STATE.DRAFT || emails.includes(one.email)),
+      ),
     commit: () => {
       const next = joined(invitees, typed, yours);
       setInvitees(next);

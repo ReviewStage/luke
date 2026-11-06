@@ -55,7 +55,7 @@ export interface EmailChip {
   /** The words put back into the field to edit the address, as they were typed. */
   readonly typed: string;
   readonly state: EmailChipState;
-  /** Why it is no address, or why the service refused it, which the field says under itself. */
+  /** Why it is no address, or why the service refused it, which its chip's hint says. */
   readonly reason?: string | undefined;
 }
 
@@ -198,8 +198,13 @@ export function EmailChipsField({
     onTyped("");
     if (words.trim() !== "") onAdd(words);
   };
-  const edit = (chip: EmailChip) => {
+  // Note that the caret comes back to the words once a chip is lifted, since the chip that held focus is gone.
+  const lift = (chip: EmailChip) => {
     onRemove(chip.id);
+    words.current?.focus();
+  };
+  const edit = (chip: EmailChip) => {
+    lift(chip);
     onTyped(chip.typed);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -234,52 +239,50 @@ export function EmailChipsField({
   };
 
   return (
-    <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the well's bare ground lands the caret in its words for the pointer alone, as a press inside a field's box does; the words themselves are the keyboard's. */}
-      <div
-        className={WELL}
-        aria-disabled={disabled ? true : undefined}
-        onMouseDown={(event) => {
-          if (event.target !== event.currentTarget || disabled) return;
-          event.preventDefault();
-          words.current?.focus();
-        }}
-      >
-        {chips.map((chip) => (
-          <AddressChip
-            key={chip.id}
-            chip={chip}
-            disabled={disabled}
-            onRemove={() => onRemove(chip.id)}
-            onEdit={() => edit(chip)}
-          />
-        ))}
-        <input
-          ref={joinRefs(words, ref)}
-          id={field?.id}
-          className={TYPING}
-          type="text"
-          inputMode="email"
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          value={typed}
+    // biome-ignore lint/a11y/noStaticElementInteractions: the well's bare ground lands the caret in its words for the pointer alone, as a press inside a field's box does; the words themselves are the keyboard's.
+    <div
+      className={WELL}
+      aria-disabled={disabled ? true : undefined}
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget || disabled) return;
+        event.preventDefault();
+        words.current?.focus();
+      }}
+    >
+      {chips.map((chip) => (
+        <AddressChip
+          key={chip.id}
+          chip={chip}
           disabled={disabled}
-          placeholder={chips.length === 0 ? placeholder : undefined}
-          aria-label={field === undefined ? label : undefined}
-          aria-describedby={field?.["aria-describedby"]}
-          aria-required={field?.["aria-required"]}
-          aria-invalid={field?.["aria-invalid"]}
-          onChange={(event) => {
-            const words = event.target.value;
-            if (endsAddress(words)) take(words);
-            else onTyped(words);
-          }}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          onBlur={() => take(typed)}
+          onRemove={() => lift(chip)}
+          onEdit={() => edit(chip)}
         />
-      </div>
-    </>
+      ))}
+      <input
+        ref={joinRefs(words, ref)}
+        id={field?.id}
+        className={TYPING}
+        type="text"
+        inputMode="email"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        value={typed}
+        disabled={disabled}
+        placeholder={chips.length === 0 ? placeholder : undefined}
+        aria-label={field === undefined ? label : undefined}
+        aria-describedby={field?.["aria-describedby"]}
+        aria-required={field?.["aria-required"]}
+        aria-invalid={field?.["aria-invalid"]}
+        onChange={(event) => {
+          const words = event.target.value;
+          if (endsAddress(words)) take(words);
+          else onTyped(words);
+        }}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        onBlur={() => take(typed)}
+      />
+    </div>
   );
 }

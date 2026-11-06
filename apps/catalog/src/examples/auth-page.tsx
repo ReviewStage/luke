@@ -1,6 +1,7 @@
 import { LANDING_TONE } from "@repo/features/landing-outcome";
 import { ON_THIS_COMPUTER, oauthScopeLines } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import { inviteesOf } from "@repo/features/workspace-invitation-wire";
 import {
   AuthMark,
   AuthPage,
@@ -90,7 +91,20 @@ function TeamFields(): React.JSX.Element {
             typed={typed}
             onTyped={setTyped}
             placeholder="Ex. ellis@acme.dev, maria@acme.dev"
-            onAdd={IGNORE}
+            onAdd={(words) =>
+              setChips((now) => [
+                ...now,
+                ...inviteesOf(words)
+                  .filter((one) => !now.some((chip) => chip.id === one.email))
+                  .map((one) => ({
+                    id: one.email,
+                    words: one.name ?? one.email,
+                    typed: one.typed,
+                    state: one.invitable ? EMAIL_CHIP_STATE.DRAFT : EMAIL_CHIP_STATE.BAD,
+                    reason: one.invitable ? undefined : "Not an email address",
+                  })),
+              ])
+            }
             onRemove={(id) => setChips((now) => now.filter((chip) => chip.id !== id))}
           />
         )}
