@@ -125,34 +125,28 @@ test("an agent in the cloud says Cloud, whatever the beats say", async () => {
   assert.equal(await placeOf({}, undefined), "Runs on: Cloud");
 });
 
-/** The `run_on_mac` row the cloud chip's card says, once rested on: its words and what stands at its end. */
-async function runOnMacRowOf(runOnMac: RunOnMacStanding): Promise<readonly (string | null)[]> {
+/** What the cloud chip's card says of its `run_on_mac`, once rested on. */
+async function runOnMacNoteOf(runOnMac: RunOnMacStanding): Promise<string | null | undefined> {
   await placeOf({}, undefined, runOnMac);
   restOn(document.querySelector(".ui-chip") ?? assert.fail("the chip stands"));
   await settle();
-  const row =
-    [...document.querySelectorAll(".ui-hover-card-row")].at(-1) ??
-    assert.fail("the card names a Mac");
-  return [
-    row.querySelector(".ui-hover-card-row-label")?.textContent ?? null,
-    row.querySelector(".ui-hover-card-row-end")?.textContent ?? null,
-  ];
+  return [...document.querySelectorAll(".ui-hover-card-note")].at(-1)?.textContent;
 }
 
 test("a cloud agent's card names whose Mac its run_on_mac runs on, and that it listens", async () => {
-  assert.deepEqual(
-    await runOnMacRowOf({ on: true, owner: { userId: READER, name: "Ada Lovelace" } }),
-    ["run_on_mac · Your Mac", "Listening"],
+  assert.equal(
+    await runOnMacNoteOf({ on: true, owner: { userId: READER, name: "Ada Lovelace" } }),
+    "run_on_mac runs shell commands on your Mac, which is listening.",
   );
 });
 
 test("a cloud agent's card says a teammate's Mac is offline where none of theirs listens", async () => {
-  assert.deepEqual(
-    await runOnMacRowOf({
+  assert.equal(
+    await runOnMacNoteOf({
       on: false,
       reason: RUN_ON_MAC_OFF.MAC_AWAY,
       owner: { userId: "user-charles", name: "Charles Pan" },
     }),
-    ["run_on_mac · Charles Pan’s Mac", "Offline"],
+    "run_on_mac runs shell commands on Charles Pan’s Mac, which is offline.",
   );
 });

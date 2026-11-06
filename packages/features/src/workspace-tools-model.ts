@@ -22,10 +22,10 @@ export const RUN_ON_MAC_REASON = {
 
 export type RunOnMacReason = (typeof RUN_ON_MAC_REASON)[keyof typeof RUN_ON_MAC_REASON];
 
-/** What we say of each reason, where a card says how `run_on_mac` stands. */
+/** What a card says of each reason after the Mac it names: "…on Ada's Mac, which is offline." */
 export const RUN_ON_MAC_REASON_WORDS = {
-  [RUN_ON_MAC_REASON.SETTINGS_OFF]: "Off in Settings",
-  [RUN_ON_MAC_REASON.MAC_AWAY]: "Offline",
+  [RUN_ON_MAC_REASON.SETTINGS_OFF]: "which Settings › This Mac has turned off",
+  [RUN_ON_MAC_REASON.MAC_AWAY]: "which is offline",
 } as const satisfies Record<RunOnMacReason, string>;
 
 /** What decides whether `run_on_mac` is on: this Mac's setting, where the reader may be told it, and the service's answer. */
