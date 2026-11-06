@@ -120,7 +120,7 @@ import {
   notKept,
   unreachedAs,
 } from "../act.js";
-import { actMutation } from "../act-mutations.js";
+import { actMutation, pressMutation } from "../act-mutations.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -1310,7 +1310,7 @@ function readInboxItemHome(
 }
 
 export function useTasksTab(input: {
-  acts: Pick<ActHandle, "act" | "press" | "tell">;
+  acts: Pick<ActHandle, "act">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
   tasks: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
@@ -1346,7 +1346,33 @@ export function useTasksTab(input: {
 }): TasksControl {
   const { shown, leaveGuard } = input;
   const { guard } = leaveGuard;
-  const { act, press, tell } = input.acts;
+  // Note that the reads below stay on `act` until they move to queries; every write is a mutation, and
+  // none invalidates a query, since what each changes comes back through app state.
+  const { act } = input.acts;
+  const { mutateAsync: sendSelect } = useMutation(actMutation(ACT_KIND.TASKS_SELECT));
+  const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.TASKS_CLOSE));
+  const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.TASKS_DELETE));
+  const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
+  const { mutateAsync: sendTaskPin } = useMutation(actMutation(ROW_WRITE.TASK_PIN.kind));
+  const { mutateAsync: sendRepositoryPin } = useMutation(
+    actMutation(ACT_KIND.TASKS_PIN_REPOSITORY),
+  );
+  const { mutateAsync: sendAgentPin } = useMutation(actMutation(ROW_WRITE.AGENT_PIN.kind));
+  const { mutateAsync: sendSections } = useMutation(actMutation(ACT_KIND.TASKS_WRITE_SECTION));
+  const { mutateAsync: sendStandingRow } = useMutation(actMutation(ROW_WRITE.TASK_STANDING.kind));
+  const { mutateAsync: sendTaskRepository } = useMutation(
+    actMutation(ACT_KIND.TASKS_SET_REPOSITORY),
+  );
+  const { mutateAsync: sendBlock } = useMutation(actMutation(ACT_KIND.TASKS_BLOCK));
+  const { mutateAsync: sendParent } = useMutation(actMutation(ACT_KIND.TASKS_SET_PARENT));
+  const { mutateAsync: sendRelation } = useMutation(actMutation(ACT_KIND.TASKS_CHANGE_RELATION));
+  const { mutateAsync: sendMove } = useMutation(actMutation(ACT_KIND.TASKS_MOVE));
+  const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
+  const { mutateAsync: sendRestore } = useMutation(actMutation(ACT_KIND.TASKS_RESTORE));
+  const { mutateAsync: sendTaskStart } = useMutation(actMutation(ACT_KIND.TASKS_START));
+  // Note that which agent is shown is told, quiet whatever comes back, since no person pressed for it.
+  const { mutate: tellShown } = useMutation(actMutation(ACT_KIND.AGENTS_SHOWN));
+  const { mutate: refreshTasks } = useMutation(pressMutation(ACT_KIND.TASKS_REFRESH));
   const copyWithToast = useCopyToast();
   const toast = useToast();
   // The New task dialog's ask, standing while the dialog does: the preset it was opened with, if any.
@@ -1861,8 +1887,8 @@ export function useTasksTab(input: {
   useEffect(() => {
     if (reportedAgent.current === shownAgent) return;
     reportedAgent.current = shownAgent;
-    tell(ACT_KIND.AGENTS_SHOWN, { agentId: shownAgent });
-  }, [shownAgent, tell]);
+    tellShown({ agentId: shownAgent });
+  }, [shownAgent, tellShown]);
 
   // The host answers a press a round trip later, so where the tab is bound
   // is said at once, and a select that did not open the task takes its ask
@@ -1934,7 +1960,7 @@ export function useTasksTab(input: {
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
-      act(ACT_KIND.TASKS_SELECT, { taskId }).then((opened) => {
+      sendSelect({ taskId }).then((opened) => {
         if (!opened) {
           withdraw();
           return;
@@ -1942,7 +1968,7 @@ export function useTasksTab(input: {
         onOpened();
       }, withdraw);
     },
-    [act, fixture, openTaskId],
+    [sendSelect, fixture, openTaskId],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
@@ -1951,8 +1977,8 @@ export function useTasksTab(input: {
     if (fixture !== undefined) return;
     const ask = { taskId: undefined, over: openTaskId };
     setAsked(ask);
-    act(ACT_KIND.TASKS_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
-  }, [act, fixture, openTaskId]);
+    sendClose().catch(() => setAsked((held) => (held === ask ? undefined : held)));
+  }, [fixture, openTaskId, sendClose]);
   // Every navigation a press asked for, counted, so an answer that lands
   // after a newer one was asked for changes nothing the newer one decided.
   const navigations = useRef(0);
@@ -2040,7 +2066,7 @@ export function useTasksTab(input: {
   // where the task leaving took it away (`use-refusal-heard.ts`).
   const deleteTask = async (taskId: string): Promise<ActedResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await askKept(act(ACT_KIND.TASKS_DELETE, { taskId }));
+    const deleted = await askKept(sendDelete({ taskId }));
     if (deleted.kept) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     return { ...DELETE_REFUSED, cause: deleted.cause };
   };
@@ -2050,10 +2076,6 @@ export function useTasksTab(input: {
   const drawnTasks = useRef(tasks);
   drawnTasks.current = tasks;
   const drawnRows = () => drawnTasks.current;
-  const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
-  const { mutateAsync: sendTaskPin } = useMutation(actMutation(ROW_WRITE.TASK_PIN.kind));
-  const { mutateAsync: sendAgentPin } = useMutation(actMutation(ROW_WRITE.AGENT_PIN.kind));
-  const { mutateAsync: sendStandingRow } = useMutation(actMutation(ROW_WRITE.TASK_STANDING.kind));
   const renameDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> = {
     rows: drawnRows,
     send: sendTaskRename,
@@ -2078,7 +2100,7 @@ export function useTasksTab(input: {
     const pressed = pressRows(ROW_WRITE.TASK_RENAME, renameDoors, [
       { id: taskId, after: { name } },
     ]);
-    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
+    const renamed = await sendTaskRename({ taskId, name }).catch(() => false);
     if (renamed) pressed.keep(TASK_RENAMED_NOTE);
     return renamed;
   };
@@ -2100,7 +2122,7 @@ export function useTasksTab(input: {
     const pressed = pressRows(ROW_WRITE.TASK_PIN, taskPinDoors, [
       { id: taskId, after: { pinned, position: null } },
     ]);
-    return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned })).then((changed) => {
+    return askKept(sendTaskPin({ taskId, pinned })).then((changed) => {
       if (changed.kept) {
         pressed.keep(TASK_MARKED_NOTES[mark]);
         return true;
@@ -2123,7 +2145,7 @@ export function useTasksTab(input: {
   // refusal says so in a toast, since the menu that asked has closed.
   const pinRepository = (repository: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    askKept(act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })).then((changed) => {
+    askKept(sendRepositoryPin({ repository, pinned })).then((changed) => {
       if (changed.kept) return;
       toast({
         replayUnmasked: true,
@@ -2161,7 +2183,7 @@ export function useTasksTab(input: {
     const asked = (flights.get(agentId) ?? Promise.resolve()).then(
       (): Promise<AgentPinAsked> | AgentPinAsked =>
         accountNow.current === pressedBy
-          ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned, ...placed }).then(
+          ? sendAgentPin({ agentId, pinned, ...placed }).then(
               (answer) => ("agent" in answer ? AGENT_PIN_ASKED.CHANGED : { refused: answer }),
               (error: unknown) => ({ refused: error }),
             )
@@ -2247,13 +2269,13 @@ export function useTasksTab(input: {
       const flight: Promise<Kept | undefined> = agent
         ? (flights.get(id) ?? Promise.resolve(true)).then(() =>
             accountNow.current === pressedBy
-              ? act(ACT_KIND.AGENTS_PIN, { agentId: id, pinned: true, position }).then(
+              ? sendAgentPin({ agentId: id, pinned: true, position }).then(
                   (answer) => ("agent" in answer ? KEPT : notKept(answer)),
                   notKept,
                 )
               : undefined,
           )
-        : askKept(act(ACT_KIND.TASKS_PIN, { taskId: id, pinned: true, position }));
+        : askKept(sendTaskPin({ taskId: id, pinned: true, position }));
       if (agent) flights.set(id, flight);
       return flight.then((changed) => {
         if (agent && flights.get(id) === flight) flights.delete(id);
@@ -2282,7 +2304,7 @@ export function useTasksTab(input: {
   const writeSections = (writes: readonly TaskSectionWrite[]) => {
     const [first, ...rest] = writes;
     if (first === undefined || fixture !== undefined) return;
-    askKept(act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })).then((changed) => {
+    askKept(sendSections({ writes: [first, ...rest] })).then((changed) => {
       if (changed.kept) return;
       toast({
         replayUnmasked: true,
@@ -2313,7 +2335,7 @@ export function useTasksTab(input: {
   ): Promise<Kept> => {
     // Note that the name the reader knows a member by goes with them, so main draws them by it until the list carries them.
     const named = standing.assigneeId && assigneeName !== undefined ? { assigneeName } : undefined;
-    return askKept(act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing, ...named }));
+    return askKept(sendStandingRow({ taskId, ...standing, ...named }));
   };
   // Each status change is sent as one standing. Answers which tasks the
   // service kept, how many it refused, and what refused the first of them.
@@ -2451,7 +2473,7 @@ export function useTasksTab(input: {
     repository: string | null,
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
-    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
+    return sendTaskRepository({ taskId, repository }).then(
       (answer) => ("failure" in answer ? repositoryChangeFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
@@ -2486,7 +2508,7 @@ export function useTasksTab(input: {
   // there is to say, in a toast, since the menu that asked has closed.
   const setTaskBlock = (taskId: string, block: TaskBlockRequest, onKept?: () => void) => {
     if (fixture !== undefined) return;
-    void act(ACT_KIND.TASKS_BLOCK, { taskId, block })
+    void sendBlock({ taskId, block })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2521,7 +2543,7 @@ export function useTasksTab(input: {
   // refusal is all there is to say, in a toast.
   const setTaskParent = (taskId: string, parentTaskId: string | null, onKept?: () => void) => {
     if (fixture !== undefined) return;
-    void act(ACT_KIND.TASKS_SET_PARENT, { taskId, parentTaskId })
+    void sendParent({ taskId, parentTaskId })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2559,7 +2581,7 @@ export function useTasksTab(input: {
   // and the sidebar and the open document take the task the service answers.
   const changeTaskRelation = (taskId: string, relation: TaskRelationChangeRequest) => {
     if (fixture !== undefined) return;
-    void act(ACT_KIND.TASKS_CHANGE_RELATION, { taskId, relation })
+    void sendRelation({ taskId, relation })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) return;
@@ -2585,7 +2607,7 @@ export function useTasksTab(input: {
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
-    return act(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
+    return sendMove({ taskId, workspaceId })
       .catch(taskUnreached)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2618,9 +2640,9 @@ export function useTasksTab(input: {
       if (fixture !== undefined) {
         return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
       }
-      return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
+      return sendEdit({ taskId, edit: request });
     },
-    [fixture, act],
+    [fixture, sendEdit],
   );
 
   // The chip's menu stands on the open task's toolbar, so another task's is
@@ -2643,9 +2665,9 @@ export function useTasksTab(input: {
     (): PlanHistorySource => ({
       readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
-      restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
+      restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
-    [act],
+    [act, sendRestore],
   );
   const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.
@@ -2783,7 +2805,7 @@ export function useTasksTab(input: {
       }
       return note;
     };
-    return act(ACT_KIND.TASKS_START, {
+    return sendTaskStart({
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
@@ -2902,7 +2924,7 @@ export function useTasksTab(input: {
   // A group's quick add starts a task with no agent and no call, quietly, so
   // the window stays on the Tasks page and the task lands in its group.
   const quickAdd: TasksControl["onQuickAdd"] = (name, into) =>
-    act(ACT_KIND.TASKS_START, {
+    sendTaskStart({
       name,
       ...(into.repository === undefined ? undefined : { repository: into.repository }),
       ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
@@ -3714,7 +3736,7 @@ export function useTasksTab(input: {
     workspaces: viewed.workspaces,
     workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
     // A failed read is taken as stale, so the refresh reads the workspaces again at once.
-    onRetryWorkspaces: () => press(ACT_KIND.TASKS_REFRESH),
+    onRetryWorkspaces: () => refreshTasks(),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
     newWorkspace: {
@@ -3973,7 +3995,7 @@ export function useTasksTab(input: {
         ...(workspaceId === undefined ? undefined : { workspaceId }),
       });
     },
-    onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
+    onRetryList: () => refreshTasks(),
     onRetryDocument: retryPlan,
     onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
