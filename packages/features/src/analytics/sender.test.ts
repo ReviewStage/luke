@@ -295,11 +295,15 @@ it.effect("the flush runs once a cadence, the first a cadence after the sender i
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender({ flushIntervalMs: 1_000 });
     sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-    yield* TestClock.adjust(1_000);
+    yield* TestClock.adjust(999);
+    assert.equal(requests.length, 0);
+    yield* TestClock.adjust(1);
     assert.equal(requests.length, 1);
 
     sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-    yield* TestClock.adjust(1_000);
+    yield* TestClock.adjust(999);
+    assert.equal(requests.length, 1);
+    yield* TestClock.adjust(1);
     assert.equal(requests.length, 2);
   }),
 );
