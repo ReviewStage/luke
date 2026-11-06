@@ -9,20 +9,15 @@ import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, ErrorReporter, Layer, Option, Redacted } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
-import {
-  FIREWALL_SLOT,
-  githubEntry,
-  placeholderSwap,
-  sandboxFirewall,
-} from "../agents/sandbox-firewall.js";
+import { LAUNCH_SWAP, placeholderSwap, sandboxFirewall } from "../agents/sandbox-firewall.js";
 import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
+import { GitHubApp } from "../github/github-app.js";
 import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
@@ -44,6 +39,10 @@ const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 const NOW = new Date(Date.UTC(2026, 9, 14, 12));
 const GRACE_MS = Duration.toMillis(NATIVE_SANDBOX_SWEEP.GRACE);
+
+/** No GitHub App: no repository credential can be minted, which the agents here need none of but one. */
+const NO_GITHUB_APP = GitHubApp.layer(undefined);
+
 const minutesBefore = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
 /** The page the fake answers a list in: the API's widest, as the sweep asks for. */
 const PAGE = 50;
@@ -71,6 +70,7 @@ function vercel(
     readonly refuseList?: boolean;
     readonly refuseLaterPages?: boolean;
     readonly refusePolicy?: boolean;
+    readonly refuseFirstPolicy?: boolean;
   } = {},
 ) {
   const sandboxes: FakeSandbox[] = [];
@@ -79,6 +79,7 @@ function vercel(
   const stopped: string[] = [];
   const policies: string[] = [];
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
+  let policiesRefused = 0;
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const method = init.method ?? "GET";
@@ -136,6 +137,10 @@ function vercel(
     }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
     if (options.refusePolicy === true) return new Response(null, { status: 502 });
+    if (options.refuseFirstPolicy === true && policiesRefused === 0) {
+      policiesRefused += 1;
+      return new Response(null, { status: 502 });
+    }
     policies.push(sessionId);
     return Response.json({});
   };
@@ -149,13 +154,20 @@ function vercel(
   };
 }
 
-/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */
-const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at: Date }) =>
+/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given, working in the repository given where one is. */
+const openAgent = (
+  runtime: ConversationRuntime,
+  turn?: { status: TurnStatus; at: Date },
+  repository: string | null = null,
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
-    const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const task = yield* startTask(userId, {
+      name: "Teammate invitations",
+      ...(repository === null ? undefined : { repository }),
+    });
     const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
@@ -163,7 +175,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
-      repository: null,
+      repository,
       runtime,
     });
     const agent = Option.getOrThrow(started).agent;
@@ -269,6 +281,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         ]);
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
           Effect.provide(Layer.merge(api.layer, reporter)),
         );
 
@@ -303,6 +316,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         // Past the grace, the failed run's sandbox is stopped as any ended run's is.
         const later = yield* sweepNativeSandboxes(new Date(NOW.getTime() + GRACE_MS + 60_000)).pipe(
+          Effect.provide(NO_GITHUB_APP),
           Effect.provide(api.layer),
         );
         assert.equal(later.stopped, 1);
@@ -363,7 +377,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         api.sandboxes.unshift(eve, eveOwn);
         api.sandboxes.push(misnamed);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
 
         const sessionOf = (agentId: string) => sandboxOf.get(agentId)?.currentSessionId;
         const stoppable = [sessionOf(ended.id), sessionOf(codexEnded.id)].sort();
@@ -390,58 +407,57 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
   );
 
   it.effect(
-    "a held sandbox whose run ended and whose runner exited, its END's own withdraw never run, has the runner's credential taken off it once, and the rest left",
+    "a held sandbox whose run ended and whose runner exited, its END's own let-go never run, has its launch's swaps taken off it, though its repository's credential could not be minted and Vercel refused the first send, and nothing after",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const agent = yield* openAgent(CONVERSATION_RUNTIME.CODEX, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
+        // No App reaches the agent's repository, so its credential cannot be minted for the shell.
+        const agent = yield* openAgent(
+          CONVERSATION_RUNTIME.CODEX,
+          { status: TURN_STATUS.SETTLED, at: minutesBefore(10) },
+          "acme/relay",
+        );
         yield* holdSandbox(agent.conversationId, new Date(NOW.getTime() + 60_000));
-        const api = vercel();
+        const api = vercel({ refuseFirstPolicy: true });
         const sandbox = nativeSandbox(agent.id);
         api.sandboxes.push(sandbox);
         const session = { userId: agent.userId, sandboxSessionId: sandbox.currentSessionId };
-        const withRing = Effect.provide(Layer.merge(api.layer, LOCAL_AGENT_ENVIRONMENT));
+        const withRing = Effect.provide(
+          Layer.mergeAll(api.layer, LOCAL_AGENT_ENVIRONMENT, NO_GITHUB_APP),
+        );
         const firewall = sandboxFirewall(
           yield* vercelSandboxApi(deploymentOidcToken).pipe(Effect.provide(api.layer)),
         );
-        yield* Effect.gen(function* () {
-          yield* firewall.set(
-            session,
-            FIREWALL_SLOT.GITHUB,
-            githubEntry({
-              token: Redacted.make("ghs_fixture"),
-              fullName: "Acme/Relay",
-              access: { kind: GITHUB_ACCESS.APP },
-            }),
-          );
-          yield* firewall.set(
-            session,
-            FIREWALL_SLOT.OPENAI_PLAN,
-            placeholderSwap({
-              domain: "api.openai.com",
-              header: "authorization",
-              placeholder: Redacted.make("Bearer placeholder-fixture"),
-              value: Redacted.make("Bearer access-fixture"),
-            }),
-          );
-        }).pipe(withRing);
-        const seeded = api.policies.length;
+        yield* firewall
+          .keepLaunch(session, {
+            agentId: agent.id,
+            swaps: new Map([
+              [
+                LAUNCH_SWAP.OPENAI_PLAN,
+                placeholderSwap({
+                  domain: "api.openai.com",
+                  header: "authorization",
+                  placeholder: Redacted.make("Bearer placeholder-fixture"),
+                  value: Redacted.make("Bearer access-fixture"),
+                }),
+              ],
+            ]),
+          })
+          .pipe(withRing);
 
         const first = yield* sweepNativeSandboxes(NOW).pipe(withRing);
-        const afterFirst = api.policies.length;
+        // The refused send leaves the launch kept, for the next sweep to take off.
+        const keptAfterRefusal = (yield* firewall.launchOf(session).pipe(withRing)) !== undefined;
+        yield* sweepNativeSandboxes(NOW).pipe(withRing);
+        const afterRetry = api.policies.length;
         yield* sweepNativeSandboxes(NOW).pipe(withRing);
 
         assert.equal(first.held, 1);
+        assert.equal(keptAfterRefusal, true);
         assert.equal(sandbox.status, "running");
-        assert.deepEqual(
-          [...(yield* firewall.standing(session).pipe(withRing))],
-          [FIREWALL_SLOT.GITHUB],
-        );
-        // One send takes the runner's swap off; the next sweep reads the record and sends nothing.
-        assert.deepEqual([afterFirst - seeded, api.policies.length - afterFirst], [1, 0]);
+        assert.equal(yield* firewall.launchOf(session).pipe(withRing), undefined);
+        // One send lands, taking the swap off with nothing beside it; the sweep after finds no launch and sends nothing.
+        assert.deepEqual([afterRetry, api.policies.length], [1, 1]);
       }),
   );
 
@@ -460,9 +476,15 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           api.sandboxes.push(nativeSandbox(agent.id));
         }
 
-        const first = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const first = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
         const stoppedFirst = api.stopped.length;
-        const second = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const second = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
 
         assert.deepEqual(first, {
           stopped: NATIVE_SANDBOX_SWEEP.MAX_STOPS,
@@ -499,11 +521,15 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const beyond = nativeSandbox(agent.id);
         api.sandboxes.push(beyond);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
 
         const pagesAsked = api.pagesListed.length;
         const runningAfterFirst = beyond.status;
         const nextMinute = yield* sweepNativeSandboxes(new Date(NOW.getTime() + 60_000)).pipe(
+          Effect.provide(NO_GITHUB_APP),
           Effect.provide(api.layer),
         );
 
@@ -552,6 +578,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const sweeps = 6;
         for (let minute = 0; minute < sweeps && middle.status === "running"; minute += 1) {
           yield* sweepNativeSandboxes(new Date(NOW.getTime() + minute * 60_000)).pipe(
+            Effect.provide(NO_GITHUB_APP),
             Effect.provide(api.layer),
           );
         }
@@ -573,7 +600,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       api.sandboxes.push(orphan);
       for (let each = 0; each < PAGE; each += 1) api.sandboxes.push(nativeSandbox(randomUUID()));
 
-      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+        Effect.provide(NO_GITHUB_APP),
+        Effect.provide(api.layer),
+      );
 
       assert.equal(api.pagesListed.length, 2, "the second page was asked and refused");
       assert.equal(outcome.stopped, 1);
@@ -591,7 +621,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       });
       api.sandboxes.push(nativeSandbox(agent.id));
 
-      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+        Effect.provide(NO_GITHUB_APP),
+        Effect.provide(api.layer),
+      );
 
       assert.deepEqual(outcome, {
         stopped: 0,
@@ -628,7 +661,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const beforeRename = nativeSandbox(older.id, "cmd_unknown", NAMING.BEFORE_RENAME);
         api.sandboxes.push(done, gone, beforeRename);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
 
         assert.deepEqual(outcome, {
           stopped: 3,
@@ -659,7 +695,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
         assert.ok(yield* claimAgentRunnerLease(agent.id, randomUUID(), NOW, heldUntil));
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
 
         assert.equal(outcome.stopped, 0);
         assert.deepEqual([api.stopped, api.policies], [[], []]);
@@ -680,7 +719,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const sandbox = nativeSandbox(agent.id);
         api.sandboxes.push(sandbox);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(NO_GITHUB_APP),
+          Effect.provide(api.layer),
+        );
 
         assert.deepEqual(outcome, {
           stopped: 0,

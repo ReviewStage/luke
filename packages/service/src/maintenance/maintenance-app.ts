@@ -96,9 +96,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepTerminalLeases: (now) =>
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepNativeSandboxes: (now) =>
-      sweepNativeSandboxes(new Date(now)).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      ),
+      sweepNativeSandboxes(new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepEveSandboxes: (now) =>
       sweepEveSandboxes(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
@@ -131,7 +129,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),
     renewCodexPlanSwaps: (now) =>
       sweepCodexPlanSwaps(environment.providerKeyEncryptionKeys, new Date(now)).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.provideContext(startContext),
         Effect.provideService(HostedEnvironment, environment),
       ),
   });
