@@ -31,8 +31,11 @@
  * (`BrowserCursor`): each click, type, choice, and wheel turn reports its point
  * just before its input is dispatched, and where someone is watching the
  * input waits `BROWSER_CURSOR_BEAT` after it, so a pointer drawn gliding to
- * the point arrives as the action lands. A caller that passes none sends
- * exactly the commands it always did.
+ * the point arrives as the action lands. A click sends its move before the
+ * beat, and holds the beat too where the page draws a recording's pointer
+ * (`BROWSER_RECORDING_POINTER_MARK`), which glides as the page hears the move,
+ * so a video's pointer arrives as the press lands. A caller that passes none
+ * sends exactly the commands it always did.
  *
  * A `wait` right after an action that may navigate (a click, Enter, a
  * navigation, a step through history) on the same tab first waits out the
@@ -92,6 +95,17 @@ const WAIT_POLL = Duration.millis(250);
 
 /** How long a watched pointer's input waits after its move is reported: about the glide the panel draws to the point. */
 export const BROWSER_CURSOR_BEAT = Duration.millis(250);
+
+/**
+ * The name of the mark a page that draws a recording's pointer stands on its
+ * window, as `Symbol.for` keys it (`@repo/service`'s `recording-cursor.ts`).
+ * That pointer glides to a point only once the page hears the move, so a
+ * click on such a page holds the beat between its move and its press.
+ */
+export const BROWSER_RECORDING_POINTER_MARK = "agent.recordingCursor";
+
+/** Whether the page draws a recording's pointer. */
+const DRAWS_RECORDING_POINTER = `window[Symbol.for(${JSON.stringify(BROWSER_RECORDING_POINTER_MARK)})] === true`;
 
 /**
  * How long finding and reporting a pointer's move may take before its input
@@ -663,21 +677,61 @@ function pointOfRef(page: Page, ref: string) {
   });
 }
 
-/** A left click at a point: the pointer moves there, presses, and lets go. */
-function clickAt(page: Page, point: { readonly x: number; readonly y: number }) {
-  const mouse = (type: string, buttons: number) =>
-    page.send("Input.dispatchMouseEvent", {
-      type,
-      x: point.x,
-      y: point.y,
-      button: type === "mouseMoved" ? "none" : "left",
-      buttons,
-      clickCount: type === "mouseMoved" ? 0 : 1,
-    });
+/** One left-button mouse event at a point: a move, a press, or a let go. */
+function mouseAt(page: Page, point: { readonly x: number; readonly y: number }, type: string) {
+  const moved = type === "mouseMoved";
+  return page.send("Input.dispatchMouseEvent", {
+    type,
+    x: point.x,
+    y: point.y,
+    button: moved ? "none" : "left",
+    buttons: type === "mousePressed" ? 1 : 0,
+    clickCount: moved ? 0 : 1,
+  });
+}
+
+/** A left click at a point: the pointer presses there and lets go. */
+function pressAt(page: Page, point: { readonly x: number; readonly y: number }) {
   return Effect.andThen(
-    mouse("mouseMoved", 0),
-    Effect.andThen(mouse("mousePressed", 1), mouse("mouseReleased", 0)),
+    mouseAt(page, point, "mousePressed"),
+    mouseAt(page, point, "mouseReleased"),
   );
+}
+
+/** Whether the page draws a recording's pointer; not where it cannot say in time. */
+function drawsRecordingPointer(page: Page) {
+  const method = "Runtime.evaluate";
+  const asked = page
+    .send(method, { expression: DRAWS_RECORDING_POINTER, returnByValue: true })
+    .pipe(Effect.flatMap((answer) => readEvaluated(method, answer)));
+  return Effect.map(Effect.timeoutOption(Effect.option(asked), CURSOR_REPORT_TIMEOUT), (answer) =>
+    Option.exists(Option.flatten(answer), ({ result }) => result.value === true),
+  );
+}
+
+/**
+ * A left click at a point, the pointer moved there first: its move is
+ * reported and sent, then held for the beat where someone watches or the page
+ * draws a recording's pointer, so the panel's pointer and the recording's
+ * both glide there and arrive as the press lands. A caller that passes no
+ * cursor sends the move and the press back to back, as it always did.
+ */
+function clickAt<R>(
+  page: Page,
+  cursor: BrowserCursor<R> | undefined,
+  point: { readonly x: number; readonly y: number },
+) {
+  return Effect.gen(function* () {
+    const heard =
+      cursor === undefined
+        ? false
+        : yield* reportPoint(page, cursor, BROWSER_CURSOR_KIND.CLICK, point);
+    yield* mouseAt(page, point, "mouseMoved");
+    if (cursor !== undefined && (heard || (yield* drawsRecordingPointer(page)))) {
+      yield* Effect.sleep(BROWSER_CURSOR_BEAT);
+    }
+    yield* pressAt(page, point);
+  });
 }
 
 /**
@@ -759,19 +813,18 @@ function typeText(page: Page, text: string, ref: string | undefined) {
 
 /**
  * Reports the pointer's move to a point, with the visible page's size, and
- * holds the input after it for the beat where someone watches. Note that a
- * page whose size cannot be read reports nothing, since a point the panel
- * cannot place is no use, and the action goes on as it would have; and that
- * the measure and the report together are bounded by
+ * answers whether someone watching heard it, which holds the input after it
+ * for the beat. Note that a page whose size cannot be read reports nothing,
+ * since a point the panel cannot place is no use, and the action goes on as
+ * it would have; and that the measure and the report together are bounded by
  * `CURSOR_REPORT_TIMEOUT`, past which the input goes on unreported.
  */
-function pointTo<R>(
+function reportPoint<R>(
   page: Page,
-  cursor: BrowserCursor<R> | undefined,
+  cursor: BrowserCursor<R>,
   kind: BrowserCursorKind,
   point: { readonly x: number; readonly y: number },
 ) {
-  if (cursor === undefined) return Effect.void;
   const reported = Effect.gen(function* () {
     const method = "Page.getLayoutMetrics";
     const metrics = yield* Effect.option(
@@ -789,13 +842,24 @@ function pointTo<R>(
     });
     return true;
   });
-  return Effect.gen(function* () {
-    const made = yield* Effect.timeoutOption(reported, CURSOR_REPORT_TIMEOUT);
-    // Note that the beat is held only for a move the panel heard, since it is the glide's time.
-    if (cursor.watched && Option.getOrElse(made, () => false)) {
-      yield* Effect.sleep(BROWSER_CURSOR_BEAT);
-    }
-  });
+  // Note that the beat is held only for a move the panel heard, since it is the glide's time.
+  return Effect.map(
+    Effect.timeoutOption(reported, CURSOR_REPORT_TIMEOUT),
+    (made) => cursor.watched && Option.getOrElse(made, () => false),
+  );
+}
+
+/** Reports the pointer's move to a point and holds the input after it for the beat where someone watching heard it. */
+function pointTo<R>(
+  page: Page,
+  cursor: BrowserCursor<R> | undefined,
+  kind: BrowserCursorKind,
+  point: { readonly x: number; readonly y: number },
+) {
+  if (cursor === undefined) return Effect.void;
+  return Effect.flatMap(reportPoint(page, cursor, kind, point), (heard) =>
+    heard ? Effect.sleep(BROWSER_CURSOR_BEAT) : Effect.void,
+  );
 }
 
 /**
@@ -1218,12 +1282,7 @@ function onPage<R>(
           ? Effect.succeed({ x: action.x ?? 0, y: action.y ?? 0 })
           : Effect.tap(pointOfRef(page, ref), (point) => assertUncovered(page, ref, point));
       return Effect.as(
-        Effect.flatMap(at, (point) =>
-          Effect.andThen(
-            pointTo(page, cursor, BROWSER_CURSOR_KIND.CLICK, point),
-            clickAt(page, point),
-          ),
-        ),
+        Effect.flatMap(at, (point) => clickAt(page, cursor, point)),
         actedOn(action.action, tab),
       );
     }

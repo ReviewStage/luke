@@ -15,6 +15,7 @@
  */
 
 import { BRAND_PALETTE } from "@repo/brand";
+import { BROWSER_RECORDING_POINTER_MARK } from "@repo/features/browser-agent-cdp";
 import { RECORDING_CURSOR_FONT } from "./recording-cursor-font.js";
 
 // The pointer's copper over a light page and a dark one, the brand's accent in either theme.
@@ -41,10 +42,11 @@ export const RECORDING_CURSOR_FILE = {
  * root, hidden from the accessibility tree and taking no pointer events. It
  * follows the input the agent sends, which a page hears as a person's
  * (`@repo/features/browser-agent-cdp`), gliding to each point on the panel's
- * spring (`--ui-spring-fast` over `--ui-duration-fast`); a press lands it on
- * its point at once and presses it there, with a ripple at the point, as the
- * page reacts, since unlike the panel's the page hears a click's move only a
- * moment before its press, and typing bobs it over an
+ * spring (`--ui-spring-fast` over `--ui-duration-fast`). A press ripples at
+ * its point at once, as the page reacts, and presses the arrow once it
+ * arrives: the browser tool moves the pointer a beat before it presses, so the
+ * arrow is there by then, and a script that clicks with no pause before the
+ * press leaves it still gliding in. Typing bobs it over an
  * amber glow; over a dark page it is drawn in the dark mode's brighter amber, and near the page's
  * right or bottom edge it is mirrored about its tip. A key a viewer could
  * not otherwise see, such as Enter, Tab, Escape, an arrow, or a shortcut,
@@ -73,7 +75,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   // A new document runs this before it has a root, so the pointer is drawn once it does.
   if (!root) return document.addEventListener("DOMContentLoaded", draw, { once: true });
   // One pointer a document, however often it is added; the mark stands on the window, so a stop finds it though the page removed the host.
-  const mark = Symbol.for("agent.recordingCursor");
+  const mark = Symbol.for(${JSON.stringify(BROWSER_RECORDING_POINTER_MARK)});
   if (window[mark]) return;
   window[mark] = true;
   const GLIDE = 280;
@@ -98,7 +100,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   host.setAttribute("aria-hidden", "true");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;";
   const shadow = host.attachShadow({ mode: "closed" });
-  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.land{transition:opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,${rgba(POINTER.LIGHT, ".42")},transparent);opacity:0;transition:opacity " + GLIDE + "ms " + EXIT + "}.c.dark .h{background:radial-gradient(closest-side,${rgba(POINTER.DARK, ".5")},transparent)}.c.t .h{opacity:1}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:${POINTER.LIGHT};stroke:#fff;stroke-width:2.4;stroke-linejoin:round;paint-order:stroke;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));transform-origin:0 0}.c.dark .a{fill:${POINTER.DARK}}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1.5px solid ${POINTER.LIGHT};border-radius:50%;opacity:0}.r.dark{border-color:${POINTER.DARK}}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
+  const css = ".c{position:absolute;left:0;top:0;opacity:0;transition:transform " + GLIDE + "ms " + SPRING + ",opacity 140ms " + EXIT + "}.c.on{opacity:1}.h{position:absolute;left:-14px;top:-14px;width:40px;height:40px;border-radius:50%;background:radial-gradient(closest-side,${rgba(POINTER.LIGHT, ".42")},transparent);opacity:0;transition:opacity " + GLIDE + "ms " + EXIT + "}.c.dark .h{background:radial-gradient(closest-side,${rgba(POINTER.DARK, ".5")},transparent)}.c.t .h{opacity:1}.f{transform-origin:0 0}.c.fx .f{scale:-1 1}.c.fy .f{scale:1 -1}.c.fx.fy .f{scale:-1 -1}.a{display:block;width:16px;height:16px;overflow:visible;fill:${POINTER.LIGHT};stroke:#fff;stroke-width:2.4;stroke-linejoin:round;paint-order:stroke;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35));transform-origin:0 0}.c.dark .a{fill:${POINTER.DARK}}.r{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;box-sizing:border-box;border:1.5px solid ${POINTER.LIGHT};border-radius:50%;opacity:0}.r.dark{border-color:${POINTER.DARK}}.k{position:absolute;left:50%;bottom:24px;display:flex;align-items:center;gap:12px;padding:7px 12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:#0b0b0c;box-shadow:0 4px 14px rgba(0,0,0,.12);color:rgba(255,255,255,.5);font:500 17px/1 " + FAMILY + ",-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;opacity:0;transform:translateX(-50%);transition:opacity 140ms " + EXIT + "}.k.on{opacity:1}.k span{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}.k span:last-child{color:rgba(255,255,255,.95)}.k svg{display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}";
   // A constructed sheet, since a page's own style-src may refuse a style element.
   if ("adoptedStyleSheets" in shadow && typeof CSSStyleSheet.prototype.replaceSync === "function") {
     const sheet = new CSSStyleSheet();
@@ -130,6 +132,8 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   const stop = new AbortController();
   const on = { capture: true, passive: true, signal: stop.signal };
   const animates = typeof icon.animate === "function";
+  let at = { x: -1, y: -1 };
+  let movedAt = 0;
   let pressedAt = 0;
   let bob;
   let bobEnd;
@@ -164,25 +168,22 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
     }
     return false;
   };
-  // A move glides the arrow to its point, and a landing puts it there at once, cutting short a glide under way.
-  const moveTo = (x, y, land = false) => {
+  const moveTo = (x, y) => {
     if (!host.isConnected && document.documentElement) document.documentElement.append(host);
-    arrow.classList.toggle("land", land);
+    if (x !== at.x || y !== at.y) movedAt = Date.now();
+    at = { x, y };
     arrow.style.transform = "translate(" + x + "px," + y + "px)";
     arrow.classList.toggle("fx", x > innerWidth - REACH);
     arrow.classList.toggle("fy", y > innerHeight - REACH);
     arrow.classList.toggle("dark", darkAt(x, y));
     arrow.classList.add("on");
-    if (!land) return;
-    // Note that the landing is laid out before the glide comes back, because a glide back first would only start it again.
-    arrow.getBoundingClientRect();
-    arrow.classList.remove("land");
   };
-  // A press lands the arrow on its point and presses it there at once, because the page has already heard it: the move before it comes only a moment earlier, and a press that waited out the glide would trail what the page did.
+  // How long until the arrow, still gliding, arrives where it last moved.
+  const arrival = () => Math.max(0, movedAt + GLIDE - Date.now());
+  // The ripple marks the press where and when the page heard it, and the arrow presses once it arrives.
   const pressAt = (x, y) => {
-    moveTo(x, y, true);
     if (!animates) return;
-    icon.animate([{ transform: "scale(1)" }, { transform: "scale(.82)", offset: 0.45 }, { transform: "scale(1)" }], { duration: GLIDE, easing: EXIT });
+    icon.animate([{ transform: "scale(1)" }, { transform: "scale(.82)", offset: 0.45 }, { transform: "scale(1)" }], { duration: GLIDE, delay: arrival(), easing: EXIT });
     const ring = document.createElement("div");
     ring.className = arrow.classList.contains("dark") ? "r dark" : "r";
     ring.style.left = x + "px";
@@ -251,6 +252,7 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   window.addEventListener("wheel", place, on);
   window.addEventListener("mousedown", (event) => {
     pressedAt = Date.now();
+    place(event);
     pressAt(event.clientX, event.clientY);
   }, on);
   window.addEventListener("beforeinput", bobOnce, on);
@@ -267,7 +269,9 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   window.addEventListener("change", (event) => {
     if (!(event.target instanceof HTMLSelectElement)) return;
     const middle = middleOf(event.target);
-    if (middle) pressAt(middle.x, middle.y);
+    if (!middle) return;
+    moveTo(middle.x, middle.y);
+    pressAt(middle.x, middle.y);
   }, on);
   window.addEventListener("agent-recording-stop", () => {
     stop.abort();
