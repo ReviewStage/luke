@@ -103,12 +103,10 @@ const AGENT_BROWSER = {
   READY_TIMEOUT: Duration.seconds(15),
   /**
    * A bridge that did not come up is tried again on a fresh PTY this many
-   * times, this far apart, while the first failure is no older than the
-   * window, so a browser that is down still answers within a bridge's bound.
+   * times, this far apart, all within a bridge's bound.
    */
   BRIDGE_RETRIES: 2,
   BRIDGE_RETRY_SPACING: Duration.seconds(1),
-  BRIDGE_RETRY_WINDOW: Duration.seconds(10),
   /** The most the bridge's attempts take in all once the browser runs, so a hung one never stacks its timeouts. */
   BRIDGE_BOUND: Duration.seconds(20),
   /** How long a command waits on its answer. */
@@ -588,7 +586,6 @@ export function agentBrowserOver(
             schedule: Schedule.max([
               Schedule.spaced(AGENT_BROWSER.BRIDGE_RETRY_SPACING),
               Schedule.recurs(AGENT_BROWSER.BRIDGE_RETRIES),
-              Schedule.during(AGENT_BROWSER.BRIDGE_RETRY_WINDOW),
             ]),
             while: (failure) => failure.reason === BROWSER_UNREACHABLE.BRIDGE_FAILED,
           }),
