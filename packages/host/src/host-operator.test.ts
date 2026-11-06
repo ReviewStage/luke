@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { INBOX_REPLY, type InboxAnswers } from "@repo/features/inbox-wire";
 import { TASK_PRIORITY, TASK_STATUS } from "@repo/features/task-wire";
 import {
   carried,
@@ -141,101 +140,6 @@ it.effect("a task filed for later carries its status, priority, and assignee to 
       ],
     );
   }),
-);
-
-it.effect(
-  "a Start from an agent that names no task travels to the host with no task key, one on a task with its task, and an empty draft's Call with its blank and call",
-  () =>
-    Effect.gen(function* () {
-      const { client, requests } = recordingClient();
-      const operator = operatorOver(client);
-      const from = { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
-
-      yield* operator.agentStart({ idempotencyKey: "press-1", from });
-      yield* operator.agentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
-      yield* operator.agentStart({
-        taskId: "task-1",
-        idempotencyKey: "press-3",
-        blank: true,
-        call: true,
-      });
-
-      assert.deepEqual(
-        requests.map((request) => [request.method, request.params]),
-        [
-          [GATEWAY_METHOD.AGENTS_START, { idempotencyKey: "press-1", from }],
-          [GATEWAY_METHOD.AGENTS_START, { taskId: "task-1", idempotencyKey: "press-2", from }],
-          [
-            GATEWAY_METHOD.AGENTS_START,
-            { taskId: "task-1", idempotencyKey: "press-3", blank: true, call: true },
-          ],
-        ],
-      );
-    }),
-);
-
-it.effect("a nod on an inbox notice travels to the host as its revision and its key alone", () =>
-  Effect.gen(function* () {
-    const { client, requests } = recordingClient();
-    const operator = operatorOver(client);
-
-    yield* operator.agentInboxAnswer({
-      itemId: "item-1",
-      revision: 2,
-      reply: INBOX_REPLY.ACKNOWLEDGED,
-      clientKey: "nod-1",
-    });
-
-    assert.deepEqual(
-      requests.map((request) => [request.method, request.params]),
-      [
-        [
-          GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
-          { itemId: "item-1", revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
-        ],
-      ],
-    );
-  }),
-);
-
-it.effect(
-  "a message on an inbox item's thread carries the answer to its open ask to the host beside its words, and a plain reply carries none",
-  () =>
-    Effect.gen(function* () {
-      const { client, requests } = recordingClient();
-      const operator = operatorOver(client);
-      const answers: InboxAnswers = {
-        ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
-        reply: INBOX_REPLY.CHOSE,
-        choices: ["Ship it"],
-      };
-
-      yield* operator.agentInboxMessage({
-        itemId: "item-1",
-        text: "Ship it today.",
-        clientKey: "message-1",
-        answers,
-      });
-      yield* operator.agentInboxMessage({
-        itemId: "item-1",
-        text: "Any news?",
-        clientKey: "message-2",
-      });
-
-      assert.deepEqual(
-        requests.map((request) => [request.method, request.params]),
-        [
-          [
-            GATEWAY_METHOD.AGENTS_INBOX_MESSAGE,
-            { itemId: "item-1", text: "Ship it today.", clientKey: "message-1", answers },
-          ],
-          [
-            GATEWAY_METHOD.AGENTS_INBOX_MESSAGE,
-            { itemId: "item-1", text: "Any news?", clientKey: "message-2" },
-          ],
-        ],
-      );
-    }),
 );
 
 it.effect(

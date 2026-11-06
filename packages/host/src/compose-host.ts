@@ -63,6 +63,7 @@ import {
   type HostConcern,
   type HostPlatformConcern,
   isPlatformConcern,
+  NOT_ON_THIS_PLATFORM,
   unavailableConcern,
 } from "./host-concerns.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
@@ -377,7 +378,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST),
+          // Note that a host without This Mac refuses its set, which the act draws as unanswered, as the Gateway's refusal of its method was.
+          acts: { HOSTS_THIS_MAC_SET: () => Effect.fail(new Error(NOT_ON_THIS_PLATFORM)) },
+        };
     const terminals: TerminalsComposer =
       openSocket !== undefined
         ? yield* served(
@@ -572,7 +577,13 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const assembly: HostAssembly = {
       gateway: service.gateway,
       // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
-      acts: { ...agents.acts },
+      acts: {
+        ...agents.acts,
+        ...thisMacHost.acts,
+        ...automations.acts,
+        ...installedSkills.acts,
+        ...integrations.acts,
+      },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
       startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),

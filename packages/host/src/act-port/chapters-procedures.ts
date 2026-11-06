@@ -1,15 +1,11 @@
-import type {
-  PullRequestChaptersAnswerView,
-  PullRequestChaptersParams,
-  PullRequestChaptersReadParams,
-} from "@repo/features/pull-request-chapters-view";
+import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { CHAPTERS_ACT_KIND } from "../contract/index.js";
 import { actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
- * chapters-procedures.ts -- a coding agent's Pull request tab's asks of the host about a pull request's chapters: hold them, read them again, or generate them; and the write of the model the member's Generate runs on, picked on Generate's own chevron.
+ * chapters-procedures.ts -- a coding agent's Pull request tab's hold on a pull request's chapters, followed and read again.
  *
  * The one check these procedures make is who asked: only a panel draws the
  * Pull request tab, so the takeover and any other window are refused
@@ -17,9 +13,8 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * while a panel holds their stream open: the host holds them on the first
  * stream and lets them go with the last, and what it holds reaches every
  * panel on app state, never down the stream, which carries nothing. How many
- * streams stand open of each is all that is held here. What the service
- * answers a Generate comes back as the panel's own answer, or why there is
- * none.
+ * streams stand open of each is all that is held here. A Generate is
+ * declared (`contract/chapters.ts`) and answered by the agents' composer.
  */
 export interface ChaptersProceduresDependencies {
   host: {
@@ -28,9 +23,6 @@ export interface ChaptersProceduresDependencies {
     chaptersUnfollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
     /** A pull request's held chapters read again at once, as Try again asks. */
     chaptersRetry(params: PullRequestChaptersReadParams): Effect.Effect<void>;
-    pullRequestChaptersGenerate(
-      params: PullRequestChaptersParams,
-    ): Effect.Effect<PullRequestChaptersAnswerView>;
   };
 }
 
@@ -64,12 +56,6 @@ export function chaptersProcedures(dependencies: ChaptersProceduresDependencies)
       function* ({ input, context, errors }) {
         if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
         yield* host.chaptersRetry(input);
-      },
-    ),
-    [CHAPTERS_ACT_KIND.CHAPTERS_GENERATE]: actPort[CHAPTERS_ACT_KIND.CHAPTERS_GENERATE].effect(
-      function* ({ input, context, errors }) {
-        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-        return yield* host.pullRequestChaptersGenerate(input);
       },
     ),
   };

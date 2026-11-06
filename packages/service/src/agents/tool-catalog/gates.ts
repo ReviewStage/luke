@@ -7,9 +7,9 @@
  * declared here once, with how it is read off the agent and the words a
  * call it shuts would be refused with, so the list an agent is offered and
  * a refusal of a call it makes anyway read the same rule. An agent's
- * standing is the gates open to it, read once per list; an agent whose row
- * is gone has every gate shut, since no gated tool's door would carry out a
- * call for an agent that no longer stands.
+ * standing is the gates open to it, read once per list or call; an agent
+ * whose row is gone has every gate shut, since no gated tool's door would
+ * carry out a call for an agent that no longer stands.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -51,10 +51,12 @@ interface Gate {
  * Each gate as it is read and refused. Note that `SANDBOX` shuts on a
  * device alone, because a local agent's Mac runs no browser of ours, and it
  * already runs on one of the developer's own machines, where `run_on_mac`
- * would only reach itself. The refusals are each gate's door's own words,
- * but `SANDBOX`'s, which no door says today.
+ * would only reach itself. The refusals are the words each gate's doors
+ * refused with before the catalog refused for them (`catalog.ts`'s
+ * `callTool`), but `SANDBOX`'s, which no door said; a tool whose door
+ * answered otherwise words its own (`CatalogTool`'s `refused`).
  */
-const GATES: { readonly [G in ToolGate]: Gate } = {
+export const GATES: { readonly [G in ToolGate]: Gate } = {
   [TOOL_GATE.REPOSITORY]: {
     opens: (agent) => Effect.succeed(hasRepository(agent)),
     refusal: CODER_REFUSAL.NO_REPOSITORY,

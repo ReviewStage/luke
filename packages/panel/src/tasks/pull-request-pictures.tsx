@@ -30,7 +30,9 @@ import { useOpenLink } from "./use-open-link.js";
  * wraps every picture in a link to itself, which `@repo/ui/github-html`
  * lets go of, so the press is the picture's own. A picture inside a link
  * the words keep, a bot's badge to its page, stands inline as GitHub drew
- * it and its press follows the link. The viewer shows the `data:` URL each
+ * it and its press follows the link, and a picture that shares its line
+ * with words, a bot's glyph beside its verdict, stands in that line as GitHub
+ * drew it, with no press. The viewer shows the `data:` URL each
  * picture was read as, so opening one reads nothing again; a picture still
  * being read joins the walk as its read lands, and one GitHub answered no
  * picture for stands as its link and is left out.
@@ -210,27 +212,28 @@ export function EntryPictures({
 /**
  * One picture GitHub's rendering names, read through the service, drawn
  * from its `data:` URL once read: standing alone, as a description's picture is,
- * its press opening the entry's viewer; inside a link, inline as GitHub
- * drew it. Its link where GitHub answered none the window draws.
+ * its press opening the entry's viewer; in a line of words or inside a
+ * link, inline as GitHub drew it. Its link where GitHub answered none the
+ * window draws.
  */
 function GitHubPicture({
   agentId,
   src,
   alt,
-  linked,
+  inline,
 }: {
   agentId: string;
   src: string;
   alt: string;
-  linked: boolean;
+  inline: boolean;
 }): React.JSX.Element {
   const state = usePicture(pictureQuery(agentId, src, useGitHubImageRead()), pictureUnread);
   const door = useContext(EntryViewerContext);
-  // Note that a linked picture whose read did not land is its link too, because it stands inside a link, where no Retry may stand.
-  if (state.kind === PICTURE_STATE.MISSING || (linked && state.kind === PICTURE_STATE.FAILED)) {
+  // Note that an inline picture whose read did not land is its link too, because it stands in a line, where no Retry may stand.
+  if (state.kind === PICTURE_STATE.MISSING || (inline && state.kind === PICTURE_STATE.FAILED)) {
     return <GitHubPictureLink src={src} alt={alt} />;
   }
-  if (!linked) {
+  if (!inline) {
     const open = door === undefined ? undefined : () => door.open(agentId, src);
     return <PictureBlock state={state} alt={alt} caption={undefined} onOpen={open} />;
   }
@@ -245,7 +248,7 @@ function GitHubPicture({
   );
 }
 
-/** A linked picture while it is read: a block the size a picture stands at, named by its alternative words. */
+/** An inline picture while it is read: a block the size a picture stands at, named by its alternative words. */
 function PictureSkeleton({ alt }: { alt: string }): React.JSX.Element {
   return (
     <span className="pull-request-picture-skeleton" role="img" aria-label={alt}>
@@ -257,9 +260,9 @@ function PictureSkeleton({ alt }: { alt: string }): React.JSX.Element {
 /** How the tab draws a picture GitHub's rendering names: one it may read through the service as the agent's, and none else. */
 export function usePictureDrawer(agentId: string): GitHubPictureDrawer {
   return useCallback(
-    (src, alt, linked) =>
+    (src, alt, inline) =>
       githubImageOf(src) === undefined ? undefined : (
-        <GitHubPicture agentId={agentId} src={src} alt={alt} linked={linked} />
+        <GitHubPicture agentId={agentId} src={src} alt={alt} inline={inline} />
       ),
     [agentId],
   );

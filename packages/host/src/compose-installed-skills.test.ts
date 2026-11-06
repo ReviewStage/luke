@@ -188,6 +188,8 @@ function subject(
       });
     return {
       call,
+      /** The composer's declared acts, each handed its input as the port reads it. */
+      acts: composer.acts,
       asked: service.asked,
       live: service.live,
       replies: service.replies,
@@ -205,16 +207,13 @@ const INSTALL = {
 
 it.effect("each ask reaches the service and answers the window its view", () =>
   Effect.gen(function* () {
-    const { call, asked } = yield* subject();
+    const { acts, asked } = yield* subject();
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, INSTALL), {
+    assert.deepEqual(yield* acts.INSTALLED_SKILLS_INSTALL(INSTALL), {
       skills: [SKILL],
     });
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, { skillId: SKILL_ID }),
-      CONTENT,
-    );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: SKILL_ID }), {
+    assert.deepEqual(yield* acts.INSTALLED_SKILLS_READ({ skillId: SKILL_ID }), CONTENT);
+    assert.deepEqual(yield* acts.INSTALLED_SKILLS_REMOVE({ skillId: SKILL_ID }), {
       id: SKILL_ID,
     });
     assert.deepEqual(asked, [
@@ -227,9 +226,9 @@ it.effect("each ask reaches the service and answers the window its view", () =>
 
 it.effect("a refused install says why, naming the skill", () =>
   Effect.gen(function* () {
-    const { call } = yield* subject({ refuseInstall: true });
+    const { acts } = yield* subject({ refuseInstall: true });
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, INSTALL), {
+    assert.deepEqual(yield* acts.INSTALLED_SKILLS_INSTALL(INSTALL), {
       failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
       skillName: "release-notes",
     });
@@ -239,20 +238,20 @@ it.effect("a refused install says why, naming the skill", () =>
 it.effect("behind a closed account gate, or on a run that sends nothing, nothing is asked", () =>
   Effect.gen(function* () {
     for (const options of [{ signedIn: false }, { sendsNetwork: false }]) {
-      const { call, asked, shown } = yield* subject(options);
+      const { call, acts, asked, shown } = yield* subject(options);
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: WORKSPACE_ID }),
         {},
       );
       yield* settled;
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, {
+        yield* acts.INSTALLED_SKILLS_PREVIEW({
           workspaceId: WORKSPACE_ID,
           text: "x",
         }),
         { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED },
       );
-      assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, INSTALL), {
+      assert.deepEqual(yield* acts.INSTALLED_SKILLS_INSTALL(INSTALL), {
         failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED,
       });
       assert.deepEqual(asked, []);
@@ -261,32 +260,17 @@ it.effect("behind a closed account gate, or on a run that sends nothing, nothing
   }),
 );
 
-it.effect("params of the wrong shape are refused before anything travels", () =>
-  Effect.gen(function* () {
-    const { call, asked } = yield* subject();
-
-    const refused = yield* Effect.flip(
-      call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: "not-an-id" }),
-    );
-
-    assert.equal(refused._tag, "InvalidParamsRefusal");
-    assert.deepEqual(asked, []);
-  }),
-);
-
 it.effect(
   "a removal draws its skill gone before the service answers, and one the service refused is put back",
   () =>
     Effect.gen(function* () {
-      const { call, replies, shown, holding } = yield* subject();
+      const { acts, replies, shown, holding } = yield* subject();
       yield* holding({ [WORKSPACE_ID]: [SKILL] });
 
       const refusing = yield* Deferred.make<void>();
       replies.remove = { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED };
       replies.gate = Deferred.await(refusing);
-      const removing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: SKILL_ID }),
-      );
+      const removing = yield* Effect.forkChild(acts.INSTALLED_SKILLS_REMOVE({ skillId: SKILL_ID }));
       yield* settled;
       assert.deepEqual(shown(WORKSPACE_ID), [], "gone before the service answers");
 
@@ -303,11 +287,11 @@ it.effect(
   "an install's skills draw as it answers in each held workspace their scope is in, and stand through an answer from before it until the read carries its transaction",
   () =>
     Effect.gen(function* () {
-      const { call, live, replies, shown, holding } = yield* subject();
+      const { acts, live, replies, shown, holding } = yield* subject();
       yield* holding({ [WORKSPACE_ID]: [], [OTHER_WORKSPACE_ID]: [] });
 
       replies.install = { ok: true, answer: { skills: [SKILL], txid: "9300" } };
-      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, INSTALL);
+      yield* acts.INSTALLED_SKILLS_INSTALL(INSTALL);
       assert.deepEqual(shown(WORKSPACE_ID), [SKILL_ID]);
       assert.deepEqual(shown(OTHER_WORKSPACE_ID), [], "another workspace's skill is not its");
 

@@ -13,14 +13,14 @@ import {
 } from "@repo/features/terminal-model";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  isTerminalTab,
   type LocalStripTab,
   localTab,
+  STRIP_TAB_KIND,
   sameTab,
   type TerminalStripTab,
   terminalTab,
 } from "@repo/ui/tab-strip-model";
-import { Duration, Effect } from "effect";
+import { absurd, Duration, Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import {
   useCallback,
@@ -59,10 +59,11 @@ import { type TerminalView, useTerminalView } from "./use-terminal-view.js";
  * with the page. Closing the tab ends its shell, wherever it runs.
  *
  * A shell that ended takes any key for a new one in the same tab. The bar's
- * action (its click, or Return) asks again for what could not be reached,
- * or resumes a stopped sandbox, which nothing but that resumes. While the
- * agent has not opened its sandbox, a shown cloud tab asks again every few
- * seconds.
+ * action (its click, or Return) asks again for what could not be reached. A
+ * cloud tab shown over a stopped sandbox resumes it, saying it is connecting
+ * meanwhile, and a hidden one waits until it is shown, so a reload never
+ * wakes every tab's sandbox. While the agent has not opened its sandbox, a
+ * shown cloud tab asks again every few seconds.
  */
 
 /** How often a shown cloud tab waiting on an agent that has not opened its sandbox asks again. */
@@ -225,9 +226,14 @@ function shellOf(tab: ShellTab): {
   readonly agentId: string;
   readonly shell: string;
 } {
-  return isTerminalTab(tab)
-    ? { kind: TERMINAL_KIND.CLOUD, agentId: tab.terminal, shell: tab.shell }
-    : { kind: TERMINAL_KIND.LOCAL, agentId: tab.local, shell: tab.shell };
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.TERMINAL:
+      return { kind: TERMINAL_KIND.CLOUD, agentId: tab.terminal, shell: tab.shell };
+    case STRIP_TAB_KIND.LOCAL:
+      return { kind: TERMINAL_KIND.LOCAL, agentId: tab.local, shell: tab.shell };
+    default:
+      return absurd(tab);
+  }
 }
 
 /** The tab of one of an agent's terminals of the kind. */
