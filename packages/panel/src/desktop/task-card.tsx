@@ -100,7 +100,7 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * the row's card names it whole.
  */
 export const SIDEBAR_ROW_TIME =
-  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-ui-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-ui-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-ui-12 [&_.ui-progress-count]:mr-icon-gap [&>.ui-row-count]:mr-tight-gap [&>.ui-time]:min-w-sidebar-row-age";
+  "sidebar-task-time flex flex-none items-center justify-end text-right text-caption-inline text-muted-foreground tabular-nums [&>.actor-mark]:mr-tight-gap [&_.task-agents-mark]:mr-tight-gap [&_.draft-mark]:mr-tight-gap [&_.draft-mark]:size-ui-12 [&_.blocked-mark]:mr-tight-gap [&_.blocked-mark]:size-ui-12 [&>.failed-mark]:mr-tight-gap [&>.failed-mark]:size-ui-12 [&_.ui-progress-count]:mr-icon-gap [&_.ui-row-count]:mr-tight-gap [&>.ui-time]:min-w-sidebar-row-age";
 
 /** The repository a sidebar row names before its marks (`SIDEBAR_ROW_TIME`). */
 export const SIDEBAR_ROW_REPOSITORY =

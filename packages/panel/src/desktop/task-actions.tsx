@@ -88,6 +88,7 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { lastEditOf } from "../tasks/description-body.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { useTaskSendFailed } from "../tasks/failed-lines.js";
+import { needsYouWords } from "../tasks/inbox-model.js";
 import { CHOOSE_LABEL } from "../tasks/repository-chip.js";
 import { PlanGlyph } from "../tasks/tab-look.js";
 import {
@@ -1029,8 +1030,10 @@ function SidebarTaskCard({
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
  * the first named in the row's card, before that how many of its threads
  * wait on the reader, the Tasks page's count (`useTasksWaiting`) in the
- * attention ink, heard with the row as "2 need you", left out at none, and
- * part of the row's press rather than one of its own, before that a stop
+ * attention ink, left out at none, and part of the row's press rather than
+ * one of its own; the press says it after the status, as "2 need you",
+ * since its end leaves the press's words while the row holds the keyboard
+ * (`list-row.css`), and the figure is decoration to a reader; before that a stop
  * sign while a task it waits on is still open (`BlockedMark`), which the press says after
  * the status, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
@@ -1174,6 +1177,7 @@ export function SidebarTask({
                   <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
                 )}
                 {task.blocked === true ? <VisuallyHidden>, {BLOCKED_WORDS}</VisuallyHidden> : null}
+                {waiting === 0 ? null : <VisuallyHidden>, {needsYouWords(waiting)}</VisuallyHidden>}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : (
                   <ReplayMask>
@@ -1202,7 +1206,9 @@ export function SidebarTask({
                     label={`${childCount.finished} of ${childCount.total} sub-tasks finished`}
                   />
                 )}
-                <WaitingCount count={waiting} />
+                <span aria-hidden="true" className="contents">
+                  <WaitingCount count={waiting} />
+                </span>
                 <TaskRowStatus task={task} />
                 <Time at={at} now={now} hint={false} />
               </span>

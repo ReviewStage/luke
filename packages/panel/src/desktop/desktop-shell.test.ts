@@ -961,10 +961,15 @@ test("on a phone the bar's Inbox and the task's sidebar row wear the count of wh
   const taskRow = [...page.querySelectorAll<HTMLElement>("aside.desktop-sidebar li")].findLast(
     (row) => row.textContent?.includes(DOCUMENT_NAME),
   );
-  assert.match(
-    spokenName(taskRow ?? assert.fail("the task's sidebar row stands")),
-    /3 need you/u,
-    "the task's row is heard with its count",
+  // Note that the row's end leaves its press's words while the row holds the keyboard, so the count is heard whether it stands or not.
+  const shown = taskRow ?? assert.fail("the task's sidebar row stands");
+  const keyed = shown.cloneNode(true);
+  assert.ok(keyed instanceof HTMLElement);
+  for (const end of keyed.querySelectorAll(".ui-list-row-meta")) end.remove();
+  assert.deepEqual(
+    [shown, keyed].map((row) => spokenName(row).match(/3 need you/gu)),
+    [["3 need you"], ["3 need you"]],
+    "the task's row is heard with its count once, its end shown or not",
   );
   act(() => root?.unmount());
   document.body.innerHTML = "";
