@@ -16,6 +16,7 @@ import {
 } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { OWN_TRANSCRIPT } from "@repo/host/app-state";
+import { useQuery } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,7 +36,7 @@ import {
   tellingTranscripts,
   transcriptTold,
 } from "../testing/tasks-control.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectRun } from "../use-app-state.js";
 import {
   type AgentTranscriptControl,
   type TranscriptOlderReader,
@@ -119,7 +120,9 @@ function drawn(older?: TranscriptOlderReader) {
     return null;
   }
   function Window(props: { shown: boolean }) {
-    return useAppSlice(APP_SLICE.RUN) === undefined ? null : createElement(Probe, props);
+    return useQuery({ ...appStateQuery, select: selectRun }).data === undefined
+      ? null
+      : createElement(Probe, props);
   }
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
@@ -129,11 +132,11 @@ function drawn(older?: TranscriptOlderReader) {
     frames,
     /** What the probe drew last. */
     seen: () => frames.at(-1),
-    draw: (shown: boolean) =>
-      act(async () => {
-        root?.render(onRegistry(registry, createElement(Window, { shown })));
-        await settle();
-      }),
+    draw: async (shown: boolean) => {
+      // Note that the document's subscription mounts as the render's act ends, so it lands in the next.
+      await act(async () => root?.render(onRegistry(registry, createElement(Window, { shown }))));
+      await act(settle);
+    },
     push: (transcript: AgentTranscriptKey, page: AgentTranscriptPage) =>
       act(async () => {
         telling.tell(transcript, page);

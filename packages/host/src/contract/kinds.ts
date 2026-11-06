@@ -770,7 +770,7 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  * What an act kind does with what it answers, which the panel's lint rule
  * `anti-slop/no-follow-outside-host-read` reads: a READ answers data that
  * can change while a surface shows it, so a surface reads it only through
- * `useHostRead`, over what the host holds; a FETCH answers what cannot
+ * a live read's query, over what the host holds; a FETCH answers what cannot
  * change for what was asked, such as content read once, a lookup as a link
  * opens, or a report for the query asked; and a WRITE is everything else: a
  * change, a command, or a stream a port carries rather than app state.

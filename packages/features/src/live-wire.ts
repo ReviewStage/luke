@@ -852,7 +852,7 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
 /**
  * Each read moved onto the host's app state, by the one name that
  * identifies it from the service's live query (`defineLiveQuery`) to the
- * panel's `useHostRead`.
+ * panel's live reads' queries (`live-reads.ts`).
  */
 export const LIVE_READ = {
   /** The account's preferences row, its default agent, chapters model, and Slack notifications as stored, by the account: the service's `accountPreferences` query, held for the signed-in session into the sync engine's pool, every write to one drawn over it the moment it is asked. */

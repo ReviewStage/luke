@@ -26,7 +26,7 @@ import "./desktop/person-route.lazy.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { deliveryOf, stateWith } from "./testing/app-state.js";
-import { onRegistry } from "./testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "./testing/copy-feedback.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 
 /**
@@ -121,6 +121,8 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 24; tick += 1) await Promise.resolve();
   });
+  // Note that the window reads the account's access through Query, which tells its readers on its own queue.
+  await settleQueries();
 }
 
 async function drawWindow(at?: string): Promise<TestWindowRouter> {

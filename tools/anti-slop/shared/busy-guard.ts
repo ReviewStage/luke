@@ -34,8 +34,8 @@ export const BUSY_PROP = "busy";
 
 /**
  * Calls that answer a promise for an act: `pressAct`, `askAct` and
- * `askActResult` by name, and what `useAct()` hands out (`press`, `act`,
- * `updateSetting`), called bare once destructured or off the handle.
+ * `askActResult` by name, and the names a hook hands them out under (`press`,
+ * `act`, `updateSetting`), called bare once destructured or off the handle.
  */
 export const ACT_CALLS: ReadonlySet<string> = new Set([
   "pressAct",

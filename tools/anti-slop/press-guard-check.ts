@@ -187,7 +187,7 @@ const GUARDS = [
     rule: HOST_READ_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
     watches: (absolute: string) => isWatchedSource(path.relative(REPOSITORY_ROOT, absolute)),
-    remedy: "Read server data through useHostRead over the app-state slice the host fills",
+    remedy: "Read server data through a live read's query (packages/panel/src/live-reads.ts)",
   },
   {
     rule: RETIRED_GUARD_RULE,

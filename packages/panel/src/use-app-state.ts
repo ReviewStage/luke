@@ -1,4 +1,3 @@
-import { useAtomValue } from "@effect/atom-react/Hooks";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -267,164 +266,7 @@ export function appStateNow(): AppStateSnapshot | undefined {
   return Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
 }
 
-/**
- * An atom of what `derive` makes of this window's snapshot, computed once per
- * delivery for every reader rather than once per reader, over the one
- * subscription. `derive` is handed the snapshot `useAppState` answers, so
- * a hook reading the atom and one reading the snapshot cannot disagree.
- */
-export function appStateDerivedAtom<A>(
-  derive: (state: AppStateSnapshot | undefined) => A,
-): Atom.Atom<A> {
-  return Atom.map(appStateAtom, (result) =>
-    derive(Option.getOrUndefined(AsyncResult.value(result))),
-  );
-}
-
-/**
- * One top-level slice of the snapshot, none before the first read. It tells
- * its readers only when the slice is a new object, which a delivery that did
- * not move it never makes (`adopted`), so a reader of one slice is not drawn
- * again for a patch to another.
- */
-function sliceAtom<Key extends keyof AppStateSnapshot>(
-  key: Key,
-): Atom.Atom<AppStateSnapshot[Key] | undefined> {
-  return appStateDerivedAtom((state) => state?.[key]);
-}
-
-/**
- * Every slice of the document, each its own atom, read with `useAppSlice`.
- * A surface reads the narrowest it draws from, so a patch to the settings
- * draws the settings' readers again and leaves the tasks' alone; the whole
- * snapshot (`useAppState`) is for the few readers that hand it on whole.
- */
-export const APP_SLICE = {
-  RUN: sliceAtom("run"),
-  SETTINGS: sliceAtom("settings"),
-  ACCOUNT: sliceAtom("account"),
-  ACCESS: sliceAtom("access"),
-  UPDATE: sliceAtom("update"),
-  AUDIO: sliceAtom("audio"),
-  TASKS: sliceAtom("tasks"),
-  AGENTS: sliceAtom("agents"),
-  INBOX: sliceAtom("inbox"),
-  ACCOUNT_PREFERENCES: sliceAtom(LIVE_READ.ACCOUNT_PREFERENCES),
-  AGENT_ORIGINS: sliceAtom(LIVE_READ.AGENT_ORIGINS),
-  INBOX_ITEMS: sliceAtom(LIVE_READ.INBOX_ITEMS),
-  HOLDER_INBOX: sliceAtom(LIVE_READ.HOLDER_INBOX),
-  INSTALLED_SKILLS: sliceAtom(LIVE_READ.INSTALLED_SKILLS),
-  INTEGRATIONS: sliceAtom(LIVE_READ.INTEGRATIONS),
-  INTEGRATION_TOOLS: sliceAtom(LIVE_READ.INTEGRATION_TOOLS),
-  LINK_STANDINGS: sliceAtom(LIVE_READ.LINK_STANDINGS),
-  MEMORIES: sliceAtom(LIVE_READ.MEMORIES),
-  MODELS: sliceAtom(LIVE_READ.MODELS),
-  PAGES: sliceAtom(LIVE_READ.PAGES),
-  PROVIDER_KEYS: sliceAtom(LIVE_READ.PROVIDER_KEYS),
-  PULL_REQUEST: sliceAtom(LIVE_READ.PULL_REQUEST),
-  REPOSITORY_LISTS: sliceAtom(LIVE_READ.REPOSITORY_LISTS),
-  GITHUB_TOKEN: sliceAtom(LIVE_READ.GITHUB_TOKEN),
-  PULL_REQUEST_CHAPTERS: sliceAtom(LIVE_READ.PULL_REQUEST_CHAPTERS),
-  PULL_REQUEST_CHECKS: sliceAtom(LIVE_READ.PULL_REQUEST_CHECKS),
-  PULL_REQUEST_CONVERSATION: sliceAtom(LIVE_READ.PULL_REQUEST_CONVERSATION),
-  PULL_REQUEST_PUBLISHED: sliceAtom(LIVE_READ.PULL_REQUEST_PUBLISHED),
-  PULL_REQUEST_VIEWED: sliceAtom(LIVE_READ.PULL_REQUEST_VIEWED),
-  REVIEW_OPTIONS: sliceAtom(LIVE_READ.REVIEW_OPTIONS),
-  BROWSER_TABS: sliceAtom(LIVE_READ.BROWSER_TABS),
-  DEVICE_PRESENCE: sliceAtom(LIVE_READ.DEVICE_PRESENCE),
-  HOSTS: sliceAtom(LIVE_READ.HOSTS),
-  WORKSPACE_INVITATIONS: sliceAtom(LIVE_READ.WORKSPACE_INVITATIONS),
-  THIS_MAC_HOST: sliceAtom(LIVE_READ.THIS_MAC_HOST),
-  TRANSCRIPT: sliceAtom(LIVE_READ.TRANSCRIPT),
-  WORKSPACE_MEMBERS: sliceAtom(LIVE_READ.WORKSPACE_MEMBERS),
-  WORKSPACE_INTEGRATIONS: sliceAtom(LIVE_READ.WORKSPACE_INTEGRATIONS),
-  SLACK_CHANNELS: sliceAtom(LIVE_READ.SLACK_CHANNELS),
-  TOKEN_REPOSITORIES: sliceAtom(LIVE_READ.TOKEN_REPOSITORIES),
-  WORKSPACE_PHOTOS: sliceAtom(LIVE_READ.WORKSPACE_PHOTOS),
-  WORKSPACE_TOOLS: sliceAtom(LIVE_READ.WORKSPACE_TOOLS),
-  MCP_CLIENTS: sliceAtom(LIVE_READ.MCP_CLIENTS),
-  AUTOMATIONS: sliceAtom(LIVE_READ.AUTOMATIONS),
-  AUTOMATION_WORKSPACE_RUNS: sliceAtom(LIVE_READ.AUTOMATION_WORKSPACE_RUNS),
-  AUTOMATION_RUNS: sliceAtom(LIVE_READ.AUTOMATION_RUNS),
-  DESCRIPTION_COMMENTS: sliceAtom(LIVE_READ.DESCRIPTION_COMMENTS),
-  HISTORY: sliceAtom(LIVE_READ.HISTORY),
-  DESCRIPTION_DOCUMENT: sliceAtom(LIVE_READ.DESCRIPTION_DOCUMENT),
-  MAC_COMMANDS: sliceAtom("macCommands"),
-  NOTIFICATIONS: sliceAtom("notifications"),
-  NETWORK: sliceAtom("network"),
-  SESSION_REPLAY: sliceAtom("sessionReplay"),
-  PORT_FORWARDING: sliceAtom("portForwarding"),
-  WINDOW: sliceAtom("window"),
-} as const;
-
-/** The settings as the panel draws them, made once per change to the settings slice for every reader. */
-export const APP_SETTINGS_VIEW: Atom.Atom<AppSettingsView | undefined> = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings) => (settings === undefined ? undefined : appSettingsView(settings)),
-);
-
-/**
- * One slice of this window's snapshot, or one field of one (`APP_SLICE`,
- * or an atom built over one), redrawn only as that moves.
- */
-export function useAppSlice<A>(slice: Atom.Atom<A>): A {
-  return useAtomValue(slice);
-}
-
-/** Every experiment the account chose, which tells its readers as any of them turns: for a list that filters entries tagged with their experiment as it is built. */
-const experimentChoicesAtom = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings): ExperimentChoices => settings?.experiments ?? NO_EXPERIMENTS,
-);
-
-/**
- * The signed-in account's experiment choices, redrawn as they move: what a
- * list gating its entries by a tag on their declaration filters by, such as
- * the Settings pages (`settingsPageShown`). Signed out, every one is off.
- * `navigation-history.ts` alone reads it here, until the cleanup PR; a surface
- * reads the same answer through `appStateQuery` and its `select`.
- */
-export function useExperimentChoices(): ExperimentChoices {
-  return useAtomValue(experimentChoicesAtom);
-}
-
-/** Whether the signed-in account is an admin, which tells its readers only as it turns. */
-const ADMIN_ACCESS: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.ACCESS,
-  (access) => access?.admin === true,
-);
-
-/** Whether the account's access is not read yet, before the first read of the document among it. */
-const ADMIN_ACCESS_PENDING: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.ACCESS,
-  (access) => access === undefined || access.pending === true,
-);
-
-/**
- * Whether the signed-in account is an admin, redrawn as it moves: what the
- * sidebar offers the Admin place by, and what the window's history and shell
- * let it stand by. Signed out, before the first read,
- * or where the host's read of it failed, no account is. It only draws: the
- * dashboard's own gate on the service decides every admin read.
- * `navigation-history.ts` alone reads it here, until the cleanup PR; a surface
- * reads the same answer through `appStateQuery` and its `select`.
- */
-export function useAdminAccess(): boolean {
-  return useAtomValue(ADMIN_ACCESS);
-}
-
-/**
- * Whether the signed-in account's access is still being read, as it is for
- * a moment after a sign-in or a launch: what an admin alone may reach waits
- * on it rather than being refused, a reloaded Admin address among it.
- * `navigation-history.ts` alone reads it here, until the cleanup PR; a surface
- * reads the same answer through `appStateQuery` and its `select`.
- */
-export function useAdminAccessPending(): boolean {
-  return useAtomValue(ADMIN_ACCESS_PENDING);
-}
-
-/** The same answer for a callback that cannot wait a render. */
+/** Whether the platform this window runs on offers `capability` (`selectCapability`), for a callback that cannot wait a render. */
 export function capabilityNow(capability: HostCapability): boolean {
   return appStateNow()?.run.capabilities.includes(capability) === true;
 }
@@ -472,60 +314,8 @@ export const selectAudio = (state: AppStateSnapshot) => state.audio;
 export const selectTasks = (state: AppStateSnapshot) => state.tasks;
 export const selectAgents = (state: AppStateSnapshot) => state.agents;
 export const selectInbox = (state: AppStateSnapshot) => state.inbox;
-export const selectAccountPreferences = (state: AppStateSnapshot) =>
-  state[LIVE_READ.ACCOUNT_PREFERENCES];
-export const selectAgentOrigins = (state: AppStateSnapshot) => state[LIVE_READ.AGENT_ORIGINS];
-export const selectInboxItems = (state: AppStateSnapshot) => state[LIVE_READ.INBOX_ITEMS];
-export const selectHolderInbox = (state: AppStateSnapshot) => state[LIVE_READ.HOLDER_INBOX];
-export const selectInstalledSkills = (state: AppStateSnapshot) => state[LIVE_READ.INSTALLED_SKILLS];
-export const selectIntegrations = (state: AppStateSnapshot) => state[LIVE_READ.INTEGRATIONS];
-export const selectIntegrationTools = (state: AppStateSnapshot) =>
-  state[LIVE_READ.INTEGRATION_TOOLS];
-export const selectLinkStandings = (state: AppStateSnapshot) => state[LIVE_READ.LINK_STANDINGS];
-export const selectMemories = (state: AppStateSnapshot) => state[LIVE_READ.MEMORIES];
-export const selectModels = (state: AppStateSnapshot) => state[LIVE_READ.MODELS];
-export const selectPages = (state: AppStateSnapshot) => state[LIVE_READ.PAGES];
-export const selectProviderKeys = (state: AppStateSnapshot) => state[LIVE_READ.PROVIDER_KEYS];
-export const selectPullRequest = (state: AppStateSnapshot) => state[LIVE_READ.PULL_REQUEST];
-export const selectRepositoryLists = (state: AppStateSnapshot) => state[LIVE_READ.REPOSITORY_LISTS];
-export const selectGithubToken = (state: AppStateSnapshot) => state[LIVE_READ.GITHUB_TOKEN];
-export const selectPullRequestChapters = (state: AppStateSnapshot) =>
-  state[LIVE_READ.PULL_REQUEST_CHAPTERS];
-export const selectPullRequestChecks = (state: AppStateSnapshot) =>
-  state[LIVE_READ.PULL_REQUEST_CHECKS];
-export const selectPullRequestConversation = (state: AppStateSnapshot) =>
-  state[LIVE_READ.PULL_REQUEST_CONVERSATION];
 export const selectPullRequestPublished = (state: AppStateSnapshot) =>
   state[LIVE_READ.PULL_REQUEST_PUBLISHED];
-export const selectPullRequestViewed = (state: AppStateSnapshot) =>
-  state[LIVE_READ.PULL_REQUEST_VIEWED];
-export const selectReviewOptions = (state: AppStateSnapshot) => state[LIVE_READ.REVIEW_OPTIONS];
-export const selectBrowserTabs = (state: AppStateSnapshot) => state[LIVE_READ.BROWSER_TABS];
-export const selectDevicePresence = (state: AppStateSnapshot) => state[LIVE_READ.DEVICE_PRESENCE];
-export const selectHosts = (state: AppStateSnapshot) => state[LIVE_READ.HOSTS];
-export const selectWorkspaceInvitations = (state: AppStateSnapshot) =>
-  state[LIVE_READ.WORKSPACE_INVITATIONS];
-export const selectThisMacHost = (state: AppStateSnapshot) => state[LIVE_READ.THIS_MAC_HOST];
-export const selectTranscript = (state: AppStateSnapshot) => state[LIVE_READ.TRANSCRIPT];
-export const selectWorkspaceMembers = (state: AppStateSnapshot) =>
-  state[LIVE_READ.WORKSPACE_MEMBERS];
-export const selectWorkspaceIntegrations = (state: AppStateSnapshot) =>
-  state[LIVE_READ.WORKSPACE_INTEGRATIONS];
-export const selectSlackChannels = (state: AppStateSnapshot) => state[LIVE_READ.SLACK_CHANNELS];
-export const selectTokenRepositories = (state: AppStateSnapshot) =>
-  state[LIVE_READ.TOKEN_REPOSITORIES];
-export const selectWorkspacePhotos = (state: AppStateSnapshot) => state[LIVE_READ.WORKSPACE_PHOTOS];
-export const selectWorkspaceTools = (state: AppStateSnapshot) => state[LIVE_READ.WORKSPACE_TOOLS];
-export const selectMcpClients = (state: AppStateSnapshot) => state[LIVE_READ.MCP_CLIENTS];
-export const selectAutomations = (state: AppStateSnapshot) => state[LIVE_READ.AUTOMATIONS];
-export const selectAutomationWorkspaceRuns = (state: AppStateSnapshot) =>
-  state[LIVE_READ.AUTOMATION_WORKSPACE_RUNS];
-export const selectAutomationRuns = (state: AppStateSnapshot) => state[LIVE_READ.AUTOMATION_RUNS];
-export const selectDescriptionComments = (state: AppStateSnapshot) =>
-  state[LIVE_READ.DESCRIPTION_COMMENTS];
-export const selectHistory = (state: AppStateSnapshot) => state[LIVE_READ.HISTORY];
-export const selectDescriptionDocument = (state: AppStateSnapshot) =>
-  state[LIVE_READ.DESCRIPTION_DOCUMENT];
 export const selectMacCommands = (state: AppStateSnapshot) => state.macCommands;
 export const selectNotifications = (state: AppStateSnapshot) => state.notifications;
 export const selectNetwork = (state: AppStateSnapshot) => state.network;
@@ -544,7 +334,7 @@ export const selectWorkspaces = (state: AppStateSnapshot) => state.tasks.workspa
 export const selectSettingsHeld = (state: AppStateSnapshot): boolean =>
   state.settings !== undefined;
 
-/** The settings as the panel draws them (`APP_SETTINGS_VIEW`). */
+/** The settings as the panel draws them. */
 export const selectAppSettingsView = (state: AppStateSnapshot): AppSettingsView | undefined =>
   state.settings === undefined ? undefined : appSettingsView(state.settings);
 

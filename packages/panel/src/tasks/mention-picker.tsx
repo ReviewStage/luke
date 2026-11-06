@@ -11,6 +11,7 @@ import {
   readerZone,
   suggestedDates,
 } from "@repo/features/date-mention";
+import { descriptionSections } from "@repo/features/description-document";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
 import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar";
@@ -24,7 +25,6 @@ import {
 } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import type { PageLine } from "@repo/features/page-wire";
-import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
 import { thingOfMention } from "@repo/features/thing-kind";
@@ -102,18 +102,18 @@ import {
 import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { askAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
-import { useAutomations } from "../desktop/use-automations.js";
-import { unreadShown } from "../failure-report.js";
-import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
-import { inboxItemsQuery, inboxItemsRetryMutation } from "../live-reads.js";
-import { useMemberDirectory } from "../member-directory.js";
-import { memberRows, YOU_WORD } from "../member-rows.js";
 import {
   type ComposerTrigger,
   type EditorAria,
   listAria,
   type MentionNode,
 } from "../description-editor/contract.js";
+import { useAutomations } from "../desktop/use-automations.js";
+import { unreadShown } from "../failure-report.js";
+import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
+import { inboxItemsQuery, inboxItemsRetryMutation } from "../live-reads.js";
+import { useMemberDirectory } from "../member-directory.js";
+import { memberRows, YOU_WORD } from "../member-rows.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
@@ -209,7 +209,7 @@ import { useTaskStatus } from "./use-known-names.js";
  *
  * Wherever the words stand in a workspace, the list offers its Inbox
  * threads too once a word is typed, as the account's feed holds them
- * (`../use-host-read.ts`), the plan's own first, each by its title and
+ * (`../live-reads.ts`), the plan's own first, each by its title and
  * what it asks, said by its task or its agent on no task, hanging its
  * Inbox row's card: no mention names a thread, so a pick writes the
  * thread's link (`@repo/features/link-grammar`), which every place draws
@@ -1116,7 +1116,10 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
-  const description = { label: MENTION_GROUP.DESCRIPTION, rows: best(rows.description, term, PER_GROUP) };
+  const description = {
+    label: MENTION_GROUP.DESCRIPTION,
+    rows: best(rows.description, term, PER_GROUP),
+  };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
     label: MENTION_GROUP.TASKS,

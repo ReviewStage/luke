@@ -309,7 +309,7 @@ export interface AppInboxSlice {
  * window draws it: its rows as it last answered, absent until it first
  * does, and whether it said it could not answer before it ever had. A read
  * that stops answering once it has keeps its rows, since its next answer
- * brings them up to date. What the panel reads through `useHostRead`.
+ * brings them up to date. What the panel reads through a live read's query.
  */
 export interface AppHostRead<Rows> {
   rows?: Rows;
