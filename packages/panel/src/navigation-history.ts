@@ -565,10 +565,10 @@ function sameDraft(one: Place, other: Place): boolean {
   );
 }
 
-/** The surfaces a routed place shows, as the window counts them opened, a version history by the task `boundFor` it is of. */
+/** The surfaces a routed place shows, as the window counts them opened, a version history by the task `historyTask` its address names. */
 function routedSurfaces(
   routed: RoutedStanding,
-  boundFor: string | undefined,
+  historyTask: string | undefined,
 ): readonly OpenSurface[] {
   switch (routed.place) {
     case ROUTED_PLACE.ADMIN:
@@ -582,9 +582,9 @@ function routedSurfaces(
     case ROUTED_PLACE.AUTOMATIONS:
       return [{ surface: PRODUCT_SURFACE.AUTOMATIONS }];
     case ROUTED_PLACE.VERSION_HISTORY:
-      return boundFor === undefined
+      return historyTask === undefined
         ? []
-        : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: boundFor }];
+        : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: historyTask }];
     case ROUTED_PLACE.INBOX:
       return [{ surface: PRODUCT_SURFACE.INBOX }];
   }
@@ -1617,6 +1617,18 @@ export function useWindowHistory(input: {
     inboxChosen,
     pageAgent,
   ]);
+  // The task a version history's address names, by the step its links name it by under the workspace named, or by its id.
+  const historyTaskOf = (matches: ReturnType<typeof router.matchRoutes>) => {
+    if (routedPlaceOf(matches) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
+    const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
+    const { workspace, taskId } = params;
+    if (workspace === undefined || taskId === undefined) return undefined;
+    const home = workspaceOfSlug(tasks.workspaces, workspace)?.id;
+    return (home === undefined ? undefined : everStepped.get(home)?.get(taskId)) ?? taskId;
+  };
+  // The task the version history standing is of, by its address, which it is counted as from the moment it stands, before that task opens under it.
+  const routedHistory =
+    routed === undefined ? undefined : historyTaskOf(router.matchRoutes(pathOf(routed.address)));
   // Each surface the place shows is counted as it opens, from here rather than from the doors that open it, as the history is written.
   useSurfaceOpen(
     useMemo(() => {
@@ -1628,9 +1640,9 @@ export function useWindowHistory(input: {
       const inboxBeside =
         routed?.place === ROUTED_PLACE.INBOX && beside !== undefined ? [beside] : [];
       return untitled?.kind === PLACE_KIND.ROUTED && routed !== undefined
-        ? [...routedSurfaces(routed, boundFor), ...inboxBeside]
+        ? [...routedSurfaces(routed, routedHistory), ...inboxBeside]
         : surfacesOf(untitled, columnKnown, beside);
-    }, [untitled, columnKnown, sideTab, boundFor, routed]),
+    }, [untitled, columnKnown, sideTab, boundFor, routed, routedHistory]),
     input.room,
   );
   const place = useMemo((): Titled | undefined => {
@@ -1649,15 +1661,6 @@ export function useWindowHistory(input: {
   // A workspace's Board, a person's page, or the Automations pages name their workspace by their address's first step, which stands only while it is the one listed;
   // an automation's page stands no more once it is deleted.
   const { automations, inbox } = input;
-  // The task a version history's address names, by the step its links name it by under the workspace named, or by its id.
-  const historyTaskOf = (matches: ReturnType<typeof router.matchRoutes>) => {
-    if (routedPlaceOf(matches) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
-    const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
-    const { workspace, taskId } = params;
-    if (workspace === undefined || taskId === undefined) return undefined;
-    const home = workspaceOfSlug(tasks.workspaces, workspace)?.id;
-    return (home === undefined ? undefined : everStepped.get(home)?.get(taskId)) ?? taskId;
-  };
   const listedStands = (matches: ReturnType<typeof router.matchRoutes>) => {
     const routedHere = routedPlaceOf(matches);
     // Note that a version history is passed over once its task is deleted, as the task's own step is.

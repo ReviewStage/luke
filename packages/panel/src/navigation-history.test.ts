@@ -46,7 +46,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
-import { useVersionHistoryRoute } from "./version-history-route.js";
+import { useVersionHistoryRoute, type VersionHistoryRoute } from "./version-history-route.js";
 import {
   type BoardRoute,
   type PersonRoute,
@@ -106,6 +106,7 @@ function mount(
   let board: BoardRoute | undefined;
   let person: PersonRoute | undefined;
   let automations: AutomationsRoute | undefined;
+  let versions: VersionHistoryRoute | undefined;
   let inbox: InboxRoute | undefined;
   function Probe() {
     const [standing, setTasks] = useState(initial);
@@ -124,7 +125,7 @@ function mount(
       onClose: () => history?.onLeaveRouted(),
       onStay: () => history?.onStayRouted(),
     });
-    const versions = useVersionHistoryRoute({
+    versions = useVersionHistoryRoute({
       narrow: false,
       onClose: () => history?.onLeaveRouted(),
       onStay: () => history?.onStayRouted(),
@@ -255,6 +256,8 @@ function mount(
       act(() => person?.onOpen(userId, name, workspace)),
     /** Opens an Automations page by the router, as its own doors do. */
     openAutomations: (to?: AutomationsPlace) => act(() => shown?.automationsView.onOpen(to)),
+    /** Opens the version history of the task named `task` under `workspace` by the router, as its doors do. */
+    openVersions: (workspace: string, task: string) => act(() => versions?.onOpen(workspace, task)),
     /** Stands the automation's runs alone, or its setup again, as its Runs and its way back do. */
     automationRuns: (runs: boolean) => act(() => shown?.automationsView.onRuns(runs)),
     /** The name the person's page standing was opened with. */
@@ -1322,4 +1325,30 @@ test("each surface the window opens is counted once, by its kind and layout alon
   // The task's Overview in the column and its Inbox in the side panel are two panes, each counted.
   window.stand(onTabs({ column: undefined, side: SIDE_PANEL_TAB.INBOX }));
   assert.deepEqual(counted.slice(4), [opened("task"), opened("inbox")]);
+});
+
+test("a version history opened over another task is counted once, as the history of the task its address names, not again as that task opens under it", () => {
+  const counted: unknown[] = [];
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    recordSurfaceEvent: (name, properties) => counted.push([name, properties]),
+  });
+  const onTask = (taskId: string) =>
+    tasksControl({
+      workspace: ACME,
+      workspaces: [ACME],
+      page: TASKS_PAGE.DOCUMENT,
+      activeTaskId: taskId,
+      boundFor: taskId,
+    });
+  const window = mount(onTask(TASK_ID));
+  counted.length = 0;
+
+  window.openVersions(ACME.slug, "task-b");
+  window.stand(onTask("task-b"));
+
+  const histories = counted.filter(
+    (event) => (event as [string, { surface: string }])[1].surface === "version_history",
+  );
+  assert.equal(histories.length, 1, JSON.stringify(counted));
 });
