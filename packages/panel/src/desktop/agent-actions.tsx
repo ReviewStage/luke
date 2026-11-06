@@ -17,6 +17,7 @@ import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useThisMac } from "../machine-name.js";
+import { renameWrite } from "../rename-write.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { useAddRepository } from "../tasks/add-repository.js";
 import type { AgentFork } from "../tasks/fork-model.js";
@@ -371,7 +372,8 @@ export function useAgentActions(
   const { label, shown, terminals, onOpenBrowser, onDeleted } = input;
   const copied = useTranscriptCopier();
   const copyLink = useCopyLinkItem()(agentPlace(agent.id));
-  const rename = useInlineRename(agent.id, agents.onRename);
+  const renaming = useMutation(agents.rename.options);
+  const rename = useInlineRename(agent.id, renameWrite(renaming, agents.rename));
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });

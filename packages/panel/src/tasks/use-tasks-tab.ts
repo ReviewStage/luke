@@ -108,7 +108,13 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  mutationOptions,
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
@@ -118,6 +124,7 @@ import {
   KEPT,
   type Kept,
   notKept,
+  sendAct,
   unreachedAs,
 } from "../act.js";
 import { actMutation, pressMutation } from "../act-mutations.js";
@@ -131,6 +138,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
+import type { RenameShape } from "../rename-write.js";
 import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
@@ -883,12 +891,8 @@ export interface TasksControl {
   onLeaveTask: () => void;
   /** Goes to Home from wherever the tab stands: the open task left, and whatever page stands in its place put away. */
   onGoHome: () => void;
-  /**
-   * Renames a task to a name already trimmed and changed, drawn under it at
-   * once and under its old name again if the service refuses; answers
-   * whether it was renamed.
-   */
-  onRenameTask: (taskId: string, name: string) => Promise<boolean>;
+  /** The options a surface renaming a task holds its own mutation over (`taskRenameMutation`). */
+  renameTask: TaskRenameMutation;
   /**
    * Draws a name being typed for a task everywhere the task is named, before
    * any of it is saved, or none, which draws its saved name again.
@@ -1187,6 +1191,48 @@ const BLOCK_REMOVED_NOTE = "Relation removed";
 
 /** What ⌘Z's toast calls a task's rename it takes back or puts back. */
 const TASK_RENAMED_NOTE = "Task renamed";
+
+/** A task's rename as a mutation asks it: the task, and the name already trimmed and changed. */
+interface TaskRenameAsk {
+  readonly taskId: string;
+  readonly name: string;
+}
+
+/**
+ * A task's rename as each surface renaming one holds it, a mutation of its
+ * own over these options: sent through `send`, drawn under the new name at
+ * once, and under its old name again by the host where the service refuses,
+ * answering whether it was renamed. A rename the service kept is ⌘Z's to
+ * take back, through `doors`; none where nothing is drawn to take back.
+ */
+export function taskRenameMutation(
+  send: (asked: TaskRenameAsk) => Promise<boolean>,
+  doors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
+) {
+  return mutationOptions({
+    mutationKey: [ROW_WRITE.TASK_RENAME.kind],
+    mutationFn: send,
+    onMutate: (asked) =>
+      doors === undefined
+        ? undefined
+        : pressRows(ROW_WRITE.TASK_RENAME, doors, [
+            { id: asked.taskId, after: { name: asked.name } },
+          ]),
+    onSuccess: (renamed, _asked, pressed) => {
+      if (renamed) pressed?.keep(TASK_RENAMED_NOTE);
+    },
+  });
+}
+
+/** A task's rename as a surface holds it (`taskRenameMutation`). */
+export type TaskRenameMutation = ReturnType<typeof taskRenameMutation>;
+
+/** How a task's rename is asked and read back, its refusal the answer that it was not renamed. */
+export const TASK_RENAME_SHAPE: RenameShape<boolean, TaskRenameAsk> = {
+  ask: (taskId, name) => ({ taskId, name }),
+  asked: ({ taskId, name }) => ({ subjectId: taskId, name }),
+  refused: (renamed) => !renamed,
+};
 
 /** What ⌘Z's toast calls a task's pin it takes back or puts back, by what was asked. */
 const TASK_MARKED_NOTES = {
@@ -2094,17 +2140,11 @@ export function useTasksTab(input: {
     send: sendStandingRow,
   };
 
-  // A fixture's tasks are renamed nowhere, as they are read from nowhere. A
-  // rename the service kept is ⌘Z's to take back.
-  const renameTask = async (taskId: string, name: string): Promise<boolean> => {
-    if (fixture !== undefined) return false;
-    const pressed = pressRows(ROW_WRITE.TASK_RENAME, renameDoors, [
-      { id: taskId, after: { name } },
-    ]);
-    const renamed = await sendTaskRename({ taskId, name }).catch(() => false);
-    if (renamed) pressed.keep(TASK_RENAMED_NOTE);
-    return renamed;
-  };
+  // A fixture's tasks are renamed nowhere, as they are read from nowhere.
+  const renameTask =
+    fixture === undefined
+      ? taskRenameMutation((asked) => sendAct(ROW_WRITE.TASK_RENAME.kind, asked), renameDoors)
+      : taskRenameMutation(() => Promise.resolve(false), undefined);
 
   // The open task as it stands when a move is answered, which may be
   // another than the one open when it was pressed.
@@ -4032,7 +4072,7 @@ export function useTasksTab(input: {
     },
     onLeaveTask: guard(() => leaveTask()),
     onGoHome: guard(goHome),
-    onRenameTask: renameTask,
+    renameTask,
     onDraftName: draftName,
     onMarkTask: (taskId, mark) => markTask(taskId, mark),
     onSettleTasks: settleTasks,

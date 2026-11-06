@@ -41,7 +41,7 @@ import {
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment, memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -49,6 +49,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
+import { renameWrite } from "../rename-write.js";
 import { HERE } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
@@ -87,7 +88,12 @@ import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
+import {
+  AUTOMATIONS_PAGE,
+  type StartingTask,
+  TASK_RENAME_SHAPE,
+  type TasksControl,
+} from "../tasks/use-tasks-tab.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
@@ -478,7 +484,8 @@ function PlanDocument({
     [onOpenAutomations],
   );
   const taskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
-  const rename = useInlineRename(taskId, tasks.onRenameTask);
+  const renaming = useMutation(tasks.renameTask);
+  const rename = useInlineRename(taskId, renameWrite(renaming, TASK_RENAME_SHAPE));
   // The open task's one rename door, which its toolbar's ⋯, its title's ⋯,
   // and ⌘K all ask. On a phone it opens the head's field; wider, it puts the
   // caret in the plan's own title, showing the plan first where the panel
@@ -720,7 +727,13 @@ function PlanDocument({
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);
   });
   const editDoor = usePlanEditDoor(opened?.id, tasks.edit);
-  const renameDoor = useSteadyDoor((name: string) => rename.end(name));
+  // Note that the plan's title reads its rename's answer, on the same mutation the header's field draws its refusal from.
+  const renameDoor = useSteadyDoor(
+    (name: string): Promise<boolean> =>
+      taskId === undefined
+        ? Promise.resolve(true)
+        : renaming.mutateAsync(TASK_RENAME_SHAPE.ask(taskId, name)).catch(() => false),
+  );
   const titleRename = useMemo<TitleRename>(
     () => ({ asks: titleAsks, asked: rename.asked, onBegin: beginRename }),
     [titleAsks, rename.asked, beginRename],
