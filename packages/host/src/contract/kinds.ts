@@ -492,7 +492,7 @@ export const TASKS_ACT_KIND = {
    * One task's plan held followed while the window holds the stream open
    * for the task it has open, and a while after among those let go lately:
    * what it holds reaches the panel on app state
-   * (`LIVE_READ.PLAN_DOCUMENT`), so the stream carries nothing.
+   * (`LIVE_READ.DESCRIPTION_DOCUMENT`), so the stream carries nothing.
    */
   TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
   /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
@@ -514,7 +514,7 @@ export const TASKS_ACT_KIND = {
   /**
    * A task's comment threads, its plan's own or one page's: held followed
    * while a window shows them, what they hold reaching the panel on app
-   * state (`LIVE_READ.PLAN_COMMENTS`), and read again at once on Try again;
+   * state (`LIVE_READ.DESCRIPTION_COMMENTS`), and read again at once on Try again;
    * one started on words of the plan or on a page, and one thing done to
    * one thread, each answered with the thread as it stands.
    */

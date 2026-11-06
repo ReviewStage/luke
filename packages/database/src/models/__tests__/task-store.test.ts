@@ -6,7 +6,7 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { READ_MARK } from "@repo/features/read-mark";
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -50,9 +50,9 @@ import {
   nameUntitledTask,
   readTask,
   readTaskHeader,
-  readTaskPlan,
+  readTaskDescription,
   readTaskWorkspace,
-  savePlanText,
+  saveDescriptionText,
   setTaskParent,
   TaskAssigneeNotMember,
   TaskIdTaken,
@@ -372,7 +372,10 @@ it.layer(getTestDB())("a task made under an id its maker chose", (it) => {
 
         assert.deepEqual(refused, new TaskIdTaken());
         assert.deepEqual(yield* listTasks(eli), []);
-        assert.equal(Option.getOrUndefined(yield* readTaskPlan(dean, id))?.name, "Acquisition");
+        assert.equal(
+          Option.getOrUndefined(yield* readTaskDescription(dean, id))?.name,
+          "Acquisition",
+        );
       }),
   );
 });
@@ -434,15 +437,15 @@ it.layer(getTestDB())("who made a task", (it) => {
         const byHand = yield* createTask(owner, { organizationId });
         const onCall = yield* createTask(owner, {
           organizationId,
-          origin: { actor: PLAN_ACTOR.NOTETAKER },
+          origin: { actor: DESCRIPTION_ACTOR.NOTETAKER },
         });
 
         assert.equal(byHand.origin, undefined);
-        assert.deepEqual(onCall.origin, { actor: PLAN_ACTOR.NOTETAKER });
+        assert.deepEqual(onCall.origin, { actor: DESCRIPTION_ACTOR.NOTETAKER });
         const listed = yield* listTasks(owner);
         const originOf = (taskId: string) => listed.find((each) => each.id === taskId)?.origin;
         assert.equal(originOf(byHand.id), undefined);
-        assert.deepEqual(originOf(onCall.id), { actor: PLAN_ACTOR.NOTETAKER });
+        assert.deepEqual(originOf(onCall.id), { actor: DESCRIPTION_ACTOR.NOTETAKER });
       }),
   );
 });
@@ -545,19 +548,19 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
         const stranger = yield* openAccount;
-        yield* savePlanText(dean, taskId, "# Plan\n\n## Goal\n\nInvite a teammate.\n");
+        yield* saveDescriptionText(dean, taskId, "# Plan\n\n## Goal\n\nInvite a teammate.\n");
         yield* updateTask(charles, taskId, { pinned: true });
 
         for (const member of [dean, charles]) {
           const whole = Option.getOrThrow(yield* readTask(member, taskId));
-          assert.deepEqual(yield* readTaskPlan(member, taskId), Option.some(whole.task));
+          assert.deepEqual(yield* readTaskDescription(member, taskId), Option.some(whole.task));
         }
         assert.notEqual(
-          Option.getOrThrow(yield* readTaskPlan(charles, taskId)).pinnedAt,
+          Option.getOrThrow(yield* readTaskDescription(charles, taskId)).pinnedAt,
           undefined,
         );
-        assert.deepEqual(yield* readTaskPlan(stranger, taskId), Option.none());
-        assert.deepEqual(yield* readTaskPlan(dean, randomUUID()), Option.none());
+        assert.deepEqual(yield* readTaskDescription(stranger, taskId), Option.none());
+        assert.deepEqual(yield* readTaskDescription(dean, randomUUID()), Option.none());
       }),
   );
 });

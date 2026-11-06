@@ -22,15 +22,15 @@ import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-w
 import { PAGE_OWNER, PAGE_SHOWER, type PageVersion, pagePlaceId } from "@repo/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@repo/features/picture-wire";
 import {
-  PLAN_COMMENT_ACTION,
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_REFUSAL,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentThread,
-} from "@repo/features/plan-comment-wire";
-import type { PlanEditAnswer } from "@repo/features/plan-edit";
+  DESCRIPTION_COMMENT_ACTION,
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_REFUSAL,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
+import type { DescriptionEditAnswer } from "@repo/features/description-edit";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { SlackListedChannel, WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import {
@@ -41,9 +41,9 @@ import {
   type TaskSectionWrite,
 } from "@repo/features/task-section-wire";
 import {
-  PLAN_ACTOR,
-  type PlanRevisionAnswer,
-  type PlanRevisionsAnswer,
+  DESCRIPTION_ACTOR,
+  type DescriptionRevisionAnswer,
+  type DescriptionRevisionsAnswer,
   type RepositoryPin,
   type RepositoryPinsWritten,
   TASK_BLOCK_CHANGE,
@@ -63,7 +63,7 @@ import {
   BROWSER_TAB_OPEN_FAILURE,
   COMMENT_SUBJECT,
   GITHUB_DISCONNECT_FAILURE,
-  type HeldPlanDocument,
+  type HeldDescriptionDocument,
   HOST_LIVE,
   type ParentCallFailure,
   PICTURE_KEEP_FAILURE,
@@ -101,8 +101,8 @@ import { Deferred, Duration, Effect, Exit, Fiber, Layer, Result, Scope } from "e
 import { TestClock } from "effect/testing";
 import {
   type AppHostRead,
-  type AppPlanComments,
-  type AppPlanDocuments,
+  type AppDescriptionComments,
+  type AppDescriptionDocuments,
   NO_KEYS_HELD,
 } from "./app-state.js";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
@@ -143,7 +143,7 @@ const MARKED_AT = 5_000;
 interface FakeService extends TasksClient {
   tasks: Task[];
   /** Each task's comment threads, by task id, and every comment write asked, in order. */
-  threads: Record<string, PlanCommentThread[]>;
+  threads: Record<string, DescriptionCommentThread[]>;
   commentCalls: string[];
   /** What a write to a thread answers, once `commentGate` opens where one stands; a deletion where none is named. */
   commentAnswer: TasksCommentAnswer | undefined;
@@ -211,17 +211,17 @@ interface FakeService extends TasksClient {
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
   /** The newest page of the history, for any task; none answers nothing, as a service that did not answer. */
-  history: PlanRevisionsAnswer | undefined;
+  history: DescriptionRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
-  olderHistory: Record<number, PlanRevisionsAnswer>;
+  olderHistory: Record<number, DescriptionRevisionsAnswer>;
   /** Each revision the service holds, by its number, which a restore puts back as the task's document. */
-  revisions: Record<number, PlanRevisionAnswer["revision"]>;
+  revisions: Record<number, DescriptionRevisionAnswer["revision"]>;
   /** Every version of every page the service holds, for any task. */
   pages: PageVersion[];
   /** The plans' pictures the service holds, by plan and then by picture. */
   pictures: Map<string, Map<string, { contentType: PictureType; base64: string }>>;
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
-  editAnswer: PlanEditAnswer | undefined;
+  editAnswer: DescriptionEditAnswer | undefined;
   /** The transaction an edit answers it committed in, where a test names one. */
   editTxid: string | undefined;
   /** The account's pinned repositories, newest pinned first, as the service keeps them. */
@@ -537,18 +537,21 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => {
         if ("page" in start) throw new Error("the fake holds no page's threads");
         service.commentCalls.push(`start:${planId}:${start.quote}`);
-        const thread: PlanCommentThread = {
+        const thread: DescriptionCommentThread = {
           id: start.id ?? "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
           scope: start.scope,
           quote: start.quote,
           anchor: start.anchor,
           section: "Goal",
-          status: PLAN_COMMENT_STATUS.OPEN,
+          status: DESCRIPTION_COMMENT_STATUS.OPEN,
           entries: [
             {
               id: "5f2b0c1e-8d3a-4c7b-9e6f-1a2b3c4d5e6f",
-              kind: PLAN_COMMENT_ENTRY.COMMENT,
-              writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
+              kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+              writer: {
+                actor: DESCRIPTION_COMMENT_ACTOR.MEMBER,
+                by: { userId: "u1", name: "Dean" },
+              },
               words: start.words,
               at: 1,
             },
@@ -637,7 +640,11 @@ function fakeService(tasks: Task[]): FakeService {
           ...found,
           document: revision.document,
           updatedAt: found.updatedAt + 1,
-          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: found.updatedAt + 1, duringCall: false },
+          lastEdit: {
+            actor: DESCRIPTION_ACTOR.DEVELOPER,
+            at: found.updatedAt + 1,
+            duringCall: false,
+          },
         };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? restored : candidate,
@@ -989,7 +996,7 @@ function fakeService(tasks: Task[]): FakeService {
       }).pipe(Effect.tap(() => service.sectionAnswered)),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
-      Effect.sync((): TaskCallResult<PlanEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
+      Effect.sync((): TaskCallResult<DescriptionEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
         if (service.editAnswer !== undefined) return { ok: true, answer: service.editAnswer };
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
@@ -1000,7 +1007,7 @@ function fakeService(tasks: Task[]): FakeService {
             ...found.document,
             body: edit.document.value,
           },
-          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: EDITED_AT, duringCall: false },
+          lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at: EDITED_AT, duringCall: false },
         };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? edited : candidate,
@@ -1357,20 +1364,24 @@ function subject(
         yield* nextPoll(settled);
       });
     /** Holds a task's plan as the window does while it has the task open. */
-    const holdPlan = (taskId: string) => call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId });
+    const holdDescription = (taskId: string) =>
+      call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId });
     /** Opens a task as the window's press does, the window then holding its plan, and lets the plan's read land. */
     const openTask = (taskId: string) =>
       Effect.tap(call(GATEWAY_METHOD.TASKS_OPEN, { taskId }), () =>
-        Effect.andThen(holdPlan(taskId), settled),
+        Effect.andThen(holdDescription(taskId), settled),
       );
-    /** The plans the host holds for the windows as it last told them (`LIVE_READ.PLAN_DOCUMENT`). */
-    const plans = (): AppPlanDocuments => {
-      const told = pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED);
+    /** The plans the host holds for the windows as it last told them (`LIVE_READ.DESCRIPTION_DOCUMENT`). */
+    const plans = (): AppDescriptionDocuments => {
+      const told = pushed.findLast(
+        ([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_DOCUMENTS_CHANGED,
+      );
       // SAFETY: the host tells its held plans whole as this event's payload.
-      return (told?.[1] ?? NO_KEYS_HELD) as AppPlanDocuments;
+      return (told?.[1] ?? NO_KEYS_HELD) as AppDescriptionDocuments;
     };
     /** `taskId`'s plan as the host last told it held; none where it holds none. */
-    const held = (taskId: string): AppHostRead<HeldPlanDocument> | undefined => plans()[taskId];
+    const held = (taskId: string): AppHostRead<HeldDescriptionDocument> | undefined =>
+      plans()[taskId];
     /** The task `taskId`'s held plan holds; none where none is held, or it is gone. */
     const plan = (taskId: string): Task | undefined => {
       const rows = held(taskId)?.rows;
@@ -1389,7 +1400,7 @@ function subject(
       settled,
       openTask,
       focus,
-      holdPlan,
+      holdDescription,
       plans,
       held,
       plan,
@@ -2129,11 +2140,11 @@ it.effect(
       const { open } = service;
       service.open = (taskId) =>
         taskId === BILLING ? Effect.andThen(Deferred.await(answered), open(taskId)) : open(taskId);
-      const { call, last, settled, held, openTask, holdPlan } = yield* subject(service);
+      const { call, last, settled, held, openTask, holdDescription } = yield* subject(service);
 
       yield* openTask(BILLING);
       const opening = yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
-      yield* holdPlan(INVITES);
+      yield* holdDescription(INVITES);
       yield* settled;
 
       assert.deepEqual(opening, { opened: true });
@@ -4734,7 +4745,7 @@ it.effect(
               ...held,
               updatedAt: 20,
               document: { ...held.document, body: theirs },
-              lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 20, duringCall: false },
+              lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at: 20, duringCall: false },
             }
           : each,
       );
@@ -4957,18 +4968,18 @@ it.effect(
 );
 
 /** A thread on the plan, as the window draws it, with its first comment. */
-const SEVEN_DAYS: PlanCommentThread = {
+const SEVEN_DAYS: DescriptionCommentThread = {
   id: "1b7c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
-  scope: PLAN_COMMENT_SCOPE.WORDS,
+  scope: DESCRIPTION_COMMENT_SCOPE.WORDS,
   quote: "Invites",
   anchor: { from: 2, to: 9 },
   section: "Goal",
-  status: PLAN_COMMENT_STATUS.OPEN,
+  status: DESCRIPTION_COMMENT_STATUS.OPEN,
   entries: [
     {
       id: "2c8d3e4f-5a6b-4c7d-9e8f-0a1b2c3d4e5f",
-      kind: PLAN_COMMENT_ENTRY.COMMENT,
-      writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
+      kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+      writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
       words: "Should this be a setting?",
       at: 0,
     },
@@ -4980,7 +4991,7 @@ const SEVEN_DAYS: PlanCommentThread = {
 };
 
 /** The rows a subject's comments' live read delivers for `threads`, each entry by a member and with no files. */
-function commentRows(threads: readonly PlanCommentThread[]) {
+function commentRows(threads: readonly DescriptionCommentThread[]) {
   return {
     threads: threads.map((thread) => ({
       id: thread.id,
@@ -5031,7 +5042,7 @@ it.effect(
       const onPage = {
         ...SEVEN_DAYS,
         id: "3d9e4f5a-6b7c-4d8e-8f9a-1b2c3d4e5f6a",
-        scope: PLAN_COMMENT_SCOPE.PAGE,
+        scope: DESCRIPTION_COMMENT_SCOPE.PAGE,
         quote: "Invite funnel",
         page: { id: FUNNEL.id, version: 1 },
         entries: [],
@@ -5045,9 +5056,9 @@ it.effect(
       yield* answered(() => page.set(commentRows([withoutAnchor])));
 
       assert.deepEqual(pushed.at(-1), [
-        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
         {
-          [COMMENT_SUBJECT.PLAN]: { [INVITES]: { rows: [SEVEN_DAYS] } },
+          [COMMENT_SUBJECT.DESCRIPTION]: { [INVITES]: { rows: [SEVEN_DAYS] } },
           [COMMENT_SUBJECT.PAGE]: { [FUNNEL.id]: { rows: [withoutAnchor] } },
         },
       ]);
@@ -5057,10 +5068,10 @@ it.effect(
       yield* followSettled;
       assert.equal(plan.held() + page.held(), 0);
       assert.deepEqual(
-        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PLAN_COMMENTS_CHANGED),
+        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED),
         [
-          GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
-          { [COMMENT_SUBJECT.PLAN]: {}, [COMMENT_SUBJECT.PAGE]: {} },
+          GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED,
+          { [COMMENT_SUBJECT.DESCRIPTION]: {}, [COMMENT_SUBJECT.PAGE]: {} },
         ],
       );
     }),
@@ -5076,43 +5087,47 @@ it.effect(
       const { call, pushed } = yield* subject(service);
       const status = () => {
         const [, held] =
-          pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PLAN_COMMENTS_CHANGED) ?? [];
-        const rows = (held as AppPlanComments | undefined)?.[COMMENT_SUBJECT.PLAN][INVITES]?.rows;
+          pushed.findLast(([kind]) => kind === GATEWAY_EVENT.DESCRIPTION_COMMENTS_CHANGED) ?? [];
+        const rows = (held as AppDescriptionComments | undefined)?.[COMMENT_SUBJECT.DESCRIPTION][
+          INVITES
+        ]?.rows;
         return rows?.map((thread) => thread.status);
       };
       const resolve = call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
         planId: INVITES,
         threadId: SEVEN_DAYS.id,
-        action: { action: PLAN_COMMENT_ACTION.RESOLVE },
+        action: { action: DESCRIPTION_COMMENT_ACTION.RESOLVE },
       });
-      const resolved = { ...SEVEN_DAYS, status: PLAN_COMMENT_STATUS.RESOLVED, revision: 2 };
+      const resolved = { ...SEVEN_DAYS, status: DESCRIPTION_COMMENT_STATUS.RESOLVED, revision: 2 };
       yield* call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, { taskId: INVITES });
       yield* followSettled;
       // An answer Sync woke hands the follow its wait for a write's transaction.
       yield* answered(() => plan.set(commentRows([SEVEN_DAYS]), ["tx-earlier"]));
 
       service.commentGate = Deferred.makeUnsafe<void>();
-      service.commentAnswer = { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS };
+      service.commentAnswer = { refused: DESCRIPTION_COMMENT_REFUSAL.NOT_YOURS };
       const refused = yield* Effect.forkChild(resolve);
       yield* followSettled;
       assert.deepEqual(
         status(),
-        [PLAN_COMMENT_STATUS.RESOLVED],
+        [DESCRIPTION_COMMENT_STATUS.RESOLVED],
         "drawn before the service answers",
       );
       Deferred.doneUnsafe(service.commentGate, Effect.void);
-      assert.deepEqual(yield* Fiber.join(refused), { refused: PLAN_COMMENT_REFUSAL.NOT_YOURS });
-      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.OPEN], "taken back once refused");
+      assert.deepEqual(yield* Fiber.join(refused), {
+        refused: DESCRIPTION_COMMENT_REFUSAL.NOT_YOURS,
+      });
+      assert.deepEqual(status(), [DESCRIPTION_COMMENT_STATUS.OPEN], "taken back once refused");
 
       service.commentGate = undefined;
       service.commentAnswer = { thread: resolved, txid: "tx-resolve" };
       const kept = yield* Effect.forkChild(resolve);
       yield* followSettled;
       yield* answered(() => plan.set(commentRows([SEVEN_DAYS]), ["tx-other"]));
-      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.RESOLVED], "a read from before it");
+      assert.deepEqual(status(), [DESCRIPTION_COMMENT_STATUS.RESOLVED], "a read from before it");
       yield* answered(() => plan.set(commentRows([resolved]), ["tx-resolve"]));
       assert.deepEqual(yield* Fiber.join(kept), { thread: resolved, txid: "tx-resolve" });
-      assert.deepEqual(status(), [PLAN_COMMENT_STATUS.RESOLVED]);
+      assert.deepEqual(status(), [DESCRIPTION_COMMENT_STATUS.RESOLVED]);
     }),
 );
 
@@ -5205,7 +5220,7 @@ it.effect(
 function historyRow(seq: number, at: number) {
   return {
     seq,
-    actor: PLAN_ACTOR.DEVELOPER,
+    actor: DESCRIPTION_ACTOR.DEVELOPER,
     editorId: "user-dean",
     editorName: "Dean",
     liveSessionId: null,
@@ -5226,7 +5241,7 @@ function historyLine(seq: number, at: number) {
   return {
     seq,
     lastEdit: {
-      actor: PLAN_ACTOR.DEVELOPER,
+      actor: DESCRIPTION_ACTOR.DEVELOPER,
       by: { userId: "user-dean", name: "Dean" },
       at,
       duringCall: false,

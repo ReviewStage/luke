@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { agentTable } from "@repo/database/schemas/agent";
 import { account, user } from "@repo/database/schemas/auth";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { conversations } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { hostedUsage } from "@repo/database/schemas/usage";
@@ -15,7 +15,7 @@ import {
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
 } from "@repo/features/admin-wire";
-import { PLAN_ACTOR, type PlanActor } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type DescriptionActor } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
@@ -78,9 +78,15 @@ const createTask = (userId: string, organizationId: string, createdAt: string) =
   });
 
 /** A plan revision of `taskId`, numbered `seq`, written by `actor` as `userId`. */
-const revisePlan = (taskId: string, seq: number, actor: PlanActor, userId: string, at: string) =>
+const reviseDescription = (
+  taskId: string,
+  seq: number,
+  actor: DescriptionActor,
+  userId: string,
+  at: string,
+) =>
   Database.use((db) =>
-    db.insert(planRevision).values({
+    db.insert(descriptionRevision).values({
       taskId,
       seq,
       actor,
@@ -194,12 +200,24 @@ it.layer(getTestDB())("the Users read", (it) => {
       // A task on the 18th, a quiet 19th, then a revision of that task and an
       // agent yesterday, and a task and an agent today.
       const planned = yield* createTask(builder, workspace, "2026-10-18T09:00:00Z");
-      yield* revisePlan(planned, 1, PLAN_ACTOR.DEVELOPER, builder, "2026-10-20T09:00:00Z");
+      yield* reviseDescription(
+        planned,
+        1,
+        DESCRIPTION_ACTOR.DEVELOPER,
+        builder,
+        "2026-10-20T09:00:00Z",
+      );
       yield* startAgent(builder, workspace, "2026-10-20T08:00:00Z");
       yield* createTask(builder, workspace, "2026-10-21T09:00:00Z");
       yield* startAgent(builder, workspace, "2026-10-21T10:00:00Z");
       // An agent's revision is the agent's, and a year and more ago is past the read.
-      yield* revisePlan(planned, 2, PLAN_ACTOR.AGENT, builder, "2026-10-19T09:00:00Z");
+      yield* reviseDescription(
+        planned,
+        2,
+        DESCRIPTION_ACTOR.AGENT,
+        builder,
+        "2026-10-19T09:00:00Z",
+      );
       yield* createTask(builder, workspace, "2025-09-01T09:00:00Z");
       // A neighbor's task on the quiet day, and hosted calls of the neighbor's alone.
       yield* createTask(neighbor, workspace, "2026-10-19T09:00:00Z");
@@ -214,10 +232,10 @@ it.layer(getTestDB())("the Users read", (it) => {
       const { actions, activity } = buildAdminUserDetail(source, support, NOW, windowDays);
 
       assert.deepEqual(actions.daily.slice(-4), [
-        { day: "2026-10-18", tasksCreated: 1, planRevisions: 0, agentsStarted: 0 },
-        { day: "2026-10-19", tasksCreated: 0, planRevisions: 0, agentsStarted: 0 },
-        { day: "2026-10-20", tasksCreated: 0, planRevisions: 1, agentsStarted: 1 },
-        { day: "2026-10-21", tasksCreated: 1, planRevisions: 0, agentsStarted: 1 },
+        { day: "2026-10-18", tasksCreated: 1, descriptionRevisions: 0, agentsStarted: 0 },
+        { day: "2026-10-19", tasksCreated: 0, descriptionRevisions: 0, agentsStarted: 0 },
+        { day: "2026-10-20", tasksCreated: 0, descriptionRevisions: 1, agentsStarted: 1 },
+        { day: "2026-10-21", tasksCreated: 1, descriptionRevisions: 0, agentsStarted: 1 },
       ]);
       assert.equal(actions.activeDaysWindow, 3);
       assert.deepEqual(actions.activeDaysTrend, { days: 7, recent: 3, prior: 0 });

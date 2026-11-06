@@ -44,7 +44,7 @@ export function landedBundles(
 export function unlandedBundles(): SideBundles {
   const unlanded = () => Promise.withResolvers<never>().promise;
   return sideBundles({
-    planEditor: unlanded,
+    descriptionEditor: unlanded,
     fileTree: unlanded,
     terminal: unlanded,
     diagram: unlanded,

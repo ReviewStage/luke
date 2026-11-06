@@ -24,7 +24,7 @@ import { act } from "react";
 import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { sideBundles } from "../bundle-loader.js";
-import { planEditor } from "../plan-editor/index.js";
+import { descriptionEditor } from "../description-editor/index.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -398,8 +398,8 @@ test("an answer box whose editor bundle could not be loaded says so beside Retry
   // Note that the chunk fails the first time it is asked for and lands the next, as a connection that dropped for a moment does.
   let failed = false;
   const bundles = sideBundles({
-    planEditor: () => {
-      if (failed) return Promise.resolve(planEditor);
+    descriptionEditor: () => {
+      if (failed) return Promise.resolve(descriptionEditor);
       failed = true;
       return Promise.reject(new Error("The chunk could not be loaded."));
     },

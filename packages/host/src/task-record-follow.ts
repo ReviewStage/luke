@@ -12,7 +12,7 @@ import { decodedLiveRows, type LiveBroken, type TxWait } from "./live-follow.js"
  * The service answers one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
  * follows them (`live-follow.ts`) for as long as a window holds the task's
- * plan (`plan-document-reads.ts`), and answers each delivery that moved the
+ * plan (`description-document-reads.ts`), and answers each delivery that moved the
  * plan with when it was last saved, which the caller reads again from the
  * service, and a write of the plan waits on the record for its transaction. The pages, calls, and code
  * parts the service still answers for a released desktop are compared by no
@@ -23,7 +23,7 @@ import { decodedLiveRows, type LiveBroken, type TxWait } from "./live-follow.js"
 
 /** What a delivery that moved the plan says: when the plan was last saved, none for a task the account no longer reaches. */
 export interface TaskRecordMove {
-  readonly planSavedAt: number | undefined;
+  readonly descriptionSavedAt: number | undefined;
 }
 
 /** A read the service did not answer, `gone` where the task is no longer the account's. */
@@ -37,7 +37,7 @@ export interface TaskRecordFollowDependencies {
 }
 
 /** The plan's rows as one comparable value. */
-function planMarkOf(rows: TaskRecordLiveRows): string {
+function descriptionMarkOf(rows: TaskRecordLiveRows): string {
   return JSON.stringify(
     rows.plan.toSorted((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0)),
   );
@@ -61,8 +61,8 @@ export function taskRecordMoves(
     Stream.mapAccum(
       (): string | undefined => undefined,
       (before: string | undefined, rows: TaskRecordLiveRows) => {
-        const mark = planMarkOf(rows);
-        const moved = mark === before ? [] : [{ planSavedAt: rows.plan[0]?.savedAt }];
+        const mark = descriptionMarkOf(rows);
+        const moved = mark === before ? [] : [{ descriptionSavedAt: rows.plan[0]?.savedAt }];
         return [mark, moved] as const;
       },
     ),

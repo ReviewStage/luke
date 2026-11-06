@@ -384,13 +384,13 @@ export function pressRows<Rows, Fields extends object, Kind extends PortActKind>
 
 /**
  * A task's row as the tasks drawn show it: the list's, else its plan's as
- * the host holds it for the window (`LIVE_READ.PLAN_DOCUMENT`), as a task
+ * the host holds it for the window (`LIVE_READ.DESCRIPTION_DOCUMENT`), as a task
  * just started is held before the list carries it.
  */
 function taskRow(tasks: TasksView, taskId: string): TaskSummary | undefined {
   const listed = tasks.tasks.find((task) => task.id === taskId);
   if (listed !== undefined) return listed;
-  const held = appStateNow()?.[LIVE_READ.PLAN_DOCUMENT][taskId]?.rows;
+  const held = appStateNow()?.[LIVE_READ.DESCRIPTION_DOCUMENT][taskId]?.rows;
   return held !== undefined && "task" in held ? held.task : undefined;
 }
 

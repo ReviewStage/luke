@@ -6,12 +6,12 @@
  * name over the text: as a document's own header (`PageHeader`), where it is
  * the page's one `h1`, with the title's ⋯ at its end, as an element of its own
  * ahead of the text's first section, where the title can be edited in the
- * same flow as the text (`plan-document-editor.tsx`). Nothing here reads or
+ * same flow as the text (`description-document-editor.tsx`). Nothing here reads or
  * writes the name but the task it is handed.
  */
 
 import { PageHeader, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@repo/ui";
-import { UNIT_ATTRIBUTED_CLASS } from "./plan-unit-look.js";
+import { UNIT_ATTRIBUTED_CLASS } from "./description-unit-look.js";
 
 /** The title over a plan's text: the page's `h1`, and `actions` (the title's ⋯) at its end. */
 export function TaskTitle({

@@ -25,7 +25,7 @@ import {
 } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import type { PageLine } from "@repo/features/page-wire";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@repo/features/task-wire";
 import { thingOfMention } from "@repo/features/thing-kind";
@@ -107,7 +107,7 @@ import {
   type EditorAria,
   listAria,
   type MentionNode,
-} from "../plan-editor/contract.js";
+} from "../description-editor/contract.js";
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
@@ -281,7 +281,9 @@ const MENTION_FROM = {
 type MentionFrom = (typeof MENTION_FROM)[keyof typeof MENTION_FROM];
 
 /** Words that narrow the list as a kind's own word does: `plan`, the description's word before it was renamed. */
-const MENTION_FROM_ALIAS: ReadonlyMap<string, MentionFrom> = new Map([["plan", MENTION_FROM.PLAN]]);
+const MENTION_FROM_ALIAS: ReadonlyMap<string, MentionFrom> = new Map([
+  ["plan", MENTION_FROM.DESCRIPTION],
+]);
 
 /** The kind a list is narrowed to: one of the place's own, or one connected server by its connection, wearing its provider's mark. */
 type Narrow =
@@ -588,7 +590,7 @@ function taskRows(
   text: string,
 ): MentionRow[] {
   if (taskId === undefined) return [];
-  const headings = planSections(text).map((section) => section.heading);
+  const headings = descriptionSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [
     ...headings.flatMap((heading, at): MentionRow[] => {
@@ -1059,7 +1061,7 @@ function narrowedRows(
   switch (kind.narrow.from) {
     case MENTION_FROM.FILES:
       return paths === undefined ? [] : fileRows(paths, folder, term);
-    case MENTION_FROM.PLAN:
+    case MENTION_FROM.DESCRIPTION:
       return best(rows.plan, term, PER_KIND);
     case MENTION_FROM.TASKS:
       return best(rows.tasks, term, PER_KIND);
@@ -1111,7 +1113,7 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : foundRows(paths, undefined, term, PER_GROUP);
-  const plan = { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) };
+  const plan = { label: MENTION_GROUP.DESCRIPTION, rows: best(rows.plan, term, PER_GROUP) };
   // The workspace's tasks are offered only once a word is typed.
   const tasks = {
     label: MENTION_GROUP.TASKS,
@@ -1153,7 +1155,7 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
   switch (kind.narrow.from) {
     case MENTION_FROM.FILES:
       return <FolderIcon aria-hidden="true" />;
-    case MENTION_FROM.PLAN:
+    case MENTION_FROM.DESCRIPTION:
       return <DocumentIcon />;
     case MENTION_FROM.TASKS:
       return <PlanGlyph status={undefined} />;
@@ -1599,9 +1601,9 @@ function kindsOf(
       ? []
       : [
           {
-            from: MENTION_FROM.PLAN,
-            name: MENTION_GROUP.PLAN,
-            detail: sectionCount(planSections(source.text()).length),
+            from: MENTION_FROM.DESCRIPTION,
+            name: MENTION_GROUP.DESCRIPTION,
+            detail: sectionCount(descriptionSections(source.text()).length),
           },
         ]),
     ...(pages === 0
@@ -1792,10 +1794,10 @@ export function useMentionPicker({
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const plansOn =
+  const descriptionsOn =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const taskRowsOffered = open
-    ? workspaceTaskRows(plansOn ? taskId : undefined, tasksWorkspace, listed.tasks)
+    ? workspaceTaskRows(descriptionsOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];
   // The threads offered are the workspace's as the account's feed holds them, which the host holds for the session.
   const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
@@ -1830,7 +1832,7 @@ export function useMentionPicker({
           threads: threadRowsOffered.length,
           automations: automationRowsOffered.length,
         },
-        plansOn,
+        descriptionsOn,
       )
     : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
@@ -1886,7 +1888,7 @@ export function useMentionPicker({
           scope,
           pathsSearched,
           {
-            plan: plansOn ? taskRows(taskId, source.taskName, planKey, source.text()) : [],
+            plan: descriptionsOn ? taskRows(taskId, source.taskName, planKey, source.text()) : [],
             tasks: taskRowsOffered,
             pages: pageRows(holder, source.pages ?? NO_PAGES, now),
             agents: agentRows(

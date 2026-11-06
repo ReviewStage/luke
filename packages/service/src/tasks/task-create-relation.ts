@@ -23,7 +23,7 @@
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
-import { recordRevision } from "@repo/database/models/plan-revisions";
+import { recordRevision } from "@repo/database/models/description-revisions";
 import {
   addTaskBlock,
   lockTasksForBlocks,

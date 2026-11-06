@@ -13,7 +13,7 @@ import {
 } from "@repo/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { formatBytes } from "@repo/features/number-format";
-import { planAttachmentOf } from "@repo/features/plan-attachment-link";
+import { descriptionAttachmentOf } from "@repo/features/description-attachment-link";
 import {
   agentCallLine,
   CALL_KIND,
@@ -169,7 +169,7 @@ import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { ModelLabel } from "./model-label.js";
-import { usePlanPictureDrawer } from "./plan-pictures.js";
+import { useDescriptionPictureDrawer } from "./description-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { cardTitle, type SentWords, todosCount } from "./tool-call-model.js";
@@ -377,7 +377,7 @@ function definitionsIn(
  * moment the tab opens, and a model's words must make none; the pictures an
  * agent shows are its `show_image` calls'. The pictures drawn are a plan's
  * own, inside the plan's card, and an Inbox item's own, inside its pane,
- * each read through the host (`plan-pictures.tsx`, `inbox-pictures.tsx`)
+ * each read through the host (`description-pictures.tsx`, `inbox-pictures.tsx`)
  * rather than from its address. Note that the mark is
  * made on the markdown, before the drawing's hardening reads a picture at
  * all, which draws a relative one as a placeholder of its own and an
@@ -576,19 +576,19 @@ const UNNAMED_PICTURE = "Picture";
 
 /**
  * A picture in a transcript's words: a plan's own picture drawn as the plan
- * draws it where its words stand inside `PlanPictures`, as the plan's card
+ * draws it where its words stand inside `DescriptionPictures`, as the plan's card
  * does, and an Inbox item's own where they stand inside `InboxPictures`
  * (`inbox-pictures.tsx`); any other a link to where it points, with the
  * picture's glyph, never drawn.
  */
 function PictureElement({ node }: MarkdownNodeProps): ReactNode {
-  const planPicture = usePlanPictureDrawer();
+  const descriptionPicture = useDescriptionPictureDrawer();
   const inboxPicture = useInboxPictureDrawer();
   const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
   const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
   const caption = String(node?.properties[PICTURE_ELEMENT.CAPTION] ?? "");
-  if (planPicture !== undefined && planAttachmentOf(address) !== undefined) {
-    return planPicture(address, said, caption === "" ? undefined : caption);
+  if (descriptionPicture !== undefined && descriptionAttachmentOf(address) !== undefined) {
+    return descriptionPicture(address, said, caption === "" ? undefined : caption);
   }
   // An Inbox item's own picture, where its words stand inside `InboxPictures`.
   const itemPicture = inboxPicture?.(address, said, caption === "" ? undefined : caption);
@@ -1001,7 +1001,7 @@ const CALL_ICON = {
   [CALL_KIND.WEB_PAGE]: GlobeIcon,
   [CALL_KIND.LOAD_SKILL]: BookOpenIcon,
   [CALL_KIND.LOOK_AT_PICTURE]: ImageIcon,
-  [CALL_KIND.EDIT_PLAN]: FilePenIcon,
+  [CALL_KIND.EDIT_DESCRIPTION]: FilePenIcon,
   [CALL_KIND.TODOS]: () => <GLYPH.TODOS />,
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,

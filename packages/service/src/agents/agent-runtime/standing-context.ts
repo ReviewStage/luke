@@ -12,8 +12,8 @@
 import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-store";
 import { dateLabel } from "@repo/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
-import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
-import { NOTE_KIND, type PlanAgentEdit } from "@repo/features/plan-notes";
+import type { DescriptionCommentThread } from "@repo/features/description-comment-wire";
+import { NOTE_KIND, type DescriptionAgentEdit } from "@repo/features/description-notes";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 
@@ -38,7 +38,7 @@ function noteWords(words: string): string {
 }
 
 /** One note an agent took, in a line: what it did, where, and its words, the text it replaced or deleted among them. */
-function agentNoteLine(note: PlanAgentEdit["notes"][number]): string {
+function agentNoteLine(note: DescriptionAgentEdit["notes"][number]): string {
   switch (note.kind) {
     case NOTE_KIND.ADD:
       return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;
@@ -134,14 +134,14 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * (so the agent can raise what a member asked), each read again
  * every turn so what the agent saved is what the next turn reads. A task that no
  * longer stands gets the heading and the developer's time alone, and one
- * whose agent's starter has Plans off (`../plans-on.ts`) its name and brief
+ * whose agent's starter has Plans off (`../descriptions-on.ts`) its name and brief
  * without the plan's document, notes, or threads.
  */
 export function standingContext(
   stored: StoredTask | undefined,
   clock: TurnClock,
-  comments: readonly PlanCommentThread[] = [],
-  plansOn = true,
+  comments: readonly DescriptionCommentThread[] = [],
+  descriptionsOn = true,
 ): string {
   const heading = [
     `${TASK_MARKER} ${new Date(clock.now).toISOString()}`,
@@ -149,7 +149,7 @@ export function standingContext(
   ].join("\n");
   if (!stored) return heading;
   const { task } = stored;
-  const plan = plansOn
+  const plan = descriptionsOn
     ? [
         DOCUMENT_MARKER,
         JSON.stringify(task.document),

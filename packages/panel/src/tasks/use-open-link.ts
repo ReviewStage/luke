@@ -5,7 +5,7 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
-import { MENTION_KIND, type PlanMention } from "@repo/features/mention-link";
+import { MENTION_KIND, type DescriptionMention } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { isGitHubAddress, isOpenableAddress } from "@repo/host/acts";
 import {
@@ -214,7 +214,7 @@ export function openPullRequestsHere(
 }
 
 /** The place a mention of a plan, or of one of its sections, names. */
-export function placeOfMention(mention: PlanMention): LinkPlace {
+export function placeOfMention(mention: DescriptionMention): LinkPlace {
   return mention.kind === MENTION_KIND.TASK
     ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
     : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor };
@@ -266,11 +266,13 @@ function openAddress(
 }
 
 /** The opener for a plan, or one of its sections, as a mention's chip names it: where the place it is pressed on opens it, else in the window; nothing outside the window. */
-export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
+export function useOpenTask(): ((mention: DescriptionMention) => void) | undefined {
   const open = useOpenPlace();
   return useMemo(
     () =>
-      open === undefined ? undefined : (mention: PlanMention) => open(placeOfMention(mention)),
+      open === undefined
+        ? undefined
+        : (mention: DescriptionMention) => open(placeOfMention(mention)),
     [open],
   );
 }

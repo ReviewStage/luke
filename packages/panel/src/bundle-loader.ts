@@ -6,14 +6,14 @@ import type * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
 import type { DiffViewModule } from "./diff-view/contract.js";
 import type { FileTreeModule } from "./file-tree/contract.js";
-import type { PlanEditorModule } from "./plan-editor/contract.js";
+import type { DescriptionEditorModule } from "./description-editor/contract.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import type { TerminalModule } from "./terminal/contract.js";
 
 /**
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
  *
- * The panel's editors (`plan-editor/`), a File tab's tree (`file-tree/`), a
+ * The panel's editors (`description-editor/`), a File tab's tree (`file-tree/`), a
  * Terminal tab's screen (`terminal/`), a plan's diagrams (`diagram/`), and a
  * Files changed diff (`diff-view/`) are each
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
@@ -33,7 +33,7 @@ export type BundleImporter<A> = () => Promise<A>;
 
 /** How each bundle of the panel's own is reached. */
 export interface SideBundleImporters {
-  readonly planEditor: BundleImporter<PlanEditorModule>;
+  readonly descriptionEditor: BundleImporter<DescriptionEditorModule>;
   readonly fileTree: BundleImporter<FileTreeModule>;
   readonly terminal: BundleImporter<TerminalModule>;
   readonly diagram: BundleImporter<DiagramModule>;
@@ -61,7 +61,7 @@ export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 
 /** Why each bundle could not be had, where its import failed. */
 const LOAD_FAILED = {
-  planEditor: "The editor could not be loaded.",
+  descriptionEditor: "The editor could not be loaded.",
   fileTree: TREE_LOAD_FAILED,
   terminal: TERMINAL_LOAD_FAILED,
   diagram: DIAGRAM_REFUSED_LINE,
@@ -70,7 +70,8 @@ const LOAD_FAILED = {
 
 /** Each bundle's entry, imported where the bundler put it. */
 const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
-  planEditor: () => import("./plan-editor/index.js").then((entry) => entry.planEditor),
+  descriptionEditor: () =>
+    import("./description-editor/index.js").then((entry) => entry.descriptionEditor),
   fileTree: () => import("./file-tree/index.js").then((entry) => entry.fileTree),
   terminal: () => import("./terminal/index.js").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index.js").then((entry) => entry.diagram),
@@ -109,7 +110,7 @@ function bundleAtom<A>(
 export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideBundles {
   const reach: SideBundleImporters = { ...SIDE_BUNDLE_IMPORTERS, ...importers };
   return {
-    planEditor: bundleAtom(reach.planEditor, LOAD_FAILED.planEditor),
+    descriptionEditor: bundleAtom(reach.descriptionEditor, LOAD_FAILED.descriptionEditor),
     fileTree: bundleAtom(reach.fileTree, LOAD_FAILED.fileTree),
     terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
     diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),
@@ -135,8 +136,8 @@ export function useSideBundles(): SideBundles {
  */
 export function usePrefetchEditorBundle(): () => void {
   const registry = useContext(RegistryContext);
-  const { planEditor } = useSideBundles();
+  const { descriptionEditor } = useSideBundles();
   return useCallback(() => {
-    registry.get(planEditor);
-  }, [registry, planEditor]);
+    registry.get(descriptionEditor);
+  }, [registry, descriptionEditor]);
 }

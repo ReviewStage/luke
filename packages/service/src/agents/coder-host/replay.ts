@@ -1127,7 +1127,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (own === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   // Note that the source's first row, a line, is its first message, which its note was a part of.
   const opened = records[0]?.message.role === MESSAGE_ROLE.USER ? records[0].placedAt : undefined;
-  const handed = briefOf(source.prompt ?? source.planSnapshot ?? "", opened);
+  const handed = briefOf(source.prompt ?? source.descriptionSnapshot ?? "", opened);
   const mine = handed.note === undefined ? own : [handed.note, ...own];
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;

@@ -29,7 +29,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * the picture's address (`@repo/features/inbox-attachment-link`), so the
  * pane standing an item stands `InboxPictures` around its words, and every
  * transcript's words under it draw a picture of that item as the item's
- * own, as `PlanPictures` does a plan's (`plan-pictures.tsx`). A press on
+ * own, as `DescriptionPictures` does a plan's (`description-pictures.tsx`). A press on
  * any of them opens one viewer over every picture of the item, in the order
  * they are drawn, which the arrow keys walk, as an agent's pictures' viewer
  * does (`agent-pictures.tsx`): a picture still read joins the walk once its

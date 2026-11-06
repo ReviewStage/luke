@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { FAILURE_CONDITION } from "@repo/features/shown-failure";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -11,7 +11,7 @@ import { afterEach, test } from "vitest";
 import { KEPT, notKept } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost, type ToastNotice, useToast } from "../toast.js";
-import { HISTORY_READ } from "./use-plan-history.js";
+import { HISTORY_READ } from "./use-description-history.js";
 import { sayRestored, useVersionRestore, VersionView } from "./version-view.js";
 
 /**
@@ -68,7 +68,7 @@ function mountVersion(answer: ActionResult, asked: (number | undefined)[], lande
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 2, duringCall: false },
+          lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at: 2, duringCall: false },
           startedAt: 1,
           changes: 1,
         },

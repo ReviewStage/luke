@@ -331,7 +331,7 @@ test("an agent started from another that has done nothing yet previews no step, 
   const copied = agentTranscript({
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, FORKED_FIRST)],
-    brief: AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.DESCRIPTION,
   });
   assert.equal(latestActivity(copied), undefined);
 });

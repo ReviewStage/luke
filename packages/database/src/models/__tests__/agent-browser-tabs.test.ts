@@ -62,7 +62,7 @@ const startAgent = (starter: string, taskId: string) =>
   Effect.map(
     createAgent(starter, {
       taskId,
-      planSnapshot: "# Checkout",
+      descriptionSnapshot: "# Checkout",
       prompt: null,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -369,7 +369,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
           yield* createAgent(starter, {
             taskId: null,
             organizationId: workspace,
-            planSnapshot: null,
+            descriptionSnapshot: null,
             prompt: "Sign in to the shop.",
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",

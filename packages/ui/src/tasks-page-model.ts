@@ -1,5 +1,5 @@
 import {
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
@@ -416,9 +416,9 @@ function makerOf(task: Pick<TaskSummary, "origin">): TaskMaker {
   switch (task.origin?.actor) {
     case undefined:
       return TASK_MAKER.PERSON;
-    case PLAN_ACTOR.AGENT:
+    case DESCRIPTION_ACTOR.AGENT:
       return TASK_MAKER.AGENT;
-    case PLAN_ACTOR.NOTETAKER:
+    case DESCRIPTION_ACTOR.NOTETAKER:
       return TASK_MAKER.APP;
   }
 }

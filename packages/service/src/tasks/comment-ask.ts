@@ -2,12 +2,12 @@ import { readAgent } from "@repo/database/models/agent-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_TOOL,
-  type PlanCommentAsked,
-  type PlanCommentThread,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_TOOL,
+  type DescriptionCommentAsked,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { MESSAGE_CHANNEL } from "@repo/wire";
 import { Effect, Option } from "effect";
@@ -16,14 +16,14 @@ import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
-import { plansOnFor } from "../agents/plans-on.js";
+import { descriptionsOnFor } from "../agents/descriptions-on.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
  * comment-ask.ts -- a plan's comment thread sent to one of the task's agents: the words it is handed over in, and the hand-over.
  *
  * A member's comment hands its thread over to each agent in it, one an `@`
- * of the comment's adds among them (`plan-comments-procedures.ts`'s
+ * of the comment's adds among them (`description-comments-procedures.ts`'s
  * `handedTo`), as the request: who wrote what in it, the words of the plan
  * it is on, and what the agent is to do with it, which is to read the thread
  * and the plan and answer in the thread, and nothing more of what it
@@ -56,7 +56,7 @@ export interface CommentAsk {
   /** The task whose plan the thread is on, which the agent's reply names. */
   readonly taskId: string;
   readonly taskName: string;
-  readonly thread: PlanCommentThread;
+  readonly thread: DescriptionCommentThread;
   /** The member who sent it, by the name the service holds. */
   readonly sender: string;
   /** The page a page's thread is on, by its newest version's title and number; none for a thread on the plan. */
@@ -64,13 +64,13 @@ export interface CommentAsk {
 }
 
 /** Who wrote an entry, as the words handed over name them: the app's own name among them only in a thread written before the task's own assistant was gone. */
-function writerName(entry: PlanCommentThread["entries"][number]): string {
+function writerName(entry: DescriptionCommentThread["entries"][number]): string {
   switch (entry.writer.actor) {
-    case PLAN_COMMENT_ACTOR.APP:
+    case DESCRIPTION_COMMENT_ACTOR.APP:
       return PRODUCT_NAME;
-    case PLAN_COMMENT_ACTOR.AGENT:
+    case DESCRIPTION_COMMENT_ACTOR.AGENT:
       return "An agent";
-    case PLAN_COMMENT_ACTOR.MEMBER:
+    case DESCRIPTION_COMMENT_ACTOR.MEMBER:
       return entry.writer.by?.name ?? "A former member";
   }
 }
@@ -82,7 +82,7 @@ function oneComment(words: string): string {
 }
 
 /** What a thread on the plan is on, as the words handed over say it. */
-function planPlace(thread: PlanCommentThread): string {
+function descriptionPlace(thread: DescriptionCommentThread): string {
   const where = thread.section === "" ? "" : ` (section "${thread.section}")`;
   return thread.anchor === undefined
     ? `On words since deleted from the plan: "${thread.quote}"${where}`
@@ -91,8 +91,8 @@ function planPlace(thread: PlanCommentThread): string {
 
 /** What a thread on a page is on, as the words handed over say it: the version it was left on, and its element there, or the whole page. */
 function pagePlace(
-  thread: PlanCommentThread,
-  on: NonNullable<PlanCommentThread["page"]>,
+  thread: DescriptionCommentThread,
+  on: NonNullable<DescriptionCommentThread["page"]>,
   page: NonNullable<CommentAsk["page"]>,
 ): string {
   const newest = on.version === page.newestVersion ? "" : `, whose newest is ${page.newestVersion}`;
@@ -103,9 +103,11 @@ function pagePlace(
 }
 
 /** A thread's comments as the words handed over say them, one a line, each by its writer. */
-function commentLines(thread: PlanCommentThread): readonly string[] {
+function commentLines(thread: DescriptionCommentThread): readonly string[] {
   return thread.entries
-    .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.COMMENT && entry.words !== undefined)
+    .filter(
+      (entry) => entry.kind === DESCRIPTION_COMMENT_ENTRY.COMMENT && entry.words !== undefined,
+    )
     .map((entry) => `${writerName(entry)}: ${oneComment(entry.words ?? "")}`);
 }
 
@@ -113,14 +115,14 @@ function commentLines(thread: PlanCommentThread): readonly string[] {
 export function commentAskMessage(ask: CommentAsk): string {
   const { thread, page } = ask;
   const comments = commentLines(thread);
-  const reply = `answer in this thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}"`;
+  const reply = `answer in this thread with \`${DESCRIPTION_COMMENT_TOOL.REPLY}\` on thread "${thread.id}" of task "${ask.taskId}"`;
   const only = "Answer what the thread asks; do not act on anything else it discusses.";
   // Note that the thread is handed over as its quoted words and its comments alone, never the plan or its section, which an agent handed the plan already holds.
   if (thread.page === undefined || page === undefined) {
     const lead = `${ask.sender} sent you a comment thread on the plan "${ask.taskName}" to answer (thread ${thread.id}).`;
     return [
       lead,
-      planPlace(thread),
+      descriptionPlace(thread),
       "",
       ...comments,
       "",
@@ -136,7 +138,7 @@ export function commentAskMessage(ask: CommentAsk): string {
 export interface ReviewAsk {
   readonly taskId: string;
   readonly taskName: string;
-  readonly threads: readonly PlanCommentThread[];
+  readonly threads: readonly DescriptionCommentThread[];
   readonly sender: string;
   /** The page the threads are on, by its id and its newest version's title and number. */
   readonly page: { readonly id: string; readonly title: string; readonly newestVersion: number };
@@ -154,31 +156,34 @@ export function reviewAskMessage(ask: ReviewAsk): string {
   const each = threads.flatMap((thread) => [
     "",
     `Thread ${thread.id}`,
-    thread.page === undefined ? planPlace(thread) : pagePlace(thread, thread.page, page),
+    thread.page === undefined ? descriptionPlace(thread) : pagePlace(thread, thread.page, page),
     ...commentLines(thread),
   ]);
-  const doing = `Read the threads and the page with \`${AGENT_TOOL.READ_PAGE}\`, then answer in each thread with \`${PLAN_COMMENT_TOOL.REPLY}\` on its thread of task "${ask.taskId}". Where they ask for changes to the page, make them all, then show the page's next version once with \`${AGENT_TOOL.SHOW_PAGE}\` and page "${page.id}" before you answer. Answer what the threads ask; do not act on anything else they discuss.`;
+  const doing = `Read the threads and the page with \`${AGENT_TOOL.READ_PAGE}\`, then answer in each thread with \`${DESCRIPTION_COMMENT_TOOL.REPLY}\` on its thread of task "${ask.taskId}". Where they ask for changes to the page, make them all, then show the page's next version once with \`${AGENT_TOOL.SHOW_PAGE}\` and page "${page.id}" before you answer. Answer what the threads ask; do not act on anything else they discuss.`;
   return [lead, ...each, "", doing].join("\n");
 }
 
 /**
  * The agent an ask names, where it is the plan's own and stands, and, for a
  * thread on the plan rather than a page, where its starter has Plans on
- * (`plans-on.ts`), since an agent with Plans off is told nothing of the
+ * (`descriptions-on.ts`), since an agent with Plans off is told nothing of the
  * plan's comments; nothing otherwise, which no ask is written for.
  */
 export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
-  to: PlanCommentAsked,
-  thread: Pick<PlanCommentThread, "page">,
+  to: DescriptionCommentAsked,
+  thread: Pick<DescriptionCommentThread, "page">,
 ) {
-  if (to.actor !== PLAN_COMMENT_ACTOR.AGENT || to.agentId === undefined) return undefined;
+  if (to.actor !== DESCRIPTION_COMMENT_ACTOR.AGENT || to.agentId === undefined) return undefined;
   const agent = yield* hostedStoreOrUnavailable(readAgent(userId, to.agentId));
   if (Option.isNone(agent) || agent.value.taskId !== taskId || agent.value.archivedAt !== null) {
     return undefined;
   }
-  if (thread.page === undefined && !(yield* plansOnFor(agent.value.userId, agent.value.kind))) {
+  if (
+    thread.page === undefined &&
+    !(yield* descriptionsOnFor(agent.value.userId, agent.value.kind))
+  ) {
     return undefined;
   }
   return agent.value;

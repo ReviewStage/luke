@@ -50,7 +50,7 @@ import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "../description-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
@@ -589,10 +589,10 @@ export function AgentComposer({
   const queues = queueing?.working && !empty && !held && !files.reading && !editingQueued;
   const modifierHeld = useModifierHeld(queues || editingQueued);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
-  const { planEditor } = useSideBundles();
-  const bundle = useAtomValue(planEditor);
+  const { descriptionEditor } = useSideBundles();
+  const bundle = useAtomValue(descriptionEditor);
   // Note that a bundle that failed is not kept (`bundle-loader.ts`), so Retry imports it again, as a File tab's tree does.
-  const retryBundle = useAtomRefresh(planEditor);
+  const retryBundle = useAtomRefresh(descriptionEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);

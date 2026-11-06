@@ -22,7 +22,7 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { invitation, member, organization, user } from "@repo/database/schemas/auth";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
-import { planRevision } from "@repo/database/schemas/plan-revision";
+import { descriptionRevision } from "@repo/database/schemas/description-revision";
 import { task } from "@repo/database/schemas/task";
 import {
   ADMIN_METRICS_SCOPE,
@@ -113,7 +113,7 @@ function agentsSince(since: Date): SQL<number> {
 
 /** Revisions written on the workspace's plans since the instant, by a member, the app, or an agent alike. */
 function revisionsSince(since: Date): SQL<number> {
-  return sql<number>`(select count(*)::int from ${planRevision} inner join ${task} on ${task.id} = ${planRevision.taskId} where ${and(eq(task.organizationId, organization.id), gte(planRevision.at, since))})`;
+  return sql<number>`(select count(*)::int from ${descriptionRevision} inner join ${task} on ${task.id} = ${descriptionRevision.taskId} where ${and(eq(task.organizationId, organization.id), gte(descriptionRevision.at, since))})`;
 }
 
 /**

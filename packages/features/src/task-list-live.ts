@@ -31,7 +31,7 @@ import { readMarkOf } from "./read-mark.js";
 import { countedNumber } from "./service-wire.js";
 import {
   type ListedPullRequest,
-  PLAN_ACTOR,
+  DESCRIPTION_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
   type TaskAgentPin,
@@ -103,9 +103,13 @@ const taskLiveRowSchema = EffectSchema.Struct({
   priority: taskPrioritySchema,
   /** The task's number in its workspace, from 1, as the list says it; absent from a row the host draws for a task it started before the service numbered it. */
   number: EffectSchema.optionalKey(EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1))),
-  /** Who made the task for its owner (`PLAN_ACTOR`); absent from a service before it was sent, read as made by hand. */
+  /** Who made the task for its owner (`DESCRIPTION_ACTOR`); absent from a service before it was sent, read as made by hand. */
   creatorActor: EffectSchema.optionalKey(
-    EffectSchema.Literals([PLAN_ACTOR.DEVELOPER, PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT]),
+    EffectSchema.Literals([
+      DESCRIPTION_ACTOR.DEVELOPER,
+      DESCRIPTION_ACTOR.NOTETAKER,
+      DESCRIPTION_ACTOR.AGENT,
+    ]),
   ),
   /** The coding agent that made the task; null for any other maker and once its row is gone. */
   creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
@@ -361,7 +365,7 @@ function agentsSummaryOf(group: AgentGroup, now: number): TaskAgentsSummary {
 /** Who made a task for its owner, as the summary names them: nothing for a task made by hand. */
 function originOf(row: TaskLiveRow): { readonly origin?: TaskOrigin } {
   const actor = row.creatorActor;
-  if (actor === undefined || actor === PLAN_ACTOR.DEVELOPER) return {};
+  if (actor === undefined || actor === DESCRIPTION_ACTOR.DEVELOPER) return {};
   const agentId = row.creatorAgentId;
   return {
     origin: { actor, ...(agentId === undefined || agentId === null ? undefined : { agentId }) },

@@ -430,7 +430,7 @@ function chooseOverviewRename(container: HTMLElement): void {
 }
 
 /** The plan's own title, which a wide window renames the task in. */
-function planTitle(container: HTMLElement): HTMLElement | null {
+function descriptionTitle(container: HTMLElement): HTMLElement | null {
   return container.querySelector<HTMLElement>('[role="textbox"][aria-label="Task name"]');
 }
 
@@ -438,9 +438,9 @@ test("on a wide window the topbar's ⋯ › Rename puts the caret in the plan's 
   const page = mount(SHELL_ROOM.WIDE);
   chooseOverviewRename(page.container);
 
-  assert.ok(planTitle(page.container), "the plan's title is drawn");
+  assert.ok(descriptionTitle(page.container), "the plan's title is drawn");
   assert.ok(
-    document.activeElement === planTitle(page.container),
+    document.activeElement === descriptionTitle(page.container),
     "the caret is in the plan's title",
   );
   assert.equal(page.container.querySelector('input[aria-label="Task name"]'), null);
@@ -454,7 +454,7 @@ test("on a wide window whose column shows an agent, the rename ⌘K asks shows O
   page.draw(false, undefined, undefined, false);
 
   assert.ok(
-    document.activeElement === planTitle(page.container),
+    document.activeElement === descriptionTitle(page.container),
     "the caret is in the plan's title",
   );
 });
@@ -482,7 +482,7 @@ test("on a wide window a refused rename keeps the name typed in the plan's title
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(RefusingTask))));
-  const title = planTitle(container);
+  const title = descriptionTitle(container);
   assert.ok(title, "the plan's title is drawn");
 
   act(() => {
@@ -492,6 +492,6 @@ test("on a wide window a refused rename keeps the name typed in the plan's title
   });
   await act(async () => title.blur());
 
-  assert.equal(planTitle(container)?.textContent, "Invite teammates");
+  assert.equal(descriptionTitle(container)?.textContent, "Invite teammates");
   assert.match(container.textContent ?? "", /The task could not be renamed\. Try again\./u);
 });

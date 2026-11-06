@@ -16,8 +16,8 @@ import {
 } from "@repo/database/models/integration-installation-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
-import { startPlanCommentThread } from "@repo/database/models/plan-comments";
-import { writePage } from "@repo/database/models/plan-pages";
+import { startDescriptionCommentThread } from "@repo/database/models/description-comments";
+import { writePage } from "@repo/database/models/task-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
 import {
   linkSlackInstallation,
@@ -96,8 +96,8 @@ import {
   workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
-import { taskCommentsLiveAnswerSchema } from "@repo/features/plan-comment-live";
-import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
+import { taskCommentsLiveAnswerSchema } from "@repo/features/description-comment-live";
+import { DESCRIPTION_COMMENT_ACTOR } from "@repo/features/description-comment-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
   pullRequestChaptersOfLive,
@@ -558,7 +558,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -648,7 +648,7 @@ it.layer(getTestDB())("a task's live reads", (it) => {
         const started = yield* createAgent(dana, {
           taskId: null,
           organizationId: workspaceId,
-          planSnapshot: null,
+          descriptionSnapshot: null,
           prompt: "Triage the inbox.",
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -697,8 +697,8 @@ it.layer(getTestDB())("a task's live reads", (it) => {
             { kind: PAGE_SHOWER.APP },
           ),
         );
-        yield* startPlanCommentThread(
-          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: dana },
+        yield* startDescriptionCommentThread(
+          { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, userId: dana },
           started.id,
           {
             clientKey: randomUUID(),
@@ -884,7 +884,7 @@ it.layer(getTestDB())("the account's inbox items' live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1010,7 +1010,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1076,7 +1076,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1246,7 +1246,7 @@ it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/relay",
-          planSnapshot: "# Teammate invitations\n",
+          descriptionSnapshot: "# Teammate invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
@@ -1841,7 +1841,7 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: RELAY_FULL_NAME,
-          planSnapshot: "# Invitations\n",
+          descriptionSnapshot: "# Invitations\n",
           prompt: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });

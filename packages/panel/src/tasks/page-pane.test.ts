@@ -7,12 +7,12 @@ import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_PICK_ACT, PAGE_PICK_TYPE, type pagePickAnswerSchema } from "@repo/features/page-pick";
 import type { PageLine, PagePlace } from "@repo/features/page-wire";
 import {
-  PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_ENTRY,
-  PLAN_COMMENT_SCOPE,
-  PLAN_COMMENT_STATUS,
-  type PlanCommentThread,
-} from "@repo/features/plan-comment-wire";
+  DESCRIPTION_COMMENT_ACTOR,
+  DESCRIPTION_COMMENT_ENTRY,
+  DESCRIPTION_COMMENT_SCOPE,
+  DESCRIPTION_COMMENT_STATUS,
+  type DescriptionCommentThread,
+} from "@repo/features/description-comment-wire";
 import {
   type CodeLines,
   TASK_CALL_FAILURE,
@@ -20,7 +20,7 @@ import {
 } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import type { PlanCommentsControl } from "@repo/ui/plan-comments";
+import type { DescriptionCommentsControl } from "@repo/ui/description-comments";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -510,18 +510,18 @@ test("on a phone the page draws no bar, and the task's header's ⋯ offers every
 
 test("Comment asks the frame for an element, an element holding threads is pinned, the element picked opens a comment quoting its words, and a press in the page lets go of it", async () => {
   const path = "body > p:nth-of-type(1)";
-  const thread: PlanCommentThread = {
+  const thread: DescriptionCommentThread = {
     id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e61",
-    scope: PLAN_COMMENT_SCOPE.ELEMENT,
+    scope: DESCRIPTION_COMMENT_SCOPE.ELEMENT,
     quote: "Invites sent",
     page: { id: FUNNEL.id, version: 3, element: path },
     section: "",
-    status: PLAN_COMMENT_STATUS.OPEN,
+    status: DESCRIPTION_COMMENT_STATUS.OPEN,
     entries: [
       {
         id: "8c1d3e5f-7a9b-4c2d-8e4f-6a8b0c2d4e62",
-        kind: PLAN_COMMENT_ENTRY.COMMENT,
-        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-theo", name: "Theo" } },
+        kind: DESCRIPTION_COMMENT_ENTRY.COMMENT,
+        writer: { actor: DESCRIPTION_COMMENT_ACTOR.MEMBER, by: { userId: "u-theo", name: "Theo" } },
         words: "Per week?",
         at: 1,
       },
@@ -530,7 +530,7 @@ test("Comment asks the frame for an element, an element holding threads is pinne
     updatedAt: 1,
     revision: 1,
   };
-  const control: PlanCommentsControl = {
+  const control: DescriptionCommentsControl = {
     planId: TASK,
     threads: [thread],
     read: true,

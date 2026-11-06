@@ -72,7 +72,7 @@ import { parsedUrl } from "./parsed-url.js";
  * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
  * its task and written no more.
  *
- * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
+ * A picture in a plan, `/plan/<id>/files/<picture>` (`description-attachment-link.ts`),
  * still written under `/plan/` for the builds that read a picture there alone,
  * is read as its task, and a picture in an Inbox item's words, the item's
  * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
@@ -220,7 +220,7 @@ const WORKSPACE_PLACES: ReadonlySet<string> = new Set([LINK_PLACE.HOME, LINK_PLA
 /** A page of Settings as its link spells it: lower case, words joined by hyphens. */
 const SETTINGS_PAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
-/** A picture's id as the service mints one, a UUID in lower case (`plan-attachment-link.ts`). */
+/** A picture's id as the service mints one, a UUID in lower case (`description-attachment-link.ts`). */
 const PICTURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 /** A UTC day as the Admin place's day page names it, `YYYY-MM-DD`; whether it is a real day is `isUtcDayKey`'s. */

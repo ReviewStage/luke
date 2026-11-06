@@ -1,7 +1,7 @@
 import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
-import { planSections } from "@repo/features/plan-document";
+import { descriptionSections } from "@repo/features/description-document";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@repo/ui";
 import { HashIcon } from "lucide-react";
@@ -87,12 +87,12 @@ export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string
 /**
  * The heading a section's anchor names in a plan the window holds the
  * words of: the plan's page's, or one the host holds for a window that
- * opened it (`LIVE_READ.PLAN_DOCUMENT`); none where it holds neither, no
+ * opened it (`LIVE_READ.DESCRIPTION_DOCUMENT`); none where it holds neither, no
  * heading spells the anchor, or no plan is asked for.
  */
 export function useSectionHeading(taskId: string | undefined, anchor: string): string | undefined {
   const page = useTaskMentions();
-  const held = useHeldRows(LIVE_READ.PLAN_DOCUMENT, taskId);
+  const held = useHeldRows(LIVE_READ.DESCRIPTION_DOCUMENT, taskId);
   const text =
     taskId === undefined
       ? undefined
@@ -102,7 +102,7 @@ export function useSectionHeading(taskId: string | undefined, anchor: string): s
           ? held.task.document.body
           : undefined;
   if (text === undefined) return undefined;
-  const headings = planSections(text).map((section) => section.heading);
+  const headings = descriptionSections(text).map((section) => section.heading);
   return headings[sectionAnchors(headings).indexOf(anchor)];
 }
 

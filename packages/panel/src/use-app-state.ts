@@ -345,9 +345,9 @@ export const APP_SLICE = {
   AUTOMATIONS: sliceAtom(LIVE_READ.AUTOMATIONS),
   AUTOMATION_WORKSPACE_RUNS: sliceAtom(LIVE_READ.AUTOMATION_WORKSPACE_RUNS),
   AUTOMATION_RUNS: sliceAtom(LIVE_READ.AUTOMATION_RUNS),
-  PLAN_COMMENTS: sliceAtom(LIVE_READ.PLAN_COMMENTS),
+  DESCRIPTION_COMMENTS: sliceAtom(LIVE_READ.DESCRIPTION_COMMENTS),
   HISTORY: sliceAtom(LIVE_READ.HISTORY),
-  PLAN_DOCUMENT: sliceAtom(LIVE_READ.PLAN_DOCUMENT),
+  DESCRIPTION_DOCUMENT: sliceAtom(LIVE_READ.DESCRIPTION_DOCUMENT),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),
@@ -503,9 +503,11 @@ export const selectAutomations = (state: AppStateSnapshot) => state[LIVE_READ.AU
 export const selectAutomationWorkspaceRuns = (state: AppStateSnapshot) =>
   state[LIVE_READ.AUTOMATION_WORKSPACE_RUNS];
 export const selectAutomationRuns = (state: AppStateSnapshot) => state[LIVE_READ.AUTOMATION_RUNS];
-export const selectPlanComments = (state: AppStateSnapshot) => state[LIVE_READ.PLAN_COMMENTS];
+export const selectDescriptionComments = (state: AppStateSnapshot) =>
+  state[LIVE_READ.DESCRIPTION_COMMENTS];
 export const selectHistory = (state: AppStateSnapshot) => state[LIVE_READ.HISTORY];
-export const selectPlanDocument = (state: AppStateSnapshot) => state[LIVE_READ.PLAN_DOCUMENT];
+export const selectDescriptionDocument = (state: AppStateSnapshot) =>
+  state[LIVE_READ.DESCRIPTION_DOCUMENT];
 export const selectMacCommands = (state: AppStateSnapshot) => state.macCommands;
 export const selectNotifications = (state: AppStateSnapshot) => state.notifications;
 export const selectNetwork = (state: AppStateSnapshot) => state.network;

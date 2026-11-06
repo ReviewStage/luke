@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { PLAN_ACTOR } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR } from "@repo/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { NavigationHistory } from "../navigation-history.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { HISTORY_READ } from "../tasks/use-description-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
@@ -36,7 +36,7 @@ const ignore = (): void => undefined;
 function line(seq: number) {
   return {
     seq,
-    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 10 * seq, duringCall: false },
+    lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at: 10 * seq, duringCall: false },
     startedAt: 10 * seq,
     changes: 2,
   };

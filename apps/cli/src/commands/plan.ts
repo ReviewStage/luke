@@ -1,7 +1,7 @@
 /**
  * plan.ts -- `vespin description show` and `description edit`: a task's description printed as the Markdown it is, and written whole from a file or stdin.
  *
- * A description is one Markdown text (`plan-edit.ts`). `edit` writes it
+ * A description is one Markdown text (`description-edit.ts`). `edit` writes it
  * through the procedure the app's description editor saves with,
  * `plans.edit`, naming the text it read just before as the base, so a write
  * an agent made in between is kept where the two do not touch the same
@@ -13,7 +13,7 @@
  */
 
 import { CLI_EXIT } from "@repo/features/cli-exit";
-import { PLAN_EDIT_REFUSAL } from "@repo/features/plan-edit";
+import { DESCRIPTION_EDIT_REFUSAL } from "@repo/features/description-edit";
 import { TASK_BOUNDS } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -33,10 +33,10 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(["--url", "--workspace", "-w"])
  * it was read as, answered with the description as saved, or a refusal
  * saying why nothing was.
  */
-export function writePlan(taskId: string, base: string, value: string) {
+export function writeDescription(taskId: string, base: string, value: string) {
   return Effect.gen(function* () {
     const { hosted } = yield* session;
-    const saved = yield* askService(hosted.plans.edit, {
+    const saved = yield* askService(hosted.plans.editDescription, {
       params: { id: taskId },
       body: { document: { base, value } },
     });
@@ -46,7 +46,7 @@ export function writePlan(taskId: string, base: string, value: string) {
       message:
         "conflict" in saved
           ? "The description changed in the same lines while it was written, so nothing was saved. Run vespin description show, and write it again."
-          : saved.refused === PLAN_EDIT_REFUSAL.TOO_LONG
+          : saved.refused === DESCRIPTION_EDIT_REFUSAL.TOO_LONG
             ? `The description is longer than a description may be (${TASK_BOUNDS.MAX_BODY_CHARS} characters), so nothing was saved.`
             : "The description was refused, so nothing was saved.",
     });
@@ -95,7 +95,7 @@ const editCommand = Command.make(
       const id = yield* resolveTaskId(task);
       const { hosted } = yield* session;
       const { plan } = yield* askService(hosted.plans.open, { id });
-      const saved = yield* writePlan(id, plan.document.body, value);
+      const saved = yield* writeDescription(id, plan.document.body, value);
       yield* answer({
         json: { id: saved.id, name: saved.name, body: saved.document.body },
         lines: [`Saved the description of ${saved.name}.`],
@@ -118,7 +118,7 @@ const editCommand = Command.make(
 );
 
 /** The description group: show and edit. */
-export const planCommand = Command.make(CURRENT_GROUP_NAME).pipe(
+export const descriptionCommand = Command.make(CURRENT_GROUP_NAME).pipe(
   Command.withDescription("Print or write a task's description"),
   Command.withSubcommands([showCommand, editCommand]),
   Command.withExamples([

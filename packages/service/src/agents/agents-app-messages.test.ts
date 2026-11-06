@@ -17,7 +17,7 @@ import { MENTIONED_HEADING } from "@repo/database/models/attached-file-parts";
 import { createAutomation } from "@repo/database/models/automation-store";
 import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import { sentLineStands } from "@repo/database/models/message-reads";
-import { writePage } from "@repo/database/models/plan-pages";
+import { writePage } from "@repo/database/models/task-pages";
 import { readTask } from "@repo/database/models/task-store";
 import { agentPin } from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";

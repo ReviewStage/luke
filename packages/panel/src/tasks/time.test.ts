@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { DESCRIPTION_ACTOR, type Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
 import { Time } from "@repo/ui";
@@ -15,7 +15,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
-import { PlanBody } from "./plan-body.js";
+import { DescriptionBody } from "./description-body.js";
 
 /**
  * relative-time.test.ts -- a save's age reads the same on the task's own
@@ -52,7 +52,7 @@ function saidOf(at: number) {
   const task: Task = {
     ...DOCUMENT_TASK,
     updatedAt: at,
-    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false, by: DANA },
+    lastEdit: { actor: DESCRIPTION_ACTOR.DEVELOPER, at, duringCall: false, by: DANA },
   };
   const row = mount(
     createElement(SidebarTask, {
@@ -64,10 +64,10 @@ function saidOf(at: number) {
       onOpen: () => undefined,
     }),
   );
-  const body = mount(createElement(PlanBody, { task, reader: { readerId: DANA.userId } }));
+  const body = mount(createElement(DescriptionBody, { task, reader: { readerId: DANA.userId } }));
   return {
     row: row.querySelector(".sidebar-task-time time")?.textContent,
-    edited: lineWords(body.querySelector(".plan-byline-edited")),
+    edited: lineWords(body.querySelector(".description-byline-edited")),
   };
 }
 
