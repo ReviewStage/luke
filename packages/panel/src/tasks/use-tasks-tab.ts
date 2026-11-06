@@ -107,6 +107,7 @@ import {
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -119,6 +120,7 @@ import {
   notKept,
   unreachedAs,
 } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -2043,17 +2045,39 @@ export function useTasksTab(input: {
     return { ...DELETE_REFUSED, cause: deleted.cause };
   };
 
-  // The tasks the tab draws as they stand at each call, and its act, which
-  // ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
+  // The tasks the tab draws as they stand at each call, and each row write's
+  // mutation, which ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
   const drawnTasks = useRef(tasks);
   drawnTasks.current = tasks;
-  const rowDoors: RowDoors<TasksView> = { rows: () => drawnTasks.current, act };
+  const drawnRows = () => drawnTasks.current;
+  const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
+  const { mutateAsync: sendTaskPin } = useMutation(actMutation(ROW_WRITE.TASK_PIN.kind));
+  const { mutateAsync: sendAgentPin } = useMutation(actMutation(ROW_WRITE.AGENT_PIN.kind));
+  const { mutateAsync: sendStandingRow } = useMutation(actMutation(ROW_WRITE.TASK_STANDING.kind));
+  const renameDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> = {
+    rows: drawnRows,
+    send: sendTaskRename,
+  };
+  const taskPinDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_PIN.kind> = {
+    rows: drawnRows,
+    send: sendTaskPin,
+  };
+  const agentPinDoors: RowDoors<TasksView, typeof ROW_WRITE.AGENT_PIN.kind> = {
+    rows: drawnRows,
+    send: sendAgentPin,
+  };
+  const standingDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_STANDING.kind> = {
+    rows: drawnRows,
+    send: sendStandingRow,
+  };
 
   // A fixture's tasks are renamed nowhere, as they are read from nowhere. A
   // rename the service kept is ⌘Z's to take back.
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
-    const pressed = pressRows(ROW_WRITE.TASK_RENAME, rowDoors, [{ id: taskId, after: { name } }]);
+    const pressed = pressRows(ROW_WRITE.TASK_RENAME, renameDoors, [
+      { id: taskId, after: { name } },
+    ]);
     const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
     if (renamed) pressed.keep(TASK_RENAMED_NOTE);
     return renamed;
@@ -2073,7 +2097,7 @@ export function useTasksTab(input: {
   const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const pinned = mark === TASK_MARK.PIN;
-    const pressed = pressRows(ROW_WRITE.TASK_PIN, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.TASK_PIN, taskPinDoors, [
       { id: taskId, after: { pinned, position: null } },
     ]);
     return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned })).then((changed) => {
@@ -2151,7 +2175,7 @@ export function useTasksTab(input: {
   };
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
-    const pressed = pressRows(ROW_WRITE.AGENT_PIN, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.AGENT_PIN, agentPinDoors, [
       { id: agentId, after: { pinned, position: null } },
     ]);
     askAgentPin(agentId, pinned).then((asked) => {
@@ -2314,7 +2338,7 @@ export function useTasksTab(input: {
     if (asked.length === 0) return;
     const pressed = pressRows(
       ROW_WRITE.TASK_STANDING,
-      rowDoors,
+      standingDoors,
       asked.map((change) => ({ id: change.taskId, after: { status: change.status } })),
     );
     sendStatuses(asked).then(({ landed, refused, cause }) => {
@@ -2448,7 +2472,7 @@ export function useTasksTab(input: {
         : {
             assignee: assigneeId === null ? null : { userId: assigneeId, name: assigneeName ?? "" },
           };
-    const pressed = pressRows(ROW_WRITE.TASK_STANDING, rowDoors, [
+    const pressed = pressRows(ROW_WRITE.TASK_STANDING, standingDoors, [
       { id: taskId, after: { ...rest, ...assignee } },
     ]);
     return sendStanding(taskId, standing, assigneeName).then((kept) => {
