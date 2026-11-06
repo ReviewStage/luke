@@ -112,7 +112,6 @@ function world(options: {
   const sandbox: AgentSandboxService = {
     terminals: () => Effect.die("the relay lists nothing"),
     listeningPorts: () => Effect.die("the relay lists no ports"),
-    startForwarding: () => Effect.die("the relay starts no run command"),
     start: () => Effect.die("the relay starts nothing"),
     rename: () => Effect.die("the relay renames nothing"),
     kill: () => Effect.die("the relay kills nothing"),
