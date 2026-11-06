@@ -3,6 +3,7 @@
  */
 
 import { ORPCError } from "@orpc/client";
+import type { AgentChangesAnswerView } from "@repo/features/agent-view";
 import type { TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import type { AppBridge } from "@repo/host/bridge";
@@ -224,6 +225,22 @@ export function readingFiles(
         ...(raw === undefined ? undefined : { raw }),
         ...(ref === undefined ? undefined : { ref }),
       }),
+  };
+}
+
+/**
+ * The act port's read of an agent's changes answered through `read`, which
+ * hears the agent and the pull request's number where a tab names one, for a
+ * test to spread into its `fakeActPort`.
+ */
+export function answeringChanges(
+  read: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>,
+): Pick<FakeActPort, typeof AGENT_ACT_KIND.AGENTS_CHANGES> {
+  return {
+    [AGENT_ACT_KIND.AGENTS_CHANGES]: (payload) =>
+      "number" in payload && payload.number !== undefined
+        ? read(payload.agentId, payload.number)
+        : read(payload.agentId),
   };
 }
 

@@ -37,11 +37,13 @@ import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { agentName, RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
+import { useChangesPeople } from "../tasks/changes-people.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { useListedPullRequest } from "../tasks/use-agent-pull-request.js";
+import type { HeldPeople } from "../tasks/use-agents.js";
 import { isAgentPin, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
@@ -276,6 +278,7 @@ function pinChangesCard(
   pin: SidebarPin,
   tasks: TasksControl,
   gone: boolean,
+  people: HeldPeople | undefined,
   onOpenAgent: (agentId: string) => void,
 ): React.JSX.Element | null {
   const { tab } = pin;
@@ -287,7 +290,7 @@ function pinChangesCard(
     subject: agentSubject(agents, tab.changes, NOTHING_HELD, false),
     models: agents.models,
     pullRequest,
-    people: peopleOf(agents.changesPeople.get(tab.changes), pullRequest),
+    people: peopleOf(people, pullRequest),
     onOpenAgent: () => onOpenAgent(tab.changes),
   });
 }
@@ -547,7 +550,9 @@ export function SidebarPinnedTab({
   const pin = namedPin(kept, agent, livePullRequest, tasks.agents.models);
   const gone = pinGone(pin, tasks);
   const taskId = pinTaskId(pin);
-  const changesCard = pinChangesCard(pin, tasks, gone, (agentId) => {
+  // Note that a pin's agent may be another task's, whose people its own Changes tab read.
+  const changesPeople = useChangesPeople(isChangesTab(pin.tab) ? pin.tab.changes : undefined);
+  const changesCard = pinChangesCard(pin, tasks, gone, changesPeople, (agentId) => {
     if (taskId !== undefined) tasks.onShowAgent(taskId, agentId);
   });
   const copyLink = useCopyLinkItem();

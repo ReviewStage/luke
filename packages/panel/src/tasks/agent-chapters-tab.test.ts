@@ -49,7 +49,7 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { answeringChanges, fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -393,6 +393,22 @@ function controlAnswering(answers: Answers): AgentsControl {
             },
       ),
   });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    ...answeringChanges(() => {
+      const head = answers.head?.() ?? HEAD;
+      // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
+      const files = head === HEAD ? FILES : [];
+      return Promise.resolve({
+        pullRequest: {
+          url: PAGE,
+          ...(answers.filesHeadless === true ? {} : { headSha: head }),
+          truncated: false,
+          files,
+        },
+      });
+    }),
+  });
   return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -412,19 +428,6 @@ function controlAnswering(answers: Answers): AgentsControl {
         },
       ],
     ]),
-    readChanges: () => {
-      const head = answers.head?.() ?? HEAD;
-      // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
-      const files = head === HEAD ? FILES : [];
-      return Promise.resolve({
-        pullRequest: {
-          url: PAGE,
-          ...(answers.filesHeadless === true ? {} : { headSha: head }),
-          truncated: false,
-          files,
-        },
-      });
-    },
     generateChapters: answers.generateChapters ?? (() => Promise.resolve(answering(ready()))),
   });
 }

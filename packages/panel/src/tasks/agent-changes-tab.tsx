@@ -42,7 +42,7 @@ import {
   ImageIcon,
   UnfoldVerticalIcon,
 } from "@repo/ui/icons";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
   type ReactNode,
@@ -69,6 +69,7 @@ import {
 import { failureShown, unreadShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useRegained } from "../use-regained.js";
+import { agentChangesQueryOptions, ChangesFailed } from "./agent-reads.js";
 import {
   type ChangesList,
   FileHead,
@@ -215,57 +216,6 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
 /** A read that threw rather than answered, drawn as any other failed read. */
 const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
-
-/**
- * One agent's read as last answered, none before the first read lands;
- * whether a read is out; and the door that reads it again, settling once
- * its answer lands. The read is
- * asked as the tab first comes on screen and again the moment the agent
- * ends, since that is when what it published settles; every ask is
- * numbered, so only the latest one's answer is drawn, and a read that threw
- * rather than answered lands as `unanswered`. One that failed, or is still
- * out, is asked again as the app reaches the service again while the tab
- * shows it (`useRegained`), since one out then may have been sent while the
- * connection was gone. The Changes and Pull request tabs read through it alike.
- */
-export function useAgentRead<A extends object>(
-  agentId: string,
-  shown: boolean,
-  ended: boolean,
-  read: (agentId: string) => Promise<A>,
-  unanswered: A,
-) {
-  const [answer, setAnswer] = useState<A | undefined>(undefined);
-  const [out, setOut] = useState(false);
-  const latest = useRef({ read, unanswered });
-  latest.current = { read, unanswered };
-  const asked = useRef(0);
-  // The agent's standing the last read on its own was asked for.
-  const readFor = useRef<boolean | undefined>(undefined);
-
-  const ask = useCallback((): Promise<void> => {
-    asked.current += 1;
-    const ask = asked.current;
-    setOut(true);
-    const settle = (next: A) => {
-      if (ask !== asked.current) return;
-      setOut(false);
-      setAnswer(next);
-    };
-    return latest.current.read(agentId).then(settle, () => settle(latest.current.unanswered));
-  }, [agentId]);
-
-  useEffect(() => {
-    if (!shown || readFor.current === ended) return;
-    readFor.current = ended;
-    ask();
-  }, [shown, ended, ask]);
-  useRegained(() => {
-    if (shown && (out || (answer !== undefined && "failure" in answer))) ask();
-  });
-
-  return { answer, out, ask };
-}
 
 /** What the bar's ⋯ says. */
 const CHANGES_MENU_WORDS = {
@@ -1715,29 +1665,41 @@ export interface ChangesReads {
 
 /**
  * The agent's changes and the member's viewed marks on them, read as the
- * view first comes on screen (`shown`), and again as the agent ends, as
- * `useAgentRead` reads; the marks with each answer of the changes, so the
- * two describe the same push.
+ * view first comes on screen (`shown`), again as the agent ends, on Refresh,
+ * and as the app reaches the service again after one failed or went out;
+ * the marks with each answer of the changes, so the two describe the same
+ * push.
  */
 export function useChangesReads(
   agentId: string,
   source: PullRequestSource,
   shown: boolean,
 ): ChangesReads {
-  const {
-    answer: latest,
-    out,
-    ask,
-  } = useAgentRead(agentId, shown, source.ended, source.readChanges, UNANSWERED);
-  // Note that a good answer stands over a failure after it, because a read that fails
-  // again must not take the files drawn away; the count follows what is drawn.
-  const good = useRef<
-    { readonly agentId: string; readonly answer: AgentChangesAnswerView } | undefined
-  >(undefined);
-  if (latest !== undefined && !("failure" in latest)) good.current = { agentId, answer: latest };
-  const standing = good.current?.agentId === agentId ? good.current.answer : undefined;
-  const answer = standing ?? latest;
-  const refreshFailed = standing !== undefined && latest !== undefined && "failure" in latest;
+  // Note that the query is read on the tab's own asks alone, as the docs' lazy query is, so it reads when the tab
+  // first shows and as the agent ends, never because another surface drew the same changes.
+  const changes = useQuery({ ...agentChangesQueryOptions(agentId, source.number), enabled: false });
+  const { refetch, isFetching: out, data: good, error } = changes;
+  const ask = useCallback(() => void refetch(), [refetch]);
+  // The agent's standing the last read on its own was asked for, none before the tab first showed.
+  const readFor = useRef<{ readonly agentId: string; readonly ended: boolean } | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!shown) return;
+    if (readFor.current?.agentId === agentId && readFor.current.ended === source.ended) return;
+    readFor.current = { agentId, ended: source.ended };
+    ask();
+  }, [shown, agentId, source.ended, ask]);
+  // A read that failed, or is still out and may have been sent while the connection was gone, is asked again.
+  const failure =
+    error instanceof ChangesFailed ? error.answer : error === null ? undefined : UNANSWERED;
+  useRegained(() => {
+    if (shown && (out || failure !== undefined)) ask();
+  });
+  // Note that a good answer stands over a failure after it, as the cache keeps it beside the error, because a
+  // read that fails again must not take the files drawn away; the count follows what is drawn.
+  const answer: AgentChangesAnswerView | undefined = good ?? failure;
+  const refreshFailed = good !== undefined && failure !== undefined;
   const reads = useRef<{ readonly of: unknown; readonly count: number }>({
     of: undefined,
     count: 0,

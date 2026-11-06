@@ -1,4 +1,4 @@
-import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
   type AgentChangesPeople,
@@ -413,8 +413,6 @@ export interface AgentsControl {
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as the host holds what was published of it while a surface holds it. */
   numberedPullRequests: ByPullRequestTab<AgentPullRequest>;
-  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
-  readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
    * One pull request's chapters generated for its head now, or the
    * generation already under way; answers once the generation lands, which
@@ -423,8 +421,6 @@ export interface AgentsControl {
    * there are none, a port that refused included.
    */
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
-  /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
-  changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a workspace, or while the Skills experiment is off. */
@@ -1492,42 +1488,6 @@ export function useAgents(input: {
     useQuery({ ...appStateQuery, select: selectNumberedPullRequests }).data ??
     NO_NUMBERED_PULL_REQUESTS;
 
-  // Note that who a pull request names is kept beside the agent, with the
-  // pull request it was read for, so its Changes card says them wherever it
-  // hangs once its tab has read them, and never for another pull request.
-  // Each agent's reads are numbered, so only its newest read's answer is kept,
-  // as the tab draws only its newest.
-  const [changesPeople, setChangesPeople] = useState<ReadonlyMap<string, HeldPeople>>(
-    () => new Map(),
-  );
-  const changesAsked = useRef(new Map<string, number>());
-  const readChanges = useCallback<AgentsControl["readChanges"]>(
-    (agentId, number) => {
-      // Note that another pull request's people are not this agent's, so they are never kept beside it.
-      if (number !== undefined) {
-        return act(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number));
-      }
-      const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
-      changesAsked.current.set(agentId, ask);
-      return act(ACT_KIND.AGENTS_CHANGES, { agentId }).then((answer) => {
-        if (changesAsked.current.get(agentId) !== ask || !("pullRequest" in answer)) return answer;
-        const read = answer.pullRequest;
-        setChangesPeople((was) => {
-          const next = new Map(was);
-          if (read === null) {
-            next.delete(agentId);
-          } else {
-            const { url, files: _files, truncated: _truncated, ...people } = read;
-            next.set(agentId, { url, people });
-          }
-          return next;
-        });
-        return answer;
-      });
-    },
-    [act],
-  );
-
   const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
       sendChapters(pullRequestAsked(agentId, number)).catch(
@@ -1646,8 +1606,6 @@ export function useAgents(input: {
     readTranscript,
     pullRequests,
     numberedPullRequests,
-    readChanges,
-    changesPeople,
     generateChapters,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
