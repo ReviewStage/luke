@@ -26,8 +26,9 @@
  * holds it, a turn of the source began meanwhile, or another Start's copy
  * still holds it past this one's own hold; one already up stays as it was.
  * That stop's calls to Vercel run on a fiber of its own, so the Start never
- * waits on them, and one they never confirmed is stopped by the scheduled
- * sweep once the copy's hold lapses. A copy that fails logs the tail of what
+ * waits on them, and one they never confirmed stops at the sandbox's own
+ * timeout (`CODER.SANDBOX_TIMEOUT_MS`), which its wake reapplied, once
+ * nothing keeps it alive. A copy that fails logs the tail of what
  * it printed on stderr, credential-shaped runs redacted.
  * Files named the way credentials are kept are never copied. No copy is
  * made where the task moved to another repository since the source
@@ -222,21 +223,14 @@ const stopUp = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   );
 
 /**
- * The sandbox this step woke stopped again, unless it must stay up. Whether
- * it stays up is read here, and the stop itself, Vercel's list and stop, is
+ * The sandbox this step woke stopped again, unless it must stay up. The
+ * stop, which asks whether it must stay up and is bounded by itself, is
  * forked detached, so it outlives the Start's own fiber and the Start never
- * waits on it; one it never confirms is the sweep's once the copy's hold
- * lapses.
+ * waits on it; one it never confirms stops at the sandbox's own timeout once
+ * nothing keeps it alive.
  */
 const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
-  Effect.gen(function* () {
-    if (yield* ask.keepUp) return;
-    yield* Effect.forkDetach(stopUp(api, ask));
-  }).pipe(
-    Effect.interruptible,
-    Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
-    Effect.catch((failure) => stopMissed(String(failure))),
-  );
+  Effect.asVoid(Effect.forkDetach(stopUp(api, ask)));
 
 /** The copy inside the scope a woken sandbox's stop is registered on. */
 const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
@@ -356,7 +350,7 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     const target = { userId, conversationId: source.conversationId };
     // The copy holds the sandbox as a terminal does for as long as it may take, so a copy beside it
     // for another Start reads it held past its own hold and leaves it up, and a sandbox no copy
-    // stopped is stopped by the terminal sweep once the hold lapses.
+    // stopped stops at its own timeout once nothing keeps it alive.
     const heldUntil = new Date(
       (yield* Clock.currentTimeMillis) +
         Duration.toMillis(Duration.sum(SNAPSHOT.TIMEOUT, SNAPSHOT.STOP_TIMEOUT)),

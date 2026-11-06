@@ -255,17 +255,15 @@ it.layer(getTestDB())("a source agent's work copied", (it) => {
     (t) =>
       Effect.gen(function* () {
         const sandbox = sourceSandbox(yield* checkoutFor(t), "stopped");
-        const askedAgain = Deferred.makeUnsafe<void>();
-        let asked = 0;
-        // Free as the copy ends; held by the time the stop behind it has listed the sandbox.
+        const asked = Deferred.makeUnsafe<void>();
+        // Held by the time the stop behind the copy has listed the sandbox.
         const keepUp = Effect.sync(() => {
-          asked += 1;
-          if (asked > 1) Deferred.doneUnsafe(askedAgain, Effect.void);
-          return asked > 1;
+          Deferred.doneUnsafe(asked, Effect.void);
+          return true;
         });
 
         const outcome = yield* copyOver((url, init) => answerOf(sandbox, url, init), keepUp);
-        yield* Deferred.await(askedAgain);
+        yield* Deferred.await(asked);
         yield* Effect.yieldNow;
 
         assert.ok(outcome.copied);
