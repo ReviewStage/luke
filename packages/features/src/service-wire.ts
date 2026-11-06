@@ -149,6 +149,8 @@ export const HOSTED_API_ERROR = {
   ALREADY_INVITED: "already-invited",
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: "sandbox-stopped",
+  /** The coding agent's sandbox can never resume: its snapshot expired or was deleted, its saved files with it, and the agent's next turn starts a fresh one. Nothing was resumed. */
+  SANDBOX_SNAPSHOT_GONE: "sandbox-snapshot-gone",
   /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
   SKILL_NAME_TAKEN: "skill-name-taken",
   /** A skill's files were refused: a file past its bound, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */

@@ -64,6 +64,7 @@ import {
   deploymentOidcToken,
   SANDBOX_STATUS,
   type SandboxUnavailable,
+  snapshotGone,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
@@ -118,6 +119,8 @@ export const BROWSER_UNREACHABLE = {
   SANDBOX_UNAVAILABLE: "sandbox-unavailable",
   /** The stopped sandbox did not come up within the bound. */
   NOT_RESUMED: "not-resumed",
+  /** The stopped sandbox's snapshot is gone, expired or deleted, so it can never resume. */
+  SNAPSHOT_GONE: "snapshot-gone",
   /** The sandbox's image carries no full Chromium: a snapshot made before it did. */
   NO_CHROMIUM: "no-chromium",
   /** Xvfb or Chromium did not start in the sandbox. */
@@ -133,6 +136,8 @@ const UNREACHABLE_MESSAGE = {
   [BROWSER_UNREACHABLE.NOT_OPENED]: "the agent has not opened its sandbox yet",
   [BROWSER_UNREACHABLE.SANDBOX_UNAVAILABLE]: "Vercel Sandbox was unavailable",
   [BROWSER_UNREACHABLE.NOT_RESUMED]: "the agent's sandbox did not resume in time",
+  [BROWSER_UNREACHABLE.SNAPSHOT_GONE]:
+    "the agent's sandbox shut down after being idle, and its next turn starts a fresh one",
   [BROWSER_UNREACHABLE.NO_CHROMIUM]: "the agent's sandbox carries no browser",
   [BROWSER_UNREACHABLE.NOT_STARTED]: "the browser did not start in the agent's sandbox",
   [BROWSER_UNREACHABLE.BRIDGE_FAILED]: "the browser in the agent's sandbox could not be reached",
@@ -450,11 +455,16 @@ export function agentBrowserOver(
       }
       // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
       // and that a refusal is tried again too, since a sandbox still stopping may refuse its resume; the
-      // last try's failure is the answer, so an outage still says Vercel was unavailable.
+      // last try's failure is the answer, so an outage still says Vercel was unavailable. A snapshot
+      // gone is the one refusal answered at once, since no later try finds it again.
       // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
       yield* capSandboxTimeout(api, sandbox);
       const resumed = api.resume(sandbox.name).pipe(
-        Effect.mapError(sandboxUnavailable),
+        Effect.mapError((error) =>
+          snapshotGone(error)
+            ? unreachable(BROWSER_UNREACHABLE.SNAPSHOT_GONE, error.status)
+            : sandboxUnavailable(error),
+        ),
         Effect.flatMap((found) =>
           found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId !== undefined
             ? Effect.succeed(found.currentSessionId)
@@ -465,6 +475,7 @@ export function agentBrowserOver(
         Effect.retry({
           schedule: Schedule.spaced(AGENT_BROWSER.RESUME_SPACING),
           times: AGENT_BROWSER.RESUME_TRIES,
+          while: (failure) => failure.reason !== BROWSER_UNREACHABLE.SNAPSHOT_GONE,
         }),
       );
     });

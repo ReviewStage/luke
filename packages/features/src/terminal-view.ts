@@ -21,6 +21,8 @@ import {
 export const TERMINAL_REFUSAL = {
   /** The sandbox is stopped, so no shell starts until the developer resumes it. */
   SANDBOX_STOPPED: "sandbox-stopped",
+  /** The sandbox can never resume: its snapshot is gone, its saved files with it, until the agent's next turn starts a fresh one. */
+  SANDBOX_SNAPSHOT_GONE: "sandbox-snapshot-gone",
   /** The agent has not opened its sandbox yet. */
   AGENT_NOT_READY: "agent-not-ready",
   /** No such agent or shell, or another workspace's. */

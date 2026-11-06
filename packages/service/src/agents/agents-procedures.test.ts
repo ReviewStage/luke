@@ -437,6 +437,31 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
       }),
   );
 
+  it.effect(
+    "a resume whose snapshot is gone is refused as that, and a sandbox that only stopped under a call is not",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent } = yield* openAgent;
+        const gone = new SandboxUnavailable({ status: 410, code: "snapshot_not_found" });
+        // Vercel answers 410 for a call to a sandbox that stopped under it too, which a resume mends.
+        const stopped = new SandboxUnavailable({ status: 410, code: "sandbox_stopped" });
+        const sandbox = Layer.succeed(AgentSandbox, {
+          ...scriptedSandbox(SANDBOX_STATE.STOPPED).service,
+          resume: () => Effect.fail(gone),
+          terminals: () => Effect.fail(stopped),
+        });
+        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox);
+
+        const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
+        const listed = yield* call(terminalsOf(agent.id), "Bearer owner");
+
+        assert.equal(resumed.status, 409);
+        assert.deepEqual(resumed.body, { error: HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE });
+        assert.equal(listed.status, 502);
+        assert.deepEqual(listed.body, { error: HOSTED_API_ERROR.UPSTREAM_ERROR });
+      }),
+  );
+
   it.effect("an archived agent's terminals are gone", () =>
     Effect.gen(function* () {
       const { userId, agent } = yield* openAgent;
