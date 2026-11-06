@@ -86,6 +86,7 @@ function agents() {
     hold: unused,
     keepAlive: unused,
     claimRenewal: unused,
+    renewedAt: unused,
     releaseRenewal: unused,
   };
   return { reached, dependencies };

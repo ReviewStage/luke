@@ -9,8 +9,8 @@
  * instants.
  */
 
-import { and, eq, gt, sql } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { sandboxTerminalLease } from "../schemas/sandbox-terminal-lease.js";
@@ -85,6 +85,24 @@ export function sandboxHeld(conversationId: string, now: Date): LeaseEffect<bool
   return Effect.map(findHeld({ conversationId, now }), (rows) => rows.length > 0);
 }
 
+const findCredentialAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, sandboxSessionId: Schema.String }),
+  Result: Schema.Struct({ credentialAt: Schema.Date }),
+  execute: ({ conversationId, sandboxSessionId }) =>
+    Database.use((db) =>
+      db
+        .select({ credentialAt: sandboxTerminalLease.credentialAt })
+        .from(sandboxTerminalLease)
+        .where(
+          and(
+            eq(sandboxTerminalLease.conversationId, conversationId),
+            eq(sandboxTerminalLease.credentialSession, sandboxSessionId),
+            isNotNull(sandboxTerminalLease.credentialAt),
+          ),
+        ),
+    ),
+});
+
 const unclaimCredential = SqlSchema.void({
   Request: Schema.Struct({
     conversationId: Schema.String,
@@ -123,6 +141,17 @@ export function claimCredentialRenewal(
   return Effect.map(
     claimCredential({ conversationId, sandboxSessionId, now, renewedBefore }),
     (rows) => rows.length > 0,
+  );
+}
+
+/** When the GitHub token was last claimed for renewal on the running sandbox session's firewall; none where it never was on this session, or a claim was given back. */
+export function credentialRenewedAt(
+  conversationId: string,
+  sandboxSessionId: string,
+): LeaseEffect<Option.Option<Date>> {
+  return Effect.map(
+    findCredentialAt({ conversationId, sandboxSessionId }),
+    Option.map(({ credentialAt }) => credentialAt),
   );
 }
 
