@@ -838,7 +838,7 @@ function InboxSidePanel({
   pages: TasksControl["inboxView"]["pages"];
   agents: AgentsControl;
   views: TabViews;
-  /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
+  /** What the item's box offers an `@`, which every tab beside it offers too: an agent's composer, and a page's comments. */
   mentions: TaskMentionsValue | undefined;
   /** Where the panel heads itself on a phone, its way back shutting it to the item (`SidePanel`'s `phone`). */
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
@@ -902,60 +902,61 @@ function InboxSidePanel({
   const transcript = (agentId: string) => {
     const agent = agents.agents?.find((each) => each.id === agentId);
     return (
-      <TaskMentions value={mentions}>
-        <AgentPane
-          label={agent === undefined ? undefined : agentName(agent, agents.models)}
-          tabbed={false}
-          tab={{ agent: agentId }}
-          agents={agents}
-          shown={tasks.shown}
-          views={views}
-          // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
-          onOpenDelegation={(agent, callId, _task, status) => {
-            views.onWorkerStatus(callId, status);
-            if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
-          }}
-          onOpenPullRequest={(agent) =>
-            showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
-          }
-          onOpenTarget={openTarget}
-          cards={cards}
-        />
-      </TaskMentions>
+      <AgentPane
+        label={agent === undefined ? undefined : agentName(agent, agents.models)}
+        tabbed={false}
+        tab={{ agent: agentId }}
+        agents={agents}
+        shown={tasks.shown}
+        views={views}
+        // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
+        onOpenDelegation={(agent, callId, _task, status) => {
+          views.onWorkerStatus(callId, status);
+          if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
+        }}
+        onOpenPullRequest={(agent) =>
+          showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
+        }
+        onOpenTarget={openTarget}
+        cards={cards}
+      />
     );
   };
+  // Note that every tab beside the item reads the mentions its box offers, so a page's comment is written in the box's editor, its quotes as blocks, as on the task.
   return (
-    <SidePanel
-      {...drawing}
-      unread={NO_UNREAD}
-      holder={SIDE_PANEL_HOLDER.INBOX}
-      taskId={panelFor ?? ""}
-      onAgent={taskId === undefined && panelFor !== undefined}
-      repository={repository}
-      repositoryPlace={repositoryPlace}
-      pages={pages}
-      agents={agents}
-      openAgents={NO_OPEN_AGENTS}
-      shownAgent={undefined}
-      views={views}
-      shown={tasks.shown}
-      focused={focused}
-      onOpenTarget={openTarget}
-      transcript={taskId === undefined ? undefined : transcript}
-      transcriptDoors={
-        taskId === undefined
-          ? undefined
-          : {
-              // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
-              onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
-              onOpenTerminal: terminals
-                ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
-                : undefined,
-            }
-      }
-      phone={phone}
-      taskOfTab={tasks}
-    />
+    <TaskMentions value={mentions}>
+      <SidePanel
+        {...drawing}
+        unread={NO_UNREAD}
+        holder={SIDE_PANEL_HOLDER.INBOX}
+        taskId={panelFor ?? ""}
+        onAgent={taskId === undefined && panelFor !== undefined}
+        repository={repository}
+        repositoryPlace={repositoryPlace}
+        pages={pages}
+        agents={agents}
+        openAgents={NO_OPEN_AGENTS}
+        shownAgent={undefined}
+        views={views}
+        shown={tasks.shown}
+        focused={focused}
+        onOpenTarget={openTarget}
+        transcript={taskId === undefined ? undefined : transcript}
+        transcriptDoors={
+          taskId === undefined
+            ? undefined
+            : {
+                // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
+                onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
+                onOpenTerminal: terminals
+                  ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
+                  : undefined,
+              }
+        }
+        phone={phone}
+        taskOfTab={tasks}
+      />
+    </TaskMentions>
   );
 }
 
