@@ -99,17 +99,20 @@
   }
 
   /* The bar: across the page at its top, then, once the page scrolls, a
-     narrower pill floating on the surface over the rails. The header keeps
-     one height whatever the bar does, and the bar stands in it out of the
-     page's flow, so floating never moves the page under it nor lays out
-     more than the bar; the bar drops into place by a transform, and its
-     corners round to half its height, a radius the transition can ease
-     toward rather than one it reaches in a frame. The call at its end is a
-     pill the control's height, inset from the floating bar's end as far as
-     from its top and bottom, so the two curves are concentric. Spanning the
-     page, the bar keeps its words to the gutter, so its ends line up with
-     the hero's and every section's words rather than touching the rails. */
+     narrower pill floating on the surface over the rails, dropped below the
+     header's top and held its side inset in from either edge. The header
+     keeps one height whatever the bar does, and the bar stands in it out of
+     the page's flow, so floating never moves the page under it nor lays out
+     more than the bar. Either layout lands at once, and site-frame.tsx
+     replays the trip on transforms and clips (docs/DESIGN.md), so nothing
+     here transitions. The call at its end is a pill the control's height,
+     inset from the floating bar's end as far as from its top and bottom, so
+     the two curves are concentric. Spanning the page, the bar keeps its
+     words to the gutter, so its ends line up with the hero's and every
+     section's words rather than touching the rails. */
   .ui-landing-bar {
+    --ui-landing-bar-drop: 12px;
+    --ui-landing-bar-side: max(0px, (100% - 720px) / 2);
     position: sticky;
     top: 0;
     z-index: 5;
@@ -117,6 +120,49 @@
     contain: layout;
   }
 
+  /* The bar's ground: its edge, and its fill over the edge inset by the
+     edge's hairline, each a layer under the bar the header's width that
+     reaches 12px below the header, past the floating pill's foot, so a clip
+     alone draws either shape and the trip between them is a clip's. */
+  .ui-landing-bar::before,
+  .ui-landing-bar::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0 0 -12px;
+    pointer-events: none;
+  }
+
+  .ui-landing-bar::before {
+    background: var(--ui-color-border);
+    clip-path: inset(0 0 12px);
+  }
+
+  .ui-landing-bar::after {
+    background: var(--ui-color-ground);
+    clip-path: inset(0 0 13px);
+  }
+
+  /* Floating, the pill is 56px tall, so its foot stands 20px less the drop
+     above the layers' own. */
+  .ui-landing-bar[data-floating="true"]::before {
+    background: var(--ui-color-border-strong);
+    clip-path: inset(
+      var(--ui-landing-bar-drop) var(--ui-landing-bar-side) calc(20px - var(--ui-landing-bar-drop))
+        round var(--ui-display-bar-radius)
+    );
+  }
+
+  .ui-landing-bar[data-floating="true"]::after {
+    background: var(--ui-color-surface);
+    clip-path: inset(
+      calc(var(--ui-landing-bar-drop) + 1px) calc(var(--ui-landing-bar-side) + 1px)
+        calc(21px - var(--ui-landing-bar-drop)) round calc(var(--ui-display-bar-radius) - 1px)
+    );
+  }
+
+  /* The bar's words, a transparent border the ground's hairline wide
+     keeping them inside its edge. */
   .ui-landing-bar-in {
     position: absolute;
     top: 0;
@@ -127,20 +173,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    max-width: 100%;
     height: 64px;
-    margin: 0 auto;
     padding: 0 var(--ui-landing-gutter);
     border: 1px solid transparent;
-    border-bottom-color: var(--ui-color-border);
-    border-radius: 0;
-    background: var(--ui-color-ground);
     white-space: nowrap;
-    transition-property:
-      transform, left, right, max-width, height, padding, border-radius, border-color,
-      background-color;
-    transition-duration: var(--ui-duration-shape);
-    transition-timing-function: var(--ui-motion-pane);
   }
 
   .ui-landing-bar-in > :first-child {
@@ -148,13 +184,11 @@
   }
 
   .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
-    max-width: 720px;
+    right: var(--ui-landing-bar-side);
+    left: var(--ui-landing-bar-side);
     height: 56px;
     padding: 0 6px 0 20px;
-    border-color: var(--ui-color-border-strong);
-    border-radius: var(--ui-display-bar-radius);
-    background: var(--ui-color-surface);
-    transform: translateY(12px);
+    transform: translateY(var(--ui-landing-bar-drop));
   }
 
   /* The bar's links to the site's pages, a hairline after them setting them
@@ -1012,11 +1046,13 @@
       display: none;
     }
 
+    .ui-landing-bar {
+      --ui-landing-bar-drop: 10px;
+      --ui-landing-bar-side: 10px;
+    }
+
     .ui-landing-bar[data-floating="true"] .ui-landing-bar-in {
-      right: 10px;
-      left: 10px;
       padding: 0 14px;
-      transform: translateY(10px);
     }
 
     .ui-landing-hero {

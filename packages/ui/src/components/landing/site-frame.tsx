@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { MOTION_TOKEN, tokenTiming } from "../../motion-timing.js";
 import { LandingWordmark } from "./landing-wordmark.js";
 
 /**
@@ -13,6 +14,14 @@ import { LandingWordmark } from "./landing-wordmark.js";
  * product's wordmark set in copper dots (`landing-wordmark.tsx`). The
  * landing (`LandingPage`) and every other public page (`PublicPage`) are
  * drawn in it, so the site reads as one. It is drawn in `landing.css`.
+ *
+ * The bar floats as the window's panes open (docs/DESIGN.md, "Layout lands
+ * at once"): it lands in its new layout on the frame the scroll crosses the
+ * line, and replays the trip from a snapshot of where it was drawn. Its
+ * ground and edge are uncovered or covered from their old shape by a clip,
+ * and each of its pieces glides from where it stood on a transform, so no
+ * word reflows on the way. A scroll back part way through starts every part
+ * again from where it had got to.
  */
 
 /**
@@ -24,17 +33,111 @@ import { LandingWordmark } from "./landing-wordmark.js";
  */
 const FLOAT = { AFTER: 24, BEFORE: 4 } as const;
 
-/** Whether the page has scrolled past the bar's own height, so the bar floats. */
-function useFloating(): boolean {
-  const [floating, setFloating] = useState(false);
+/** The bar's two ground layers, its edge and the fill over it, each clipped to the bar's shape (landing.css). */
+const GROUND_LAYERS = ["::before", "::after"] as const;
+
+/** The name the bar's motion plays under, so a change part way through finds what to stop. */
+const FLOAT_MOTION = "site-bar-float";
+
+/** Less than this, in CSS pixels, is not a move worth playing nor a change of size. */
+const STILL = 0.5;
+
+/** Where each of the bar's elements was drawn, and how each ground layer was clipped and colored. */
+interface BarDrawn {
+  boxes: Map<Element, DOMRect>;
+  layers: Keyframe[];
+}
+
+/** Where each element in the bar is drawn now, a glide under way included. */
+function boxesIn(bar: Element): Map<Element, DOMRect> {
+  const boxes = new Map<Element, DOMRect>();
+  for (const element of bar.querySelectorAll("*"))
+    boxes.set(element, element.getBoundingClientRect());
+  return boxes;
+}
+
+/** How a ground layer is clipped and colored now, a motion under way included. */
+function layerPose(header: Element, layer: string): Keyframe {
+  const style = getComputedStyle(header, layer);
+  return { clipPath: style.clipPath, backgroundColor: style.backgroundColor };
+}
+
+/**
+ * Glides each of `parent`'s pieces from where it was drawn to where it now
+ * stands. Note that a piece the change resized, a row spread across the
+ * bar's width, is not moved itself: its own pieces are, each holding its
+ * size, so nothing that holds words changes shape mid-motion.
+ */
+function glidePieces(
+  parent: Element,
+  was: Map<Element, DOMRect>,
+  now: Map<Element, DOMRect>,
+  timing: KeyframeAnimationOptions,
+): void {
+  for (const piece of parent.children) {
+    const from = was.get(piece);
+    const to = now.get(piece);
+    if (from === undefined || to === undefined) continue;
+    if (Math.abs(from.width - to.width) >= STILL || Math.abs(from.height - to.height) >= STILL) {
+      glidePieces(piece, was, now, timing);
+      continue;
+    }
+    const dx = from.left - to.left;
+    const dy = from.top - to.top;
+    if (Math.abs(dx) < STILL && Math.abs(dy) < STILL) continue;
+    piece.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], timing);
+  }
+}
+
+/**
+ * Floats the bar under `header`, or spans the page with it again: the new
+ * layout lands at once, and the trip is replayed from where the bar was
+ * drawn, a trip under way included, on the shape's motion tokens. Reduced
+ * motion and a capture run zero those tokens, so the bar lands with nothing
+ * played.
+ */
+function float(header: HTMLElement, bar: Element, floating: boolean): void {
+  const timing = tokenTiming(header, MOTION_TOKEN.DURATION_SHAPE, MOTION_TOKEN.EASE_PANE);
+  const before: BarDrawn | undefined =
+    timing === undefined
+      ? undefined
+      : { boxes: boxesIn(bar), layers: GROUND_LAYERS.map((layer) => layerPose(header, layer)) };
+  for (const motion of header.getAnimations({ subtree: true })) {
+    if (motion.id === FLOAT_MOTION) motion.cancel();
+  }
+  header.dataset.floating = String(floating);
+  if (timing === undefined || before === undefined) return;
+  const played = { ...timing, id: FLOAT_MOTION };
+  // Note that everything is measured before anything plays, so the layout is worked out once.
+  const after = boxesIn(bar);
+  const layers = GROUND_LAYERS.map((layer) => layerPose(header, layer));
+  GROUND_LAYERS.forEach((pseudoElement, index) => {
+    header.animate([before.layers[index] ?? {}, layers[index] ?? {}], { ...played, pseudoElement });
+  });
+  glidePieces(bar, before.boxes, after, played);
+}
+
+/**
+ * Floats the bar once the page has scrolled past the bar's own height. Note
+ * that the page opens as it stands, so a reload part way down lands the bar
+ * floating rather than playing the trip there.
+ */
+function useFloatingBar(header: RefObject<HTMLElement | null>): void {
   useEffect(() => {
-    const read = (): void =>
-      setFloating((was) => (was ? window.scrollY > FLOAT.BEFORE : window.scrollY > FLOAT.AFTER));
-    read();
+    const element = header.current;
+    const bar = element?.firstElementChild;
+    if (element === null || element === undefined || bar === null || bar === undefined) return;
+    let floating = window.scrollY > FLOAT.AFTER;
+    element.dataset.floating = String(floating);
+    const read = (): void => {
+      const next = floating ? window.scrollY > FLOAT.BEFORE : window.scrollY > FLOAT.AFTER;
+      if (next === floating) return;
+      floating = next;
+      float(element, bar, next);
+    };
     window.addEventListener("scroll", read, { passive: true });
     return () => window.removeEventListener("scroll", read);
-  }, []);
-  return floating;
+  }, [header]);
 }
 
 /** A rule across the page, a cross where it meets each rail. */
@@ -72,12 +175,13 @@ export function SiteFrame({
   /** The page itself, its `main` among it. */
   children: ReactNode;
 }): React.JSX.Element {
-  const floating = useFloating();
+  const header = useRef<HTMLElement>(null);
+  useFloatingBar(header);
   return (
     <div className="ui-landing-page">
       <div className="ui-landing-rails" aria-hidden="true" />
       {bar === undefined || bar === null ? null : (
-        <header className="ui-landing-bar" data-floating={floating}>
+        <header ref={header} className="ui-landing-bar">
           <div className="ui-landing-bar-in">
             {bar}
             {barCall === undefined ? null : <span className="ui-landing-bar-call">{barCall}</span>}
