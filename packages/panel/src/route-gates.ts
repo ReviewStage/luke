@@ -23,6 +23,13 @@ export interface RouteAccess {
   readonly experimentsRead: boolean;
 }
 
+/** The access before the window's state is read: Admin waits on it, as a page an experiment holds waits on the settings. */
+export const UNREAD_ROUTE_ACCESS: RouteAccess = {
+  admin: true,
+  experiments: NO_EXPERIMENTS,
+  experimentsRead: false,
+};
+
 /** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
 export function routeAccessNow(): RouteAccess {
   const state = appStateNow();
