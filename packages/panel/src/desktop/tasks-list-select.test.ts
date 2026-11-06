@@ -30,6 +30,7 @@ import {
   ADMIN_AWAY,
   AUTOMATIONS_AWAY,
   BOARD_AWAY,
+  INBOX_AWAY,
   PERSON_AWAY,
   VERSION_HISTORY_AWAY,
 } from "../testing/tasks-control.js";
@@ -226,6 +227,7 @@ async function mountPage(held?: TasksPageHeld): Promise<{
       personView: PERSON_AWAY,
       automationsView: AUTOMATIONS_AWAY,
       versionHistoryView: VERSION_HISTORY_AWAY,
+      inboxView: INBOX_AWAY,
     });
     return createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE, held });
   }

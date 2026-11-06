@@ -970,12 +970,6 @@ export interface AppState {
  */
 export interface AppWindowFacts {
   fullScreen: boolean;
-  /**
-   * Whether a development build's label, the branch it was cut from, is
-   * hidden for now, as View > Developer > Show Build Label leaves it for a
-   * demo; absent while it is drawn, and in every build that draws none.
-   */
-  buildLabelHidden?: boolean;
 }
 
 /**

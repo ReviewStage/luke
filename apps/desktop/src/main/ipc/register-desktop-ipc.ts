@@ -169,7 +169,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       captureStill: (sender, rect) => windowStill(sender, rect),
       tellUnsavedWork: services.unsavedWork.tell,
       tellMenuOffers: services.menuOffers.tell,
-      showBuildLabel: windows.showBuildLabel,
       saveFile: async (sender, name, text) => {
         const window = BrowserWindow.fromWebContents(sender);
         const options = { defaultPath: name };

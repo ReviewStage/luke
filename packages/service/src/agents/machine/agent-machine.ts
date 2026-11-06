@@ -40,7 +40,7 @@ import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
-import type { AgentImage } from "../coder-host/agent-image.js";
+import type { AgentImage, AgentImageMissing } from "../coder-host/agent-image.js";
 import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
 import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
 import type { FirewallLaunch, FirewallSources } from "../sandbox-firewall.js";
@@ -137,8 +137,18 @@ export interface FoundPlace {
   readonly kept: MachineKept;
 }
 
-/** A found place's resume: where it runs now, or gone where it can never run again, its disk lost. */
+/** A found place's resume where it can never run again, its disk lost. */
 export const PLACE_RESUME = { GONE: "gone" } as const;
+
+/**
+ * A found place running again: where it runs now, and whether it was made
+ * anew in place of one whose disk was lost (`created`), which holds nothing
+ * the place kept off its drive, the harness's own session among it.
+ */
+export interface ResumedPlace {
+  readonly place: MachinePlace;
+  readonly created: boolean;
+}
 
 /**
  * A running place's firewall, the account whose agent it is named beside
@@ -255,8 +265,7 @@ export interface AgentMachineService {
   /**
    * The agent's place opened under the session, its repository checked out
    * there where it has one, and handed to `use`; a place `use` fails in is
-   * thrown away again, since no conversation records the session that would
-   * find it.
+   * left standing for the session's next message.
    */
   readonly open: <A, E, R, B, EB, RB>(
     ask: MachineOpen<B, EB, RB>,
@@ -284,10 +293,19 @@ export interface AgentMachineService {
   ) => Effect.Effect<void, SandboxUnavailable | StoreFailure, DatabaseServices>;
   /** The running place's firewall, every write to it composing what stands whole. */
   readonly firewall: MachineFirewall;
-  /** The found place run again, where it is not, and where it runs now; gone where its disk is lost for good. */
+  /**
+   * The agent's found place run again, where it is not, and where it runs
+   * now: made anew on the machine's own terms where its disk is lost, or
+   * gone where the machine cannot make it again.
+   */
   readonly resume: (
     found: FoundPlace,
-  ) => Effect.Effect<MachinePlace | typeof PLACE_RESUME.GONE, SandboxUnavailable>;
+    agent: Agent,
+  ) => Effect.Effect<
+    ResumedPlace | typeof PLACE_RESUME.GONE,
+    SandboxUnavailable | CheckoutRefused | AgentImageMissing,
+    AgentImage | DatabaseServices
+  >;
   /** The running place stopped, its disk kept for a later resume. */
   readonly stop: (place: MachinePlace) => Effect.Effect<void, SandboxUnavailable>;
   /** The found place thrown away, with whatever runs in it and its record. */
@@ -368,10 +386,10 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place, checking out what it clones beside the agent's own, and launching a runner in it. */
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place or running it again, checking out what it clones beside the agent's own, and launching a runner in it. */
 export type MachineLifecycle = Omit<
   AgentMachineService,
-  "layout" | "open" | "checkOutExtras" | "launchRunner"
+  "layout" | "open" | "resume" | "checkOutExtras" | "launchRunner"
 >;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(

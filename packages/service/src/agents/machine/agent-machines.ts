@@ -44,7 +44,6 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
         of(place.machine).firewall.endLaunch(place, userId, sources),
       clear: (place) => of(place.machine).firewall.clear(place),
     },
-    resume: (found) => of(found.machine).resume(found),
     stop: (place) => of(place.machine).stop(place),
     discard: (found) => of(found.machine).discard(found),
     writeFiles: (place, files) => of(place.machine).writeFiles(place, files),
@@ -65,6 +64,7 @@ function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): A
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),
     open: (ask, use) => of(ask.agent.machine).open(ask, use),
+    resume: (found, agent) => of(found.machine).resume(found, agent),
     checkOutExtras: (place, target, agent, shared) =>
       of(place.machine).checkOutExtras(place, target, agent, shared),
     launchRunner: (place, launch) => of(place.machine).launchRunner(place, launch),

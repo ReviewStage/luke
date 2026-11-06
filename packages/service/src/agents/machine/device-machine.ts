@@ -474,7 +474,9 @@ function deviceMachineOver(
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
     resume: (found) =>
-      found.running === undefined ? Effect.fail(unavailable()) : Effect.succeed(found.running),
+      found.running === undefined
+        ? Effect.fail(unavailable())
+        : Effect.succeed({ place: found.running, created: false }),
 
     stop: () => Effect.void,
 
@@ -512,7 +514,7 @@ function deviceMachineOver(
 
     // The secrets and the first lines are sealed together, bound to the agent, before the line is
     // queued; a launch whose line was not queued undoes what its caller recorded of it. Who the
-    // agent's commits are by is read beside the caller's steps, as a sandbox's deepen reads it
+    // agent's commits are by is read beside the caller's steps, as a sandbox's checkout finish reads it
     // (`agentCommitIdentity`), and kept as it ended, so a read that failed fails the launch where
     // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
     // so an agent whose repository was made before the field gets it too.

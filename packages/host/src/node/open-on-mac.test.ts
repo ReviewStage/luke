@@ -5,7 +5,12 @@ import { createServer, type Socket } from "node:net";
 import path from "node:path";
 import { temporaryDirectory } from "@repo/runtime/testing";
 import { test } from "vitest";
-import { agentWorktreeScript, cloneFolder } from "./open-on-mac.js";
+import {
+  agentWorktreeScript,
+  cloneFolder,
+  mirrorPrefetchScript,
+  mirrorWorktreeScript,
+} from "./open-on-mac.js";
 
 /**
  * A local agent's worktree script over real Git and bash, an origin on disk standing
@@ -15,8 +20,9 @@ import { agentWorktreeScript, cloneFolder } from "./open-on-mac.js";
  * before the clone is made each bring in their own branch, and two agents
  * fetch into the clone at once; one waits on a clone another holds while
  * it lives, and takes the lock over once it is gone; a transfer from a remote that
- * never answers fails rather than hangs; and a make that fails or was cut
- * off leaves nothing that blocks the next.
+ * never answers fails rather than hangs; a make that fails or was cut
+ * off leaves nothing that blocks the next; and a cloud agent's mirror is
+ * made whole at its base from the prefetch beside it, even one cut off.
  */
 
 const GIT_ENVIRONMENT = {
@@ -433,6 +439,52 @@ test(
     assert.equal(existsSync(`${agent("agent")}.making`), false);
     assert.deepEqual(worktreesListed(clone), realPaths([clone, agent("other"), agent("agent")]));
     assert.doesNotMatch(git(clone, ["worktree", "list", "--porcelain"]), /^locked/mu);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a mirror's worktree is made whole and detached at its base, from the prefetch beside it where it ended well and made again where it was cut off",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    writeFileSync(path.join(origin, "kept.txt"), "kept\n");
+    git(origin, ["add", "kept.txt"]);
+    git(origin, ["commit", "--quiet", "-m", "kept"]);
+    const base = push("first\n");
+    push("second\n");
+    const clone = cloneFolder(state, "acme/app");
+    const own = (agent: string) => path.join(scratch, "mirrors", agent, "repository");
+    const input = (agent: string) => ({
+      repository: "acme/app",
+      clone,
+      worktree: own(agent),
+      remote: origin,
+    });
+
+    for (const agent of ["whole", "cut"]) {
+      run(scratch, shell, mirrorPrefetchScript(input(agent)));
+      assert.equal(existsSync(path.join(own(agent), ".git")), false, "a prefetch never stands");
+    }
+    // A prefetch cut off before its checkout wrote a file the base shares with the default branch.
+    rmSync(path.join(`${own("cut")}.making`, "kept.txt"));
+    const ended = [
+      runEnded(scratch, shell, mirrorWorktreeScript({ ...input("whole"), base, prefetched: true })),
+      runEnded(scratch, shell, mirrorWorktreeScript({ ...input("cut"), base, prefetched: false })),
+    ];
+
+    assert.deepEqual(
+      ended.map((made) => made.code),
+      [0, 0],
+    );
+    assert.deepEqual(worktreesListed(clone), realPaths([clone, own("whole"), own("cut")]));
+    for (const agent of ["whole", "cut"]) {
+      assert.equal(git(own(agent), ["rev-parse", "HEAD"]), base, agent);
+      assert.equal(git(own(agent), ["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD", agent);
+      assert.equal(readFileSync(path.join(own(agent), "README.md"), "utf8"), "first\n", agent);
+      assert.equal(readFileSync(path.join(own(agent), "kept.txt"), "utf8"), "kept\n", agent);
+      assert.equal(git(own(agent), ["status", "--porcelain"]), "", agent);
+      assert.equal(existsSync(`${own(agent)}.making`), false, agent);
+    }
   },
   GIT_DEADLINE,
 );

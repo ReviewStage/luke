@@ -367,6 +367,8 @@ function mountWith(
         onChoose: (chosen) => opened.inbox.push(chosen),
         onOpenItem: (chosen) => opened.inbox.push(chosen),
         onClear: () => undefined,
+        narrowed: undefined,
+        onWiden: () => undefined,
         pages: undefined,
         onTaskAgents: () => undefined,
       },

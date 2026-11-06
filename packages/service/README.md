@@ -655,15 +655,17 @@ sealed under production's ring and reads `unreadable` there. A Preview may
 hold a stand-in API key per provider, `PREVIEW_ANTHROPIC_API_KEY` and
 `PREVIEW_OPENAI_API_KEY`, read through `HostedEnvironment`'s
 `previewApiKeys` only where `VERCEL_ENV` is `preview`, so production and a
-local run never spend one, set or not. Wherever an account's own API key
-for that provider is missing or does not open, the stand-in pays instead
-(`src/accounts/own-api-key.ts`): Start counts it as an API key, a Claude
-Code or Codex agent on an API key launches on it, held at its sandbox's
-firewall as an account's key is or handed to a Mac's runner, and the calls
-beside an agent (chapters, a replay's summary, dictation) spend it. The
-account's own key still wins wherever it opens, and a plan is untouched.
-Every member who can sign in to a Preview spends it, so give it a key of
-its own with a low spending limit, never a member's:
+local run never spend one, set or not. Only a Vespin admin's account (the
+`admin` role, `src/admin/admin-access.ts`) spends it, read only where the
+Preview holds one; every other account is left on its own keys, as in
+production. Wherever an admin's own API key for that provider is missing
+or does not open, the stand-in pays instead (`src/accounts/own-api-key.ts`):
+Start counts it as an API key, a Claude Code or Codex agent on an API key
+launches on it, held at its sandbox's firewall as an account's key is or
+handed to a Mac's runner, and the calls beside an agent (chapters, a
+replay's summary, dictation) spend it. The account's own key still wins
+wherever it opens, and a plan is untouched. Give it a key of its own with a
+low spending limit, never a member's:
 
 ```
 vercel env add PREVIEW_ANTHROPIC_API_KEY preview
@@ -1438,7 +1440,7 @@ with no model call, and never falls back to the account's key. The other
 calls beside an account's agents run on its own key, through `ownKeyOf`
 (`src/agents/coder-host/account-keys.ts`), the provider they prefer first and
 the other where it saved only that, and never on Vespin's but for a
-Preview's stand-in where no key of the account's opens: a pull request's
+Preview's stand-in, for a Vespin admin, where no key of the account's opens: a pull request's
 chapters on the key of the member who asks for them, whatever the agent
 runs on: Haiku at Anthropic on their Anthropic key, or OpenAI's `gpt-6-luna`
 at OpenAI where they saved only an OpenAI key; and a Continue's or Fork's

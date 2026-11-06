@@ -141,7 +141,7 @@ function drawn(
                       {
                         at: 0,
                         title: { label: stepBehind },
-                        page: { kind: "inbox", of: undefined },
+                        page: { kind: "routed", of: "/acme/inbox" },
                       },
                     ],
               forward: [],

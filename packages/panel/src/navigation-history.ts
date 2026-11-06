@@ -133,6 +133,7 @@ import {
 } from "react";
 import type { AutomationsRoute } from "./automations-route.js";
 import { liveStepTitle, NAMED_STEP, type NamedStep } from "./history-titles.js";
+import type { InboxRoute } from "./inbox-route.js";
 import { workspaceMembersQuery } from "./live-reads.js";
 import {
   ROUTED_PLACE,
@@ -144,7 +145,6 @@ import {
 import { useRoutedLocation } from "./routed-location.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { useSteadyDoorSet, useSteadyDoors } from "./steady-door.js";
-import { standInboxTask, useInboxTask } from "./tasks/use-inbox-task.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import type { InboxChoice, LeaveGuard, TasksControl } from "./tasks/use-tasks-tab.js";
@@ -162,15 +162,15 @@ const OVER_THE_PLAN: ReadonlySet<RoutedPlace | undefined> = new Set([
   ROUTED_PLACE.BOARD,
   ROUTED_PLACE.PERSON,
   ROUTED_PLACE.AUTOMATIONS,
+  ROUTED_PLACE.INBOX,
 ]);
 
 /** Which kind of place the window is on. */
 const PLACE_KIND = {
   TASK: "plan",
   HOME: "home",
-  INBOX: "inbox",
   AGENT: "agent",
-  /** A place the router says the window stands on, Settings, Admin, a workspace's Board, a person's page, the Automations pages, or a task's version history, which its route draws and its own history moves (`ROUTED_PLACE`). */
+  /** A place the router says the window stands on, Settings, Admin, a workspace's Board, a person's page, the Automations pages, a task's version history, or the Inbox, which its route draws and its own history moves (`ROUTED_PLACE`). */
   ROUTED: "routed",
 } as const;
 
@@ -186,8 +186,7 @@ interface PanelStep {
 /**
  * A place the window can stand on: a task by its id, so a rename leaves it
  * the same place. A place a narrow room shows one pane of at a time holds
- * which, its sub-step, and none in a wide room: the side panel over a task,
- * and whether the Inbox stands on its list (`listed`) or the item chosen in it.
+ * which, its sub-step, and none in a wide room: the side panel over a task.
  */
 type Place =
   | {
@@ -201,16 +200,6 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
   | {
-      readonly kind: typeof PLACE_KIND.INBOX;
-      readonly listed?: boolean | undefined;
-      /** The item standing alone, while one does. */
-      readonly chosen?: InboxChoice | undefined;
-      /** The task the Inbox is narrowed to. */
-      readonly taskId?: string | undefined;
-      /** The side panel beside the item standing, as a task's step holds it; none while no item stands. */
-      readonly side?: SideStep;
-    }
-  | {
       readonly kind: typeof PLACE_KIND.AGENT;
       readonly agentId: string;
       /** The side panel beside the page, as a task's step holds it. */
@@ -220,6 +209,8 @@ type Place =
       readonly kind: typeof PLACE_KIND.ROUTED;
       /** The address the router stood on, which its entry is held at, and which alone tells one routed step from another. */
       readonly address: string;
+      /** The side panel beside an Inbox item standing, as a task's step holds it, saved in the entry's state beside its address; none on any other routed place. */
+      readonly side?: SideStep;
     };
 
 /** Where the router says the window stands, while it stands on a routed place: the place, the address it stands at, and the params its routes read there. */
@@ -318,12 +309,6 @@ function namedStepOf(place: Place): NamedStep | undefined {
       const side = place.side ?? panelTab;
       return { kind: NAMED_STEP.TASK, taskId: place.taskId, column: place.column, side };
     }
-    case PLACE_KIND.INBOX: {
-      const { chosen } = place;
-      // Note that an Inbox narrowed to a task is named by it, as every item it shows is that task's.
-      const taskId = chosen !== undefined && "taskId" in chosen ? chosen.taskId : place.taskId;
-      return { kind: NAMED_STEP.INBOX, taskId };
-    }
     default:
       return undefined;
   }
@@ -341,8 +326,6 @@ function subStepOf(place: Place): boolean | undefined {
   switch (place.kind) {
     case PLACE_KIND.TASK:
       return place.panel?.open;
-    case PLACE_KIND.INBOX:
-      return place.listed;
     default:
       return undefined;
   }
@@ -355,16 +338,15 @@ function sameSubStep(one: Place, other: Place): boolean {
   return mine === undefined || theirs === undefined || mine === theirs;
 }
 
+/** The task an Inbox item stands on; none for one on an agent with no task, or named by its id alone. */
+function choiceTask(choice: InboxChoice): string | undefined {
+  return "taskId" in choice ? choice.taskId : undefined;
+}
+
 /** The task an Inbox item stands on, or for an agent with no task its agent, whose side panel stands beside it. */
 function choiceHolder(choice: InboxChoice): string | undefined {
   if ("taskId" in choice) return choice.taskId;
   return "agentId" in choice ? choice.agentId : undefined;
-}
-
-/** Whether two Inbox items are the same item of the same holder. */
-function sameInboxChoice(one: InboxChoice | undefined, other: InboxChoice | undefined): boolean {
-  if (one === undefined || other === undefined) return one === other;
-  return one.itemId === other.itemId && choiceHolder(one) === choiceHolder(other);
 }
 
 /** Whether two side panels stand on the same tab, or none. */
@@ -409,7 +391,7 @@ function sideOf(place: Place): SideStep {
   if (place.kind === PLACE_KIND.TASK) {
     return place.panel === undefined ? place.side : openPanelTab(place.panel);
   }
-  return place.kind === PLACE_KIND.INBOX || place.kind === PLACE_KIND.AGENT
+  return place.kind === PLACE_KIND.ROUTED || place.kind === PLACE_KIND.AGENT
     ? place.side
     : undefined;
 }
@@ -436,13 +418,6 @@ function sameShown(one: Place, other: Place): boolean {
 function sameChosen(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.TASK && other.kind === PLACE_KIND.TASK) {
     return sameOrUnknownTab(one.column, other.column);
-  }
-  if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    // Note that the Inbox and each task it is narrowed to are steps of their own, so moving between them is a visit rather than filling in the step.
-    if (one.taskId !== other.taskId) return false;
-    return one.chosen === undefined || other.chosen === undefined
-      ? true
-      : sameInboxChoice(one.chosen, other.chosen);
   }
   return true;
 }
@@ -518,8 +493,6 @@ function surfacesOf(
         : [];
       return [...column, ...sideSurface];
     }
-    case PLACE_KIND.INBOX:
-      return withSide([{ surface: PRODUCT_SURFACE.INBOX }]);
     case PLACE_KIND.AGENT:
       return withSide([{ surface: PRODUCT_SURFACE.AGENT, of: place.agentId }]);
     case PLACE_KIND.HOME:
@@ -541,14 +514,10 @@ function samePlace(one: Place, other: Place): boolean {
       sameSide(one.side, other.side)
     );
   }
-  if (one.kind === PLACE_KIND.INBOX && other.kind === PLACE_KIND.INBOX) {
-    return (
-      one.taskId === other.taskId &&
-      sameInboxChoice(one.chosen, other.chosen) &&
-      sameSide(one.side, other.side)
-    );
-  }
-  if (one.kind === PLACE_KIND.AGENT && other.kind === PLACE_KIND.AGENT) {
+  if (
+    (one.kind === PLACE_KIND.AGENT && other.kind === PLACE_KIND.AGENT) ||
+    (one.kind === PLACE_KIND.ROUTED && other.kind === PLACE_KIND.ROUTED)
+  ) {
     return sameSide(one.side, other.side);
   }
   return true;
@@ -596,10 +565,10 @@ function sameDraft(one: Place, other: Place): boolean {
   );
 }
 
-/** The surfaces a routed place shows, as the window counts them opened, a version history by the task `boundFor` it is of. */
+/** The surfaces a routed place shows, as the window counts them opened, a version history by the task `historyTask` its address names. */
 function routedSurfaces(
   routed: RoutedStanding,
-  boundFor: string | undefined,
+  historyTask: string | undefined,
 ): readonly OpenSurface[] {
   switch (routed.place) {
     case ROUTED_PLACE.ADMIN:
@@ -613,9 +582,11 @@ function routedSurfaces(
     case ROUTED_PLACE.AUTOMATIONS:
       return [{ surface: PRODUCT_SURFACE.AUTOMATIONS }];
     case ROUTED_PLACE.VERSION_HISTORY:
-      return boundFor === undefined
+      return historyTask === undefined
         ? []
-        : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: boundFor }];
+        : [{ surface: PRODUCT_SURFACE.VERSION_HISTORY, of: historyTask }];
+    case ROUTED_PLACE.INBOX:
+      return [{ surface: PRODUCT_SURFACE.INBOX }];
   }
 }
 
@@ -1266,8 +1237,6 @@ function useHistory(input: {
 }): NavigationHistory & {
   backTo: (place: Place) => boolean;
   upTo: (place: Place, stand: () => void) => void;
-  /** Stands the window on `place` by `stand`, its step taking the step standing in place rather than adding one. */
-  inPlace: (place: Place, stand: () => void) => void;
   /** A step back, answering whether one stood behind to take, though the leave ask may yet hold it. */
   stepBack: () => boolean;
   /** The step behind on another page (`awayFrom`), where one stands. */
@@ -1474,12 +1443,6 @@ function useHistory(input: {
     stand();
   };
 
-  // Note that this is the mark `upTo` sets where no step stands behind, so the visit it leads to takes the step in place.
-  const inPlace = (to: Place, stand: () => void) => {
-    wentUp.current = to;
-    stand();
-  };
-
   return {
     canGoBack: reading.canGoBack,
     canGoForward: reading.canGoForward,
@@ -1489,7 +1452,6 @@ function useHistory(input: {
     onGoTo: goTo,
     backTo,
     upTo,
-    inPlace,
     stepBack: () => step(-1),
     away: reading.away,
     stepAway: () => goTo(awayFrom(held.trail, latest.current.reachable)),
@@ -1537,6 +1499,8 @@ export function useWindowHistory(input: {
   automations: Pick<AutomationsRoute, "deleted" | "setupAddress">;
   /** What the history reads of a version history beyond where it stands: the list under a narrow room's version (`version-history-route.ts`). */
   versionHistory: Pick<VersionHistoryRoute, "listAddress">;
+  /** What the history reads of the Inbox beyond where it stands: the list under its item, the item chosen, and the doors that stand its list (`inbox-route.ts`). */
+  inbox: Pick<InboxRoute, "listAddress" | "chosen" | "choiceOf" | "onOpen" | "onClear">;
   /** The room the panel's stage gives, narrow where it shows one pane at a time. */
   room: ShellRoom;
   tasks: Pick<
@@ -1550,7 +1514,6 @@ export function useWindowHistory(input: {
     | "history"
     | "signedIn"
     | "inboxView"
-    | "onShowInbox"
     | "agentView"
     | "personView"
     | "workspace"
@@ -1571,14 +1534,8 @@ export function useWindowHistory(input: {
   const { boundFor } = tasks;
   const historyOpen = tasks.history.open;
   const inboxOpen = tasks.inboxView.open;
-  // An Inbox showing one column, by its own width or a narrow room's, stands its item alone, or its list while none is chosen.
-  const inboxSingle = narrow || tasks.inboxView.single === true;
-  // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
-  const inboxChosen = tasks.inboxView.chosen;
-  const inboxListed = inboxSingle ? inboxChosen === undefined : undefined;
-  // A task chosen narrows the Inbox to its items, a step of its own.
-  const narrowedTask = useInboxTask();
-  const inboxTask = inboxOpen ? narrowedTask : undefined;
+  // The item chosen in the Inbox, whose side panel its step holds beside its address.
+  const inboxChosen = input.inbox.chosen;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
   // The strips are the open task's, which is the one bound for once it has opened and its agents are read, so a task on its way holds no tab of the one before it.
@@ -1628,15 +1585,12 @@ export function useWindowHistory(input: {
   const untitled = useMemo((): Place | undefined => {
     // A workspace's address naming none of the reader's is no place of theirs to come back to, so it is no step, and the tab keeps its address.
     if (!known || unknownWorkspace) return undefined;
-    if (routedAddress !== undefined) return { kind: PLACE_KIND.ROUTED, address: routedAddress };
-    if (inboxOpen) {
-      const inbox = {
-        kind: PLACE_KIND.INBOX,
-        listed: inboxListed,
-        chosen: inboxChosen,
-        side: inboxChosen === undefined ? undefined : sideHeld,
-      } as const;
-      return inboxTask === undefined ? inbox : { ...inbox, taskId: inboxTask };
+    if (routedAddress !== undefined) {
+      // Note that an Inbox item's step holds the side panel beside it, as a task's does, which no address says.
+      const side = inboxOpen && inboxChosen !== undefined ? sideHeld : undefined;
+      return side === undefined
+        ? { kind: PLACE_KIND.ROUTED, address: routedAddress }
+        : { kind: PLACE_KIND.ROUTED, address: routedAddress, side };
     }
     if (pageAgent !== undefined)
       return { kind: PLACE_KIND.AGENT, agentId: pageAgent, side: sideHeld };
@@ -1660,43 +1614,9 @@ export function useWindowHistory(input: {
     taskSide,
     sideHeld,
     inboxOpen,
-    inboxListed,
     inboxChosen,
-    inboxTask,
     pageAgent,
   ]);
-  // Each surface the place shows is counted as it opens, from here rather than from the doors that open it, as the history is written.
-  useSurfaceOpen(
-    useMemo(() => {
-      const beside =
-        sideTab === undefined || boundFor === undefined
-          ? undefined
-          : tabSurface(boundFor, sideTab, true);
-      return untitled?.kind === PLACE_KIND.ROUTED && routed !== undefined
-        ? routedSurfaces(routed, boundFor)
-        : surfacesOf(untitled, columnKnown, beside);
-    }, [untitled, columnKnown, sideTab, boundFor, routed]),
-    input.room,
-  );
-  // An Inbox narrowed to a task is named by the task, every item it shows being that task's.
-  const inboxTaskName =
-    inboxTask === undefined ? undefined : tasks.tasks.find((task) => task.id === inboxTask)?.name;
-  const place = useMemo((): Titled | undefined => {
-    if (untitled === undefined || titleLabel === undefined) return untitled;
-    const label = { label: titleLabel, detail: titleDetail ?? inboxTaskName };
-    const panes = { column: titleColumn, side: titleSide };
-    const unnamed = titleColumn === undefined && titleSide === undefined;
-    return { ...untitled, title: unnamed ? label : { ...label, panes } };
-  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide, inboxTaskName]);
-  // Whether the column's tab a task's step showed still stands on its strip, as far as the window last saw it; a task not seen since is taken to.
-  // Note that the side panel's tab is not asked after, because going to the step opens it again, as a link opens a preview another took the place of.
-  const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
-    const column = knownColumns.get(to.taskId);
-    return to.column === undefined || column === undefined || column.has(tabKey(to.column));
-  };
-  // A workspace's Board, a person's page, or the Automations pages name their workspace by their address's first step, which stands only while it is the one listed;
-  // an automation's page stands no more once it is deleted.
-  const { automations } = input;
   // The task a version history's address names, by the step its links name it by under the workspace named, or by its id.
   const historyTaskOf = (matches: ReturnType<typeof router.matchRoutes>) => {
     if (routedPlaceOf(matches) !== ROUTED_PLACE.VERSION_HISTORY) return undefined;
@@ -1706,6 +1626,41 @@ export function useWindowHistory(input: {
     const home = workspaceOfSlug(tasks.workspaces, workspace)?.id;
     return (home === undefined ? undefined : everStepped.get(home)?.get(taskId)) ?? taskId;
   };
+  // The task the version history standing is of, by its address, which it is counted as from the moment it stands, before that task opens under it.
+  const routedHistory =
+    routed === undefined ? undefined : historyTaskOf(router.matchRoutes(pathOf(routed.address)));
+  // Each surface the place shows is counted as it opens, from here rather than from the doors that open it, as the history is written.
+  useSurfaceOpen(
+    useMemo(() => {
+      const beside =
+        sideTab === undefined || boundFor === undefined
+          ? undefined
+          : tabSurface(boundFor, sideTab, true);
+      // Note that the side panel beside an Inbox item counts as it does beside an agent's page.
+      const inboxBeside =
+        routed?.place === ROUTED_PLACE.INBOX && beside !== undefined ? [beside] : [];
+      return untitled?.kind === PLACE_KIND.ROUTED && routed !== undefined
+        ? [...routedSurfaces(routed, routedHistory), ...inboxBeside]
+        : surfacesOf(untitled, columnKnown, beside);
+    }, [untitled, columnKnown, sideTab, boundFor, routed, routedHistory]),
+    input.room,
+  );
+  const place = useMemo((): Titled | undefined => {
+    if (untitled === undefined || titleLabel === undefined) return untitled;
+    const label = { label: titleLabel, detail: titleDetail };
+    const panes = { column: titleColumn, side: titleSide };
+    const unnamed = titleColumn === undefined && titleSide === undefined;
+    return { ...untitled, title: unnamed ? label : { ...label, panes } };
+  }, [untitled, titleLabel, titleDetail, titleColumn, titleSide]);
+  // Whether the column's tab a task's step showed still stands on its strip, as far as the window last saw it; a task not seen since is taken to.
+  // Note that the side panel's tab is not asked after, because going to the step opens it again, as a link opens a preview another took the place of.
+  const tabsStand = (to: Extract<Place, { kind: typeof PLACE_KIND.TASK }>) => {
+    const column = knownColumns.get(to.taskId);
+    return to.column === undefined || column === undefined || column.has(tabKey(to.column));
+  };
+  // A workspace's Board, a person's page, or the Automations pages name their workspace by their address's first step, which stands only while it is the one listed;
+  // an automation's page stands no more once it is deleted.
+  const { automations, inbox } = input;
   const listedStands = (matches: ReturnType<typeof router.matchRoutes>) => {
     const routedHere = routedPlaceOf(matches);
     // Note that a version history is passed over once its task is deleted, as the task's own step is.
@@ -1740,22 +1695,15 @@ export function useWindowHistory(input: {
     // page, and the Automations pages stand over the plan's place as they always have, so whatever stood in it gives way,
     // as opening any of them has it.
     if (to.kind === PLACE_KIND.ROUTED) {
-      if (!OVER_THE_PLAN.has(routedPlaceOf(router.matchRoutes(pathOf(to.address))))) return;
-      if (inboxOpen) tasks.inboxView.onClose();
+      const matches = router.matchRoutes(pathOf(to.address));
+      if (!OVER_THE_PLAN.has(routedPlaceOf(matches))) return;
       if (pageAgent !== undefined) tasks.agentView.onClose();
       if (unknownWorkspace) tasks.unknownWorkspace.onClose();
-      return;
-    }
-    if (to.kind === PLACE_KIND.INBOX) {
-      // Note that a task's step holding no item opens it afresh, so no item chosen in a later step stands over it.
-      if (to.taskId !== undefined && to.chosen === undefined) {
-        tasks.onShowInbox({ taskId: to.taskId });
-      } else {
-        tasks.inboxView.onOpen();
-      }
-      standInboxTask(to.taskId);
-      if (to.chosen !== undefined) tasks.inboxView.onChoose(to.chosen);
-      standSide(to.chosen === undefined ? undefined : choiceHolder(to.chosen), to.side);
+      // An Inbox item's step stands the side panel beside it as it stood, on the item's own task or agent.
+      const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
+      const { itemId } = params;
+      const chosen = itemId === undefined ? undefined : inbox.choiceOf(itemId);
+      standSide(chosen === undefined ? undefined : choiceHolder(chosen), to.side);
       return;
     }
     if (to.kind === PLACE_KIND.AGENT) {
@@ -1763,8 +1711,7 @@ export function useWindowHistory(input: {
       standSide(to.agentId, to.side);
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox and an agent's page stand over.
-    if (inboxOpen) tasks.inboxView.onClose();
+    // Every other place of the Plans tab is the plan's, which an agent's page stands over.
     if (pageAgent !== undefined) tasks.agentView.onClose();
     if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onRestoreTask(to.taskId);
     if (to.kind === PLACE_KIND.TASK && to.column !== undefined) {
@@ -1815,6 +1762,20 @@ export function useWindowHistory(input: {
     to.kind === PLACE_KIND.ROUTED
       ? historyTaskOf(router.matchRoutes(pathOf(to.address)))
       : undefined;
+  // The task a routed step's Inbox is named by, where it is the Inbox's: its chosen item's, else the one its list is narrowed to.
+  const inboxNamed = (to: Place): NamedStep | undefined => {
+    if (to.kind !== PLACE_KIND.ROUTED) return undefined;
+    const matches = router.matchRoutes(pathOf(to.address));
+    if (routedPlaceOf(matches) !== ROUTED_PLACE.INBOX) return undefined;
+    const params: Readonly<Record<string, string | undefined>> = matches.at(-1)?.params ?? {};
+    const chosen = params.itemId === undefined ? undefined : inbox.choiceOf(params.itemId);
+    const narrowed =
+      params.taskId ??
+      new URL(to.address, "https://panel.invalid").searchParams.get("task") ??
+      undefined;
+    const holder = chosen === undefined ? undefined : choiceTask(chosen);
+    return { kind: NAMED_STEP.INBOX, taskId: holder ?? narrowed };
+  };
   const named = (to: Place) => {
     const person = personOf(to);
     const history = historyOf(to);
@@ -1823,10 +1784,10 @@ export function useWindowHistory(input: {
         ? { kind: NAMED_STEP.PERSON, userId: person }
         : history !== undefined
           ? { kind: NAMED_STEP.VERSION_HISTORY, taskId: history }
-          : namedStepOf(to);
+          : (inboxNamed(to) ?? namedStepOf(to));
     return liveStepTitle(step, titleOf(to), tasks, members);
   };
-  const { backTo, upTo, inPlace, stepBack, stepAway, ...history } = useHistory({
+  const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     held,
     place,
     address: routedAddress ?? addressOf(input.link),
@@ -1840,10 +1801,13 @@ export function useWindowHistory(input: {
   // the Inbox's list (`mobile-bar.tsx`), which takes Home's step in place, so
   // Back never lands on a Home that would only leave again.
   const homeOnPhone = narrow && tasks.signedIn && untitled?.kind === PLACE_KIND.HOME;
-  const openInbox = tasks.inboxView.onOpen;
+  const phoneWorkspace = tasks.workspace;
+  const openInbox = inbox.onOpen;
   useEffect(() => {
-    if (homeOnPhone) inPlace({ kind: PLACE_KIND.INBOX, listed: true }, openInbox);
-  }, [homeOnPhone, inPlace, openInbox]);
+    if (!homeOnPhone || phoneWorkspace === undefined) return;
+    const workspace = phoneWorkspace.slug ?? phoneWorkspace.id;
+    openInbox({ workspace, narrowed: undefined }, true);
+  }, [homeOnPhone, phoneWorkspace, openInbox]);
   // Note that only a narrow room holds a list as a step of its own, so a wide one only stands it.
   const up = (to: Place, stand: () => void) => (narrow ? upTo(to, stand) : stand());
   // Note that the history is handed back steady, its ways back among it, so the screens it is handed hold while nothing they read moves.
@@ -1866,19 +1830,18 @@ export function useWindowHistory(input: {
         automations.setupAddress === undefined ? undefined : routedPlace(automations.setupAddress);
       if (!narrow || setup === undefined || !backTo(setup)) tasks.automationsView.onRuns(false);
     },
-    // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
-    // Note that the list stepped back to is under the task the Inbox stands narrowed to, as its step is.
+    // Note that an Inbox item is a step after the list it was chosen in, in every room, as its address is its own.
     inbox: () => {
-      const stand = () => tasks.inboxView.onClear();
-      const list = { kind: PLACE_KIND.INBOX, listed: true } as const;
-      const narrowed = inboxTask === undefined ? list : { ...list, taskId: inboxTask };
-      if (inboxSingle) upTo(narrowed, stand);
-      else stand();
+      const list = inbox.listAddress === undefined ? undefined : routedPlace(inbox.listAddress);
+      if (list === undefined || !backTo(list)) inbox.onClear();
     },
     panel: () => {
       const shut = () => tasks.sidePanel.onSetOpen(false);
       // Note that a phone's panel a link opened over an Inbox item or an agent's page steps back to it shut, where that is the step behind.
-      if (untitled?.kind === PLACE_KIND.INBOX || untitled?.kind === PLACE_KIND.AGENT) {
+      if (
+        (untitled?.kind === PLACE_KIND.ROUTED && inboxOpen) ||
+        untitled?.kind === PLACE_KIND.AGENT
+      ) {
         if (!narrow || !backTo({ ...untitled, side: null })) shut();
         return;
       }

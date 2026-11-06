@@ -1,6 +1,5 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
@@ -18,50 +17,43 @@ import {
   terminalLook,
 } from "@repo/features/terminal-model";
 import { ACT_KIND } from "@repo/host/acts";
-import { STATUS_TONE } from "@repo/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { type LocalStripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { askAct } from "../act.js";
+import { askAct, tellAct } from "../act.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract.js";
 import { onTerminalPort } from "../terminal/terminal-port.js";
-import { TOAST_HOLD, useToast } from "../toast.js";
-import { type HeldShell, localShellsAsked, localShellsHeld, nextShellTitle } from "./local-held.js";
+import { type HeldShell, localShellsHeld, nextShellTitle } from "./local-held.js";
 import { useOpenLink } from "./use-open-link.js";
 import type { SidePanelControl } from "./use-side-panel.js";
 
 /**
- * use-local-session.ts -- one Local tab's shells on this Mac, in its cloud agent's mirror: opened, attached while the tab is shown, and let go when it is not.
+ * use-local-session.ts -- one Local tab's terminal on this Mac, in its cloud agent's mirror: its shell opened, attached while the tab is shown, and let go when it is not; and the doors that open such a tab and end its terminal as it closes.
  *
- * While the tab is shown it attaches to the shell it held, else the oldest
- * the window holds for the agent (`local-held.ts`), else a new one: the
- * agent's mirror found or made (`macShell.mirror`, which starts mirroring
- * the agent's files and answers as soon as its folder stands), then a
- * shell opened there (`macShell.open`). Main then posts the shell's port,
- * which carries its bytes and how it stands (`TERMINAL_CONNECTION`) and
- * nothing else. Hidden, the tab closes the port; the shell goes on running
- * in main, which holds the latest of what it printed for the next attach,
- * drawn on a cleared screen, and a reload attaches to it again. A shell
- * main no longer holds, refused on attach, is dropped from the list and the
- * next one found.
+ * Each terminal is a tab of its own, minted in the window's list
+ * (`local-held.ts`) as its tab opens. While the tab is shown it attaches to
+ * the terminal's shell, or where none is open yet opens one: the agent's
+ * mirror found or made (`macShell.mirror`, which starts mirroring the
+ * agent's files and answers as soon as its folder stands), then a shell
+ * opened there (`macShell.open`). Main then posts the shell's port, which
+ * carries its bytes and how it stands (`TERMINAL_CONNECTION`) and nothing
+ * else. Hidden, the tab closes the port; the shell goes on running in main,
+ * which holds the latest of what it printed for the next attach, drawn on a
+ * cleared screen, and a reload attaches to it again. A shell main no longer
+ * holds, refused on attach, is forgotten and a new one opened in its place.
  *
- * A shell that ended takes any key for a new one, and the bar's action (its
- * click, or Return) asks again for a mirror or a shell main could not make.
+ * A shell that ended takes any key for a new one in the same tab, and the
+ * bar's action (its click, or Return) asks again for a mirror or a shell
+ * main could not make. Closing the tab ends its terminal (`useEndLocal`).
  *
  * The bytes go to the screen and to the port, and nowhere else.
  */
 
 /** How long a resize waits for the next before the shell is told, so a dragged edge tells it once. */
 const RESIZE_SETTLES = Duration.millis(100);
-
-/** What a toast says when a shell could not be started or ended. */
-const SHELL_FAILED = {
-  CREATE: "Could not start a shell.",
-  KILL: "Could not end that shell.",
-} as const;
 
 /** Reads a message main sent on a shell's port. */
 const readOutbound = Schema.decodeUnknownOption(terminalPortOutboundSchema);
@@ -98,7 +90,7 @@ function isHighSurrogate(unit: number): boolean {
 
 /** One attach out, by the shell it named; its own object, so a refusal takes that one out of line. */
 interface AttachAsked {
-  readonly shell: string;
+  readonly terminalId: string;
 }
 
 /** A shell opened, or why none could be. */
@@ -112,7 +104,7 @@ interface LiveSession {
   handle: TerminalHandle | undefined;
   port: MessagePort | undefined;
   /** The shell the tab shows, which an attach and a port's ticket name. */
-  shell: string | undefined;
+  terminalId: string | undefined;
   /** Whether the tab wants the port of the newest attach it sent. */
   attaching: boolean;
   /**
@@ -131,7 +123,7 @@ interface LiveSession {
   generation: number;
 }
 
-/** A Local tab's session: where it stands, where its screen mounts, the bar's action, and its shells. */
+/** A Local tab's session: where it stands, where its screen mounts, and the bar's action. */
 export interface LocalSession {
   readonly state: TerminalState;
   /** Whether the terminal bundle failed to load, so there is no screen to draw on. */
@@ -142,18 +134,6 @@ export interface LocalSession {
   readonly find: TerminalFind | undefined;
   readonly screen: (element: HTMLDivElement | null) => void;
   readonly onAction: (action: TerminalAction) => void;
-  /** The agent's shells this window opened, oldest first. */
-  readonly listed: readonly HeldShell[];
-  /** The shell the screen shows, or nothing before one is found. */
-  readonly shell: string | undefined;
-  /** Shows another of the agent's shells on the screen. */
-  readonly onChoose: (shell: string) => void;
-  /** Opens another shell in the same agent's mirror and shows it. */
-  readonly onCreate: () => void;
-  /** Names a shell, which takes at once. */
-  readonly onRename: (shell: string, title: string) => void;
-  /** Ends a shell, answering whether it ended; the one shown gives way to the oldest left, or a new one. */
-  readonly onKill: (shell: string) => Promise<ActionResult>;
 }
 
 /** What runs once a wait has passed. Note that it is wrapped, because an atom's setter calls a bare function as an update. */
@@ -167,7 +147,13 @@ const waitAtom = (wait: Duration.Duration) =>
     Effect.sleep(wait).pipe(Effect.andThen(Effect.sync(after.run))),
   );
 
-export function useLocalSession(agentId: string, shown: boolean): LocalSession {
+/** The terminal without the shell it held, whose id main no longer answers to. */
+function withoutShell(held: HeldShell): HeldShell {
+  const { terminalId: _gone, ...rest } = held;
+  return rest;
+}
+
+export function useLocalSession(agentId: string, shellId: string, shown: boolean): LocalSession {
   const registry = useContext(RegistryContext);
   const openLink = useOpenLink();
   // Note that the module itself is held, not the result around it, which is a new value each render.
@@ -180,26 +166,11 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
   const [handle, setHandle] = useState<TerminalHandle | undefined>(undefined);
   const [resizeAtom] = useState(() => waitAtom(RESIZE_SETTLES));
   const settleResize = useAtomSet(resizeAtom);
-  const listed = useAtomValue(localShellsHeld(agentId));
-  const asked = useAtomValue(localShellsAsked(agentId));
-  const setAsked = useAtomSet(localShellsAsked(agentId));
-  const [shell, setShell] = useState<string | undefined>(undefined);
-  const show = useToast();
-  const failedToast = useCallback(
-    (words: string, cause: unknown) =>
-      show({
-        words,
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-        failure: { surface: FAILURE_SURFACE.TERMINAL_CREATE, cause, about: { agentId } },
-      }),
-    [show, agentId],
-  );
   const live = useRef<LiveSession>({
     state,
     handle: undefined,
     port: undefined,
-    shell: undefined,
+    terminalId: undefined,
     attaching: false,
     asked: [],
     release: undefined,
@@ -207,16 +178,27 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     generation: 0,
   });
 
-  // Note that the list is read and written through the registry, because a
-  // connect under way reads it as it lands rather than as its render saw it.
-  const heldNow = useCallback(() => registry.get(localShellsHeld(agentId)), [registry, agentId]);
-  const writeHeld = useCallback(
-    (update: (shells: readonly HeldShell[]) => readonly HeldShell[]) =>
-      registry.set(localShellsHeld(agentId), update(registry.get(localShellsHeld(agentId)))),
-    [registry, agentId],
+  // Note that the terminal is read and written through the registry,
+  // because a connect under way reads it as it lands rather than as its
+  // render saw it.
+  const heldNow = useCallback(
+    () => registry.get(localShellsHeld(agentId)).find((each) => each.shell === shellId),
+    [registry, agentId, shellId],
   );
+  const writeHeld = useCallback(
+    (update: (held: HeldShell) => HeldShell) =>
+      registry.set(
+        localShellsHeld(agentId),
+        registry
+          .get(localShellsHeld(agentId))
+          .map((each) => (each.shell === shellId ? update(each) : each)),
+      ),
+    [registry, agentId, shellId],
+  );
+  // A shell main no longer holds is forgotten, unless the terminal holds another by now.
   const forget = useCallback(
-    (target: string) => writeHeld((shells) => shells.filter((each) => each.terminalId !== target)),
+    (target: string) =>
+      writeHeld((held) => (held.terminalId === target ? withoutShell(held) : held)),
     [writeHeld],
   );
 
@@ -239,8 +221,13 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     live.current.port = undefined;
   }, []);
 
-  // A new shell in the agent's mirror, held in the window's list, or why
-  // main could not make the mirror or the shell.
+  // A new shell in the agent's mirror, held beside the terminal, or why
+  // main could not make the mirror or the shell. Note that a shell no
+  // terminal will keep is let go as it lands, because nothing else would
+  // end it: one whose tab closed while it opened, its connect let go too so
+  // it answers nothing more, and one that lost to another open for the same
+  // terminal, as a tab hidden and shown again asks, which answers the
+  // shell that won.
   const open = useCallback(async (): Promise<Opened> => {
     const mirrored = await askAct(ACT_KIND.MAC_SHELL_MIRROR, { agentId }).catch(() => undefined);
     if (mirrored === undefined) return { why: TERMINAL_UNREACHED.MIRROR };
@@ -250,12 +237,19 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     }).catch(() => undefined);
     if (opened === undefined) return { why: TERMINAL_UNREACHED.SHELL };
     const { terminalId } = opened;
-    writeHeld((shells) => [...shells, { terminalId, title: nextShellTitle(shells) }]);
+    const held = heldNow();
+    if (held === undefined || held.terminalId !== undefined) {
+      tellAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId });
+      return held?.terminalId === undefined
+        ? { why: TERMINAL_UNREACHED.SHELL }
+        : { terminalId: held.terminalId };
+    }
+    writeHeld((was) => ({ ...was, terminalId }));
     return { terminalId };
-  }, [agentId, writeHeld]);
+  }, [agentId, heldNow, writeHeld]);
 
   // Note that `connect` is read through a ref here, because a refused
-  // attach finds the next shell, and `connect` is built over `attach`.
+  // attach opens a shell in its place, and `connect` is built over `attach`.
   const connectNow = useRef<() => Promise<void>>(async () => undefined);
 
   const attach = useCallback(
@@ -263,23 +257,22 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       const held = live.current;
       const size = held.handle?.size();
       if (size === undefined) return;
-      held.shell = target;
+      held.terminalId = target;
       held.attaching = true;
-      const asked: AttachAsked = { shell: target };
+      const asked: AttachAsked = { terminalId: target };
       held.asked.push(asked);
-      setShell(target);
       // Note that the screen is cleared, because main draws all it holds of the shell again.
       held.handle?.reset();
       enter({ kind: TERMINAL_STATE.CONNECTING });
       // An attach main refused posts no port, so it is out of the line, and
-      // its shell, which main no longer holds, out of the list; the next one
-      // is found in its place, unless it was just opened, which says so.
+      // its shell, which main no longer holds, forgotten; a new one is
+      // opened in its place, unless it was just opened, which says so.
       void askAct(ACT_KIND.MAC_SHELL_ATTACH, { agentId, terminalId: target, ...size }).catch(() => {
         held.asked = held.asked.filter((each) => each !== asked);
         if (held.asked.length === 0) held.release?.();
         forget(target);
-        if (held.shell !== target) return;
-        held.shell = undefined;
+        if (held.terminalId !== target) return;
+        held.terminalId = undefined;
         if (!held.attaching || held.asked.length > 0) return;
         if (opened) enter({ kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SHELL });
         else void connectNow.current();
@@ -288,81 +281,23 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     [agentId, enter, forget],
   );
 
+  // Note that a terminal its tab no longer holds, as one closed, connects to nothing.
   const connect = useCallback(async () => {
     letGo();
     const generation = live.current.generation;
     const current = () => generation === live.current.generation;
     enter({ kind: TERMINAL_STATE.CONNECTING });
-    // A new shell asked for is opened in place of the one held.
-    const fresh = registry.get(localShellsAsked(agentId)) > 0;
-    if (fresh) setAsked((was) => Math.max(0, was - 1));
-    const shells = heldNow();
-    const target = shells.find((each) => each.terminalId === live.current.shell) ?? shells[0];
-    if (target !== undefined && !fresh) return attach(target.terminalId);
+    const held = heldNow();
+    if (held === undefined) return;
+    if (held.terminalId !== undefined) return attach(held.terminalId);
     const made = await open();
     if (!current()) return;
     if ("why" in made) return enter({ kind: TERMINAL_STATE.UNREACHABLE, why: made.why });
     attach(made.terminalId, true);
-  }, [agentId, attach, enter, heldNow, letGo, open, registry, setAsked]);
+  }, [attach, enter, heldNow, letGo, open]);
   useLayoutEffect(() => {
     connectNow.current = connect;
   });
-
-  // Note that a shell shown on the same screen as another starts from a
-  // clear screen, which main then fills with what it held of that shell.
-  const onChoose = useCallback(
-    (next: string) => {
-      const held = live.current;
-      // The screen takes the keyboard from the row pressed, the shell's to type into.
-      held.handle?.focus();
-      if (next === held.shell && held.port !== undefined) return;
-      letGo();
-      held.handle?.reset();
-      attach(next);
-    },
-    [attach, letGo],
-  );
-
-  const onCreate = useCallback(async () => {
-    const made = await open();
-    if ("why" in made) return failedToast(SHELL_FAILED.CREATE, made.why);
-    onChoose(made.terminalId);
-  }, [failedToast, onChoose, open]);
-
-  // A shell's name is the window's own, so it takes at once.
-  const onRename = useCallback(
-    (target: string, title: string) =>
-      writeHeld((shells) =>
-        shells.map((each) => (each.terminalId === target ? { ...each, title } : each)),
-      ),
-    [writeHeld],
-  );
-
-  // Note that the shown shell's port is let go before it is ended, so its
-  // end is never said as an exit on the screen. The screen then moves on to
-  // the oldest shell left, or a new one, where nothing else moved it meanwhile.
-  const onKill = useCallback(
-    async (target: string): Promise<ActionResult> => {
-      const held = live.current;
-      const shown = target === held.shell;
-      if (shown) {
-        letGo();
-        held.shell = undefined;
-        held.handle?.reset();
-      }
-      const generation = held.generation;
-      try {
-        await askAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: target });
-        forget(target);
-        if (shown && held.generation === generation) await connect();
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      } catch {
-        if (shown && held.generation === generation) attach(target);
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: SHELL_FAILED.KILL };
-      }
-    },
-    [agentId, attach, connect, forget, letGo],
-  );
 
   // Note that the screen takes the keyboard back as the bar's action
   // starts, because the button pressed goes with the bar.
@@ -374,15 +309,15 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     [connect],
   );
 
-  // The shown shell that ended let go, out of main and the list, and the
-  // next one found in its place, as a key or a new shell asked for opens it.
+  // The shell that ended let go, out of main and the terminal, and a new
+  // one opened in its place, as a key asks.
   const replaceEnded = useCallback(() => {
     const held = live.current;
-    const ended = held.shell;
-    held.shell = undefined;
+    const ended = held.terminalId;
+    held.terminalId = undefined;
     if (ended !== undefined) {
       forget(ended);
-      void askAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended }).catch(() => undefined);
+      tellAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended });
     }
     void connect();
   }, [agentId, connect, forget]);
@@ -475,10 +410,10 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       onTerminalPort((ticket, port) => {
         const held = live.current;
         const [first] = held.asked;
-        const answers = ticket.agentId === agentId && ticket.terminalId === first?.shell;
+        const answers = ticket.agentId === agentId && ticket.terminalId === first?.terminalId;
         if (!answers) return port.close();
         held.asked.shift();
-        const newest = held.asked.length === 0 && ticket.terminalId === held.shell;
+        const newest = held.asked.length === 0 && ticket.terminalId === held.terminalId;
         if (!held.attaching || !newest) return port.close();
         held.port?.close();
         held.port = port;
@@ -506,7 +441,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       // Note that a port is matched to any attach still out for its shell,
       // not only the oldest, since nothing waits on their order any more.
       const stop = onTerminalPort((ticket, port) => {
-        const at = held.asked.findIndex((asked) => asked.shell === ticket.terminalId);
+        const at = held.asked.findIndex((asked) => asked.terminalId === ticket.terminalId);
         if (ticket.agentId !== agentId || at < 0) return;
         port.close();
         held.asked.splice(at, 1);
@@ -517,33 +452,12 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
   }, [agentId]);
 
   // Connected only while shown, and only once there is a screen to draw on.
-  // Note that a shell that ended with a new one asked for is left to the
-  // ask's own effect below, which lets the ended one go first, because
-  // connecting here as well would open a shell beside the one asked for.
   useEffect(() => {
     if (!shown || handle === undefined) return;
     handle.focus();
-    const replacing =
-      live.current.state.kind === TERMINAL_STATE.EXITED &&
-      registry.get(localShellsAsked(agentId)) > 0;
-    if (!replacing) void connect();
+    void connect();
     return letGo;
-  }, [shown, handle, agentId, connect, letGo, registry]);
-
-  // A new shell asked for while a shell is attached opens at once, each ask
-  // its own shell; one asked for while the shown shell ended is the key
-  // that opens it; one asked for before is opened by the connect. Note that
-  // attached means a port held too, because a hidden tab let its port go
-  // and its state stands as it was until it is shown again.
-  useEffect(() => {
-    if (!shown || asked === 0) return;
-    if (state.kind === TERMINAL_STATE.ATTACHED && live.current.port !== undefined) {
-      setAsked((was) => Math.max(0, was - 1));
-      void onCreate();
-      return;
-    }
-    if (state.kind === TERMINAL_STATE.EXITED) replaceEnded();
-  }, [shown, asked, state.kind, setAsked, onCreate, replaceEnded]);
+  }, [shown, handle, connect, letGo]);
 
   return {
     state,
@@ -552,31 +466,66 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     find: handle?.find,
     screen: setElement,
     onAction,
-    listed,
-    shell,
-    onChoose,
-    onCreate: () => void onCreate(),
-    onRename,
-    onKill,
   };
 }
 
+/** The tab of one of the agent's terminals. */
+function localTabOf(agentId: string, held: HeldShell): LocalStripTab {
+  return { local: agentId, shell: held.shell, title: held.title };
+}
+
 /**
- * Opens an agent's Local tab, handing the panel the keys (`onShown`): with a
- * new shell asked of its mirror (`fresh`), as the Local rows of the panel's
- * "+" and ⌘K mean it, or on the shell it holds, as Show local does.
+ * Opens a cloud agent's Local tab, handing the panel the keys (`onShown`).
+ * A new terminal (`fresh`), as the Local rows of the panel's "+" and ⌘K
+ * mean it, is minted in the window's list and its tab opened, which opens
+ * its shell. Show local goes to the agent's Local tab viewed last; where
+ * none is open, as after a reload, it opens the tab of each terminal the
+ * window still holds, the newest shown, and where it holds none, a new one.
  */
 export function useOpenLocal(
-  sidePanel: Pick<SidePanelControl, "onChoose">,
+  sidePanel: Pick<SidePanelControl, "onChoose" | "locals" | "viewedAt">,
   onShown: () => void,
 ): (agentId: string, fresh: boolean) => void {
   const registry = useContext(RegistryContext);
+  const { onChoose, locals, viewedAt } = sidePanel;
   return useCallback(
     (agentId, fresh) => {
-      if (fresh) registry.update(localShellsAsked(agentId), (asked) => asked + 1);
-      sidePanel.onChoose({ local: agentId });
+      const held = registry.get(localShellsHeld(agentId));
+      const open = locals.filter((tab) => tab.local === agentId);
+      if (fresh || held.length === 0) {
+        const made: HeldShell = { shell: crypto.randomUUID(), title: nextShellTitle(held) };
+        registry.set(localShellsHeld(agentId), [...held, made]);
+        onChoose(localTabOf(agentId, made));
+      } else if (open.length > 0) {
+        const at = (tab: LocalStripTab) =>
+          viewedAt.find((each) => sameTab(each.tab, tab))?.at ?? Number.NEGATIVE_INFINITY;
+        onChoose(open.reduce((latest, tab) => (at(tab) > at(latest) ? tab : latest)));
+      } else {
+        for (const each of held) onChoose(localTabOf(agentId, each));
+      }
       onShown();
     },
-    [registry, sidePanel.onChoose, onShown],
+    [registry, onChoose, locals, viewedAt, onShown],
+  );
+}
+
+/**
+ * Ends a Local tab's terminal as its tab closes: out of the window's list,
+ * and its shell, where one opened, ended in main, which nothing brings back.
+ */
+export function useEndLocal(): (tab: LocalStripTab) => void {
+  const registry = useContext(RegistryContext);
+  return useCallback(
+    (tab) => {
+      const shells = registry.get(localShellsHeld(tab.local));
+      const ended = shells.find((each) => each.shell === tab.shell);
+      registry.set(
+        localShellsHeld(tab.local),
+        shells.filter((each) => each.shell !== tab.shell),
+      );
+      if (ended?.terminalId === undefined) return;
+      tellAct(ACT_KIND.MAC_SHELL_CLOSE, { agentId: tab.local, terminalId: ended.terminalId });
+    },
+    [registry],
   );
 }

@@ -65,6 +65,7 @@ import {
   isTerminalTab,
   isTranscriptTab,
   type LocalStripTab,
+  localLabelOf,
   type PageStripTab,
   type StripTab,
   type SubagentStripTab,
@@ -134,8 +135,7 @@ import {
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
-import { LocalStanding } from "../tasks/local-shells.js";
-import { LocalTab } from "../tasks/local-tab.js";
+import { LocalStanding, LocalTab } from "../tasks/local-tab.js";
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
@@ -389,6 +389,17 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 const NO_LOCALS: readonly LocalStripTab[] = [];
+
+/** The key each agent's Local row in the "+" is drawn under, by agent, made the first time it is asked for, apart from its Terminal row's and its tabs'. */
+const localRowKeys = new Map<string, string>();
+
+function localRowKey(agentId: string): string {
+  const held = localRowKeys.get(agentId);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  localRowKeys.set(agentId, made);
+  return made;
+}
 
 /**
  * The fixed kinds each holder's panel offers: a task's every one it draws,
@@ -867,10 +878,10 @@ export function panelEntries(input: {
           }),
     onPick: () => input.terminals?.onNew(agent.id),
   }));
-  // A Local row adds a shell on this Mac in its cloud agent's mirror, beside its Terminal row.
+  // A Local row opens a new terminal on this Mac in its cloud agent's mirror, its own tab, beside its Terminal row.
   const localRows = (input.locals?.offers ?? []).map(({ agent, label }) => ({
     row: {
-      id: tabKey({ local: agent.id }),
+      id: localRowKey(agent.id),
       ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
       detail: <LocalStanding agentId={agent.id} />,
       section: ADD_SECTION.LOCAL,
@@ -1176,13 +1187,13 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  // A Local tab wears its agent's glyph and name, and hangs its agent's card.
+  // A Local tab is named by its terminal, wears its agent's glyph and name, and hangs its agent's card.
   const localTabs = locals.map((tab) => {
     const subject = agentSubject(agentsOf(tab.local), tab.local, held, false);
     return {
       tab,
       look: look(tab, {
-        ...tabLook({ kind: TAB_KIND.LOCAL, agent: subject.agent }),
+        ...tabLook({ kind: TAB_KIND.LOCAL, agent: subject.agent, title: tab.title }),
         detail: subject.name,
         card: hungCard({ kind: TAB_KIND.LOCAL, subject, models }),
       }),
@@ -2095,12 +2106,12 @@ function TabContent({
   if (isLocalTab(tab)) {
     return (
       <LocalTab
-        key={tab.local}
+        key={tab.shell}
         agentId={tab.local}
+        shell={tab.shell}
         agents={agentsOf(tab.local)}
         shown={shown}
         onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.local })}
-        shells={shellsList}
       />
     );
   }
@@ -2730,7 +2741,7 @@ export function SidePanel({
                 : isTerminalTab(tab)
                   ? TAB_WORDS.TERMINAL
                   : isLocalTab(tab)
-                    ? TAB_WORDS.LOCAL
+                    ? localLabelOf(tab)
                     : isCloudBrowserTab(tab)
                       ? cloudBrowserLabel(tab.cloudBrowser)
                       : tabLook({ kind: TAB_KIND.PANEL, tab }).label;

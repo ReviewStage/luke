@@ -603,7 +603,7 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly pages: readonly OpenPage[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
-  /** The open Local tabs, by agent, in the order opened. */
+  /** The open Local tabs, one per terminal, in the order opened. */
   readonly locals: readonly LocalStripTab[];
   /** The agents' cloud Browser tabs opened in this window, by the id the service keeps each under, in the order opened: the only ones the strip draws. */
   readonly openedCloudBrowsers: readonly string[];
@@ -708,7 +708,7 @@ export interface SidePanelControl {
   pages: readonly OpenPage[];
   /** The open Terminal tabs in the order opened, after the page tabs; only those of the open task's agents are drawn. */
   terminals: readonly TerminalStripTab[];
-  /** The open Local tabs in the order opened, after the Terminal tabs; only those of the open task's agents are drawn. */
+  /** The open Local tabs, one per terminal, in the order opened, after the Terminal tabs; only those of the open task's agents are drawn. */
   locals: readonly LocalStripTab[];
   /** The agent whose Terminal tab was shown last on the open task, which ⌘J goes to among several. */
   lastTerminal: string | undefined;

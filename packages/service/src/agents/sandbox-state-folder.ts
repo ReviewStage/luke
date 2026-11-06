@@ -2,7 +2,7 @@
  * sandbox-state-folder.ts -- the folder our own state stands in within a sandbox, and the link that keeps one made before the rename reading it.
  *
  * Two folders of a sandbox hold what we keep there: the workspace's, beside
- * the checkout (its record and its deepen's), and the sandbox user's home's
+ * the checkout (its record), and the sandbox user's home's
  * (the browser's profile and recordings). A persistent sandbox resumes from
  * its own snapshot, so one made before the product's rename holds them
  * under the old name; every script that reaches them first links the new

@@ -59,9 +59,12 @@
  * clear of them.
  *
  * A phone's bar (`TOOLBAR_LOOK.PHONE`) lays the same slots as one control a
- * corner, its title centered between them, and is named by the place it
- * heads (`place`). A task's bar leads with its tab strip (`TOOLBAR_LOOK.TABS`),
- * which a narrow room wraps to a row of its own.
+ * corner, its title centered between them in a bar title's type whatever
+ * the page, and its tag under the title, so the title stays centered; it is
+ * named by the place it heads (`place`). A corner is one control wide, so
+ * every labeled control in it draws its glyph alone, named still, centered
+ * where every corner's is. A task's bar leads with its tab strip
+ * (`TOOLBAR_LOOK.TABS`), which a narrow room wraps to a row of its own.
  *
  * What the window around the bar knows and the bar does not, it says in
  * custom properties on the room the bar stands in (`toolbar.css`): the
@@ -129,6 +132,9 @@ const TAG = "ui-toolbar-tag flex-none";
 const DETAIL = "ui-toolbar-detail min-w-0 flex-[0_1000_auto] text-body text-muted-foreground";
 /** The title, in the dialog's type with a title's tracking; its room reaches 6px left of the words, so its own hover fill and field ring, which start there, are not clipped. */
 const TITLE = "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-dialog-size font-dialog tracking-title";
+/** A phone's title, in a bar title's type, as every phone heads a page, so one place's name reads no larger than another's. */
+const PHONE_TITLE =
+  "ui-toolbar-title m-0 -ml-ui-6 pl-ui-6 text-toolbar-title font-toolbar-title tracking-title";
 
 /** A title that opens what it names, set as a bar's title rather than a page's heading, so it reads no louder than the tabs beside it. */
 const TITLE_PRESS_HEADING =
@@ -216,7 +222,7 @@ export interface ToolbarProps {
   readonly place?: string | undefined;
   /** Whether the bar is a container its slots' rules answer the width of (`@container ui-toolbar`), so a control folds before the title or tabs beside it do. */
   readonly measure?: boolean | undefined;
-  /** Whether every labeled control of the bar draws its glyph alone, named still. */
+  /** Whether every labeled control of the bar draws its glyph alone, named still; a phone's bar always does. */
   readonly folded?: boolean | undefined;
   /** Whether a bar that would cut the page's own name under the readable floor stands its heading on a row of its own under the lead and actions, and under 360px folds its lead to glyphs. */
   readonly wrapHeading?: boolean | undefined;
@@ -233,8 +239,11 @@ function ToolbarTitle({
   unmasked,
   press,
   menu,
+  phone,
 }: {
   title: ReactNode;
+  /** Whether the bar is a phone's, whose title takes a bar title's type. */
+  phone: boolean;
   /** Whether a title in words shows in a screen recording (`titleReplayUnmasked`). */
   unmasked: boolean;
   /** What a title in words opens, which makes it a press; none for words alone. */
@@ -265,7 +274,12 @@ function ToolbarTitle({
     );
   }
   return (
-    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE} words={title}>
+    <OneLine
+      as={ONE_LINE_ELEMENT.H1}
+      hint={wholeWordsHint(title)}
+      className={phone ? PHONE_TITLE : TITLE}
+      words={title}
+    >
       <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
     </OneLine>
   );
@@ -354,14 +368,24 @@ function ToolbarTrail({
 }
 
 /** The name the bar picks up from a document's header: words on one line, there to fade in and out, hidden from a reader until shown. */
-function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Element {
+function ToolbarPickedUp({
+  pickUp,
+  phone,
+}: {
+  pickUp: ToolbarPickUp;
+  /** Whether the bar is a phone's, whose title takes a bar title's type. */
+  phone: boolean;
+}): React.JSX.Element {
   return (
     <span
       className="ui-toolbar-pick-up"
       data-shown={pickUp.shown ? "true" : "false"}
       aria-hidden={pickUp.shown ? undefined : "true"}
     >
-      <OneLine hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined} className={TITLE}>
+      <OneLine
+        hint={pickUp.shown ? wholeWordsHint(pickUp.name) : undefined}
+        className={phone ? PHONE_TITLE : TITLE}
+      >
         {pickUp.name}
       </OneLine>
     </span>
@@ -422,10 +446,11 @@ export function Toolbar({
               unmasked={titleReplayUnmasked}
               press={titlePress}
               menu={titleMenu}
+              phone={look === TOOLBAR_LOOK.PHONE}
             />
           ) : pickUp !== undefined && pickUp.name !== "" ? (
             <ReplayMask>
-              <ToolbarPickedUp pickUp={pickUp} />
+              <ToolbarPickedUp pickUp={pickUp} phone={look === TOOLBAR_LOOK.PHONE} />
             </ReplayMask>
           ) : null}
         </TitleMenu>

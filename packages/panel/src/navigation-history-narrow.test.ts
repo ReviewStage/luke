@@ -8,12 +8,14 @@ import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views"
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
+import { createMemoryHistory } from "@tanstack/react-router";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { useAdminRoute } from "./admin/admin-route.js";
 import { runAppCommand } from "./app-commands.js";
 import { type AutomationsRoute, useAutomationsRoute } from "./automations-route.js";
+import { type InboxRoute, useInboxRoute } from "./inbox-route.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
   throughHistory,
@@ -23,7 +25,6 @@ import {
 } from "./navigation-history.js";
 import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import { chooseInboxTask, leaveInboxTask } from "./tasks/use-inbox-task.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   type AdminViewControl,
@@ -76,6 +77,7 @@ const AUTOMATION = "automation-1";
 /** Where the window stands, as the Tasks tab holds it; Settings and Admin are the router's (`settings-link.ts`, `admin-route.ts`). */
 interface Standing {
   readonly panel: { readonly open: boolean; readonly tab: SidePanelTab | undefined };
+  /** The Inbox, which the router stands (`inbox-route.ts`): where it stands open at the start, the window's first address is its own. */
   readonly inbox: {
     readonly open: boolean;
     readonly chosen: InboxChoice | undefined;
@@ -105,11 +107,11 @@ function tasksTab(
   patch: (move: (held: Standing) => Standing) => void,
   room: ShellRoom,
   versions: VersionHistoryRoute,
+  inbox: InboxRoute,
 ): TasksControl {
   const base = tasksControl();
   const panel = (next: Standing["panel"]) => patch((held) => ({ ...held, panel: next }));
-  const inbox = (next: Partial<Standing["inbox"]>) =>
-    patch((held) => ({ ...held, inbox: { ...held.inbox, ...next } }));
+  const inboxAt = (narrowed: string | undefined) => ({ workspace: ACME.slug, narrowed });
   // As the real one does, opening or shutting the panel leaves the tab where it stands.
   const setOpen = (open: boolean) => patch((held) => ({ ...held, panel: { ...held.panel, open } }));
   const shut = () => setOpen(false);
@@ -175,17 +177,19 @@ function tasksTab(
       onOpen: (agent) => patch((held) => ({ ...held, agent })),
       onClose: () => patch((held) => ({ ...held, agent: undefined })),
     },
-    // As the real door does, it opens the Inbox on no item; the task it narrows to is the window's own store's.
-    onShowInbox: () => inbox({ open: true, chosen: undefined }),
+    // As the real doors do, the Inbox opens by the router, narrowed to the task named or to none.
+    onShowInbox: ({ taskId }) => inbox.onOpen(inboxAt(taskId)),
     inboxView: {
       ...base.inboxView,
-      open: at.inbox.open,
-      chosen: at.inbox.chosen,
+      open: inbox.open,
+      chosen: inbox.chosen,
+      narrowed: inbox.narrowed,
       single: at.inbox.single ?? false,
-      onOpen: () => inbox({ open: true, chosen: undefined }),
-      onClose: () => inbox({ open: false }),
-      onChoose: (chosen) => inbox({ chosen }),
-      onClear: () => inbox({ chosen: undefined }),
+      onOpen: () => inbox.onOpen(inboxAt(undefined)),
+      onClose: inbox.onClose,
+      onChoose: (chosen) => inbox.onChoose(chosen),
+      onClear: inbox.onClear,
+      onWiden: inbox.onWiden,
     },
     // As the real history does, each choice is a move of the router's.
     history: {
@@ -221,7 +225,13 @@ function unmountAll(): void {
 afterEach(unmountAll);
 
 /** The window standing as `start` says in a room, under a router over a memory history, or over the history given, and its addresses written from its Copy link, as the root wires them. */
-function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = windowRouter()) {
+function mount(
+  room: ShellRoom,
+  start: Standing,
+  held: TestWindowRouter = windowRouter(
+    createMemoryHistory({ initialEntries: [start.inbox.open ? "/acme/inbox" : "/app"] }),
+  ),
+) {
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
   let standing = start;
@@ -230,6 +240,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
   let admin: AdminViewControl | undefined;
   let automations: AutomationsRoute | undefined;
   let versions: VersionHistoryRoute | undefined;
+  let inbox: InboxRoute | undefined;
   function Probe() {
     const [at, setAt] = useState(start);
     standing = at;
@@ -251,7 +262,11 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       onClose: () => history?.onLeaveRouted(),
       onStay: () => history?.onStayRouted(),
     });
-    const tab = tasksTab(at, setAt, room, versions);
+    inbox = useInboxRoute({
+      onClose: () => history?.onLeaveRouted(),
+      onStay: () => history?.onStayRouted(),
+    });
+    const tab = tasksTab(at, setAt, room, versions, inbox);
     const tasks: TasksControl = {
       ...tab,
       adminView: admin,
@@ -284,6 +299,7 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
       onSettingsList: settings.list,
       automations,
       versionHistory: versions,
+      inbox,
       room,
       tasks,
     });
@@ -306,7 +322,13 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
     history: () => history ?? assert.fail("the window's history stands"),
     /** The Tasks tab as the shell presses it. */
     shown: () => shown ?? assert.fail("the Tasks tab stands"),
-    at: () => standing,
+    /** Where the window stands, the Inbox as the router stands it. */
+    at: (): Standing => ({
+      ...standing,
+      inbox: { ...standing.inbox, open: inbox?.open === true, chosen: inbox?.chosen },
+    }),
+    /** The Inbox as the router stands it. */
+    inbox: () => inbox ?? assert.fail("the Inbox's route stands"),
     /** Settings as the router stands it, and the navigation a Settings link makes. */
     settings: () => settings ?? assert.fail("Settings stands"),
     /** Admin as the router stands it. */
@@ -321,8 +343,13 @@ function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = window
     openAutomation: (to: AutomationsPlace) => act(() => automations?.onOpen(to, ACME.slug)),
     /** Opens Settings where `link` names, as a Settings link does. */
     openSettings: (link: SettingsLink) => act(() => void settings?.open(link)),
-    /** Moves the window as a door other than the history would. */
-    move: (to: (held: Standing) => Standing) => act(() => restand?.(to)),
+    /** Moves the window as a door other than the history would, one leaving the Inbox leaving its route as the real door does. */
+    move: (to: (held: Standing) => Standing) =>
+      act(() => {
+        if (inbox?.open === true && standing.inbox.open && !to(standing).inbox.open)
+          inbox.onClose();
+        restand?.(to);
+      }),
     /** Presses through the shell, as a press of the pointer lands before the door it opens. */
     press: (press: () => void) =>
       act(() => {
@@ -519,12 +546,11 @@ test("on a narrow stage an Inbox item opened from its list is a step, and the In
 });
 
 test("an Inbox narrowed to a task, showing one column, steps its item's way back to the task's list rather than adding a step after the item", () => {
-  chooseInboxTask(DOCUMENT_TASK.id);
-  onTestFinished(leaveInboxTask);
   const window = mount(SHELL_ROOM.WIDE, {
     ...ON_TASK,
-    inbox: { open: true, chosen: undefined, single: true },
+    inbox: { open: false, chosen: undefined, single: true },
   });
+  window.press(() => window.shown().onShowInbox({ taskId: DOCUMENT_TASK.id }));
   window.press(() => {
     window.shown().inboxView.onChoose(ITEM);
   });
@@ -553,14 +579,14 @@ test("in a room still wide, as a 700px stage is, an Inbox showing one column by 
   assert.equal(window.standingAddress(), "/acme/inbox");
 });
 
-test("on the desktop's width the step's link names the Inbox's item standing alone where the Inbox shows one column by its own width, as Copy link does, and the Inbox where it splits", () => {
+test("on the desktop's width an Inbox item stands at its own address, which Copy link names, whether the Inbox shows one column by its own width or splits", () => {
   for (const single of [true, false]) {
     const window = mount(SHELL_ROOM.WIDE, {
       ...ON_TASK,
       inbox: { open: true, chosen: undefined, single },
     });
     window.press(() => window.shown().inboxView.onChoose(ITEM));
-    assert.equal(window.standingAddress(), single ? "/acme/inbox/item-1" : "/acme/inbox");
+    assert.equal(window.standingAddress(), "/acme/inbox/item-1");
     assert.equal(copiedHere(), "/acme/inbox/item-1", "Copy link names the item at hand");
     unmountAll();
   }
@@ -623,15 +649,11 @@ test("on a narrow stage a Settings page a link opened has no list behind it, so 
   assert.equal(window.standingAddress(), TASK_PATH);
 });
 
-test("on the desktop's width none of a narrow room's panes is a step: the side panel opened by its toggle, the Inbox's first item, a Settings page, and a version", () => {
+test("on the desktop's width none of a narrow room's panes is a step: the side panel opened by its toggle, a Settings page, and a version", () => {
   const moves: readonly [Standing, (window: Window) => void][] = [
     [
       { ...ON_TASK, panel: { open: false, tab: PAGE_TAB } },
       (window) => window.press(() => window.shown().sidePanel.onToggle()),
-    ],
-    [
-      { ...ON_TASK, inbox: { open: true, chosen: undefined } },
-      (window) => window.press(() => window.shown().inboxView.onChoose(ITEM)),
     ],
     [
       ON_TASK,
@@ -654,7 +676,6 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
     // Each screen's way back to its list, which a wide room draws no button for, stands nothing new either.
     window.press(() => {
       window.history().lists.settings();
-      window.shown().inboxView.onClear();
       window.shown().history.onList();
     });
     // Note that Settings and a version history, entered, are a step of their own after the task, however their pages turn.

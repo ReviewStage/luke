@@ -3,7 +3,7 @@ import type { ModelProvider } from "@repo/features/models-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { localLabelOf, pullRequestLabelOf, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
 import { AppWindowIcon, BotIcon, GitPullRequestIcon, GlobeIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
@@ -100,9 +100,16 @@ export type TabSubject =
       readonly pullRequest?: (PullRequestMarked & Pick<AgentPullRequest, "title">) | undefined;
     }
   | {
-      readonly kind: typeof TAB_KIND.TERMINAL | typeof TAB_KIND.LOCAL;
-      /** Where the agent whose sandbox or mirror it is stands, as its own tab's glyph wears it. */
+      readonly kind: typeof TAB_KIND.TERMINAL;
+      /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
       readonly agent: AgentStanding | undefined;
+    }
+  | {
+      readonly kind: typeof TAB_KIND.LOCAL;
+      /** Where the agent whose mirror it is stands, as its own tab's glyph wears it. */
+      readonly agent: AgentStanding | undefined;
+      /** The terminal's name, which the tab is named by after its kind's word. */
+      readonly title: string;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string }
@@ -242,7 +249,7 @@ export function tabLook(subject: TabSubject): KindLook {
       // what it is first; each place drawing it names the agent beside it.
       return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
     case TAB_KIND.LOCAL:
-      return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.LOCAL };
+      return { icon: <AgentGlyph agent={subject.agent} />, label: localLabelOf(subject) };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);

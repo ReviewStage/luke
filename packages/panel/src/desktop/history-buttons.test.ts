@@ -54,7 +54,7 @@ const BACK: readonly HistoryStep[] = [
   {
     at: 0,
     title: { label: "Inbox", detail: "Desktop shell" },
-    page: { kind: "inbox", of: undefined },
+    page: { kind: "routed", of: "/acme/inbox" },
   },
 ];
 
@@ -189,7 +189,7 @@ test("repeated steps named nothing are listed in separate page groups, one for e
     {
       at: 1,
       title: { label: "Inbox", detail: "Desktop shell" },
-      page: { kind: "inbox", of: undefined },
+      page: { kind: "routed", of: "/acme/inbox" },
     },
     { at: 0, title: undefined, page: home },
   ]);
