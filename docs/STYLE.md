@@ -56,9 +56,9 @@ complex libraries VS creating our stuff."
   sits on top of it.
 - A new dependency is a design decision stated in the PR, not a line in a
   lockfile.
-- Generated code comes from one data file through one generator, opens
-  with a banner saying so, and there is nothing else generated. Redis generates
-  exactly one file, `commands.def`, from the JSON describing each command.
+- Generated code comes from one data file through one generator, and
+  there is nothing else generated. Redis generates exactly one file,
+  `commands.def`, from the JSON describing each command.
 
 ### Fundamental structures, no intermediate layers
 
@@ -259,7 +259,7 @@ in this repository that a tool keeps true.
 A comment stays when a tool reads it and acts on it, since deleting it
 changes what the build does:
 
-- a shebang, a license header, and a generated file's banner;
+- a shebang and a license header;
 - a lint or type suppression (`@ts-expect-error`, a lint directive), each
   where the lint rules allow one;
 - a pragma: `@vitest-environment`, `/// <reference>`;
@@ -268,3 +268,8 @@ changes what the build does:
 
 Such a comment says only what its tool needs. Prose beside it is a comment
 and goes where Part 3 sends it.
+
+A file a third-party generator writes, such as the Codex protocol types in
+`packages/agent-runner/src/codex-protocol/`, is left as its generator
+writes it, comments and all, since the next regeneration would put them
+back.

@@ -424,10 +424,11 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   assertion says what it assumes, a test named as a sentence says what it
   promises, the commit message says why it changed, and the package's
   README holds a design that outlives one change. The one comment kept is
-  one a tool reads: a shebang, a license header, a generated file's banner,
-  a lint or type suppression, a pragma (`@vitest-environment`,
-  `/// <reference>`), and a JSDoc tag a tool acts on (`@public`,
-  `@deprecated`).
+  one a tool reads: a shebang, a license header, a lint or type suppression,
+  a pragma (`@vitest-environment`, `/// <reference>`), and a JSDoc tag a
+  tool acts on (`@public`, `@deprecated`). A file a third-party generator
+  writes (`packages/agent-runner/src/codex-protocol/`) is left as its
+  generator writes it.
 - UI draws with `@repo/ui` (`packages/ui/README.md`): its components, page
   patterns and `--ui-*` tokens; no raw controls where a component exists,
   no literal colors or sizes, no `className` on its controls. A missing
