@@ -74,7 +74,8 @@ import { useAnnounceShown } from "../use-announce-shown.js";
  * one. A connected row that works stands quiet, and its ⋯ (or a right-click
  * on it) keeps Reconnect, which signs in with the provider again, beside
  * Disconnect, which asks first in the confirm dialog and ends that account
- * alone. Where the provider offers more than one account, the ⋯ keeps Add
+ * alone; an expired or broken row keeps Disconnect in its ⋯ beside its
+ * Reconnect button. Where the provider offers more than one account, the ⋯ keeps Add
  * another account, which begins a sign-in for a new one that stands pending
  * as a row of its own until it settles; and where it holds more than one,
  * Rename, which names the account in place. GitHub is granted by the

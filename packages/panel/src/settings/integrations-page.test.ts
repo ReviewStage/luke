@@ -613,7 +613,7 @@ test("Disconnect on a lone account says what goes before it disconnects", async 
   );
 });
 
-test("a sign-in that expired, and a connection its server refused, each show Reconnect on the row", async () => {
+test("a sign-in that expired, and a connection its server refused, each show Reconnect on the row and keep Disconnect in its ⋯", async () => {
   withheld = INTEGRATION_PROVIDER_LIST.filter(
     (provider) =>
       provider !== INTEGRATION_PROVIDER.NOTION && provider !== INTEGRATION_PROVIDER.SLACK,
@@ -629,6 +629,7 @@ test("a sign-in that expired, and a connection its server refused, each show Rec
 
   assert.equal(expired.querySelector(".ui-settings-row-state")?.textContent, "Sign-in expired");
   assert.deepEqual(rowButtons(expired), ["Reconnect"]);
+  assert.deepEqual(menuOf(expired), { items: ["Disconnect"], heading: undefined });
   assert.equal(
     refused.querySelector(".ui-settings-row-state")?.textContent,
     "Slack refused the sign-in.",

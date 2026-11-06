@@ -85,8 +85,9 @@ import { MenuRow } from "./settings/menu-row.js";
  * browser is waited on with Reopen and Cancel, one that failed or never
  * finished with Try again, or one expired with Reconnect. A row with nothing
  * of that to say and not connected says instead what the provider gives
- * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. Its
- * ⋯ keeps Reconnect, Disconnect (asked first), and, where the provider
+ * agents (`INTEGRATION_PURPOSE`), so a Connect is never pressed blind. A
+ * connected or expired account's ⋯ keeps Reconnect (but where Reconnect is
+ * the row's button), Disconnect (asked first), and, where the provider
  * allows, Add another account and Rename. A surface that hands it the server's
  * tools (`tools`) lets the row open onto them in place; one that hands none
  * says their count alone. Settings › Integrations' own words
@@ -511,6 +512,9 @@ export function IntegrationRow({
   };
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
+  const expired = status === INTEGRATION_STATUS.EXPIRED;
+  // An account the service still holds, connected or expired, is managed from its ⋯.
+  const held = connected || expired;
   const disconnecting = useMutation({
     mutationKey: [ACT_KIND.INTEGRATIONS_DISCONNECT],
     mutationFn: () =>
@@ -525,7 +529,7 @@ export function IntegrationRow({
     answered: sameAnswer,
   });
   const disconnect = useConfirmDialog(
-    { subject: connected, surfaceOpen: true },
+    { subject: held, surfaceOpen: true },
     disconnectAct,
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
@@ -539,8 +543,8 @@ export function IntegrationRow({
     !waiting &&
     !(connected && health.kind === CONNECTION_HEALTH.FAILED) &&
     !(status === undefined || status === INTEGRATION_STATUS.UNAVAILABLE || (connected && !broken));
-  // A broken connection's Reconnect is the row's button, so its ⋯ keeps it
-  // only while the connection stands quiet.
+  // A broken or expired connection's Reconnect is the row's button, so its ⋯
+  // keeps it only while the connection stands quiet.
   const reconnect = {
     label: ROW_ACT.RECONNECT,
     icon: <RefreshCwIcon />,
@@ -567,8 +571,8 @@ export function IntegrationRow({
           },
         ]
       : [];
-  const actions = connected
-    ? [[...naming, ...adding], broken ? [] : [reconnect], [leave]].filter(
+  const actions = held
+    ? [[...naming, ...adding], broken || expired ? [] : [reconnect], [leave]].filter(
         (group) => group.length > 0,
       )
     : [];
