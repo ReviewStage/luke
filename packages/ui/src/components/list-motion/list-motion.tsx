@@ -4,7 +4,11 @@
  * Layout lands at once and motion replays it (docs/DESIGN.md): a commit puts
  * every row where the change stands it, and `ListMotion` replays the
  * journey FLIP-style on `transform`, from a snapshot taken in
- * `getSnapshotBeforeUpdate`, as `pane-motion.tsx` replays the panes. What
+ * `getSnapshotBeforeUpdate`, as `pane-motion.tsx` replays the panes. Its
+ * places are read in the root's own layout, a transform around the root
+ * undone, so a list drawn smaller than it is laid out, as a landing's window
+ * draws the app, glides as far as its rows moved rather than as far as they
+ * are drawn, which would set each glide off from short of where it stood. What
  * moves is every child of a list that opts in by wearing `data-motion-rows`
  * (`motionRows()`, or `List`'s `moves`), under the root `ListMotion` is
  * handed; a group of rows is itself a mover where the box around it opts in,
@@ -366,6 +370,20 @@ function viewOf(root: HTMLElement): { readonly top: number; readonly bottom: num
 }
 
 /**
+ * How much larger than its layout `root` is drawn, across and down, by a
+ * transform around it, as a landing's window draws the app at a fraction of
+ * its size: what a box the window measures is divided by to be a distance
+ * a motion under the root plays in. 1 where it is drawn as laid out, or has
+ * no box to measure.
+ */
+function drawnScale(root: HTMLElement): Point {
+  const box = root.getBoundingClientRect();
+  const across = root.offsetWidth > 0 ? box.width / root.offsetWidth : 1;
+  const down = root.offsetHeight > 0 ? box.height / root.offsetHeight : 1;
+  return { x: across > 0 ? across : 1, y: down > 0 ? down : 1 };
+}
+
+/**
  * Where the layout stands each element, from the root's top left corner:
  * where it is drawn, less what its own transform and every one around it
  * under the root draw it by, so a motion under way moves no place; and
@@ -373,6 +391,7 @@ function viewOf(root: HTMLElement): { readonly top: number; readonly bottom: num
  */
 function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element, Place> {
   const origin = root.getBoundingClientRect();
+  const scale = drawnScale(root);
   const view = viewOf(root);
   const places = new Map<Element, Place>();
   // Note that a box's shift is read once however many rows it holds, because a long list's rows share their lists and groups.
@@ -387,8 +406,9 @@ function placesOf(root: HTMLElement, elements: readonly Element[]): Map<Element,
   for (const element of elements) {
     const box = element.getBoundingClientRect();
     const seen = box.bottom >= view.top && box.top <= view.bottom;
-    let x = box.left - origin.left;
-    let y = box.top - origin.top;
+    // Note that the window's distances are the root's own once undone by its scale, because a glide plays in the root's layout, under any transform around it.
+    let x = (box.left - origin.left) / scale.x;
+    let y = (box.top - origin.top) / scale.y;
     for (let at: Element | null = element; at !== null && at !== root; at = at.parentElement) {
       const shift = shiftOnce(at);
       x -= shift.x;
@@ -444,7 +464,8 @@ function standingTop(root: HTMLElement, element: HTMLElement, before: Snapshot):
   const was = before.places.get(element)?.y;
   const carrierWas = carrier === root ? 0 : before.places.get(carrier)?.y;
   if (box === null || was === undefined || carrierWas === undefined) return element.offsetTop;
-  const boxInCarrier = box.getBoundingClientRect().top - carrier.getBoundingClientRect().top;
+  const boxInCarrier =
+    (box.getBoundingClientRect().top - carrier.getBoundingClientRect().top) / drawnScale(root).y;
   return was - carrierWas - boxInCarrier - box.clientTop;
 }
 
@@ -613,10 +634,11 @@ function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): voi
 /** How tall what `root` lays out stands, from its top to under its last element in the layout. */
 function laidOutHeight(root: HTMLElement): number {
   const top = root.getBoundingClientRect().top;
+  const scale = drawnScale(root).y;
   let bottom = 0;
   for (const child of root.children) {
     if (exits.has(child) || getComputedStyle(child).position === "absolute") continue;
-    bottom = Math.max(bottom, child.getBoundingClientRect().bottom - top);
+    bottom = Math.max(bottom, (child.getBoundingClientRect().bottom - top) / scale);
   }
   return bottom + Number.parseFloat(getComputedStyle(root).paddingBottom || "0");
 }

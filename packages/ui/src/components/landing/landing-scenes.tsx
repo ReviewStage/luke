@@ -47,7 +47,7 @@ import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { GROUP_HEADING, GroupHeader } from "../group-header/group-header.js";
 import { INLINE_REF_LOOK, InlineRef } from "../inline-ref/inline-ref.js";
 import { LineRow } from "../line-button/line-button.js";
-import { ListMotion } from "../list-motion/list-motion.js";
+import { LIST_MOTION_WAY, ListMotion } from "../list-motion/list-motion.js";
 import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -108,7 +108,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  */
 
 /** How long each scene holds a step, in milliseconds. */
-const BEAT = { HERO: 800, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+const BEAT = { HERO: 900, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -1230,9 +1230,10 @@ const HERO_SPACING = 9;
  * The hero's Inbox at `step`, two steps to each post's arrival: on the first
  * the newest post arrives on top and every other glides down to make room,
  * and on the second the oldest, by then under the panel's faded foot, is let
- * go. Note that a post arrives in a change of its own, because a list plays
- * what leaves it before what moves, and a row leaving in the same change
- * would hold every glide back for its exit. A post stands as it arrived,
+ * go. The one arriving unrolls from the list's top edge, its foot and the
+ * rows under it traveling as one edge. Note that a post arrives in a change
+ * of its own, because a list plays what leaves it before what moves, and a
+ * row leaving in the same change would hold every glide back for its exit. A post stands as it arrived,
  * unread and asking what it asks, because nothing on screen reads or answers
  * it. Its place in the story is its age alone, so the last step leads into
  * the first with nothing reset.
@@ -1283,7 +1284,7 @@ export function LandingHeroScene(): React.JSX.Element {
               />
             </search>
             <div className="ui-landing-rows">
-              <ListMotion root={rows}>
+              <ListMotion root={rows} way={LIST_MOTION_WAY.UNROLL}>
                 <List label="Inbox items" moves>
                   {heroItems(step).map((item) => (
                     <InboxRow key={item.id} item={item} />

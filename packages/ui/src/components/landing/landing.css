@@ -252,6 +252,21 @@
     color: var(--ui-color-text);
   }
 
+  /* Note that the hero's list glides slower than the app's and on an ease
+     in and out rather than the spring, because a homepage watches it move
+     rather than waiting on it: the spring's quick start and overshoot,
+     right for a list a reader acts on, read as a snap there. A post's fade
+     runs the length of the glide. Reduced motion keeps the zeroed tokens,
+     and the scene holds still under it anyway. */
+  @media (prefers-reduced-motion: no-preference) {
+    .ui-landing-hero-inbox {
+      /* off-scale: the hero's glide */
+      --ui-duration-shape: 1000ms;
+      --ui-duration-quick: 1000ms;
+      --ui-spring: var(--ui-motion-exit);
+    }
+  }
+
   .ui-landing-hero-inbox {
     display: grid;
     grid-template-rows: 50px minmax(0, 1fr);
