@@ -2757,14 +2757,14 @@ it.effect(
 );
 
 it.effect(
-  "an agent's inbox the account does not reach is told holding no items, one the service answers nothing for is told failed, Try again reads it anew telling nothing meanwhile, and behind a closed gate a hold reads nothing until the gate opens",
+  "an agent's inbox the account does not reach is told failed, as is one the service answers nothing for, Try again reads it anew telling nothing meanwhile, and behind a closed gate a hold reads nothing until the gate opens",
   () =>
     Effect.gen(function* () {
       const refused = yield* subject();
       refused.sealScope({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
       yield* refused.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);
       yield* settled;
-      assert.deepEqual(heldOf(refused.told, AGENT_SCOPE), { rows: [] });
+      assert.deepEqual(heldOf(refused.told, AGENT_SCOPE), { failed: true });
 
       const unsealed = yield* subject();
       yield* unsealed.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, AGENT_SCOPE);

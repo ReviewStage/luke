@@ -192,10 +192,7 @@ export function followInbox(
  * The held lifetime over every scope's follow (`heldSlice`), told whole on
  * the held inboxes' slice: each scope's read as its follow last told it,
  * kept where a later read does not answer, and failed where it never
- * answered; one let go for good is told no more. Note that a scope the
- * account does not reach is told holding no items rather than failed,
- * because the service answers the reader no item of a task or agent it
- * does not reach, and a failure would offer a Try again no read can answer.
+ * answered; one let go for good is told no more.
  */
 export function holderInboxes(
   inboxes: ScopeInboxes,
@@ -213,11 +210,7 @@ export function holderInboxes(
     follow: (scope, answers) =>
       followInbox(inboxes, scope, (told) =>
         Effect.sync(() =>
-          !("failure" in told)
-            ? answers.answered(told.items)
-            : told.failure === AGENT_CALL_FAILURE.NOT_FOUND
-              ? answers.answered([])
-              : answers.unanswered(),
+          "failure" in told ? answers.unanswered() : answers.answered(told.items),
         ),
       ),
   });
