@@ -1689,7 +1689,7 @@ function itemChord(label: string): string | null {
   return item.querySelector(".ui-shortcut")?.textContent ?? null;
 }
 
-test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", () => {
+test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", async () => {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
@@ -1709,6 +1709,8 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   openPalette(tasks, undefined, undefined, DESKTOP_CAPABILITIES, PANEL_TAB.TASKS, registry);
   type("permanently delete");
   const deleteKeys = rowChord("Permanently delete");
@@ -2626,7 +2628,7 @@ test('over an Inbox item of the open task, ⌘K\'s "This task" lists the pages t
   assert.ok(listed.includes(`Review notes · ${DOCUMENT_TASK.name}`), "the Inbox's page is listed");
 });
 
-test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", () => {
+test("with a task on screen, ⌘K offers its Version history, Cancel task, and Change repository, each running on it what its ⋯ item runs", async () => {
   const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
   const ran: string[] = [];
   const base = tasksControl();
@@ -2638,6 +2640,7 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
     onSettleTasks: (taskIds, status) => ran.push(`settle:${taskIds.join()}:${status}`),
     onChangeRepository: (taskId) => ran.push(`repository:${taskId}`),
   });
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   act(() =>
@@ -2668,6 +2671,8 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
       ),
     ),
   );
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   for (const command of ["Version history", "Cancel task", "Change repository"]) {
     act(() => {
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
@@ -3173,11 +3178,14 @@ test("a key pressed in the search field is timed under ⌘K's own keystroke span
   );
 });
 
-test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", () => {
+test("with a task open and nothing typed, ⌘K lists the task's commands first, then Go to, then the window's own", async () => {
   const places = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(places);
   act(() => places.render(withQueryClient(createElement(OffersPlaces))));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   paletteOverTask()(DOCUMENT_TASK);
+  // The document arrives a few microtasks after the window first draws.
+  await settle();
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });

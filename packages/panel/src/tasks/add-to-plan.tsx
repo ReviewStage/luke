@@ -16,14 +16,14 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { isVideoDataUrl, STATUS_TONE } from "@repo/ui";
 import { keepPictureRead } from "@repo/ui/picture-cache";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
 import { unreachedAs } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -128,7 +128,8 @@ async function edited(
  * account has Plans off.
  */
 export function useAddToPlan(): ViewerAction | undefined {
-  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const plansOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const page = useTaskMentions();
   const { mutateAsync: sendEdit } = useMutation(actMutation(ACT_KIND.TASKS_EDIT));
   const { mutateAsync: sendKeep } = useMutation(actMutation(ACT_KIND.TASKS_PICTURE_KEEP));

@@ -111,7 +111,12 @@ import {
 import { QUERY_ROOT } from "../query-keys.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
-import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
+import {
+  appStateDerivedAtom,
+  appStateQuery,
+  selectExperiment,
+  useAppSlice,
+} from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
@@ -1787,7 +1792,8 @@ export function useMentionPicker({
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
   // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
-  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const plansOn =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const taskRowsOffered = open
     ? workspaceTaskRows(plansOn ? taskId : undefined, tasksWorkspace, listed.tasks)
     : [];

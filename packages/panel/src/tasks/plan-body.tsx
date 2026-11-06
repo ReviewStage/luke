@@ -35,6 +35,7 @@ import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
@@ -53,7 +54,7 @@ import { useCreator } from "../member-directory.js";
 import { PLACEMENT_END, PLAN_PLACEHOLDER, type PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
   type EditAgents,
@@ -1047,7 +1048,8 @@ export const PlanBody = memo(function PlanBody({
 }): React.JSX.Element {
   const { views, sections: textSections } = useDrawnUnits(task);
   // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
-  const documented = useExperiment(EXPERIMENT.DESCRIPTIONS);
+  const documented =
+    useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
   const editable = onEdit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
