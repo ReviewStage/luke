@@ -449,8 +449,6 @@ export const GATEWAY_METHOD = {
   AGENTS_CHAPTERS_RETRY: "agents.chaptersRetry",
   /** One agent's pull request's chapters generated for its head on our own model key, or the generation already under way, answered as a read of them is. */
   AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
-  /** The Claude model the account's Generate chapters runs on, drawn over the account's preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes

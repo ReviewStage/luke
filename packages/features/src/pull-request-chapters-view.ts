@@ -1,5 +1,4 @@
 import { Schema as EffectSchema } from "effect";
-import { chaptersModelSchema } from "./chapters-model-choice.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { pullRequestChaptersAnswerSchema } from "./pull-request-chapters-wire.js";
 
@@ -58,21 +57,3 @@ export const pullRequestChaptersAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type PullRequestChaptersAnswerView = typeof pullRequestChaptersAnswerViewSchema.Type;
-
-/** The member's chapters model as a pick on the Chapters view writes it: one of the set. */
-export const chaptersModelWriteParamsSchema = EffectSchema.Struct({ model: chaptersModelSchema });
-
-export type ChaptersModelWriteParams = typeof chaptersModelWriteParamsSchema.Type;
-
-/** The member's chapters model, as a pick on the Chapters view hears it written: the model as kept, with the transaction it committed in where the service names one, or why there is none. */
-export const chaptersModelAnswerViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    model: chaptersModelSchema,
-    txid: EffectSchema.optionalKey(EffectSchema.String),
-  }),
-  EffectSchema.Struct({
-    failure: EffectSchema.Literals(Object.values(PULL_REQUEST_CHAPTERS_CALL_FAILURE)),
-  }),
-]);
-
-export type ChaptersModelAnswerView = typeof chaptersModelAnswerViewSchema.Type;

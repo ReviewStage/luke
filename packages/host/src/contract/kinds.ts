@@ -289,7 +289,6 @@ export const CHAPTERS_ACT_KIND = {
   CHAPTERS_FOLLOW: "chapters.follow",
   CHAPTERS_RETRY: "chapters.retry",
   CHAPTERS_GENERATE: "chapters.generate",
-  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
 } as const;
 
 /**
@@ -885,7 +884,6 @@ export const PORT_ACT_USE = {
   CHAPTERS_FOLLOW: ACT_USE.READ,
   CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
-  CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
 
   CLI_INSTALL: ACT_USE.WRITE,
 

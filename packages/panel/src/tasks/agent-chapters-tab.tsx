@@ -1,5 +1,5 @@
 import type { AgentChangedFile } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL_LABEL, CHAPTERS_MODEL_LIST } from "@repo/features/chapters-model-choice";
+import { CHAPTERS_MODEL, CHAPTERS_MODEL_LABEL } from "@repo/features/chapters-model-choice";
 import { formatCount } from "@repo/features/number-format";
 import {
   type Chapter,
@@ -14,14 +14,14 @@ import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@repo/settings/shortcuts";
 import {
-  BUTTON_VARIANT,
-  type ButtonVariant,
+  Button,
   CHIP_LOOK,
   CHIP_SIZE,
   Checkbox,
   Chip,
   type CountPart,
   CountParts,
+  EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -61,7 +61,6 @@ import {
   SPINNER_SIZE,
   Spinner,
   SpinnerRegion,
-  SplitButton,
   STATUS_TONE,
   Stack,
   type StatusTone,
@@ -73,12 +72,10 @@ import {
   TIME_LOOK,
   Time,
   Tooltip,
-  useMenu,
   VisuallyHidden,
 } from "@repo/ui";
 import { CheckIcon, GLYPH } from "@repo/ui/icons";
 import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
-import { ActionMenu } from "../desktop/action-menu.js";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
@@ -108,7 +105,6 @@ import {
   lineRefLines,
   steppedChapter,
 } from "./chapters-model.js";
-import { type ChaptersModelPick, useChaptersModelPick } from "./chapters-model-pick.js";
 import type { ChaptersRead } from "./chapters-read.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import { FileCard } from "./file-ref.js";
@@ -127,11 +123,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * or failure draws here within a moment, never on a clock. The view is a
  * chunk of its own, loaded the first time it is shown, as Settings is. Nothing makes them but a press of
  * Generate chapters, which answers once the generation lands, minutes later
- * at most; until then the view stands as a ring timed from the press, or,
- * where a model was picked just before, from that pick's write landing,
- * which the Generate waits on. Its chevron, and Regenerate's, drop Claude's
- * models, the account's choice checked, which a pick keeps for every
- * Generate after it (`chapters-model-pick.ts`).
+ * at most; until then the view stands as a ring timed from the press.
+ * Every Generate runs on Haiku, which the button names.
  * Chapters someone else is making stand the same way, until their
  * generation lands. A generation that failed says why with a
  * Retry; a member who saved no API key, which chapters run on, is told to
@@ -167,8 +160,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * mixed while only some are, and marks or unmarks every file in it; its
  * place, "1 of 8", and the arrows to the chapters either side (`Pager`), as
  * ← and → step; its list's diff settings, Collapse all, and tree toggle
- * (`ChangesBarHost`); and its ⋯, which offers Regenerate on each model where
- * chapters can be made, the tab's head holding the one Refresh and the list's bar
+ * (`ChangesBarHost`); and its ⋯, which offers Regenerate where chapters can
+ * be made, the tab's head holding the one Refresh and the list's bar
  * nothing that acts on the whole pull request inside a chapter. The model
  * that told the chapters is named at the rail's foot. Under the bar its summary in Markdown as the
  * transcript draws words; then What to review, each change a reviewer
@@ -192,16 +185,12 @@ const CHAPTERS_WORDS = {
   FAILED: "The chapters could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
   NONE: "No chapters yet.",
-  GENERATE: "Generate chapters",
+  GENERATE: `Generate chapters (${CHAPTERS_MODEL_LABEL[CHAPTERS_MODEL.HAIKU]})`,
   /** Why no chapters can be generated, naming the page an API key is saved on by its link. */
   unavailable: (page: ReactNode) => <>Save an API key in {page} settings to generate chapters.</>,
   GENERATING: "Generating chapters",
   REGENERATE: "Regenerate",
   REGENERATE_CHAPTERS: "Regenerate chapters",
-  /** The chevron joined to Generate and Regenerate, and the menu of models it drops. */
-  CHOOSE_MODEL: "Choose the model chapters are generated on",
-  /** What the hint over Generate and Regenerate says they run on. */
-  on: (model: string) => `On ${model}`,
   NOTHING: "This pull request has nothing to chapter.",
   NO_FILES: "None of this chapter's changes are in the pull request now.",
   STALE_DIFF: "Regenerate the chapters to see this chapter's changes.",
@@ -351,54 +340,6 @@ function ChapterReading({
     <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-label={label}>
       {children}
     </Fill>
-  );
-}
-
-/**
- * Generate or Regenerate, and joined to it the chevron that drops Claude's
- * models, the account's choice checked, whose pick is kept for the press
- * and every Generate after it (`chapters-model-pick.ts`).
- */
-function GenerateButton({
-  pick,
-  variant,
-  icon,
-  children,
-}: {
-  pick: ChaptersModelPick;
-  variant: ButtonVariant;
-  icon?: ReactNode;
-  children: string;
-}): React.JSX.Element {
-  const menu = useMenu(true);
-  return (
-    <>
-      <SplitButton
-        variant={variant}
-        icon={icon}
-        hintLabel={
-          pick.model === undefined ? undefined : CHAPTERS_WORDS.on(CHAPTERS_MODEL_LABEL[pick.model])
-        }
-        onClick={pick.generate}
-        menu={{ label: CHAPTERS_WORDS.CHOOSE_MODEL, ...menu.trigger() }}
-      >
-        {children}
-      </SplitButton>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={CHAPTERS_WORDS.CHOOSE_MODEL}
-          menu={menu.drawn}
-          groups={[
-            CHAPTERS_MODEL_LIST.map((model) => ({
-              label: CHAPTERS_MODEL_LABEL[model],
-              checked: model === pick.model,
-              onSelect: () => pick.choose(model),
-            })),
-          ]}
-          onClose={menu.close}
-        />
-      )}
-    </>
   );
 }
 
@@ -708,7 +649,7 @@ function ChaptersReading({
   model,
   stale,
   generatable,
-  pick,
+  read,
   changes,
   files,
   threads,
@@ -724,7 +665,7 @@ function ChaptersReading({
   model: string;
   stale: boolean;
   generatable: boolean;
-  pick: ChaptersModelPick;
+  read: ChaptersRead;
   changes: ChangesReads;
   /** Every file the pull request changes, as the read of its files answered. */
   files: readonly AgentChangedFile[];
@@ -844,13 +785,9 @@ function ChaptersReading({
         <TabNotice>
           <p>{CHAPTERS_WORDS.STALE}</p>
           {generatable ? (
-            <GenerateButton
-              pick={pick}
-              variant={BUTTON_VARIANT.QUIET}
-              icon={<GLYPH.RETRY aria-hidden="true" />}
-            >
+            <Button icon={<GLYPH.RETRY aria-hidden="true" />} onClick={read.generate}>
               {CHAPTERS_WORDS.REGENERATE}
-            </GenerateButton>
+            </Button>
           ) : null}
         </TabNotice>
       ) : null}
@@ -934,15 +871,7 @@ function ChaptersReading({
                         {
                           label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
                           icon: <GLYPH.RETRY aria-hidden="true" />,
-                          // Note that each model regenerates on itself and is kept, as a pick on Regenerate's chevron then its press would.
-                          items: CHAPTERS_MODEL_LIST.map((model) => ({
-                            label: CHAPTERS_MODEL_LABEL[model],
-                            checked: model === pick.model,
-                            onSelect: () => {
-                              pick.choose(model);
-                              pick.generate();
-                            },
-                          })),
+                          onSelect: read.generate,
                         },
                       ],
                     ],
@@ -1038,7 +967,6 @@ function ChaptersReading({
 function chaptersState(
   state: Exclude<ChaptersShown, { kind: typeof CHAPTERS_SHOWN.READY }>,
   read: ChaptersRead,
-  pick: ChaptersModelPick,
   live: boolean,
 ): ReactNode {
   switch (state.kind) {
@@ -1064,11 +992,11 @@ function chaptersState(
       return state.generatable ? (
         <EmptyState
           icon={<GLYPH.PULL_REQUEST_CHAPTERS />}
-          beside={
-            <GenerateButton pick={pick} variant={BUTTON_VARIANT.PRIMARY}>
-              {CHAPTERS_WORDS.GENERATE}
-            </GenerateButton>
-          }
+          action={{
+            label: CHAPTERS_WORDS.GENERATE,
+            look: EMPTY_STATE_ACTION_LOOK.PRIMARY,
+            onClick: read.generate,
+          }}
         >
           {CHAPTERS_WORDS.NONE}
         </EmptyState>
@@ -1086,7 +1014,7 @@ function chaptersState(
             surface: FAILURE_SURFACE.AGENT_CHAPTERS_GENERATE,
             cause: state.failureKind,
           })}
-          onRetry={state.generatable ? pick.generate : undefined}
+          onRetry={state.generatable ? read.generate : undefined}
           placement={ERROR_STATE_PLACEMENT.CENTERED}
         >
           {FAILURE_WORDS[state.failureKind]}
@@ -1126,13 +1054,11 @@ export function AgentChaptersTab({
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
   // Note that the files' head counts as well as the pull request's, because a chapter's hunks are found in the files drawn.
-  const pick = useChaptersModelPick(chapters.generate);
   const state = chaptersShown(chapters.answer, chapters.generating, {
     pullRequest: chapters.head,
     files: changes.pullRequest?.headSha,
   });
-  if (state.kind !== CHAPTERS_SHOWN.READY)
-    return <>{chaptersState(state, chapters, pick, shown)}</>;
+  if (state.kind !== CHAPTERS_SHOWN.READY) return <>{chaptersState(state, chapters, shown)}</>;
   // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;
   if (answer === undefined || (out && "failure" in answer)) {
@@ -1167,7 +1093,7 @@ export function AgentChaptersTab({
       model={state.model}
       stale={state.stale}
       generatable={state.generatable}
-      pick={pick}
+      read={chapters}
       changes={changes}
       files={pullRequest.files}
       threads={threads}

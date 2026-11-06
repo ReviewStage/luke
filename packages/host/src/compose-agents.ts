@@ -110,7 +110,6 @@ import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import {
-  chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
@@ -151,11 +150,7 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
-import {
-  agentDefaultWritten,
-  chaptersModelWritten,
-  heldAccountPreferences,
-} from "./account-preferences-follow.js";
+import { agentDefaultWritten, heldAccountPreferences } from "./account-preferences-follow.js";
 import { type AgentQueues, agentQueues, type QueueWrite } from "./agent-queue-writes.js";
 import {
   type AppAccountPreferences,
@@ -285,7 +280,6 @@ export type AgentClient = Pick<
   | "pullRequestChaptersLive"
   | "agentOriginLive"
   | "generateChapters"
-  | "writeChaptersModel"
   | "models"
   | "accountPreferencesLive"
   | "writeDefault"
@@ -1761,19 +1755,6 @@ function composed(
         const answer = yield* asked(client.generateChapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.CHAPTERS_MODEL_WRITE]: declaredMethod(
-      dependencies.pool,
-      chaptersModelWritten(
-        (write) => asked(client.writeChaptersModel(write.model)),
-        dependencies.accountId,
-      ),
-      (params: WireRecord) =>
-        readParams(
-          chaptersModelWriteParamsSchema,
-          params,
-          "the chapters model names one of the models Generate offers",
-        ),
-    ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {

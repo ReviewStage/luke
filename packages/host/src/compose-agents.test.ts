@@ -27,7 +27,6 @@ import {
   PULL_REQUEST_STATE,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
-import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
@@ -551,11 +550,6 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHAPTERS;
-      }),
-    writeChaptersModel: (model) =>
-      Effect.sync(() => {
-        asked.push(`chapters-model-write:${model}`);
-        return { model };
       }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
@@ -1294,10 +1288,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHAPTERS,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
-      { model: CHAPTERS_MODEL.OPUS },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
         agentId: AGENT_ID,
         src: "https://camo.githubusercontent.com/abc",
@@ -1447,7 +1437,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
-      `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,

@@ -167,9 +167,6 @@ import {
 } from "@repo/features/mcp-client-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
-  type ChaptersModelAnswerView,
-  type ChaptersModelWriteParams,
-  chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
   type PullRequestChaptersReadParams,
@@ -820,8 +817,6 @@ export interface HostOperator {
   pullRequestChaptersGenerate(
     params: PullRequestChaptersParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
-  /** The account's chapters model drawn over its preferences at once and written to the service; the model as kept, or why it is unchanged. */
-  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
   installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
   /** A workspace's skills let go by the windows. */
@@ -2228,11 +2223,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, pullRequestChaptersRead(params)),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    chaptersModelWrite: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
-        answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
       ),
     installedSkillsFollow: (params) =>
       fire(
