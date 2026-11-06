@@ -171,6 +171,11 @@ export class TerminalSession {
     this.#screen.dim(terminalLook(this.#state).dim);
   }
 
+  /** Says on the shell's port that its tab is shown in the window the developer is using; nothing while no port stands. */
+  sayShown(): void {
+    this.#post({ type: TERMINAL_PORT_MESSAGE.SHOWN });
+  }
+
   /** Takes the screen out of its box; the shell and the screen go on. */
   hide(): void {
     this.#screen?.detach();

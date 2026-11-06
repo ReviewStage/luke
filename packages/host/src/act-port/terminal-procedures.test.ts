@@ -100,6 +100,8 @@ function fixture(options: { connectTaken?: boolean } = {}) {
       Effect.sync(() => void asked.push(`resize:${connectionId}:${cols}x${rows}`)),
     terminalAck: ({ connectionId, bytes }) =>
       Effect.sync(() => void asked.push(`ack:${connectionId}:${bytes}`)),
+    terminalShown: ({ connectionId }) =>
+      Effect.sync(() => void asked.push(`shown:${connectionId}`)),
     terminalDisconnect: ({ connectionId }) =>
       Effect.sync(() => void asked.push(`disconnect:${connectionId}`)),
     onTerminalOutput: (listener) => {
@@ -276,6 +278,7 @@ it.effect(
       port.send({ type: TERMINAL_PORT_MESSAGE.INPUT, data: "ls\r" });
       port.send({ type: TERMINAL_PORT_MESSAGE.RESIZE, cols: 100, rows: 30 });
       port.send({ type: TERMINAL_PORT_MESSAGE.ACK, bytes: 5_000 });
+      port.send({ type: TERMINAL_PORT_MESSAGE.SHOWN });
       port.send({ type: "eval", code: "rm -rf /" });
       port.send({ type: TERMINAL_PORT_MESSAGE.RESIZE, cols: 0, rows: 30 });
       yield* drain;
@@ -284,6 +287,7 @@ it.effect(
         "input:connection-1:ls\r",
         "resize:connection-1:100x30",
         "ack:connection-1:5000",
+        "shown:connection-1",
       ]);
     }),
 );

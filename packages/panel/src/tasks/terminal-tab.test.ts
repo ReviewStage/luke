@@ -1060,6 +1060,28 @@ test("while shown, the shells are read again every few seconds and whenever the 
   assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.list"]);
 });
 
+test("a tab says on its shell's port each minute that it is shown, only while shown in a window in use", async () => {
+  vi.useFakeTimers();
+  const focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "attached" });
+  const shown = () => port.posted.filter((message) => message.type === "shown").length;
+  const minute = () => act(async () => vi.advanceTimersByTimeAsync(60_000));
+  await minute();
+  const whileInUse = shown();
+  focused.mockReturnValue(false);
+  await minute();
+  const whileUnfocused = shown();
+  focused.mockReturnValue(true);
+  await tab.render(false);
+  await minute();
+
+  assert.equal(whileInUse, 1);
+  assert.equal(whileUnfocused, 1, "a window nobody is using says nothing");
+  assert.equal(shown(), 1, "a hidden tab says nothing");
+});
+
 test("the tab's card counts the agent's shells as the tab last read them", async () => {
   const tab = await mount();
   const foot = renderToStaticMarkup(
