@@ -21,6 +21,7 @@ import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { AgentForward } from "./agent-forward.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { paneToggleAction, TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -39,7 +40,9 @@ import { WorkingTime } from "./working-time.js";
  *
  * The tab is the File tab's frame: a bar across its top, here naming the
  * agent whose sandbox it is (`AgentRef`, which hangs the agent's card and
- * opens its tab), "sandbox", and the connection in a word or two; then the
+ * opens its tab), "sandbox", and the connection in a word or two, with the
+ * Forward chip that forwards its ports to this Mac (`agent-forward.tsx`)
+ * before the shells toggle; then the
  * terminal's screen (`terminal/`), which fills the rest. A state with
  * something to do lays one slim bar over the screen with one text action
  * and its key, and the terminal prints a state with nothing to do as a dim
@@ -199,7 +202,12 @@ export function TerminalTab({
               </span>
             </span>
           }
-          actions={<TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />}
+          actions={
+            <>
+              {subject.agent === undefined ? null : <AgentForward agent={subject.agent} />}
+              <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
+            </>
+          }
         />
       )}
       <Fill flow={FILL_FLOW.ROW} clip className={TERMINAL_BODY_CLASS} {...room.body}>

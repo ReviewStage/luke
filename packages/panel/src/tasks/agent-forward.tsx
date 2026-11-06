@@ -6,10 +6,10 @@ import {
   CHIP_LOOK,
   Chip,
   ChipName,
+  dropBelow,
   MENU_ITEM_MARK,
   Menu,
   type MenuAction,
-  riseAbove,
   STATUS_TONE,
   StatusGlyph,
   useMenu,
@@ -21,14 +21,15 @@ import { appPlatform } from "../app-platform.js";
 import { appStateQuery, selectCapability, selectPortForwarding } from "../use-app-state.js";
 
 /**
- * agent-forward.tsx -- the Forward chip an agent's message box wears beside its Cloud chip: whether the agent's cloud ports are forwarded to this Mac's localhost, and the menu that turns it on and opens them.
+ * agent-forward.tsx -- the Forward chip an agent's Terminal tab wears in its bar: whether the agent's cloud ports are forwarded to this Mac's localhost, and the menu that turns it on and opens them.
  *
  * Only the desktop's host listens on the Mac's loopback
  * (`HOST_CAPABILITY.PORT_FORWARDS`), and only an agent in a cloud sandbox
  * has ports to forward, so the chip stands nowhere else. Off, it reads
  * "Forward" beside a plug; on, it reads the first forwarded port's local
  * address ("localhost:3000") and its plug wears a dot in the complete tone.
- * A press raises a menu with the Forward to localhost switch and, while it
+ * It stands beside the sandbox's shells, where its dev servers run, and a
+ * press drops a menu under it with the Forward to localhost switch and, while it
  * is on, one row per port, "3000 → localhost:3000", whose press opens that
  * address in the default browser; "No ports detected" where none listens,
  * and "Sandbox not running" while the sandbox is stopped. The host keeps
@@ -94,13 +95,7 @@ function useForwarding(agentId: string): PortForwardingAnswer {
 }
 
 /** The chip and its menu. */
-function ForwardControl({
-  agentId,
-  narrow,
-}: {
-  agentId: string;
-  narrow: boolean;
-}): React.JSX.Element {
+function ForwardControl({ agentId }: { agentId: string }): React.JSX.Element {
   const menu = useMenu(true);
   const answer = useForwarding(agentId);
   const words = forwardChipWords(answer);
@@ -125,9 +120,8 @@ function ForwardControl({
     <>
       <Chip
         look={CHIP_LOOK.TOOLBAR}
-        iconOnly={narrow}
         aria-label={`${WORDS.MENU}: ${words}`}
-        {...menu.trigger(riseAbove)}
+        {...menu.trigger(dropBelow)}
       >
         {glyph}
         <ChipName>{words}</ChipName>
@@ -148,15 +142,12 @@ function ForwardControl({
 /** The Forward chip for an agent in a cloud sandbox, on a platform that forwards ports; nothing otherwise. */
 export function AgentForward({
   agent,
-  narrow = false,
 }: {
   agent: Pick<AgentSummary, "id" | "machine">;
-  /** Whether the box is too narrow for the chip's words, so it draws its glyph alone. */
-  narrow?: boolean;
 }): React.JSX.Element | null {
   const offered =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.PORT_FORWARDS) }).data ===
     true;
   if (!offered || agent.machine === AGENT_MACHINE.DEVICE) return null;
-  return <ForwardControl agentId={agent.id} narrow={narrow} />;
+  return <ForwardControl agentId={agent.id} />;
 }

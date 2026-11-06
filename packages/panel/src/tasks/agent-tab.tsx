@@ -123,7 +123,6 @@ import { TOAST_HOLD, useToast } from "../toast.js";
 import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { type FindRow, useVirtualFind } from "../virtual-find.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
-import { AgentForward } from "./agent-forward.js";
 import {
   AGENT_PART,
   type AgentPart,
@@ -3097,12 +3096,7 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={(narrow) => (
-              <>
-                <AgentPlace agent={agent} narrow={narrow} />
-                <AgentForward agent={agent} narrow={narrow} />
-              </>
-            )}
+            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its description or
             // task, so the box takes a follow up even before the transcript is read.
