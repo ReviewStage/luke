@@ -51,6 +51,7 @@ import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
 } from "@repo/features/provider-key-wire";
+import { HTTP_STATUS } from "@repo/wire";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import {
   CHATGPT_ID_TOKEN,
@@ -68,16 +69,14 @@ const DEVICE_CODE_LIFETIME = Duration.minutes(15);
 /** How often the panel polls where OpenAI named no interval, and the least it is told to wait between polls. */
 const POLL_INTERVAL_SECONDS = { DEFAULT: 5, MIN: 1 } as const;
 
-/** The statuses a code poll answers that say the code is not entered yet. */
-const PENDING_STATUSES: ReadonlySet<number> = new Set([403, 404]);
+/** The statuses a code poll answers that say the code is not entered yet, as Codex reads them. */
+const PENDING_STATUSES: ReadonlySet<number> = new Set([
+  HTTP_STATUS.FORBIDDEN,
+  HTTP_STATUS.NOT_FOUND,
+]);
 
-/** A status that says OpenAI could not answer now, which a later poll may ask again. */
-const HTTP_STATUS = {
-  OK_MIN: 200,
-  OK_MAX: 299,
-  TOO_MANY_REQUESTS: 429,
-  SERVER_ERROR: 500,
-} as const;
+/** The bounds of a success, and where a server's own failure begins. */
+const STATUS_RANGE = { OK_MIN: 200, OK_MAX: 299, SERVER_ERROR: 500 } as const;
 
 /** OpenAI's answer to a user-code request, as Codex reads it: its interval a string of seconds. */
 const UserCodeAnswerSchema = Schema.Struct({
@@ -132,7 +131,8 @@ function intervalOf(interval: string | number | undefined): number {
 }
 
 /** Whether a status is a success. */
-const succeeded = (status: number) => status >= HTTP_STATUS.OK_MIN && status <= HTTP_STATUS.OK_MAX;
+const succeeded = (status: number) =>
+  status >= STATUS_RANGE.OK_MIN && status <= STATUS_RANGE.OK_MAX;
 
 /**
  * Begins a device-code connection for the account: asks OpenAI for a user
@@ -257,7 +257,7 @@ export const pollChatGptDeviceLogin = /* @__PURE__ */ Effect.fnUntraced(function
       if (
         PENDING_STATUSES.has(status) ||
         status === HTTP_STATUS.TOO_MANY_REQUESTS ||
-        status >= HTTP_STATUS.SERVER_ERROR
+        status >= STATUS_RANGE.SERVER_ERROR
       ) {
         return answer(CHATGPT_DEVICE_LOGIN.PENDING);
       }

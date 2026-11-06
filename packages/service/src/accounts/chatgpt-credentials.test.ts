@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { type KeyRing, parseKeyRing } from "@repo/database/models/provider-key-seal";
+import {
+  type KeyRing,
+  parseKeyRing,
+  sealProviderKey,
+} from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@repo/database/models/provider-key-store";
 import { accountProviderKey } from "@repo/database/schemas/account-provider-key";
 import { user } from "@repo/database/schemas/auth";
@@ -25,11 +29,15 @@ import { TestClock } from "effect/testing";
 import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import {
   CHATGPT_ACCESS,
+  CHATGPT_FLOW,
   CHATGPT_OAUTH,
   type ChatGptAccess,
+  CODEX_DEVICE_OAUTH,
+  chatGptPlanOf,
   refreshChatGptAccess,
   removeChatGptCredentials,
   sealChatGptCredentials,
+  sealCodexDeviceCredentials,
 } from "./chatgpt-credentials.js";
 
 /**
@@ -410,6 +418,120 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
           ),
         );
         assert.equal(yield* rowOf(owner), undefined);
+      }).pipe(Effect.provide(server.http.layer));
+    },
+  );
+
+  it.effect(
+    "a Codex device-code credential renews under Codex's client in Codex's own body, keeps a token not answered, and a refresh token OpenAI refuses marks it invalid",
+    () => {
+      const renewals: unknown[] = [];
+      let refusing = false;
+      const http = recordingHttpClient(async (request) => {
+        if (request.url !== CODEX_DEVICE_OAUTH.TOKEN_URL)
+          return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        renewals.push(JSON.parse(await new Response(request.init.body).text()));
+        if (refusing) return jsonResponse({ error: "invalid_grant" }, HTTP_STATUS.BAD_REQUEST);
+        return jsonResponse({ access_token: "codex-access-1", expires_in: 3600 });
+      });
+      return Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        const now = yield* DateTime.nowAsDate;
+        const { sealed, hint } = sealCodexDeviceCredentials(ring(), owner, {
+          accessToken: "codex-access-0",
+          refreshToken: "codex-refresh-0",
+          idToken: "codex-id-0",
+          accountId: "chatgpt-subject",
+          chatgptAccountId: "chatgpt-workspace",
+          accessExpiresAt: new Date(now.getTime() + 3_600_000),
+        });
+        yield* saveProviderKey(
+          owner,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          sealed,
+          hint,
+          null,
+          now,
+          new Date(now.getTime() + 3_600_000),
+        );
+        yield* TestClock.adjust("2 hours");
+
+        const renewed = yield* refreshChatGptAccess(owner, ring());
+        assert.equal(tokenOf(renewed), "codex-access-1");
+        assert.deepEqual(chatGptPlanOf(renewed), {
+          flow: CHATGPT_FLOW.CODEX_DEVICE,
+          chatgptAccountId: "chatgpt-workspace",
+        });
+        assert.deepEqual(renewals, [
+          {
+            grant_type: "refresh_token",
+            client_id: CODEX_DEVICE_OAUTH.CLIENT_ID,
+            refresh_token: "codex-refresh-0",
+          },
+        ]);
+        // No scope is granted this flow, and none is asked of it.
+        assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.UNVERIFIED);
+
+        yield* TestClock.adjust("2 hours");
+        refusing = true;
+        assert.equal(
+          tokenOf(yield* refreshChatGptAccess(owner, ring())),
+          CHATGPT_ACCESS.SIGNED_OUT,
+        );
+        assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
+        // The refresh token the answer did not rotate is the one kept, so the refused renewal presented it again.
+        assert.deepEqual(renewals.at(-1), {
+          grant_type: "refresh_token",
+          client_id: CODEX_DEVICE_OAUTH.CLIENT_ID,
+          refresh_token: "codex-refresh-0",
+        });
+      }).pipe(Effect.provide(http.layer));
+    },
+  );
+
+  it.effect(
+    "a sign-in sealed before the flows were told apart reads as the third party's and renews as it always has",
+    () => {
+      const server = fakeAuthorizationServer("refresh-0");
+      return Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        const now = yield* DateTime.nowAsDate;
+        // The seal as it was written before it named a flow.
+        const json = JSON.stringify({
+          clientId: ISSUED_CLIENT,
+          accountId: "chatgpt-subject",
+          accessToken: "access-0",
+          refreshToken: "refresh-0",
+          idToken: "id-token-0",
+          scopes: GRANTED,
+        });
+        const sealed = sealProviderKey(
+          ring(),
+          {
+            userId: owner,
+            provider: PROVIDER_KEY_PROVIDER.OPENAI,
+            kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          },
+          Redacted.make(json),
+        );
+        yield* saveProviderKey(
+          owner,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          sealed,
+          "ChatGPT",
+          null,
+          now,
+          now,
+        );
+
+        const renewed = yield* refreshChatGptAccess(owner, ring());
+        assert.equal(tokenOf(renewed), "access-1");
+        assert.deepEqual(chatGptPlanOf(renewed), {
+          flow: CHATGPT_FLOW.THIRD_PARTY,
+          chatgptAccountId: undefined,
+        });
       }).pipe(Effect.provide(server.http.layer));
     },
   );
