@@ -353,7 +353,7 @@ function withCards(
  * (`agent-threads.tsx`).
  */
 function summaryRows(tasks: TasksControl) {
-  const { sidePanel, mainTabs, agents } = tasks;
+  const { sidePanel, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
   const rows = [
     ...panelEntries({
