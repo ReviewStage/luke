@@ -2773,37 +2773,36 @@ const LISTING_WORDS = {
 
 /** What the plan's Comments toggle says, and what its press does. */
 const TOGGLE_WORDS = {
-  COMMENTS: "Comments",
   LIST: "List all comments",
   MARGIN: "Show comments beside the plan",
 } as const;
 
+/** The toggle's words: how many threads the plan holds, as the byline's other phrases say what they count. */
+function commentCount(threads: number): string {
+  return `${threads} ${threads === 1 ? "comment" : "comments"}`;
+}
+
 /**
- * The plan's Comments toggle, at its byline's end, as Word's and Google
- * Docs' Comments button is: pressed, the plan lists its threads in the
- * margin's place (`PlanCommentList`), open or resolved; pressed again, its
- * open threads stand beside their words. It counts the open threads, and
- * stands only while the plan holds any thread at all.
+ * The plan's Comments toggle, a phrase of its byline as its Edited time is,
+ * and pressed as Word's and Google Docs' Comments button is: pressed, the
+ * plan lists its threads in the margin's place (`PlanCommentList`), open or
+ * resolved; pressed again, its open threads stand beside their words. It
+ * counts every thread, and stands only while the plan holds any at all.
  */
 export function CommentsToggle(): React.JSX.Element | null {
   const control = usePlanCommentsControlOrUndefined();
   const { listing, onListing } = useCommentFocus();
   if (control === undefined || control.threads.length === 0) return null;
-  const open = control.threads.filter(openThread).length;
   const listed = listing !== undefined;
   return (
-    <span className={COMMENTS_TOGGLE_CLASS}>
+    <span className={`${COMMENTS_TOGGLE_CLASS} actor-line`}>
       <Tooltip label={listed ? TOGGLE_WORDS.MARGIN : TOGGLE_WORDS.LIST}>
-        <Button
-          variant={BUTTON_VARIANT.QUIET}
-          size={BUTTON_SIZE.COMPACT}
-          icon={<CommentsIcon />}
-          pressed={listed}
-          trailing={open === 0 ? undefined : String(open)}
+        <TextButton
+          aria-expanded={listed}
           onClick={() => onListing(listed ? undefined : COMMENTS_FILTER.OPEN)}
         >
-          <ReplayUnmask>{TOGGLE_WORDS.COMMENTS}</ReplayUnmask>
-        </Button>
+          <ReplayUnmask>{commentCount(control.threads.length)}</ReplayUnmask>
+        </TextButton>
       </Tooltip>
     </span>
   );
@@ -2897,10 +2896,10 @@ function PlanCommentList({
       {threads}
     </div>
   ) : (
-    // Note that over the words the list stands on a raised card of its own, so the words under it never show through.
+    // Note that over the words the list stands on the well the threads were listed on in the panel, so the words never show through and no card stands in another.
     <div className="comment-float" style={{ top }}>
       <Card
-        look={CARD_LOOK.RAISED}
+        look={CARD_LOOK.WELL}
         shadow={CARD_SHADOW.MENU}
         padding={CARD_PADDING.SNUG}
         className="comment-list comment-list-float"
