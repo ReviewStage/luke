@@ -15,19 +15,15 @@
  * Turning forwarding on is the one call that wakes a stopped sandbox, and
  * starts the repository's run command in it where no port listens yet
  * (`terminal/run-command.ts`); it answers at once, and the desktop's polling
- * finds the port once the command listens. The sandbox is held for the
- * tunnel's idle bound first, as a tunnel holds it, so one woken for an app
- * that never listens is stopped by the lease sweep.
+ * finds the port once the command listens.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
-import { Clock, Duration, Effect, type Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import type { HttpClient } from "effect/http";
-import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
+import type { UserIdResolver } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { TUNNEL_RELAY_BOUNDS } from "../tunnel/relay.js";
 import { AgentSandbox } from "./terminal/agent-sandbox.js";
 import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
 
@@ -57,15 +53,8 @@ export function agentPortsProcedures(seams: AgentPortsProcedureSeams) {
     }),
     /** The sandbox woken and the repository's run command started where no port listens, answered at once. */
     startForwarding: signedIn.startForwarding.effect(function* ({ input, context }) {
-      const { conversationId, sessionId, machine } = yield* reachedAgentSession(
-        context.userId,
-        input.id,
-      );
+      const { sessionId, machine } = yield* reachedAgentSession(context.userId, input.id);
       if (machine === AGENT_MACHINE.DEVICE || sessionId === undefined) return { started: false };
-      const now = yield* Clock.currentTimeMillis;
-      yield* hostedStoreOrUnavailable(
-        holdSandbox(conversationId, new Date(now + Duration.toMillis(TUNNEL_RELAY_BOUNDS.IDLE))),
-      );
       return yield* Effect.provide(
         Effect.gen(function* () {
           const sandbox = yield* AgentSandbox;
