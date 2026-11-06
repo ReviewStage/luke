@@ -77,6 +77,7 @@ export * from "./components/inline-ref/inline-ref.js";
 export * from "./components/keep-focus/keep-focus.js";
 export * from "./components/landing/landing-page.js";
 export * from "./components/landing/lost-page.js";
+export * from "./components/landing/site-foot.js";
 export * from "./components/layout/layout.js";
 export * from "./components/length-counter/length-counter.js";
 export * from "./components/line-button/line-button.js";
