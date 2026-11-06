@@ -211,12 +211,14 @@ import type { TreeShown } from "./file-view.js";
 import { MergeControl } from "./merge-box.js";
 import {
   PENDING_WORDS,
+  type PendingActs,
   PendingComment,
   type PendingComments,
   PendingCommentsProvider,
   PendingSurfaceProvider,
   PendingWords,
   pendingThreadsOf,
+  usePendingActs,
   usePendingComment,
   usePendingThread,
 } from "./pending-comments.js";
@@ -1326,6 +1328,7 @@ function ThreadCard({
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const preview = threadPreview(thread);
   const pending = usePendingThread(thread);
+  const start = usePendingActs(usePendingComment(thread.comments[0]?.url));
   const head = useThreadHead(thread, now, pending);
   const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
   const toFiles = useThreadJump(thread, PULL_REQUEST_THREAD_VIEW.FILES);
@@ -1339,11 +1342,15 @@ function ThreadCard({
         landing={landed}
         where={<ThreadWhere path={thread.path} lines={lineSpan(thread)} onPress={toFiles} />}
         menu={
-          <ThreadMenu
-            thread={thread}
-            here={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
-            there={PULL_REQUEST_THREAD_VIEW.FILES}
-          />
+          pending ? (
+            start.menu
+          ) : (
+            <ThreadMenu
+              thread={thread}
+              here={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
+              there={PULL_REQUEST_THREAD_VIEW.FILES}
+            />
+          )
         }
         lead={
           preview === undefined ? undefined : (
@@ -1358,7 +1365,12 @@ function ThreadCard({
         }
         footer={<ThreadActions thread={thread} />}
       >
-        <ThreadComments thread={thread} now={now} picture={picture} />
+        <ThreadComments
+          thread={thread}
+          now={now}
+          picture={picture}
+          start={pending ? start : undefined}
+        />
       </AnnotationCard>
     </li>
   );
@@ -1376,14 +1388,20 @@ function ThreadComment({
   now,
   picture,
   first,
+  start,
 }: {
   comment: ReviewThread["comments"][number];
   now: number;
   picture: GitHubPictureDrawer;
   /** Whether it is the comment the card's head names. */
   first: boolean;
+  /** Its acts where it is the pending comment its thread starts, whose ⋯ the card's head wears. */
+  start: PendingActs | undefined;
 }): React.JSX.Element {
   const draft = usePendingComment(comment.url);
+  // Note that a pending comment starting its thread wears its ⋯ at the card's head, which names it, so the card holds its acts; a reply holds its own.
+  const own = usePendingActs(start === undefined ? draft : undefined);
+  const acts = start ?? own;
   const writer = useNamer()(comment.by);
   const words = <EntryWords entry={comment} picture={picture} />;
   const reply: AnnotationReply | undefined = first
@@ -1393,7 +1411,13 @@ function ThreadComment({
         nameRef: <ActorRef actor={writer} nameOnly />,
         at: comment.at,
         now,
-        trailing: draft === undefined ? undefined : <PendingWords />,
+        trailing:
+          draft === undefined ? undefined : (
+            <>
+              <PendingWords />
+              {acts.menu}
+            </>
+          ),
       };
   return (
     <AnnotationComment reply={reply} className="pull-request-thread-comment">
@@ -1403,7 +1427,7 @@ function ThreadComment({
           <Reactions reactions={comment.reactions} subject={comment.subject} />
         </>
       ) : (
-        <PendingComment draft={draft} words={words} marked={false} />
+        acts.body(words)
       )}
     </AnnotationComment>
   );
@@ -1466,10 +1490,13 @@ function ThreadComments({
   thread,
   now,
   picture,
+  start,
 }: {
   thread: ReviewThread;
   now: number;
   picture: GitHubPictureDrawer;
+  /** The acts on the pending comment the thread starts, whose ⋯ stands at the card's head; none for a published thread. */
+  start: PendingActs | undefined;
 }): React.JSX.Element {
   const last = thread.comments.at(-1);
   return (
@@ -1482,6 +1509,7 @@ function ThreadComments({
             now={now}
             picture={picture}
             first={at === 0}
+            start={at === 0 ? start : undefined}
           />
         ))}
       </AnnotationComments>
@@ -1518,6 +1546,7 @@ function InlineThread({
 }): React.JSX.Element {
   // A thread the member's pending comment starts is theirs alone until they submit it, with no page to link or jump to.
   const pending = usePendingThread(thread);
+  const start = usePendingActs(usePendingComment(thread.comments[0]?.url));
   const head = useThreadHead(thread, now, pending);
   const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
   const lines = place === THREAD_PLACE.ABOVE ? lineSpan(thread) : undefined;
@@ -1534,7 +1563,9 @@ function InlineThread({
         )
       }
       menu={
-        pending ? null : (
+        pending ? (
+          start.menu
+        ) : (
           <ThreadMenu
             thread={thread}
             here={PULL_REQUEST_THREAD_VIEW.FILES}
@@ -1544,7 +1575,12 @@ function InlineThread({
       }
       footer={<ThreadActions thread={thread} />}
     >
-      <ThreadComments thread={thread} now={now} picture={picture} />
+      <ThreadComments
+        thread={thread}
+        now={now}
+        picture={picture}
+        start={pending ? start : undefined}
+      />
     </AnnotationCard>
   );
 }
