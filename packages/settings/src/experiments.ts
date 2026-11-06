@@ -24,6 +24,41 @@ export const EXPERIMENT = {
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
 
+/** Whose choice an experiment is: a workspace's, made by its admins for every member and agent in it, or each account's own. */
+export const EXPERIMENT_SCOPE = {
+  WORKSPACE: "workspace",
+  ACCOUNT: "account",
+} as const;
+
+export type ExperimentScope = (typeof EXPERIMENT_SCOPE)[keyof typeof EXPERIMENT_SCOPE];
+
+/**
+ * The experiments a workspace turns on for everyone in it: each changes what
+ * its members share and what every agent in it reads and writes, so one
+ * member's choice cannot stand apart from another's. Every experiment not
+ * listed here is each account's own.
+ */
+export const WORKSPACE_EXPERIMENT_LIST = [
+  EXPERIMENT.DESCRIPTIONS,
+  EXPERIMENT.PILOT,
+  EXPERIMENT.MEMORY,
+] as const;
+
+export type WorkspaceExperiment = (typeof WORKSPACE_EXPERIMENT_LIST)[number];
+export type AccountExperiment = Exclude<Experiment, WorkspaceExperiment>;
+
+const isWorkspaceExperimentKey = Schema.is(Schema.Literals(WORKSPACE_EXPERIMENT_LIST));
+
+/** Whether an experiment is a workspace's choice rather than an account's. */
+export function isWorkspaceExperiment(experiment: Experiment): experiment is WorkspaceExperiment {
+  return isWorkspaceExperimentKey(experiment);
+}
+
+/** Whose choice an experiment is. */
+export function experimentScope(experiment: Experiment): ExperimentScope {
+  return isWorkspaceExperiment(experiment) ? EXPERIMENT_SCOPE.WORKSPACE : EXPERIMENT_SCOPE.ACCOUNT;
+}
+
 /** One experiment as the Experimental page lists it. */
 export interface ExperimentEntry {
   readonly key: Experiment;

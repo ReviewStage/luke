@@ -31,6 +31,8 @@ import { agentRead } from "../schemas/agent-read.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
+import { descriptionComment, descriptionCommentThread } from "../schemas/description-comment.js";
+import { descriptionRevision } from "../schemas/description-revision.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -45,9 +47,6 @@ import { integrationInstallation } from "../schemas/integration-installation.js"
 import { macCommand } from "../schemas/mac-command.js";
 import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import { descriptionComment, descriptionCommentThread } from "../schemas/description-comment.js";
-import { taskPageVersion } from "../schemas/task-page.js";
-import { descriptionRevision } from "../schemas/description-revision.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { pullRequestChapters } from "../schemas/pull-request-chapters.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
@@ -56,9 +55,11 @@ import { slackChannelRepository, slackInstallation } from "../schemas/slack-inst
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskBlock } from "../schemas/task-block.js";
+import { taskPageVersion } from "../schemas/task-page.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskRead } from "../schemas/task-read.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
+import { workspaceExperiment } from "../schemas/workspace-experiment.js";
 import { workspaceFormerSlug } from "../schemas/workspace-former-slug.js";
 import { TOPIC } from "./notification.js";
 import { defineSyncTable, LOG, type SyncTable } from "./sync-table.js";
@@ -211,6 +212,11 @@ export const personalWorkspaceSync = defineSyncTable(personalWorkspace, {
 /** A slug a workspace stood under before, on the workspace's topic, so its members' list names it. */
 export const workspaceFormerSlugSync = defineSyncTable(workspaceFormerSlug, {
   topics: [{ kind: TOPIC.WORKSPACE, column: workspaceFormerSlug.organizationId }],
+});
+
+/** An experiment a workspace's admin turned on or off, on the workspace's topic, so every member's panel follows the switch. */
+export const workspaceExperimentSync = defineSyncTable(workspaceExperiment, {
+  topics: [{ kind: TOPIC.WORKSPACE, column: workspaceExperiment.organizationId }],
 });
 
 /** A GitHub App installation connected to a workspace, on the workspace's topic. */
@@ -703,6 +709,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   organizationSync,
   personalWorkspaceSync,
   workspaceFormerSlugSync,
+  workspaceExperimentSync,
   githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,

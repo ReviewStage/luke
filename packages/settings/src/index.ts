@@ -17,15 +17,22 @@ export {
 } from "./commit-author.js";
 export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
+  type AccountExperiment,
   EXPERIMENT,
+  EXPERIMENT_SCOPE,
   EXPERIMENTS,
   type Experiment,
   type ExperimentChoices,
   type ExperimentEntry,
+  type ExperimentScope,
   experimentChoicesFrom,
   experimentOn,
+  experimentScope,
   isExperiment,
+  isWorkspaceExperiment,
   NO_EXPERIMENTS,
+  WORKSPACE_EXPERIMENT_LIST,
+  type WorkspaceExperiment,
 } from "./experiments.js";
 export {
   isMacCommandMode,
