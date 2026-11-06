@@ -106,10 +106,13 @@ export const accountInboxTaskSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   items: countedNumber,
   /**
-   * How many of the task's items are questions waiting on the reader: open,
-   * holding an ask (`asking`), and waiting on them (`waitsOn`); a notice or
-   * a settled item never counts, read or not. Absent from a service before
-   * it, which the desktop counts as it did before, by the open items alone.
+   * How many of the task's items wait on the reader: open, an ask not
+   * answered or a notice not acknowledged, and waiting on them (`waitsOn`);
+   * a settled item never counts, read or not. Note that one whose reminder
+   * the reader set for later still counts, since the count is read live,
+   * where no clock is, so the reader leaves it out on its own side (`remindAt`).
+   * Absent from a service before it, which the desktop counts as it did
+   * before, by the open items alone.
    */
   toDo: EffectSchema.optionalKey(countedNumber),
   updatedAt: countedNumber,

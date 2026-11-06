@@ -203,7 +203,11 @@ import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
-import { AUTOMATION_DELETE_MUTATION, WEBHOOK_SECRET_MUTATION } from "./use-automations.js";
+import {
+  AUTOMATION_DELETE_MUTATION,
+  type AutomationWriteAnswer,
+  WEBHOOK_SECRET_MUTATION,
+} from "./use-automations.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
@@ -281,9 +285,9 @@ const SENTRY_UNREAD = readFailedWords("the workspace's Sentry");
 
 /** The writes the editor makes, as the list's hook answers them (`use-automations.ts`). */
 export interface AutomationWrites {
-  create(params: AutomationCreateParams): Promise<AutomationView>;
-  change(params: AutomationChangeParams): Promise<AutomationView>;
-  toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
+  create(params: AutomationCreateParams): Promise<AutomationWriteAnswer>;
+  change(params: AutomationChangeParams): Promise<AutomationWriteAnswer>;
+  toggle(automationId: string, enabled: boolean): Promise<AutomationWriteAnswer>;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -379,7 +383,7 @@ export const RUN_REFUSAL_WORDS = {
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /** Why a switch did not move, as its toast says it. */
-function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
+function toggleRefusal(answer: AutomationWriteAnswer, enabled: boolean): string | undefined {
   if (!("failure" in answer)) return undefined;
   if (answer.failure === AUTOMATION_CALL_FAILURE.NOT_PERMITTED) {
     return SAVE_REFUSAL_WORDS[AUTOMATION_CALL_FAILURE.NOT_PERMITTED];
@@ -402,7 +406,7 @@ export function AutomationSwitch({
   write,
 }: {
   automation: AutomationSummary;
-  write: (enabled: boolean) => Promise<AutomationView>;
+  write: (enabled: boolean) => Promise<AutomationWriteAnswer>;
 }): React.JSX.Element {
   const toast = useToast();
   const turn = (enabled: boolean) => {
@@ -1215,7 +1219,7 @@ function EditorToolbar({
   saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
-  onToggle: (enabled: boolean) => Promise<AutomationView>;
+  onToggle: (enabled: boolean) => Promise<AutomationWriteAnswer>;
   onDelete: () => void;
   /** Whether a Run now is out. */
   running: boolean;
@@ -2749,7 +2753,7 @@ export function AutomationEditor({
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
   };
-  const landed = (answer: AutomationView) => {
+  const landed = (answer: AutomationWriteAnswer) => {
     setSaving(false);
     if ("failure" in answer) {
       setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);

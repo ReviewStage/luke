@@ -3,12 +3,19 @@
  *
  * The list and the make share one path, told apart by their method, as the
  * old route did. The two reads take their query as their input.
+ *
+ * Each declares the refusals its handler answers beyond any procedure's
+ * (`packages/service/src/accounts/workspace-invitations-procedures.ts`): a
+ * workspace or invitation not found, a role that does not allow it, and,
+ * for the invite alone, an address already a member or invited. The offer
+ * answers "no offer" as an answer, never a refusal.
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
 import { workspaceIdSchema } from "../task-wire.js";
 import {
   invitationOfferAnswerSchema,
@@ -19,7 +26,7 @@ import {
   workspaceInvitationsAnswerSchema,
   workspaceInviteRequestSchema,
 } from "../workspace-invitation-wire.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 
 /** A workspace's id, an address, and a role are a few dozen characters, so a body past this is not one. */
 const BODY_BYTES = 1_024;
@@ -30,11 +37,19 @@ const invitationsQuerySchema = EffectSchema.Struct({
 });
 
 export const workspaceInvitationsContract = {
-  list: hostedProcedure
+  list: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS }))
     .input(invitationsQuerySchema)
     .output(EffectSchema.flip(workspaceInvitationsAnswerSchema)),
-  invite: hostedProcedure
+  invite: declaredProcedure
+    .errors(
+      refuses(
+        HOSTED_API_ERROR.NOT_FOUND,
+        HOSTED_API_ERROR.NOT_PERMITTED,
+        HOSTED_API_ERROR.ALREADY_INVITED,
+      ),
+    )
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
@@ -45,7 +60,8 @@ export const workspaceInvitationsContract = {
     )
     .input(exactInput(workspaceInviteRequestSchema))
     .output(EffectSchema.flip(workspaceInvitationAnswerSchema)),
-  cancel: hostedProcedure
+  cancel: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.NOT_FOUND, HOSTED_API_ERROR.NOT_PERMITTED))
     .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({
@@ -55,7 +71,7 @@ export const workspaceInvitationsContract = {
     )
     .input(exactInput(workspaceInvitationCancelSchema))
     .output(EffectSchema.flip(workspaceInvitationsAnswerSchema)),
-  offer: hostedProcedure
+  offer: declaredProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER }),
     )

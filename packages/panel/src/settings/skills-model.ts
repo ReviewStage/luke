@@ -221,7 +221,7 @@ const FAILURE_WORDS = {
     "The skill could not be installed. Check what you pasted.",
   [INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN]: (skill: string) =>
     `${skill} is already installed there. Remove it first, or install for the other scope.`,
-  [INSTALLED_SKILL_CALL_FAILURE.UNREACHABLE]: () =>
+  [INSTALLED_SKILL_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: () =>
     "That repository or branch could not be reached on GitHub. A private repository needs the workspace's GitHub connected.",
   [INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED]: () =>
     "GitHub didn't answer, or is limiting requests. Try again later.",

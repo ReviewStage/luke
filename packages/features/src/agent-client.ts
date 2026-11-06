@@ -16,6 +16,7 @@ import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import type { AgentOriginLiveAnswer } from "./agent-origin-live.js";
 import {
   AGENT_CALL_FAILURE,
+  AGENT_RENAMES,
   type AgentAgentAnswer,
   type AgentCallFailure,
   type AgentChangesAnswerView,
@@ -106,7 +107,7 @@ import {
   type HostPairingFailed,
   type HostPairingView,
 } from "./host-pairing-view.js";
-import { askLiveRead, type HostedPoll } from "./hosted-call.js";
+import { askLiveRead, type HostedPoll, hostedCall } from "./hosted-call.js";
 import {
   askHosted,
   askLive,
@@ -285,11 +286,6 @@ const MESSAGE_REFUSALS = {
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
 const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
-
-/** The refusals a dictated clip can answer with: the account saved no OpenAI key to hear it on. */
-const DICTATION_REFUSALS = {
-  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: AGENT_CALL_FAILURE.OPENAI_KEY_MISSING,
-} satisfies NamedRefusals;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
@@ -505,7 +501,9 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
  * as a choice reads, the settings parts beside it the settings client's to
  * read.
  */
-function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAnswer {
+function defaultOf(
+  read: AccountPreferencesAnswerWire | Exclude<AgentDefaultAnswer, { readonly choice: unknown }>,
+): AgentDefaultAnswer {
   if ("failure" in read) return read;
   const choice = Option.getOrUndefined(Schema.decodeUnknownOption(modelChoiceSchema)(read.agent));
   if (choice === undefined) return UNANSWERED;
@@ -541,7 +539,7 @@ export class HostedAgentClient {
 
   /** The models a coding agent may run on, as the service offers them now. */
   models(): Effect.Effect<AgentModelsAnswer, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.models.list, undefined), {});
+    return hostedCall(this.#hosted.models.list, undefined);
   }
 
   /** The account's hosts, as Settings lists them. */
@@ -612,7 +610,7 @@ export class HostedAgentClient {
     const admitted = Result.getOrUndefined(readEither(agentDefaultWriteSchema)({ agent: choice }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.map(
-      hostedAnswer(askHosted(this.#hosted.account.writePreferences, admitted), DEFAULT_REFUSALS),
+      hostedCall(this.#hosted.account.writePreferences, admitted, { as: AGENT_RENAMES }),
       defaultOf,
     );
   }
@@ -647,17 +645,14 @@ export class HostedAgentClient {
     params: MemoryForgetParams,
   ): Effect.Effect<MemoriesAnswerView, never, HttpClient.HttpClient> {
     // The workspace and the memory ride in the query, since a DELETE carries no body.
-    return hostedAnswer(
-      askHosted(this.#hosted.account.forgetMemory, {
-        query: { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId, [MEMORY_QUERY.ID]: params.id },
-      }),
-      MEMORY_REFUSALS,
-    );
+    return hostedCall(this.#hosted.account.forgetMemory, {
+      query: { [MEMORY_QUERY.WORKSPACE_ID]: params.workspaceId, [MEMORY_QUERY.ID]: params.id },
+    });
   }
 
   /** The account's own provider keys, as hints and statuses. */
   readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.account.providerKeys, undefined), {});
+    return hostedCall(this.#hosted.account.providerKeys, undefined);
   }
 
   /**
@@ -670,7 +665,7 @@ export class HostedAgentClient {
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
+    return hostedCall(this.#hosted.account.saveProviderKey, admitted);
   }
 
   /** Codex's device-code login begun on the service: the code to enter, where, how often to ask again, and when it lapses. */
@@ -679,7 +674,7 @@ export class HostedAgentClient {
     never,
     HttpClient.HttpClient
   > {
-    return hostedAnswer(askHosted(this.#hosted.account.startChatGptDeviceLogin, undefined), {});
+    return hostedCall(this.#hosted.account.startChatGptDeviceLogin, undefined);
   }
 
   /** How a device-code login stands, the keys once it connected; a login id the service would refuse by shape never travels. */
@@ -688,7 +683,7 @@ export class HostedAgentClient {
   ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.pollChatGptDeviceLogin, admitted), {});
+    return hostedCall(this.#hosted.account.pollChatGptDeviceLogin, admitted);
   }
 
   /** A device-code login withdrawn, answering how it then stands; a login id the service would refuse by shape never travels. */
@@ -697,7 +692,7 @@ export class HostedAgentClient {
   ): Effect.Effect<ChatGptDevicePollAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatGptDeviceLoginRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.cancelChatGptDeviceLogin, admitted), {});
+    return hostedCall(this.#hosted.account.cancelChatGptDeviceLogin, admitted);
   }
 
   /**
@@ -710,7 +705,7 @@ export class HostedAgentClient {
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(providerKeyForAgentsRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.account.setProviderKeyForAgents, admitted), {});
+    return hostedCall(this.#hosted.account.setProviderKeyForAgents, admitted);
   }
 
   /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
@@ -718,15 +713,12 @@ export class HostedAgentClient {
     params: ProviderKeyRemoveParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     // The provider rides in the query, since a DELETE carries no body.
-    return hostedAnswer(
-      askHosted(this.#hosted.account.removeProviderKey, {
-        query: {
-          [PROVIDER_KEY_QUERY.PROVIDER]: params.provider,
-          ...(params.kind === undefined ? undefined : { [PROVIDER_KEY_QUERY.KIND]: params.kind }),
-        },
-      }),
-      {},
-    );
+    return hostedCall(this.#hosted.account.removeProviderKey, {
+      query: {
+        [PROVIDER_KEY_QUERY.PROVIDER]: params.provider,
+        ...(params.kind === undefined ? undefined : { [PROVIDER_KEY_QUERY.KIND]: params.kind }),
+      },
+    });
   }
 
   /**
@@ -739,15 +731,14 @@ export class HostedAgentClient {
   ): Effect.Effect<DictationTranscribeAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(dictationRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
-      DICTATION_REFUSALS,
-    );
+    return hostedCall(this.#hosted.dictation.transcribe, admitted, {
+      deadline: HOSTED_DEADLINE.HELD,
+    });
   }
 
   /** The member's own GitHub token, as what tells it apart; never the token. */
   readGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.githubToken.read, undefined), {});
+    return hostedCall(this.#hosted.githubToken.read, undefined);
   }
 
   /**
@@ -760,12 +751,12 @@ export class HostedAgentClient {
   ): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(githubTokenSaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.githubToken.save, admitted), {});
+    return hostedCall(this.#hosted.githubToken.save, admitted);
   }
 
   /** The member's GitHub token removed, answering none. */
   removeGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.githubToken.remove, undefined), {});
+    return hostedCall(this.#hosted.githubToken.remove, undefined);
   }
 
   /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */

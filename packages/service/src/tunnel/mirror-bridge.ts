@@ -9,9 +9,10 @@
  * holds is only a trigger: once the checkout has been quiet for a moment,
  * or at most a second after it first stirred, it is listed again and
  * compared by size, modified time, and executable bit with the last
- * listing, held in memory and nowhere else, each file new or changed is
- * sent, each one gone is deleted, and the folders watched follow the new
- * listing. Note that we
+ * listing, held in memory and nowhere else, the folders watched follow the
+ * new listing, and then each file new or changed is sent and each one gone
+ * is deleted, so a change the Mac sees is never followed by one the bridge
+ * misses in a folder it has not watched yet. Note that we
  * watch the listed folders rather than the checkout recursively, because
  * Node on Linux watches a recursive tree file by file, ignored folders such
  * as `node_modules` included, which costs seconds and hundreds of megabytes.
@@ -114,17 +115,18 @@ const settle = () => {
   quiet = undefined;
   longest = undefined;
   if (channel === undefined) return;
-  const now = list();
-  for (const [name, stat] of now) {
-    const was = listing.get(name);
-    const moved = was === undefined || was.size !== stat.size || was.mtimeMs !== stat.mtimeMs;
-    if (moved || (was.mode & 0o111) !== (stat.mode & 0o111)) send(name, stat);
-  }
-  for (const name of listing.keys()) {
-    if (!now.has(name)) tell({ type: "${MIRROR_FRAME.DELETE}", path: name });
-  }
-  listing = now;
+  const was = listing;
+  listing = list();
+  // Note that we watch the new listing's folders before telling any change, because the Mac may answer one with the next at once, in a folder new since.
   watchFolders();
+  for (const [name, stat] of listing) {
+    const before = was.get(name);
+    const moved = before === undefined || before.size !== stat.size || before.mtimeMs !== stat.mtimeMs;
+    if (moved || (before.mode & 0o111) !== (stat.mode & 0o111)) send(name, stat);
+  }
+  for (const name of was.keys()) {
+    if (!listing.has(name)) tell({ type: "${MIRROR_FRAME.DELETE}", path: name });
+  }
 };
 const stir = () => {
   clearTimeout(quiet);

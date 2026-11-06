@@ -25,6 +25,7 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const BASE_URL = "https://app.test";
 const MODELS_ROUTE = "GET /api/models";
+const CHAPTERS_ROUTE = "GET /api/agents/agent-1/chapters";
 
 const MODEL = {
   id: "anthropic/claude-opus-5.5",
@@ -207,13 +208,20 @@ it.effect("a repository out of reach reaches the caller with why", () =>
   Effect.gen(function* () {
     const unreached = { reason: REPOSITORY_UNREACHED.GONE, repository: "Acme/Relay" };
     const api = fakeCloudApi({
-      [MODELS_ROUTE]: {
+      [CHAPTERS_ROUTE]: {
         answer: () => ({ error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached }),
         status: HTTP_STATUS.FORBIDDEN,
       },
     });
+    const hosted = hostedClient({ baseUrl: `${BASE_URL}/`, credential: account(["token-1"]) });
 
-    const failure = yield* Effect.flip(Effect.provide(askModels(account(["token-1"])), api.layer));
+    // A pull request's chapters stand in for a procedure that declares the refusal.
+    const failure = yield* Effect.flip(
+      Effect.provide(
+        askHosted(hosted.pullRequestChapters.read, { id: "agent-1", number: "7" }),
+        api.layer,
+      ),
+    );
 
     assert.deepEqual(
       failure,

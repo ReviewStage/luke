@@ -6,7 +6,7 @@ import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { Task, TaskSummary } from "@repo/features/task-wire";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { agentTab, isTerminalTab, type StripTab } from "@repo/ui/tab-strip-model";
+import { agentTab, STRIP_TAB_KIND, type StripTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -160,7 +160,12 @@ async function mount(input: {
   await vi.waitFor(() => assert.equal(appCommandOffered(APP_COMMAND.SHOW_TERMINAL), terminals));
   return {
     /** Every tab the side panel was asked to show, in order, a terminal's by its agent and its name. */
-    shown: () => shown.map((tab) => (isTerminalTab(tab) ? [tab.terminal, tab.title] : tab)),
+    shown: () =>
+      shown.map((tab) =>
+        typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TERMINAL
+          ? [tab.terminal, tab.title]
+          : tab,
+      ),
     run: async (command: typeof APP_COMMAND.SHOW_TERMINAL | typeof APP_COMMAND.NEW_TERMINAL) => {
       act(() => {
         runAppCommand(command);

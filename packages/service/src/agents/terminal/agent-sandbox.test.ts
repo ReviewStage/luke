@@ -437,26 +437,23 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   );
 
   it.effect(
-    "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else, then taken off whole",
+    "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else",
     () =>
       Effect.gen(function* () {
         const api = vercel("running");
         const session = yield* ownSession;
 
         yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-          Effect.andThen(
-            sandbox.setCredential(session, {
-              token: Redacted.make(MEMBER_TOKEN),
-              fullName: REPOSITORY,
-              access: {
-                kind: GITHUB_ACCESS.TOKEN,
-                githubLogin: "octo-member",
-                githubUserId: "4242",
-                markInvalid: Effect.void,
-              },
-            }),
-            sandbox.withdrawCredential(session),
-          ),
+          sandbox.setCredential(session, {
+            token: Redacted.make(MEMBER_TOKEN),
+            fullName: REPOSITORY,
+            access: {
+              kind: GITHUB_ACCESS.TOKEN,
+              githubLogin: "octo-member",
+              githubUserId: "4242",
+              markInvalid: Effect.void,
+            },
+          }),
         ).pipe(Effect.provide(api.layer));
 
         const basic = `Basic ${Buffer.from(`octo-member:${MEMBER_TOKEN}`).toString("base64")}`;
@@ -483,7 +480,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
               ],
             },
           },
-          { mode: "allow-all" },
         ]);
       }),
   );

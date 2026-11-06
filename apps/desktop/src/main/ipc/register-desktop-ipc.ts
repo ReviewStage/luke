@@ -211,6 +211,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       {
         account: {
           host: operator.host,
+          acts: operator.acts,
           haltSessionReplay: operator.haltSessionReplay,
           resumeSessionReplay: operator.resumeSessionReplay,
           askBeforeSignOut: () => services.askBeforeLeaving(LEAVE.SIGN_OUT),
@@ -227,6 +228,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         pushes: windowPushes,
         settings: {
           host: operator.host,
+          acts: operator.acts,
           // The port names its window as an unknown sender; only a window of
           // this process's own is one the reporter is minted for.
           reporterOf: (actor) => {
@@ -238,6 +240,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          acts: operator.acts,
           colorCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,

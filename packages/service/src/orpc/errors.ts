@@ -8,10 +8,15 @@
  * `{ error: slug }` with its extra fields at the top level, under the status
  * `HOSTED_REFUSAL_STATUS` gives it, so a refusal answers exactly what
  * `hostedRefusalResponse` answered.
+ *
+ * A refusal its procedure's contract does not declare is answered the same,
+ * since a released desktop reads its slug, and is also reported as a defect
+ * naming the procedure and the slug (`UndeclaredRefusal`), since a contract
+ * that does not say what its handler refuses is a bug in the contract.
  */
 
 import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
-import { ORPCError } from "@orpc/server";
+import { type AnyProcedure, ORPCError } from "@orpc/server";
 import {
   extraRepositoryRefusalSchema,
   localAgentRefusalSchema,
@@ -20,9 +25,10 @@ import {
 import { installedSkillRefusedDataSchema } from "@repo/features/installed-skill-route-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { repositoryUnreachedSchema } from "@repo/features/repository-reach-wire";
-import { Effect, Schema } from "effect";
+import { Cause, type Context, Data, Effect, ErrorReporter, Schema } from "effect";
 import { ADMIN_REFUSAL_STATUS } from "../admin/http-effect.js";
 import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS } from "../http/http-effect.js";
+import type { WebServices } from "../runtime.js";
 import type { HostedContext } from "./base.js";
 
 /**
@@ -76,20 +82,64 @@ function refusalError(refusal: { readonly error: string }): ORPCError<string, ob
 }
 
 /**
- * Runs around every effectful handler and middleware: a `HostedRefusal` (or an admin `AdminRefusal`) in
- * the failure channel becomes its declared error, and anything else passes
- * through as it was, so a failure that comes back through an outer layer is
- * left as the inner one made it.
+ * A refusal a procedure answered that its contract does not declare, by the
+ * procedure's path and the refusal's slug alone: none of the fields the
+ * refusal carries beside its slug, which may name a member's repository.
  */
-export const hostedRefusalWrap: NonNullable<HostedContext["effect/wrap"]> = <A, E>(
-  effect: Effect.Effect<A, E>,
-) =>
-  Effect.mapError(
-    effect,
-    (failure): E =>
-      // SAFETY: oRPC reads the wrapped effect's failure as `unknown` and settles an `ORPCError` among it; the generic `E` is the caller's view alone.
-      isHostedRefusal(failure) ? (refusalError(failure) as E) : failure,
-  );
+export class UndeclaredRefusal extends Data.TaggedError("UndeclaredRefusal")<{
+  readonly procedure: string;
+  readonly refusal: string;
+}> {
+  override get message(): string {
+    return `${this.procedure} refused with ${this.refusal}, which its contract does not declare`;
+  }
+
+  override get [ErrorReporter.attributes]() {
+    return { procedure: this.procedure, refusal: this.refusal };
+  }
+}
+
+/**
+ * The wrap run around every effectful handler and middleware: a
+ * `HostedRefusal` (or an admin `AdminRefusal`) in the failure channel becomes
+ * its declared error, and anything else passes through as it was, so a
+ * failure that comes back through an outer layer is left as the inner one
+ * made it. A refusal the procedure does not declare is reported as a defect
+ * through the reporters among `services` (`UndeclaredRefusal`) and answered
+ * as any other.
+ *
+ * Note that each refusal is checked once, where it is first met, because an
+ * outer layer meets it already turned into an `ORPCError`. Note too that the
+ * report is provided `services` itself, because oRPC runs the wrap outside
+ * the services it provides the wrapped effect.
+ */
+export function hostedRefusalWrap(
+  services: Context.Context<WebServices>,
+): NonNullable<HostedContext["effect/wrap"]> {
+  return <A, E>(
+    effect: Effect.Effect<A, E>,
+    { path, procedure }: { path: string[]; procedure: AnyProcedure },
+  ) =>
+    effect.pipe(
+      Effect.tapError((failure) =>
+        isHostedRefusal(failure) && !Object.hasOwn(procedure["~orpc"].errorMap, failure.error)
+          ? Effect.provide(
+              ErrorReporter.report(
+                Cause.die(
+                  new UndeclaredRefusal({ procedure: path.join("."), refusal: failure.error }),
+                ),
+              ),
+              services,
+            )
+          : Effect.void,
+      ),
+      Effect.mapError(
+        (failure): E =>
+          // SAFETY: oRPC reads the wrapped effect's failure as `unknown` and settles an `ORPCError` among it; the generic `E` is the caller's view alone.
+          isHostedRefusal(failure) ? (refusalError(failure) as E) : failure,
+      ),
+    );
+}
 
 /**
  * The body an error is answered with: a refusal as itself, an input its

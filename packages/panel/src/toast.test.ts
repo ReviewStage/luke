@@ -19,7 +19,7 @@ import { installShownFailureReporter } from "./failure-report.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
-import { onRegistry, testQueryClientNow } from "./testing/copy-feedback.js";
+import { onRegistry, readAppState, testQueryClientNow } from "./testing/copy-feedback.js";
 import {
   TOAST_HOLD,
   ToastHost,
@@ -29,7 +29,7 @@ import {
   useWorkingToast,
 } from "./toast.js";
 import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
-import { appStateFirstRead, appStateIn } from "./use-app-state.js";
+import { appStateIn } from "./use-app-state.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
@@ -441,9 +441,9 @@ it.effect(
     Effect.gen(function* () {
       handState({}, { network: { online: true, reachable: false } });
       // Note that we wait on the read itself, because it lands after a fiber's hops a busy runner can stretch past any one tick.
-      yield* Effect.orDie(appStateFirstRead);
+      yield* Effect.promise(readAppState);
       mount(WINDOW.TALL);
-      // Note that we wait on the test's client, because the window's registry reads the document again before the subscription writes it there.
+      // Note that we wait on the test's client, because the subscription reads the document again as it mounts before it writes it there.
       yield* Effect.promise(() =>
         vi.waitFor(() =>
           assert.equal(

@@ -12,7 +12,6 @@
    `data-ui-profile`, `data-ui-theme`, and `data-ui-density`, so every
    sheet below reads them. */
 @import "@repo/ui/tokens.css";
-@import "./settings.css";
 @import "./base.css";
 /* The shared components' own rules, in the `components` layer: above
    base.css's element resets, which sit in `base`, and under the utilities an

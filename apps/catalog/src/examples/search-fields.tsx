@@ -59,15 +59,15 @@ function SearchFields(): React.JSX.Element {
           <Stack gap={GAP.FIELD}>
             <Held
               start=""
-              label="Search integrations and tools"
-              placeholder="Search integrations and tools"
+              label="Search integrations"
+              placeholder="Search integrations"
               shortcut={<kbd>⌘F</kbd>}
               clears
             />
             <Held
               start="deploy"
-              label="Search integrations and tools"
-              placeholder="Search integrations and tools"
+              label="Search integrations"
+              placeholder="Search integrations"
               clears
             />
           </Stack>

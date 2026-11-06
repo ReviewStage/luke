@@ -153,6 +153,7 @@ function tasksTab(
     sidePanel: {
       ...base.sidePanel,
       open: at.panel.open,
+      stop: onTask ? DOCUMENT_TASK.id : undefined,
       fullScreen: at.panel.open && narrow,
       fullScreenOnly: at.panel.open && narrow,
       tab: at.panel.tab,

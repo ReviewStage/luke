@@ -77,7 +77,7 @@ import {
 } from "@repo/ui";
 import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, STRIP_TAB_KIND, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -2040,7 +2040,10 @@ function SidebarColumn({
     },
     unread,
     unseenAgent: (agentId) =>
-      tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
+      tasks.unreadTabs.some(
+        (tab) =>
+          typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.AGENT && tab.agent === agentId,
+      ),
     now,
     faces: { creator: true, assignee: assignedTo.kind !== ASSIGNED_TO.MEMBER },
     inSight: overlay.inSight,

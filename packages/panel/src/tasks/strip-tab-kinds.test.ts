@@ -73,6 +73,14 @@ const HOLDER = { taskId: TASK };
  */
 const DRAWS_NOTHING: TaskDraws = { agents: [], openAgents: [], taskAgents: [], pages: [] };
 
+/** A task none of whose agents, open agent tabs, or pages are read yet. */
+const DRAWS_UNREAD: TaskDraws = {
+  agents: undefined,
+  openAgents: undefined,
+  taskAgents: undefined,
+  pages: undefined,
+};
+
 /** Kept across a launch in neither strip. */
 const NOWHERE = { column: false, sidePanel: false };
 
@@ -350,6 +358,24 @@ describe("a strip tab's kind answers", () => {
         },
         lives,
       );
+    },
+  );
+
+  // Note that each row names its tab in its own list alone, so a kind that reads another list draws nothing.
+  it.each([
+    { kind: "agent", tab: agentTab(AGENT), draws: { ...DRAWS_NOTHING, agents: [AGENT] } },
+    {
+      kind: "subagent",
+      tab: subagentTab(CALL, { agent: AGENT, task: "Read the logs" }),
+      draws: { ...DRAWS_NOTHING, openAgents: [AGENT] },
+    },
+    { kind: "changes", tab: changesTab(AGENT), draws: { ...DRAWS_NOTHING, taskAgents: [AGENT] } },
+    { kind: "page", tab: pageTab(PAGE), draws: { ...DRAWS_NOTHING, pages: [PAGE] } },
+  ])(
+    "$kind: drawn again where the task names it, and before the task is read",
+    ({ tab, draws }) => {
+      assert.equal(stripTabDrawsAgain(tab, draws), true);
+      assert.equal(stripTabDrawsAgain(tab, DRAWS_UNREAD), true);
     },
   );
 });

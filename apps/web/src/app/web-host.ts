@@ -316,6 +316,7 @@ function portDependencies(
   return {
     account: {
       host,
+      acts: operator.acts,
       haltSessionReplay: operator.haltSessionReplay,
       resumeSessionReplay: operator.resumeSessionReplay,
     },
@@ -334,6 +335,7 @@ function portDependencies(
     pushes: new WindowPushes(),
     settings: {
       host,
+      acts: operator.acts,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),
       lastSettings: () => operator.settings(),
       sideEffects: {
@@ -344,6 +346,7 @@ function portDependencies(
     },
     tasks: {
       host,
+      acts: operator.acts,
       colorCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,

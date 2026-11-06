@@ -133,6 +133,7 @@ import {
   type RunnerCredential,
   type RunnerHandle,
   type RunnerLaunch,
+  SWAP_RENEWAL,
 } from "./agent-machine.js";
 
 export const MAC_MACHINE = {
@@ -293,6 +294,8 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
+        // Note that a Mac's Codex keeps its threads at its default under the agent's own home.
+        codexHome: undefined,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
         transcriptsKept: false,
@@ -488,8 +491,8 @@ function deviceMachineOver(
     firewall: {
       write: () => Effect.void,
       keepLaunch: () => Effect.void,
-      endLaunch: () => Effect.void,
       clear: () => Effect.void,
+      renew: () => Effect.succeed({ outcome: SWAP_RENEWAL.LEFT }),
     },
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
@@ -539,7 +542,7 @@ function deviceMachineOver(
     // its caller's record is undone; the Mac sets it in the agent's repository on every launch,
     // so an agent whose repository was made before the field gets it too.
     // Note that only an agent in the cloud works in repositories beside its own, so a device clones none.
-    checkOutExtras: () => Effect.void,
+    checkOutMissing: () => Effect.void,
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);

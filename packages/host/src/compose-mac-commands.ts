@@ -1,4 +1,4 @@
-import type { HostedMacCommandClient } from "@repo/features";
+import { type HostedMacCommandClient, MAC_COMMAND_CALL_FAILURE } from "@repo/features";
 import {
   type MacCommandsLiveAnswer,
   macCommandsLiveRowsSchema,
@@ -341,16 +341,18 @@ export function composeMacCommands(
           Effect.repeat({
             schedule: Schedule.spaced(CLAIM_RETRY.every),
             times: CLAIM_RETRY.times,
-            until: (granted) => granted !== undefined,
+            until: (granted) =>
+              !("failure" in granted) || granted.failure !== MAC_COMMAND_CALL_FAILURE.UNANSWERED,
           }),
         );
         // A claim refused, or never answered, runs nothing: the command is another Mac's, or its call has given up.
-        if (answer === undefined || !("id" in answer)) return;
+        if ("failure" in answer) return;
+        const { command: granted } = answer;
         if (!(yield* gateOpen)) {
-          yield* asked(client.settle(answer.id, SWITCHED_OFF));
+          yield* asked(client.settle(granted.id, SWITCHED_OFF));
           return;
         }
-        yield* FiberSet.run(running, decided(answer, userId));
+        yield* FiberSet.run(running, decided(granted, userId));
       }).pipe(Effect.uninterruptible);
 
     /** The unclaimed commands of this Mac's kinds, their rows inline, held past `after` where it names one, for the account `userId` names. */

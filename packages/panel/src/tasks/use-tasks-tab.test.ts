@@ -53,9 +53,8 @@ import {
   changesTab,
   draftTab,
   fileTab,
-  isAgentTab,
-  isDraftTab,
   pageTab,
+  STRIP_TAB_KIND,
   subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
@@ -964,7 +963,10 @@ test("a column whose last agent is archived opens a new agent's draft in its pla
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
   const shown = column().tab;
-  assert.ok(shown !== undefined && isDraftTab(shown), "a draft, as a task with no agent opens on");
+  assert.ok(
+    shown !== undefined && typeof shown !== "string" && shown.kind === STRIP_TAB_KIND.DRAFT,
+    "a draft, as a task with no agent opens on",
+  );
   assert.deepEqual(column().tabs, [MAIN_TAB.OVERVIEW, shown]);
 });
 
@@ -1220,6 +1222,7 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   const UNREAD = "6d4e2c1b-9a8f-4e7d-b6c5-3a2f1e0d9c8b";
   const SLOW = "1a9b8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d";
   const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
+  const LISTED = "3f2e1d0c-9b8a-4f7e-8d6c-5b4a39281706";
   let answerSlow: () => void = () => undefined;
   const read = (agentId: unknown) => ({
     agent: {
@@ -1233,10 +1236,15 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
     },
   });
   const tab = mount(
-    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
+    {
+      shown: true,
+      tasks: withAgents([RUNNING_AGENT, { ...RUNNING_AGENT, id: LISTED, planId: OTHER_TASK_ID }]),
+    },
     {
       [ACT_KIND.AGENTS_PAGE]: (payload) => {
         const { agentId } = payload as { agentId: string };
+        // Note that the service never answers for the agent the list followed live carries, which opens without it.
+        if (agentId === LISTED) return new Promise(() => undefined);
         if (agentId === SLOW) {
           return new Promise((resolve) => {
             answerSlow = () => resolve(read(ELSEWHERE));
@@ -1275,6 +1283,15 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   await settle();
   assert.equal(tab.control().agentView.agentId, undefined);
   assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT, "an agent on another task opens that task");
+
+  const beforeListed = tab.told.length;
+  open({ kind: LINK_PLACE.AGENT, agentId: LISTED });
+  await settle();
+  assert.equal(
+    tab.told.slice(beforeListed).at(-1),
+    ACT_KIND.TASKS_SELECT,
+    "an agent the list carries on another task opens that task without the service",
+  );
 
   open({ kind: LINK_PLACE.AGENT, agentId: ARCHIVED });
   await settle();
@@ -3280,7 +3297,9 @@ test("archiving a task's last agent takes its tab at once, and a refused archive
   tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
   await settle();
   assert.ok(
-    !tab.control().mainTabs.tabs.some((each) => isAgentTab(each)),
+    !tab
+      .control()
+      .mainTabs.tabs.some((each) => typeof each !== "string" && each.kind === STRIP_TAB_KIND.AGENT),
     "the agent leaves at once",
   );
 

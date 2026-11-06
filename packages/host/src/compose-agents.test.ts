@@ -1109,6 +1109,8 @@ function subject(
       call,
       /** The composer's declared acts, each handed its input as the port reads it. */
       acts: composer.acts,
+      /** The composer's row writes that may wait, as a relaunch lays its queue back by. */
+      queueable: composer.queueable,
       flushHeldCloses: composer.flushHeldCloses,
       transcripts,
       /** Each of `transcript`'s rows the host laid, in order. */
@@ -1202,39 +1204,38 @@ function subject(
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
-    const { call, acts, asked, sealTranscript } = yield* subject();
+    const { acts, asked, sealTranscript } = yield* subject();
     sealTranscript(LIVE_ANSWERED);
 
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_DEFAULT_WRITE, {
+      yield* acts.AGENTS_DEFAULT_WRITE({
         model: "openai/gpt-6.1-sol",
         effort: "xhigh",
       }),
       { choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } },
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }), {
+    assert.deepEqual(yield* acts.AGENTS_LIST({ taskId: TASK_ID }), {
+      agents: [AGENT],
+    });
+    assert.deepEqual(yield* acts.AGENTS_LIST({ taskId: TASK_ID, includeArchived: true }), {
       agents: [AGENT],
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID, includeArchived: true }),
-      { agents: [AGENT] },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_WORKSPACE_LIST, {
+      yield* acts.AGENTS_WORKSPACE_LIST({
         workspaceId: "workspace-1",
         repository: "acme/relay",
       }),
       { agents: [AGENT] },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_START, {
+      yield* acts.AGENTS_START({
         taskId: TASK_ID,
         idempotencyKey: "press-1",
       }),
       { agent: { ...AGENT, status: AGENT_STATUS.STARTING } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_MESSAGES, {
+      yield* acts.AGENTS_MESSAGES({
         agentId: AGENT_ID,
         after: AGENT_CURSOR_START,
       }),
@@ -1246,7 +1247,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_MESSAGES, {
+      yield* acts.AGENTS_MESSAGES({
         agentId: AGENT_ID,
         after: AGENT_CURSOR_START,
         callId: "call-7",
@@ -1259,7 +1260,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_MESSAGE, {
+      yield* acts.AGENTS_MESSAGE({
         agentId: AGENT_ID,
         text: "Also expire them after a week.",
         clientKey: "send-1",
@@ -1267,7 +1268,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: AGENT },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHOOSE, {
+      yield* acts.AGENTS_CHOOSE({
         agentId: AGENT_ID,
         model: "openai/gpt-6.1-sol",
         effort: "low",
@@ -1275,57 +1276,53 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agent: { ...AGENT, model: "openai/gpt-6.1-sol", effort: "low" } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_RENAME, {
+      yield* acts.AGENTS_RENAME({
         agentId: AGENT_ID,
         title: "Sign-out button",
       }),
       { agent: { ...AGENT, title: "Sign-out button" } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_SERVERS, {
+      yield* acts.AGENTS_SERVERS({
         agentId: AGENT_ID,
         disabledServers: [INTEGRATION_PROVIDER.LINEAR],
       }),
       { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_STOP, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* acts.AGENTS_STOP({ agentId: AGENT_ID }), {
       agent: { ...AGENT, status: AGENT_STATUS.CANCELED },
     });
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
-      { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
-    );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_PIN, { agentId: AGENT_ID, pinned: true }), {
+    assert.deepEqual(yield* acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true }), {
+      agent: { ...AGENT, archivedAt: 1_800_000_120_000 },
+    });
+    assert.deepEqual(yield* acts.AGENTS_PIN({ agentId: AGENT_ID, pinned: true }), {
       agent: AGENT,
     });
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* acts.AGENTS_DELETE({ agentId: AGENT_ID }), {
       deleted: true,
       txid: "9102",
     });
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: AGENT_ID }), {
+    assert.deepEqual(yield* acts.AGENTS_PAGE({ agentId: AGENT_ID }), {
       agent: PAGE,
     });
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID }), CHANGES);
+    assert.deepEqual(yield* acts.AGENTS_CHANGES({ agentId: AGENT_ID }), CHANGES);
+    assert.deepEqual(yield* acts.AGENTS_CHANGES({ agentId: AGENT_ID, number: 11 }), CHANGES);
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
-      CHANGES,
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, {
+      yield* acts.CHAPTERS_GENERATE({
         agentId: AGENT_ID,
         number: 11,
       }),
       CHAPTERS,
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
+      yield* acts.AGENTS_GITHUB_IMAGE({
         agentId: AGENT_ID,
         src: "https://camo.githubusercontent.com/abc",
       }),
       { contentType: GITHUB_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION, {
+      yield* acts.AGENTS_PULL_REQUEST_ACTION({
         agentId: AGENT_ID,
         number: 11,
         request: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
@@ -1348,7 +1345,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_PART, {
+      yield* acts.AGENTS_PART({
         agentId: AGENT_ID,
         messageId: "message-1",
         index: 2,
@@ -1493,10 +1490,10 @@ it.effect(
       const offline = yield* subject({ sendsNetwork: false });
 
       assert.deepEqual(
-        yield* signedOut.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }),
+        yield* signedOut.acts.AGENTS_LIST({ taskId: TASK_ID }),
         GATE_CLOSED_SIGNED_OUT,
       );
-      assert.deepEqual(yield* offline.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }), {
+      assert.deepEqual(yield* offline.acts.AGENTS_LIST({ taskId: TASK_ID }), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
         cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: GATE_CLOSED_BY.NO_NETWORK },
       });
@@ -1506,29 +1503,22 @@ it.effect(
 );
 
 it.effect(
-  "a Start from an agent that names no task asks the service to start where that agent is, one on a task still starts on it, and one naming neither a task nor an agent is refused, asking nothing",
+  "a Start from an agent that names no task asks the service to start where that agent is, and one on a task still starts on it",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { acts, asked } = yield* subject();
 
-      const fromTaskless = yield* call(GATEWAY_METHOD.AGENTS_START, {
+      const fromTaskless = yield* acts.AGENTS_START({
         idempotencyKey: "press-continue",
         from: { agentId: AGENT_ID },
       });
-      yield* call(GATEWAY_METHOD.AGENTS_START, {
+      yield* acts.AGENTS_START({
         taskId: TASK_ID,
         idempotencyKey: "press-fork",
         from: { agentId: AGENT_ID },
       });
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.AGENTS_START, {
-          idempotencyKey: "press-nowhere",
-          prompt: "Go.",
-        }),
-      );
 
       assert.deepEqual(fromTaskless, { agent: { ...AGENT, status: AGENT_STATUS.STARTING } });
-      assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(asked, [
         `start-from:${AGENT_ID}:press-continue`,
         `start:${TASK_ID}:press-fork:default`,
@@ -1984,11 +1974,11 @@ it.effect(
   "an edit of a queued message is drawn in the agent's transcript before the service answers it, and taken back where the service refused it",
   () =>
     Effect.gen(function* () {
-      const { call, held, answerQueue } = yield* queueFollowed();
+      const { acts, held, answerQueue } = yield* queueFollowed();
       const answered = yield* Deferred.make<void>();
       answerQueue({ failure: AGENT_CALL_FAILURE.NOT_FOUND }, Deferred.await(answered));
 
-      const edit = yield* Effect.forkChild(call(GATEWAY_METHOD.AGENTS_QUEUE, EDITED));
+      const edit = yield* Effect.forkChild(acts.AGENTS_QUEUE(EDITED));
       yield* settled;
       assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
 
@@ -2002,9 +1992,9 @@ it.effect(
   "an edit the service answered stands until a page carries its queue, so a page read before it lands without putting the old words back",
   () =>
     Effect.gen(function* () {
-      const { call, held, answerQueue, pageNow: script, live } = yield* queueFollowed();
+      const { acts, held, answerQueue, pageNow: script, live } = yield* queueFollowed();
       answerQueue({ queue: queueOf("Run the tests and fix them", 2) });
-      yield* call(GATEWAY_METHOD.AGENTS_QUEUE, EDITED);
+      yield* acts.AGENTS_QUEUE(EDITED);
       assert.deepEqual(queuedTexts(held), ["Run the tests and fix them"]);
 
       // A page read before the edit landed answers after it.
@@ -2282,40 +2272,34 @@ it.effect(
   "an older page read below the place the window names is laid before the messages held and answers that it landed; one asked below a place they no longer begin at, as once a newer page took their place, is dropped, and a worker's is read under its call",
   () =>
     Effect.gen(function* () {
-      const { call, asked, held, sealTranscript, pageNewest } = yield* subject();
+      const { call, acts, asked, held, sealTranscript, pageNewest } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites.", "40"));
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(held().at(-1)?.before, "40");
 
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
-        { landed: true },
-      );
+      assert.deepEqual(yield* acts.AGENTS_TRANSCRIPT_OLDER({ ...FOLLOWED, before: "40" }), {
+        landed: true,
+      });
       assert.deepEqual(ids(held().at(-1)), ["m-1", "m-1:0"]);
       assert.equal(held().at(-1)?.before, "3");
 
       // The messages held begin below "40" now, so a page read for it would leave a gap or repeat itself.
       const laid = held().length;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
-        { landed: false },
-      );
+      assert.deepEqual(yield* acts.AGENTS_TRANSCRIPT_OLDER({ ...FOLLOWED, before: "40" }), {
+        landed: false,
+      });
       assert.equal(held().length, laid);
 
       assert.deepEqual(
-        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
+        yield* acts.AGENTS_TRANSCRIPT_OLDER({
           ...FOLLOWED,
           callId: "call-7",
           before: "40",
         }),
         { landed: false },
       );
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "the start" }),
-      );
-      assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(
         asked.filter((ask) => ask.includes("-before:")),
         [
@@ -2514,7 +2498,7 @@ it.effect(
 
       const archived = yield* subject();
       yield* followedOnce(archived);
-      yield* archived.call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true });
+      yield* archived.acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true });
       assert.equal(archived.held().at(-1), undefined);
       yield* archived.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
@@ -2524,7 +2508,7 @@ it.effect(
       yield* followedOnce(shown);
       yield* shown.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      yield* shown.call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true });
+      yield* shown.acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true });
       assert.deepEqual(ids(shown.held().at(-1)), ["m-1:0", "m-2:0"]);
     }),
 );
@@ -2553,9 +2537,8 @@ it.effect(
       type Harness = Effect.Success<ReturnType<typeof subject>>;
       const lettingGo = [
         (harness: Harness) => harness.reset,
-        (harness: Harness) =>
-          harness.call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
-        (harness: Harness) => harness.call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }),
+        (harness: Harness) => harness.acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true }),
+        (harness: Harness) => harness.acts.AGENTS_DELETE({ agentId: AGENT_ID }),
       ];
       for (const letGo of lettingGo) {
         const harness = yield* subject();
@@ -3492,7 +3475,7 @@ it.effect(
 );
 
 it.effect(
-  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
+  "a close drops its update from what waits across the account, its task counting one fewer as for a question, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
   () =>
     Effect.gen(function* () {
       const { call, acts, sealAccount, live, commitIn, accountInboxes } = yield* subject();
@@ -3501,7 +3484,8 @@ it.effect(
       yield* settled;
       const plan = { planId: TASK_ID, items: 1, toDo: 1, updatedAt: ITEM.updatedAt };
       const parts = { planless: [], automations: [], failedRuns: [] };
-      live.account.set({ ...parts, items: [WAITING], plans: [plan] }, ["9100"]);
+      const update = { ...WAITING, asking: false };
+      live.account.set({ ...parts, items: [update], plans: [plan] }, ["9100"]);
       yield* toldTimes(accountInboxes, 1);
       /** What waits, and each task's count, as the account inbox was last told. */
       const waiting = () => {
@@ -3524,7 +3508,7 @@ it.effect(
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
       // The read answers once more from before the close, which still stands over it.
-      live.account.set({ ...parts, items: [WAITING], plans: [{ ...plan, updatedAt: NOW }] });
+      live.account.set({ ...parts, items: [update], plans: [{ ...plan, updatedAt: NOW }] });
       yield* nextPoll;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
@@ -3586,6 +3570,58 @@ it.effect(
         }),
         { held: false },
       );
+    }),
+);
+
+it.effect(
+  "an inbox write queued on disk by an older build under its Gateway method's name is laid back and sent on relaunch, a reminder under Snooze's",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "write-key", replayRefused: Effect.void });
+      const { asked, queueable } = yield* subject({ pool });
+      // Note that the names are spelled here, not read from the composer, because they are what a disk written before this build holds.
+      const waiting = [
+        {
+          name: "agents.inboxAnswer",
+          key: "k-1",
+          input: {
+            itemId: ITEM.id,
+            revision: 2,
+            reply: INBOX_REPLY.ACKNOWLEDGED,
+            clientKey: "a-1",
+          },
+        },
+        {
+          name: "agents.inboxClose",
+          key: "k-2",
+          input: { itemId: ITEM.id, revision: 2, clientKey: "c-1" },
+        },
+        { name: "agents.inboxReadState", key: "k-3", input: { itemId: ITEM.id, unread: true } },
+        { name: "agents.inboxSnooze", key: "k-4", input: { itemId: ITEM.id, until: 5_000 } },
+        {
+          name: "agents.inboxReadAll",
+          key: "k-5",
+          input: { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] },
+        },
+      ];
+
+      yield* pool.requeue(waiting, queueable);
+      yield* pool.resend;
+
+      assert.deepEqual(
+        asked.filter(
+          (each) =>
+            each.startsWith("answer:") || each.startsWith("close:") || each.startsWith("inbox-"),
+        ),
+        [
+          `answer:${ITEM.id}:2:${INBOX_REPLY.ACKNOWLEDGED}:a-1`,
+          `close:${ITEM.id}:2:c-1`,
+          `inbox-unread:${ITEM.id}`,
+          `inbox-remind:${ITEM.id}:5000`,
+          `inbox-read-all:${WORKSPACE_ID}`,
+        ],
+      );
+      assert.deepEqual(pool.queued(), []);
     }),
 );
 
@@ -3668,21 +3704,21 @@ it.effect(
       });
       yield* list.answer({ plans: [], agents: [{ ...agentListRow(TASK_ID, NOW), id: AGENT_ID }] });
       const answered = yield* Deferred.make<void>();
-      const { call, holdChanges } = yield* subject({ pool });
+      const { acts, holdChanges } = yield* subject({ pool });
       holdChanges(Deferred.await(answered));
       const standing = () => drawn.at(-1)?.[0];
 
       const asked = yield* Effect.forkChild(
         Effect.all(
           [
-            call(GATEWAY_METHOD.AGENTS_RENAME, { agentId: AGENT_ID, title: "Sign-out button" }),
-            call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
-            call(GATEWAY_METHOD.AGENTS_CHOOSE, {
+            acts.AGENTS_RENAME({ agentId: AGENT_ID, title: "Sign-out button" }),
+            acts.AGENTS_ARCHIVE({ agentId: AGENT_ID, archived: true }),
+            acts.AGENTS_CHOOSE({
               agentId: AGENT_ID,
               model: "openai/gpt-6.1-sol",
               effort: "low",
             }),
-            call(GATEWAY_METHOD.AGENTS_SERVERS, { agentId: AGENT_ID, disabledServers: ["linear"] }),
+            acts.AGENTS_SERVERS({ agentId: AGENT_ID, disabledServers: ["linear"] }),
           ],
           { concurrency: "unbounded" },
         ),
@@ -3694,9 +3730,7 @@ it.effect(
 
       const held = yield* Deferred.make<void>();
       holdChanges(Deferred.await(held));
-      const deleting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }),
-      );
+      const deleting = yield* Effect.forkChild(acts.AGENTS_DELETE({ agentId: AGENT_ID }));
       yield* settled;
       const deleted = standing();
       yield* Deferred.succeed(held, undefined);
@@ -3717,7 +3751,7 @@ it.effect(
     Effect.gen(function* () {
       const carried = yield* Deferred.make<void>();
       const waited: (string | undefined)[] = [];
-      const { call, startCommits } = yield* subject({
+      const { acts, startCommits } = yield* subject({
         listed: (txid) =>
           Effect.andThen(
             Effect.sync(() => waited.push(txid)),
@@ -3727,7 +3761,7 @@ it.effect(
       startCommits("9104");
 
       const starting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+        acts.AGENTS_START({ taskId: TASK_ID, idempotencyKey: "press-1" }),
       );
       yield* settled;
       assert.equal(starting.pollUnsafe(), undefined, "no answer while the list is behind");
@@ -3746,11 +3780,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
-      const { call, asked, leaveStartsUnanswered } = yield* subject({ pool });
+      const { acts, asked, leaveStartsUnanswered } = yield* subject({ pool });
       leaveStartsUnanswered(true);
 
       const starting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+        acts.AGENTS_START({ taskId: TASK_ID, idempotencyKey: "press-1" }),
       );
       yield* settled;
       const meanwhile = starting.pollUnsafe();
@@ -3874,7 +3908,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const { call, live, answerRemoves } = harness;
+      const { call, acts, live, answerRemoves } = harness;
       const shown = () => hostIdsOf(harness.hosts().at(-1));
       const both = { hosts: [hostRow(KEPT_HOST, "ams-01"), hostRow(GONE_HOST, "fra-03")] };
       yield* call(GATEWAY_METHOD.HOSTS_FOLLOW);
@@ -3886,9 +3920,7 @@ it.effect(
 
       const answering = yield* Deferred.make<void>();
       answerRemoves({ done: true, txid: "9400" }, Deferred.await(answering));
-      const removing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.HOSTS_REMOVE, { id: GONE_HOST }),
-      );
+      const removing = yield* Effect.forkChild(acts.HOSTS_REMOVE({ id: GONE_HOST }));
       yield* settled;
       assert.equal(removing.pollUnsafe(), undefined, "no answer while the service is asked");
       assert.deepEqual(shown(), [KEPT_HOST], "gone before the service answers");
@@ -3905,7 +3937,7 @@ it.effect(
 
       const refusing = yield* Deferred.make<void>();
       answerRemoves({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }, Deferred.await(refusing));
-      const refused = yield* Effect.forkChild(call(GATEWAY_METHOD.HOSTS_REMOVE, { id: KEPT_HOST }));
+      const refused = yield* Effect.forkChild(acts.HOSTS_REMOVE({ id: KEPT_HOST }));
       yield* settled;
       assert.deepEqual(shown(), []);
       yield* Deferred.succeed(refusing, undefined);

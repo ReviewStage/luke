@@ -21,13 +21,13 @@ it.effect(
       const host = gatewayHost({
         client: { clientId: "operator", role: GATEWAY_CLIENT_ROLE.OPERATOR },
         methods: {
-          [GATEWAY_METHOD.TASKS_REFRESH]: () => Effect.die(new TypeError("board is undefined")),
-          [GATEWAY_METHOD.TASKS_OPEN]: () =>
+          [GATEWAY_METHOD.TASKS_RESYNC]: () => Effect.die(new TypeError("board is undefined")),
+          [GATEWAY_METHOD.TASKS_PAGE]: () =>
             Effect.fail(new NotFoundRefusal({ message: "No such task." })),
         },
       });
-      const died = yield* host.call(GATEWAY_METHOD.TASKS_REFRESH);
-      const refused = yield* host.call(GATEWAY_METHOD.TASKS_OPEN);
+      const died = yield* host.call(GATEWAY_METHOD.TASKS_RESYNC);
+      const refused = yield* host.call(GATEWAY_METHOD.TASKS_PAGE);
       assert.deepEqual(
         [died.ok ? undefined : died.error.message, refused.ok ? undefined : refused.error.message],
         ["board is undefined", "No such task."],
