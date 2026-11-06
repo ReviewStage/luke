@@ -104,7 +104,8 @@ export function useConfirmDialog(
   const held = useConfirm(surroundings, act, failure);
   const standing = surroundings.subject && surroundings.surfaceOpen;
   if (!standing && held.rejection !== undefined && held.stage !== CONFIRM_STAGE.ACTING) {
-    held.clear();
+    // Note that the refusal is only forgotten here, never reset on the caller's mutation, because the render must not change another component's state.
+    held.forget();
   }
   return useMemo(() => ({ ...held, standing }), [held, standing]);
 }

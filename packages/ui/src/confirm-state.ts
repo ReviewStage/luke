@@ -135,6 +135,12 @@ export interface HeldConfirm {
    * asking any more.
    */
   clear: () => void;
+  /**
+   * Stops reading the last answer's refusal as this question's own, leaving
+   * the caller's act as it stands, so it may be called while rendering, as a
+   * question whose subject or surface went is let go.
+   */
+  forget: () => void;
 }
 
 /**
@@ -193,6 +199,7 @@ export function useConfirm(
     if (newestRan.current) newestAct.current.reset();
     setRan(false);
   }, []);
+  const forget = useCallback(() => setRan(false), []);
   const ask = useCallback(() => {
     letGo();
     setHeld(CONFIRM_STAGE.ASKING);
@@ -231,8 +238,9 @@ export function useConfirm(
       ask,
       keep,
       clear: letGo,
+      forget,
       run,
     }),
-    [stage, rejection, ask, keep, letGo, run],
+    [stage, rejection, ask, keep, letGo, forget, run],
   );
 }
