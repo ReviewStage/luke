@@ -19,6 +19,8 @@ import { EXPERIMENT } from "@repo/settings";
 import {
   Button,
   EDITABLE_BLOCK_CLASS,
+  EDITABLE_BLOCK_KIND,
+  EditableBlock,
   IconButton,
   SavedTick,
   STATUS_TONE,
@@ -287,26 +289,36 @@ function EditTime({
 }
 
 /**
- * What an editable description with no text says at rest, the editor's own
- * placeholder in a quieter ink, so the room does not read as blank; its
- * press opens the editor, and the pointer or the keyboard reaching it reads
- * the editor's bundle ahead, as a section's block does. Note that it takes
- * the document's reading type rather than the body's, because the editor's
- * placeholder and the words written in its place stand in that type, so the
- * line neither grows nor drops as the press opens the editor.
+ * What an editable description with no text says at rest: the editor's own
+ * placeholder, in its type and its quieter ink, so the room does not read as
+ * blank and nothing moves as a press opens the editor there. It is a block of
+ * the document (`EditableBlock`), as a written section is, so it takes the
+ * text cursor and no link's look, and the keyboard steps onto it from the
+ * title; a press or Return opens the editor, and the pointer or the keyboard
+ * reaching it reads the editor's bundle ahead.
  */
-function EmptyDescriptionLine({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+function EmptyDescriptionLine({
+  entry,
+  onOpen,
+}: {
+  entry: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
   const prefetchEditorBundle = usePrefetchEditorBundle();
   return (
-    <Text variant={TEXT_VARIANT.INHERIT} tone={TEXT_TONE.MUTED}>
-      <TextButton
-        onPointerEnter={prefetchEditorBundle}
-        onFocus={prefetchEditorBundle}
-        onClick={onOpen}
-      >
+    <EditableBlock
+      label="Description"
+      kind={EDITABLE_BLOCK_KIND.TEXT}
+      entry={entry}
+      onPointerEnter={prefetchEditorBundle}
+      onFocus={prefetchEditorBundle}
+      onPress={onOpen}
+      onOpen={onOpen}
+    >
+      <Text variant={TEXT_VARIANT.INHERIT} tone={TEXT_TONE.MUTED}>
         <ReplayUnmask>{DESCRIPTION_PLACEHOLDER}</ReplayUnmask>
-      </TextButton>
-    </Text>
+      </Text>
+    </EditableBlock>
   );
 }
 
@@ -1466,7 +1478,10 @@ export const DescriptionBody = memo(function DescriptionBody({
           <Fragment key={HEAD_KEY}>{head?.(room)}</Fragment>
           {!documented ? null : editing.editor === undefined ? (
             editable && views.length === 0 ? (
-              <EmptyDescriptionLine onOpen={() => editing.open(PLACEMENT_END)} />
+              <EmptyDescriptionLine
+                entry={entry === undefined}
+                onOpen={() => editing.open(PLACEMENT_END)}
+              />
             ) : (
               sections
             )

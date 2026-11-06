@@ -856,26 +856,26 @@ test("a press anywhere on an empty description's room opens its text with the ca
   assert.ok(body.contains(container.querySelector(".description-document-editor")));
 });
 
-test("an empty description at rest says to write it, a button whose press opens its text with the caret in it", () => {
-  const { container, render } = mount();
-  render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
-  const line = [...container.querySelectorAll("button")].find(
-    (each) => each.textContent === "Write the description",
-  );
-  assert.ok(line, "the empty description's line");
-
-  act(() => line.focus());
-  assert.equal(document.activeElement, line, "the keyboard reaches it");
+test("an empty description at rest says to write it in a block of the document, which a press or Return opens with the caret in it", () => {
+  const empty = { ...DOCUMENT_TASK, document: { body: "", assumptions: [] } };
+  const pressed = mount();
+  pressed.render(empty);
+  const line = block(pressed.container, "Description");
+  assert.equal(line.textContent, "Write the description");
   act(() => line.click());
+  assert.deepEqual(open().placement, PLACEMENT_END);
+  assert.equal(
+    pressed.container.querySelector('[aria-label="Description"]'),
+    null,
+    "the block goes once the editor stands in its place",
+  );
+  pressed.unmount();
 
+  const keyed = mount();
+  keyed.render(empty);
+  _press(block(keyed.container, "Description"), "Enter");
   assert.equal(open().markdown, "");
   assert.deepEqual(open().placement, PLACEMENT_END);
-  assert.ok(
-    ![...container.querySelectorAll("button")].some(
-      (each) => each.textContent === "Write the description",
-    ),
-    "the line goes once the editor stands in its place",
-  );
 });
 
 test("a press on a description's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
