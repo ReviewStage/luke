@@ -3581,6 +3581,19 @@ function openDraft(tab: ReturnType<typeof mount>) {
   return tab.control().agents.draft ?? assert.fail("no draft opened");
 }
 
+test("a task with no agent opens no draft while its column is out of view, and opens one once it is shown", async () => {
+  const tab = mount({ shown: false, tasks: withAgents([]) });
+  await settle();
+  assert.equal(tab.control().agents.draft, undefined, "nothing opens out of view");
+  assert.equal(tab.control().mainTabs.tab, undefined);
+
+  tab.stand({ shown: true });
+  await settle();
+  const draft = tab.control().agents.draft;
+  assert.ok(draft, "a draft opens once the column is shown");
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id });
+});
+
 test("a task with no agent opens on a new agent's draft, which closes once left holding nothing, while one holding words stays", async () => {
   const tab = mount({ shown: true, tasks: withAgents([]) });
   await settle();

@@ -1587,9 +1587,6 @@ export function useTasksTab(input: {
     if (opensDraft) agents.onNewDraft();
     else mainTabs.onChoose(MAIN_TAB.OVERVIEW);
   });
-  useEffect(() => {
-    if (columnEmpty) fillColumn();
-  }, [columnEmpty, fillColumn]);
   // The open task's pages are held whenever a task is open, the Inbox's or an agent's page over it
   // among them, so its page draws them from where they stand, and a page's tab is held to them.
   const taskPages = useHostRead(
@@ -1793,6 +1790,11 @@ export function useTasksTab(input: {
   const columnInView =
     shown && historyFor === undefined && standIn === undefined && !sidePanel.fullScreen;
   const columnShown = columnInView && fixture === undefined;
+  // Note that the column is filled only while in view, because a blank draft out of view is let
+  // go at once (below), which would leave it empty to fill again.
+  useEffect(() => {
+    if (columnEmpty && columnInView) fillColumn();
+  }, [columnEmpty, columnInView, fillColumn]);
   // A new agent's draft opens only from the column's "+" (`main-tabs.tsx`), and one holding
   // nothing (`holdsNothing`) stands only while its tab is in view: left for another tab, another
   // task, or another place, Settings and the side panel filling the window among them, it closes,
