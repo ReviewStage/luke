@@ -124,8 +124,14 @@ it.effect.each(DECLARED)(
       const refused = yield* port.perform(act, OTHER_WINDOW);
 
       assert.deepEqual(refused, { refused: act.refusal });
+      // Note that a read the host opens on its own names neither the item nor the agent, so only this act's own request would.
       assert.deepEqual(
-        requests.filter((request) => request.method !== "GET"),
+        requests.filter(
+          (request) =>
+            request.method !== "GET" ||
+            request.url.includes(ITEM_ID) ||
+            request.url.includes(AGENT_ID),
+        ),
         [],
       );
     }),
