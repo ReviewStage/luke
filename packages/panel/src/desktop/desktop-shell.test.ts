@@ -1332,14 +1332,14 @@ test("with the sidebar folded, the Mac offline says so in the title bar beside N
   handState({}, { network: { online: false, reachable: true } });
   const offline = mount(false);
   await settle();
-  assert.ok(titleBarOffline(offline), "the title bar says the Mac is offline");
+  await vi.waitFor(() => assert.equal(titleBarOffline(offline) !== null, true));
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   handState({}, { network: { online: true, reachable: true } });
   const online = mount(false);
   await settle();
-  assert.equal(titleBarOffline(online), null);
+  await vi.waitFor(() => assert.equal(titleBarOffline(online) === null, true));
 });
 
 /** What a strip right under a phone's header says, if one stands there. */
@@ -1352,7 +1352,9 @@ test("on a phone, the service not answering says so in a strip under the page's 
   const inboxView = { ...tasksControl().inboxView, open: true };
   handState({}, { network: { online: true, reachable: false } });
   const unreached = await mountNarrow({ inboxView });
-  assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering.");
+  await vi.waitFor(() =>
+    assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering."),
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1362,7 +1364,7 @@ test("on a phone, the service not answering says so in a strip under the page's 
     answering.querySelector('header.ui-toolbar[data-look="phone"]'),
     "a phone's header stands",
   );
-  assert.equal(stripUnderPhoneHead(answering), undefined);
+  await vi.waitFor(() => assert.equal(stripUnderPhoneHead(answering), undefined));
 });
 
 test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
@@ -1386,7 +1388,7 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
   await settle();
 
   assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
-  assert.equal(titleBarOffline(container)?.textContent, "Offline");
+  await vi.waitFor(() => assert.equal(titleBarOffline(container)?.textContent, "Offline"));
 });
 
 test("on a phone an open task leads its own row with the way back the window's history names, in the sidebar toggle's place, and a wide window keeps the toggle", async () => {

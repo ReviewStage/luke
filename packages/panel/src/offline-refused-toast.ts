@@ -12,11 +12,11 @@
 import { countWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import { STATUS_TONE } from "@repo/ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { pressMutation } from "./act-mutations.js";
 import { useToast, useWithdrawToast } from "./toast.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectNetwork } from "./use-app-state.js";
 
 /** What the toast is about, which withdraws it as the count moves or is cleared. */
 const OFFLINE_REFUSED_SUBJECT = "offline-refused";
@@ -28,7 +28,7 @@ export function useOfflineRefusedToast(): void {
   const { mutate: clearOfflineRefused } = useMutation(
     pressMutation(ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR),
   );
-  const count = useAppSlice(APP_SLICE.NETWORK)?.offlineRefused ?? 0;
+  const count = useQuery({ ...appStateQuery, select: selectNetwork }).data?.offlineRefused ?? 0;
   useEffect(() => {
     withdraw(OFFLINE_REFUSED_SUBJECT);
     if (count === 0) return;

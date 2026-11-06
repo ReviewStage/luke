@@ -14,7 +14,7 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
 import { actMutation } from "../act-mutations.js";
@@ -22,7 +22,7 @@ import { welcomed } from "../desktop/desktop-welcome.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAppSettingsView } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
 import {
@@ -103,7 +103,7 @@ export function useSetupGate(
 ): SetupGate {
   const [places] = useKept(SETUP_PLACE, {});
   const [finishedOnDevice] = useKept(SETUP_FINISHED, []);
-  const settings = useAppSlice(APP_SETTINGS_VIEW);
+  const settings = useQuery({ ...appStateQuery, select: selectAppSettingsView }).data;
   const finishedOnAccount = settings?.setupFinished === true;
   // Note that this device's own record stands beside the account's, because the account's arrives only once its preferences are read, and a device clears them at every sign-out.
   const finished =

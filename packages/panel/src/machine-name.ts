@@ -2,7 +2,7 @@ import { signedInAccountId } from "@repo/credentials/snapshot";
 import type { AppThisMacHost } from "@repo/host/app-state";
 import { useQuery } from "@tanstack/react-query";
 import { thisMacHostQuery } from "./live-reads.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectAccount } from "./use-app-state.js";
 
 /**
  * machine-name.ts -- what every list of the member's machines calls each one: This Mac, or its name, with its model where another listed machine has that name too.
@@ -63,6 +63,6 @@ export function machineName(
 
 /** This Mac as the host holds it for the account signed in; none before the host first reads it, while nobody is signed in, and in a browser tab. */
 export function useThisMac(): ThisMac {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   return useQuery(thisMacHostQuery(accountId)).data;
 }

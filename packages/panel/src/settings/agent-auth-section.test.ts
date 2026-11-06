@@ -197,6 +197,7 @@ async function mount(
     root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return container;
 }
 
@@ -221,7 +222,15 @@ async function mountSetup(): Promise<{ page: HTMLElement; connected: boolean[] }
     ),
   );
   await settle();
+  await vi.waitFor(() => assert.equal(harnessRowsStand(container), true));
   return { page: container, connected };
+}
+
+/** Whether the harnesses' rows stand, which they do once the signed-in account's keys are read. */
+function harnessRowsStand(page: HTMLElement): boolean {
+  return [...page.querySelectorAll(".ui-settings-row")].some((row) =>
+    row.textContent?.startsWith("Claude"),
+  );
 }
 
 /** A harness's row button, or the link it draws in a button's place, the check it may end in having none. */

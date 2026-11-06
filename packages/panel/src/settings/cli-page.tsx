@@ -38,7 +38,7 @@ import { useState } from "react";
 import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
-import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount, selectCapability } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
@@ -293,7 +293,7 @@ export function CliPage(): React.JSX.Element {
   const installs =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.CLI_INSTALL) }).data ===
     true;
-  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const account = useQuery({ ...appStateQuery, select: selectAccount }).data;
   const accountId = signedInAccountId(account);
   const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
   // The grant signed out while the page shows, by when it was allowed, which stands signed out until the read drops it or a new sign-in replaces it.

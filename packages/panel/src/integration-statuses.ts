@@ -22,14 +22,15 @@ import {
 } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { useMutation } from "@tanstack/react-query";
+import type { AppStateSnapshot } from "@repo/host/app-state";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { actMutation } from "./act-mutations.js";
 import { rendererRuntime } from "./renderer-runtime.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery } from "./use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
 
 /**
@@ -210,9 +211,8 @@ const sharedOf = Atom.family(
 );
 
 /** The account signed in to the window, by its id, which the host holds its integrations by; none while signed out. */
-const ownerAtom: Atom.Atom<string | null> = Atom.map(APP_SLICE.ACCOUNT, (account) =>
-  account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? null) : null,
-);
+const selectOwner = ({ account }: AppStateSnapshot): string | null =>
+  account.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? null) : null;
 
 /** The book with its sign-ins as `change` leaves them. */
 function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
@@ -228,7 +228,7 @@ function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
 export function useIntegrationStatuses(): IntegrationStatuses {
   const { mutateAsync: cancelIntegration } = useMutation(actMutation(ACT_KIND.INTEGRATIONS_CANCEL));
   const registry = useContext(RegistryContext);
-  const owner = useAppSlice(ownerAtom);
+  const owner = useQuery({ ...appStateQuery, select: selectOwner }).data ?? null;
   const held = useHostRead(LIVE_READ.INTEGRATIONS, owner ?? undefined);
   const answer = held.rows;
   const shared = sharedOf(owner);

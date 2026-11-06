@@ -59,7 +59,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useOpenPerson } from "../person-door.js";
 import { signOutSayingFailure } from "../settings/account-section.js";
-import { APP_SLICE, appStateQuery, selectCapability, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectCapability, selectRun, selectWindow } from "../use-app-state.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { OfflineMark } from "./offline-mark.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
@@ -187,8 +187,8 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
  * pictures, draw none.
  */
 function SidebarBuild(): React.JSX.Element | null {
-  const run = useAppSlice(APP_SLICE.RUN);
-  const facts = useAppSlice(APP_SLICE.WINDOW);
+  const run = useQuery({ ...appStateQuery, select: selectRun }).data;
+  const facts = useQuery({ ...appStateQuery, select: selectWindow }).data;
   const { mutate: showBuildLabel } = useMutation(pressMutation(ACT_KIND.WINDOW_SHOW_BUILD_LABEL));
   const copy = useCopyToast();
   if (run === undefined || run.packaged || run.fixtureMode) return null;

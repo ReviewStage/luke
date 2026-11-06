@@ -56,7 +56,7 @@ import {
 } from "../machine-name.js";
 import { DeviceGlyph } from "../tasks/runs-on.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { appStateQuery, selectAccount } from "../use-app-state.js";
 import { HostConnectDialog, useHostConnect } from "./host-connect-dialog.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -430,7 +430,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const { mutateAsync: sendHostsRemove } = useMutation(actMutation(ACT_KIND.HOSTS_REMOVE));
   // Note that the clock only redraws the rows as a beat ages, since each standing is read off the book's own monotonic clock.
   useSecond();
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const read = useQuery(hostsQuery(signedIn ? accountId : undefined));
   const retry = useMutation(hostsRetryMutation());
   const hosts = read.data?.hosts;

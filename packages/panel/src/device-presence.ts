@@ -4,7 +4,7 @@ import type { AppDevicePresence } from "@repo/host/app-state";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { devicePresenceQuery, devicePresenceRefreshMutation } from "./live-reads.js";
-import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { appStateQuery, selectAccount } from "./use-app-state.js";
 
 /**
  * device-presence.ts -- the one source of when each of the account's devices last beat, which every surface that says whether a device is there reads.
@@ -108,7 +108,7 @@ function bookOf(rows: AppDevicePresence | undefined, failed: boolean): PresenceB
 
 /** The shared presence while `drawing`, a surface that shows a device's standing; the nothing-known book while it does not, or before the first read lands. */
 export function useDevicePresence(drawing: boolean): PresenceBook {
-  const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
+  const accountId = signedInAccountId(useQuery({ ...appStateQuery, select: selectAccount }).data);
   const { data: rows, isError } = useQuery(devicePresenceQuery(drawing ? accountId : undefined));
   const { mutate: askAgain } = useMutation(devicePresenceRefreshMutation());
   useEffect(() => (drawing ? listenOnline(() => askAgain()) : undefined), [drawing, askAgain]);
