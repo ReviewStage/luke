@@ -597,9 +597,13 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
   });
   await settle();
   await press(question(), "Disconnect Claude plan");
-  assert.ok(
-    document.activeElement === labeled(dialog, "Claude setup-token"),
-    "the field has focus",
+  // Note that the form stands once the keys the host lays after the disconnect reach the query.
+  await vi.waitFor(() =>
+    assert.equal(
+      document.activeElement === labeled(dialog, "Claude setup-token"),
+      true,
+      "the field has focus",
+    ),
   );
 });
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
@@ -17,7 +18,7 @@ import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
@@ -187,11 +188,19 @@ async function mount(): Promise<HTMLElement> {
       createElement(
         OpenSettingsProvider,
         { value: (link: SettingsLink) => opened.push(link) },
-        createElement(
-          Fragment,
-          null,
-          onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true })),
-          onRegistry(rendererRegistry, createElement(ToastHost)),
+        // Note that the toasts draw from the window's registry under the page's one client, since a second subscription would write that registry's document over the test's.
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(
+            Fragment,
+            null,
+            createElement(AgentsPage, { signedIn: true }),
+            createElement(
+              RegistryContext.Provider,
+              { value: rendererRegistry },
+              createElement(ToastHost),
+            ),
+          ),
         ),
       ),
     ),
@@ -504,14 +513,15 @@ test("replacing the account's own Anthropic key moves the models the host holds,
 test("a catalog that could not be read says so in the Default model menu with Retry, and Retry reads it again", async () => {
   refuseModels = true;
   const page = await mount();
+  // Note that the Default model row stands once the failed read reaches its query.
+  const control = await vi.waitFor(
+    () =>
+      page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??
+      assert.fail("no Default model control"),
+  );
   assert.equal(placeholders(page).length, 0, "the page does not read for ever");
 
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label^="Default model: "]') ??
-      assert.fail()
-    ).click(),
-  );
+  act(() => control.click());
   const menu =
     document.querySelector('[role="dialog"][aria-label="Default model"]') ?? assert.fail();
   assert.equal(
@@ -531,7 +541,7 @@ test("a catalog that could not be read says so in the Default model menu with Re
   await settle();
 
   assert.equal(reads().length, before + 1, "Retry asks the service for the models again");
-  assert.equal(menu.querySelector('[role="alert"]'), null);
+  await vi.waitFor(() => assert.equal(menu.querySelector('[role="alert"]') === null, true));
   assert.ok(menu.querySelectorAll('[role="option"]').length > 0, "the models are listed");
 });
 

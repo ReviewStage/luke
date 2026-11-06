@@ -20,10 +20,11 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { actMutation, pressMutation } from "../act-mutations.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
+import { githubTokenQuery } from "../live-reads.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -179,8 +180,8 @@ export function AddTokenRepository(props: {
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element | null {
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
-  const token = useHostRead(LIVE_READ.GITHUB_TOKEN, accountId);
-  return token.rows?.token ? <AddRepositoryMenu {...props} /> : null;
+  const token = useQuery(githubTokenQuery(accountId));
+  return token.data?.token ? <AddRepositoryMenu {...props} /> : null;
 }
 
 /** The menu itself, mounted only once a token is saved, so the workspace's repositories are read for no one else. */

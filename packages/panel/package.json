@@ -36,6 +36,7 @@
     "./desktop/product-identity": "./src/desktop/product-identity.js",
     "./failure-report": "./src/failure-report.js",
     "./keyboard-modality": "./src/keyboard-modality.js",
+    "./live-reads": "./src/live-reads.js",
     "./navigation-history": "./src/navigation-history.js",
     "./not-found": "./src/not-found.js",
     "./panel-router": "./src/panel-router.js",

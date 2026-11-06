@@ -138,6 +138,15 @@ async function mountAndOpen(open = true): Promise<void> {
     ),
   );
   await settle();
+  // Note that the row draws its press, or its Retry, once the token the host holds reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll("button")].some((each) =>
+        ["Add", "Manage", "Retry"].includes(each.textContent ?? ""),
+      ),
+      true,
+    ),
+  );
   if (!open) return;
   act(() => button(stored === null ? "Add" : "Manage").click());
   await settle();
@@ -229,7 +238,10 @@ test("the dialog opens with the token field focused, and Disconnect's question g
     ).click(),
   );
   await settle();
-  assert.ok(document.activeElement === tokenField(), "the form drawn again has focus");
+  // Note that the form stands once the token the host lays after the removal reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(document.activeElement === tokenField(), true, "the form drawn again has focus"),
+  );
 });
 
 test("a saved token's Manage opens it with Disconnect, which asks at the dialog's foot, then takes it away", async () => {
@@ -327,7 +339,8 @@ test("a read that went unanswered says so as an alert with Retry in place of Add
 
   act(() => button("Retry").click());
   await settle();
-  button("Add");
+  // Note that Add stands once the token read again reaches its query.
+  await vi.waitFor(() => button("Add"));
 });
 
 test("the row draws no other account's token when Profile is drawn for another account", async () => {
@@ -358,7 +371,7 @@ test("the row draws no other account's token when Profile is drawn for another a
     );
   draw(ADA.id);
   await settle();
-  button("Manage");
+  await vi.waitFor(() => button("Manage"));
 
   draw("user-bea");
   await settle();

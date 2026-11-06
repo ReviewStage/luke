@@ -14,7 +14,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { DesktopInbox } from "./desktop/desktop-inbox.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop/desktop-version-history.js";
@@ -262,11 +262,18 @@ test("Settings says a page's failed read alike in its card's place, the keys and
     },
   });
   const keys = await mount(createElement(AgentAuthSection, { signedIn: true, onKeys: ignore }));
-  const keysFailure = readFailure(keys);
+  // Note that the failure, and then the keys read again, stand once they reach the keys' query.
+  const keysFailure = await vi.waitFor(() => readFailure(keys));
   assertSaidAlike(keysFailure, "Your keys could not be read.");
   keysFailure.retry();
   await settle();
-  assert.equal(keys.querySelector('[role="alert"]'), null, "the keys were read, so nothing fails");
+  await vi.waitFor(() =>
+    assert.equal(
+      keys.querySelector('[role="alert"]') === null,
+      true,
+      "the keys were read, so nothing fails",
+    ),
+  );
 
   let retried = 0;
   const workspaces = await mount(

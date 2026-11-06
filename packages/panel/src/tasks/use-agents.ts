@@ -48,6 +48,7 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts.js";
 import type { ShownFailure } from "../failure-report.js";
+import { modelsRetryMutation } from "../live-reads.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -58,7 +59,6 @@ import {
   selectExperiment,
   selectPullRequestPublished,
 } from "../use-app-state.js";
-import { HOST_READ_STATUS } from "../use-host-read.js";
 import {
   ARCHIVE_NOT_READY,
   archiveWords,
@@ -909,23 +909,23 @@ export function useAgents(input: {
    * An ask that landed settles once the slice says how it went (below),
    * since a Try again answers alike whether its ask was answered or not.
    */
-  const retryModels = offered.retry;
+  const { mutateAsync: retryModels } = useMutation(modelsRetryMutation());
   const readModels = useCallback(() => {
     modelsGeneration.current += 1;
     const generation = modelsGeneration.current;
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsRead({ state: MODELS_READ.READING, generation });
-    retryModels().then(() => setModelsLanded(generation));
+    retryModels()
+      .catch(() => undefined)
+      .then(() => setModelsLanded(generation));
     rendererPause(MODELS_READ_BOUND_MS).then(() => settleModels(generation, MODELS_READ.FAILED));
   }, [retryModels, settleModels]);
   // Note that a landed ask reads as read only where the slice holds models, and as failed where it never answered, so a card waiting on its devices never takes no list for an empty one.
   useEffect(() => {
     if (modelsLanded === 0) return;
-    if (offered.rows !== undefined) settleModels(modelsLanded, MODELS_READ.READ);
-    else if (offered.status === HOST_READ_STATUS.FAILED) {
-      settleModels(modelsLanded, MODELS_READ.FAILED);
-    }
-  }, [modelsLanded, offered.rows, offered.status, settleModels]);
+    if (offered.data !== undefined) settleModels(modelsLanded, MODELS_READ.READ);
+    else if (offered.isError) settleModels(modelsLanded, MODELS_READ.FAILED);
+  }, [modelsLanded, offered.data, offered.isError, settleModels]);
 
   /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (
@@ -1615,11 +1615,10 @@ export function useAgents(input: {
     listFailed,
     listMissing,
     onRetryList,
-    models: offered.rows?.models,
-    modelsFailed:
-      offered.status === HOST_READ_STATUS.FAILED || modelsRead.state === MODELS_READ.FAILED,
+    models: offered.data?.models,
+    modelsFailed: offered.isError || modelsRead.state === MODELS_READ.FAILED,
     modelsRead,
-    macs: offered.rows === undefined ? undefined : (offered.rows.macs ?? []),
+    macs: offered.data === undefined ? undefined : (offered.data.macs ?? []),
     readModels,
     onUnarchive: undefined,
     continueAgent: startsOn === undefined ? undefined : steadyContinueAgent,
