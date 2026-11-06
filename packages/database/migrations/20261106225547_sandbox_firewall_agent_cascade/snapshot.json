@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "5b1b286d-9456-4dcc-a274-9e5d41d29cd8",
+  "id": "2fa813ce-2179-41c4-a737-81e9f17dff27",
   "prevIds": ["02da8a68-27f4-4b36-b43a-6a6b67a57aa8"],
   "ddl": [
     {
@@ -14159,6 +14159,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "sandbox_firewall_session",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sandbox_firewall"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sandbox_firewall_agent",
       "entityType": "indexes",
       "schema": "public",
       "table": "sandbox_firewall"

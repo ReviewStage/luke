@@ -42,6 +42,8 @@ export const sandboxFirewall = pgTable(
     primaryKey({ columns: [table.userId, table.sandboxSessionId] }),
     // A clear ahead of a stop names the session alone.
     index("sandbox_firewall_session").on(table.sandboxSessionId),
+    // An agent's deletion finds its rows by it.
+    index("sandbox_firewall_agent").on(table.agentId),
     // The sweep drops the rows of sessions long gone by age.
     index("sandbox_firewall_updated").on(table.updatedAt),
   ],
