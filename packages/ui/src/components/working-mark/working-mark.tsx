@@ -77,14 +77,19 @@ function cellTransform(index: number): string {
   return `translate(${column * PITCH}px, ${row * PITCH}px)`;
 }
 
-/** The moving pixels, `beat` cells on from where they rest. */
+/**
+ * The moving pixels, `beat` cells on from where they rest. Note that each
+ * wears the recording's mark as the whole mark does, because the recorder
+ * asks only the element whose attribute moved whether it is left out, and
+ * would otherwise diff and mask every step before dropping it.
+ */
 function WorkingDots({ beat }: { readonly beat: number }): React.JSX.Element {
   return (
     <>
       {WORKING_DOTS.map(({ dot, restsOn, tail }) => (
         <rect
           key={dot}
-          className={tail ? "ui-working-mark-dot opacity-60" : "ui-working-mark-dot"}
+          className={`ui-working-mark-dot ${REPLAY_LEFT_OUT}${tail ? " opacity-60" : ""}`}
           data-dot={dot}
           style={{ transform: cellTransform(restsOn + beat) }}
           {...cellAt(0, 0)}
