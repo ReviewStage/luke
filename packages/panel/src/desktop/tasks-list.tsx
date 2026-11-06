@@ -98,6 +98,7 @@ import {
   useVirtualRuns,
   VIRTUAL_ROW_KEY_ATTRIBUTE,
   VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowMeasurements,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
@@ -799,6 +800,7 @@ function TasksListGroup({
   properties,
   place,
   row,
+  measured,
 }: {
   group: TasksGroup;
   head: GroupHead;
@@ -815,7 +817,10 @@ function TasksListGroup({
   place: ListRunsPlace;
   /** Draws a task's row, wearing its place in the run. */
   row: (task: TaskSummary, at: VirtualRowPlace) => ReactNode;
+  /** What each group's run measured, by the group's key, held across the page's visits. */
+  measured: Map<string, VirtualRowMeasurements> | undefined;
 }): React.JSX.Element {
+  const runKey = groupKey(group.head);
   const drawn = useLeaving(group.tasks, taskIdOf);
   const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
   const run = useRef<VirtualRowsHandle>(null);
@@ -876,6 +881,8 @@ function TasksListGroup({
             data-row-drop-rows={ordered(group.head) ? "" : undefined}
             onPointerDown={draggable ? drag : undefined}
             handle={run}
+            measurements={measured?.get(runKey)}
+            onMeasurements={(rows) => measured?.set(runKey, rows)}
           >
             {(index, at) => {
               const entry = drawn[index];
@@ -1175,6 +1182,7 @@ export function TasksList({
                     tasks={tasks}
                     properties={properties}
                     place={runsPlace}
+                    measured={frame.measured}
                     row={(task, at) => (
                       <TasksPageRow
                         key={task.id}

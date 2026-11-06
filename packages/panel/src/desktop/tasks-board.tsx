@@ -109,6 +109,7 @@ import {
   useVirtualRuns,
   VIRTUAL_ROW_KEY_ATTRIBUTE,
   VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowMeasurements,
   type VirtualRowPlace,
   VirtualRows,
   type VirtualRowsHandle,
@@ -712,6 +713,7 @@ function TaskBoardColumnView({
   chosenOf,
   finding,
   holdRun,
+  measured,
   onSelect,
   onStanding,
   onShowOlder,
@@ -740,6 +742,8 @@ function TaskBoardColumnView({
   finding: boolean;
   /** Holds the column's run of cards while it stands, so a card out of view can be brought in (`useVirtualRuns`). */
   holdRun: VirtualRuns["hold"];
+  /** What each column's run measured, by the column's value, held across the page's visits. */
+  measured: Map<string, VirtualRowMeasurements> | undefined;
   /** Opens a task by its id. */
   onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
@@ -877,6 +881,8 @@ function TaskBoardColumnView({
                   className="tasks-board-cards data-[dragging=true]:cursor-grabbing"
                   onPointerDown={narrow ? undefined : drag}
                   handle={run}
+                  measurements={measured?.get(columnValue(column.head))}
+                  onMeasurements={(rows) => measured?.set(columnValue(column.head), rows)}
                 >
                   {(index, place) => {
                     const task = cards[index]?.value;
@@ -1094,6 +1100,7 @@ export function TasksBoard({
                 chosenOf={selection.chosenOf}
                 finding={finding}
                 holdRun={runs.hold}
+                measured={frame.measured}
                 onSelect={tasks.onSelect}
                 onStanding={setStanding}
                 onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}

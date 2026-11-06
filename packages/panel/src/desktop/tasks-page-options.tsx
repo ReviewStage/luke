@@ -79,6 +79,7 @@ import {
   toggledFilter,
   valueCounts,
 } from "@repo/ui/tasks-page-model";
+import type { VirtualRowMeasurements } from "@repo/ui/virtual-rows";
 import type { Store } from "@tanstack/react-store";
 import { Fragment, type ReactNode, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
@@ -132,6 +133,8 @@ export interface TasksViewFrame {
   readonly onDisplay: (display: TasksDisplay) => void;
   /** Where the view's chosen tasks are held across the page's visits; the view's own while nothing outlives it. */
   readonly chosen?: ChosenTasksStore | undefined;
+  /** What each run of the view's rows measured, by the run's key, held across the page's visits; none while nothing outlives the view. */
+  readonly measured?: Map<string, VirtualRowMeasurements> | undefined;
   /** Where the column a narrow room's Columns view shows is held across the page's visits; the view's own otherwise. */
   readonly column?: Store<string | undefined> | undefined;
 }

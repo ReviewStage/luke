@@ -329,6 +329,7 @@ export function TasksPage({
     display,
     onDisplay,
     chosen: held?.chosenIn(view),
+    measured: held?.measuredIn(view),
     column: held?.column,
   };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.

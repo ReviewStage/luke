@@ -168,6 +168,12 @@ export const VIRTUAL_ROWS_ANCHOR = {
 
 export type VirtualRowsAnchor = (typeof VIRTUAL_ROWS_ANCHOR)[keyof typeof VIRTUAL_ROWS_ANCHOR];
 
+/** The rows a run measured, by key, as TanStack Virtual's `measurementsCache` holds them, which a run drawn again starts from (`initialMeasurementsCache`). */
+export type VirtualRowMeasurements = readonly VirtualItem[];
+
+/** No rows measured, where a run starts fresh. */
+const NO_MEASUREMENTS: VirtualRowMeasurements = [];
+
 /** What a row the caller draws as its own list item wears (`listItems`): what measures it, and what tells a reader and the run where it stands. */
 export interface VirtualRowPlace {
   readonly ref: (element: HTMLElement | null) => void;
@@ -337,6 +343,8 @@ export function VirtualRows({
   onPointerDown,
   "data-row-drop-rows": dropRows,
   block: wears,
+  measurements = NO_MEASUREMENTS,
+  onMeasurements,
   children,
 }: {
   /** The element that scrolls, which the rows stand in. */
@@ -374,6 +382,10 @@ export function VirtualRows({
   "data-row-drop-rows"?: "" | undefined;
   /** What the block wears beside the run's own, where the run is a list of the caller's own, as `List`'s is. */
   block?: VirtualRowsBlock | undefined;
+  /** What the run measured when it was last drawn, which it lays its rows out by until it measures them again, as a page drawn again stands where it was left. */
+  measurements?: VirtualRowMeasurements | undefined;
+  /** Hears what the run measured as it goes, to hand back as `measurements` when it is drawn again. */
+  onMeasurements?: ((measured: VirtualRowMeasurements) => void) | undefined;
   /** Draws the row at an index, which wears `place` where its rows are list items or options of the caller's own. */
   children: (index: number, place: VirtualRowPlace) => ReactNode;
 }): ReactNode {
@@ -422,6 +434,7 @@ export function VirtualRows({
     anchorTo: fromEnd ? "end" : "start",
     followOnAppend: fromEnd,
     scrollEndThreshold: END_THRESHOLD_PX,
+    initialMeasurementsCache: [...measurements],
     // Note that the run opens wherever its scroller stands, kept as the reader left it, since several runs may share it; one anchored to its end then takes it there.
     initialOffset: () => scroller.current?.scrollTop ?? 0,
     measureElement: measured,
@@ -433,6 +446,10 @@ export function VirtualRows({
     directDomUpdatesMode: "position",
   });
   // A run anchored to its end opens there once the virtualizer holds its scroller, and only once, so a page kept hidden and shown again leaves it where the reader left it.
+  // What the run measured is handed back as it goes, read off the virtualizer's own cache, each row materialized.
+  const heard = useRef(onMeasurements);
+  heard.current = onMeasurements;
+  useEffect(() => () => heard.current?.(Array.from(virtualizer.measurementsCache)), [virtualizer]);
   const opened = useRef(false);
   useLayoutEffect(() => {
     if (!fromEnd || opened.current || virtualizer.scrollElement === null) return;
