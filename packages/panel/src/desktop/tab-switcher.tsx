@@ -49,7 +49,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND, commandForKey, type KeyedCommand } from "@repo/settings/shortcuts";
 import { DIALOG_SIZE, Dialog, TabCard, TabCards, VisuallyHidden } from "@repo/ui";
-import { isAgentTab, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND, sameTab, TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
@@ -505,7 +505,9 @@ export function TabSwitcher({
       if (column === undefined) return false;
       // Note that an agent's tab is judged only once the task's agents are read, since none stands open before.
       const { openAgents, tabs } = control.mainTabs;
-      if (isAgentTab(column)) return openAgents !== undefined && !openAgents.includes(column.agent);
+      if (typeof column !== "string" && column.kind === STRIP_TAB_KIND.AGENT) {
+        return openAgents !== undefined && !openAgents.includes(column.agent);
+      }
       return !tabs.some((each) => sameTab(each, column));
     });
     return stops.current;

@@ -14,7 +14,7 @@ import {
   TEXT_BUTTON_TONE,
   TextButton,
 } from "@repo/ui";
-import { isTerminalTab } from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
@@ -149,7 +149,7 @@ export function TerminalTab({
   /** Closes the tab, as an archived agent's does. */
   onClose: () => void;
 }): React.JSX.Element {
-  const agentId = isTerminalTab(tab) ? tab.terminal : tab.local;
+  const agentId = tab.kind === STRIP_TAB_KIND.TERMINAL ? tab.terminal : tab.local;
   const subject = agentSubject(agents, agentId, NOTHING_HELD, false);
   const session = useTerminalTabSession(tab, shown, onClose);
   useFindSource(useScrollbackFind(session.find));

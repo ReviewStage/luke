@@ -13,14 +13,14 @@ import {
 } from "@repo/features/terminal-model";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  isTerminalTab,
   type LocalStripTab,
   localTab,
+  STRIP_TAB_KIND,
   sameTab,
   type TerminalStripTab,
   terminalTab,
 } from "@repo/ui/tab-strip-model";
-import { Duration, Effect } from "effect";
+import { absurd, Duration, Effect } from "effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import {
   useCallback,
@@ -222,9 +222,14 @@ function shellOf(tab: ShellTab): {
   readonly agentId: string;
   readonly shell: string;
 } {
-  return isTerminalTab(tab)
-    ? { kind: TERMINAL_KIND.CLOUD, agentId: tab.terminal, shell: tab.shell }
-    : { kind: TERMINAL_KIND.LOCAL, agentId: tab.local, shell: tab.shell };
+  switch (tab.kind) {
+    case STRIP_TAB_KIND.TERMINAL:
+      return { kind: TERMINAL_KIND.CLOUD, agentId: tab.terminal, shell: tab.shell };
+    case STRIP_TAB_KIND.LOCAL:
+      return { kind: TERMINAL_KIND.LOCAL, agentId: tab.local, shell: tab.shell };
+    default:
+      return absurd(tab);
+  }
 }
 
 /** The tab of one of an agent's terminals of the kind. */
