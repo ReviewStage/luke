@@ -21,6 +21,7 @@ import {
   SANDBOX_CALL,
   type SandboxCall,
   type SandboxUnavailable,
+  snapshotGone,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "./vercel-sandbox-api.js";
@@ -234,6 +235,26 @@ it.effect(
       assert.equal(yield* api.snapshotExists("snap_fixture"), false);
       answer = () => snapshotAt("created");
       assert.equal(yield* api.snapshotExists("snap_fixture"), true);
+    }),
+);
+
+it.effect(
+  "a create Vercel refused for its snapshot gone reads as gone, and the same status for a stopped sandbox or with no code does not",
+  () =>
+    Effect.gen(function* () {
+      let error: object = { code: "snapshot_not_found", message: "the snapshot is gone" };
+      const api = yield* apiOver(() => Response.json({ error }, { status: 410 }));
+      const refusal = () => Effect.flip(api.create(createAsk(NAME_TAKEN.REFUSE)));
+
+      const lost = yield* refusal();
+      error = { code: "sandbox_stopped", message: "the sandbox is stopped" };
+      const stopped = yield* refusal();
+      error = { message: "gone" };
+      const unnamed = yield* refusal();
+
+      assert.equal(snapshotGone(lost), true);
+      assert.equal(snapshotGone(stopped), false);
+      assert.equal(snapshotGone(unnamed), false);
     }),
 );
 

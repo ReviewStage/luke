@@ -75,10 +75,13 @@ export const NOT_FOUND_STATUS = 404;
 
 /**
  * Vercel's answer for a resume or a create whose snapshot is gone: expired
- * past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. Vercel's body
- * names it `snapshot_not_found`, as the SDK's own check reads it.
+ * past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted, its body naming
+ * `snapshot_not_found`, as the SDK's own check reads it. Note that Vercel
+ * answers the same status for a call to a stopped sandbox
+ * (`sandbox_stopped`), which a resume mends, so the code is what says the
+ * snapshot is gone.
  */
-const SNAPSHOT_GONE_STATUS = 410;
+const SNAPSHOT_GONE = { STATUS: 410, CODE: "snapshot_not_found" } as const;
 
 /** Vercel's answer for a create whose name another sandbox already holds. */
 const NAME_TAKEN_STATUS = 409;
@@ -184,7 +187,11 @@ export function sessionEnding(failure: { readonly _tag: string }): boolean {
 
 /** Whether a resume or a create failed because the snapshot it opens from is gone. */
 export function snapshotGone(failure: { readonly _tag: string }): boolean {
-  return failure instanceof SandboxUnavailable && failure.status === SNAPSHOT_GONE_STATUS;
+  return (
+    failure instanceof SandboxUnavailable &&
+    failure.status === SNAPSHOT_GONE.STATUS &&
+    failure.code === SNAPSHOT_GONE.CODE
+  );
 }
 
 /** A sandbox as a list or a lookup names it: its name, where it stands, the session it runs while up, and its tags. */
@@ -1231,7 +1238,7 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
         ).pipe(
           Effect.map((snapshot) => !SNAPSHOT_UNUSABLE.has(snapshot.status)),
           Effect.catchIf(
-            (failure) => isGone(failure) || snapshotGone(failure),
+            (failure) => isGone(failure) || failure.status === SNAPSHOT_GONE.STATUS,
             () => Effect.succeed(false),
           ),
         ),
