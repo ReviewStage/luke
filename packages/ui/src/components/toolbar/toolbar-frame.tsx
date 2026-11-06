@@ -38,6 +38,7 @@ export function ToolbarFrame({
   look = TOOLBAR_LOOK.WINDOW,
   place,
   measure = false,
+  folded = false,
   wrapHeading = false,
   wrapped = false,
   frameRef,
@@ -48,6 +49,7 @@ export function ToolbarFrame({
   look?: ToolbarLook | undefined;
   place?: string | undefined;
   measure?: boolean | undefined;
+  folded?: boolean | undefined;
   wrapHeading?: boolean | undefined;
   wrapped?: boolean | undefined;
   frameRef?: Ref<HTMLElement> | undefined;
@@ -61,6 +63,7 @@ export function ToolbarFrame({
       data-end={end}
       data-look={look}
       data-measure={measure ? "true" : undefined}
+      data-folded={folded ? "true" : undefined}
       data-wrap-heading={wrapHeading ? "true" : undefined}
       data-wrapped={wrapped ? "true" : undefined}
     >

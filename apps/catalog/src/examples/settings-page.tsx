@@ -4,6 +4,7 @@ import {
   BUTTON_VARIANT,
   Button,
   EmptyState,
+  MoreButton,
   PlugIcon,
   SettingsPage,
   SettingsRow,
@@ -21,7 +22,7 @@ import { CatalogSection } from "../section";
  * title's line, tall enough to scroll inside its frame; and the same page
  * in a frame narrower than the 480px a desktop page insets less under, its
  * long title pushing the Reset below it; the page on a phone, its way back
- * and Reset in its bar's corners; and a page whose content is an empty
+ * and a ⋯ holding its Reset in its bar's corners; and a page whose content is an empty
  * state, standing in the room under its title.
  */
 
@@ -48,7 +49,14 @@ function Page({ title, look }: { title: string; look?: ToolbarLook }): React.JSX
           <BackButton label="Settings" place="settings" onBack={() => undefined} />
         ) : undefined
       }
-      actions={<Button variant={BUTTON_VARIANT.QUIET}>Reset</Button>}
+      actions={
+        // A phone's corner holds one control, so its reset stands in a ⋯, as the app's does.
+        look === TOOLBAR_LOOK.PHONE ? (
+          <MoreButton thing={title} onClick={() => undefined} />
+        ) : (
+          <Button variant={BUTTON_VARIANT.QUIET}>Reset</Button>
+        )
+      }
     >
       <SettingsSection title="General">
         <SwitchRow

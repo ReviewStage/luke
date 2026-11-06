@@ -255,6 +255,11 @@
     }
   }
 
+  /* Every labeled control of the bar draws its glyph alone, named still. */
+  .ui-toolbar[data-folded="true"] {
+    --ui-fold: folded;
+  }
+
   /* Where the window sets the bar to center its title over a column (a list
      whose first control stands past the window's buttons), the title stands
      centered in the bar, each side holding at least what stands there: the

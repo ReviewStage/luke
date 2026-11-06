@@ -61,8 +61,9 @@
  * A phone's bar (`TOOLBAR_LOOK.PHONE`) lays the same slots as one control a
  * corner, its title centered between them, and is named by the place it
  * heads (`place`). A corner is one control wide, so every labeled control in
- * it draws its glyph alone, named still, centered where every corner's is. A task's bar leads with its tab strip (`TOOLBAR_LOOK.TABS`),
- * which a narrow room wraps to a row of its own.
+ * it draws its glyph alone, named still, centered where every corner's is.
+ * A task's bar leads with its tab strip (`TOOLBAR_LOOK.TABS`), which a
+ * narrow room wraps to a row of its own.
  *
  * What the window around the bar knows and the bar does not, it says in
  * custom properties on the room the bar stands in (`toolbar.css`): the
@@ -217,6 +218,8 @@ export interface ToolbarProps {
   readonly place?: string | undefined;
   /** Whether the bar is a container its slots' rules answer the width of (`@container ui-toolbar`), so a control folds before the title or tabs beside it do. */
   readonly measure?: boolean | undefined;
+  /** Whether every labeled control of the bar draws its glyph alone, named still; a phone's bar always does. */
+  readonly folded?: boolean | undefined;
   /** Whether a bar that would cut the page's own name under the readable floor stands its heading on a row of its own under the lead and actions, and under 360px folds its lead to glyphs. */
   readonly wrapHeading?: boolean | undefined;
 }
@@ -384,6 +387,7 @@ export function Toolbar({
   look,
   place,
   measure,
+  folded,
   wrapHeading,
 }: ToolbarProps): React.JSX.Element {
   const frame = useRef<HTMLElement>(null);
@@ -397,6 +401,7 @@ export function Toolbar({
       look={look}
       place={place}
       measure={measure}
+      folded={folded}
       wrapHeading={wrapHeading}
     >
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
