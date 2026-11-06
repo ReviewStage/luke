@@ -83,7 +83,9 @@ function standHost(
 async function drawn(element: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), element)));
+  act(() =>
+    root?.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), element)),
+  );
   await settle();
   return container;
 }
@@ -317,7 +319,7 @@ test("a picture whose read went unanswered says it could not be read, with Retry
   act(() =>
     root?.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(PlanBody, { task: taskOf(taskId, next) }),
       ),
     ),

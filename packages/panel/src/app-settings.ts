@@ -16,9 +16,10 @@ import type {
 import type { SettingsView } from "@repo/settings/settings-views";
 import { fixtureUpdate } from "@repo/settings/update-row";
 import type { ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";
-import { useAct } from "./act.js";
+import { actMutation, pressMutation } from "./act-mutations.js";
 import type { SettingsPanelProps } from "./settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "./settings/workspace-page.js";
 import { APP_SETTINGS_VIEW, APP_SLICE, useAppSlice } from "./use-app-state.js";
@@ -53,7 +54,18 @@ export function useShownUpdate(): UpdateControl["update"] | undefined {
  * draw the sidebar again.
  */
 export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | undefined {
-  const { act, press } = useAct();
+  const { mutateAsync: checkForUpdate } = useMutation(actMutation(ACT_KIND.UPDATE_CHECK));
+  const { mutate: installUpdate } = useMutation(pressMutation(ACT_KIND.UPDATE_INSTALL));
+  const { mutate: moveToApplications } = useMutation(
+    pressMutation(ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS),
+  );
+  const { mutate: openRelease } = useMutation(pressMutation(ACT_KIND.UPDATE_OPEN_RELEASE));
+  const { mutate: openMicrophoneSettings } = useMutation(
+    pressMutation(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
+  );
+  const { mutate: openNotificationsSettings } = useMutation(
+    pressMutation(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+  );
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const run = useAppSlice(APP_SLICE.RUN);
   const settings = useAppSlice(APP_SETTINGS_VIEW);
@@ -72,13 +84,13 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
             // Answered rather than fire-and-forget so the row that asked redraws from
             // the same snapshot the broadcast carries to every other window.
             onCheck: async () => {
-              await act(ACT_KIND.UPDATE_CHECK);
+              await checkForUpdate();
             },
-            onInstall: () => press(ACT_KIND.UPDATE_INSTALL),
-            onMoveToApplications: () => press(ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS),
-            onOpenLatest: () => press(ACT_KIND.UPDATE_OPEN_RELEASE),
+            onInstall: () => installUpdate(),
+            onMoveToApplications: () => moveToApplications(),
+            onOpenLatest: () => openRelease(),
           },
-    [update, packaged, commit, act, press],
+    [update, packaged, commit, checkForUpdate, installUpdate, moveToApplications, openRelease],
   );
   return useMemo(() => {
     if (account === undefined || run === undefined || audio === undefined) return undefined;
@@ -88,12 +100,12 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
     const microphone: MicrophoneControl = {
       status: audio.microphoneStatus,
       onRequest: doors.onRequestMicrophone,
-      onOpenSettings: () => press(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
+      onOpenSettings: () => openMicrophoneSettings(),
     };
     const notifications: NotificationsControl = {
       status: notificationsStatus,
       packaged: run.packaged,
-      onOpenSettings: () => press(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+      onOpenSettings: () => openNotificationsSettings(),
     };
     return {
       account,
@@ -108,5 +120,15 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
       capabilities: run.capabilities,
       workspace: doors.workspace,
     };
-  }, [account, run, settings, audio, notificationsStatus, updates, doors, press]);
+  }, [
+    account,
+    run,
+    settings,
+    audio,
+    notificationsStatus,
+    updates,
+    doors,
+    openMicrophoneSettings,
+    openNotificationsSettings,
+  ]);
 }

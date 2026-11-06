@@ -16,10 +16,6 @@ import {
 import {
   Badge,
   COLLECTION_STATE,
-  DATA_TABLE_COLUMN_KIND,
-  DATA_TABLE_MIN_WIDTH,
-  DataTable,
-  type DataTableColumn,
   GAP,
   Inline,
   MARK_PROVIDER,
@@ -32,10 +28,18 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
+import {
+  createDataTableColumnHelper,
+  DATA_TABLE_COLUMN_KIND,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumns,
+  DataTableSkeleton,
+} from "@repo/ui/data-table";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { githubAccountPageUrl } from "@repo/ui/tasks-model";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminWorkspacesQuery, useAdminSignOut } from "../admin-queries.js";
@@ -48,7 +52,6 @@ import {
   CollectionCountSkeleton,
   type ViewerAccount,
 } from "../chrome/page-header.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { searchTerm, workspacesReadQuery } from "../routing.js";
 import { useSettledSearch } from "../settled-search.js";
@@ -122,53 +125,56 @@ function InstallationsCell({
   );
 }
 
+const workspaceColumn = createDataTableColumnHelper<AdminWorkspaceRow>();
+
 function workspaceColumns(
   onOpenAccount: (id: string) => void,
   onOpenWorkspace: (id: string) => void,
-): DataTableColumn<AdminWorkspaceRow, WorkspaceColumnKey>[] {
+): DataTableColumns<AdminWorkspaceRow> {
   const count = (
     key: WorkspaceColumnKey,
     label: string,
     value: (row: AdminWorkspaceRow) => number,
-  ) => ({
-    key,
-    label,
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (row: AdminWorkspaceRow) => formatCount(value(row)),
-  });
-  return [
-    {
-      key: WORKSPACE_COLUMN.NAME,
-      label: "Workspace",
-      cell: (row) => (
+  ) =>
+    workspaceColumn.display({
+      id: key,
+      header: label,
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatCount(value(row)),
+    });
+  return workspaceColumn.columns([
+    workspaceColumn.display({
+      id: WORKSPACE_COLUMN.NAME,
+      header: "Workspace",
+      cell: ({ row: { original: row } }) => (
         <Inline gap={GAP.ICON}>
           <WorkspaceCell workspace={row} onOpen={onOpenWorkspace} />
           {row.personal ? <Badge tone={STATUS_TONE.NEUTRAL}>Personal</Badge> : null}
         </Inline>
       ),
-    },
-    {
-      key: WORKSPACE_COLUMN.OWNER,
-      label: "Owner",
-      cell: (row) =>
+    }),
+    workspaceColumn.display({
+      id: WORKSPACE_COLUMN.OWNER,
+      header: "Owner",
+      cell: ({ row: { original: row } }) =>
         row.owner === null ? "—" : <AccountCell account={row.owner} onOpen={onOpenAccount} />,
-    },
+    }),
     count(WORKSPACE_COLUMN.MEMBERS, "Members", (row) => row.members),
-    {
-      key: WORKSPACE_COLUMN.GITHUB,
-      label: "GitHub",
-      cell: (row) => <InstallationsCell installations={row.installations} />,
-    },
+    workspaceColumn.display({
+      id: WORKSPACE_COLUMN.GITHUB,
+      header: "GitHub",
+      cell: ({ row: { original: row } }) => <InstallationsCell installations={row.installations} />,
+    }),
     count(WORKSPACE_COLUMN.TASKS, "Tasks", (row) => row.tasksWeek),
     count(WORKSPACE_COLUMN.AGENTS, "Agents", (row) => row.agentsWeek),
     count(WORKSPACE_COLUMN.MERGED, "Merged", (row) => row.prsMergedWeek),
-    {
-      key: WORKSPACE_COLUMN.CREATED,
-      label: "Created",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatDate(row.createdAt),
-    },
-  ];
+    workspaceColumn.display({
+      id: WORKSPACE_COLUMN.CREATED,
+      header: "Created",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatDate(row.createdAt),
+    }),
+  ]);
 }
 
 /** The four headline counts, in the stat row's two wrapping pairs. */
@@ -185,7 +191,7 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
     value: ({ summary }) => formatCount(summary.sharedActiveWeek),
     hint: ({ summary }) =>
       `${formatPercent(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
-    title: () => "A task or agent started, or a plan revised, in the last 7 UTC days",
+    title: () => "A task or agent started, or a description revised, in the last 7 UTC days",
   },
   {
     key: "invites",
@@ -243,6 +249,10 @@ function WorkspacesSections({
   onOpenAccount: (id: string) => void;
   onOpenWorkspace: (id: string) => void;
 }): React.JSX.Element {
+  const workspaceTableColumns = useMemo(
+    () => workspaceColumns(onOpenAccount, onOpenWorkspace),
+    [onOpenAccount, onOpenWorkspace],
+  );
   return (
     <>
       <StatCards layout={STAT_LAYOUT.PAIRS} stats={WORKSPACE_STATS} data={list} />
@@ -250,7 +260,7 @@ function WorkspacesSections({
         {list === undefined ? (
           <DataTableSkeleton
             label="Workspaces"
-            columns={workspaceColumns(onOpenAccount, onOpenWorkspace)}
+            columns={workspaceTableColumns}
             rows={WORKSPACES_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
             cells={{ [WORKSPACE_COLUMN.OWNER]: <AccountCellSkeleton /> }}
@@ -259,9 +269,9 @@ function WorkspacesSections({
           <>
             <DataTable
               label="Workspaces"
-              columns={workspaceColumns(onOpenAccount, onOpenWorkspace)}
+              columns={workspaceTableColumns}
               rows={rows}
-              rowKey={(row) => row.id}
+              getRowId={(row) => row.id}
               empty={workspacesEmpty(searched)}
               minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
               onRowPress={(row) => onOpenWorkspace(row.id)}

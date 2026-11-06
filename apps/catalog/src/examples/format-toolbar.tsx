@@ -87,7 +87,7 @@ function TurnInto(): React.JSX.Element {
 function FormatToolbarExample(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="format-toolbar-plan" title="Over the plan's words">
+      <CatalogSection id="format-toolbar-plan" title="Over the description's words">
         <Stack gap={GAP.FIELD}>
           <PlanToolbar />
           <SpanningToolbar />

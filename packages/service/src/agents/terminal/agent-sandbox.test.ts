@@ -11,7 +11,6 @@ import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { LOCAL_AGENT_ENVIRONMENT } from "../../testing/local-agent.js";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
-import { CODER } from "../coder-host/bounds.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
@@ -77,8 +76,7 @@ function commandStream(exitCode: number, stdout = ""): Response {
 /**
  * Vercel as the scenario has it: the session's sandbox in the status given,
  * tmux holding the shells the list prints, refusing to name a shell it does
- * not hold, a resume that brings the sandbox up under a fresh session, and
- * an update of the sandbox's configuration kept as it was asked.
+ * not hold, and a resume that brings the sandbox up under a fresh session.
  */
 function vercel(
   status: string | undefined,
@@ -86,11 +84,9 @@ function vercel(
   listExit = 0,
   interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
   shellCheckExit: number = TMUX_EXIT.NO_SESSION,
-  timeout?: number,
 ) {
   const asked: Asked[] = [];
   const policies: unknown[] = [];
-  const updates: unknown[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
     Layer.merge(
@@ -102,7 +98,7 @@ function vercel(
           const body = JSON.parse(await new Response(init.body).text());
           const args: readonly string[] = body.args;
           asked.push({ method, url: parsed, args });
-          // Every command is `setpriv <drop> -- sh -c <script> sh <tmux args>`; the list is the one with none.
+          // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
           const scriptAt = args.indexOf("-c") + 1;
           const tmuxArgs = args.slice(scriptAt + 2);
           if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
@@ -121,10 +117,6 @@ function vercel(
           policies.push(JSON.parse(await new Response(init.body).text()));
           return Response.json({});
         }
-        if (method === "PATCH") {
-          updates.push(JSON.parse(await new Response(init.body).text()));
-          return Response.json({ sandbox: { name: SANDBOX } });
-        }
         if (parsed.searchParams.get("resume") === "true") {
           return Response.json({
             sandbox: { name: SANDBOX, status: "stopped" },
@@ -137,13 +129,13 @@ function vercel(
             sandboxes:
               status === undefined
                 ? []
-                : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION, timeout }],
+                : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
           })
         );
       }),
     ),
   );
-  return { layer, asked, policies, updates };
+  return { layer, asked, policies };
 }
 
 /** One field as the list prints it: what tmux printed, newline and all, in base64. */
@@ -255,81 +247,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   );
 
   it.effect(
-    "turning forwarding on wakes a stopped sandbox and starts the repository's run command in its checkout without capabilities, and starts nothing where a port listens",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const header =
-          "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid";
-        const listener =
-          "   0: 00000000:0BB8 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1002";
-        /** Vercel with the session's sandbox in the status given, its tables printing the rows given, and the checkout's `.vespin.json` naming `pnpm dev` where no row listens. */
-        const forwarding = (status: string, rows: readonly string[]) => {
-          const started: { readonly url: URL; readonly body: Record<string, unknown> }[] = [];
-          const resumed: URL[] = [];
-          const layer = Layer.provide(
-            agentSandboxLayer,
-            Layer.merge(
-              LOCAL_AGENT_ENVIRONMENT,
-              fakeHttpClientLayer(async (url, init) => {
-                const parsed = new URL(url);
-                if (parsed.pathname.endsWith("/cmd")) {
-                  const body = JSON.parse(await new Response(init.body).text());
-                  if (body.attachStdin === true) {
-                    started.push({ url: parsed, body });
-                    return Response.json({ command: { id: "cmd_run", exitCode: null } });
-                  }
-                  const [file] = body.args;
-                  if (file !== "/workspace/repository/.vespin.json") {
-                    return commandStream(0, [header, ...rows].join("\n"));
-                  }
-                  // Where a port listens the file is never read, so a read there fails the call.
-                  return rows.length > 0
-                    ? new Response(null, { status: 503 })
-                    : commandStream(0, '{ "run": "pnpm dev" }');
-                }
-                if (init.method === "PATCH") return Response.json({ sandbox: { name: SANDBOX } });
-                if (parsed.searchParams.get("resume") === "true") {
-                  resumed.push(parsed);
-                  return Response.json({
-                    sandbox: { name: SANDBOX, status: "running" },
-                    session: { id: "sbs_resumed", status: "running" },
-                  });
-                }
-                return Response.json({
-                  sandboxes: [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
-                });
-              }),
-            ),
-          );
-          return { layer, started, resumed };
-        };
-        const stopped = forwarding("stopped", []);
-        const serving = forwarding("running", [listener]);
-
-        const woken = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-          sandbox.startForwarding(SESSION),
-        ).pipe(Effect.provide(stopped.layer));
-        const listening = yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-          sandbox.startForwarding(SESSION),
-        ).pipe(Effect.provide(serving.layer));
-
-        assert.deepEqual(woken, { started: true });
-        assert.equal(stopped.resumed[0]?.pathname, `/api/v2/sandboxes/${SANDBOX}`);
-        const [run] = stopped.started;
-        assert.ok(run !== undefined);
-        assert.equal(run.url.pathname, "/api/v2/sandboxes/sessions/sbs_resumed/cmd");
-        assert.equal(run.body.command, "setpriv");
-        assert.equal(run.body.cwd, "/workspace/repository");
-        assert.equal(run.body.sudo, false);
-        assert.ok((run.body.args as readonly string[]).includes("pnpm dev"));
-        assert.deepEqual(listening, { started: false });
-        assert.deepEqual(serving.started, []);
-        assert.deepEqual(serving.resumed, []);
-      }),
-  );
-
-  it.effect(
     "a shell starts in the running sandbox under the id given and is read back, and one tmux does not hold is not found",
     () =>
       Effect.gen(function* () {
@@ -385,30 +302,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
       const woken = api.asked.find((call) => call.url.searchParams.get("resume") === "true");
       assert.equal(woken?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
     }),
-  );
-
-  it.effect(
-    "a sandbox opened before the timeout was shortened has it lowered ahead of its resume, so the session the resume opens lives the timeout, and one within it is left",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const resume = (api: ReturnType<typeof vercel>) =>
-          Effect.flatMap(AgentSandbox, (sandbox) => sandbox.resume(SESSION)).pipe(
-            Effect.provide(api.layer),
-          );
-        const old = vercel("stopped", [], 0, undefined, undefined, CODER.SANDBOX_MAX_LIFETIME_MS);
-        const capped = vercel("stopped", [], 0, undefined, undefined, CODER.SANDBOX_TIMEOUT_MS);
-
-        yield* resume(old);
-        yield* resume(capped);
-
-        const lowered = old.asked.findIndex((call) => call.method === "PATCH");
-        const woken = old.asked.findIndex((call) => call.url.searchParams.get("resume") === "true");
-        assert.ok(lowered >= 0 && lowered < woken, "the timeout is lowered before the resume");
-        assert.equal(old.asked[lowered]?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
-        assert.deepEqual(old.updates, [{ timeout: CODER.SANDBOX_TIMEOUT_MS }]);
-        assert.ok(capped.asked.every((call) => call.method !== "PATCH"));
-      }),
   );
 
   it.effect("an attach mints the running session's PTY and never wakes a stopped sandbox", () =>

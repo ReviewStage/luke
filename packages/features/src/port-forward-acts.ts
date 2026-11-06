@@ -1,5 +1,5 @@
 /**
- * port-forward-acts.ts -- what the panel's Forward to localhost control says to the desktop and hears back: forwarding read and turned on or off for one coding agent, and how each of its forwarded ports stands.
+ * port-forward-acts.ts -- what the panel's Forward to localhost control says to the desktop and hears back: forwarding turned on or off for one coding agent, and how each of its forwarded ports stands, as the host keeps it in app state.
  *
  * The desktop's host forwards one agent's ports at a time: while forwarding
  * is on, every port the service detects listening in the agent's cloud
@@ -23,14 +23,9 @@ export const PORT_FORWARD_STATE = {
   UNAVAILABLE: "unavailable",
 } as const;
 
-/** A call that names the agent whose forwarding it reads or turns. */
-export const portForwardAgentParamsSchema = EffectSchema.Struct({
-  agentId: EffectSchema.NonEmptyString,
-});
-
 /** Forwarding turned on or off for an agent; on for one turns it off for any other. */
 export const portForwardSetParamsSchema = EffectSchema.Struct({
-  ...portForwardAgentParamsSchema.fields,
+  agentId: EffectSchema.NonEmptyString,
   on: EffectSchema.Boolean,
 });
 
@@ -53,3 +48,13 @@ export const portForwardingAnswerSchema = EffectSchema.Struct({
 });
 
 export type PortForwardingAnswer = typeof portForwardingAnswerSchema.Type;
+
+/** The one agent forwarded and how its forwarding stands, as the host keeps it in app state; none while no agent is forwarded. */
+export const portForwardingSchema = EffectSchema.NullOr(
+  EffectSchema.Struct({
+    agentId: EffectSchema.NonEmptyString,
+    ...portForwardingAnswerSchema.fields,
+  }),
+);
+
+export type PortForwarding = typeof portForwardingSchema.Type;

@@ -36,8 +36,8 @@ const SECTIONS = [
   },
   {
     id: "plan",
-    title: "Get a plan",
-    body: "The plan is written as you go, in steps an agent can follow, with the files each step touches.",
+    title: "Get a description",
+    body: "The description is written as you go, in steps an agent can follow, with the files each step touches.",
   },
   {
     id: "hand",
@@ -81,7 +81,7 @@ function Landing(): React.JSX.Element {
       footer={<Footer />}
       title="A better way to plan with agents."
       titleStyle={PUBLIC_TITLE.HERO}
-      lead={`Talk through a feature with ${PRODUCT_NAME}. It reads the code while you talk and writes a plan you can paste into your coding agent.`}
+      lead={`Talk through a feature with ${PRODUCT_NAME}. It reads the code while you talk and writes a description you can paste into your coding agent.`}
     >
       <PublicSection>
         <Inline gap={GAP.CONTROL}>

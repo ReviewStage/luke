@@ -33,7 +33,7 @@ import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handMembers, readExperiments, registryWith } from "../testing/app-state.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -44,7 +44,7 @@ import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -150,7 +150,7 @@ function mount(element: ReactElement): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(element));
+  act(() => root.render(withQueryClient(element)));
   return container;
 }
 
@@ -294,7 +294,13 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   const draw = (control: TasksControl) =>
     act(() =>
       root.render(
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+        withQueryClient(
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: control,
+          }),
+        ),
       ),
     );
   draw(tasks);
@@ -330,7 +336,13 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
   const draw = (control: TasksControl) =>
     act(() =>
       root.render(
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+        withQueryClient(
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            tasks: control,
+          }),
+        ),
       ),
     );
   draw(asked(false));
@@ -930,7 +942,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
 
   openTaskMenu(mountPlanTab(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⌥⌘C"],
+    ["Copy description", "⌥⌘C"],
     ["Version history", "⌥⇧⌘H"],
     ["Mark as unread", "U"],
     ["Pin", "P"],
@@ -977,7 +989,7 @@ test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version histo
   openTaskMenu(mountPlanTab(tasks, registryWith({})));
   const offered = menuItems().map(itemLabel);
   assert.deepEqual(
-    ["Copy plan", "Version history"].filter((item) => offered.includes(item)),
+    ["Copy description", "Version history"].filter((item) => offered.includes(item)),
     [],
   );
   assert.equal(appCommandOffered(APP_COMMAND.COPY_CONTENT), false);

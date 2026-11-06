@@ -495,6 +495,7 @@ const merge = extendTailwindMerge({
         "block-gap",
         "row-inset",
         "list-inset",
+        "nav-item-nest",
         "menu-glyph",
         "control-compact",
         "time-inset",

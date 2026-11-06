@@ -439,7 +439,7 @@ describe("the host's install script", () => {
       const answer = computer.install("0.3.0");
 
       expect(answer.status, answer.stderr).toBe(0);
-      expect(answer.stdout).toContain("Connected.");
+      expect(answer.stdout).toContain("Ready. Pick it under a task's Runs on");
       expect(answer.stdout).toContain("To remove it: ~/.local/bin/vespin-host uninstall");
       expect(readlinkSync(join(computer.releases, "current"))).toBe("versions/0.3.0");
       expect(readlinkSync(computer.link)).toBe(join(computer.releases, "current/bin/vespin-host"));

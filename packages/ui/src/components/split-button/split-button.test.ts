@@ -49,7 +49,7 @@ function Harness({
     "div",
     null,
     createElement(SplitButton, {
-      label: "Save the plan",
+      label: "Save the description",
       disabled,
       busy: busy !== undefined,
       busyLabel: busy ?? "",
@@ -115,7 +115,7 @@ function press(element: HTMLElement): void {
 test("the main part, named by its label and showing its words, does its act and opens nothing", () => {
   const done: Done = [];
   mount(createElement(Harness, { done }));
-  const save = button("Save the plan");
+  const save = button("Save the description");
   expect(save.textContent).toBe("Save");
 
   press(save);
@@ -164,7 +164,7 @@ test("the keys walk the menu, a choice acts and closes it, and Escape closes it 
 test("unavailable, both halves refuse their press and stay Tab stops", () => {
   const done: Done = [];
   mount(createElement(Harness, { done, disabled: true }));
-  const save = button("Save the plan");
+  const save = button("Save the description");
   const chevron = button("More ways to save");
 
   press(save);
@@ -197,7 +197,7 @@ test("every press but the chevron's is heard as it lands, one the busy main part
   const done: Done = [];
   mount(
     createElement(SplitButton, {
-      label: "Save the plan",
+      label: "Save the description",
       busy: true,
       busyLabel: "Saving",
       onClick: () => done.push("Save"),

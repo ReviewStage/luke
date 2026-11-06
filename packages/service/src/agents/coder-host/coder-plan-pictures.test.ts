@@ -22,12 +22,11 @@ import {
 import { planAttachmentOf } from "@repo/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@repo/features/plan-attachment-wire";
 import { planSections } from "@repo/features/plan-document";
-import { unparsedWire, type WireRecord } from "@repo/wire";
+import { unparsedWire } from "@repo/wire";
 import { paddedTo, webmBytes } from "@repo/wire/testing";
 import { Effect, Option } from "effect";
 import { Base64 } from "effect/encoding";
 import { ACTION_RESULT_STATUS } from "../../core.js";
-import { stampedEveEvent } from "../../testing/eve-events.js";
 import { CODER } from "./bounds.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import {
@@ -36,7 +35,6 @@ import {
   recordPlanEdit,
   TASK_PICTURE_FILE_REFUSAL,
 } from "./plan-edit.js";
-import { CODER_TOOL, opensSandbox } from "./tool-set.js";
 
 /**
  * A coding agent's `edit_plan` adding a screenshot from its sandbox to its
@@ -290,32 +288,6 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           Option.map(read, ({ bytes }) => bytes.length),
           Option.some(recording.length),
         );
-      }),
-  );
-
-  it.effect(
-    "an edit adding a picture opens the agent's sandbox, and one of notes alone does not",
-    () =>
-      Effect.sync(() => {
-        const requested = (input: WireRecord) =>
-          stampedEveEvent(
-            {
-              type: "actions.requested",
-              data: {
-                turnId: "turn_0",
-                sequence: 0,
-                stepIndex: 0,
-                actions: [
-                  { kind: "tool-call", callId: "call-1", toolName: CODER_TOOL.EDIT_PLAN, input },
-                ],
-              },
-            },
-            1_800_000_000_000,
-          );
-
-        assert.equal(opensSandbox(requested(pictureCall("shots/members.png"))), true);
-        assert.equal(opensSandbox(requested({ notes: [] })), false);
-        assert.equal(opensSandbox(requested({ notes: [], pictures: [] })), false);
       }),
   );
 });

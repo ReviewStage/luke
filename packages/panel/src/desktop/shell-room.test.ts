@@ -193,7 +193,10 @@ function mount(width: number, onTask = true): HTMLElement {
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Window, { onTask })),
+      onRegistry(
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
+        createElement(Window, { onTask }),
+      ),
     ),
   );
   return container;

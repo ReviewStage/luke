@@ -279,7 +279,7 @@ test("on a phone an agent's screen goes back to its task's plan, named for the t
   const menu = page.menu();
   assert.ok(menu.includes("Copy link") && menu.includes("Copy transcript"));
   assert.ok(menu.includes("Show browser"), "the agent's browser, which no list of tabs offers");
-  assert.ok(!menu.includes("Copy plan"), "none of the task's own");
+  assert.ok(!menu.includes("Copy description"), "none of the task's own");
 
   page.choose("Show browser");
   assert.ok(
@@ -318,7 +318,7 @@ test("on a phone a tab of the panel is pushed over the column, titled by the tab
   });
   const menu = page.menu();
   assert.ok(menu.includes("Copy link"), "the tab's own");
-  assert.ok(!menu.includes("Copy plan"), "the task's own menu is Overview's");
+  assert.ok(!menu.includes("Copy description"), "the task's own menu is Overview's");
 
   page.back();
   assert.deepEqual(page.told, ["toggle"]);

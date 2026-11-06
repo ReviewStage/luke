@@ -14,7 +14,10 @@ import {
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
 import { type SentryCapture, sentryReporterLayer } from "@repo/features/sentry-reporting";
-import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import {
+  SENTRY_PROFILE_SESSION_SAMPLE_RATE,
+  SENTRY_TRACES_SAMPLE_RATE,
+} from "@repo/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@repo/host";
 import type { AppStateStore } from "@repo/host/client";
 import type { EffectDesktopService } from "@repo/host/desktop-service";
@@ -22,6 +25,8 @@ import type { SentryEnvironment } from "@repo/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
 import { Effect, Exit, type Layer, Scope, Stream } from "effect";
 import {
+  type CpuSummary,
+  sampleProcessCpu,
   sampleWindowMemory,
   type UnresponsiveEpisode,
   type WorkingSetCrossing,
@@ -51,6 +56,14 @@ declare const PACKAGED_SENTRY_RELEASE: string;
  *
  * Main reports on behalf of every renderer, so what leaves goes through the
  * same token filters as the preload's and the renderers' own.
+ *
+ * Main also decides, once a launch, whether its windows are profiled: where
+ * they are, the SDK serves every document with `Document-Policy: js-profiling`,
+ * which the browser's profiler needs, and each window profiles as it starts
+ * (`renderer/desktop-sentry-sdk.ts`). Note that the choice is made here rather
+ * than by each window's SDK, because the policy alone already costs a page:
+ * Chromium readies its profiler for every document it is granted to, so a
+ * launch left unprofiled is served none.
  */
 export function initializeCrashReporting(runMode: RunMode, environment: SentryEnvironment): void {
   Sentry.init({
@@ -59,6 +72,7 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     release: PACKAGED_SENTRY_RELEASE,
     environment,
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
+    enableRendererProfiling: Math.random() < SENTRY_PROFILE_SESSION_SAMPLE_RATE,
     integrations: [Sentry.startupTracingIntegration()],
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
@@ -141,6 +155,30 @@ function noteWorkingSetCrossing(crossing: WorkingSetCrossing): void {
   });
 }
 
+/**
+ * One kind of process's CPU over five minutes, as two of Sentry's metric
+ * distributions, its mean and its highest sample, each a percentage of one
+ * core: tagged with the kind, where the windows stood, how many agents
+ * worked, and the build and machine it ran on, and nothing of the page.
+ */
+function reportCpuSummary(summary: CpuSummary, appVersion: string): void {
+  const attributes = {
+    "process.type": summary.process,
+    "window.state": summary.windowState,
+    "agents.working": summary.workingAgents,
+    "app.version": appVersion,
+    "os.arch": process.arch,
+  };
+  Sentry.metrics.distribution("desktop.cpu.mean", summary.meanPercent, {
+    unit: "percent",
+    attributes,
+  });
+  Sentry.metrics.distribution("desktop.cpu.max", summary.maxPercent, {
+    unit: "percent",
+    attributes,
+  });
+}
+
 export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
@@ -156,9 +194,11 @@ interface TelemetryServiceDependencies {
   config: DesktopConfig;
   /** The one way a counted event leaves this process: the host's own stream, through the operator. */
   recordEvent: RecordProductEvent;
+  /** How many agents are working now, as the CPU summaries bucket them. */
+  workingAgents: () => number;
 }
 
-/** Everything that leaves this process and is not the Gateway: the crash stream, the counted events, the feedback delivery, the windows' memory notes. */
+/** Everything that leaves this process and is not the Gateway: the crash stream, the counted events, the feedback delivery, the windows' memory notes, the processes' CPU summaries. */
 export function createTelemetryService(
   dependencies: TelemetryServiceDependencies,
 ): TelemetryService {
@@ -166,7 +206,7 @@ export function createTelemetryService(
   const feedbackDelivery = feedbackDeliveryFromEnvironment();
   const recordProductEvent: RecordProductEvent = (name, properties) =>
     dependencies.recordEvent(name, properties);
-  /** What the memory sampler runs in, from the start; closing it at the stop interrupts it. */
+  /** What the memory and CPU samplers run in, from the start; closing it at the stop interrupts them. */
   const sampling = Scope.makeUnsafe();
 
   return {
@@ -186,8 +226,18 @@ export function createTelemetryService(
           : Effect.void,
       );
     },
-    // Every window's working set is read once a minute for the run's life.
-    start: () => Effect.asVoid(Effect.forkIn(sampleWindowMemory(noteWorkingSetCrossing), sampling)),
+    // Every window's working set is read once a minute, and every process's
+    // CPU time every few seconds, for the run's life.
+    start: () =>
+      Effect.andThen(
+        Effect.forkIn(sampleWindowMemory(noteWorkingSetCrossing), sampling),
+        Effect.forkIn(
+          sampleProcessCpu(dependencies.workingAgents, (summary) =>
+            reportCpuSummary(summary, config.appVersion),
+          ),
+          sampling,
+        ),
+      ).pipe(Effect.asVoid),
     // A report queued when the quit began would otherwise go with the
     // process; the flush is bounded so it cannot be what holds one open.
     // Note that it flushes rather than closes, because a launch that fails

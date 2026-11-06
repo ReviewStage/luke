@@ -1,0 +1,59 @@
+---
+title: "Automations"
+description: "Start agents on a schedule, on GitHub and Sentry events, or from a webhook"
+---
+
+An automation starts an agent with a prompt you write whenever its trigger fires. Each run gets its own task, assigned to you, and runs in the cloud as you: with your GitHub access, your model and plan, and your integrations.
+
+Open **Automations** (<kbd>⇧⌘U</kbd>) and click **New automation**. To describe what you want in words instead, click **Create with an agent**, and an agent sets it up for you.
+
+## Triggers
+
+### Schedule
+
+Hourly, daily, weekdays, weekly, or a custom five-field cron, in a time zone you pick. It runs at most every 15 minutes. A run more than an hour late is skipped, and the schedule moves on to its next time.
+
+### GitHub event
+
+Pull request opened or updated, opened, or labeled; issue opened or labeled; checks failed; or commits pushed. The repository must be one Vespin's GitHub App can reach.
+
+By default, only events from people start a run. Turn on **From Vespin's agents** or **From other bots** to include those. A push by Vespin's own agents never starts a run.
+
+### Webhook
+
+Save the automation first. Its page then shows the address to POST to and a secret, which is shown only once:
+
+```sh
+curl -X POST https://vespin.dev/api/automations/<id>/webhook \
+  -H "Authorization: Bearer <secret>" \
+  -d 'deploy failed on main'
+```
+
+The request body, up to 64 KB of text, is added to the agent's prompt. Don't put secrets in it. Send an `Idempotency-Key` header to ignore repeated calls. **New secret** replaces the secret, and the old one stops working.
+
+### Sentry
+
+New issues or triggered alerts, filtered by project, environment, and level. An owner or admin first installs the Sentry integration from the trigger's settings. For alerts, set the Sentry alert rule's action to notify the Vespin integration. The same issue starts a run again only after a cooldown, 24 hours by default.
+
+## What the agent gets
+
+The agent gets your prompt, then a note saying which automation started it and why, then the event itself: the GitHub event, the webhook body, or the Sentry issue. No one watches the run as it goes, so write the prompt to say what done looks like.
+
+Under **Runs land in**, choose **New agent each run**, or **Same agent** to send every run to one agent as a new message.
+
+## Limits
+
+A run that would go over a limit is skipped, not queued, and shows as **Skipped** on the **Runs** tab.
+
+| Limit | Default | Up to |
+| --- | --- | --- |
+| Agents working at once | 1 | 5 |
+| Runs per 24 hours | 10 | 50 |
+
+The editor keeps the defaults. To raise a limit, ask an agent to change the automation, through **Create with an agent** or [Vespin MCP](/vespin-mcp).
+
+**Run now** starts a run at any time, even when the automation is off, within the same limits.
+
+## Sharing
+
+A new automation belongs to you: only you can see and run it, and your workspace's owners and admins can turn it off or delete it. Share it with the workspace, and every member can see it, run it, and turn it off.

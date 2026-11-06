@@ -13,6 +13,7 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ellipsized } from "../testing/action-label.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { openTaskMenu } from "../testing/task-menu.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -135,7 +136,11 @@ function openMenu(tasks: TasksControl): void {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+    root.render(
+      withQueryClient(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
   );
   openTaskMenu(container);
 }
@@ -289,7 +294,11 @@ function openTask(tasks: TasksControl): HTMLElement {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+    root.render(
+      withQueryClient(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
   );
   return container;
 }

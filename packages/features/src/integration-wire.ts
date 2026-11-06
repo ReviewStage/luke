@@ -81,6 +81,32 @@ export const INTEGRATION_NAME = {
   [INTEGRATION_PROVIDER.YCOMBINATOR]: "Y Combinator",
 } as const satisfies Record<IntegrationProvider, string>;
 
+/**
+ * What each provider gives agents, as a row that is not connected says it
+ * under the provider's name, so a developer knows what a Connect grants
+ * before pressing it.
+ */
+export const INTEGRATION_PURPOSE = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: "The apps, APIs, and skills you set up in Executor",
+  [INTEGRATION_PROVIDER.GITHUB]: "Issues, pull requests, and code, as you",
+  [INTEGRATION_PROVIDER.GMAIL]: "Read mail and write drafts",
+  [INTEGRATION_PROVIDER.GOOGLE_CALENDAR]: "Events, invitations, and free time",
+  [INTEGRATION_PROVIDER.GOOGLE_DRIVE]: "Docs, sheets, and files",
+  [INTEGRATION_PROVIDER.GRANOLA]: "Meeting notes and transcripts",
+  [INTEGRATION_PROVIDER.LINEAR]: "Issues, projects, and cycles",
+  [INTEGRATION_PROVIDER.MERCURY]: "Accounts, transactions, and payments",
+  [INTEGRATION_PROVIDER.NEON]: "Postgres projects, branches, and SQL",
+  [INTEGRATION_PROVIDER.NOTION]: "Pages, databases, and comments",
+  [INTEGRATION_PROVIDER.POSTHOG]: "Analytics, feature flags, and experiments",
+  [INTEGRATION_PROVIDER.RESEND]: "Send email and read delivery logs",
+  [INTEGRATION_PROVIDER.SENTRY]: "Errors, traces, and releases",
+  [INTEGRATION_PROVIDER.SLACK]: "Messages, channels, and threads",
+  [INTEGRATION_PROVIDER.STRIPE]: "Payments, customers, and subscriptions",
+  [INTEGRATION_PROVIDER.SUPABASE]: "Postgres, auth, storage, and edge functions",
+  [INTEGRATION_PROVIDER.VERCEL]: "Deployments, logs, and domains",
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: "Bookface companies, founders, and investors",
+} as const satisfies Record<IntegrationProvider, string>;
+
 /** How an account grants our agents a provider. */
 export const INTEGRATION_GRANT = {
   /** A sign-in to the provider through Vercel Connect, begun from Settings › Integrations and ended there. */

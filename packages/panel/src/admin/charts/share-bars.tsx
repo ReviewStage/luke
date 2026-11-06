@@ -33,7 +33,7 @@ const FUNNEL_LABEL = {
 } as const satisfies Record<FunnelStep, string>;
 
 const REACH_LABEL = {
-  [REACH_FEATURE.TASKS]: "Tasks & plans",
+  [REACH_FEATURE.TASKS]: "Tasks & descriptions",
   [REACH_FEATURE.AGENTS]: "Agents",
   [REACH_FEATURE.INBOX]: "Inbox",
   [REACH_FEATURE.INTEGRATIONS]: "Integration connected",

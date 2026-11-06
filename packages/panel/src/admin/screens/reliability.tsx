@@ -21,10 +21,6 @@ import { formatDate } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
 import {
   Card,
-  DATA_TABLE_COLUMN_KIND,
-  DATA_TABLE_MIN_WIDTH,
-  DataTable,
-  type DataTableColumn,
   Inline,
   List,
   ListRow,
@@ -37,7 +33,16 @@ import {
   TextLink,
 } from "@repo/ui";
 import { RATE_PLACES } from "@repo/ui/admin-format";
+import {
+  createDataTableColumnHelper,
+  DATA_TABLE_COLUMN_KIND,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumns,
+  DataTableSkeleton,
+} from "@repo/ui/data-table";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReliabilityQuery, useAdminSignOut } from "../admin-queries.js";
@@ -63,7 +68,6 @@ import { AdminViewOptions, windowWords } from "../chrome/controls.js";
 import { AppTurnsNote, retiredTitle } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
 import { connectionWord, INSTALLATION_LABEL } from "../status-words.js";
 
@@ -212,39 +216,39 @@ function share(count: { failed: number; total: number }): number | null {
   return count.total === 0 ? null : count.failed / count.total;
 }
 
-function attentionColumns(
-  onOpen: (id: string) => void,
-): readonly DataTableColumn<AdminAttentionAccount>[] {
-  return [
-    {
-      key: ATTENTION_ACCOUNT_COLUMN,
-      label: "Account",
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
-    {
-      key: "problems",
-      label: "Broken",
-      cell: (row) => (
+const attentionColumn = createDataTableColumnHelper<AdminAttentionAccount>();
+
+function attentionColumns(onOpen: (id: string) => void): DataTableColumns<AdminAttentionAccount> {
+  return attentionColumn.columns([
+    attentionColumn.display({
+      id: ATTENTION_ACCOUNT_COLUMN,
+      header: "Account",
+      cell: ({ row: { original: row } }) => <AccountCell account={row} onOpen={onOpen} />,
+    }),
+    attentionColumn.display({
+      id: "problems",
+      header: "Broken",
+      cell: ({ row: { original: row } }) => (
         <Inline>
           {row.problems.map((problem) => (
             <QuietWords key={problemLabel(problem)}>{problemLabel(problem)}</QuietWords>
           ))}
         </Inline>
       ),
-    },
-    {
-      key: "since",
-      label: "Last changed",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatDate(row.brokenSince),
-    },
-    {
-      key: "failed-agents",
-      label: `Agents failed · ${ADMIN_ATTENTION_AGENT_DAYS}d`,
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatCount(row.failedAgents),
-    },
-  ];
+    }),
+    attentionColumn.display({
+      id: "since",
+      header: "Last changed",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatDate(row.brokenSince),
+    }),
+    attentionColumn.display({
+      id: "failed-agents",
+      header: `Agents failed · ${ADMIN_ATTENTION_AGENT_DAYS}d`,
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      cell: ({ row: { original: row } }) => formatCount(row.failedAgents),
+    }),
+  ]);
 }
 
 /**
@@ -384,6 +388,7 @@ function ReliabilityRecords({
   reliability: AdminReliability | undefined;
   onOpenAccount: (id: string) => void;
 }): React.JSX.Element {
+  const attentionTableColumns = useMemo(() => attentionColumns(onOpenAccount), [onOpenAccount]);
   return (
     <>
       <AdminSection title="Failures">
@@ -422,7 +427,7 @@ function ReliabilityRecords({
         {reliability === undefined ? (
           <DataTableSkeleton
             label="Accounts that need attention"
-            columns={attentionColumns(onOpenAccount)}
+            columns={attentionTableColumns}
             rows={ATTENTION_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             cells={{ [ATTENTION_ACCOUNT_COLUMN]: <AccountCellSkeleton /> }}
@@ -430,9 +435,9 @@ function ReliabilityRecords({
         ) : (
           <DataTable
             label="Accounts that need attention"
-            columns={attentionColumns(onOpenAccount)}
+            columns={attentionTableColumns}
             rows={reliability.attention.accounts}
-            rowKey={(row) => row.id}
+            getRowId={(row) => row.id}
             empty="No account holds a broken key, integration, or GitHub installation."
             minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
             onRowPress={(row) => onOpenAccount(row.id)}

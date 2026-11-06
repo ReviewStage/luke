@@ -25,10 +25,11 @@ import {
   linkOpenTarget,
   withoutStayOnWeb,
 } from "@repo/features/link-open";
+import { savesStep } from "@repo/panel/navigation-history";
 import { HTTP_METHOD } from "@repo/wire";
+import type { HistoryLocation } from "@tanstack/react-router";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { savedEntry } from "./browser-history";
 
 /**
  * The one part of the account's preferences the hand-off reads. A choice
@@ -63,17 +64,19 @@ function tookStayOnWeb(): boolean {
  * Whether the page was loaded by a fresh navigation to its address, as a
  * link followed or an address opened is: not a reload or a Back or Forward,
  * not onto an entry the browser brought back with a place the panel saved
- * in it (`browser-history.ts`), and not by our own Open in browser,
- * whose flag this takes out of the address. Read once, before the panel
- * reads the address or writes its own first place into the entry. A
+ * in it (`loaded`, the router history's location as the page loaded), and
+ * not by our own Open in browser, whose flag this takes out of the address.
+ * Read once, before the panel reads the address or writes its own first
+ * place into the entry. A
  * browser that does not say how it loaded the page is taken as not, so a
  * doubt stays on the web.
  */
-export function browserLoadedFresh(): boolean {
+export function browserLoadedFresh(loaded: HistoryLocation): boolean {
   const stay = tookStayOnWeb();
-  const [loaded] = performance.getEntriesByType("navigation");
-  const navigated = loaded !== undefined && "type" in loaded && loaded.type === NAVIGATED;
-  return navigated && !stay && savedEntry() === undefined;
+  const [navigation] = performance.getEntriesByType("navigation");
+  const navigated =
+    navigation !== undefined && "type" in navigation && navigation.type === NAVIGATED;
+  return navigated && !stay && !savesStep(loaded);
 }
 
 /**

@@ -377,8 +377,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           },
         ]);
         assert.equal(yield* sentLineStands(owner, stored.value.conversationId, lineId), true);
-        // The default stands: nothing was chosen.
-        assert.equal(yield* readAccountPreferences(owner), undefined);
+        // The default stands: no agent was chosen.
+        assert.equal((yield* readAccountPreferences(owner))?.agent, undefined);
       }),
   );
 

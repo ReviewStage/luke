@@ -15,6 +15,14 @@
     border-top: 1px solid var(--ui-color-border);
   }
 
+  /* A run of rows drawing only those near the view (virtual-rows.tsx) stands
+     as one box of the card, its rows placed in it absolutely: each is ruled
+     from the row above it but the run's first, by its place in the whole
+     run rather than among the rows drawn, since the first drawn may be any. */
+  .ui-settings-section-card > .ui-virtual-rows > .ui-virtual-row:not([data-index="0"]) {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
   /* A row inset under the row above that stands inside a box of its own, as
      a row with a menu of its own does, is ruled where its inset starts, as a
      bare inset row is: the box draws no rule, and the row draws it from its

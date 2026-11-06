@@ -1,6 +1,6 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { RUNNER_BUNDLE_FILE } from "@repo/service/agents/coder-host/runner-bundle";
+import { AGENT_IMAGE_FILE } from "@repo/service/agents/coder-host/agent-image";
 import { build } from "esbuild";
 import {
   BUILD_OUTPUT_DIRECTORY,
@@ -19,6 +19,7 @@ import {
   FUNCTION_BUNDLE_DIRECTORY,
   functionPublicPath,
 } from "../server/function-layout.js";
+import { agentImageReference } from "./agent-image.js";
 
 /**
  * Bundles the functions the routes under `server/routes/` and the hosted
@@ -42,34 +43,27 @@ import {
 const WEB = join(import.meta.dirname, "..");
 
 /**
- * The runner a native harness's sandbox runs, as `@repo/agent-runner`'s own
- * build leaves it, which the web build runs first; and the module that reads
- * it beside a function's entry. Every function whose bundle reaches that
- * module ships the runner in its `.func`, and a build without the runner
- * fails here rather than deploy a launch that cannot upload it.
+ * The module that reads the agents' image reference beside a function's
+ * entry. Every function whose bundle reaches it ships the reference in its
+ * `.func`, computed here as CI computes the tag it pushes the image under
+ * (`agent-image.ts`), and a build without the runner's bundle the image
+ * carries fails here rather than deploy a launch that names no image.
  */
-const AGENT_RUNNER = {
-  BUNDLE: join(WEB, "..", "..", "packages", "agent-runner", "dist", RUNNER_BUNDLE_FILE),
-  READER: join(
-    WEB,
-    "..",
-    "..",
-    "packages",
-    "service",
-    "src",
-    "agents",
-    "coder-host",
-    "runner-bundle.ts",
-  ),
-} as const;
+const AGENT_IMAGE_READER = join(
+  WEB,
+  "..",
+  "..",
+  "packages",
+  "service",
+  "src",
+  "agents",
+  "coder-host",
+  "agent-image.ts",
+);
 /** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
 
-const runnerBundle = await readFile(AGENT_RUNNER.BUNDLE).catch(() => {
-  throw new Error(
-    `${relative(WEB, AGENT_RUNNER.BUNDLE)} is missing: run \`pnpm --filter @repo/agent-runner build\` first`,
-  );
-});
+const agentImage = Buffer.from(`${await agentImageReference()}\n`, "utf8");
 
 const task = await functionBundlePlan(WEB);
 // Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
@@ -93,8 +87,8 @@ if (localOnly.length > 0) {
 
 await writeFile(join(WEB, FUNCTION_METAFILE), JSON.stringify(result.metafile));
 
-const shipsRunner = new Set(
-  [...bundlesReaching(result.metafile, WEB, AGENT_RUNNER.READER)].map((path) => join(WEB, path)),
+const shipsImage = new Set(
+  [...bundlesReaching(result.metafile, WEB, AGENT_IMAGE_READER)].map((path) => join(WEB, path)),
 );
 
 const durationOf = new Map(
@@ -117,8 +111,8 @@ const emitted = await emitBuildOutput({
         path: functionPublicPath(definition),
         contents: await readFile(join(WEB, bundlePath(definition))),
         maxDuration: definition.maxDuration,
-        files: shipsRunner.has(join(WEB, bundlePath(definition)))
-          ? [{ name: RUNNER_BUNDLE_FILE, contents: runnerBundle }]
+        files: shipsImage.has(join(WEB, bundlePath(definition)))
+          ? [{ name: AGENT_IMAGE_FILE, contents: agentImage }]
           : [],
       })),
     )),

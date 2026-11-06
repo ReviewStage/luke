@@ -13,6 +13,13 @@
  * Window Focus Refetching guide's `refetchOnWindowFocus: false`) or when
  * the network reconnects (`refetchOnReconnect: false`). Nothing polls,
  * since `refetchInterval` is off by default and left so.
+ *
+ * Every query and mutation goes to the host over the window's port rather
+ * than reaching the network itself, and the host holds what it cannot send
+ * while offline, so both run in the Network Mode guide's
+ * `networkMode: "always"`: none pauses for the browser's online mark, which
+ * reads true while the service is unreachable often enough to mean nothing
+ * here.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -22,8 +29,12 @@ import type { ReactNode } from "react";
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode: "always",
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
+    },
+    mutations: {
+      networkMode: "always",
     },
   },
 });

@@ -15,6 +15,8 @@ export const PINS = {
 } as const;
 
 export const PROBE_SANDBOX = {
+  /** Vercel's Node image, the agents' image's own base (`apps/web/agent-image/Dockerfile`): Node, git, and sudo. */
+  IMAGE: "vercel/sandbox/node:24",
   /** The unprivileged user Claude Code runs as. */
   AGENT_USER: "agent",
   /** Root-owned, world-readable: the SDK, the driver, and the leak check. */

@@ -1,8 +1,4 @@
-import {
-  ACCOUNT_PROVIDER,
-  type ACCOUNT_STATUS,
-  type AccountSnapshot,
-} from "@repo/credentials/snapshot";
+import type { ACCOUNT_STATUS, AccountSnapshot } from "@repo/credentials/snapshot";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -14,7 +10,7 @@ import {
   type SettingsRowsInput,
 } from "@repo/settings";
 import { SettingsSection } from "@repo/ui";
-import { ACTOR_KIND, type Actor } from "@repo/ui/actor-model";
+import { ACTOR_KIND, type Actor, accountActor } from "@repo/ui/actor-model";
 import { ActorStack } from "../actor-ref.js";
 import { SchemaSettingRows } from "./schema-rows.js";
 import type { SettingsWrites } from "./writes.js";
@@ -25,9 +21,10 @@ import type { SettingsWrites } from "./writes.js";
  * The one row is the schema's (`commitAuthor`), drawn by `SchemaSettingRows`
  * like every stored setting, so the settings search finds it too. Each of
  * its choices wears the faces GitHub shows on such a commit, the author's
- * first and the co-author's over it: the member by their GitHub picture, or
- * their letter where they signed in otherwise, and the product as GitHub
- * shows its App's bot.
+ * first and the co-author's over it: the member by the face the window draws
+ * them with everywhere else (`accountActor`), so the Account row above and
+ * these choices show one person alike, and the product as GitHub shows its
+ * App's bot.
  */
 
 /** The product as GitHub shows its App's bot. */
@@ -40,21 +37,6 @@ function facesOf(member: Actor, token: string): readonly Actor[] {
   return coAuthorCredited(token) ? [author, other] : [author];
 }
 
-/** The signed-in member as their commits show them: by their GitHub picture, where their sign-in is GitHub's. */
-function memberActor(
-  account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>,
-): Actor {
-  return {
-    kind: ACTOR_KIND.PERSON,
-    userId: account.id ?? account.email,
-    name: account.name ?? account.email,
-    ...(account.provider === ACCOUNT_PROVIDER.GITHUB && account.pictureUrl !== undefined
-      ? { pictureUrl: account.pictureUrl }
-      : undefined),
-    you: true,
-  };
-}
-
 export function CommitsSection({
   view,
   writes,
@@ -64,7 +46,7 @@ export function CommitsSection({
   writes: SettingsWrites;
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
 }): React.JSX.Element {
-  const member = memberActor(account);
+  const member = accountActor(account);
   const faces = (field: AppSettingField, token: string) =>
     field === APP_SETTING_SCHEMA.commitAuthor.field ? (
       <ActorStack actors={facesOf(member, token)} counted={false} />

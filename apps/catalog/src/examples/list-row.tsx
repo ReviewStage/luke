@@ -505,7 +505,7 @@ function ListRows(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="list-row-dense" title="Dense rows, acts on hover">
         <div className="catalog-narrow">
-          <List label="Plans" density={LIST_DENSITY.DENSE}>
+          <List label="Tasks" density={LIST_DENSITY.DENSE}>
             <ListRow
               title="Ship the release"
               description="web"
@@ -537,12 +537,12 @@ function ListRows(): React.JSX.Element {
               onPress={() => undefined}
             />
             <ListRow
-              title="A read plan in the sidebar's ink"
+              title="A read task in the sidebar's ink"
               meta="2d"
               ink={LIST_ROW_INK.SIDEBAR}
               onPress={() => undefined}
             />
-            <ListRow title="Deleting a plan" meta="3d" disabled onPress={() => undefined} />
+            <ListRow title="Deleting a task" meta="3d" disabled onPress={() => undefined} />
           </List>
         </div>
       </CatalogSection>
@@ -599,8 +599,8 @@ function ListRows(): React.JSX.Element {
             />
             <ListRow
               leading={<UserIcon />}
-              title="Plan"
-              description={`The plan this task is talked through in, as ${PRODUCT_NAME} keeps it`}
+              title="Description"
+              description={`The description this task is talked through in, as ${PRODUCT_NAME} keeps it`}
               onPress={() => undefined}
             />
             <ListRow leading={<UserIcon />} title="Inbox" meta="3" onPress={() => undefined} />

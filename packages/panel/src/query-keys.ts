@@ -23,4 +23,11 @@ export const QUERY_ROOT = {
   CONSENT_REQUEST: "consent-request",
   /** The admin screens' reads and writes (`admin/admin-queries.ts`), each next keyed by its procedure. */
   ADMIN: "admin",
+  HOST_PAIRING: "host-pairing",
+  INSTALLED_SKILL: "installed-skill",
+  INSTALLED_SKILL_PREVIEW: "installed-skill-preview",
+  TASK_NEWEST_REVISION: "task-newest-revision",
+  WORKSPACE_AGENTS: "workspace-agents",
+  REPOSITORY_PATHS: "repository-paths",
+  AGENT_PART: "agent-part",
 } as const;

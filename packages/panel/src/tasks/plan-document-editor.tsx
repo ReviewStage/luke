@@ -981,8 +981,8 @@ export function PlanDocumentEditor({
   return (
     <MarkdownEditor
       markdown={editor.draft}
-      label="Plan"
-      roomLabel="Editing the plan"
+      label="Description"
+      roomLabel="Editing the description"
       placeholder={PLAN_PLACEHOLDER}
       // Note that the text wears the drawn sections' own classes, so its lists keep their gutter and nothing moves as it opens or closes.
       className={markdownClass("plan-unit")}

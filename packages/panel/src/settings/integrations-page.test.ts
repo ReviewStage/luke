@@ -1007,6 +1007,11 @@ test("a query finds an integration by what it is for, keeping its section", asyn
   await searchFor(page, "database");
 
   assert.deepEqual(sections(page), [["Not connected", ["Neon", "Notion", "Supabase"]]]);
+
+  // The line a row says of what it gives agents finds it too.
+  await searchFor(page, "invitations");
+
+  assert.deepEqual(sections(page), [["Not connected", ["Google Calendar"]]]);
 });
 
 test("a query that finds nothing says so, and clearing it brings every row back", async () => {

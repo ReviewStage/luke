@@ -887,7 +887,7 @@ const OWN_KINDS: ReadonlySet<Mention["kind"]> = new Set([
 
 /** What a bare link's chip names a plan, a page, an agent, and a person by, since its address holds no name of theirs. */
 const BARE_NAME = {
-  TASK: "Plan",
+  TASK: "Description",
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",

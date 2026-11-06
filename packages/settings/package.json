@@ -21,7 +21,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "test:vitest": "vitest run",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "tsc --project tsconfig.json",
+    "docs:shortcuts": "tsx scripts/shortcuts-docs.ts --write"
   },
   "devDependencies": {
     "@types/node": "catalog:",

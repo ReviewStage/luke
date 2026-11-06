@@ -5,7 +5,7 @@ import {
 } from "@repo/features/host-pairing-view";
 import { type HostPairingAnswer, shownHostUserCode } from "@repo/features/host-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { momentText } from "@repo/features/time-format";
+import { clockText, momentText } from "@repo/features/time-format";
 import { readFailedWords, readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -17,6 +17,9 @@ import {
   ErrorLine,
   ErrorState,
   GAP,
+  SettingsRow,
+  SettingsRowMark,
+  SettingsSection,
   SpinnerRegion,
   Stack,
   TEXT_FONT,
@@ -25,11 +28,14 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
-import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act.js";
+import { useCallback, useState } from "react";
+import { askAct, useAct } from "../act.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import { unreadShown } from "../failure-report.js";
+import { QUERY_ROOT } from "../query-keys.js";
+import { DeviceGlyph } from "../tasks/runs-on.js";
 
 /**
  * host-connect-dialog.tsx -- a box's pairing approved or denied over Settings › Hosts, by the code its link named: the box as it named itself and the address its start came from, the code to hold against its terminal, and Connect or Deny.
@@ -37,12 +43,13 @@ import { unreadShown } from "../failure-report.js";
  * A box that pairs prints a link, `<origin>/connect/<code>`, and the code
  * itself. The link opened in a window hands its code here
  * (`useOpenHostConnect`), and Settings › Hosts, which only stands while
- * Bring your own host is on, draws this dialog over itself, over Add hosts
- * too where that stands. It reads the pairing, then asks "Connect <name>
- * (<OS> · <IP>) to your account?", since the box's name, platform, and
- * address are what tells a member their own box from one a stranger started
- * and sent them the link to; nothing is pressed for them, so focus rests on
- * the card. Connect makes the host at once and closes onto the list, which
+ * Bring your own host is on, draws this dialog over itself. It reads the
+ * pairing, then asks "Connect <name>?" over a row of the box as it named
+ * itself, its platform's glyph, and what it is, its architecture, and the
+ * address its start came from, since those are what tell a member their own
+ * box from one a stranger started and sent them the link to, as a device
+ * code's approval shows the device (RFC 8628); nothing is pressed for them,
+ * so focus rests on the card. Connect makes the host at once and closes onto the list, which
  * reads it; Deny ends the pairing and says so. A code no pending pairing has,
  * lapsed, used, mistyped, or held after too many such codes, reads as that,
  * with what to do: run the command on the host again for a new code.
@@ -112,10 +119,17 @@ type Standing =
 /** An answer that never reached the service, as a call that failed on its way is read. */
 const UNANSWERED: HostPairingFailed = { failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED };
 
-/** The box as the question names it: its name, then what it is and the address its start came from. */
-function boxQuestion(box: HostPairingAnswer): string {
-  const facts = [DEVICE_PLATFORM_NAME[box.platform], ...(box.ip === null ? [] : [box.ip])];
-  return `Connect ${box.name} (${facts.join(" · ")}) to your account?`;
+/** What the box is, as its row says under its name: its platform, its architecture, and the address its start came from. */
+function boxFacts(box: HostPairingAnswer): string {
+  return [DEVICE_PLATFORM_NAME[box.platform], box.arch, ...(box.ip === null ? [] : [box.ip])].join(
+    " · ",
+  );
+}
+
+/** When the code lapses, as a time of day, since a pairing lasts minutes. */
+function expiresAt(at: number): string {
+  const moment = new Date(at);
+  return clockText(moment.getHours(), moment.getMinutes());
 }
 
 /** What a code that cannot be approved says: why, and what to do next. */
@@ -137,6 +151,29 @@ function failedStanding(failed: HostPairingFailed, unanswered: Standing): Standi
     : { kind: STANDING.REFUSED, refusal: failed };
 }
 
+/**
+ * The read of the pairing a code names, asked as the dialog opens and again
+ * on Try again: answered at once on a failure, never tried again on its own.
+ */
+function hostPairingQueryOptions(code: string) {
+  return queryOptions({
+    queryKey: [QUERY_ROOT.HOST_PAIRING, code],
+    queryFn: () => askAct(ACT_KIND.HOSTS_PAIRING_READ, { code }),
+    retry: false,
+  });
+}
+
+/** Where the pairing's read leaves the dialog before anything is pressed. */
+function readStanding(pairing: UseQueryResult<HostPairingAnswer | HostPairingFailed>): Standing {
+  if (pairing.isPending || (pairing.isError && pairing.isFetching))
+    return { kind: STANDING.READING };
+  if (pairing.isError) return failedStanding(UNANSWERED, { kind: STANDING.UNREAD });
+  const answer = pairing.data;
+  return "failure" in answer
+    ? failedStanding(answer, { kind: STANDING.UNREAD })
+    : { kind: STANDING.ASKING, box: answer };
+}
+
 /** Hands Settings › Hosts a code to approve, as a pairing's link opened in this window does. */
 export function useOpenHostConnect(): (code: string) => void {
   return useAtomSet(hostConnectAtom);
@@ -149,7 +186,7 @@ export function useHostConnect(): readonly [string | undefined, () => void] {
   return [code, close];
 }
 
-/** The question: whose box, the code to hold against its terminal and until when it works, and Deny and Connect, Connect's check standing once the host is made. */
+/** The question: whose box, the code to hold against its terminal and when it expires, and Deny and Connect, Connect's check standing once the host is made. */
 function AskDialog({
   code,
   box,
@@ -170,7 +207,7 @@ function AskDialog({
   return (
     <Dialog
       open
-      title={boxQuestion(box)}
+      title={`Connect ${box.name}?`}
       // Note that the question names the box by the name and address it reported, so its title stays masked in a screen recording.
       replayUnmasked
       titleReplayMasked
@@ -203,12 +240,23 @@ function AskDialog({
       }
     >
       <Stack gap={GAP.CONTROL}>
+        <SettingsSection>
+          <SettingsRow
+            leading={
+              <SettingsRowMark>
+                <DeviceGlyph device={box} />
+              </SettingsRowMark>
+            }
+            label={<ReplayMask>{box.name}</ReplayMask>}
+            description={<ReplayMask>{boxFacts(box)}</ReplayMask>}
+          />
+        </SettingsSection>
         <Text>{WORDS.MATCH}</Text>
         <Text variant={TEXT_VARIANT.SECTION} font={TEXT_FONT.MONO}>
           <ReplayMask>{shownHostUserCode(code)}</ReplayMask>
         </Text>
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {`It works until ${momentText(box.expiresAt)}.`}
+          {`This code expires at ${expiresAt(box.expiresAt)}.`}
         </Text>
         <ErrorLine
           level={ANNOUNCE.ALERT}
@@ -295,31 +343,18 @@ export function HostConnectDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [standing, setStanding] = useState<Standing>({ kind: STANDING.READING });
-  const [attempt, setAttempt] = useState(0);
-
   // The dialog opening reads the pairing the code names, so the member sees whose box it is before anything is pressed.
-  useEffect(() => {
-    let live = true;
-    setStanding({ kind: STANDING.READING });
-    act(ACT_KIND.HOSTS_PAIRING_READ, { code })
-      .catch(() => UNANSWERED)
-      .then((answer) => {
-        if (!live) return;
-        setStanding(
-          "failure" in answer
-            ? failedStanding(answer, { kind: STANDING.UNREAD })
-            : { kind: STANDING.ASKING, box: answer },
-        );
-      });
-    return () => {
-      live = false;
-    };
-  }, [act, code, attempt]);
+  const pairing = useQuery(hostPairingQueryOptions(code));
+  // Note that a press is the code's own, so a dialog handed another code reads that one afresh.
+  const [afterPress, setAfterPress] = useState<{
+    readonly code: string;
+    readonly standing: Standing;
+  }>();
+  const standing = afterPress?.code === code ? afterPress.standing : readStanding(pairing);
 
   const answer = useCallback(
     (box: HostPairingAnswer, pressed: Answer) => {
-      setStanding({ kind: STANDING.ASKING, box, sending: pressed });
+      setAfterPress({ code, standing: { kind: STANDING.ASKING, box, sending: pressed } });
       const sent =
         pressed === ANSWER.CONNECT
           ? act(ACT_KIND.HOSTS_PAIRING_APPROVE, { code })
@@ -329,9 +364,11 @@ export function HostConnectDialog({
         .then((answered) => {
           const unanswered = { kind: STANDING.ASKING, box, sending: SENDING.UNANSWERED } as const;
           const ended = pressed === ANSWER.CONNECT ? STANDING.CONNECTED : STANDING.DENIED;
-          setStanding(
-            "failure" in answered ? failedStanding(answered, unanswered) : { kind: ended, box },
-          );
+          setAfterPress({
+            code,
+            standing:
+              "failure" in answered ? failedStanding(answered, unanswered) : { kind: ended, box },
+          });
         });
     },
     [act, code],
@@ -365,7 +402,7 @@ export function HostConnectDialog({
       return (
         <ReadingDialog
           unread={standing.kind === STANDING.UNREAD}
-          onRetry={() => setAttempt((count) => count + 1)}
+          onRetry={() => void pairing.refetch()}
           onClose={onClose}
         />
       );

@@ -120,7 +120,7 @@ export const FINISH = {
 export type Finish = (typeof FINISH)[keyof typeof FINISH];
 
 /** What an empty plan says until a word is typed, the editor's own where a document names none. */
-export const PLAN_PLACEHOLDER = "Write the plan";
+export const PLAN_PLACEHOLDER = "Write the description";
 
 /** What the `/` menu lays in beyond the writing vocabulary's blocks, each the menu's own. */
 export const SLASH_INSERT = {
@@ -168,7 +168,7 @@ export interface PlanEditorProps {
   /** Whether the editor takes the keyboard as it mounts, as a task opened by a click or a key does and a page drawing it does not. */
   readonly focus: boolean;
   readonly label: string;
-  /** What the empty text says until a word is typed; "Write the plan" where none is given. */
+  /** What the empty text says until a word is typed; "Write the description" where none is given. */
   readonly placeholder?: string | undefined;
   /** The read view's own classes, so the editor's words stand where the drawn words stood. */
   readonly className: string;

@@ -79,7 +79,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.PLANS));
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 afterEach(() => {
@@ -168,7 +168,7 @@ async function mountEveryTab(
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         // Only the tabs' bars are asked about, so no bundle lands under them.
         onSideBundles(
           unlandedBundles(),
@@ -290,7 +290,7 @@ test("the task's name's right-click is the task's own document menu, which pins 
   const details = await mountEveryTab({ main: MAIN_TAB.OVERVIEW, side: SIDE_PANEL_TAB.INBOX });
   const fromDetails = taskMenu(details);
   assert.deepEqual(fromDetails, [
-    "Copy plan",
+    "Copy description",
     "Copy link",
     "Rename",
     "Version history",
@@ -308,7 +308,7 @@ test("the task's name's right-click is the task's own document menu, which pins 
   assert.deepEqual(taskMenu(agent), fromDetails, "the same menu over an agent's tab");
   const agentItems = rightClickChosen(bars(agent).main);
   assert.ok(
-    !agentItems.includes("Copy plan") && !agentItems.includes("Version history"),
+    !agentItems.includes("Copy description") && !agentItems.includes("Version history"),
     "an agent's tab offers none of the task's items",
   );
 });

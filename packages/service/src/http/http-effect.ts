@@ -50,7 +50,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.OPENAI_KEY_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -154,8 +153,6 @@ export const HOSTED_REFUSAL = {
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
   /** The agent's session has ended for good, as every agent's that ran on eve has, so nothing reaches it again and only a new agent goes on from its work; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
-  /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
-  AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
   /** The agent runs on a native harness this function cannot reach; nothing was written. */
   NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
   /** The account saved no OpenAI API key, which a voice call or a dictated clip runs on. */

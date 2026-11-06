@@ -811,7 +811,7 @@ export function DesktopVersionHistory({
   const hidden = hiddenColumns(split.columns, versions.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, versions.listed), split.ref);
   const narrow = room === SHELL_ROOM.NARROW;
-  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? "plan");
+  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? "description");
 
   return (
     <div

@@ -47,19 +47,19 @@ import { useTaskMentions } from "./task-mentions.js";
  */
 
 /** What the press is called. */
-const ADD_LABEL = "Add to plan";
+const ADD_LABEL = "Add to description";
 
 /** What each outcome says in the window's toast. */
 const ADD_WORDS = {
-  ADDING: "Adding to the plan…",
-  ADDED: "Added to the plan",
-  NOT_A_PICTURE: "This picture could not be added to the plan.",
-  VIDEO_TOO_LARGE: `This video is over ${String(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 1_000_000)} MB, too large to add to the plan from here.`,
-  TOO_MANY: "This plan already holds as many pictures as it can.",
-  TOO_MANY_VIDEOS: "This plan already holds as many videos as it can.",
-  NOT_SAVED: "The plan could not be saved.",
-  UNDONE: "Taken out of the plan",
-  NOT_UNDONE: "The plan changed since, so the picture stays in it.",
+  ADDING: "Adding to the description…",
+  ADDED: "Added to the description",
+  NOT_A_PICTURE: "This picture could not be added to the description.",
+  VIDEO_TOO_LARGE: `This video is over ${String(PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES / 1_000_000)} MB, too large to add to the description from here.`,
+  TOO_MANY: "This description already holds as many pictures as it can.",
+  TOO_MANY_VIDEOS: "This description already holds as many videos as it can.",
+  NOT_SAVED: "The description could not be saved.",
+  UNDONE: "Taken out of the description",
+  NOT_UNDONE: "The description changed since, so the picture stays in it.",
 } as const;
 
 /** How many times an edit is written again on the text as it stands before it gives up. */
@@ -126,7 +126,7 @@ async function edited(
  * account has Plans off.
  */
 export function useAddToPlan(): ViewerAction | undefined {
-  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const plansOn = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const page = useTaskMentions();
   const { act } = useAct();
   const toast = useToast();

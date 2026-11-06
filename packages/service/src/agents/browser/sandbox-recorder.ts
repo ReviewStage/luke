@@ -24,8 +24,8 @@
  * beside its Chromium, at ever smaller sizes until one fits the byte bound,
  * and writes what came of it to `done.json`.
  *
- * Both scripts run with every capability dropped, as the browser does
- * (`sandbox-capabilities.ts`), and keep the recording under the browser's
+ * Both scripts run as the sandbox's default user, as the browser does, and
+ * keep the recording under the browser's
  * own state directory, which a new recording clears. The recorder dies
  * with the sandbox, so a recording not stopped before the agent's turn
  * ends is lost. Every value a script reads is a constant of this module or
@@ -33,7 +33,6 @@
  */
 
 import { PLAYWRIGHT_PIN } from "@repo/agent-runner/pins";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { LINK_SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./recording-cursor.js";
@@ -333,10 +332,8 @@ const STOP_SCRIPT = [
 /** Starts a recording of the browser, where none runs; read its run with `recordingStartOf`. */
 export function startRecording(maxSeconds: number, maxBytes: number): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
+    command: "bash",
     args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "bash",
       "-c",
       START_SCRIPT,
       RECORDING_SCRIPT_NAME,
@@ -354,10 +351,8 @@ export function startRecording(maxSeconds: number, maxBytes: number): CommandAsk
 /** Stops the recording and waits on its video; read its run with `recordingStopOf`. */
 export function stopRecording(): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
+    command: "bash",
     args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "bash",
       "-c",
       STOP_SCRIPT,
       RECORDING_SCRIPT_NAME,
@@ -372,18 +367,16 @@ export const RECORDING_READ_EXIT = { NO_VIDEO: 3 } as const;
 
 /**
  * Reads the video back, up to the bytes given and one past them, as base64
- * on one line after the line naming its absolute path, with every
- * capability dropped as the sandbox's other file reads are
- * (`workspace-mcp/sandbox-door.ts`); read its run with `recordingBytesOf`. Note
+ * on one line after the line naming its absolute path, as the sandbox's
+ * default user reads its other files (`workspace-mcp/sandbox-door.ts`); read
+ * its run with `recordingBytesOf`. Note
  * that the path is the sandbox user's home's, which the agent's own may not
  * be, as a native runner's is not, so the agent is answered it whole.
  */
 export function readRecording(maxBytes: number): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
+    command: "bash",
     args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "bash",
       "-c",
       `f="$HOME/$1"; [ -f "$f" ] || exit ${RECORDING_READ_EXIT.NO_VIDEO}; printf '%s\\n' "$f"; head -c "$2" -- "$f" | base64 | tr -d '\\n'`,
       RECORDING_SCRIPT_NAME,

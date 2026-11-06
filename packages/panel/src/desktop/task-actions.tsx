@@ -715,7 +715,7 @@ function TaskMenuFooter({
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
   // Note that the open task's last editor is its plan's, so while Plans is off it is said only by when the task last changed, as another task is.
-  const plans = useExperiment(EXPERIMENT.PLANS);
+  const plans = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const edit = opened === undefined || !plans ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
@@ -848,7 +848,7 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
-  const plans = useExperiment(EXPERIMENT.PLANS);
+  const plans = useExperiment(EXPERIMENT.DESCRIPTIONS);
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -954,7 +954,7 @@ export function TaskActions({
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
   useAppCommand(
     APP_COMMAND.VERSION_HISTORY,
-    useExperiment(EXPERIMENT.PLANS) ? () => tasks.history.onOpen(task.id) : undefined,
+    useExperiment(EXPERIMENT.DESCRIPTIONS) ? () => tasks.history.onOpen(task.id) : undefined,
   );
   return actions.dialog;
 }

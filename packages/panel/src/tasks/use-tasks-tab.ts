@@ -51,7 +51,6 @@ import {
   type TasksEditAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
-import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { managesWorkspace } from "@repo/features/workspace-role";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -599,12 +598,6 @@ export interface NewTaskStart {
   readonly card?: NewTaskCardKept;
 }
 
-/** What a workspace is made with beyond its name: its photo, and the addresses invited to it. */
-export interface WorkspaceMade {
-  readonly photo?: string | undefined;
-  readonly invite?: readonly string[] | undefined;
-}
-
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
   page: TasksPage;
@@ -652,12 +645,12 @@ export interface TasksControl {
   /** Lists the account's own workspace, else the first other, once one is left, and turns to the home page. */
   onLeftWorkspace: (workspaceId: string) => void;
   /**
-   * Creates a workspace of that name and lists it, then sets its photo and
-   * invites its addresses where they are given; answers why it was not
-   * created, or nothing once it was. A photo or an invitation refused does
-   * not undo the workspace, and says why in a toast.
+   * New workspace's cards, standing alone in the window in the app's place
+   * while open (`new-workspace-steps.tsx`): opened from the switcher or a
+   * phone's account menu, and put away by their own Cancel or Close. Open
+   * only for the account that opened them, so a sign-out puts them away.
    */
-  onCreateWorkspace: (name: string, made?: WorkspaceMade) => Promise<string | undefined>;
+  newWorkspace: { open: boolean; onOpen: () => void; onClose: () => void };
   /** Opens Settings on its Workspace page, showing the listed workspace. */
   onOpenWorkspaceSettings: () => void;
   /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
@@ -1149,7 +1142,7 @@ type AgentPinAsked =
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
-const TASK_COPIED_NOTE = "Plan copied";
+const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
 const OPENS_NEW_TASK = Atom.map(
@@ -1499,6 +1492,14 @@ export function useTasksTab(input: {
     [inboxWaiting, inboxTasks, tasks.tasks, listedWorkspaceId],
   );
   const signedIn = fixture !== undefined || input.signedIn;
+  // The account New workspace's cards were opened for, which alone they stand for.
+  const [founding, setFounding] = useState<{ accountId: string | undefined } | undefined>(
+    undefined,
+  );
+  // A sign-out, or another account, puts the cards away for good, so the same account signing in again does not find them open.
+  if (founding !== undefined && (!signedIn || founding.accountId !== input.accountId)) {
+    setFounding(undefined);
+  }
   const page = tasksPage(tasks);
   // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
@@ -1867,7 +1868,7 @@ export function useTasksTab(input: {
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
   // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
-  const plansOn = experimentOn(experiments, EXPERIMENT.PLANS);
+  const plansOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
   if (historyFor !== undefined && (historyFor.taskId !== boundFor || !plansOn)) {
     setHistoryFor(undefined);
   }
@@ -2420,48 +2421,6 @@ export function useTasksTab(input: {
       },
     );
   };
-  // A fixture's workspaces are made, shared, and connected nowhere. A
-  // workspace made is listed at once, main's view holding it after, and its
-  // photo set once it stands; the invite and the connect open the browser,
-  // and a refusal of the photo or either says why in a toast, since the
-  // menu or card that asked has closed.
-  const createWorkspace = (
-    name: string,
-    { photo, invite = [] }: WorkspaceMade = {},
-  ): Promise<string | undefined> => {
-    if (fixture !== undefined) return Promise.resolve(undefined);
-    const refusedAfter =
-      (kind: typeof ACT_KIND.WORKSPACE_PHOTO_SET | typeof ACT_KIND.WORKSPACE_INVITE, about = "") =>
-      (refused: Error) =>
-        toast({
-          words: `${about}${refused.message}`,
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-          failure: { surface: FAILURE_SURFACE.WORKSPACE_WRITE, act: kind, cause: refused },
-        });
-    return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
-      async (created) => {
-        const workspaceId = created.id;
-        switchWorkspace(workspaceId);
-        // Note that the photo and the invitations follow the workspace made, and one refused leaves the rest standing.
-        if (photo !== undefined) {
-          await act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo }).catch(
-            refusedAfter(ACT_KIND.WORKSPACE_PHOTO_SET),
-          );
-        }
-        for (const email of invite) {
-          await act(ACT_KIND.WORKSPACE_INVITE, {
-            workspaceId,
-            email,
-            role: INVITATION_ROLE.MEMBER,
-          }).catch(refusedAfter(ACT_KIND.WORKSPACE_INVITE, `${email}: `));
-        }
-        return undefined;
-      },
-      (refused: Error) => refused.message,
-    );
-  };
-
   // A fixture's tasks are given no repository, as they are read from nowhere.
   const setRepository = (
     taskId: string,
@@ -3734,7 +3693,12 @@ export function useTasksTab(input: {
     onRetryWorkspaces: () => press(ACT_KIND.TASKS_REFRESH),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
-    onCreateWorkspace: createWorkspace,
+    newWorkspace: {
+      open: signedIn && founding !== undefined && founding.accountId === input.accountId,
+      // Note that the cards take the window in the page's place, so a page holding unsaved work asks first, as leaving it does.
+      onOpen: guard(() => setFounding({ accountId: input.accountId })),
+      onClose: () => setFounding(undefined),
+    },
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({
         page: SETTINGS_VIEW.WORKSPACE,

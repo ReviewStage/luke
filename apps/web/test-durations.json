@@ -20,7 +20,6 @@
   "tests/auth-app.test.ts": 147,
   "tests/browser-client-orpc-route.test.ts": 1500,
   "tests/browser-history-narrow.test.ts": 11203,
-  "tests/browser-history.test.ts": 2144,
   "tests/browser-pages-orpc-route.test.ts": 2422,
   "tests/build-output.test.ts": 23207,
   "tests/changelog-feed.test.ts": 113,

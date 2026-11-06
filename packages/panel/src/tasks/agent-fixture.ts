@@ -305,7 +305,7 @@ const ASK: AgentTranscriptMessage = {
   parts: [
     {
       type: "text",
-      text: "Build teammate invitations from the plan: a member invites by email, and the link joins the workspace.",
+      text: "Build teammate invitations from the description: a member invites by email, and the link joins the workspace.",
     },
   ],
   sentAt: STARTED_AT,
@@ -318,7 +318,7 @@ const WORK: AgentTranscriptMessage = {
   parts: [
     {
       type: "text",
-      text: "I'll model an invite as a pending membership, as the plan settled, so removal covers both.",
+      text: "I'll model an invite as a pending membership, as the description settled, so removal covers both.",
     },
     toolPart(
       "read_file",

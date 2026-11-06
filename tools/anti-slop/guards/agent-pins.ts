@@ -12,16 +12,24 @@ import { loadModule, type RepositoryGuard, readJson, record, text } from "./guar
  * generated from the Codex `CODEX_PIN` installs; every host fetches its own
  * Claude Code and Codex of the same releases, each pin's address, size, and
  * digests read off its release, so one left behind by a bump is refused on
- * every host as it fetches; and the coding agent's
- * sandbox template starts from the base image of the eve the service runs.
+ * every host as it fetches; and the agents' image
+ * (`apps/web/agent-image/Dockerfile`) installs the Agent SDK, Claude Code,
+ * Codex, and Playwright the pins name, its `ARG`s written out beside them.
  * A pin moved on one side alone builds, typechecks, and fails only in a
  * hosted sandbox.
  */
 
 const SDK = "@anthropic-ai/claude-agent-sdk";
 const RUNNER = "packages/agent-runner";
-const SERVICE = "packages/service";
-const EVE_BASE_IMAGE_REPOSITORY = "vcr.vercel.com/vercel/eve/base";
+const DOCKERFILE = "apps/web/agent-image/Dockerfile";
+
+/** Each of the Dockerfile's `ARG`s that installs a pinned release, and the pin it is held to. */
+const IMAGE_ARGS = {
+  CLAUDE_AGENT_SDK_VERSION: "CLAUDE_CODE_PIN.SDK_VERSION",
+  CLAUDE_CODE_VERSION: "CLAUDE_CODE_PIN.VERSION",
+  CODEX_VERSION: "CODEX_PIN.VERSION",
+  PLAYWRIGHT_VERSION: "PLAYWRIGHT_PIN.VERSION",
+} as const;
 
 /** A host's own build of an agent CLI as the guard reads its pin: its name in `pins.ts`, its release, and its address. */
 export interface HostCliPin {
@@ -41,8 +49,9 @@ export interface AgentPins {
   readonly pinnedCodex: string;
   readonly hostClaudePins: readonly HostCliPin[];
   readonly hostCodexPins: readonly HostCliPin[];
-  readonly eveBaseImage: string;
-  readonly installedEve: string;
+  readonly pinnedPlaywright: string;
+  /** The Dockerfile's `ARG`s by name, as their defaults read. */
+  readonly imageArgs: Readonly<Record<string, string>>;
 }
 
 /** Where the pins disagree, each as a line naming both sides. */
@@ -80,14 +89,28 @@ export function pinProblems(pins: AgentPins): readonly string[] {
       }
     }
   }
-  // Note that an eve version may carry build metadata (`+…`), which no image tag does.
-  const eveVersion = pins.installedEve.split("+")[0] ?? "";
-  differ(
-    "EVE_BASE_IMAGE against the installed eve",
-    pins.eveBaseImage,
-    `${EVE_BASE_IMAGE_REPOSITORY}:${eveVersion}`,
-  );
+  const pinned: Record<keyof typeof IMAGE_ARGS, string> = {
+    CLAUDE_AGENT_SDK_VERSION: pins.pinnedSdk,
+    CLAUDE_CODE_VERSION: pins.pinnedClaude,
+    CODEX_VERSION: pins.pinnedCodex,
+    PLAYWRIGHT_VERSION: pins.pinnedPlaywright,
+  };
+  for (const [arg, pin] of Object.entries(IMAGE_ARGS) as [keyof typeof IMAGE_ARGS, string][]) {
+    differ(`${DOCKERFILE}'s ${arg} against ${pin}`, pins.imageArgs[arg], pinned[arg]);
+  }
   return problems;
+}
+
+/** The Dockerfile's `ARG`s that carry a default, by name. */
+function dockerfileArgs(root: string): Record<string, string> {
+  const args: Record<string, string> = {};
+  for (const [, name = "", value = ""] of readFileSync(
+    path.join(root, DOCKERFILE),
+    "utf8",
+  ).matchAll(/^ARG ([A-Z_]+)=(\S+)$/gmu)) {
+    args[name] = value;
+  }
+  return args;
 }
 
 /** A package's manifest as `workspace` resolves it. */
@@ -120,14 +143,10 @@ async function readPins(root: string): Promise<AgentPins> {
   const pins = await loadModule(root, `${RUNNER}/src/pins.ts`);
   const claude = record(pins.CLAUDE_CODE_PIN, "CLAUDE_CODE_PIN");
   const codex = record(pins.CODEX_PIN, "CODEX_PIN");
+  const playwright = record(pins.PLAYWRIGHT_PIN, "PLAYWRIGHT_PIN");
   const generated = await loadModule(root, `${RUNNER}/src/codex-protocol/generated-from.ts`);
-  const template = await loadModule(root, `${SERVICE}/src/agents/native-sandbox-template.ts`);
   const runner = record(readJson(root, `${RUNNER}/package.json`).dependencies, "dependencies");
   const sdk = installedManifest(root, RUNNER, SDK);
-  const eveManifest = createRequire(path.join(root, SERVICE, "package.json")).resolve(
-    "eve/package.json",
-  );
-  const eve = record(JSON.parse(readFileSync(eveManifest, "utf8")), eveManifest);
   const dependency = runner[SDK];
   return {
     runnerSdkDependency: typeof dependency === "string" ? dependency : undefined,
@@ -139,8 +158,8 @@ async function readPins(root: string): Promise<AgentPins> {
     pinnedCodex: text(codex.VERSION, "CODEX_PIN.VERSION"),
     hostClaudePins: hostCliPins(pins, "CLAUDE_CODE_MAC_PIN", "CLAUDE_CODE_LINUX_PINS"),
     hostCodexPins: hostCliPins(pins, "CODEX_MAC_PIN", "CODEX_LINUX_PINS"),
-    eveBaseImage: text(template.EVE_BASE_IMAGE, "EVE_BASE_IMAGE"),
-    installedEve: text(eve.version, "eve's version"),
+    pinnedPlaywright: text(playwright.VERSION, "PLAYWRIGHT_PIN.VERSION"),
+    imageArgs: dockerfileArgs(root),
   };
 }
 

@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { claimAgentRunnerLease } from "@repo/database/models/agent-runner-lease";
 import { createAgent } from "@repo/database/models/agent-store";
-import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
@@ -12,25 +11,19 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, ErrorReporter, Layer, Option, Redacted } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { LAUNCH_SWAP, placeholderSwap, sandboxFirewall } from "../agents/sandbox-firewall.js";
-import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
-import { GitHubApp } from "../github/github-app.js";
-import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
-import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
+import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 
 /**
- * The scheduled sweep's stop of a native agent's sandbox whose run ended,
- * over a real store and a fake of Vercel Sandbox's REST API that keeps the
- * project's sandboxes and what it was asked: an ended sandbox no Terminal
- * holds is stopped, its credential taken off first; one a Terminal holds,
- * one whose run goes on or waits, and one whose run ended within the grace
- * keep running; an eve sandbox is never asked after; and each sweep stops
- * and reads no more than its bounds, leaving the rest to the next minute.
+ * The scheduled sweep's settle of a native agent's turn whose runner died
+ * mid-turn, over a real store and a fake of Vercel Sandbox's REST API that
+ * keeps the project's sandboxes and what it was asked: the turn is settled
+ * failed and reported, a runner still up keeps its turn, and each sweep
+ * reads no more than its bounds, leaving the rest to the next minute.
  *
  * Synthetic accounts, agents, sandboxes, and tokens throughout.
  */
@@ -38,11 +31,6 @@ import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-swe
 const TEAM = "team_fixture";
 const PROJECT = "prj_fixture";
 const NOW = new Date(Date.UTC(2026, 9, 14, 12));
-const GRACE_MS = Duration.toMillis(NATIVE_SANDBOX_SWEEP.GRACE);
-
-/** No GitHub App: no repository credential can be minted, which the agents here need none of but one. */
-const NO_GITHUB_APP = GitHubApp.layer(undefined);
-
 const minutesBefore = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
 /** The page the fake answers a list in: the API's widest, as the sweep asks for. */
 const PAGE = 50;
@@ -66,20 +54,14 @@ interface FakeSandbox {
 
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
 function vercel(
-  options: {
-    readonly refuseList?: boolean;
-    readonly refuseLaterPages?: boolean;
-    readonly refusePolicy?: boolean;
-    readonly refuseFirstPolicy?: boolean;
-  } = {},
+  options: { readonly refuseList?: boolean; readonly refuseLaterPages?: boolean } = {},
 ) {
   const sandboxes: FakeSandbox[] = [];
   /** The detached commands, by id, with their exit code, or null while they run, and what they printed on stderr. */
   const commands = new Map<string, ReadCommand & { readonly stderr?: string }>();
-  const stopped: string[] = [];
-  const policies: string[] = [];
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
-  let policiesRefused = 0;
+  /** Each network policy sent, by the session it was sent to. */
+  const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const method = init.method ?? "GET";
@@ -107,67 +89,32 @@ function vercel(
       const next = from + PAGE < matching.length ? String(from + PAGE) : null;
       return Response.json({ sandboxes: page, pagination: { count: page.length, next } });
     }
-    const named = /^\/api\/v2\/sandboxes\/([^/]+)$/u.exec(parsed.pathname);
-    if (method === "PATCH" && named !== null) {
-      const sandbox = sandboxes.find((each) => each.name === decodeURIComponent(named[1] ?? ""));
-      if (sandbox === undefined) return new Response(null, { status: 404 });
-      sandbox.tags = JSON.parse(String(init.body)).tags;
-      return Response.json({ sandbox });
-    }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(parsed.pathname);
     assert.ok(session !== null, `an unexpected call: ${method} ${parsed.pathname}`);
     const [, sessionId = "", rest = ""] = session;
-    if (rest === "stop") {
-      const refused = sandboxStopRefusal(init);
-      if (refused !== undefined) return refused;
-      stopped.push(sessionId);
-      for (const sandbox of sandboxes.filter((each) => each.currentSessionId === sessionId)) {
-        sandbox.status = "stopped";
-      }
-      return Response.json({ session: { id: sessionId } });
+    if (rest === "network-policy") {
+      policies.push({ session: sessionId, policy: JSON.parse(String(init.body)) });
+      return Response.json({});
     }
     const command = /^cmd\/([^/]+)(\/logs)?$/u.exec(rest);
-    if (command !== null) {
-      const found = commands.get(command[1] ?? "");
-      if (found === undefined) return new Response(null, { status: 404 });
-      if (command[2] === undefined) return commandRead(found, parsed, init, false);
-      const line =
-        found.stderr === undefined ? "" : JSON.stringify({ stream: "stderr", data: found.stderr });
-      return new Response(`${line}\n`, { headers: { "content-type": "application/x-ndjson" } });
-    }
-    assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
-    if (options.refusePolicy === true) return new Response(null, { status: 502 });
-    if (options.refuseFirstPolicy === true && policiesRefused === 0) {
-      policiesRefused += 1;
-      return new Response(null, { status: 502 });
-    }
-    policies.push(sessionId);
-    return Response.json({});
+    assert.ok(command !== null, `an unexpected call: ${method} ${parsed.pathname}`);
+    const found = commands.get(command[1] ?? "");
+    if (found === undefined) return new Response(null, { status: 404 });
+    if (command[2] === undefined) return commandRead(found, parsed, init, false);
+    const line =
+      found.stderr === undefined ? "" : JSON.stringify({ stream: "stderr", data: found.stderr });
+    return new Response(`${line}\n`, { headers: { "content-type": "application/x-ndjson" } });
   };
-  return {
-    layer: fakeHttpClientLayer(respond),
-    sandboxes,
-    commands,
-    stopped,
-    policies,
-    pagesListed,
-  };
+  return { layer: fakeHttpClientLayer(respond), sandboxes, commands, pagesListed, policies };
 }
 
-/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given, working in the repository given where one is. */
-const openAgent = (
-  runtime: ConversationRuntime,
-  turn?: { status: TurnStatus; at: Date },
-  repository: string | null = null,
-) =>
+/** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */
+const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at: Date }) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
-    const task = yield* startTask(userId, {
-      name: "Teammate invitations",
-      ...(repository === null ? undefined : { repository }),
-    });
+    const task = yield* startTask(userId, { name: "Teammate invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
@@ -175,7 +122,7 @@ const openAgent = (
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
-      repository,
+      repository: null,
       runtime,
     });
     const agent = Option.getOrThrow(started).agent;
@@ -234,13 +181,25 @@ function eveSandbox(): FakeSandbox {
   };
 }
 
+/** A running sandbox whose runner exited while its agent's turn still runs. */
+const lostSandbox = (api: ReturnType<typeof vercel>) =>
+  Effect.gen(function* () {
+    const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+      status: TURN_STATUS.RUNNING,
+      at: minutesBefore(10),
+    });
+    const commandId = `cmd_${randomUUID()}`;
+    api.commands.set(commandId, { id: commandId, exitCode: 1 });
+    return nativeSandbox(agent.id, commandId);
+  });
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
 it.layer(getTestDB())("the native sandbox sweep", (it) => {
   it.effect(
-    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone, its sandbox stopped past the grace; a runner still up keeps its turn",
+    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone, every credential taken off its firewall; a runner still up keeps its turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -281,17 +240,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         ]);
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
           Effect.provide(Layer.merge(api.layer, reporter)),
         );
 
-        assert.deepEqual(outcome, {
-          stopped: 0,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 1,
-        });
+        assert.deepEqual(outcome, { lost: 1 });
         const statusOf = (conversationId: string) =>
           db
             .select({ status: turns.status, failureDetail: turns.failureDetail })
@@ -313,200 +265,35 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           .from(conversations)
           .where(eq(conversations.id, crashed.conversationId));
         assert.deepEqual(projection?.projection, { session: "cli-session" });
-
-        // Past the grace, the failed run's sandbox is stopped as any ended run's is.
-        const later = yield* sweepNativeSandboxes(new Date(NOW.getTime() + GRACE_MS + 60_000)).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-        assert.equal(later.stopped, 1);
-        assert.deepEqual(api.stopped, [dead.currentSessionId]);
+        assert.deepEqual(api.policies, [
+          { session: dead.currentSessionId, policy: { mode: "allow-all" } },
+        ]);
+        assert.equal(dead.status, "running");
         assert.equal(alive.status, "running");
       }),
   );
 
   it.effect(
-    "an ended sandbox no Terminal holds is stopped, credential first; a held, running, waiting, or just-ended one keeps running, and eve's is never asked after",
+    "a lost runner whose agent's runner lease a message holds keeps its turn and its firewall",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const longAgo = minutesBefore(10);
-        const ended = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: longAgo,
-        });
-        const codexEnded = yield* openAgent(CONVERSATION_RUNTIME.CODEX, {
-          status: TURN_STATUS.FAILED,
-          at: longAgo,
-        });
-        const held = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: longAgo,
-        });
-        const queued = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.QUEUED,
-          at: longAgo,
-        });
-        // A runner waiting on a wakeup posts no END, so its turn stays running.
-        const waiting = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.RUNNING,
-          at: longAgo,
-        });
-        const justEnded = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: new Date(NOW.getTime() - GRACE_MS + 1),
-        });
-        const onEve = yield* openAgent(CONVERSATION_RUNTIME.EVE, {
-          status: TURN_STATUS.SETTLED,
-          at: longAgo,
-        });
-        yield* holdSandbox(held.conversationId, new Date(NOW.getTime() + 60_000));
         const api = vercel();
-        const sandboxOf = new Map(
-          [ended, codexEnded, held, queued, waiting, justEnded].map((agent) => {
-            const sandbox = nativeSandbox(agent.id);
-            api.sandboxes.push(sandbox);
-            return [agent.id, sandbox] as const;
-          }),
-        );
-        // eve's sandbox, even tagged as an ended native agent's would be, is not ours to stop.
-        const eve = { ...eveSandbox(), tags: { sessionId: "wrun_eve", agentId: ended.id } };
-        const eveOwn = eveSandbox();
-        // A sandbox named as ours whose agent runs on eve is left to eve's own lifecycle.
-        const misnamed = nativeSandbox(onEve.id);
-        api.sandboxes.unshift(eve, eveOwn);
-        api.sandboxes.push(misnamed);
-
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
-        const sessionOf = (agentId: string) => sandboxOf.get(agentId)?.currentSessionId;
-        const stoppable = [sessionOf(ended.id), sessionOf(codexEnded.id)].sort();
-        assert.deepEqual(outcome, {
-          stopped: 2,
-          held: 1,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.deepEqual([...api.stopped].sort(), stoppable);
-        assert.deepEqual([...api.policies].sort(), stoppable, "the credential goes first");
-        for (const agent of [held, queued, waiting, justEnded]) {
-          assert.equal(sandboxOf.get(agent.id)?.status, "running");
-        }
-        assert.deepEqual(
-          [eve, eveOwn, misnamed].map((sandbox) => sandbox.status),
-          ["running", "running", "running"],
-        );
-        assert.deepEqual(api.pagesListed, [
-          { status: "running", sortBy: "createdAt", order: "asc" },
-        ]);
-      }),
-  );
-
-  it.effect(
-    "a held sandbox whose run ended and whose runner exited, its END's own let-go never run, has its launch's swaps taken off it, though its repository's credential could not be minted and Vercel refused the first send, and nothing after",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        // No App reaches the agent's repository, so its credential cannot be minted for the shell.
-        const agent = yield* openAgent(
-          CONVERSATION_RUNTIME.CODEX,
-          { status: TURN_STATUS.SETTLED, at: minutesBefore(10) },
-          "acme/relay",
-        );
-        yield* holdSandbox(agent.conversationId, new Date(NOW.getTime() + 60_000));
-        const api = vercel({ refuseFirstPolicy: true });
-        const sandbox = nativeSandbox(agent.id);
+        const sandbox = yield* lostSandbox(api);
         api.sandboxes.push(sandbox);
-        const session = { userId: agent.userId, sandboxSessionId: sandbox.currentSessionId };
-        const withRing = Effect.provide(
-          Layer.mergeAll(api.layer, LOCAL_AGENT_ENVIRONMENT, NO_GITHUB_APP),
-        );
-        const firewall = sandboxFirewall(
-          yield* vercelSandboxApi(deploymentOidcToken).pipe(Effect.provide(api.layer)),
-        );
-        yield* firewall
-          .keepLaunch(session, {
-            agentId: agent.id,
-            swaps: new Map([
-              [
-                LAUNCH_SWAP.OPENAI_PLAN,
-                placeholderSwap({
-                  domain: "api.openai.com",
-                  header: "authorization",
-                  placeholder: Redacted.make("Bearer placeholder-fixture"),
-                  value: Redacted.make("Bearer access-fixture"),
-                }),
-              ],
-            ]),
-          })
-          .pipe(withRing);
+        const agentId = sandbox.tags.agentId ?? "";
+        const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.ok(yield* claimAgentRunnerLease(agentId, randomUUID(), NOW, heldUntil));
 
-        const first = yield* sweepNativeSandboxes(NOW).pipe(withRing);
-        // The refused send leaves the launch kept, for the next sweep to take off.
-        const keptAfterRefusal = (yield* firewall.launchOf(session).pipe(withRing)) !== undefined;
-        yield* sweepNativeSandboxes(NOW).pipe(withRing);
-        const afterRetry = api.policies.length;
-        yield* sweepNativeSandboxes(NOW).pipe(withRing);
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.equal(first.held, 1);
-        assert.equal(keptAfterRefusal, true);
-        assert.equal(sandbox.status, "running");
-        assert.equal(yield* firewall.launchOf(session).pipe(withRing), undefined);
-        // One send lands, taking the swap off with nothing beside it; the sweep after finds no launch and sends nothing.
-        assert.deepEqual([afterRetry, api.policies.length], [1, 1]);
+        assert.deepEqual(outcome, { lost: 0 });
+        assert.deepEqual(api.policies, []);
       }),
   );
 
   it.effect(
-    "a sweep stops no more than its bound and leaves the rest to the next, which stops them",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel();
-        const count = NATIVE_SANDBOX_SWEEP.MAX_STOPS + 2;
-        for (let each = 0; each < count; each += 1) {
-          const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-            status: TURN_STATUS.SETTLED,
-            at: minutesBefore(10),
-          });
-          api.sandboxes.push(nativeSandbox(agent.id));
-        }
-
-        const first = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-        const stoppedFirst = api.stopped.length;
-        const second = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
-        assert.deepEqual(first, {
-          stopped: NATIVE_SANDBOX_SWEEP.MAX_STOPS,
-          held: 0,
-          failed: 0,
-          deferred: 2,
-          lost: 0,
-        });
-        assert.equal(stoppedFirst, NATIVE_SANDBOX_SWEEP.MAX_STOPS);
-        assert.deepEqual(second, {
-          stopped: 2,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.ok(api.sandboxes.every((sandbox) => sandbox.status === "stopped"));
-      }),
-  );
-
-  it.effect(
-    "a sweep reads no more pages than its bound, and a native sandbox past them is reached from the other end the next minute",
+    "a sweep reads no more pages than its bound, and a lost runner past them is reached from the other end the next minute",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -514,52 +301,27 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         for (let each = 0; each < NATIVE_SANDBOX_SWEEP.MAX_PAGES * PAGE; each += 1) {
           api.sandboxes.push(eveSandbox());
         }
-        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        const beyond = nativeSandbox(agent.id);
-        api.sandboxes.push(beyond);
+        api.sandboxes.push(yield* lostSandbox(api));
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
         const pagesAsked = api.pagesListed.length;
-        const runningAfterFirst = beyond.status;
         const nextMinute = yield* sweepNativeSandboxes(new Date(NOW.getTime() + 60_000)).pipe(
-          Effect.provide(NO_GITHUB_APP),
           Effect.provide(api.layer),
         );
 
         assert.equal(pagesAsked, NATIVE_SANDBOX_SWEEP.MAX_PAGES);
-        assert.deepEqual(outcome, {
-          stopped: 0,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.equal(runningAfterFirst, "running");
+        assert.deepEqual(outcome, { lost: 0 });
         assert.equal(
           api.pagesListed.at(-1)?.order,
           "desc",
           "the next minute lists from the newest",
         );
-        assert.deepEqual(nextMinute, {
-          stopped: 1,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.equal(beyond.status, "stopped");
+        assert.deepEqual(nextMinute, { lost: 1 });
       }),
   );
 
   it.effect(
-    "an ended sandbox listed past the window at both ends, among sandboxes that keep running, is reached as the window moves along",
+    "a lost runner listed past the window at both ends, among sandboxes that keep running, is reached as the window moves along",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -568,23 +330,17 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const running = NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES * 2 + 10;
         for (let each = 0; each < running; each += 1)
           api.sandboxes.push(nativeSandbox(randomUUID()));
-        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        const middle = nativeSandbox(agent.id);
-        api.sandboxes.splice(NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES + 5, 0, middle);
+        api.sandboxes.splice(NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES + 5, 0, yield* lostSandbox(api));
 
-        const sweeps = 6;
-        for (let minute = 0; minute < sweeps && middle.status === "running"; minute += 1) {
-          yield* sweepNativeSandboxes(new Date(NOW.getTime() + minute * 60_000)).pipe(
-            Effect.provide(NO_GITHUB_APP),
-            Effect.provide(api.layer),
-          );
+        let lost = 0;
+        for (let minute = 0; minute < 6 && lost === 0; minute += 1) {
+          const outcome = yield* sweepNativeSandboxes(
+            new Date(NOW.getTime() + minute * 60_000),
+          ).pipe(Effect.provide(api.layer));
+          lost = outcome.lost;
         }
 
-        assert.equal(middle.status, "stopped");
-        assert.deepEqual(api.stopped, [middle.currentSessionId]);
+        assert.equal(lost, 1);
       }),
   );
 
@@ -592,22 +348,13 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel({ refuseLaterPages: true });
-      const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-        status: TURN_STATUS.SETTLED,
-        at: minutesBefore(10),
-      });
-      const orphan = nativeSandbox(agent.id);
-      api.sandboxes.push(orphan);
+      api.sandboxes.push(yield* lostSandbox(api));
       for (let each = 0; each < PAGE; each += 1) api.sandboxes.push(nativeSandbox(randomUUID()));
 
-      const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-        Effect.provide(NO_GITHUB_APP),
-        Effect.provide(api.layer),
-      );
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
       assert.equal(api.pagesListed.length, 2, "the second page was asked and refused");
-      assert.equal(outcome.stopped, 1);
-      assert.equal(orphan.status, "stopped");
+      assert.deepEqual(outcome, { lost: 1 });
     }),
   );
 
@@ -615,124 +362,11 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel({ refuseList: true });
-      const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-        status: TURN_STATUS.SETTLED,
-        at: minutesBefore(10),
-      });
-      api.sandboxes.push(nativeSandbox(agent.id));
+      api.sandboxes.push(yield* lostSandbox(api));
 
-      const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-        Effect.provide(NO_GITHUB_APP),
-        Effect.provide(api.layer),
-      );
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(outcome, {
-        stopped: 0,
-        held: 0,
-        failed: 0,
-        deferred: 0,
-        lost: 0,
-      });
-      assert.deepEqual(api.stopped, []);
+      assert.deepEqual(outcome, { lost: 0 });
     }),
-  );
-  it.effect(
-    "a sandbox whose old runner exited or is gone is stopped, one made and tagged before the rename alike",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel();
-        const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        const vanished = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        const older = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
-        api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
-        const done = nativeSandbox(exited.id, "cmd_exited");
-        const gone = nativeSandbox(vanished.id, "cmd_unknown");
-        const beforeRename = nativeSandbox(older.id, "cmd_unknown", NAMING.BEFORE_RENAME);
-        api.sandboxes.push(done, gone, beforeRename);
-
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
-        assert.deepEqual(outcome, {
-          stopped: 3,
-          held: 0,
-          failed: 0,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.equal(done.status, "stopped");
-        assert.equal(gone.status, "stopped");
-        assert.equal(beforeRename.status, "stopped");
-      }),
-  );
-
-  it.effect(
-    "a sandbox a message resumed and is relaunching into, its runner lease held, keeps running",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel();
-        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        // Resumed with no runner tagged yet, as a send's relaunch stands before its launch is recorded.
-        const resumed = nativeSandbox(agent.id);
-        api.sandboxes.push(resumed);
-        const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.ok(yield* claimAgentRunnerLease(agent.id, randomUUID(), NOW, heldUntil));
-
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
-        assert.equal(outcome.stopped, 0);
-        assert.deepEqual([api.stopped, api.policies], [[], []]);
-        assert.equal(resumed.status, "running");
-      }),
-  );
-
-  it.effect(
-    "a sandbox whose credential would not come off the firewall is left running for the next sweep",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = vercel({ refusePolicy: true });
-        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
-          status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
-        });
-        const sandbox = nativeSandbox(agent.id);
-        api.sandboxes.push(sandbox);
-
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
-          Effect.provide(NO_GITHUB_APP),
-          Effect.provide(api.layer),
-        );
-
-        assert.deepEqual(outcome, {
-          stopped: 0,
-          held: 0,
-          failed: 1,
-          deferred: 0,
-          lost: 0,
-        });
-        assert.deepEqual(api.stopped, []);
-        assert.equal(sandbox.status, "running");
-      }),
   );
 });

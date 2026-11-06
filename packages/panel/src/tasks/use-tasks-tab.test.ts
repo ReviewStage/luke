@@ -33,7 +33,6 @@ import {
   TASKS_READ,
   type TasksView,
 } from "@repo/features/tasks-view";
-import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -48,7 +47,6 @@ import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
 import { timeRuntime } from "@repo/ui";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import { isAgentTab, isDraftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
@@ -59,11 +57,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type ActHandle, KEPT, type Kept } from "../act.js";
-import {
-  installWindowHistory,
-  useWindowHistory,
-  type WindowHistoryLists,
-} from "../navigation-history.js";
+import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
   PANEL_SPAN,
@@ -94,6 +88,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
@@ -113,9 +108,9 @@ import {
 } from "./use-tasks-tab.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 // Note that each case starts with the document handing Plans on, whatever an earlier case handed.
-beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
+beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -225,7 +220,6 @@ function mount(
   let windowHistory: WindowHistoryLists | undefined;
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
-    installWindowHistory(memoryHistory());
   }
   /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
   function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
@@ -311,7 +305,11 @@ function mount(
   roots.push(root);
   // A fresh registry reads the document handed here, its plans among it, rather than one an earlier test handed.
   act(() => {
-    root.render(onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.PLANS)), surface));
+    root.render(
+      windowRouter().provide(
+        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), surface),
+      ),
+    );
   });
   return {
     told,
@@ -441,9 +439,6 @@ const readWorkspaceNamed = Schema.decodeUnknownOption(
 
 /** A pin's payload, read back as the act's own schema admits it. */
 const readPin = Schema.decodeUnknownOption(Schema.Struct({ pinned: Schema.Boolean }));
-
-/** A create's payload, read back as the act's own schema admits it. */
-const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
@@ -575,7 +570,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     {},
     {
       settings: appSettingsWire(
-        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.PLANS) }),
+        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.DESCRIPTIONS) }),
       ),
     },
   );
@@ -587,7 +582,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -629,7 +624,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     { tab: { agent: AGENT_ID }, panel: false },
     "the task opens on its agent alone, no plan laid over it in a narrow room",
   );
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 /** A line of a file of the task's repository, as a place names it to open. */
@@ -1260,7 +1255,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1289,7 +1284,7 @@ test("a Vespin link to a page of the task, as Open in browser lands on, opens th
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1597,7 +1592,7 @@ test("a task's Inbox door and its link narrow the Inbox to the task, an agent's 
   const tab = mount(
     { shown: true, tasks: TWO_WORKSPACES },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   const narrowed = inboxTaskNow();
@@ -1779,7 +1774,7 @@ test("a task whose plan the host holds opens on its plan in its first frame agai
 
 test("a version history opened on a held task lists its versions in its first frame, with no page read", async () => {
   const versions = [revisionLine(2), revisionLine(1)];
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     [LIVE_READ.HISTORY]: { [TASK.id]: { rows: { revisions: versions } } },
   });
   const tab = mount({ shown: true, tasks: OPEN });
@@ -1895,7 +1890,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   fakeActs({
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
   const reads = handHostReads({});
   const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
@@ -1903,7 +1898,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   const tab = mount(
     { shown: true, tasks: OPEN },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
@@ -2530,7 +2525,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2559,72 +2554,16 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   );
 });
 
-test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
-  let refuse = false;
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
-    {
-      [ACT_KIND.WORKSPACE_CREATE]: () =>
-        refuse
-          ? Promise.reject(new Error("Could not make that workspace on this system."))
-          : Promise.resolve(PLATFORM),
-    },
-  );
+test("New workspace's cards opened before a sign-out stay put away when the account signs in again", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
-  const made = await tab.control().onCreateWorkspace("Platform");
-  await settle();
-  tab.stand({ tasks: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } });
-  refuse = true;
-  const refused = await tab.control().onCreateWorkspace("Platform");
+  act(() => tab.control().newWorkspace.onOpen());
+  const opened = tab.control().newWorkspace.open;
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true });
 
-  assert.equal(made, undefined);
-  assert.equal(refused, "Could not make that workspace on this system.");
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_CREATE)
-      .map((asked) => Option.getOrUndefined(readCreate(asked.payload))?.name),
-    ["Platform", "Platform"],
-  );
-  assert.equal(tab.control().workspace?.id, PLATFORM.id);
-});
-
-test("a workspace made with a photo and addresses has them set on it, and one refused leaves the rest standing and says why in a toast", async () => {
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
-    {
-      [ACT_KIND.WORKSPACE_CREATE]: () => Promise.resolve(PLATFORM),
-      [ACT_KIND.WORKSPACE_PHOTO_SET]: () => Promise.reject(new Error("That photo is too large.")),
-      [ACT_KIND.WORKSPACE_INVITE]: () =>
-        Promise.resolve({
-          id: "invitation-dana",
-          email: "dana@acme.dev",
-          role: INVITATION_ROLE.MEMBER,
-          expiresAt: "2026-11-12T00:00:00.000Z",
-          acceptUrl: "https://vespin.dev/invite/dana",
-        }),
-    },
-  );
-
-  const made = await tab.control().onCreateWorkspace("Platform", {
-    photo: "data:image/webp;base64,UklG",
-    invite: ["dana@acme.dev"],
-  });
-  await settle();
-
-  assert.equal(made, undefined);
-  assert.deepEqual(
-    tab.payloads
-      .filter(
-        (asked) =>
-          asked.kind === ACT_KIND.WORKSPACE_PHOTO_SET || asked.kind === ACT_KIND.WORKSPACE_INVITE,
-      )
-      .map((asked) => asked.payload),
-    [
-      { workspaceId: PLATFORM.id, photo: "data:image/webp;base64,UklG" },
-      { workspaceId: PLATFORM.id, email: "dana@acme.dev", role: INVITATION_ROLE.MEMBER },
-    ],
-  );
-  assert.match(newestToastSays() ?? "", /That photo is too large\./u);
+  assert.equal(opened, true);
+  assert.equal(tab.control().newWorkspace.open, false);
 });
 
 test("Workspace settings opens Settings on the listed workspace's page", () => {
@@ -2782,13 +2721,13 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
   // Note that the page profile's page is held on the open task's pages, as its fixture run's document lays it (`fixtureAppState`).
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE },
   });
   const page = mount(
     { ...run, profile: RUN_PROFILE.AGENT_PAGE },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -3775,7 +3714,7 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
  */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   fakeActPort({});
-  return registryWith(experimentsOn(EXPERIMENT.PLANS), [
+  return registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), [
     [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
     [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
   ]);

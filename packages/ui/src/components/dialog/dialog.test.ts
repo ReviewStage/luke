@@ -83,7 +83,7 @@ function Owner({ heard, busy }: { heard: Heard; busy: boolean }): React.JSX.Elem
           onDismiss: () => setOpen(false),
           onKeyDown: (event) => heard.dialogKeys.push(event.key),
           children: [
-            createElement("h2", { key: "title", id: titleId }, "Rename plan"),
+            createElement("h2", { key: "title", id: titleId }, "Rename task"),
             createElement("input", {
               key: "name",
               ref: field,
@@ -162,7 +162,7 @@ function opened(busy = false) {
 
 test("it opens named by its title on its field, keeps Tab and Shift-Tab among its controls, and Escape hands focus back", () => {
   const { opener, dialog, field } = opened();
-  expect(nameOf(dialog)).toBe("Rename plan");
+  expect(nameOf(dialog)).toBe("Rename task");
   expect(holds(field)).toBe(true);
   button("Save").focus();
   key("Tab");
@@ -285,7 +285,7 @@ test("asked away while busy, by the dimmed window or Escape, its owner still hea
   draw(
     createElement(Dialog, {
       open: true,
-      title: "Deleting plan",
+      title: "Deleting task",
       busy: true,
       onDismiss: () => {
         dismissals += 1;
@@ -310,14 +310,14 @@ test("a question that must be answered is an alert dialog, named by its title an
       describedBy: "body",
       onDismiss: () => undefined,
       children: [
-        createElement("h2", { key: "title", id: "title" }, "Delete plan?"),
+        createElement("h2", { key: "title", id: "title" }, "Delete task?"),
         createElement("p", { key: "body", id: "body" }, "It goes for good."),
         createElement("button", { key: "delete", type: "button" }, "Delete"),
       ],
     }),
   );
   const question = card(DIALOG_ROLE.ALERT_DIALOG) ?? expect.fail("no alert dialog");
-  expect(nameOf(question)).toBe("Delete plan?");
+  expect(nameOf(question)).toBe("Delete task?");
   const described = question.getAttribute("aria-describedby");
   expect(described && document.getElementById(described)?.textContent).toBe("It goes for good.");
 });
@@ -463,7 +463,7 @@ function OpenOwner({ onExited }: { onExited?: (() => void) | undefined }): React
     createElement("button", { type: "button", onClick: () => setOpen(true) }, "Rename"),
     createElement(Dialog, {
       open,
-      title: "Rename plan",
+      title: "Rename task",
       onDismiss: () => setOpen(false),
       onExited,
       children: createElement("button", { type: "button", onClick: () => setOpen(false) }, "Done"),

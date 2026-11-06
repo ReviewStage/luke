@@ -123,6 +123,7 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { plansOnFor } from "../plans-on.js";
 import { agentFailureSaid, agentLogIds } from "./agent-log.js";
 import {
   type AccountKeyRows,
@@ -544,7 +545,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, its brief or name in place of its document where the account has Plans off, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -594,7 +595,12 @@ const landingOf = Effect.fnUntraced(function* (
       place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
     };
   }
-  const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
+  // A starter with Plans off hands no plan: the task's brief in its place, or else its name.
+  const words =
+    brief === undefined && !(yield* plansOnFor(userId, kind))
+      ? (read.value.brief ?? task.name)
+      : brief;
+  const handed = yield* handedOf(words ?? planMarkdown(task), place, fitter, noteFiles);
   return {
     startedFrom: handed.startedFrom,
     workspaceId: task.workspaceId,
@@ -602,7 +608,7 @@ const landingOf = Effect.fnUntraced(function* (
     task,
     mover,
     place:
-      brief === undefined
+      words === undefined
         ? { taskId: place.taskId, planSnapshot: handed.text, prompt: null, kind }
         : { taskId: place.taskId, planSnapshot: null, prompt: handed.text, kind },
   };
@@ -1462,7 +1468,15 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         attachments,
       ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
       const mentioned =
-        words === undefined ? undefined : mentionedContext(words, landing.task, reads);
+        words === undefined
+          ? undefined
+          : mentionedContext(
+              words,
+              landing.task,
+              reads,
+              undefined,
+              yield* plansOnFor(agent.userId, agent.kind),
+            );
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
       // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).
       const line = yield* openingLine(

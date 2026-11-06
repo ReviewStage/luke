@@ -18,6 +18,7 @@ import {
   pressInComposer,
   QUIET_COMPOSER,
 } from "../testing/composer.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
@@ -139,18 +140,20 @@ async function page({ box = true }: { box?: boolean } = {}) {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(TaskMentions, {
-        value: PAGE,
-        children: [
-          createElement(FileTab, {
-            key: "file",
-            file: { path: "src/invite.ts", range: undefined, opened: 1 },
-            readFile,
-            onRead: ignore,
-          }),
-          box ? createElement(Box, { key: "box", sender }) : null,
-        ],
-      }),
+      withQueryClient(
+        createElement(TaskMentions, {
+          value: PAGE,
+          children: [
+            createElement(FileTab, {
+              key: "file",
+              file: { path: "src/invite.ts", range: undefined, opened: 1 },
+              readFile,
+              onRead: ignore,
+            }),
+            box ? createElement(Box, { key: "box", sender }) : null,
+          ],
+        }),
+      ),
     ),
   );
   await settle();

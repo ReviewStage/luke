@@ -64,13 +64,15 @@ const section = (heading: string) =>
     PLACE,
   );
 
-test("a section the words mention is handed as it stands, under the part's heading", () => {
-  const part = mentionedContext(`Do what ${section("Rollout")} says.`, TASK);
+test("a section the words mention is handed as it stands, under the part's heading, and nothing of it to an agent whose starter has Plans off", () => {
+  const words = `Do what ${section("Rollout")} says.`;
+  const part = mentionedContext(words, TASK);
 
   assert.equal(
     part,
     `${MENTIONED_HEADING}\n\nThe plan's section "Rollout":\n\n## Rollout\n\nStore first, then the desktop.`,
   );
+  assert.equal(mentionedContext(words, TASK, undefined, undefined, false), undefined);
 });
 
 test("the whole plan the words mention is handed as an agent started on it is", () => {
