@@ -111,14 +111,17 @@ it.effect(
             JSON.parse(request.body ?? "{}") as {
               from: string;
               to: string[];
-              text: string;
               scheduled_at: string;
+              template: { id: string; variables: { GREETING: string } };
             },
         );
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, WELCOME_FROM);
         assert.deepEqual(emails[0]?.to, [ADA.email]);
-        assert.ok(emails[0]?.text.startsWith("Hey Ada,"));
+        assert.deepEqual(emails[0]?.template, {
+          id: "founder-welcome",
+          variables: { GREETING: "Hey Ada," },
+        });
         assert.equal(emails[0]?.scheduled_at, "1970-01-02T01:00:00.000Z");
 
         const [personal, ...others] = yield* Database.use((db) =>
