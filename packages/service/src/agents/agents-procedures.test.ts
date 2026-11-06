@@ -82,6 +82,7 @@ function scriptedSandbox(state: SandboxState) {
         return SANDBOX_STATE.RUNNING;
       }),
     attach: () => Effect.die("the routes attach nothing"),
+    open: () => Effect.die("the routes open nothing"),
     setCredential: () => Effect.die("the routes set no credential"),
     withdrawCredential: () => Effect.die("the routes withdraw no credential"),
   };

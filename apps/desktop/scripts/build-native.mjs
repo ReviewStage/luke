@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { swiftCompilerArguments } from "./package-config.mjs";
-import { LIQUID_GLASS_ADDON, NATIVE_HELPERS } from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, NODE_PTY } from "./package-layout.mjs";
 
 if (process.platform !== "darwin") {
   process.stdout.write("Skipping the macOS helpers on this platform.\n");
@@ -80,3 +80,27 @@ if (!fs.existsSync(liquidGlassSource)) {
 }
 fs.copyFileSync(liquidGlassSource, path.join(outputDirectory, LIQUID_GLASS_ADDON.binary));
 process.stdout.write(`Copied the Liquid Glass addon: ${LIQUID_GLASS_ADDON.binary}\n`);
+
+// node-pty is copied rather than compiled too: its JavaScript, without its
+// tests and maps, and its prebuilds for the packaged architecture, laid out
+// as the package lays them, since its JavaScript finds the addon and
+// `spawn-helper` from its own folder. The package ships `spawn-helper`
+// without its execute bit, without which no shell starts, so it is set here.
+const nodePtySource = path.join(appRoot, "node_modules", NODE_PTY.packageName);
+const nodePtyOutput = path.join(outputDirectory, NODE_PTY.folder);
+const nodePtyPrebuilds = path.join(nodePtySource, NODE_PTY.prebuilds);
+if (!fs.existsSync(nodePtyPrebuilds)) {
+  throw new Error(
+    `node-pty's prebuilds are missing (${nodePtyPrebuilds}): ${NODE_PTY.packageName} did not install. Run ./scripts/bootstrap.sh and read its output.`,
+  );
+}
+fs.rmSync(nodePtyOutput, { recursive: true, force: true });
+fs.mkdirSync(nodePtyOutput, { recursive: true });
+fs.copyFileSync(path.join(nodePtySource, "package.json"), path.join(nodePtyOutput, "package.json"));
+fs.cpSync(path.join(nodePtySource, "lib"), path.join(nodePtyOutput, "lib"), {
+  recursive: true,
+  filter: (source) => !source.endsWith(".map") && !source.endsWith(".test.js"),
+});
+fs.cpSync(nodePtyPrebuilds, path.join(nodePtyOutput, NODE_PTY.prebuilds), { recursive: true });
+fs.chmodSync(path.join(nodePtyOutput, NODE_PTY.prebuilds, "spawn-helper"), 0o755);
+process.stdout.write(`Copied node-pty: ${NODE_PTY.folder}\n`);

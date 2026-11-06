@@ -134,6 +134,7 @@ function world(options: {
             }
           : { state };
       }),
+    open: () => Effect.die("the relay opens no PTY of its own"),
     setCredential: ({ sandboxSessionId }) =>
       Effect.sync(() => void asked.policies.push(sandboxSessionId)),
     withdrawCredential: ({ sandboxSessionId }) =>

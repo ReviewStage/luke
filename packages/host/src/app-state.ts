@@ -208,8 +208,8 @@ export interface AppInboxWaitingItem {
   postedAt: number;
   /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
   asking?: boolean;
-  /** Until when the developer snoozed it, while nothing has woken it since; absent where it is not snoozed. The window leaves it uncounted until then. */
-  snoozedUntil?: number;
+  /** When the developer's reminder on it comes due, while no change has ended it since; absent where it has none. The window leaves it uncounted until then. */
+  remindAt?: number;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */

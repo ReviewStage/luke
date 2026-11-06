@@ -34,7 +34,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * quiet one does. Two tinted looks carry news on a wash of their
  * color rather than a fill: `working-tint` for an act something under way
  * offers (Restart, once a release is downloaded), and `danger-tint` for the
- * one a failure offers (Download, once installing it failed). `row` is an
+ * one a failure offers (Download, once installing it failed). `danger-quiet`
+ * is a quiet one in the danger ink, for the mark of a failure that opens
+ * what mends it (the red alert beside a message that did not go), lighting
+ * on a wash of the danger color. `row` is an
  * act standing as a row of a card's own, its words at the row's start and
  * the row lit by the fill a menu's row is lit by, as a date picker's Clear
  * is. Each is one control's height, corner, and glyph
@@ -155,6 +158,7 @@ export const BUTTON_VARIANT = {
   INK: "ink",
   WORKING_TINT: "working-tint",
   DANGER_TINT: "danger-tint",
+  DANGER_QUIET: "danger-quiet",
   ROW: "row",
   MEDIA: "media",
 } as const;

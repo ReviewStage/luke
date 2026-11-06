@@ -24,6 +24,7 @@ import {
 } from "@repo/features/task-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 
 /**
@@ -224,6 +225,11 @@ function savedUnderLock<T extends TextTaken, F>(
       taken.agentEdits === undefined ? {} : { agentEdits: taken.agentEdits },
     );
     if (Option.isNone(saved)) return NO_TASK_RESULT;
+    // A member's own edit is counted, from the window or an outside agent alike; a restore is none.
+    if (writer.actor === PLAN_ACTOR.DEVELOPER && writer.restoredFrom === undefined) {
+      const workspaceId = saved.value.workspaceId;
+      yield* recordServerEvent(SERVER_EVENT.PLAN_EDIT, { userId: binding.userId, workspaceId }, {});
+    }
     return { status: PLAN_SAVE_STATUS.SAVED, task: saved.value, taken, moved, txid };
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));

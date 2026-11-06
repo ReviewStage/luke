@@ -264,6 +264,14 @@
           "dest": "/api/terminal/sessions.js"
         },
         {
+          "src": "/api/terminal/tunnels",
+          "dest": "/api/terminal/tunnels"
+        },
+        {
+          "src": "/api/terminal/tunnels\\.js",
+          "dest": "/api/terminal/tunnels.js"
+        },
+        {
           "src": "/api/(.*)",
           "dest": "/api/default.js?route=orpc&route-path=$1"
         },

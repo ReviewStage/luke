@@ -18,7 +18,11 @@ import type { PageThumbFrame } from "../page-thumb/page-thumb.js";
  * height, so the page is scrolled with the words rather than inside a box of
  * its own; and at a screenful where the page fills whatever frame holds it
  * (`@repo/features/page-size`'s `pageFitAfter`), since such a page has no
- * height of its own to stand at. Until the page has loaded the frame is
+ * height of its own to stand at. The frame never scrolls itself, because
+ * where scroll bars always show, one drawn while the page overflowed its
+ * stand-in narrows the page, which then reports the height it has at that
+ * narrower width and keeps the bar for good; a page past the runaway's bound
+ * is read whole in its tab. Until the page has loaded the frame is
  * hidden over a quiet ground, because the blank document it loads through is
  * light only and would flash in a dark window. The frame loads only once it
  * nears the screen where the caller asks, so a long transcript loads the
@@ -98,6 +102,7 @@ function LiveFrame({
       allow=""
       referrerPolicy="no-referrer"
       loading={frame.lazy === true ? "lazy" : undefined}
+      scrolling="no"
       onLoad={onLoaded}
     />
   );

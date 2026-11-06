@@ -120,8 +120,13 @@ function heldAfter(
   const settledSince = now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS;
   for (const [id, { item }] of next) {
     if (item.status === INBOX_STATUS.OPEN) continue;
-    // A nod on an old notice settles it without moving its last change, so it stands by the later of the two.
-    if (Math.max(item.updatedAt, item.settledAt ?? item.updatedAt) < settledSince) next.delete(id);
+    // A nod on an old notice settles it without moving its last change, and a reminder brings it back when it comes due, so it stands by the latest of the three, as the service carries it.
+    const standsBy = Math.max(
+      item.updatedAt,
+      item.settledAt ?? item.updatedAt,
+      item.remindAt ?? item.updatedAt,
+    );
+    if (standsBy < settledSince) next.delete(id);
   }
   const sent = [...carried.values()].filter((item) => next.has(item.id));
   return { held: next, sent, placed };

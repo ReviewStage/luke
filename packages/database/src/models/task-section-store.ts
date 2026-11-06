@@ -728,6 +728,40 @@ function placeAgent(
   });
 }
 
+/** A section a delete took away, how many of the account's tasks went back under Tasks with it, and the transaction it went in. */
+export interface DeletedTaskSection {
+  readonly section: TaskSection;
+  readonly returnedTasks: number;
+  readonly txid: string | undefined;
+}
+
+/**
+ * Every delete of a section, the sidebar's and an agent's alike: the
+ * account's section read, held to the workspace where one is given, its
+ * entries counted, and the section deleted, under the caller's lock.
+ * Nothing where the account keeps no such section there, with nothing written.
+ */
+function sectionTaken(
+  userId: string,
+  id: string,
+  workspaceId?: string,
+): TaskStoreEffect<Option.Option<DeletedTaskSection>> {
+  return Effect.gen(function* () {
+    const found = yield* findSection({ userId, id });
+    if (Option.isNone(found)) return Option.none();
+    if (workspaceId !== undefined && found.value.organizationId !== workspaceId) {
+      return Option.none();
+    }
+    const [entries] = yield* countEntriesIn({ userId, id });
+    const [written] = yield* deleteSection({ userId, id });
+    return Option.some({
+      section: sectionOf(found.value),
+      returnedTasks: entries?.held ?? 0,
+      txid: written?.txid,
+    });
+  });
+}
+
 /** Runs one write; none where it was refused. */
 function applyWrite(userId: string, write: TaskSectionWrite): TaskStoreEffect<Applied> {
   switch (write.kind) {
@@ -747,7 +781,9 @@ function applyWrite(userId: string, write: TaskSectionWrite): TaskStoreEffect<Ap
       });
     case TASK_SECTION_WRITE.DELETE:
       // Deleting a section already gone moves nothing, so it is no refusal.
-      return Effect.map(deleteSection({ userId, id: write.id }), done);
+      return Effect.map(sectionTaken(userId, write.id), (taken) =>
+        Option.isNone(taken) ? UNCHANGED : Option.some(taken.value.txid),
+      );
     case TASK_SECTION_WRITE.PLACE:
       return placeTask(userId, write);
     case TASK_SECTION_WRITE.PLACE_AGENT:
@@ -780,18 +816,12 @@ export function writeTaskSections(
   );
 }
 
-/** A section a delete took away, and how many of the account's tasks went back under Tasks with it. */
-export interface DeletedTaskSection {
-  readonly section: TaskSection;
-  readonly returnedTasks: number;
-}
-
 /**
  * Deletes one of the account's sections of the workspace given, under the
- * same lock every write takes, and answers what it took away as it read it
- * there: the section, and how many entries went with it. Nothing where the
- * account keeps no such section in that workspace, the account is gone, or
- * another write deleted it first, with nothing written.
+ * same lock every write takes, as the sidebar's delete does
+ * (`sectionTaken`), and answers what it took away as it read it there.
+ * Nothing where the account keeps no such section in that workspace, the
+ * account is gone, or another write deleted it first, with nothing written.
  */
 export function deleteTaskSectionIn(
   userId: string,
@@ -802,13 +832,7 @@ export function deleteTaskSectionIn(
     client.withTransaction(
       Effect.gen(function* () {
         if (Option.isNone(yield* lockAccount(userId))) return Option.none();
-        const found = yield* findSection({ userId, id });
-        if (Option.isNone(found) || found.value.organizationId !== workspaceId) {
-          return Option.none();
-        }
-        const [entries] = yield* countEntriesIn({ userId, id });
-        yield* deleteSection({ userId, id });
-        return Option.some({ section: sectionOf(found.value), returnedTasks: entries?.held ?? 0 });
+        return yield* sectionTaken(userId, id, workspaceId);
       }),
     ),
   );

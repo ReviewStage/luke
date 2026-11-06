@@ -1514,9 +1514,11 @@ as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the settings it holds.
 
-`chaptersModel` is the Claude model Generate chapters runs on, one of
-`@repo/features/chapters-model-choice`'s fixed set, Claude Haiku 5.5 until
-the account chooses; any other value is `invalid-request`.
+`chaptersModel` is the Claude model an earlier desktop let the account pick
+for Generate chapters, one of `@repo/features/chapters-model-choice`'s fixed
+set, Claude Haiku 5.5 until it chose; any other value is `invalid-request`.
+It is kept for the builds that still write it, but Generate no longer reads
+it: every Generate runs on Haiku.
 
 `experiments` is the last part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@repo/settings`'s
@@ -1584,8 +1586,8 @@ the answer), holds the answer to the diff, asks once more for any hunk it left
 out, and closes the story with "Other changes": the files a reader reads past,
 those with no hunk, and whatever is still outside. The model is a seam: the
 route hands in `chaptersModelOf(own, modelId)` on the API key the member who
-pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
-Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Vespin's
+pressed Generate saved (`ownKeyOf`), Claude Haiku on an Anthropic key and
+OpenAI's model of its tier on an OpenAI key alone, never Vespin's
 key; a member who saved none reads `generatable: false`. A test hands in a
 scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
 call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is

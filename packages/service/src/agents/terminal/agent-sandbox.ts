@@ -89,6 +89,11 @@ type SandboxAttach =
   | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING }
   | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly gone: true };
 
+/** What an open finds: a running sandbox's PTY, minted for one connection, or where the sandbox stands instead. */
+export type SandboxOpen =
+  | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly shell: InteractiveShell }
+  | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING };
+
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
@@ -109,6 +114,8 @@ export interface AgentSandboxService {
     sessionId: string,
     terminalId: string,
   ) => Effect.Effect<SandboxAttach, SandboxUnavailable>;
+  /** A PTY minted on the running sandbox for a command of the caller's own, or where the sandbox stands; a stopped sandbox is never woken here. */
+  readonly open: (sessionId: string) => Effect.Effect<SandboxOpen, SandboxUnavailable>;
   /**
    * A fresh credential set in the GitHub slot of the running sandbox
    * session's firewall, in the shape the agent's own session sets it
@@ -217,6 +224,19 @@ function agentSandboxOver(
         // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
         const shell = yield* api.openInteractive(running);
         return { state: SANDBOX_STATE.RUNNING, sandboxSessionId: running, shell };
+      }),
+    open: (sessionId) =>
+      Effect.gen(function* () {
+        const { state, running } = yield* standing(sessionId);
+        if (running === undefined) {
+          return {
+            state:
+              state === SANDBOX_STATE.STARTING ? SANDBOX_STATE.STARTING : SANDBOX_STATE.STOPPED,
+          };
+        }
+        // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
+        const shell = yield* api.openInteractive(running);
+        return { state: SANDBOX_STATE.RUNNING, shell };
       }),
     setCredential: (session, credential) =>
       Effect.provideContext(
