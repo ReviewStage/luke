@@ -145,7 +145,7 @@ import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
-import { stripTabTitle } from "../tasks/strip-tab-kinds.js";
+import { stripTabTakesFind, stripTabTitle } from "../tasks/strip-tab-kinds.js";
 import {
   AgentGlyph,
   agentEndMark,
@@ -2886,7 +2886,7 @@ export function SidePanel({
           // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
           aria-label={label}
           aria-labelledby={tabId}
-          active={keys && focused && !isPageTab(tab) && !isCloudBrowserTab(tab)}
+          active={keys && focused && stripTabTakesFind(tab)}
           subject={{ task: taskId, tab }}
         >
           {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
