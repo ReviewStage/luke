@@ -567,6 +567,49 @@ body,
   --ui-toolbar-start-at: 0px;
 }
 
+/* The agents' tabs and the side panel's stand on one row tucked under the
+   topbar, at a control's full height, flush with the topbar's own room under
+   the task's name and as much room again under them: the room the title bar
+   keeps above and below its controls (`--title-bar-middle`), so the name, the
+   tabs, and the card stand one even step apart, 8px on the web and 10px by
+   the Mac's traffic lights. The sheets under the row start where it ends. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main) {
+  --task-tabs-gap: calc(var(--title-bar-middle) - var(--ui-control-height) / 2);
+  --task-tabs-height: calc(var(--ui-control-height) + var(--task-tabs-gap));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  .task-tabs {
+  --ui-toolbar-height: var(--task-tabs-height);
+  --ui-toolbar-top-inset: 0px;
+  --ui-toolbar-block-inset: var(--task-tabs-gap);
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > .side-panel
+  > .side-panel-bar {
+  min-height: var(--task-tabs-height);
+  padding-top: 0;
+  padding-bottom: var(--task-tabs-gap);
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell
+  > .desktop-main
+  .desktop-task:has(> .desktop-task-main)
+  > :is(.desktop-task-main, .side-panel)::before {
+  top: var(--task-tabs-height);
+}
+
 /* The task's details stand across the page with no bar of their own, so
    their sheet starts right under the topbar. */
 :where(:root):not([data-ui-room="narrow"])

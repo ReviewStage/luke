@@ -6,8 +6,10 @@ import {
   type PullRequestChaptersAnswerView,
 } from "./pull-request-chapters-view.js";
 import {
+  chaptersRunsOnSchema,
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
+  type PullRequestChaptersAnswer,
   type PullRequestChaptersState,
 } from "./pull-request-chapters-wire.js";
 import { countedNumber } from "./service-wire.js";
@@ -17,8 +19,8 @@ import { countedNumber } from "./service-wire.js";
  *
  * The service answers one statement, the workspace's newest claim of the
  * pull request an agent's Pull request tab names, as one row or none, with
- * whether the reader can generate chapters at all beside it, which no
- * statement can carry since it comes from the reader's own keys. The row is
+ * whether the reader can generate chapters at all, and on what, beside it,
+ * which no statement can carry since it comes from the reader's own keys. The row is
  * drawn into the same answer the agent's read gives
  * (`pullRequestChaptersAnswerSchema`), its stored chapters decoded with
  * their wire schema, so a row off its own shape is drawn as unavailable,
@@ -28,16 +30,33 @@ import { countedNumber } from "./service-wire.js";
 /**
  * A pull request's chapters sealed for following: the address, the one
  * statement of its newest claim, and whether the reader can generate them
- * on a key of their own. Asked to poll, the service answers the
+ * on a key of their own, and on which model and whose key, absent from a
+ * service older than it. Asked to poll, the service answers the
  * statement's rows inline instead (`LIVE_POLL`).
  */
 export const pullRequestChaptersLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
   queries: EffectSchema.Struct({ chapters: sealedLiveQuerySchema }),
   generatable: EffectSchema.Boolean,
+  runsOn: EffectSchema.optionalKey(chaptersRunsOnSchema),
 });
 
 export type PullRequestChaptersLiveAnswer = typeof pullRequestChaptersLiveAnswerSchema.Type;
+
+/** What the reader's Generate stands on, as a sealed answer carries it beside its statement. */
+export type ChaptersGenerator = Pick<
+  NonNullable<PullRequestChaptersAnswer["pullRequest"]>,
+  "generatable" | "runsOn"
+>;
+
+/** Whether two answers' readers stand on the same Generate, so a change between them is drawn. */
+export function sameGenerator(a: ChaptersGenerator, b: ChaptersGenerator): boolean {
+  return (
+    a.generatable === b.generatable &&
+    a.runsOn?.provider === b.runsOn?.provider &&
+    a.runsOn?.model === b.runsOn?.model
+  );
+}
 
 /** A git commit's name, as GitHub spells it. */
 const commitSchema = EffectSchema.NonEmptyString;
@@ -104,17 +123,20 @@ function stateOf(row: ChaptersLiveRow | undefined): PullRequestChaptersState | u
 /**
  * The pull request numbered as the reader named it, with its newest
  * chapters as the live statement's rows stand and whether the reader can
- * generate them, as the agent's read answers it; unavailable where a row
- * is off its own shape.
+ * generate them, and on what, as the agent's read answers it; unavailable
+ * where a row is off its own shape.
  */
 export function pullRequestChaptersOfLive(
   rows: readonly unknown[],
   number: number,
-  generatable: boolean,
+  generator: ChaptersGenerator,
 ): PullRequestChaptersAnswerView {
   const read = readRows(rows);
   if (Option.isNone(read)) return UNAVAILABLE;
   const chapters = stateOf(read.value[0]);
   if (chapters === undefined) return UNAVAILABLE;
-  return { pullRequest: { number, generatable, chapters } };
+  const { generatable, runsOn } = generator;
+  return {
+    pullRequest: { number, generatable, ...(runsOn === undefined ? {} : { runsOn }), chapters },
+  };
 }

@@ -360,7 +360,11 @@ function senderOf(sent: LineSent): AgentSender {
     case MESSAGE_SENDER.APP:
       return { name: SENDER_NAME.APP, kind: AGENT_SENDER.APP };
     case MESSAGE_SENDER.AUTOMATION:
-      return { name: sent.name, kind: AGENT_SENDER.AUTOMATION };
+      return {
+        name: sent.name,
+        kind: AGENT_SENDER.AUTOMATION,
+        ...(sent.automationId === undefined ? undefined : { automationId: sent.automationId }),
+      };
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:

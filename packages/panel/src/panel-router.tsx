@@ -51,8 +51,8 @@ import {
 import {
   adminRouteStands,
   type RouteAccess,
-  routeAccessNow,
   settingsPageRouteStands,
+  UNREAD_ROUTE_ACCESS,
   useRouteAccess,
   workspaceRouteStands,
 } from "./route-gates.js";
@@ -439,12 +439,17 @@ const routeTree = rootRoute.addChildren([
   appSettingsRoute.addChildren([appSettingsIndexRoute, appSettingsPageRoute]),
 ]);
 
-/** The panel's router over `history`, a window's own, which its root makes, one per window, its routes handed the window's `queryClient`. */
+/**
+ * The panel's router over `history`, a window's own, which its root makes, one per window, its routes handed the window's `queryClient`.
+ * Note that it starts on the unread access and reads no state, because the desktop's entry makes it as the module loads, before
+ * its root installs the bridge, and a read then would keep the bridge's absence as the window's first read; `PanelRouterProvider`
+ * hands it the window's access as it draws, before the router first loads.
+ */
 export function createPanelRouter(history: RouterHistory, queryClient: QueryClient) {
   return createRouter({
     routeTree,
     history,
-    context: { queryClient, access: routeAccessNow() },
+    context: { queryClient, access: UNREAD_ROUTE_ACCESS },
     parseSearch: readSearch,
     stringifySearch: writeSearch,
     // Every scroller stands where it stood as the window comes back to a step, as TanStack Router's docs set it up.

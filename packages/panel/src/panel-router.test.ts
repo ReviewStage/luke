@@ -1,3 +1,4 @@
+import { it } from "@effect/vitest";
 import { hostConnectPath } from "@repo/features/host-wire";
 import {
   ADMIN_LINK_SECTION,
@@ -8,8 +9,12 @@ import {
 } from "@repo/features/link-grammar";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, type RouteIds } from "@tanstack/react-router";
-import { describe, expect, it } from "vitest";
+import { Effect } from "effect";
+import { describe, expect } from "vitest";
 import { createPanelRouter, type PanelRouter } from "./panel-router.js";
+import { fakeAppBridge } from "./testing/app-bridge.js";
+import { stateWith } from "./testing/app-state.js";
+import { appStateFirstRead } from "./use-app-state.js";
 
 type PanelRouteId = RouteIds<PanelRouter["routeTree"]>;
 
@@ -271,4 +276,20 @@ describe("the panel's route tree", () => {
     const kinds = new Set(LINKS.map(([place]) => place.kind));
     expect([...kinds].sort()).toEqual(Object.values(LINK_PLACE).sort());
   });
+
+  it.effect(
+    "is made before the window's bridge stands without spoiling the window's first read",
+    () =>
+      Effect.gen(function* () {
+        // The desktop's entry makes its router as the module loads, before its root installs the bridge (`window-root.tsx`).
+        landingOf("/app");
+        const state = stateWith({}, {});
+        fakeAppBridge({
+          requestAppState: () => Promise.resolve(state),
+          onAppState: () => () => undefined,
+        });
+
+        expect(yield* appStateFirstRead).toEqual(state);
+      }),
+  );
 });

@@ -43,6 +43,7 @@ import {
   taskDeleteMutation,
   taskMoveMutation,
   taskRenameMutation,
+  tasksDeleteMutation,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
 import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
@@ -650,6 +651,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onMovePins: ignore,
     onDeleteTask,
     deleteTask: taskDeleteMutation((taskId) => onDeleteTask(taskId)),
+    deleteTasks: tasksDeleteMutation((taskId) => onDeleteTask(taskId)),
     back: () => false,
     // No page asks before it is left, so every way out goes at once.
     leaveGuard: {

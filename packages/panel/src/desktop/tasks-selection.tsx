@@ -17,6 +17,7 @@ import {
   workspaceSections,
 } from "@repo/ui/task-sections-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { type Store, useCreateStore, useSelector } from "@tanstack/react-store";
 import { createContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
@@ -240,10 +241,11 @@ export function useTasksSelection(
     surface: FAILURE_SURFACE.TASK_DELETE,
   });
   // Note that a refusal leaves only the tasks refused asked of, so Retry sends none already deleted.
+  const deleting = useMutation(tasks.deleteTasks);
   const deletion = useConfirmDialog(
     { subject: doomed.length > 0, surfaceOpen: tasks.shown },
     async () => {
-      const answers = await Promise.all(doomed.map((id) => latest.current.onDeleteTask(id)));
+      const answers = await deleting.mutateAsync(doomed);
       const refused = doomed.filter(
         (_, at) => answers[at]?.status !== ACTION_RESULT_STATUS.ACCEPTED,
       );

@@ -20,6 +20,7 @@ import {
   type PullRequestRefusal,
 } from "@repo/features/pull-request-write-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import {
   Badge,
@@ -54,13 +55,14 @@ import {
   GLYPH,
 } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -72,7 +74,7 @@ import { useToast, useWithdrawToast } from "../toast.js";
 import { PULL_REQUEST_STATE_LABEL, queuedLabel, REPOSITORY_UNREACHED_NOTE } from "./agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
-import { useAgentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
+import { agentPullRequestWrite, usePullRequestSource } from "./pull-request-source.js";
 import { useOpenWorkspaceGitHub } from "./repository-remedy.js";
 
 /**
@@ -285,10 +287,17 @@ export function noteOf(
 export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): PullRequestWrites {
   const number = usePullRequestNumber();
   const source = usePullRequestSource();
-  const own = useAgentPullRequestWrite(agentId, number);
-  const send = source?.write ?? own;
+  const send = source?.write ?? agentPullRequestWrite(agentId, number);
+  const queryClient = useQueryClient();
+  // Note that every change to one pull request is keyed alike, so each control refuses to send while any is out (`isMutating`), and runs in order under one scope where two land in one tick.
+  const mutationKey = useMemo(
+    () => [ACT_KIND.AGENTS_PULL_REQUEST_ACTION, agentId, number] as const,
+    [agentId, number],
+  );
   // Note that the change is one mutation through GitHub's answer and the reads it asks again, so it stays pending until they land.
   const change = useMutation({
+    mutationKey,
+    scope: { id: agentId },
     mutationFn: async (request: PullRequestActionRequest) => {
       const answer = await send(request).catch(
         (): AgentPullRequestWriteAnswerView => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
@@ -305,7 +314,7 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
   const out = useRef(false);
   const write = useCallback(
     async (request: PullRequestActionRequest, onDone?: () => void) => {
-      if (out.current) return NOT_SENT;
+      if (out.current || queryClient.isMutating({ mutationKey }) > 0) return NOT_SENT;
       out.current = true;
       const { answer, note } = await mutateAsync(request).finally(() => {
         out.current = false;
@@ -315,7 +324,7 @@ export function usePullRequestWrites(agentId: string, onWritten: ReadAgain): Pul
       }
       return outcomeOf(note);
     },
-    [mutateAsync],
+    [mutateAsync, queryClient, mutationKey],
   );
   const pending = change.isPending ? change.variables.action : undefined;
   const note = change.data?.note;

@@ -84,6 +84,22 @@
   -webkit-app-region: drag;
 }
 
+/* The workspace's head (`workspace-switcher.tsx`) is one control's row under
+   the strip, so its middle stands where the agents' tabs beside it stand
+   theirs, and the list under it starts as far below as the tabs' row ends
+   below its tabs (`desktop.css`'s `--task-tabs-gap`), level with the work's
+   card. */
+.sidebar-workspace {
+  padding-bottom: calc(var(--title-bar-middle) - var(--ui-control-height) / 2);
+}
+
+/* Note that the strip over it keeps a top row's hairline the work's own row
+   beside it leaves out (`.desktop-main`'s `--desktop-bar-height`), so the
+   head rises by it to stand level. A drawer keeps no strip. */
+:where(:root):not([data-ui-room="narrow"]) .sidebar-workspace {
+  margin-top: calc(2 * var(--title-bar-middle) - var(--desktop-bar-height));
+}
+
 .desktop-shell {
   display: grid;
   height: 100%;

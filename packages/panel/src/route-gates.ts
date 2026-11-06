@@ -45,6 +45,15 @@ export interface RouteAccess {
   readonly listed: string | undefined;
 }
 
+/** The access before the window's state is read: Admin waits on it, as a page an experiment holds waits on the settings. */
+export const UNREAD_ROUTE_ACCESS: RouteAccess = {
+  admin: true,
+  experiments: NO_EXPERIMENTS,
+  experimentsRead: false,
+  workspaces: NO_WORKSPACES,
+  listed: undefined,
+};
+
 /** The window's access as it stands now, for a route's `beforeLoad`, which cannot wait a render. */
 export function routeAccessNow(): RouteAccess {
   const state = appStateNow();
@@ -55,7 +64,7 @@ export function routeAccessNow(): RouteAccess {
     experiments: state?.settings?.experiments ?? NO_EXPERIMENTS,
     experimentsRead: state?.settings !== undefined,
     workspaces: state?.tasks?.workspaces ?? NO_WORKSPACES,
-    // Note that the router is made before the window chooses, so its first reading lists the first workspace, as the window does with none kept.
+    // Note that a reading off the state alone lists the first workspace, as the window does with none kept.
     listed: stepOf(state?.tasks?.workspaces?.[0]),
   };
 }

@@ -17,14 +17,38 @@ import { mutationOptions } from "@tanstack/react-query";
 /** How a description's write is sent: the request, answered as the service answers it. */
 export type DescriptionEditSend = (request: DescriptionEditRequest) => Promise<TasksEditAnswer>;
 
+/** The key and the scope every write to `taskId`'s words runs under, one at a time in the order asked. */
+function descriptionWritesOf(taskId: string) {
+  return { mutationKey: [ACT_KIND.TASKS_EDIT, taskId], scope: { id: taskId } };
+}
+
 /** Every write to `taskId`'s words, sent through `send`, in the order asked. */
 export function descriptionEditMutation(taskId: string, send: DescriptionEditSend) {
-  return mutationOptions({
-    mutationKey: [ACT_KIND.TASKS_EDIT, taskId],
-    mutationFn: send,
-    scope: { id: taskId },
-  });
+  return mutationOptions({ ...descriptionWritesOf(taskId), mutationFn: send });
 }
 
 /** A description's writes, as each place writing them holds them (`descriptionEditMutation`). */
 export type DescriptionEditMutation = ReturnType<typeof descriptionEditMutation>;
+
+/**
+ * A write to `taskId`'s words made from them at rest, a tick or a date, in
+ * its turn among every other write to them: `write` runs once each write
+ * before it settles, so the text it writes over is the one they left, and
+ * sends through `edit`, the description's own send.
+ */
+export function descriptionAtRestMutation<Asked, Answer>(
+  taskId: string,
+  edit: DescriptionEditMutation,
+  write: (asked: Asked, send: DescriptionEditSend) => Promise<Answer>,
+) {
+  const send = edit.mutationFn;
+  return mutationOptions({
+    ...descriptionWritesOf(taskId),
+    mutationFn: (asked: Asked, context) =>
+      write(asked, (request) =>
+        send === undefined
+          ? Promise.reject(new Error("The description's writes name no send."))
+          : send(request, context),
+      ),
+  });
+}

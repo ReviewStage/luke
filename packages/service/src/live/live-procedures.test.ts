@@ -97,6 +97,7 @@ import {
   workspaceMemoriesLiveAnswerSchema,
   workspaceMemoriesLiveRowsSchema,
 } from "@repo/features/memory-live";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   pullRequestChaptersLiveAnswerSchema,
@@ -1876,21 +1877,19 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
         assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(pullRequestChaptersLiveAnswerSchema)(polled.body);
         assert.equal(answer.url, LIVE_POLL_URL);
-        assert.deepEqual(
-          pullRequestChaptersOfLive(answer.queries.chapters.rows ?? [], 7, answer.generatable),
-          {
-            pullRequest: {
-              number: 7,
-              generatable: true,
-              chapters: {
-                status: "generating",
-                headSha: "c0ffee1",
-                baseSha: "ba5e000",
-                startedAt: 1_000,
-              },
+        assert.deepEqual(pullRequestChaptersOfLive(answer.queries.chapters.rows ?? [], 7, answer), {
+          pullRequest: {
+            number: 7,
+            generatable: true,
+            runsOn: { provider: MODEL_PROVIDER.ANTHROPIC, model: "claude-haiku-5-5" },
+            chapters: {
+              status: "generating",
+              headSha: "c0ffee1",
+              baseSha: "ba5e000",
+              startedAt: 1_000,
             },
           },
-        );
+        });
         assert.deepEqual(yield* askChapters({ bearer: stranger, agentId, number: 7, github }), {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
