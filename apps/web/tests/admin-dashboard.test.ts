@@ -6,13 +6,11 @@ import {
   FUNNEL_STEP,
   REACH_FEATURE,
 } from "@repo/features/admin-overview-vocabulary";
-import { ADMIN_READ } from "@repo/features/admin-wire";
 import { DashboardScreen } from "@repo/panel/admin/screens/dashboard";
-import type { AdminRead } from "@repo/panel/admin/use-admin-read";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { afterEach, expect, test, vi } from "vitest";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 /**
@@ -133,58 +131,75 @@ function metrics(overrides: Partial<AdminMetrics> = {}): AdminMetrics {
   };
 }
 
-function ready(
-  value: AdminMetrics,
-  refreshFailure: string | undefined = undefined,
-): AdminRead<AdminMetrics> {
-  return {
-    status: "ready",
-    value,
-    question: { procedure: ADMIN_READ.METRICS, query: {} },
-    refreshFailure,
-  };
-}
+/** What one read of the overview is answered with, beside the metrics themselves. */
+const REPLY = { FAILS: "fails", HANGS: "hangs" } as const;
+
+type Reply = AdminMetrics | (typeof REPLY)[keyof typeof REPLY];
 
 let root: Root | undefined;
+
+/** How many times the overview was read. */
+let reads = 0;
 
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
+  reads = 0;
+  vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
-/** The dashboard in `state`, recording what its controls hand up into `heard`. */
-function render(
-  state: AdminRead<AdminMetrics>,
-  heard: string[] = [],
-  refreshing = false,
-): HTMLElement {
+function answer(reply: Reply): Promise<Response> {
+  if (reply === REPLY.HANGS) return new Promise(() => undefined);
+  if (reply === REPLY.FAILS) return Promise.resolve(new Response(null, { status: 500 }));
+  return Promise.resolve(
+    new Response(JSON.stringify(reply), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+}
+
+/**
+ * The dashboard, signed in, opened once per reply, each opening reading the
+ * overview again and answered by its reply, so a later reply lands over the
+ * answer an earlier one left; what its controls hand up goes into `heard`.
+ */
+async function render(replies: readonly Reply[], heard: string[] = []): Promise<HTMLElement> {
+  window.localStorage.setItem("app-admin-sign-in-chosen", "true");
+  const queue = [...replies];
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+    reads += 1;
+    const reply = queue.length > 1 ? queue.shift() : queue[0];
+    return answer(reply ?? REPLY.HANGS);
+  });
   const container = document.createElement("div");
   document.body.replaceChildren(container);
-  root = createRoot(container);
-  act(() =>
-    root?.render(
-      underWebAdminDoors(
-        createElement(DashboardScreen, {
-          read: {
-            state,
-            refreshing,
-            reload: () => heard.push("reload"),
-            withdraw: async () => undefined,
-            revise: () => undefined,
-          },
-          hideAdmins: false,
-          onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
-          windowDays: 7,
-          onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
-          account: undefined,
-          onSignOut: async () => undefined,
-          onOpenAccount: () => undefined,
-          onOpenDay: () => undefined,
-          frame: (content) => content,
-        }),
+  for (const reply of replies) {
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        underWebAdminDoors(
+          createElement(DashboardScreen, {
+            hideAdmins: false,
+            onHideAdminsChange: (hide) => heard.push(`hide ${hide}`),
+            windowDays: 7,
+            onWindowDaysChange: (windowDays) => heard.push(`window ${windowDays}`),
+            account: undefined,
+            onSignOut: async () => undefined,
+            onOpenAccount: () => undefined,
+            onOpenDay: () => undefined,
+            frame: (content) => content,
+          }),
+        ),
       ),
-    ),
-  );
+    );
+    // Note that a failure over a shown answer draws no skeleton to wait out, so it waits for the failure itself.
+    if (reply === REPLY.FAILS) {
+      await vi.waitFor(() => expect(container.querySelector('[role="alert"]')).not.toBeNull());
+    } else if (reply !== REPLY.HANGS) await readLanded(container);
+  }
   return container;
 }
 
@@ -200,8 +215,8 @@ function cardOf(page: HTMLElement, label: string): string {
   return name?.parentElement?.parentElement?.textContent ?? "";
 }
 
-test("the loading dashboard stands its sections under the same headings, saying it is loading", () => {
-  const page = render({ status: "loading" });
+test("the loading dashboard stands its sections under the same headings, saying it is loading", async () => {
+  const page = await render([REPLY.HANGS]);
 
   expect(sectionHeadings(page)).toEqual(SECTIONS);
   expect(regions(page).map((region) => region.name)).toEqual(SECTIONS);
@@ -216,8 +231,8 @@ function regions(page: HTMLElement): { name: string; words: string }[] {
   }));
 }
 
-test("each section is a region named by its heading, holding what it heads and its note", () => {
-  const page = render(ready(metrics()));
+test("each section is a region named by its heading, holding what it heads and its note", async () => {
+  const page = await render([metrics()]);
 
   expect(regions(page).map((region) => region.name)).toEqual(SECTIONS);
   const named = (name: string) => regions(page).find((region) => region.name === name)?.words;
@@ -227,8 +242,8 @@ test("each section is a region named by its heading, holding what it heads and i
   expect(named("Most active accounts")).toContain("An active day is a UTC day");
 });
 
-test("each headline tile reads its week's figure under its name, with its move and its detail", () => {
-  const page = render(ready(metrics()));
+test("each headline tile reads its week's figure under its name, with its move and its detail", async () => {
+  const page = await render([metrics()]);
 
   expect(cardOf(page, "Weekly active developers")).toBe(
     "Weekly active developers12+20% vs the 7 days before",
@@ -244,22 +259,20 @@ test("each headline tile reads its week's figure under its name, with its move a
   );
 });
 
-test("a quiet week's tiles state their figures without a share of nothing", () => {
+test("a quiet week's tiles state their figures without a share of nothing", async () => {
   const quiet = overview().headline;
-  const page = render(
-    ready(
-      metrics({
-        overview: overview({
-          headline: {
-            ...quiet,
-            activeDevelopers: { days: 7, recent: 0, prior: 0 },
-            agentsStarted: { days: 7, recent: 0, prior: 0 },
-            prsOpened: { opened: 0, merged: 0 },
-          },
-        }),
+  const page = await render([
+    metrics({
+      overview: overview({
+        headline: {
+          ...quiet,
+          activeDevelopers: { days: 7, recent: 0, prior: 0 },
+          agentsStarted: { days: 7, recent: 0, prior: 0 },
+          prsOpened: { opened: 0, merged: 0 },
+        },
       }),
-    ),
-  );
+    }),
+  ]);
 
   expect(cardOf(page, "Tasks created · 7 days")).toBe(
     "Tasks created · 7 days30+50% vs the 7 days before",
@@ -280,8 +293,8 @@ function listRows(page: HTMLElement, label: string): string[] {
   );
 }
 
-test("the funnel and reach read each row's count and its share of the base", () => {
-  const page = render(ready(metrics()));
+test("the funnel and reach read each row's count and its share of the base", async () => {
+  const page = await render([metrics()]);
 
   expect(listRows(page, "Activation funnel")).toEqual([
     "Signed up | 50 | 100%",
@@ -301,8 +314,8 @@ test("the funnel and reach read each row's count and its share of the base", () 
   expect(page.textContent).toContain("of 12 active developers");
 });
 
-test("the week's agents read by origin, each row's count and share of the agents started, pilots beside", () => {
-  const page = render(ready(metrics()));
+test("the week's agents read by origin, each row's count and share of the agents started, pilots beside", async () => {
+  const page = await render([metrics()]);
   const thisWeek = regions(page).find((region) => region.name === "This week")?.words;
 
   expect(listRows(page, "Agents by origin")).toEqual([
@@ -315,8 +328,8 @@ test("the week's agents read by origin, each row's count and share of the agents
   expect(thisWeek).toContain("the first that fits");
 });
 
-test("retention counts meaningful actions, and the retired hosted basis stands in its own grid", () => {
-  const page = render(ready(metrics()));
+test("retention counts meaningful actions, and the retired hosted basis stands in its own grid", async () => {
+  const page = await render([metrics()]);
   const named = (name: string) => regions(page).find((region) => region.name === name)?.words;
 
   expect(named("Retention · weekly cohorts")).toContain("70%");
@@ -326,8 +339,8 @@ test("retention counts meaningful actions, and the retired hosted basis stands i
   expect(named("Retention by any hosted call · retired")).toContain("made a hosted-tier call");
 });
 
-test("the most active accounts read each one's days and per-feature counts", () => {
-  const page = render(ready(metrics()));
+test("the most active accounts read each one's days and per-feature counts", async () => {
+  const page = await render([metrics()]);
   const table = page.querySelector('table[aria-label="Accounts"]');
   const headers = Array.from(table?.querySelectorAll("th") ?? [], (cell) => cell.textContent);
   const cells = Array.from(table?.querySelectorAll("tbody td") ?? [], (cell) => cell.textContent);
@@ -345,9 +358,8 @@ function button(page: HTMLElement, words: string): HTMLButtonElement {
   return found;
 }
 
-test("a refresh that failed says so over the answer still shown, and Retry reads again", () => {
-  const heard: string[] = [];
-  const page = render(ready(metrics(), "The overview could not be read."), heard);
+test("a refresh that failed says so over the answer still shown, and Retry reads again", async () => {
+  const page = await render([metrics(), REPLY.FAILS]);
 
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
     "Refresh failed. Still showing the earlier answer. The overview could not be read.",
@@ -355,13 +367,13 @@ test("a refresh that failed says so over the answer still shown, and Retry reads
   expect(cardOf(page, "Weekly active developers")).toBe(
     "Weekly active developers12+20% vs the 7 days before",
   );
-  act(() => button(page, "Retry").click());
-  expect(heard).toEqual(["reload"]);
+  await act(async () => button(page, "Retry").click());
+  expect(reads).toBe(3);
 });
 
-test("a first read that failed says why under the page's toolbar, its controls still at hand, and Retry reads again", () => {
+test("a first read that failed says why under the page's toolbar, its controls still at hand, and Retry reads again", async () => {
   const heard: string[] = [];
-  const page = render({ status: "error", detail: "The overview could not be read." }, heard);
+  const page = await render([REPLY.FAILS], heard);
 
   expect(page.querySelector("header h1")?.textContent).toBe("Overview");
   expect(page.querySelector('[role="alert"]')?.textContent).toContain(
@@ -369,13 +381,14 @@ test("a first read that failed says why under the page's toolbar, its controls s
   );
   openViewOptions(page);
   choose("Time range", "Last 90 days");
-  act(() => button(page, "Retry").click());
-  expect(heard).toEqual(["window 90", "reload"]);
+  await act(async () => button(page, "Retry").click());
+  expect(heard).toEqual(["window 90"]);
+  expect(reads).toBe(2);
 });
 
-test("View options offer the three time ranges, the one read checked, and Include admins, each handing its choice up", () => {
+test("View options offer the three time ranges, the one read checked, and Include admins, each handing its choice up", async () => {
   const heard: string[] = [];
-  const page = render(ready(metrics()), heard);
+  const page = await render([metrics()], heard);
 
   openViewOptions(page);
   expect(menuItems().map((item) => item.label)).toEqual(["Time range", "Include admins"]);
@@ -391,18 +404,9 @@ test("View options offer the three time ranges, the one read checked, and Includ
   expect(heard).toEqual(["window 90", "hide true"]);
 });
 
-test("Retry refuses a press while a read is out, rather than abort it and start over", () => {
-  const heard: string[] = [];
-  const failed = render(
-    { status: "error", detail: "The overview could not be read." },
-    heard,
-    true,
-  );
-  act(() => button(failed, "Retry").click());
-  act(() => root?.unmount());
-
-  const stale = render(ready(metrics(), "The overview could not be read."), heard, true);
+test("Retry refuses a press while a read is out, rather than abort it and start over", async () => {
+  const stale = await render([metrics(), REPLY.FAILS, REPLY.HANGS]);
   act(() => button(stale, "Retry").click());
 
-  expect(heard).toEqual([]);
+  expect(reads).toBe(3);
 });

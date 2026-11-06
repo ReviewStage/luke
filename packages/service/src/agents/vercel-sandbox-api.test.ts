@@ -26,7 +26,7 @@ const NAME = "luke-native-fixture";
 const REFUSAL = { code: "bad_request", message: "Invalid request: the fixture's refusal" } as const;
 const SECRET_ENV = "fixture-secret-env-value";
 
-/** Each call the native launch and the template make, as a caller asks it. */
+/** Each call the native launch makes, as a caller asks it. */
 const CALLS: readonly {
   readonly call: SandboxCall;
   readonly ask: (api: VercelSandboxApi) => Effect.Effect<unknown, SandboxUnavailable>;
@@ -36,7 +36,7 @@ const CALLS: readonly {
     ask: (api) =>
       api.create({
         name: NAME,
-        snapshotId: "snap_fixture",
+        from: { snapshotId: "snap_fixture" },
         tags: {},
         timeoutMs: 60_000,
         vcpus: 2,
@@ -192,20 +192,22 @@ it.effect("a token that could not be read names the call and why", () =>
   }),
 );
 
-it.effect("a template list asks by name, the only sort Vercel takes a name prefix under", () =>
-  Effect.gen(function* () {
-    const api = yield* apiOver((url) => {
-      const asked = new URL(url);
-      assert.equal(asked.searchParams.get("namePrefix"), "luke-native-");
-      assert.equal(asked.searchParams.get("sortBy"), "name");
-      return Response.json({ sandboxes: [{ name: "luke-native-a" }] });
-    });
-    const listed = yield* api.listNamed("luke-native-");
-    assert.deepEqual(
-      listed.map((each) => each.name),
-      ["luke-native-a"],
-    );
-  }),
+it.effect(
+  "a list by name prefix asks sorted by name, the only sort Vercel takes a prefix under",
+  () =>
+    Effect.gen(function* () {
+      const api = yield* apiOver((url) => {
+        const asked = new URL(url);
+        assert.equal(asked.searchParams.get("namePrefix"), "luke-native-");
+        assert.equal(asked.searchParams.get("sortBy"), "name");
+        return Response.json({ sandboxes: [{ name: "luke-native-a" }] });
+      });
+      const listed = yield* api.listNamed("luke-native-");
+      assert.deepEqual(
+        listed.map((each) => each.name),
+        ["luke-native-a"],
+      );
+    }),
 );
 
 it.effect("a start Vercel refused in passing is tried again until it starts", () =>

@@ -15,17 +15,19 @@ import { FIND_SKIP_ATTRIBUTE } from "../../find-skip.js";
  * a light drawn as a moving background on clipped text repaints the line
  * every frame. The loop's play state answers `--ui-loop-motion`, so a
  * capture run and reduced motion hold it still, with the window off the
- * words, as they hold every other endless loop. The line reads as quiet as a
- * status and never as a reply.
+ * words, as they hold every other endless loop. A caller's `style` lands on
+ * the frame around both, so the copy is set in the words' own type; every
+ * other prop lands on the words. The line reads as quiet as a status and
+ * never as a reply.
  */
 
 export type ShimmerProps = Omit<ComponentProps<"span">, "children" | "className"> & {
   children: string;
 };
 
-export function Shimmer({ children, ...props }: ShimmerProps): ReactNode {
+export function Shimmer({ children, style, ...props }: ShimmerProps): ReactNode {
   return (
-    <span className="ui-shimmer-frame">
+    <span className="ui-shimmer-frame" style={style}>
       <span className="ui-shimmer" {...props}>
         {children}
       </span>

@@ -90,6 +90,7 @@
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
 import { linkOf, type ReadLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
+import { EXPERIMENT, experimentOn } from "@repo/settings";
 import type { SettingsView } from "@repo/settings/settings-views";
 import {
   isAgentTab,
@@ -1727,6 +1728,10 @@ export function useWindowHistory(input: {
     }
     // A Settings page an experiment holds, such as Memory, stands only while the account has it on.
     if (to.kind === PLACE_KIND.SETTINGS) return settingsPageExperimentStands(to.view, experiments);
+    // A task's version history is the plan's, which stands only while the account has Plans on.
+    if (to.kind === PLACE_KIND.VERSION_HISTORY && !experimentOn(experiments, EXPERIMENT.PLANS)) {
+      return false;
+    }
     // The Board is a workspace's tasks, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.BOARD) return to.workspaceId === listedWorkspace;
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.

@@ -56,12 +56,7 @@ function wakeupKey(wakeup: ClaimedAgentWakeup): string {
   return `native-wakeup:${wakeup.id}`;
 }
 
-/**
- * One wakeup handed to its agent as a message of its own; whether it landed.
- * It is sent only while it still stands, so one a Stop or a launch deleted
- * since the claim is not sent, and deleted once the send landed; one whose
- * send failed stands for its next delivery.
- */
+/** One wakeup handed to its agent as a message of its own, as the header says; whether it landed. */
 const deliver = (sessionsFor: SessionsForAccount, wakeup: ClaimedAgentWakeup) =>
   Effect.gen(function* () {
     const agent = yield* readAgent(wakeup.userId, wakeup.agentId);

@@ -154,6 +154,8 @@ export const AGENT_ACT_KIND = {
   /** The beats a window holds asked again now, as the window comes back online. */
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on or off, from This Mac's row in Settings › Hosts; only the desktop answers it. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
   HOSTS_PAIRING_DENY: "hosts.pairingDeny",
@@ -565,6 +567,17 @@ export const MAC_COMMAND_ACT_KIND = {
 } as const;
 
 /**
+ * A coding agent's cloud ports forwarded to this Mac's localhost
+ * (`@repo/features/port-forward-acts`), for one agent at a time: its
+ * forwarding turned on or off, how it stands kept in app state
+ * (`portForwarding`), answered by the platform shell, whose host listens on the Mac's loopback. What a forwarded
+ * connection carries never travels on an act.
+ */
+export const PORT_FORWARD_ACT_KIND = {
+  PORT_FORWARD_SET: "portForward.set",
+} as const;
+
+/**
  * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
  * started, named, and ended, its sandbox resumed on the developer's click,
  * and a shell attached and detached. What a shell prints travels on the port
@@ -746,6 +759,7 @@ export const PORT_ACT_KIND = {
   ...MAC_COMMAND_ACT_KIND,
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PORT_FORWARD_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
@@ -823,6 +837,7 @@ export const PORT_ACT_USE = {
   HOSTS_PRESENCE_FOLLOW: ACT_USE.READ,
   HOSTS_PRESENCE_REFRESH: ACT_USE.READ,
   HOSTS_REMOVE: ACT_USE.WRITE,
+  HOSTS_THIS_MAC_SET: ACT_USE.WRITE,
   HOSTS_PAIRING_READ: ACT_USE.FETCH,
   HOSTS_PAIRING_APPROVE: ACT_USE.WRITE,
   HOSTS_PAIRING_DENY: ACT_USE.WRITE,
@@ -916,6 +931,8 @@ export const PORT_ACT_USE = {
   MAC_SHELL_CLOSE: ACT_USE.WRITE,
 
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
+
+  PORT_FORWARD_SET: ACT_USE.WRITE,
 
   SETTING_UPDATE: ACT_USE.WRITE,
   SETTINGS_RESET: ACT_USE.WRITE,
@@ -1043,6 +1060,7 @@ export const PLATFORM_PORT_ACT_KIND = {
   ...CLI_ACT_KIND,
   ...MAC_SHELL_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PORT_FORWARD_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,

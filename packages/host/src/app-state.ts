@@ -46,6 +46,7 @@ import type { MemorySummary } from "@repo/features/memory-wire";
 import type { ModelsAnswer } from "@repo/features/models-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
+import type { PortForwarding } from "@repo/features/port-forward-acts";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
@@ -549,6 +550,10 @@ export type AppWorkspaceInvitations = Readonly<
 export interface AppThisMacHost {
   deviceId?: string;
   machineId?: string;
+  /** Whether this Mac runs agents: a record of the account's stands, and its secret was not refused; absent reads as not. */
+  enrolled?: boolean;
+  /** How many agents' folders its host made on this Mac, which turning it off may delete; absent reads as none. */
+  agentFolders?: number;
 }
 
 /** This Mac as the host last read it, by the account signed in: the one key the host holds, none while nobody is signed in. */
@@ -947,6 +952,8 @@ export interface AppState {
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
   sessionReplay: AppSessionReplaySlice;
+  /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, as the host tells it; none while no agent is forwarded, and in a host that forwards nothing. */
+  portForwarding: PortForwarding;
 }
 
 /**

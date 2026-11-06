@@ -68,6 +68,25 @@ test("the bar reads its lead, its title, the tag after it, and its actions, in t
   assert.equal(heading.textContent, "New thread");
 });
 
+test("a title that opens what it names is its heading's one press, saying whether that stands open", () => {
+  const presses: string[] = [];
+  const banner = bar({
+    title: "Teammate invitations",
+    titlePress: { open: false, label: "Task details", onPress: () => presses.push("press") },
+  });
+  const press = banner.querySelector<HTMLButtonElement>("h1 button") ?? assert.fail("no press");
+  assert.equal(press.textContent, "Teammate invitations");
+  assert.equal(press.getAttribute("aria-expanded"), "false");
+  act(() => press.click());
+  assert.deepEqual(presses, ["press"]);
+
+  const open = bar({
+    title: "Teammate invitations",
+    titlePress: { open: true, label: "Task details", onPress: () => undefined },
+  });
+  assert.equal(open.querySelector("h1 button")?.getAttribute("aria-expanded"), "true");
+});
+
 test("a bar draws only the slots that say something, and its actions end it with no title", () => {
   const banner = bar({
     lead: false,

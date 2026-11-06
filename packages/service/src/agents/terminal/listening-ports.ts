@@ -5,10 +5,10 @@
  * than `ss`, which the sandbox's image does not carry: one `cat`, quick
  * enough for the desktop to ask every few seconds. A socket is kept where
  * it listens and is not one of our own. Ours are the agent's browser's DevTools port
- * (`SANDBOX_BROWSER.DEVTOOLS_PORT`), and whatever root holds: no member's
- * or agent's server runs as root, since every command they drive runs with
- * every capability dropped (`../sandbox-capabilities.ts`), while the
- * sandbox's own init, which serves the sandbox's API, listens as root.
+ * (`SANDBOX_BROWSER.DEVTOOLS_PORT`), and whatever root holds: a member's
+ * server runs as the sandbox's default user and an agent's as its own,
+ * while the sandbox's own init, which serves the sandbox's API, listens as
+ * root.
  */
 
 import { SANDBOX_BROWSER } from "../browser/sandbox-browser.js";

@@ -16,13 +16,11 @@ import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
  * The door to a native agent's sandbox, over Vercel Sandbox's REST API as
  * the deployment asks it under its own OIDC token: the sandbox tagged with
  * the agent's session is found, the file is read from its running session
- * by a command run with every capability dropped, never by Vercel's own
- * file read, a path that is no file is no file, a file past every tool's
- * bound is read only one byte past it, and a conversation that records no
- * session opens no door. The read's command runs in a real bash over a
- * temporary directory standing in for the sandbox's disk, once the fake
- * has checked that `setpriv` empties every capability set ahead of it. The
- * token is a synthetic one.
+ * by a command, never by Vercel's own file read, a path that is no file is
+ * no file, a file past every tool's bound is read only one byte past it, and
+ * a conversation that records no session opens no door. The read's command
+ * runs in a real bash over a temporary directory standing in for the
+ * sandbox's disk. The token is a synthetic one.
  */
 
 const TEAM = "team_fixture";
@@ -42,14 +40,6 @@ interface Asked {
   readonly url: URL;
   readonly body: unknown;
 }
-
-/** What `setpriv` is handed ahead of the command it runs, every capability set emptied. */
-const CAPABILITIES_DROPPED = [
-  "--inh-caps=-all",
-  "--ambient-caps=-all",
-  "--bounding-set=-all",
-  "--",
-];
 
 /** A command's run as Vercel streams it back: its start, its stdout, and its exit. */
 function commandStream(exitCode: number, stdout: string): Response {
@@ -89,15 +79,8 @@ function vercel(root: string) {
     }
     if (parsed.pathname.endsWith("/cmd")) {
       const { command, args } = body as { command: string; args: string[] };
-      // The capability drop holds, so the rest runs as the sandbox's user, in the stand-in disk.
-      if (
-        command !== "setpriv" ||
-        args.slice(0, CAPABILITIES_DROPPED.length).join(" ") !== CAPABILITIES_DROPPED.join(" ")
-      ) {
-        return commandStream(97, "");
-      }
-      const [program = "", ...rest] = args.slice(CAPABILITIES_DROPPED.length);
-      const ran = spawnSync(program, rest, {
+      // The command runs as the sandbox's user, in the stand-in disk.
+      const ran = spawnSync(command, args, {
         cwd: root,
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,

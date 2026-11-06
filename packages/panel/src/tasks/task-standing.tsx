@@ -10,7 +10,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import { noMatchWords, readFailedWords, TERM } from "@repo/features/words";
+import { noMatchWords, TERM } from "@repo/features/words";
 import { taskKey } from "@repo/features/workspace-key";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -19,13 +19,11 @@ import {
   CHIP_LOOK,
   CHIP_WIDTH,
   type Crumb,
-  ErrorState,
   FailureNote,
   GAP,
   Inline,
   type MenuRow,
   POPOVER_ALIGN,
-  Spinner,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -38,9 +36,9 @@ import { ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { failureShown, unreadShown } from "../failure-report.js";
+import { failureShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { memberRows } from "../member-rows.js";
+import { memberReadNote, memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useTaskCard } from "./chip-cards.js";
@@ -210,15 +208,7 @@ function TaskAssigneePicker({
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to"
       noMatch={noMatchWords(TERM.MEMBER)}
-      note={
-        refused ? (
-          <ErrorState failure={unreadShown(FAILURE_SURFACE.MEMBERS_READ)} onRetry={retry}>
-            {readFailedWords(TERM.MEMBER.many)}
-          </ErrorState>
-        ) : reading ? (
-          <Spinner delay label="Reading members" />
-        ) : undefined
-      }
+      note={memberReadNote({ reading, refused, retry })}
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       look={CHIP_LOOK.TOOLBAR}

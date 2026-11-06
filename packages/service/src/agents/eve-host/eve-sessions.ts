@@ -81,15 +81,12 @@ export type KeyRefusal = (typeof KEY_REFUSAL)[keyof typeof KEY_REFUSAL];
 /**
  * Why a coding agent's native runtime did not take a call, where that is
  * why it failed: its conversation runs on a native harness that this
- * function has no way to launch or write to, nor to relay to one that can, or
- * whose sandbox image is still being prepared.
+ * function has no way to launch or write to, nor to relay to one that can.
  */
 export const RUNTIME_REFUSAL = {
   NOT_HERE: "not_here",
   /** The agent's session ended for good, as one that ran on eve did; nothing reaches it again, and only a new agent goes on from its work. */
   ENDED: "ended",
-  /** The harness's sandbox image is still being prepared; the same call a little later is taken. */
-  IMAGE_PREPARING: "image_preparing",
   /** The agent's device is a host its account removed; no message reaches it again. */
   DEVICE_REMOVED: "device_removed",
   /** The agent's device has not beaten lately, so nothing it is sent would be taken until it is back. */

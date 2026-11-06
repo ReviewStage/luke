@@ -1,9 +1,8 @@
 /**
- * image.ts -- what the probe adds to today's image, as root, and the root commands it reads the sandbox with.
+ * image.ts -- what the probe adds to the agents' image's base, as root, and the root commands it reads the sandbox with.
  *
- * Today's image is `PREPARE_SCRIPT` (`agent-runtime/sandbox-image.ts`), run
- * as the sandbox's default user exactly as our template's build runs it
- * (`native-sandbox-template.ts`). On top of it the
+ * The sandbox boots Vercel's Node image, the agents' image's own base
+ * (`PROBE_SANDBOX.IMAGE`). On top of it the
  * probe installs what P03 would: the pinned Agent SDK with its `claude`
  * binary in a root-owned directory, and the `agent` user with a private home. The
  * checkout stays the default user's, shared with `agent` through the default

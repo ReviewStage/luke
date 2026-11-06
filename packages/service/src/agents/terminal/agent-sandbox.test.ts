@@ -102,7 +102,7 @@ function vercel(
           const body = JSON.parse(await new Response(init.body).text());
           const args: readonly string[] = body.args;
           asked.push({ method, url: parsed, args });
-          // Every command is `setpriv <drop> -- sh -c <script> sh <tmux args>`; the list is the one with none.
+          // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
           const scriptAt = args.indexOf("-c") + 1;
           const tmuxArgs = args.slice(scriptAt + 2);
           if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
@@ -255,7 +255,7 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
   );
 
   it.effect(
-    "turning forwarding on wakes a stopped sandbox and starts the repository's run command in its checkout without capabilities, and starts nothing where a port listens",
+    "turning forwarding on wakes a stopped sandbox and starts the repository's run command in its checkout, and starts nothing where a port listens",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -319,7 +319,6 @@ it.layer(getTestDB())("a coding agent's sandbox", (it) => {
         const [run] = stopped.started;
         assert.ok(run !== undefined);
         assert.equal(run.url.pathname, "/api/v2/sandboxes/sessions/sbs_resumed/cmd");
-        assert.equal(run.body.command, "setpriv");
         assert.equal(run.body.cwd, "/workspace/repository");
         assert.equal(run.body.sudo, false);
         assert.ok((run.body.args as readonly string[]).includes("pnpm dev"));

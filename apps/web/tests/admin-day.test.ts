@@ -9,7 +9,7 @@ import { DayScreen } from "@repo/panel/admin/screens/day";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { underWebAdminDoors } from "./support/admin-doors";
+import { readLanded, underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-day.test.ts -- one day's page names the day it covers and whether it
@@ -143,6 +143,7 @@ async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
       ),
     );
   });
+  if (body !== undefined) await readLanded(page);
   return { page, opened, backs };
 }
 

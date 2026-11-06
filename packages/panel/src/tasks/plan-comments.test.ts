@@ -17,15 +17,17 @@ import {
 import type { Task } from "@repo/features/task-wire";
 import { pasteCutWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { readExperiments, registryWith } from "../testing/app-state.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
@@ -42,13 +44,11 @@ import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
-import {
-  COMMENTS_FILTER,
-  CommentFocusScope,
-  PageComments,
-  PlanCommentsTab,
-} from "./plan-comments.js";
+import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * A plan's comments on its own page: each open thread's words marked where
@@ -151,9 +151,16 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** The plan's page, or its Comments tab, drawn over the threads, with every write asked kept. */
+/** The choice of the plan's comments list that lists the resolved threads. */
+function resolvedChoice(container: HTMLElement): HTMLElement | undefined {
+  return [...container.querySelectorAll<HTMLElement>('[role="radio"]')].find((choice) =>
+    choice.textContent?.startsWith("Resolved"),
+  );
+}
+
+/** The plan's page, or the page with its comments listed in the margin's place, drawn over the threads, with every write asked kept. */
 function drawn(
-  view: "page" | "tab" | "other",
+  view: "page" | "list" | "other",
   threads: readonly PlanCommentThread[] = THREADS,
   landing: () => boolean | Promise<boolean> = () => true,
   plan: Task = PLAN,
@@ -165,8 +172,6 @@ function drawn(
 ) {
   const asked: { thread: string; action: PlanCommentActionRequest }[] = [];
   const started: PlanCommentStartRequest[] = [];
-  /** Each time the plan's own tab was asked to be shown. */
-  const documentsShown: true[] = [];
   /** Why each thread's last act failed, which a test sets before it draws the thread. */
   const notes = new Map<string, string>();
   const control: PlanCommentsControl = {
@@ -189,19 +194,16 @@ function drawn(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page =
-    view === "tab"
-      ? createElement(PlanCommentsTab, {
-          doors: { agents, me: "u-dean" },
-          onShowDocument: () => documentsShown.push(true),
-        })
-      : createElement(PlanBody, {
-          task: plan,
-          ...(view === "page" ? { sectionLinks: PAGE_LINKS } : undefined),
-          ...(me === undefined ? undefined : { reader: { readerId: me } }),
-        });
+  // The list draws its threads whole, their writers read as the reader's own and the agents named.
+  const reader = view === "list" ? (me ?? "u-dean") : me;
+  const page = createElement(PlanBody, {
+    task: plan,
+    ...(view === "other" ? undefined : { sectionLinks: PAGE_LINKS }),
+    ...(reader === undefined ? undefined : { reader: { readerId: reader } }),
+    ...(view === "list" && agents !== undefined ? { agents } : undefined),
+  });
   // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const treeOf = (value: PlanCommentsControl) =>
     createElement(
       PlanCommentsProvider,
@@ -215,10 +217,14 @@ function drawn(
       }),
     );
   act(() => root.render(onRegistry(registry, treeOf(control))));
+  // The list stands in the margin's place once the plan's Comments toggle is pressed.
+  if (view === "list") {
+    act(() => container.querySelector<HTMLButtonElement>(".comments-toggle button")?.click());
+  }
   /** Draws the page again on the threads the service now lists. */
   const rethread = (next: readonly PlanCommentThread[]) =>
     act(() => root.render(onRegistry(registry, treeOf({ ...control, threads: next }))));
-  return { container, asked, started, documentsShown, notes, rethread };
+  return { container, asked, started, notes, rethread };
 }
 
 /** What `draw` drew with the column stood `across` wide, by default wide enough for its margin, since jsdom lays nothing out. */
@@ -345,11 +351,16 @@ test("a thread whose words were deleted stays in the margin, saying so over its 
   );
 });
 
-test("the Comments tab's Resolved toggle lists the resolved thread whole, where Reopen brings it back", async () => {
-  const { container, asked } = drawn("tab");
+test("the plan's comments list, turned to Resolved, lists the resolved thread whole, where Reopen brings it back", async () => {
+  const { container, asked } = drawn("list");
 
-  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
-  assert.ok(container.querySelector(".ui-pane-bar")?.textContent?.startsWith("Resolved"));
+  act(() => resolvedChoice(container)?.click());
+  assert.deepEqual(
+    [...container.querySelectorAll<HTMLElement>(".comments-list .comment-card")].map(
+      (card) => card.dataset.thread,
+    ),
+    [ID.RESOLVED],
+  );
   await act(async () => {
     container.querySelector<HTMLButtonElement>('button[aria-label="Reopen"]')?.click();
   });
@@ -359,47 +370,8 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   ]);
 });
 
-test("the Comments tab opens on the list its reader last chose, Resolved until they show the open ones again", () => {
-  const heading = (container: HTMLElement) =>
-    container.querySelector(".ui-pane-bar")?.textContent?.split(/\d/u)[0];
-  const toggle = (container: HTMLElement) =>
-    container.querySelector<HTMLButtonElement>(".ui-pane-bar button[aria-pressed]")?.click();
-
-  const first = drawn("tab");
-  assert.equal(heading(first.container), "Open", "no choice kept lists the open threads");
-  act(() => toggle(first.container));
-  assert.equal(heading(first.container), "Resolved");
-
-  const again = drawn("tab");
-  assert.equal(heading(again.container), "Resolved", "the tab drawn again lists the resolved ones");
-  act(() => toggle(again.container));
-
-  assert.equal(heading(drawn("tab").container), "Open", "and the open ones once chosen again");
-});
-
-test("the Comments tab's Resolved toggle starts the other list at its top", () => {
-  const { container } = drawn("tab");
-  // The list scrolls in the box around its rows (`ScrollArea`).
-  const list = container.querySelector<HTMLElement>(".comments-list")?.parentElement;
-  assert.ok(list);
-  let top = 240;
-  Object.defineProperty(list, "scrollTop", {
-    configurable: true,
-    get: () => top,
-    set: (value: number) => {
-      top = value;
-    },
-  });
-
-  act(() =>
-    container.querySelector<HTMLButtonElement>(".ui-pane-bar button[aria-pressed]")?.click(),
-  );
-
-  assert.equal(top, 0);
-});
-
-test("the Comments tab lists each open thread whole, its reply field under its comments", () => {
-  const { container } = drawn("tab");
+test("the plan's comments list holds each open thread whole, its reply field under its comments, and no card beside the words", () => {
+  const { container } = drawn("list");
 
   const cards = [...container.querySelectorAll<HTMLElement>(".comments-list .comment-card")];
   assert.deepEqual(
@@ -412,21 +384,7 @@ test("the Comments tab lists each open thread whole, its reply field under its c
   assert.ok(
     cards.every((card) => card.querySelector(".comment-field[data-variant='reply']") !== null),
   );
-});
-
-test("the Comments tab draws a skeleton while its threads are read, then neither it nor an empty state once they are", () => {
-  const reading = drawn("tab", [], undefined, PLAN, undefined, undefined, undefined, false);
-
-  assert.match(
-    reading.container.querySelector('.comments-list [role="status"]')?.textContent ?? "",
-    /Reading the comments/u,
-  );
-  assert.equal(reading.container.querySelector(".comments-list .ui-empty-state"), null);
-  assert.equal(reading.container.querySelector(".comments-list[data-empty]"), null);
-  assert.ok(
-    reading.container.querySelectorAll('[role="status"] .comment-card .ui-skeleton').length > 0,
-    "the placeholder's blocks stand in a thread's own card, where the threads land",
-  );
+  assert.equal(container.querySelectorAll(".comment-card").length, cards.length);
 });
 
 test("a comment's time reads as a thread's does, a few letters, with the full moment on hover", () => {
@@ -434,7 +392,7 @@ test("a comment's time reads as a thread's does, a few letters, with the full mo
   const at = Date.now() - 3 * 3_600_000 - 30_000;
   const [open] = THREADS;
   assert.ok(open?.entries[0]);
-  const { container } = drawn("tab", [
+  const { container } = drawn("list", [
     { ...open, entries: [{ ...open.entries[0], at }], createdAt: at, updatedAt: at },
   ]);
 
@@ -711,7 +669,7 @@ test("a press that opens a thread puts the caret in its reply, and a thread draw
   assert.ok(reply, "the open thread's reply field");
   assert.equal(document.activeElement, reply);
 
-  const tab = drawn("tab");
+  const tab = drawn("list");
   const [field] = tab.container.querySelectorAll("textarea");
   assert.ok(field, "the Comments tab's reply field");
   assert.notEqual(
@@ -825,7 +783,7 @@ test("a link to a resolved thread lists it under Resolved, open, and scrolls the
     return (this.classList.contains("comment-card") ? box(500) : box(0))();
   };
   try {
-    const { container } = drawn("tab", THREADS, () => true, PLAN, {
+    const { container } = drawn("page", THREADS, () => true, PLAN, {
       thread: ID.RESOLVED,
       ask: 1,
     });
@@ -1153,18 +1111,22 @@ test("on a plan's page a comment's field offers dictation, and the plain field n
   assert.equal(dictate(plain.container), null, "the plain field does not");
 });
 
-test("in the Comments tab a thread's quote shows its words in the plan, and a deleted thread's quote where they stood", () => {
-  const { container, documentsShown } = drawn("tab");
+test("in the plan's comments list a thread's quote lights its words in the plan, and a deleted thread's quote is a press too", () => {
+  const { container } = drawn("list");
   const quote = (thread: string) =>
     container.querySelector<HTMLButtonElement>(
       `.comment-card[data-thread="${thread}"] .comment-quote button`,
     );
 
-  act(() => quote(ID.OPEN)?.click());
-  act(() => quote(ID.GONE)?.click());
-
   assert.ok(quote(ID.OPEN) && quote(ID.GONE), "both quotes are presses");
-  assert.equal(documentsShown.length, 2);
+  act(() => quote(ID.OPEN)?.click());
+
+  assert.equal(
+    container
+      .querySelector(`mark.plan-comment-mark[data-threads~="${ID.OPEN}"]`)
+      ?.getAttribute("data-active"),
+    "true",
+  );
 });
 
 test("a comment's field offers no Vespin among the agents, since no task has one, and no Send to beside it", async () => {
@@ -1281,7 +1243,7 @@ test("a thread's resolve reads as its writer's own line, drawn as a comment's he
     onOpen: undefined,
   };
   const { container } = drawn(
-    "tab",
+    "list",
     [byMember, byAgent],
     undefined,
     undefined,
@@ -1293,7 +1255,7 @@ test("a thread's resolve reads as its writer's own line, drawn as a comment's he
   );
 
   assert.ok(container.querySelector(".ui-empty-state")?.textContent?.includes("No comments"));
-  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
+  act(() => resolvedChoice(container)?.click());
   const events = [
     ...container.querySelectorAll<HTMLElement>(".comment-event[data-kind='resolved']"),
   ];
@@ -1322,7 +1284,7 @@ test("the line a thread's ask leaves is not drawn, since the mention in its word
       },
     ],
   });
-  const { container } = drawn("tab", [asked]);
+  const { container } = drawn("list", [asked]);
 
   const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
   assert.ok(card);
@@ -1758,7 +1720,7 @@ function datedThread(by: { userId: string; name: string }): PlanCommentThread {
 }
 
 test("the date chip in the reader's own comment opens its picker with no field opened, and a day picked there saves the comment with the date named anew", async () => {
-  const { container, asked } = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })]);
+  const { container, asked } = drawn("list", [datedThread({ userId: "u-dean", name: "Dean" })]);
 
   act(() => container.querySelector<HTMLElement>('.comment-entry [data-kind="date"]')?.click());
   await act(async () => undefined);
@@ -1789,7 +1751,7 @@ test("the date chip in the reader's own comment opens its picker with no field o
 });
 
 test("the date chip in another's comment opens no picker, since only its writer changes it", () => {
-  const { container } = drawn("tab", [datedThread({ userId: "u-charles", name: "Charles Pan" })]);
+  const { container } = drawn("list", [datedThread({ userId: "u-charles", name: "Charles Pan" })]);
 
   const chip = container.querySelector<HTMLElement>('.comment-entry [data-kind="date"]');
   assert.ok(chip);
@@ -1871,7 +1833,7 @@ test("a card that grows with nothing drawn again moves the card under it down, i
 
 /** The reader's own comment in the Comments tab, with presses that open its Edit and the field it opens. */
 function ownComment(landing?: () => boolean | Promise<boolean>) {
-  const drawnTab = drawn("tab", [datedThread({ userId: "u-dean", name: "Dean" })], landing);
+  const drawnTab = drawn("list", [datedThread({ userId: "u-dean", name: "Dean" })], landing);
   const { container } = drawnTab;
   const edit = () => {
     act(() =>
@@ -1984,7 +1946,7 @@ test("a thread resolved fades out of a page's column where its row stood, out of
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    const registry = AtomRegistry.make();
+    const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
     const draw = (threads: readonly PlanCommentThread[]) =>
       act(() =>
         root.render(

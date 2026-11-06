@@ -9,16 +9,10 @@
  * take a prefix of one for another. Every command is a script we write,
  * and what a developer typed reaches it only as a positional argument, never
  * spliced into its text. tmux and its settings come with the image
- * (`agent-runtime/sandbox-image.ts`), and nothing here installs them, since a
- * Terminal's shell reaches no root: the settings keep tmux out of sight, with
- * no status line, no mouse, and its output scrolling into the terminal's own
- * scrollback. Every command runs with every capability dropped
- * (`sandbox-capabilities.ts`), the command that starts tmux's server among
- * them, so the server, on a socket of its own (`TMUX.SOCKET`), and every
- * shell it starts hold none: a shell cannot
- * read another process's environment, a file its mode keeps from the
- * sandbox's user, or reach root through sudo, which the emptied bounding
- * set refuses.
+ * (`apps/web/agent-image/tmux.conf`), and nothing here installs them: the
+ * settings keep tmux out of sight, with no status line, no mouse, and its
+ * output scrolling into the terminal's own scrollback. Every command runs as
+ * the sandbox's default user, on a server of its own (`TMUX.SOCKET`).
  *
  * tmux prints a control character in a format's value as `_`, so a list
  * cannot separate its fields with one; each free-text field is read on its
@@ -30,7 +24,6 @@ import { readEither } from "@repo/wire/effect";
 import { Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../../core.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {
@@ -42,53 +35,11 @@ export const TMUX = {
   START_DIRECTORY: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /**
    * The socket every command names its server by. Note that it is a name of
-   * its own rather than tmux's default, because a server started on the
-   * default before shells dropped their capabilities still holds them and
-   * would start each new shell with them; this one is only ever started
-   * without, and the old one ends as its sandbox next stops.
+   * its own rather than tmux's default, so a sandbox's old server on the
+   * default, from before shells ran on this one, is never the one attached to.
    */
   SOCKET: "terminal",
 } as const;
-
-/**
- * The sandbox's own tmux settings, written to `/etc/tmux.conf` as its image
- * is prepared (`agent-runtime/sandbox-image.ts`): tmux kept out of sight, with no
- * status line and no mouse, so the terminal's own selection and scrollback
- * work, its output scrolling into that scrollback rather than an alternate
- * screen; the newest window's size, so two windows on one shell size it to
- * the last one used; and no shell history written to a file the agent could
- * read, since what a developer types is theirs.
- */
-const TMUX_SETTINGS: readonly string[] = [
-  "set -g status off",
-  "set -g mouse off",
-  "set -sg escape-time 0",
-  "set -g history-limit 50000",
-  "set -g window-size latest",
-  'set -g default-terminal "tmux-256color"',
-  'set -ga terminal-overrides ",xterm*:smcup@:rmcup@"',
-  "set-environment -g HISTFILE /dev/null",
-];
-
-/** `sudo` where the sandbox's user is not root, so an install and the settings file reach the system as the image is prepared. */
-export const SUDO_LINE = 'SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"';
-
-/** Installs tmux with the system's own package manager, `$SUDO` as `SUDO_LINE` set it. */
-const INSTALL_TMUX =
-  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y tmux; else $SUDO apt-get update && $SUDO apt-get install -y tmux; fi";
-
-/** Writes `TMUX_SETTINGS` to `/etc/tmux.conf`, `$SUDO` as `SUDO_LINE` set it. */
-const CONFIGURE_TMUX = `printf '%s\\n' ${TMUX_SETTINGS.map((line) => `'${line}'`).join(" ")} | $SUDO tee /etc/tmux.conf >/dev/null`;
-
-/** What the image's preparation runs: tmux installed where it is missing, and its settings written. */
-export const PREPARE_TMUX: readonly string[] = [
-  SUDO_LINE,
-  "if ! command -v tmux >/dev/null 2>&1; then",
-  `  ${INSTALL_TMUX}`,
-  "fi",
-  CONFIGURE_TMUX,
-  "tmux -V",
-];
 
 /** The foreground commands that are a shell at its prompt, so nothing else runs there. */
 const SHELLS: ReadonlySet<string> = new Set(["bash", "zsh", "sh", "dash", "fish"]);
@@ -136,21 +87,11 @@ function optionTargetOf(terminalId: string): string {
   return `${targetOf(terminalId)}:`;
 }
 
-/**
- * A script run with every capability dropped, its arguments as positional
- * parameters, so none of them is ever read as shell text.
- */
+/** A script, its arguments as positional parameters, so none of them is ever read as shell text. */
 function script(text: string, args: readonly string[] = []): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "sh",
-      "-c",
-      `tmux() { command tmux -L ${TMUX.SOCKET} "$@"; }\n${text}`,
-      "sh",
-      ...args,
-    ],
+    command: "sh",
+    args: ["-c", `tmux() { command tmux -L ${TMUX.SOCKET} "$@"; }\n${text}`, "sh", ...args],
   };
 }
 
@@ -179,7 +120,7 @@ export function attachTerminal(terminalId: string): CommandAsk {
   return tmux(["attach-session", "-t", targetOf(terminalId)]);
 }
 
-/** How the shell check exits where tmux ran and holds no such session: apart from tmux's own 1, and the 127 of a `setpriv` that could not drop the capabilities or a tmux missing. */
+/** How the shell check exits where tmux ran and holds no such session: apart from tmux's own 1, and the 127 of a tmux missing. */
 export const TMUX_EXIT = { NO_SESSION: 3 } as const;
 
 /** Whether a shell stands: exit 0 where its session does, `TMUX_EXIT.NO_SESSION` where tmux holds none by that name, and anything else where tmux could not be asked. */

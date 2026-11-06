@@ -192,6 +192,7 @@ export const FAILURE_SURFACE = {
   TERMINAL_CREATE: "terminal.create",
   TERMINAL_SHELLS_READ: "terminal_shells.read",
   TERMINAL_STOP: "terminal.stop",
+  THIS_MAC_SET: "this_mac.set",
   TRANSCRIPT_COPY: "transcript.copy",
   UPDATE_CHECK: "update.check",
   WINDOW_ZOOM: "window.zoom",

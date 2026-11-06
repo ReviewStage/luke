@@ -16,12 +16,15 @@ import {
   RetryButton,
   STATUS_TONE,
   TABS_GROUND,
+  TOOLBAR_INSET,
+  TOOLBAR_LOOK,
+  Toolbar,
   VisuallyHidden,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
-import { memo, useRef } from "react";
+import { memo, useRef, useState } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -43,13 +46,14 @@ import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import {
   isOverviewTab,
-  MAIN_TAB,
+  type MAIN_TAB,
   type MainTab,
   type MainTabsControl,
 } from "../tasks/use-main-tabs.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import type { MenuAction } from "./action-menu.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
+import { PlaceMore } from "./phone-head.js";
 import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
@@ -68,23 +72,26 @@ import { tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
- * main-tabs.tsx -- the task's column's tabs: its Overview, each agent's and the draft agent's, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the task's topbar and its column's tabs: the topbar naming the task, its name opening its details, and the task's ⋯, each agent's tab and the draft agent's under it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
- * Each part draws what `use-main-tabs.ts` holds and hands every press back
- * to it. The strip is the side panel's in every way: the same pills, the
+ * A task opens on its agents, as Conductor opens a workspace on its chats:
+ * the topbar names the task across its page (`TaskTopbar`), and the column's
+ * bar holds the agents' tabs (`MainTabBars`). Each part draws what
+ * `use-main-tabs.ts` holds and hands every press back to it. The strip is
+ * the side panel's in every way: the same pills, the
  * same hover and chosen fills, dragged and stepped along, closed by ×,
  * Delete, ⌘W, or the menu's Close and Close others, each tab's menu on a
  * right-click (`strip-tabs.tsx`). An agent's own actions, its one menu
  * (`agent-actions.tsx`), stand on its tab's right-click after the tab's
- * keeping, and the chosen agent's in the toolbar's ⋯, drawn into the slot
- * the toolbar keeps for it (`slot`), so the ⋯ acts on what is under the bar.
+ * keeping, and the chosen agent's in the bar's ⋯, drawn into the slot
+ * the bar keeps for it, so the ⋯ acts on what is under the bar.
  *
- * Overview leads the strip on every task, named by the task itself, its
- * status mark and name, since no bar over the column names the task: it
- * shows the task's plan document, which the task's page draws and hands
- * in (`desktop-tasks.tsx`), and offers the task's own menu on its
- * right-click and in the toolbar's ⋯, as the task's plan did where it stood
- * in the side panel. It never closes, and the agents' tabs move after it.
+ * The task's details, its Overview (its head and its plan document, which
+ * the task's page draws, `desktop-tasks.tsx`), are no tab among the agents:
+ * the task's name in the topbar opens them across the page, in place of the column's
+ * bar and the side panel, with the way back to the agents in their own card,
+ * so no tab ever stands with none chosen. The task's ⋯ stands in the topbar whatever the
+ * column shows.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -134,6 +141,9 @@ const NEW_AGENT_STARTING = "Starting…";
 
 /** The row that opens the task's Inbox, which no agent's id spells. */
 export const INBOX_ROW = "inbox";
+
+/** The slot a bar keeps for a tab's ⋯ portaled in from it. */
+const TAB_ACTIONS_SLOT = "toolbar-tab-actions flex min-w-control flex-none items-center";
 
 /** What the press that reads the plan's agents again, after a first read did not land, says. */
 const RETRY_AGENTS = "Retry agents";
@@ -276,8 +286,8 @@ interface DrawnTab {
 }
 
 /**
- * Overview's tab, named by the task's status mark and name, then the agents' tabs and the draft's, in the order
- * started, each but Overview closing through `main`. An agent's card previews its
+ * The agents' tabs and the draft's, in the order started, each closing
+ * through `main`. An agent's card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab,
  * and the draft's, wears the Draft pencil at its end while its box holds
  * words and another tab is chosen (`draft-mark.tsx`), or the failed mark in
@@ -285,7 +295,6 @@ interface DrawnTab {
  * says more, so it keeps its failed mark in the pencil's place.
  */
 function agentTabs(input: {
-  task: Pick<TaskSummary, "id" | "name" | "status">;
   main: MainTabsControl;
   agents: AgentsControl;
   unread: readonly StripTab[];
@@ -297,7 +306,7 @@ function agentTabs(input: {
   /** The threads waiting on the developer, by the agent that posted them, which an agent's tab counts. */
   waiting: ReadonlyMap<string, readonly unknown[]> | undefined;
 }): DrawnTab[] {
-  const { task, main, agents, unread, views, drafted, failed, waiting } = input;
+  const { main, agents, unread, views, drafted, failed, waiting } = input;
   const chosen = (tab: MainTab) => main.tab !== undefined && sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -306,23 +315,6 @@ function agentTabs(input: {
     selected: chosen(tab),
     onSelect: () => main.onChoose(tab),
   });
-  const overview = {
-    tab: MAIN_TAB.OVERVIEW,
-    // Note that the first tab names the task by its status mark and name, since no bar over the column names it, and hangs the task's card, as the Plan tab did.
-    look: {
-      ...look(MAIN_TAB.OVERVIEW, {
-        ...tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name }),
-        card: tabCard({
-          kind: TAB_KIND.PLAN,
-          taskId: task.id,
-          name: task.name,
-          status: task.status,
-        }),
-      }),
-      anchored: true,
-    },
-    close: undefined,
-  };
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
@@ -391,7 +383,7 @@ function agentTabs(input: {
             },
           },
         ];
-  return [overview, ...own, ...starting, ...drafts];
+  return [...own, ...starting, ...drafts];
 }
 
 /**
@@ -537,12 +529,88 @@ function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Ele
   return <div className="main-tabs flex items-center gap-list-gap">{children}</div>;
 }
 
+/** What the task's name in its topbar opens, and the place the details' way back leads to. */
+export const DETAILS_WORDS = { HINT: "Task details", PLACE: "agents" } as const;
+
 /**
- * The column's strip across its toolbar: Overview, the agents' and the draft's, then the "+", which stands apart from the strip so it is never
- * dragged nor dropped before. ⌘W closes the chosen tab while the column
- * holds the window's focus (`keys`).
+ * The task's topbar, across the task's page over its column and its side
+ * panel: the task's status mark and name, the two one press, hanging the
+ * task's card, that opens the
+ * task's details across the page and, pressed again, goes back to the agents
+ * (`details`), as a channel's name opens its details; then the task's ⋯, its
+ * own menu (`planMenu`), standing whichever the page shows, and `actions`. The window's side panel toggle
+ * stands at its end (`desktop-shell.tsx`).
  */
-export function MainTabStrip({
+export function TaskTopbar({
+  task,
+  details,
+  planMenu,
+  shown,
+  actions,
+}: {
+  /** The task as the list names it now, its name and status first there. */
+  task: Pick<TaskSummary, "id" | "name" | "status"> | undefined;
+  /** Whether the task's details stand in the column, and the press that opens or leaves them. */
+  details: { readonly shown: boolean; readonly onToggle: () => void } | undefined;
+  /** The task's own menu, which its ⋯ draws. */
+  planMenu: DocumentMenu | undefined;
+  /** Whether the task's page is on screen, for the menu not to outlive it. */
+  shown: boolean;
+  actions?: React.ReactNode;
+}): React.JSX.Element {
+  const look =
+    task === undefined
+      ? undefined
+      : tabLook({ kind: TAB_KIND.PLAN, status: task.status, name: task.name });
+  return (
+    <Toolbar
+      // Note that the status mark stands inside the name's press, as a task's chip wears it, where the name opens the details.
+      lead={details === undefined ? look?.icon : undefined}
+      title={task?.name}
+      titlePress={
+        details === undefined || task === undefined
+          ? undefined
+          : {
+              open: details.shown,
+              label: DETAILS_WORDS.HINT,
+              icon: look?.icon,
+              // The task's card, as its sidebar row and its chips hang it.
+              card: tabCard({
+                kind: TAB_KIND.PLAN,
+                taskId: task.id,
+                name: task.name,
+                status: task.status,
+              }),
+              onPress: details.onToggle,
+            }
+      }
+      measure
+      actions={
+        <>
+          {task === undefined || planMenu === undefined ? null : (
+            <PlaceMore
+              thing={task.name}
+              shown={shown}
+              groups={() => planMenu.groups()}
+              ends={() => planMenu}
+            />
+          )}
+          {actions}
+        </>
+      }
+    />
+  );
+}
+
+/**
+ * The column's bar: the agents' tabs and the draft's, then the "+", which
+ * stands apart from the strip so it is never dragged nor dropped before,
+ * then the chosen agent's ⋯ and `actions`. The task's details stand in place
+ * of the bar and the side panel alike, so no tab ever stands with none
+ * chosen. ⌘W closes the chosen tab while the column holds the window's
+ * focus (`keys`).
+ */
+export function MainTabBars({
   task,
   main,
   agents,
@@ -553,13 +621,13 @@ export function MainTabStrip({
   shown,
   onOpenTerminal,
   onOpenBrowser,
-  slot,
+  slots,
   onShown,
-  planMenu,
   waiting,
+  actions,
 }: {
-  /** The task as the list names it now, its name and status first there, which its first tab wears. */
-  task: TaskSummary;
+  /** The task the column is, whose strip's looks the switcher keeps. */
+  task: Pick<TaskSummary, "id">;
   main: MainTabsControl;
   agents: AgentsControl;
   /** The agents that ended while no one was looking, each in semibold until shown. */
@@ -578,25 +646,26 @@ export function MainTabStrip({
   onOpenTerminal?: ((agentId: string) => void) | undefined;
   /** Opens a new tab of an agent's cloud browser in the side panel, by the agent; a phone's alone, whose ⋯ offers it beside Show terminal. */
   onOpenBrowser?: ((agentId: string) => void) | undefined;
-  /** The toolbar's slot the chosen agent's ⋯ is drawn into; none where the toolbar keeps none, as a phone's. */
-  slot?: HTMLElement | null | undefined;
+  /** Whether the bar keeps a slot for the chosen agent's ⋯; none on a phone, whose header offers what it would. */
+  slots: boolean;
   /** Hears the tab the column shows, for a phone's header, whose ⋯ offers what the agent's ⋯ would (`task-pane-switcher.tsx`); none where the toolbar draws the ⋯. */
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
-  /** The task's own menu, which Overview's right-click and ⋯ draw. */
-  planMenu?: DocumentMenu | undefined;
   /** The threads waiting on the developer, by the agent that posted them (`waitingByAgent`), which each agent's tab counts. */
   waiting?: ReadonlyMap<string, readonly unknown[]> | undefined;
+  /** What the bar draws after the chosen agent's ⋯. */
+  actions?: React.ReactNode;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
   const failed = useFailedAgents();
-  // Overview, then the agents' and the draft's tabs in the column's order,
-  // which the developer's moves and their opening set (`use-main-tabs.ts`).
-  const own = inTaskOrder(
-    agentTabs({ task, main, agents, unread, views, drafted, failed, waiting }),
+  // The slot the bar keeps for the chosen agent's ⋯, portaled in from its tab (`strip-tabs.tsx`'s `DoorsTab`).
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  // The agents' and the draft's tabs in the column's order, which the
+  // developer's moves and their opening set (`use-main-tabs.ts`).
+  const strip = inTaskOrder(
+    agentTabs({ main, agents, unread, views, drafted, failed, waiting }),
     main.tabs,
     (entry) => entry.tab,
   );
-  const strip = own;
   useStripLooks(LOOK_STRIP.COLUMN, task.id, strip);
   const copyLink = useCopyLinkItem();
   // Close others closes every tab but `entry` that closes, then shows it; none where no other tab closes.
@@ -633,69 +702,79 @@ export function MainTabStrip({
       // Note that an archived agent offers no pin, as its sidebar row does none, since no pin of it is drawn until it comes back.
       pin: agent === undefined || agent.archivedAt !== undefined ? undefined : pinDoor(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
-      // Overview's menu is the task's own, its Pin and Copy link among it.
-      document: isOverviewTab(entry.tab) ? planMenu : undefined,
     };
   };
   return (
-    <MainTabsRow>
-      <TabStrip
-        label="Task"
-        ground={TABS_GROUND.GROUND}
-        onMove={(from, to) => {
-          // Note that the strip counts its moves among the tabs after Overview, which never moves.
-          const entry = strip.filter((each) => !isOverviewTab(each.tab))[from];
-          if (entry !== undefined) main.onMove(entry.tab, to);
-        }}
-      >
-        {strip.map((entry) =>
-          entry.agent === undefined ? (
-            <DoorsTab
-              key={tabKey(entry.tab)}
-              look={entry.look}
-              doors={doorsOf(entry)}
-              slot={slot}
-              // A phone's header names itself by the task, and offers the task's menu on Overview.
-              onShown={isOverviewTab(entry.tab) ? undefined : onShown}
-            />
-          ) : (
-            <AgentMenuTab
-              key={tabKey(entry.tab)}
-              agent={entry.agent}
-              agents={agents}
-              look={entry.look}
-              doors={doorsOf(entry)}
-              shown={shown}
-              keys={keys}
-              terminals={{ onOpenTerminal }}
-              onOpenBrowser={onOpenBrowser}
-              slot={slot}
-              onShown={onShown}
-            />
-          ),
-        )}
-      </TabStrip>
-      {/* The first read of the plan's agents did not land: nothing is known
-          to draw, so the row offers the read again where the tabs would be,
-          after the strip rather than in it, so the strip's scrolling never
-          takes it out of reach, and as its glyph alone where the bar is
-          short of room (desktop.css's `plan-toolbar`). */}
-      {agents.listFailed && agents.agents === undefined ? (
-        <ReplayUnmask>
-          <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
-        </ReplayUnmask>
-      ) : null}
-      <AddTabButton
-        label="Open a tab"
-        placeholder="Search tabs"
-        noMatch="No tabs match"
-        entries={addEntries(main, agents, views.held)}
-        onOpen={agents.onRetryList}
-        asked={main.newTabAsked}
-        answers={keys}
-        onAnswered={main.onNewTabAnswered}
-      />
-    </MainTabsRow>
+    <Toolbar
+      start={TOOLBAR_INSET.COLUMN}
+      look={TOOLBAR_LOOK.TABS}
+      measure
+      title={
+        <MainTabsRow>
+          <TabStrip
+            label="Agents"
+            ground={TABS_GROUND.GROUND}
+            onMove={(from, to) => {
+              const entry = strip[from];
+              if (entry !== undefined) main.onMove(entry.tab, to);
+            }}
+          >
+            {strip.map((entry) =>
+              entry.agent === undefined ? (
+                <DoorsTab
+                  key={tabKey(entry.tab)}
+                  look={entry.look}
+                  doors={doorsOf(entry)}
+                  slot={slots ? slot : null}
+                  onShown={onShown}
+                />
+              ) : (
+                <AgentMenuTab
+                  key={tabKey(entry.tab)}
+                  agent={entry.agent}
+                  agents={agents}
+                  look={entry.look}
+                  doors={doorsOf(entry)}
+                  shown={shown}
+                  keys={keys}
+                  terminals={{ onOpenTerminal }}
+                  onOpenBrowser={onOpenBrowser}
+                  slot={slots ? slot : null}
+                  onShown={onShown}
+                />
+              ),
+            )}
+          </TabStrip>
+          {/* The first read of the task's agents did not land: nothing is known
+                to draw, so the row offers the read again where the tabs would be,
+                after the strip rather than in it, so the strip's scrolling never
+                takes it out of reach, and as its glyph alone where the bar is
+                short of room (desktop.css's `main-tabs`). */}
+          {agents.listFailed && agents.agents === undefined ? (
+            <ReplayUnmask>
+              <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+            </ReplayUnmask>
+          ) : null}
+          <AddTabButton
+            label="Open a tab"
+            placeholder="Search tabs"
+            noMatch="No tabs match"
+            entries={addEntries(main, agents, views.held)}
+            onOpen={agents.onRetryList}
+            asked={main.newTabAsked}
+            answers={keys}
+            onAnswered={main.onNewTabAnswered}
+          />
+        </MainTabsRow>
+      }
+      actions={
+        <>
+          {/* The chosen agent's ⋯, portaled in from its tab, so it acts on what is under the bar. */}
+          <span ref={setSlot} className={TAB_ACTIONS_SLOT} />
+          {actions}
+        </>
+      }
+    />
   );
 }
 

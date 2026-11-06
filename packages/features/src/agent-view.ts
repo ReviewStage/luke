@@ -127,8 +127,6 @@ export const AGENT_CALL_FAILURE = {
   DEVICE_REMOVED: "device-removed",
   /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
   NOT_PERMITTED: "not-permitted",
-  /** The agent's sandbox image is still being prepared; the same call under its key, a little later, is taken. */
-  AGENT_IMAGE_PREPARING: "agent-image-preparing",
   /** The agent runs on Claude Code or Codex, which this part of the app cannot reach yet. */
   NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
   /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again. */
@@ -209,6 +207,14 @@ export type HostDoneAnswerView = typeof hostDoneAnswerViewSchema.Type;
 
 /** What removing a host names: its id. */
 export const hostIdParamsSchema = hostIdRequestSchema;
+
+/** What turning Run agents on this Mac on or off says: whether it is on, and, turning it off, whether its agents' folders go with it. */
+export const thisMacHostSetParamsSchema = EffectSchema.Struct({
+  on: EffectSchema.Boolean,
+  deleteFolders: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type ThisMacHostSetParams = typeof thisMacHostSetParamsSchema.Type;
 
 /** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
 export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);

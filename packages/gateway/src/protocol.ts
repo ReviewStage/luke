@@ -314,6 +314,8 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE_REFRESH: "hosts.presenceRefresh",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
+  /** Run agents on this Mac turned on, This Mac enrolled, or off, its host removed; done, or why not. */
+  HOSTS_THIS_MAC_SET: "hosts.thisMacSet",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */
@@ -645,6 +647,14 @@ export const GATEWAY_METHOD = {
   BROWSER_LIVE_CONNECT: "browserLive.connect",
   BROWSER_LIVE_SEND: "browserLive.send",
   BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
+  /**
+   * A coding agent's cloud ports forwarded to this Mac's `127.0.0.1`
+   * (`@repo/features/port-forward-acts`), for one agent at a time: how its
+   * forwarding turned on or off, its standing told as
+   * `PORT_FORWARDS_CHANGED`. What a forwarded connection carries never
+   * crosses the Gateway.
+   */
+  PORT_FORWARDS_SET: "portForwards.set",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -818,6 +828,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
+  /** The one agent whose cloud ports are forwarded to this Mac and how its forwarding stands, or none, each time it moves. */
+  PORT_FORWARDS_CHANGED: "portForwards.changed",
   /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
   OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

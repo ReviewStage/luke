@@ -12,7 +12,6 @@ import {
   recordingStopOf,
   SANDBOX_RECORDING,
   startRecording,
-  stopRecording,
 } from "./sandbox-recorder.js";
 
 /**
@@ -25,10 +24,9 @@ import {
 
 const run = (stdout: string, exitCode = 0) => ({ exitCode, stdout, stderr: "" });
 
-test("a start runs without capabilities with the recorder's source, and its run says whether it started one", () => {
+test("a start runs with the recorder's source, and its run says whether it started one", () => {
   const ask = startRecording(120, 4_000_000);
 
-  assert.equal(ask.command, "setpriv");
   assert.ok(ask.args.includes(RECORDER_SOURCE));
   assert.ok(ask.args.includes("120") && ask.args.includes("4000000"));
   assert.deepEqual(recordingStartOf(run(`${RECORDING_START_OUTPUT.STARTED}\n`)), {
@@ -46,7 +44,6 @@ test("a start runs without capabilities with the recorder's source, and its run 
 });
 
 test("a stop's run is the video's length and size, a known failure, or an encoder that failed", () => {
-  assert.equal(stopRecording().command, "setpriv");
   assert.deepEqual(recordingStopOf(run('{"ok":true,"seconds":8.3,"bytes":22237}\n')), {
     ok: true,
     seconds: 8.3,
@@ -66,13 +63,12 @@ test("a stop's run is the video's length and size, a known failure, or an encode
   }
 });
 
-test("a read prints the video's absolute path, then the video as base64, under the capability drop, and its run is the path and the bytes or nothing", () => {
+test("a read prints the video's absolute path, then the video as base64, and its run is the path and the bytes or nothing", () => {
   const ask = readRecording(4_000_000);
   const video = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
   const path = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
   const printed = `${path}\n${Buffer.from(video).toString("base64")}`;
 
-  assert.equal(ask.command, "setpriv");
   assert.ok(
     ask.args.includes("4000001"),
     "it reads one byte past the bound, so a larger file shows",
