@@ -1,7 +1,8 @@
 # Review Guidelines
 
-Report real defects only. Every finding costs a push, a CI run, and another
-review round, so leave out anything that does not change what the code does.
+Report real defects, and the code comments a diff adds. Every finding costs a
+push, a CI run, and another review round, so leave out anything else that
+does not change what the code does.
 
 ## Report
 
