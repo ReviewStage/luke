@@ -40,9 +40,11 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
     findPlaces: (session) => bySession(session, (machine) => machine.findPlaces(session)),
     recordRunner: (place, record) => of(place.machine).recordRunner(place, record),
     firewall: {
-      set: (place, userId, slot, entry) =>
-        of(place.machine).firewall.set(place, userId, slot, entry),
-      withdraw: (place, userId, slot) => of(place.machine).firewall.withdraw(place, userId, slot),
+      write: (place, userId, sources) => of(place.machine).firewall.write(place, userId, sources),
+      keepLaunch: (place, userId, launch) =>
+        of(place.machine).firewall.keepLaunch(place, userId, launch),
+      endLaunch: (place, userId, sources) =>
+        of(place.machine).firewall.endLaunch(place, userId, sources),
       clear: (place) => of(place.machine).firewall.clear(place),
     },
     resume: (found) => of(found.machine).resume(found),

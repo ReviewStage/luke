@@ -38,9 +38,10 @@ import { Redacted, Result, Schema } from "effect";
  * bound beside them, so the seal opens for no other agent's line. The
  * rewrap does not visit those rows, which the Mac's claim clears.
  *
- * What stands at a cloud agent's sandbox firewall, every credential its
- * session set there, is sealed the same way for as long as the session
- * runs (`sandbox_firewall`), with purposes of their own
+ * The swaps a cloud agent's runner launch holds at its sandbox firewall,
+ * each credential behind the placeholder its runner was handed, are sealed
+ * the same way for as long as the launch runs (`sandbox_firewall`), with
+ * purposes of their own
  * (`luke/sandbox-firewall/*`) and the account and the sandbox session bound
  * beside them, so the seal opens for no other session's row. The rewrap
  * does not visit those rows either: the sweep drops each a day and an hour
@@ -121,7 +122,7 @@ export interface SealedGitHubToken {
   readonly sealedToken: string;
 }
 
-/** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's entries are: the version, the wrapped data key, and the seal. */
+/** What a seal kept in one text column holds, as a launch line's secrets and a sandbox firewall's launch swaps are: the version, the wrapped data key, and the seal. */
 const SealedColumnSchema = Schema.Struct({
   keyVersion: Schema.Number,
   sealedDataKey: Schema.String,
@@ -410,7 +411,7 @@ export function openMacLaunchSecrets(
   return secrets === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(secrets);
 }
 
-/** A sandbox session's standing firewall entries sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
+/** The swaps a launch holds at a sandbox session's firewall sealed for its row under a fresh data key, wrapped under the ring's current version, as the row's one text column holds them. */
 export function sealFirewallEntries(
   ring: KeyRing,
   owner: FirewallOwner,
@@ -420,7 +421,7 @@ export function sealFirewallEntries(
   return encodeSealedColumn(sealSecret(ring, SEAL_PURPOSE.SANDBOX_FIREWALL, names, entries));
 }
 
-/** The entries a sandbox firewall's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
+/** The swaps a sandbox firewall's row seals, or unreadable where the column is no seal or any part of it does not open for this owner. */
 export function openFirewallEntries(
   ring: KeyRing,
   owner: FirewallOwner,

@@ -1291,7 +1291,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target,
           sessionId: opened.sessionId,
           sequence: 41,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         assert.equal(ended, RUNNER_ENDED.STOPPED);
         assert.equal(api.sandboxes[0]?.status, "stopped");
         assert.equal(
@@ -1327,7 +1327,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The first launch's END, arriving late, stops nothing of the second's.
         yield* runnerTook(agent.id);
         const late = yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
-          Effect.provide(api.layer),
+          Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)),
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
@@ -1399,7 +1399,15 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           sessionId: opened.sessionId,
           sequence: 8,
           reason: RUNNER_END.TURN_ENDED,
-        }).pipe(Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))));
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              api.layer,
+              Layer.succeed(HostedEnvironment, NO_KEYS),
+              GITHUB_APP_WITH_TOKENS,
+            ),
+          ),
+        );
         assert.equal(ended, RUNNER_ENDED.LINES_WAITING);
         assert.equal(api.sandboxes[0]?.status, "running");
         assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
@@ -1458,7 +1466,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           sessionId: opened.sessionId,
           sequence: 3,
           reason: RUNNER_END.FAILED,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
 
         assert.equal(ended, RUNNER_ENDED.STOPPED);
         assert.equal(api.sandboxes[0]?.status, "stopped");
@@ -1544,7 +1552,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 0,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
 
@@ -1572,7 +1580,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 41,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
         expired.snapshotExpired = true;
@@ -1615,7 +1623,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 41,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
         expired.snapshotExpired = true;
@@ -1663,7 +1671,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 41,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
         expired.snapshotExpired = true;
@@ -1736,7 +1744,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 41,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
         expired.snapshotExpired = true;
@@ -1848,7 +1856,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         sequence.next = 42;
         yield* runnerTook(agent.id);
         yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
-          Effect.provide(api.layer),
+          Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)),
         );
         const [expired] = api.sandboxes;
         assert.ok(expired !== undefined);
@@ -1875,7 +1883,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target,
           sessionId: opened.sessionId,
           sequence: 42,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         assert.equal(ended, RUNNER_ENDED.STOPPED);
         assert.equal(fresh.status, "stopped");
       }),
@@ -1906,7 +1914,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           lateEnds.push(
             Effect.runPromiseWith(context)(
               runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
-                Effect.provide(api.layer),
+                Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)),
               ),
             ),
           );
@@ -2391,7 +2399,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             target: { userId, conversationId: agent.conversationId },
             sessionId: opened.sessionId,
             sequence: 5,
-          }).pipe(Effect.provide(api.layer)),
+          }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS))),
         );
 
         assert.ok(Result.isFailure(ended));
@@ -2421,8 +2429,15 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           sessionId: opened.sessionId,
           sequence: 5,
         }).pipe(
-          // The events route's services, the deployment's key ring among them, which the withdraw seals its record under.
-          Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))),
+          // The events route's services: the deployment's key ring, which the kept launch opens under, and the App,
+          // which mints the repository's credential the Terminal keeps.
+          Effect.provide(
+            Layer.mergeAll(
+              api.layer,
+              Layer.succeed(HostedEnvironment, NO_KEYS),
+              GITHUB_APP_WITH_TOKENS,
+            ),
+          ),
         );
 
         assert.equal(ended, RUNNER_ENDED.HELD);
@@ -2464,7 +2479,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             target: { userId, conversationId: agent.conversationId },
             sessionId: opened.sessionId,
             sequence: 5,
-          }).pipe(Effect.provide(api.layer)),
+          }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS))),
         );
         yield* Effect.promise(async () => {
           for (let turn = 0; turn < 50; turn += 1) {
@@ -3379,7 +3394,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
           sequence: 19,
-        }).pipe(Effect.provide(api.layer));
+        }).pipe(Effect.provide(Layer.merge(api.layer, GITHUB_APP_WITH_TOKENS)));
         yield* sessions.send(opened.sessionId, message(agent, "And the changelog."));
 
         assert.deepEqual(

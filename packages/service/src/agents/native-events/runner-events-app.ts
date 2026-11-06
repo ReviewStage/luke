@@ -53,6 +53,7 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { RUN_EVENT, type RunEvent, TURN_ORIGIN } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { afterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
@@ -219,7 +220,7 @@ export interface RunnerEventsOptions<R = never> {
    * transaction: the sandbox's own lifecycle (P08's `runnerEnded`), which
    * stops nothing for a launch since replaced. Nothing where left out.
    */
-  readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
+  readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices | R>;
   /**
    * Told once a batch that holds a launch's IDLE, and no END after it, has
    * landed, after its transaction: the warm runner retired at once where
@@ -273,7 +274,7 @@ export function sandboxKeptAlive(alive: RunnerAlive): Effect.Effect<void> {
  */
 export function sandboxAtRunnerEnd(
   ended: RunnerEnded,
-): Effect.Effect<void, never, DatabaseServices> {
+): Effect.Effect<void, never, DatabaseServices | GitHubApp> {
   const { sessionId } = ended;
   if (sessionId === undefined) return Effect.void;
   return runnerEnded({

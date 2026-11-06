@@ -1,0 +1,1 @@
+ALTER TABLE "sandbox_firewall" ADD COLUMN "agent_id" text;

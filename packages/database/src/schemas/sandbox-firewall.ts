@@ -3,18 +3,20 @@ import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
- * sandbox-firewall.ts -- what stands at one Vercel Sandbox session's firewall, so every write to it composes the whole policy.
+ * sandbox-firewall.ts -- the swaps a runner's launch holds at one Vercel Sandbox session's firewall, so every write to it sends them beside what its writer gathered.
  *
  * Vercel's network-policy write replaces a session's whole policy, and the
- * policy reads back with every header value redacted, so the service keeps
- * here what each part of the session set at its firewall: one row per
- * sandbox session and the account whose agent the session is, with the
- * standing entries as the service sealed them under the deployment's key
- * ring, bound to that account and session (`../models/sandbox-firewall-store.ts`,
- * `@repo/service`'s `agents/sandbox-firewall.ts`). `version` is minted
- * afresh at every write, which is how a writer knows the row moved on since
- * its own. An entry withdrawn leaves the sealed column at once, the row
- * goes when the last one does or the session is cleared ahead of its stop,
+ * policy reads back with every header value redacted, so each write composes
+ * the whole policy from its sources; the one source no writer can gather
+ * again is a launch's placeholders, which only its runner's environment
+ * holds. The service keeps here the swaps the launch running in a session
+ * holds: one row per sandbox session and the account whose agent the
+ * session is, naming the agent, with the swaps as the service sealed them
+ * under the deployment's key ring, bound to that account and session
+ * (`../models/sandbox-firewall-store.ts`, `@repo/service`'s
+ * `agents/sandbox-firewall.ts`). `version` is minted as the launch is kept,
+ * which is how a renewal knows the row still holds the launch it read. The
+ * row goes as its launch ends or the session is cleared ahead of its stop,
  * and the scheduled sweep drops a row left past the longest a session can
  * run. Every row goes with its account.
  */
@@ -26,9 +28,11 @@ export const sandboxFirewall = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** Minted at every write, so a writer that reads it back knows whether another wrote since. */
+    /** Minted as the launch is kept, so a renewal lands only on the launch it read. */
     version: uuid("version").notNull(),
-    /** The standing entries as the service sealed them. */
+    /** The agent the launch runs, whose repository credential a write made apart from the launch mints; none in a row kept before agents were named here. */
+    agentId: text("agent_id"),
+    /** The launch's swaps as the service sealed them. */
     sealedEntries: text("sealed_entries").notNull(),
     /** When the row was last written, from the writer's own clock. */
     updatedAt: timestamptz("updated_at").notNull(),

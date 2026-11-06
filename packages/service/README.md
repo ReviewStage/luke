@@ -668,8 +668,8 @@ by `src/github/github-token-procedures.ts`) the same way, and answers counts: th
 moved, already current, changed meanwhile, and unreadable. Run it again
 until nothing is changed meanwhile; once nothing names the old version,
 and a day and an hour has passed since, drop it from the list and redeploy.
-The wait is for what stands at a sandbox's firewall (`sandbox_firewall`),
-sealed under the ring for as long as its session runs, which the rewrap
+The wait is for the swaps a runner's launch keeps at its sandbox's firewall
+(`sandbox_firewall`), sealed under the ring for as long as the launch runs, which the rewrap
 does not move and the sweep drops a day and an hour after its last write. A row counted unreadable reads
 `unreadable` to its account, which is told to replace it. It is not a
 migration, since a migration holds no key and runs before the deployment

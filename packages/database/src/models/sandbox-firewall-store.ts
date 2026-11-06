@@ -1,21 +1,22 @@
 /**
- * sandbox-firewall-store.ts -- the record of what stands at a sandbox session's firewall: read under its account, changed by compare-and-set on its version, cleared ahead of a stop, and dropped once its session is long gone.
+ * sandbox-firewall-store.ts -- the swaps a runner's launch holds at its sandbox session's firewall: kept as it launches, read under its account, renewed only while it stands, let go at its end or cleared ahead of a stop, and dropped once its session is long gone.
  *
- * The service composes a session's whole policy from this row, so a write by
- * one part of the session never drops what another set
- * (`@repo/service`'s `agents/sandbox-firewall.ts`). A write is a
- * compare-and-set on the version the writer read: it lands only where the
- * row still stands at that version, or, for a session with no row, where
- * none was written meanwhile, and answers whether it landed, so two writers
- * at once never lose either's change. A write that leaves nothing standing
- * deletes the row, so a withdrawn entry's sealed value is gone with it. A
- * row is the account's own, keyed by the account whose agent the session
- * is and the session, so a read and a write reach that account's row
- * alone; a clear, made by the service ahead of a stop, and the sweep's drop
- * read nothing and are the deployment's, as are the sweep's count and list
- * of the sessions whose row stands, which name each row's account and
- * session and nothing it holds. The row holds the entries only as the
- * service sealed them (`provider-key-seal.ts`'s `sealFirewallEntries`).
+ * Every write to a session's firewall composes the whole policy, and the one
+ * source a writer cannot gather again is the launch's, whose placeholders are
+ * in its runner's environment alone (`@repo/service`'s
+ * `agents/sandbox-firewall.ts`). So the launch keeps them here, one row per
+ * sandbox session and the account whose agent the session is, beside the
+ * agent it runs, replacing an earlier launch's; nothing but the launch keeps
+ * a row. `version` is minted as the launch is kept, and the sweep's renewal
+ * of a swap's value lands only where the row still holds that launch, so a
+ * renewal never sets an ended launch's swaps over a new one's or back after
+ * its end. A row is the account's own, keyed by the account and the session,
+ * so a read, a keep, a renewal, and a let-go reach that account's row alone;
+ * a clear, made by the service ahead of a stop, and the sweep's drop read
+ * nothing and are the deployment's, as are the sweep's count and list of the
+ * sessions whose row stands, which name each row's account and session and
+ * nothing it holds. The row holds the swaps only as the service sealed them
+ * (`provider-key-seal.ts`'s `sealFirewallEntries`).
  */
 
 import { and, count, eq, lt } from "drizzle-orm";
@@ -27,15 +28,20 @@ import type { FirewallOwner } from "./provider-key-seal.js";
 
 type FirewallEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
-/** What a session's row holds: the version its last write minted, and the entries as the service sealed them. */
-export interface StandingFirewall {
+/** What a session's row holds: the launch's id, minted as it was kept; the agent it runs, none in a row kept before agents were named; and its swaps as the service sealed them. */
+export interface FirewallLaunchRow {
   readonly version: string;
+  readonly agentId: string | null;
   readonly sealedEntries: string;
 }
 
 const OwnerFields = { userId: Schema.String, sandboxSessionId: Schema.String };
 
-const StandingSchema = Schema.Struct({ version: Schema.String, sealedEntries: Schema.String });
+const LaunchSchema = Schema.Struct({
+  version: Schema.String,
+  agentId: Schema.NullOr(Schema.String),
+  sealedEntries: Schema.String,
+});
 
 const VersionSchema = Schema.Struct({ version: Schema.String });
 
@@ -43,65 +49,69 @@ const VersionSchema = Schema.Struct({ version: Schema.String });
 const ownRow = (userId: string, sandboxSessionId: string) =>
   and(eq(sandboxFirewall.sandboxSessionId, sandboxSessionId), eq(sandboxFirewall.userId, userId));
 
-const findStanding = SqlSchema.findAll({
+const findLaunch = SqlSchema.findAll({
   Request: Schema.Struct(OwnerFields),
-  Result: StandingSchema,
+  Result: LaunchSchema,
   execute: ({ userId, sandboxSessionId }) =>
     Database.use((db) =>
       db
-        .select({ version: sandboxFirewall.version, sealedEntries: sandboxFirewall.sealedEntries })
+        .select({
+          version: sandboxFirewall.version,
+          agentId: sandboxFirewall.agentId,
+          sealedEntries: sandboxFirewall.sealedEntries,
+        })
         .from(sandboxFirewall)
         .where(ownRow(userId, sandboxSessionId)),
     ),
 });
 
-const insertStanding = SqlSchema.findAll({
+const upsertLaunch = SqlSchema.void({
   Request: Schema.Struct({
     ...OwnerFields,
     version: Schema.String,
+    agentId: Schema.String,
     sealedEntries: Schema.String,
     updatedAt: Schema.Date,
   }),
-  Result: VersionSchema,
   execute: (row) =>
     Database.use((db) =>
       db
         .insert(sandboxFirewall)
         .values(row)
-        .onConflictDoNothing({ target: [sandboxFirewall.userId, sandboxFirewall.sandboxSessionId] })
-        .returning({ version: sandboxFirewall.version }),
+        .onConflictDoUpdate({
+          target: [sandboxFirewall.userId, sandboxFirewall.sandboxSessionId],
+          set: {
+            version: row.version,
+            agentId: row.agentId,
+            sealedEntries: row.sealedEntries,
+            updatedAt: row.updatedAt,
+          },
+        }),
     ),
 });
 
-const updateStanding = SqlSchema.findAll({
+const updateLaunch = SqlSchema.findAll({
   Request: Schema.Struct({
     ...OwnerFields,
-    expected: Schema.String,
     version: Schema.String,
     sealedEntries: Schema.String,
     updatedAt: Schema.Date,
   }),
   Result: VersionSchema,
-  execute: ({ userId, sandboxSessionId, expected, version, sealedEntries, updatedAt }) =>
+  execute: ({ userId, sandboxSessionId, version, sealedEntries, updatedAt }) =>
     Database.use((db) =>
       db
         .update(sandboxFirewall)
-        .set({ version, sealedEntries, updatedAt })
-        .where(and(ownRow(userId, sandboxSessionId), eq(sandboxFirewall.version, expected)))
+        .set({ sealedEntries, updatedAt })
+        .where(and(ownRow(userId, sandboxSessionId), eq(sandboxFirewall.version, version)))
         .returning({ version: sandboxFirewall.version }),
     ),
 });
 
-const deleteStanding = SqlSchema.findAll({
-  Request: Schema.Struct({ ...OwnerFields, expected: Schema.String }),
-  Result: VersionSchema,
-  execute: ({ userId, sandboxSessionId, expected }) =>
-    Database.use((db) =>
-      db
-        .delete(sandboxFirewall)
-        .where(and(ownRow(userId, sandboxSessionId), eq(sandboxFirewall.version, expected)))
-        .returning({ version: sandboxFirewall.version }),
-    ),
+const deleteLaunch = SqlSchema.void({
+  Request: Schema.Struct(OwnerFields),
+  execute: ({ userId, sandboxSessionId }) =>
+    Database.use((db) => db.delete(sandboxFirewall).where(ownRow(userId, sandboxSessionId))),
 });
 
 const deleteSession = SqlSchema.void({
@@ -147,39 +157,42 @@ const deleteStale = SqlSchema.findAll({
     ),
 });
 
-/** What stands at the account's session's firewall as its row holds it; none where no row stands, or it is another account's. */
-export function readStandingFirewall(
+/** The launch kept for the account's session; none where none is, or it is another account's. */
+export function readFirewallLaunch(
   owner: FirewallOwner,
-): FirewallEffect<StandingFirewall | undefined> {
-  return Effect.map(findStanding(owner), ([row]) => row);
+): FirewallEffect<FirewallLaunchRow | undefined> {
+  return Effect.map(findLaunch(owner), ([row]) => row);
+}
+
+/** The launch given kept for the account's session, in place of any launch kept there before. */
+export function keepFirewallLaunch(
+  owner: FirewallOwner,
+  launch: { readonly version: string; readonly agentId: string; readonly sealedEntries: string },
+  updatedAt: Date,
+): FirewallEffect<void> {
+  return upsertLaunch({ ...owner, ...launch, updatedAt });
 }
 
 /**
- * The account's session's row moved from the version read to what stands
- * next, answering whether it landed: a row written where none stood, one
- * replaced where it still stands at `expected`, or deleted where nothing
- * stands next. Another account's row under the session is never read or
- * replaced.
+ * The swaps of the launch kept for the account's session sealed anew, only
+ * where the row still holds the launch `version` names, answering whether it
+ * landed; a launch let go or replaced since is left as it stands.
  */
-export function replaceStandingFirewall(
+export function renewFirewallLaunch(
   owner: FirewallOwner,
-  expected: string | undefined,
-  next: StandingFirewall | undefined,
+  version: string,
+  sealedEntries: string,
   updatedAt: Date,
 ): FirewallEffect<boolean> {
-  const wrote = (rows: readonly unknown[]) => rows.length > 0;
-  if (expected === undefined) {
-    // Note that nothing read and nothing next lands only while still nothing stands.
-    if (next === undefined) {
-      return Effect.map(readStandingFirewall(owner), (row) => row === undefined);
-    }
-    return Effect.map(insertStanding({ ...owner, ...next, updatedAt }), wrote);
-  }
-  const landed =
-    next === undefined
-      ? deleteStanding({ ...owner, expected })
-      : updateStanding({ ...owner, expected, ...next, updatedAt });
-  return Effect.map(landed, wrote);
+  return Effect.map(
+    updateLaunch({ ...owner, version, sealedEntries, updatedAt }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** The launch kept for the account's session let go, as its runner ends. */
+export function letGoFirewallLaunch(owner: FirewallOwner): FirewallEffect<void> {
+  return deleteLaunch(owner);
 }
 
 /** The session's rows deleted, whoever's they are, as the session's firewall is cleared ahead of a stop. */

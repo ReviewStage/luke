@@ -9,18 +9,21 @@ import {
   clearStandingFirewall,
   countStandingFirewalls,
   dropStaleFirewalls,
+  keepFirewallLaunch,
+  letGoFirewallLaunch,
   listStandingFirewalls,
-  readStandingFirewall,
-  replaceStandingFirewall,
+  readFirewallLaunch,
+  renewFirewallLaunch,
 } from "../sandbox-firewall-store.js";
 
 /**
- * The record of what stands at a sandbox session's firewall, over a real
- * dialect: a write lands only from the version its writer read, a write
- * that leaves nothing deletes the row, one account's session row is neither
- * read nor replaced through another's, and a clear and the sweep's drop
- * delete rows by session and by age. The sealed column is opaque text here,
- * as the store holds it. Synthetic accounts, sessions, and seals throughout.
+ * The swaps a runner's launch keeps for its sandbox session, over a real
+ * dialect: a launch replaces the one kept before it, a renewal lands only on
+ * the launch it read, a let-go deletes the row, one account's session row is
+ * neither read, renewed, nor let go through another's, and a clear and the
+ * sweep's drop delete rows by session and by age. The sealed column is
+ * opaque text here, as the store holds it. Synthetic accounts, sessions,
+ * agents, and seals throughout.
  */
 
 const AT = new Date("2026-11-04T12:00:00Z");
@@ -35,59 +38,70 @@ const openOwner = Effect.gen(function* () {
   return { userId, sandboxSessionId: `sbx_${randomUUID()}` };
 });
 
-/** A row's next state under a fresh version, its seal standing in as text. */
-const nextState = (sealedEntries: string) => ({ version: randomUUID(), sealedEntries });
+/** A launch under a fresh id, its seal standing in as text. */
+const launchOf = (sealedEntries: string) => ({
+  version: randomUUID(),
+  agentId: "agent-fixture",
+  sealedEntries,
+});
 
-it.layer(getTestDB())("a sandbox session's firewall record", (it) => {
+it.layer(getTestDB())("the launch kept at a sandbox session's firewall", (it) => {
   it.effect(
-    "a write lands only from the version its writer read, and one that leaves nothing deletes the row",
+    "a launch replaces the one kept before it, a renewal lands only on the launch it read, and a let-go deletes the row",
     () =>
       Effect.gen(function* () {
         const owner = yield* openOwner;
-        const first = nextState("sealed-github");
-        const rival = nextState("sealed-rival");
+        const first = launchOf("sealed-first");
+        const relaunch = launchOf("sealed-relaunch");
 
-        assert.equal(yield* replaceStandingFirewall(owner, undefined, first, AT), true);
-        // A second writer that also read nothing standing finds the row written and must read again.
-        assert.equal(yield* replaceStandingFirewall(owner, undefined, rival, AT), false);
+        yield* keepFirewallLaunch(owner, first, AT);
+        yield* keepFirewallLaunch(owner, relaunch, LATER);
+        // A renewal of the launch the relaunch replaced lands nowhere.
+        assert.equal(
+          yield* renewFirewallLaunch(owner, first.version, "sealed-stale", LATER),
+          false,
+        );
+        assert.equal(
+          yield* renewFirewallLaunch(owner, relaunch.version, "sealed-renewed", LATER),
+          true,
+        );
+        assert.deepEqual(yield* readFirewallLaunch(owner), {
+          ...relaunch,
+          sealedEntries: "sealed-renewed",
+        });
 
-        const second = nextState("sealed-github-and-swap");
-        assert.equal(yield* replaceStandingFirewall(owner, first.version, second, LATER), true);
-        assert.equal(yield* replaceStandingFirewall(owner, first.version, rival, LATER), false);
-        assert.deepEqual(yield* readStandingFirewall(owner), second);
-
-        assert.equal(yield* replaceStandingFirewall(owner, first.version, undefined, LATER), false);
-        assert.equal(yield* replaceStandingFirewall(owner, second.version, undefined, LATER), true);
-        assert.equal(yield* readStandingFirewall(owner), undefined);
+        yield* letGoFirewallLaunch(owner);
+        assert.equal(yield* readFirewallLaunch(owner), undefined);
+        // Nor does one of a launch let go.
+        assert.equal(
+          yield* renewFirewallLaunch(owner, relaunch.version, "sealed-late", LATER),
+          false,
+        );
+        assert.equal(yield* readFirewallLaunch(owner), undefined);
       }),
   );
 
   it.effect(
-    "one account's session row is neither read nor replaced through another's, whose writes keep to a row of its own",
+    "one account's session row is neither read, renewed, nor let go through another's, whose launch keeps to a row of its own",
     () =>
       Effect.gen(function* () {
         const owner = yield* openOwner;
         const other = yield* openOwner;
         const theirs = { userId: other.userId, sandboxSessionId: owner.sandboxSessionId };
-        const standing = nextState("sealed-owner");
-        yield* replaceStandingFirewall(owner, undefined, standing, AT);
+        const standing = launchOf("sealed-owner");
+        yield* keepFirewallLaunch(owner, standing, AT);
 
-        assert.equal(yield* readStandingFirewall(theirs), undefined);
-        const landed = [
-          yield* replaceStandingFirewall(
-            theirs,
-            standing.version,
-            nextState("sealed-other"),
-            LATER,
-          ),
-          yield* replaceStandingFirewall(theirs, standing.version, undefined, LATER),
-        ];
-        const own = nextState("sealed-other-own");
-        const ownLanded = yield* replaceStandingFirewall(theirs, undefined, own, LATER);
+        assert.equal(yield* readFirewallLaunch(theirs), undefined);
+        assert.equal(
+          yield* renewFirewallLaunch(theirs, standing.version, "sealed-other", LATER),
+          false,
+        );
+        yield* letGoFirewallLaunch(theirs);
+        const own = launchOf("sealed-other-own");
+        yield* keepFirewallLaunch(theirs, own, LATER);
 
-        assert.deepEqual([...landed, ownLanded], [false, false, true]);
-        assert.deepEqual(yield* readStandingFirewall(owner), standing);
-        assert.deepEqual(yield* readStandingFirewall(theirs), own);
+        assert.deepEqual(yield* readFirewallLaunch(owner), standing);
+        assert.deepEqual(yield* readFirewallLaunch(theirs), own);
       }),
   );
 
@@ -98,18 +112,18 @@ it.layer(getTestDB())("a sandbox session's firewall record", (it) => {
         const cleared = yield* openOwner;
         const stale = yield* openOwner;
         const fresh = yield* openOwner;
-        yield* replaceStandingFirewall(cleared, undefined, nextState("sealed-cleared"), LATER);
-        yield* replaceStandingFirewall(stale, undefined, nextState("sealed-stale"), AT);
-        const kept = nextState("sealed-fresh");
-        yield* replaceStandingFirewall(fresh, undefined, kept, LATER);
+        yield* keepFirewallLaunch(cleared, launchOf("sealed-cleared"), LATER);
+        yield* keepFirewallLaunch(stale, launchOf("sealed-stale"), AT);
+        const kept = launchOf("sealed-fresh");
+        yield* keepFirewallLaunch(fresh, kept, LATER);
 
         yield* clearStandingFirewall(cleared.sandboxSessionId);
         const dropped = yield* dropStaleFirewalls(new Date(AT.getTime() + 1));
 
-        assert.equal(yield* readStandingFirewall(cleared), undefined);
-        assert.equal(yield* readStandingFirewall(stale), undefined);
+        assert.equal(yield* readFirewallLaunch(cleared), undefined);
+        assert.equal(yield* readFirewallLaunch(stale), undefined);
         assert.ok(dropped >= 1);
-        assert.deepEqual(yield* readStandingFirewall(fresh), kept);
+        assert.deepEqual(yield* readFirewallLaunch(fresh), kept);
         const standing = yield* countStandingFirewalls();
         const listed = (yield* listStandingFirewalls(0, standing)).map(
           (each) => each.sandboxSessionId,
