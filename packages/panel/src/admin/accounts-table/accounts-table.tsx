@@ -1,10 +1,6 @@
 import { formatCount } from "@repo/features/number-format";
 import {
   Badge,
-  DATA_TABLE_COLUMN_KIND,
-  DATA_TABLE_MIN_WIDTH,
-  DataTable,
-  type DataTableColumn,
   IconButton,
   Inline,
   SKELETON_SHAPE,
@@ -20,19 +16,26 @@ import {
 } from "@repo/ui";
 import { accountLabel } from "@repo/ui/account-initials";
 import {
+  ACCOUNTS_SORT_FIRST_DIRECTION,
   ACCOUNTS_SORT_KEY,
   type AccountsDetailColumn,
-  type AccountsSort,
   type AccountsSortKey,
   type AccountsTableRow,
-  nextSort,
-  sortAccountsRows,
 } from "@repo/ui/accounts-sort";
+import {
+  createDataTableColumnHelper,
+  DATA_TABLE_COLUMN_KIND,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumns,
+  DataTableSkeleton,
+  type SortingState,
+} from "@repo/ui/data-table";
 import { StarIcon } from "@repo/ui/icons";
-import { useState } from "react";
+import { SORT_DIRECTION } from "@repo/ui/sort-direction";
+import { useMemo, useState } from "react";
 import { useAdminDoorsIfAny } from "../admin-doors.js";
 import { AccountAvatar } from "../chrome/page-header.js";
-import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ACCOUNTS_SORT } from "../prefs.js";
 import { plainLeftClick } from "../routing.js";
 
@@ -56,10 +59,11 @@ const SKELETON_NAME_WIDTH = "144px";
 
 const SKELETON_EMAIL_WIDTH = "176px";
 
-/** The star's column, which sorts nothing and so stands outside the sort keys. */
+/** The star's column, which no heading sorts and so stands outside the sort keys. */
 const FAVORITE_COLUMN = "favorite";
 
-type AccountsColumnKey = AccountsSortKey | typeof FAVORITE_COLUMN;
+/** Starred rows above the rest: the order before any a heading chooses. */
+const STARRED_FIRST: SortingState = [{ id: FAVORITE_COLUMN, desc: true }];
 
 /** What a row's star shows, and what its press asks. */
 interface AccountsFavorite<Row> {
@@ -67,28 +71,34 @@ interface AccountsFavorite<Row> {
   onToggle: (id: string, favorite: boolean) => void;
 }
 
-/** The leading star column, whose press asks to star or unstar a row's account. */
-function favoriteColumn<Row extends AccountsTableRow>(
-  favorite: AccountsFavorite<Row>,
-): DataTableColumn<Row, AccountsColumnKey> {
-  return {
-    key: FAVORITE_COLUMN,
-    label: "Favorite",
-    kind: DATA_TABLE_COLUMN_KIND.MARK,
-    cell: (row) => {
-      const label = `${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`;
+/**
+ * The leading star column, whose press asks to star or unstar a row's
+ * account. Its value is whether the row is starred, which `STARRED_FIRST`
+ * sorts by before the order a heading chooses; its heading is a mark's, so
+ * no press sorts it.
+ */
+function favoriteColumn<Row extends AccountsTableRow>(favorite: AccountsFavorite<Row>) {
+  const column = createDataTableColumnHelper<Row>();
+  return column.accessor((row) => favorite.starred(row), {
+    id: FAVORITE_COLUMN,
+    header: "Favorite",
+    meta: { kind: DATA_TABLE_COLUMN_KIND.MARK },
+    sortFn: "basic",
+    cell: ({ row }) => {
+      const account = row.original;
+      const label = `${favorite.starred(account) ? "Unfavorite" : "Favorite"} ${account.name || account.email}`;
       return (
         <Tooltip label={label}>
           <IconButton
-            icon={<StarIcon fill={favorite.starred(row) ? "currentColor" : "none"} />}
+            icon={<StarIcon fill={favorite.starred(account) ? "currentColor" : "none"} />}
             label={label}
-            pressed={favorite.starred(row)}
-            onClick={() => favorite.onToggle(row.id, !favorite.starred(row))}
+            pressed={favorite.starred(account)}
+            onClick={() => favorite.onToggle(account.id, !favorite.starred(account))}
           />
         </Tooltip>
       );
     },
-  };
+  });
 }
 
 /** An account cell's frame: `avatar` beside `name` over `email`, where it has one. */
@@ -204,6 +214,20 @@ interface AccountsTableShape<Row extends AccountsTableRow> {
   favorite?: AccountsFavorite<Row> | undefined;
 }
 
+/**
+ * How a column sorts by its heading, where its table sorts at all: its first
+ * press the way `ACCOUNTS_SORT_FIRST_DIRECTION` says, and an account with no
+ * value yet below the rest in either direction, since it has no place in a
+ * chronology and flipping one should not bury the answer under the blanks.
+ */
+function sortSettings(key: AccountsSortKey, sortable: boolean) {
+  return {
+    enableSorting: sortable,
+    sortDescFirst: ACCOUNTS_SORT_FIRST_DIRECTION[key] === SORT_DIRECTION.DESCENDING,
+    sortUndefined: "last",
+  } as const;
+}
+
 /** A table's columns, in the order every account table draws them. */
 function accountsColumns<Row extends AccountsTableRow>({
   windowDays,
@@ -212,40 +236,86 @@ function accountsColumns<Row extends AccountsTableRow>({
   trailingColumns = [],
   sortable = false,
   favorite,
-}: AccountsTableShape<Row>): DataTableColumn<Row, AccountsColumnKey>[] {
-  const numericColumn = (column: AccountsDetailColumn<Row>) => ({
-    key: column.key,
-    label: column.label,
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    sortable,
-    cell: column.cell,
-  });
-  return [
+}: Omit<AccountsTableShape<Row>, "minWidth">): DataTableColumns<Row> {
+  const column = createDataTableColumnHelper<Row>();
+  const numericColumn = (detail: AccountsDetailColumn<Row>) =>
+    column.accessor((row) => detail.sortValue(row) ?? undefined, {
+      id: detail.key,
+      header: detail.label,
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      sortFn: "basic",
+      ...sortSettings(detail.key, sortable),
+      cell: ({ row }) => detail.cell(row.original),
+    });
+  return column.columns([
     ...(favorite ? [favoriteColumn(favorite)] : []),
-    {
-      key: ACCOUNTS_SORT_KEY.ACCOUNT,
-      label: "Account",
-      sortable,
-      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
-    },
+    // Note that an account sorts by the name its row shows, falling back to the email exactly as the cell does.
+    column.accessor((row) => accountLabel(row), {
+      id: ACCOUNTS_SORT_KEY.ACCOUNT,
+      header: "Account",
+      sortFn: "text",
+      ...sortSettings(ACCOUNTS_SORT_KEY.ACCOUNT, sortable),
+      cell: ({ row }) => <AccountCell account={row.original} onOpen={onOpen} />,
+    }),
     ...detailColumns.map(numericColumn),
-    {
-      key: ACCOUNTS_SORT_KEY.ACTIVE_DAYS,
-      label: "Active days",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable,
-      cell: (row) => (
+    column.accessor((row) => row.activeDays, {
+      id: ACCOUNTS_SORT_KEY.ACTIVE_DAYS,
+      header: "Active days",
+      meta: { kind: DATA_TABLE_COLUMN_KIND.NUMERIC },
+      sortFn: "basic",
+      ...sortSettings(ACCOUNTS_SORT_KEY.ACTIVE_DAYS, sortable),
+      cell: ({ getValue }) => (
         <>
-          {formatCount(row.activeDays)}
+          {formatCount(getValue())}
           <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
             {" "}
             of {formatCount(windowDays)}
           </Text>
         </>
       ),
-    },
+    }),
     ...trailingColumns.map(numericColumn),
-  ];
+  ]);
+}
+
+/** The columns of `shape`, built again only when one of its parts changes, as TanStack Table asks. */
+function useAccountsColumns<Row extends AccountsTableRow>({
+  windowDays,
+  onOpen,
+  detailColumns,
+  trailingColumns,
+  sortable,
+  favorite,
+}: AccountsTableShape<Row>): DataTableColumns<Row> {
+  return useMemo(
+    () =>
+      accountsColumns({ windowDays, onOpen, detailColumns, trailingColumns, sortable, favorite }),
+    [windowDays, onOpen, detailColumns, trailingColumns, sortable, favorite],
+  );
+}
+
+/**
+ * The remembered roster sort as the table's first order: none where the
+ * table does not sort, or where the stored key names a column it does not
+ * draw.
+ */
+function rememberedSorting<Row extends AccountsTableRow>(
+  columns: DataTableColumns<Row>,
+  sortable: boolean,
+): SortingState {
+  const sort = sortable ? ACCOUNTS_SORT.read() : undefined;
+  if (sort === undefined || !columns.some((column) => column.id === sort.key)) return [];
+  return [{ id: sort.key, desc: sort.direction === SORT_DIRECTION.DESCENDING }];
+}
+
+/** Remembers the order a heading's press chose, for the next visit. */
+function rememberSorting([sort]: SortingState): void {
+  const key = Object.values(ACCOUNTS_SORT_KEY).find((candidate) => candidate === sort?.id);
+  if (sort === undefined || key === undefined) return;
+  ACCOUNTS_SORT.write({
+    key,
+    direction: sort.desc ? SORT_DIRECTION.DESCENDING : SORT_DIRECTION.ASCENDING,
+  });
 }
 
 /** The table's label, for a reader moving between tables. */
@@ -268,26 +338,20 @@ export function AccountsTable<Row extends AccountsTableRow>({
   rows: readonly Row[];
   emptyText: string;
 }): React.JSX.Element {
-  const { sortable = false, favorite, detailColumns = [], trailingColumns = [] } = shape;
-  const [sort, setSort] = useState<AccountsSort | undefined>(
-    sortable ? ACCOUNTS_SORT.read : undefined,
-  );
-  const toggleSort = (key: AccountsColumnKey) => {
-    if (key === FAVORITE_COLUMN) return;
-    const next = nextSort(sort, key);
-    ACCOUNTS_SORT.write(next);
-    setSort(next);
-  };
+  const { sortable = false, favorite } = shape;
+  const columns = useAccountsColumns(shape);
+  const [initialSorting] = useState(() => rememberedSorting(columns, sortable));
   return (
     <DataTable
       label={ACCOUNTS_TABLE_LABEL}
-      columns={accountsColumns(shape)}
-      rows={sortAccountsRows(rows, sort, [...detailColumns, ...trailingColumns], favorite?.starred)}
-      rowKey={(row) => row.id}
+      columns={columns}
+      rows={rows}
+      getRowId={(row) => row.id}
       empty={emptyText}
       minWidth={shape.minWidth}
-      sort={sort}
-      onSort={sortable ? toggleSort : undefined}
+      initialSorting={initialSorting}
+      leadingSorting={favorite ? STARRED_FIRST : undefined}
+      onSortingChange={rememberSorting}
       onRowPress={(row) => shape.onOpen(row.id)}
     />
   );
@@ -305,7 +369,7 @@ export function AccountsTableSkeleton<Row extends AccountsTableRow>({
   return (
     <DataTableSkeleton
       label={ACCOUNTS_TABLE_LABEL}
-      columns={accountsColumns(shape)}
+      columns={useAccountsColumns(shape)}
       rows={rows}
       minWidth={shape.minWidth}
       cells={{ [ACCOUNTS_SORT_KEY.ACCOUNT]: <AccountCellSkeleton /> }}
