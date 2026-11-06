@@ -1,12 +1,17 @@
 /**
- * output-schema.ts -- the wire schema a hosted procedure's answer is decoded with, read off the contract.
+ * output-schema.ts -- what a hosted procedure declares, read off the contract: the wire schema its answer is decoded with, and the refusals it may answer.
  *
  * The desktop's link (`hosted-link.ts`) and a page's (`browser-client.ts`)
- * both decode a success with the schema its procedure declares, so the one
- * reading of that declaration stands here.
+ * both decode a success with the schema its procedure declares, and the
+ * desktop's reads a refusal its procedure does not declare as no answer,
+ * so the one reading of each declaration stands here.
  */
 
-import { type AnySchema, getProcedureContractOrThrow } from "@orpc/contract";
+import {
+  type AnyProcedureContract,
+  type AnySchema,
+  getProcedureContractOrThrow,
+} from "@orpc/contract";
 import { Schema } from "effect";
 import { hostedContract } from "./index.js";
 
@@ -21,8 +26,23 @@ function isWireSchema(
   return Schema.isSchema(schema);
 }
 
-/** The wire schema a procedure's output is decoded with: the one its contract declares, flipped back. */
-export function outputWireSchema(path: readonly string[]): Schema.Codec<unknown> | undefined {
-  const [declared] = getProcedureContractOrThrow(hostedContract, path)["~orpc"].outputSchemas ?? [];
+/** The wire schema a procedure's output is decoded with: the one it declares, flipped back. */
+export function procedureOutputWire(
+  procedure: AnyProcedureContract,
+): Schema.Codec<unknown> | undefined {
+  const [declared] = procedure["~orpc"].outputSchemas ?? [];
   return isWireSchema(declared) ? Schema.flip(declared) : undefined;
+}
+
+/** The wire schema the procedure at a path decodes its output with (`procedureOutputWire`). */
+export function outputWireSchema(path: readonly string[]): Schema.Codec<unknown> | undefined {
+  return procedureOutputWire(getProcedureContractOrThrow(hostedContract, path));
+}
+
+/** Whether the procedure at a path declares a refusal. */
+export function refusalDeclared(path: readonly string[], refusal: string): boolean {
+  return Object.hasOwn(
+    getProcedureContractOrThrow(hostedContract, path)["~orpc"].errorMap,
+    refusal,
+  );
 }

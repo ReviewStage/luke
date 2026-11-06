@@ -14,11 +14,7 @@ import {
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
 import type { LIVE_READ } from "@repo/features/live-wire";
-import {
-  MCP_CLIENTS_CALL_FAILURE,
-  type McpClientsView,
-  mcpClientRevokeParamsSchema,
-} from "@repo/features/mcp-client-view";
+import { type McpClientsView, mcpClientRevokeParamsSchema } from "@repo/features/mcp-client-view";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import {
   carried,
@@ -118,8 +114,6 @@ export interface IntegrationsComposer extends Composer {
 }
 
 const UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
-
-const MCP_CLIENTS_UNANSWERED = { failure: MCP_CLIENTS_CALL_FAILURE.UNANSWERED } as const;
 
 /** A call of the service asked behind the gate, or unanswered where the gate stands closed. */
 type Asked = <Answer>(
@@ -308,7 +302,7 @@ function composed(
   const revoke = (clientId: string): Effect.Effect<McpClientsView> =>
     Effect.gen(function* () {
       const answer = yield* asked(mcpClients.revoke(clientId));
-      if ("failure" in answer) return MCP_CLIENTS_UNANSWERED;
+      if ("failure" in answer) return answer;
       const userId = accountId();
       if (userId !== undefined) yield* clients.read.answered(userId, answer);
       return answer;
