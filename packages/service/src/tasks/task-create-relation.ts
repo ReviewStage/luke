@@ -55,6 +55,7 @@ import {
 import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { taskActivityReported } from "../accounts/onboarding-events.js";
 import {
   recordServerEvent,
   SERVER_EVENT,
@@ -400,6 +401,7 @@ export const createTaskAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
         source,
       },
     );
+    yield* taskActivityReported(userId);
   }
   return { ...created, ...reached };
 });

@@ -68,8 +68,11 @@ interface WelcomeMailValues {
 /** The deployment's sender of welcome emails. Read optionally, so a runtime without one emails nothing. */
 export class WelcomeMail extends Context.Service<WelcomeMail, WelcomeMailValues>()("WelcomeMail") {}
 
-/** "Hey Ada," for an account named "Ada Lovelace", and "Hey," for one with no name. */
-function greetingOf(name: string): string {
+/**
+ * "Hey Ada," for an account named "Ada Lovelace", and "Hey," for one with no
+ * name; the onboarding emails greet by it too (`onboarding-events.ts`).
+ */
+export function greetingOf(name: string): string {
   const first = name.trim().split(/\s+/)[0] ?? "";
   return first === "" ? "Hey," : `Hey ${first},`;
 }
