@@ -27,6 +27,7 @@ import {
   ResizeEdge,
   RowHint,
   RowHintOptions,
+  reachedKey,
   SCROLL_FADE,
   ScrollArea,
   ShowMoreRow,
@@ -41,11 +42,19 @@ import {
   Toolbar,
   Tooltip,
   useMinute,
+  useRovingKeys,
 } from "@repo/ui";
 import { type Actor, actorName } from "@repo/ui/actor-model";
 import { ArrowUpRightIcon, GLYPH, RotateCcwIcon } from "@repo/ui/icons";
 import { DOCUMENT_REGION } from "@repo/ui/tasks-model";
-import { useEffect, useRef, useState } from "react";
+import {
+  VIRTUAL_ROW_KEY_ATTRIBUTE,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+} from "@repo/ui/virtual-rows";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -233,6 +242,7 @@ function RevisionRow({
   author,
   selected,
   now,
+  place,
   rowRef,
   onSelect,
   onOpenSections,
@@ -245,6 +255,8 @@ function RevisionRow({
   author: Actor;
   selected: boolean;
   now: number;
+  /** Where it stands in the run of versions (`VirtualRows`). */
+  place: VirtualRowPlace;
   rowRef: (row: HTMLElement | null) => void;
   onSelect: () => void;
   /** Opens the sections the revision changed; none for a revision that opens none. */
@@ -278,6 +290,7 @@ function RevisionRow({
     <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
+        place={place}
         leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
         title={
           <span className={VERSION_AUTHOR} data-author={author.kind}>
@@ -560,24 +573,39 @@ function useSectionsFocused(
 
 /**
  * The row of the version the view opened on, brought into the list's view
- * once it is chosen, so a version opened deep in the list is seen lit. Only
- * the list scrolls, since the window around it must not.
+ * once it is chosen, so a version opened deep in the list is seen lit, and
+ * drawn there where its run had not drawn it (`bringIn`). Only the list
+ * scrolls, since the window around it must not.
  */
 function useOpenedRowShown(
   selected: number | undefined,
   rows: Map<number, HTMLElement>,
-  log: React.RefObject<HTMLDivElement | null>,
+  log: RefObject<HTMLDivElement | null>,
+  run: RefObject<VirtualRowsHandle | null>,
 ): void {
   const shown = useRef(false);
   useEffect(() => {
-    const row = selected === undefined ? undefined : rows.get(selected);
-    if (shown.current || row === undefined || log.current === null) return;
+    if (shown.current || selected === undefined || log.current === null) return;
+    const row = rows.get(selected);
+    if (row === undefined) {
+      shown.current = run.current?.bringIn(String(selected)) === true;
+      return;
+    }
     shown.current = true;
     const box = log.current.getBoundingClientRect();
     const line = row.getBoundingClientRect();
     if (line.top < box.top || line.bottom > box.bottom) centerWithin(log.current, row);
-  }, [selected, rows, log]);
+  }, [selected, rows, log, run]);
 }
+
+/** How tall a version's row is taken to be before it is drawn, in pixels: its name over two lines of what it did, and its insets. */
+const REVISION_ESTIMATE_PX = 64;
+
+/** The room between two versions' rows, in pixels: a list's (`--ui-list-gap`). */
+const REVISION_GAP_PX = 2;
+
+/** A row's press, which takes the focus in the list's walk. */
+const ROW_PRESS = ".ui-list-row-main";
 
 /** The sections the open revision changed, once its version is read; nothing while it is read, or while no revision is open. */
 function openedSections(
@@ -738,6 +766,29 @@ export function DesktopVersionHistory({
   const rows = useRef(new Map<number, HTMLElement>()).current;
   const sectionRows = useRef(new Map<number, HTMLElement>()).current;
   const log = useRef<HTMLDivElement>(null);
+  const run = useRef<VirtualRowsHandle>(null);
+  const keys = useMemo(() => revisions.map((line) => String(line.seq)), [revisions]);
+  // The rows are one Tab stop that ↑↓ walk; a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLDivElement>({
+    reach: (from, to) => {
+      const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
+      const key = reachedKey(
+        keys,
+        inHand?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ?? undefined,
+        to,
+      );
+      if (key === undefined) return false;
+      const press = run.current?.rowElement(key)?.querySelector<HTMLElement>(ROW_PRESS);
+      if (press !== undefined && press !== null) {
+        press.focus();
+        return true;
+      }
+      return (
+        run.current?.bringIn(key, (row) => row.querySelector<HTMLElement>(ROW_PRESS)?.focus()) ===
+        true
+      );
+    },
+  });
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
   const people = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, subject.workspace?.id).rows;
@@ -790,7 +841,12 @@ export function DesktopVersionHistory({
   const closeSections = () => {
     if (opened === undefined) return;
     versions.onCloseSections();
-    rows.get(opened.seq)?.focus();
+    const row = rows.get(opened.seq);
+    if (row !== undefined) row.focus();
+    else
+      run.current?.bringIn(String(opened.seq), (drawn) =>
+        drawn.querySelector<HTMLElement>(ROW_PRESS)?.focus(),
+      );
   };
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, opened === undefined ? onExit : closeSections);
   const chooseUnit = (at: number) => {
@@ -806,7 +862,7 @@ export function DesktopVersionHistory({
   });
   const sectionKeys = goThroughRow(sectionRows, { back: closeSections });
   useSectionsFocused(opened?.seq, unit, sectionRows);
-  useOpenedRowShown(versions.selected, rows, log);
+  useOpenedRowShown(versions.selected, rows, log, run);
   const split = useScreenSplit(room);
   const hidden = hiddenColumns(split.columns, versions.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, versions.listed), split.ref);
@@ -880,18 +936,37 @@ export function DesktopVersionHistory({
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 {/* biome-ignore lint/a11y/noStaticElementInteractions: the keys and the focus are the rows' own, which the box only hears bubble. */}
                 <div
+                  {...roving}
                   className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
-                  onFocus={chooseSteppedRow(rows, versions.onSelect)}
-                  onKeyDown={versionKeys}
+                  onFocus={(event) => {
+                    roving.onFocus(event);
+                    chooseSteppedRow(rows, versions.onSelect)(event);
+                  }}
+                  onKeyDown={(event) => {
+                    versionKeys(event);
+                    if (!event.defaultPrevented) roving.onKeyDown(event);
+                  }}
                 >
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-                  <List label={LIST_LABEL.VERSIONS}>
-                    {revisions.map((line) => {
+                  <VirtualRows
+                    scroller={log}
+                    keys={keys}
+                    estimate={REVISION_ESTIMATE_PX}
+                    gap={REVISION_GAP_PX}
+                    anchor={VIRTUAL_ROWS_ANCHOR.START}
+                    listItems
+                    holdsFocus
+                    aria-label={LIST_LABEL.VERSIONS}
+                    handle={run}
+                  >
+                    {(index, place) => {
+                      const line = revisions[index];
+                      if (line === undefined) return null;
                       const author = revisionAuthorOf(line, reader, agents);
                       return (
                         <RevisionRow
-                          key={line.seq}
                           line={line}
+                          place={place}
                           author={author}
                           source={sourceOf(line, author)}
                           selected={line.seq === versions.selected}
@@ -909,8 +984,8 @@ export function DesktopVersionHistory({
                           summary={subject.summary(line)}
                         />
                       );
-                    })}
-                  </List>
+                    }}
+                  </VirtualRows>
                   {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
                     <EarlierRow before={list.earlier} onRead={versions.onLoadEarlier} />
                   ) : null}

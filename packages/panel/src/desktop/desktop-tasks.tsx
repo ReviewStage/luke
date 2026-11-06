@@ -1142,6 +1142,7 @@ function PlanDocument({
         standing={standing}
         head={planHead}
         titleActions={!phone}
+        shown={overviewShown}
       />
     </Fill>
   );
