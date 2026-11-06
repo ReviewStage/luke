@@ -63,10 +63,24 @@ export interface TeamMade {
   readonly name: string | undefined;
 }
 
+/** What a press writes: the workspace made, or the one made changed. */
+const PRESS = {
+  CREATE: "create",
+  SAVE: "save",
+} as const;
+
+type Press = (typeof PRESS)[keyof typeof PRESS];
+
+/** Each press's words, at rest and while it is out. */
+const PRESS_WORDS = {
+  [PRESS.CREATE]: { label: "Create", busy: "Creating" },
+  [PRESS.SAVE]: { label: "Save", busy: "Saving" },
+} as const satisfies Record<Press, { label: string; busy: string }>;
+
 /** The press's words for what it will write: a workspace made, one changed, or nothing but going on. */
 function pressWords(made: boolean, changed: boolean): string {
-  if (!made) return "Create";
-  return changed ? "Save" : "Continue";
+  if (!made) return PRESS_WORDS[PRESS.CREATE].label;
+  return changed ? PRESS_WORDS[PRESS.SAVE].label : "Continue";
 }
 
 /**
@@ -93,7 +107,9 @@ export function useTeamForm({
   const signedIn = useSignedIn();
   const [name, setName] = useState(made?.name ?? "");
   const named = useRef(made?.name !== undefined);
-  const [busy, setBusy] = useState(false);
+  // Note that a press out keeps the words it was pressed under, because the workspace it makes stands before its invitations have gone.
+  const [pressing, setPressing] = useState<Press | undefined>(undefined);
+  const busy = pressing !== undefined;
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [setPhoto, setSetPhoto] = useState<string | undefined>(undefined);
   const invitees = useInvitees(signedIn?.email);
@@ -124,7 +140,7 @@ export function useTeamForm({
       );
     }
     refused.push(...(await invitees.send(workspaceId, emails)));
-    setBusy(false);
+    setPressing(undefined);
     onDone(refused);
   };
   const create = async () => {
@@ -135,7 +151,7 @@ export function useTeamForm({
       onDone([]);
       return;
     }
-    setBusy(true);
+    setPressing(made === undefined ? PRESS.CREATE : PRESS.SAVE);
     setRefusal(undefined);
     let workspaceId = made?.id;
     try {
@@ -146,7 +162,7 @@ export function useTeamForm({
         await renameWorkspace({ workspaceId, name: trimmed });
       }
     } catch (refused) {
-      setBusy(false);
+      setPressing(undefined);
       setRefusal((refused as Error).message);
       return;
     }
@@ -164,8 +180,11 @@ export function useTeamForm({
     busy,
     refusal,
     ready,
-    label: pressWords(made !== undefined, changed),
-    busyLabel: made === undefined ? "Creating" : "Saving",
+    label:
+      pressing === undefined
+        ? pressWords(made !== undefined, changed)
+        : PRESS_WORDS[pressing].label,
+    busyLabel: PRESS_WORDS[pressing ?? (made === undefined ? PRESS.CREATE : PRESS.SAVE)].busy,
     create: () => void create(),
   };
 }
