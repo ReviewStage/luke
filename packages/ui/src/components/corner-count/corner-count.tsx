@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cappedCount } from "../count-figure/count-figure.js";
 
 /**
  * corner-count.tsx -- a glyph wearing a count at its corner, in the accent, as a mail app counts what waits: the comments a pending review holds, on its press's glyph.
@@ -6,7 +7,7 @@ import type { ReactNode } from "react";
  * The count stands on the glyph rather than beside its words, so a press
  * folded to its glyph alone still says it. It is a picture of a number the
  * caller says in its press's name, so it is hidden from a reader here, and
- * none is drawn while nothing waits.
+ * none is drawn while nothing waits; past 99 it is drawn "99+" (`cappedCount`).
  *
  * Its quieter sibling, `CornerDot`, says only that something is so, a view
  * filtered, with a dot over a press's corner rather than a number; and
@@ -29,7 +30,7 @@ export function CornerCount({
       {children}
       {count > 0 ? (
         <span className="ui-corner-count-mark" aria-hidden="true">
-          {count}
+          {cappedCount(count)}
         </span>
       ) : null}
     </span>

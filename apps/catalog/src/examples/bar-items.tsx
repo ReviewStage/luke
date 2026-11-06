@@ -86,7 +86,7 @@ function BarItemsExample(): React.JSX.Element {
     <>
       <CatalogSection
         id="bar-item-places"
-        title="Places in a bar, one shown, two counting what waits, More opening a drawer"
+        title="Places in a bar, one shown, two counting what waits (128 is drawn 99+), More opening a drawer"
       >
         <Bar />
       </CatalogSection>
