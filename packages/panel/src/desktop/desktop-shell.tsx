@@ -169,7 +169,7 @@ function PersonLoading({
 const TASKS_EXIT_PLACE = "tasks";
 
 /** Where a version history's way out leads where no step stands behind it, as a hint names it. */
-const HISTORY_EXIT_PLACE = "plan";
+const HISTORY_EXIT_PLACE = "description";
 
 /** What a phone's row is named for over a workspace's address that names none of the reader's. */
 const UNKNOWN_WORKSPACE_PHONE_PLACE = "unknown-workspace";

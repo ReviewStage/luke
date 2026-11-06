@@ -1229,7 +1229,7 @@ test("in the window's Inbox an @ in the box of a task's item offers that plan's 
   await settle();
 
   const offered = [
-    ...pane.querySelectorAll('.mention-menu [aria-label="Plan"] .ui-combobox-option-label'),
+    ...pane.querySelectorAll('.mention-menu [aria-label="Description"] .ui-combobox-option-label'),
   ].map((name) => name.textContent);
   assert.deepEqual(offered, ["Thresholds"]);
 });

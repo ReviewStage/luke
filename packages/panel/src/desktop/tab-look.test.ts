@@ -289,8 +289,11 @@ test("the task's topbar names the task, as the list names it now, over a strip o
   assert.deepEqual([...tabLooks(agents).keys()], [WORKING.title, TAB_WORDS.NEW_AGENT]);
   const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
-  assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Plan"), "no Plan tab");
-  assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
+  assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Description"), "no Plan tab");
+  assert.ok(
+    !rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Description"),
+    "nor a Plan row",
+  );
 });
 
 test("a link to an agent's pull request in the plan hangs the card its Pull request tab hangs, whatever it is called", async () => {

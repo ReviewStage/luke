@@ -237,7 +237,7 @@ export function retargetedMention(
 }
 
 /** What a gone section's card says of it. */
-const GONE_WORDS = "No longer in the plan";
+const GONE_WORDS = "No longer in the description";
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {

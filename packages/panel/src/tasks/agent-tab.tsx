@@ -366,7 +366,7 @@ interface TranscriptLead {
 
 /** An agent's transcript: the plan it was handed, and the agent starting. */
 export const AGENT_LEAD: TranscriptLead = {
-  label: "Plan",
+  label: "Description",
   icon: <DocumentIcon />,
   plan: true,
   startingLine: "The agent is starting.",

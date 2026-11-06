@@ -428,7 +428,7 @@ const COMMENT_WORDS = {
   REOPENED_IT: "reopened this",
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
-  SHOW_WORDS: "Show in the plan",
+  SHOW_WORDS: "Show in the description",
   SHOW_ELEMENT: "Show on the page",
   WHOLE_PAGE: "Whole page",
   DISCARD: "Discard",
@@ -2722,7 +2722,7 @@ function CommentsSkeleton(): React.JSX.Element {
 const NO_COMMENTS = {
   [COMMENTS_FILTER.OPEN]: {
     title: "No comments",
-    line: "Select words in the plan, or press a block's comment button, to start a thread.",
+    line: "Select words in the description, or press a block's comment button, to start a thread.",
   },
   [COMMENTS_FILTER.RESOLVED]: {
     title: "No resolved comments",
@@ -2836,7 +2836,7 @@ const LISTING_WORDS = {
 /** What the plan's Comments toggle says, and what its press does. */
 const TOGGLE_WORDS = {
   LIST: "List all comments",
-  MARGIN: "Show comments beside the plan",
+  MARGIN: "Show comments beside the description",
 } as const;
 
 /** The toggle's words: how many threads the plan holds, as the byline's other phrases say what they count. */

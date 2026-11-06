@@ -183,11 +183,11 @@ test("an @ typed in the plan offers the plan's sections and, as the word is type
   await task.typeAtEnd("roll");
 
   assert.deepEqual(empty, [
-    ["Plan", ["Goal", "Rollout", "Teammate invitations"]],
-    ["Mention from", ["Plan", "Files and folders", "Dates"]],
+    ["Description", ["Goal", "Rollout", "Teammate invitations"]],
+    ["Mention from", ["Description", "Files and folders", "Dates"]],
   ]);
   assert.deepEqual(listed(task.container), [
-    ["Plan", ["Rollout"]],
+    ["Description", ["Rollout"]],
     ["Files and folders", ["rollout-store.ts"]],
   ]);
 });
@@ -249,7 +249,7 @@ test("words typed past a space that match nothing close the list, and words that
 
   assert.match(oneWord, /No results match/u);
   assert.ok(proseClosed, "the list closes once the words past a space match nothing");
-  assert.deepEqual(listed(task.container), [["Plan", ["Teammate invitations"]]]);
+  assert.deepEqual(listed(task.container), [["Description", ["Teammate invitations"]]]);
 });
 
 test("the list says it is reading, never that nothing matches, while the repository's files are unread", async () => {
@@ -270,8 +270,8 @@ test("a heading just renamed is offered by its new words, before the editor hand
   await task.typeAtEnd(" See @roll");
 
   assert.deepEqual(
-    listed(task.container).find(([group]) => group === "Plan"),
-    ["Plan", ["Rollout plan"]],
+    listed(task.container).find(([group]) => group === "Description"),
+    ["Description", ["Rollout plan"]],
   );
 });
 
@@ -309,7 +309,7 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
 
   assert.deepEqual(
     listed(plan.container).map(([group]) => group),
-    ["Agents", "Plan", "Pages", "Mention from"],
+    ["Agents", "Description", "Pages", "Mention from"],
   );
 });
 
@@ -411,7 +411,7 @@ test("a plan with no repository offers no files and folders to narrow to", async
 
   assert.deepEqual(
     listed(plan.container).find(([group]) => group === "Mention from"),
-    ["Mention from", ["Plan", "Dates"]],
+    ["Mention from", ["Description", "Dates"]],
   );
 });
 
@@ -454,9 +454,9 @@ test("@plan: typed in the plan narrows the list to the plan, searched by the wor
   const all = listed(plan.container);
   await plan.typeAtEnd("roll");
 
-  assert.equal(crumb(plan.container), "Plan");
-  assert.deepEqual(all, [["Plan", ["Goal", "Rollout", "Teammate invitations"]]]);
-  assert.deepEqual(listed(plan.container), [["Plan", ["Rollout"]]]);
+  assert.equal(crumb(plan.container), "Description");
+  assert.deepEqual(all, [["Description", ["Goal", "Rollout", "Teammate invitations"]]]);
+  assert.deepEqual(listed(plan.container), [["Description", ["Rollout"]]]);
 });
 
 test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {

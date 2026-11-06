@@ -756,7 +756,7 @@ test("an unavailable row refuses its press and takes no focus", () => {
   const pressed: string[] = [];
   const container = draw(
     createElement(List, {
-      label: "Plans",
+      label: "Tasks",
       children: createElement(ListRow, {
         title: "Ship the release",
         disabled: true,

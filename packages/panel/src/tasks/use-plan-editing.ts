@@ -95,7 +95,7 @@ function mark<Key>(
 
 /** What the toast over words a task was left with says, and its action, by whether they wait on a conflict. */
 const LEFT_UNSAVED = {
-  WORDS: "Your plan edits could not be saved.",
+  WORDS: "Your description edits could not be saved.",
   RETRY: "Retry",
   KEEP_MINE: "Keep mine",
 } as const;

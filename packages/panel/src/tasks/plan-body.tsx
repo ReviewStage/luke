@@ -597,7 +597,8 @@ function useMentionChips(
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
-const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
+const NO_EDIT: PlanEditDoor = () =>
+  Promise.reject(new Error("This description cannot be edited here."));
 
 /** Where a title's draft goes when nothing else names the task: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
@@ -682,7 +683,7 @@ function savedOver(
 }
 
 /** What a toast says where a tick or a date written from the plan at rest was not saved. */
-const PLAN_NOT_SAVED = "The plan could not be saved.";
+const PLAN_NOT_SAVED = "The description could not be saved.";
 
 /** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
 const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;

@@ -225,7 +225,7 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
   act(() => picker().onTrigger(word("STAG-1")));
   assert.deepEqual(
     detailedRows(page)[0],
-    "Ship the palette · The whole plan",
+    "Ship the palette · The whole description",
     "the plan's own key leads with the plan's own row, not another task's",
   );
   act(() => picker().onTrigger(word("acme")));

@@ -1710,8 +1710,8 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   const deleteKeys = rowChord("Permanently delete");
   type("mark done");
   const doneKeys = rowChord("Mark done");
-  type("copy plan");
-  const copyKeys = rowChord("Copy plan or transcript");
+  type("copy description");
+  const copyKeys = rowChord("Copy description or transcript");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
@@ -1724,7 +1724,7 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   assert.equal(itemChord("Permanently delete"), deleteKeys);
   assert.equal(doneKeys, null);
   assert.equal(copyKeys, "⌥⌘C");
-  assert.equal(itemChord("Copy plan"), copyKeys);
+  assert.equal(itemChord("Copy description"), copyKeys);
 });
 
 test("an agent tab's right-click words and keys Close and Show terminal as ⌘K does, ⌘K naming the tab where the menu says the verb alone", async () => {

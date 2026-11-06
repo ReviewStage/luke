@@ -536,7 +536,7 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   );
   assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
   assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
-  assert.equal(newestToastSays(), "The plan could not be saved.");
+  assert.equal(newestToastSays(), "The description could not be saved.");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
@@ -675,7 +675,7 @@ test("a tick the service did not answer goes back and says the plan could not be
 
   assert.equal(sent.length, 1);
   assert.equal(box.getAttribute("aria-checked"), "false", "the box goes back");
-  assert.equal(newestToastSays(), "The plan could not be saved.");
+  assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
 test("a box pressed twice while its first tick is out, whose first is refused, stands as last pressed", async () => {
@@ -699,7 +699,7 @@ test("a box pressed twice while its first tick is out, whose first is refused, s
 
   assert.equal(sent.length, 1, "the second asks for what the plan already holds, so sends nothing");
   assert.equal(box.getAttribute("aria-checked"), "false");
-  assert.equal(newestToastSays(), "The plan could not be saved.");
+  assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
@@ -769,7 +769,7 @@ test("an empty plan at rest says to write it, a button whose press opens its tex
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
   const line = [...container.querySelectorAll("button")].find(
-    (each) => each.textContent === "Write the plan",
+    (each) => each.textContent === "Write the description",
   );
   assert.ok(line, "the empty plan's line");
 
@@ -781,7 +781,7 @@ test("an empty plan at rest says to write it, a button whose press opens its tex
   assert.deepEqual(open().placement, PLACEMENT_END);
   assert.ok(
     ![...container.querySelectorAll("button")].some(
-      (each) => each.textContent === "Write the plan",
+      (each) => each.textContent === "Write the description",
     ),
     "the line goes once the editor stands in its place",
   );
@@ -895,7 +895,7 @@ test("words whose save is refused as the developer leaves the plan are kept, sai
   await settle();
 
   assert.equal(sent.length, 1, "the save went as the plan was left");
-  assert.equal(newestToastSays(), "Your plan edits could not be saved.Retry");
+  assert.equal(newestToastSays(), "Your description edits could not be saved.Retry");
 
   render(DOCUMENT_TASK);
   await settle();
@@ -1085,7 +1085,7 @@ test("words left waiting on a conflict are kept and said, and the toast's Keep m
   await settle();
 
   assert.equal(sent.length, 1, "a conflict sends nothing more as the plan is left");
-  assert.equal(newestToastSays(), `Your plan edits could not be saved.${appNote}Keep mine`);
+  assert.equal(newestToastSays(), `Your description edits could not be saved.${appNote}Keep mine`);
 
   act(() => newestToastAction()?.click());
   await settle();

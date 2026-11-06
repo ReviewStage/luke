@@ -232,17 +232,17 @@ const LINE = `![Members page](https://vespin.dev/acme/plan/${TASK_ID}/files/${KE
 
 test("Add to plan keeps the picture on the plan and writes its line at the plan's end, and Undo takes it back out", async () => {
   await opened(await drawn(PAGE));
-  const add = viewerButton("Add to plan");
+  const add = viewerButton("Add to description");
   assert.ok(add);
 
   await act(async () => add.click());
-  assert.equal(newestToastSays(), "Adding to the plan…");
+  assert.equal(newestToastSays(), "Adding to the description…");
   const card = document.querySelector(".ui-toast");
   await settled(() => /Added/u.test(newestToastSays() ?? ""));
 
   assert.deepEqual(sent, [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT]);
   assert.equal(held, `${PAGE_TEXT}\n${LINE}\n`);
-  assert.equal(newestToastSays(), "Added to the planUndo");
+  assert.equal(newestToastSays(), "Added to the descriptionUndo");
   assert.equal(
     document.querySelectorAll(".ui-toast").length,
     1,
@@ -256,14 +256,14 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
   await settled(() => held === PAGE_TEXT && /Taken out/u.test(newestToastSays() ?? ""));
 
   assert.equal(held, PAGE_TEXT);
-  assert.match(newestToastSays() ?? "", /Taken out of the plan/u);
+  assert.match(newestToastSays() ?? "", /Taken out of the description/u);
 });
 
 test("a plan that moved on under the page is written on as it stands", async () => {
   held = `${PAGE_TEXT}\nA teammate's newer line.\n`;
   await opened(await drawn(PAGE));
 
-  await act(async () => viewerButton("Add to plan")?.click());
+  await act(async () => viewerButton("Add to description")?.click());
   await settled(() => held.includes(LINE));
 
   assert.equal(held, `${PAGE_TEXT}\nA teammate's newer line.\n\n${LINE}\n`);
@@ -274,7 +274,7 @@ test("a transcript off a plan's page offers no Add to plan", async () => {
   await opened(await drawn(undefined));
 
   assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
-  assert.equal(viewerButton("Add to plan"), undefined);
+  assert.equal(viewerButton("Add to description"), undefined);
 });
 
 test("a planless agent's transcript, whose page names a workspace and no plan, offers no Add to plan", async () => {
@@ -282,7 +282,7 @@ test("a planless agent's transcript, whose page names a workspace and no plan, o
   await opened(await drawn({ ...PAGE, holder: AGENT, doors: { ...PAGE.doors, holder: AGENT } }));
 
   assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
-  assert.equal(viewerButton("Add to plan"), undefined);
+  assert.equal(viewerButton("Add to description"), undefined);
 });
 
 /** Runs the body with the window's `blob:` addresses stood in, which jsdom makes none of. */
@@ -303,7 +303,7 @@ const VIDEO_LINE = `![Inviting a member](https://vespin.dev/acme/plan/${TASK_ID}
 test("Add to plan keeps a recording as it is, never re-encoded, and writes its line at the plan's end", () =>
   withBlobs(async () => {
     await opened(await drawn(PAGE, recorded(WEBM_BASE64)));
-    const add = viewerButton("Add to plan");
+    const add = viewerButton("Add to description");
     assert.ok(add, "the viewer playing the recording offers Add to plan");
 
     await act(async () => add.click());
@@ -311,7 +311,7 @@ test("Add to plan keeps a recording as it is, never re-encoded, and writes its l
 
     assert.deepEqual(keeping, [`data:${CONVERSATION_MEDIA_TYPE.WEBM};base64,${WEBM_BASE64}`]);
     assert.equal(held, `${PAGE_TEXT}\n${VIDEO_LINE}\n`);
-    assert.equal(newestToastSays(), "Added to the planUndo");
+    assert.equal(newestToastSays(), "Added to the descriptionUndo");
   }));
 
 test("a recording past what a plan may be sent, or one past the plan's videos, is refused in words and the plan is not written", () =>
@@ -319,23 +319,23 @@ test("a recording past what a plan may be sent, or one past the plan's videos, i
     // Three zero bytes for every four characters, one more than a sent video may hold.
     const large = "AAAA".repeat(1_100_001);
     await opened(await drawn(PAGE, recorded(large)));
-    await act(async () => viewerButton("Add to plan")?.click());
+    await act(async () => viewerButton("Add to description")?.click());
     await settled(() => /over/u.test(newestToastSays() ?? ""));
 
     assert.deepEqual(sent, []);
     assert.equal(
       newestToastSays(),
-      "This video is over 3.3 MB, too large to add to the plan from here.",
+      "This video is over 3.3 MB, too large to add to the description from here.",
     );
 
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";
     keepAnswer = { failure: PICTURE_KEEP_FAILURE.TOO_MANY_VIDEOS };
     await opened(await drawn(PAGE, recorded(WEBM_BASE64)));
-    await act(async () => viewerButton("Add to plan")?.click());
+    await act(async () => viewerButton("Add to description")?.click());
     await settled(() => /videos/u.test(newestToastSays() ?? ""));
 
     assert.deepEqual(sent, [ACT_KIND.TASKS_PICTURE_KEEP]);
     assert.equal(held, PAGE_TEXT);
-    assert.equal(newestToastSays(), "This plan already holds as many videos as it can.");
+    assert.equal(newestToastSays(), "This description already holds as many videos as it can.");
   }));

@@ -494,7 +494,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
   assert.equal(sectionCard.card, "data-task-card");
   assert.equal(sectionCard.name, TASK.name);
   assert.equal(sectionCard.focus, "Roll it out");
-  assert.equal((await cardOf(gone)).focus, "Pricing · No longer in the plan");
+  assert.equal((await cardOf(gone)).focus, "Pricing · No longer in the description");
   assert.equal((await cardOf(version)).focus, "Version 4");
 });
 

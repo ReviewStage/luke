@@ -454,7 +454,7 @@ test("a plan read and not edited names itself by one h1, its title, with its Cop
 test("an empty plan that cannot be edited draws no line saying to write it", async () => {
   const view = await draw({ ...TASK, document: { body: "", assumptions: [] } });
 
-  assert.ok(!view.textContent?.includes("Write the plan"), "no line under the byline");
+  assert.ok(!view.textContent?.includes("Write the description"), "no line under the byline");
 });
 
 test("a save that writes a section above the one the keyboard stands on leaves Tab entering at that section", async () => {

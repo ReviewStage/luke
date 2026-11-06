@@ -27,7 +27,7 @@ function PlanActions(): React.JSX.Element {
 function PageHeaders(): React.JSX.Element {
   return (
     <>
-      <CatalogSection id="page-header-plan" title="A plan's title, what it is, and its acts">
+      <CatalogSection id="page-header-plan" title="A task's title, what it is, and its acts">
         <PageHeader
           title="Launch checklist"
           description="A task in the platform workspace."

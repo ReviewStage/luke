@@ -938,7 +938,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
 
   openMenu(mountPlanTab(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⌥⌘C"],
+    ["Copy description", "⌥⌘C"],
     ["Version history", "⌥⇧⌘H"],
     ["Mark as unread", "U"],
     ["Pin", "P"],
@@ -985,7 +985,7 @@ test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version histo
   openMenu(mountPlanTab(tasks, registryWith({})));
   const offered = menuItems().map(itemLabel);
   assert.deepEqual(
-    ["Copy plan", "Version history"].filter((item) => offered.includes(item)),
+    ["Copy description", "Version history"].filter((item) => offered.includes(item)),
     [],
   );
   assert.equal(appCommandOffered(APP_COMMAND.COPY_CONTENT), false);

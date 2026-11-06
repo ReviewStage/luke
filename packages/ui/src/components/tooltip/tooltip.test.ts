@@ -55,13 +55,13 @@ test("a pill says its control's name and then its chord, as the tooltip its id n
     createElement(TooltipPill, {
       id: "hint",
       anchor,
-      label: "Archive plan",
+      label: "Archive task",
       shortcut: createElement("kbd", null, "⌘E"),
     }),
   );
   const hint = document.getElementById("hint");
   assert.equal(hint?.getAttribute("role"), "tooltip");
-  assert.equal(hint?.textContent, "Archive plan⌘E");
+  assert.equal(hint?.textContent, "Archive task⌘E");
 });
 
 test("a card's presses stop at the card, and only a press on one of its buttons chooses", () => {
@@ -76,7 +76,7 @@ test("a card's presses stop at the card, and only a press on one of its buttons 
         onPress: () => heard.push("press"),
         onChoice: () => heard.push("choice"),
         children: [
-          createElement("p", { key: "note" }, "Archived plans stay searchable."),
+          createElement("p", { key: "note" }, "Archived tasks stay searchable."),
           createElement("button", { key: "open", type: "button" }, "Open archive"),
         ],
       }),

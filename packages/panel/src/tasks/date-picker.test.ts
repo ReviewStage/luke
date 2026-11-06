@@ -683,7 +683,7 @@ test("a day picked from the plan at rest whose save is refused leaves the date a
     before,
     "the chip names the date as it was",
   );
-  assert.equal(newestToastSays(), "The plan could not be saved.");
+  assert.equal(newestToastSays(), "The description could not be saved.");
 });
 
 test("a tick, a date and a tick from the plan at rest, before it is drawn anew, are each written over the one before", async () => {

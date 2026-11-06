@@ -429,7 +429,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.COPY_CONTENT]: {
     label: "Copy transcript",
     chord: { key: SHORTCUT_KEY.C, option: true },
-    renamed: { experiment: EXPERIMENT.DESCRIPTIONS, label: "Copy plan or transcript" },
+    renamed: { experiment: EXPERIMENT.DESCRIPTIONS, label: "Copy description or transcript" },
   },
   // Note that the full transcript is the concise copy's chord with Shift, as VS Code's Copy Relative Path is its Copy Path's.
   [APP_COMMAND.COPY_FULL_TRANSCRIPT]: {

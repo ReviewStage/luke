@@ -43,7 +43,7 @@ export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.E
     <SectionNote>
       Each cell is the share of one UTC week's signups that{" "}
       {basis === RETENTION_BASIS.MEANINGFUL
-        ? "created a task, wrote a plan revision, or started an agent"
+        ? "created a task, revised a description, or started an agent"
         : "made a hosted-tier call"}{" "}
       that many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing.
       {basis === RETENTION_BASIS.MEANINGFUL
@@ -56,7 +56,7 @@ export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.E
 export function TopAccountsNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      An active day is a UTC day the account created a task, revised a description, or started an
       agent. PRs merged count its agents' pull requests merged in the window. Last seen is the
       account's latest sign-in session.
     </SectionNote>
@@ -67,11 +67,11 @@ export function TopAccountsNote(): React.JSX.Element {
 export function ActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active developer created a task, wrote a plan revision, or started an agent in the last 7
-      UTC days. Plan revisions count the developer's own, and the notes {PRODUCT_NAME}'s retired
-      notetaker took before agents wrote plans; automation runs leave out the ones a guard held
-      back. A deleted task leaves no row, and takes its agents and revisions with it, so past counts
-      can shrink.
+      An active developer created a task, revised a description, or started an agent in the last 7
+      UTC days. Description revisions count the developer's own, and the notes {PRODUCT_NAME}'s
+      retired notetaker took before agents wrote descriptions; automation runs leave out the ones a
+      guard held back. A deleted task leaves no row, and takes its agents and revisions with it, so
+      past counts can shrink.
     </SectionNote>
   );
 }
@@ -102,10 +102,10 @@ export function AccountActivityNote(): React.JSX.Element {
 export function AccountActionsNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active day is a UTC day the account created a task, wrote a plan revision, or started an
-      agent. Plan revisions count the account's own. The streak, Last active, and the calendar read
-      back a trailing year. A deleted task takes its agents and revisions with it, so past days can
-      empty.
+      An active day is a UTC day the account created a task, revised a description, or started an
+      agent. Description revisions count the account's own. The streak, Last active, and the
+      calendar read back a trailing year. A deleted task takes its agents and revisions with it, so
+      past days can empty.
     </SectionNote>
   );
 }
@@ -119,7 +119,7 @@ export function RosterNote({
 }): React.JSX.Element {
   return (
     <SectionNote>
-      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      An active day is a UTC day the account created a task, revised a description, or started an
       agent. Last active is the latest such day in the past year, and the roster is ranked by it.
       Last seen is the account's latest sign-in session.
       {truncatedTo !== undefined
@@ -161,10 +161,10 @@ export function DayActivityNote({
 }): React.JSX.Element {
   return (
     <SectionNote>
-      An active account created a task, wrote a plan revision, or started an agent on this UTC day.
-      The totals are this day's bar on the Overview's activity chart, so plan revisions count the
-      notes {PRODUCT_NAME}'s retired notetaker took too, and automation runs leave out the ones a
-      guard held back.
+      An active account created a task, revised a description, or started an agent on this UTC day.
+      The totals are this day's bar on the Overview's activity chart, so description revisions count
+      the notes {PRODUCT_NAME}'s retired notetaker took too, and automation runs leave out the ones
+      a guard held back.
       {truncatedTo !== undefined
         ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. Active developers counts all ${formatCount(activeDevelopers)}.`
         : ""}

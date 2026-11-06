@@ -148,7 +148,7 @@ const OPENING_CALLS: readonly {
     output: ACCEPTED,
     target: { kind: TOOL_TARGET.PLAN },
     verb: "Updated",
-    made: "Plan",
+    made: "Description",
     opens: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
   },
   {
@@ -158,7 +158,7 @@ const OPENING_CALLS: readonly {
     output: { status: "accepted", thread: "thread-1" },
     target: { kind: TOOL_TARGET.TASK, task: "5d1e2f3a-4b5c-4d6e-8f70-000000000002" },
     verb: "Resolved a thread on",
-    made: "Plan",
+    made: "Description",
     opens: "5d1e2f3a-4b5c-4d6e-8f70-000000000002",
   },
   {

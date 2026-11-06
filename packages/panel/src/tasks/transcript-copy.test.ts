@@ -117,7 +117,7 @@ test("another agent's message is copied under the agent that sent it, never as t
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
     [
       "# Add teammate invitations",
-      "## Plan",
+      "## Description",
       "Build invitations.",
       "## Message from Invite emails",
       "@agent-1 are you changing memberships?",
@@ -156,7 +156,7 @@ test("another agent's message in its whole shape is copied as its words alone, w
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
     [
       "# Add teammate invitations",
-      "## Plan",
+      "## Description",
       "Build invitations.",
       "## Message from Invite emails",
       "Rebase before you push.",
@@ -186,7 +186,7 @@ test("a thread's answer is copied led by what the member did, without the header
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
     [
       "# Add teammate invitations",
-      "## Plan",
+      "## Description",
       "Build invitations.",
       "## Developer",
       "Answered Ship it?",
@@ -230,7 +230,7 @@ test("GitHub's review is copied as its card reads, from its metadata, without th
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
     [
       "# Add teammate invitations",
-      "## Plan",
+      "## Description",
       "Build invitations.",
       "## Developer",
       "@octocat approved #42",

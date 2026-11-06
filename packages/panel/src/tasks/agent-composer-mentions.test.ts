@@ -508,7 +508,7 @@ test("a word that finds an agent and a file leads the @ list with the agent, whi
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(offered, ["Agents", "Plan", "Files and folders"]);
+  assert.deepEqual(offered, ["Agents", "Description", "Files and folders"]);
   assert.deepEqual(
     [...composerEditor(container).querySelectorAll("[data-mention-ref]")].map(chipName),
     [name],
@@ -899,10 +899,10 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
 
   assert.deepEqual(groupsListed(container), [
     ["Agents", ["Wire the desktop"]],
-    ["Plan", ["Goal", "Rollout", "Invitations"]],
+    ["Description", ["Goal", "Rollout", "Invitations"]],
     ["Pages", ["Invites by week"]],
     ["Integrations", ["Linear"]],
-    ["Mention from", ["Agents", "Plan", "Pages", "Files and folders", "Dates", "Linear"]],
+    ["Mention from", ["Agents", "Description", "Pages", "Files and folders", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
 });
@@ -1516,7 +1516,7 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
 
   assert.deepEqual(kinds, [
     ["Agents", "acme"],
-    ["Plan", "2 sections"],
+    ["Description", "2 sections"],
     ["Pages", "1 page"],
     ["Files and folders", "acme/relay"],
     ["Dates", ""],

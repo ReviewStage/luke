@@ -1149,7 +1149,7 @@ type AgentPinAsked =
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
-const TASK_COPIED_NOTE = "Plan copied";
+const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
 const OPENS_NEW_TASK = Atom.map(
