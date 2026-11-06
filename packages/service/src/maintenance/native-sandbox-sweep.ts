@@ -47,6 +47,7 @@ import { redactCredentials } from "@repo/features/credential-redaction";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Cause, Data, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   runnerTag,
@@ -84,7 +85,7 @@ export interface NativeSandboxSweepOutcome {
 const NOTHING_SWEPT: NativeSandboxSweepOutcome = { lost: 0 };
 
 const SANDBOX_ENDING = {
-  /** Its runner still runs, or its run ended, or it is no native agent's the store knows. */
+  /** Its runner still runs, or its run ended, or a call holds its agent's runner lease, or it is no native agent's the store knows. */
   LEFT: "left",
   /** Its runner exited while its run's turn still ran, which the sweep settled failed. */
   LOST: "lost",
@@ -257,8 +258,11 @@ const runGoesOn = (sandbox: NativeSandbox) =>
 /**
  * One running native sandbox dealt with: its run's open turns settled
  * failed where its runner exited while the run still goes on, and every
- * credential taken off its firewall, and left otherwise. The run and the runner are read again just before the settle,
- * so a message that relaunched the runner since keeps its turn.
+ * credential taken off its firewall, and left otherwise. The run and the
+ * runner are read again under the agent's runner lease, held through the
+ * clear, so a message relaunching the runner keeps its turn and the
+ * credentials its launch sets; a lease another call holds leaves the
+ * sandbox for a later sweep.
  */
 const endSandbox = (
   api: VercelSandboxApi,
@@ -279,24 +283,37 @@ const endSandbox = (
     // The turns open once the runner was seen gone, so a turn queued since is not failed for it.
     const lostTurns = new Set(yield* runningTurnIds(going.value));
     const stderr = yield* lostRunnerStderr(api, sandbox, exited.commandId);
-    // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
-    if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
-    if ((yield* exitedRunner(api, sandbox))?.commandId !== exited.commandId) {
-      return SANDBOX_ENDING.LEFT;
-    }
-    yield* settledLostRunner(writer, sandbox, going.value, lostTurns, { ...exited, stderr }, now);
-    // Note that the credentials come off as at any turn's end, because the sandbox then stops on its
-    // timeout with its policy saved, and a later resume would wear them again.
-    yield* sandboxFirewall(api)
-      .clear(sandbox.running)
-      .pipe(
-        Effect.catch((failure) =>
-          Effect.logWarning(
-            `a lost runner's credentials stayed on its sandbox: ${failure.message}`,
-          ),
-        ),
-      );
-    return SANDBOX_ENDING.LOST;
+    const settled = holdingRunnerIfFree(
+      sandbox.agentId,
+      Effect.gen(function* () {
+        // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
+        if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
+        if ((yield* exitedRunner(api, sandbox))?.commandId !== exited.commandId) {
+          return SANDBOX_ENDING.LEFT;
+        }
+        yield* settledLostRunner(
+          writer,
+          sandbox,
+          going.value,
+          lostTurns,
+          { ...exited, stderr },
+          now,
+        );
+        // Note that the credentials come off as at any turn's end, because the sandbox then stops on its
+        // timeout with its policy saved, and a later resume would wear them again.
+        yield* sandboxFirewall(api)
+          .clear(sandbox.running)
+          .pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning(
+                `a lost runner's credentials stayed on its sandbox: ${failure.message}`,
+              ),
+            ),
+          );
+        return SANDBOX_ENDING.LOST;
+      }),
+    );
+    return Option.getOrElse(yield* settled, (): SandboxEnding => SANDBOX_ENDING.LEFT);
   });
 
 /**

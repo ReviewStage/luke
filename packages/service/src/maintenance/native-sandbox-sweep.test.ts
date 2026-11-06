@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { claimAgentRunnerLease } from "@repo/database/models/agent-runner-lease";
 import { createAgent } from "@repo/database/models/agent-store";
 import { user } from "@repo/database/schemas/auth";
 import { conversations, turns } from "@repo/database/schemas/storage";
@@ -10,8 +11,9 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { Effect, ErrorReporter, Layer, Option } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
 import { afterEach, vi } from "vitest";
+import { CODER } from "../agents/coder-host/bounds.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
@@ -268,6 +270,25 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         ]);
         assert.equal(dead.status, "running");
         assert.equal(alive.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a lost runner whose agent's runner lease a message holds keeps its turn and its firewall",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const sandbox = yield* lostSandbox(api);
+        api.sandboxes.push(sandbox);
+        const agentId = sandbox.tags.agentId ?? "";
+        const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.ok(yield* claimAgentRunnerLease(agentId, randomUUID(), NOW, heldUntil));
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.deepEqual(outcome, { lost: 0 });
+        assert.deepEqual(api.policies, []);
       }),
   );
 
