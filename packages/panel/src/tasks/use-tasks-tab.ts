@@ -2999,15 +2999,31 @@ export function useTasksTab(input: {
     showColumnTab(taskId, { agent: source.agentId });
   };
 
+  // A task named anywhere, by a chip, a link, an Inbox crumb, or a call's row, opens on its
+  // agents, its main view, as one gone back to does (`resumeListed`), a panel filling the window
+  // giving way; a task already open on its details goes back to the agents they were opened over.
+  // Only a place in its description opens the details.
+  const showTaskAgents = (taskId: string) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    setStandIn(undefined);
+    setHistoryFor(undefined);
+    const returnTab = taskId === tasks.activeTaskId ? mainTabs.returnTab : undefined;
+    if (returnTab !== undefined && isOverviewTab(mainTabs.tab)) {
+      mainTabs.onChoose(returnTab);
+      return;
+    }
+    resumeListed(taskId);
+  };
+
   // Each ask is its own, so the same section asked twice scrolls twice.
-  // Note that a section is the plan's, so while Plans is off a mention of one opens its task's Overview at its top.
+  // Note that a section is the description's, so while descriptions are off a mention of one opens its task's agents.
   const showMention = (mention: PlanMention) => {
     const anchor = mention.kind === MENTION_KIND.SECTION && plansOn ? mention.anchor : undefined;
-    showOverview(
-      anchor === undefined
-        ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
-        : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor },
-    );
+    if (anchor === undefined) {
+      showTaskAgents(mention.taskId);
+      return;
+    }
+    showOverview({ kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor });
     sectionAsks.current += 1;
     setSectionReveal({ taskId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
   };
@@ -3299,9 +3315,12 @@ export function useTasksTab(input: {
         showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
       case LINK_PLACE.COMMENT:
+        // A comment is the description's, so while descriptions are off its link opens the task's agents.
+        if (!plansOn) {
+          showTaskAgents(place.planId);
+          return;
+        }
         showOverview(place);
-        // A comment is the plan's, so while Plans is off its link opens the task's Overview alone.
-        if (!plansOn) return;
         commentAsks.current += 1;
         setCommentReveal({
           planId: place.planId,
@@ -3853,8 +3872,8 @@ export function useTasksTab(input: {
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab.
     onShowSource: guard(showSource),
-    // The call card's way back lands where the task's call bar is in sight.
-    onShowTask: guard((taskId: string) => showOverview({ kind: LINK_PLACE.TASK, planId: taskId })),
+    // A task named by an Inbox item or a call's row opens on its agents.
+    onShowTask: guard(showTaskAgents),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),
