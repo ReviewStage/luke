@@ -705,7 +705,11 @@ export function FileView({
   const readRepository = "repository" in place ? place.repository : undefined;
   // Coming back to a File tab from another tab lists the repository afresh, as GitHub holds it then; within the view a folder is listed once.
   useEffect(() => {
-    void queryClient.invalidateQueries({ queryKey: taskTreeKey(latestPlace.current) });
+    // Note that refetchOnMount cannot do it, because the listings are read through fetchQuery, which no mount reaches.
+    void queryClient.invalidateQueries({
+      queryKey: taskTreeKey(latestPlace.current),
+      refetchType: "none",
+    });
   }, [queryClient, taskId, workspaceId, readRepository]);
   const listFolder = useCallback(
     (path: string, recursive = false): Promise<TasksTreeAnswer> =>
