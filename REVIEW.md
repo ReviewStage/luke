@@ -30,5 +30,6 @@ These files are generated or fixtures; skip them:
 - `apps/web/server/api-rewrites.json`
 - `packages/*/fixtures/**`
 - `packages/database/migrations/**/snapshot.json`
+- `packages/agent-runner/src/codex-protocol/**`
 - `CHANGELOG.md`
 - `pnpm-lock.yaml`
