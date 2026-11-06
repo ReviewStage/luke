@@ -103,7 +103,7 @@ it("the open sends git's files without ignored ones or symlinks, and a request i
   assert.deepEqual(await next(), { type: "delete", path: "out.log" });
 });
 
-it("a change after the open crosses as a file, a delete, or a skip, in a new folder as in an old one", async (t) => {
+it("a change after the open crosses as a file, a delete, or a skip, in a new folder as in an old one, a chmod included", async (t) => {
   const { root } = await checkout(t);
   const { frame, next, send } = bridge(t, root);
   assert.deepEqual(await frame(), { bridge: "ready" });
@@ -135,6 +135,14 @@ it("a change after the open crosses as a file, a delete, or a skip, in a new fol
     type: "file",
     path: "new/c.txt",
     mode: "100644",
+    bytes: "again",
+  });
+
+  fs.chmodSync(path.join(root, "new", "c.txt"), 0o755);
+  assert.deepEqual(shown(await next()), {
+    type: "file",
+    path: "new/c.txt",
+    mode: "100755",
     bytes: "again",
   });
 });

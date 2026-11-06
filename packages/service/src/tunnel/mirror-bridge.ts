@@ -8,9 +8,10 @@
  * as git lists it, and from then on a watch on each folder that listing
  * holds is only a trigger: once the checkout has been quiet for a moment,
  * or at most a second after it first stirred, it is listed again and
- * compared by size and modified time with the last listing, held in
- * memory and nowhere else, each file new or changed is sent, each one gone
- * is deleted, and the folders watched follow the new listing. Note that we
+ * compared by size, modified time, and executable bit with the last
+ * listing, held in memory and nowhere else, each file new or changed is
+ * sent, each one gone is deleted, and the folders watched follow the new
+ * listing. Note that we
  * watch the listed folders rather than the checkout recursively, because
  * Node on Linux watches a recursive tree file by file, ignored folders such
  * as `node_modules` included, which costs seconds and hundreds of megabytes.
@@ -116,7 +117,8 @@ const settle = () => {
   const now = list();
   for (const [name, stat] of now) {
     const was = listing.get(name);
-    if (was === undefined || was.size !== stat.size || was.mtimeMs !== stat.mtimeMs) send(name, stat);
+    const moved = was === undefined || was.size !== stat.size || was.mtimeMs !== stat.mtimeMs;
+    if (moved || (was.mode & 0o111) !== (stat.mode & 0o111)) send(name, stat);
   }
   for (const name of listing.keys()) {
     if (!now.has(name)) tell({ type: "${MIRROR_FRAME.DELETE}", path: name });
