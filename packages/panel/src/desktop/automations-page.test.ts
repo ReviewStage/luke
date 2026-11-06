@@ -1589,7 +1589,7 @@ test("a new agent's MCP servers row claims nothing while the owner's connections
 
   const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
   assert.ok(reading.includes("Reading your connected MCP servers…"), "the row says it is reading");
-  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected integration/u);
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected MCP server/u);
   assert.equal(serversChip(page) === undefined, true, "no chip claims None while the read is out");
 });
 
