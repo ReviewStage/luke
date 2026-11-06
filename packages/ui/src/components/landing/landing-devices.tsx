@@ -9,8 +9,10 @@ import { cssCustomProperties } from "../../css.js";
  * own proportions, and the device scales it to fit, measuring its own box
  * rather than the viewport. The window wears the app's frame (the sidebar's
  * ground around the sheet) and three quiet lights; the phone a thin even
- * bezel, deep corners, and the Dynamic Island. Neither is ever pressed: what
- * they hold is inert, and a reader is told only the device's name.
+ * bezel, deep corners, and the Dynamic Island. A pane is one column of the
+ * window cut out at true size, for a page with no room to read the whole.
+ * None is ever pressed: what they hold is inert, and a reader is told only
+ * what it shows.
  */
 
 /** The size each device lays its screen out at, in CSS pixels. */
@@ -57,6 +59,27 @@ export function LandingWindow({
           </span>
           {children}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One pane of a Mac window cut out of it, drawing `children` at the room's
+ * own width and unscaled: what a page too narrow to read the whole window
+ * shows in its place (`landing.css`), so its words stand at true size.
+ */
+export function LandingPane({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="ui-landing-pane" role="img" aria-label={label}>
+      <div className="ui-landing-pane-screen" inert>
+        {children}
       </div>
     </div>
   );
