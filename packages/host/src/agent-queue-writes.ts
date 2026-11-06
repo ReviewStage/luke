@@ -5,9 +5,7 @@ import {
   type AgentQueueChange,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
-import { carried } from "@repo/gateway";
 import type { EntityKind, EntityPool, Refused, WriteDeclaration, Written } from "@repo/sync";
-import type { WireValue } from "@repo/wire";
 import { Effect, Equal, MutableHashMap, Option, type Scope } from "effect";
 import type { AppTranscript } from "./app-state.js";
 import { type CarriedWaits, carriedWaits, type HeldAnswers } from "./live-collection.js";
@@ -170,7 +168,7 @@ export interface AgentQueues {
   /** A change of an agent's queue, sent as `send` asks. */
   readonly write: (
     send: (agentId: string, change: AgentQueueChange) => Effect.Effect<AgentQueueAnswerView>,
-  ) => WriteDeclaration<QueueRow, QueueChange, QueueWrite, WireValue>;
+  ) => WriteDeclaration<QueueRow, QueueChange, QueueWrite, AgentQueueAnswerView>;
 }
 
 /** The agents' queues in `pool`, each held while its own transcript is followed, for as long as the scope stands. */
@@ -239,19 +237,19 @@ export function agentQueues(pool: EntityPool): Effect.Effect<AgentQueues, never,
       });
     const write = (
       send: (agentId: string, change: AgentQueueChange) => Effect.Effect<AgentQueueAnswerView>,
-    ): WriteDeclaration<QueueRow, QueueChange, QueueWrite, WireValue> => ({
+    ): WriteDeclaration<QueueRow, QueueChange, QueueWrite, AgentQueueAnswerView> => ({
       kind: AGENT_QUEUE,
       keys: ({ agentId }) => [agentId],
       change: drawnChange,
       send: ({ agentId, change }) =>
         Effect.map(
           send(agentId, change),
-          (answer): Written<QueueChange, WireValue> | Refused<WireValue> => {
-            if (!("queue" in answer)) return { refused: carried<AgentQueueAnswerView>(answer) };
+          (answer): Written<QueueChange, AgentQueueAnswerView> | Refused<AgentQueueAnswerView> => {
+            if (!("queue" in answer)) return { refused: answer };
             const { revision } = answer.queue;
             const over = answeredOver(answer.queue);
             return {
-              answer: carried<AgentQueueAnswerView>(answer),
+              answer: answer,
               txid: undefined,
               standsAs: over,
               taken: over,

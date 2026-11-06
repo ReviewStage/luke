@@ -15,8 +15,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * hosted-call.test.ts -- how one hosted call's answer or failure reads as its domain's: one row per behavior of the translation.
  *
  * `mcpClients.list` declares only the refusals any procedure may answer;
- * `models.list` still declares every refusal, so it stands for a procedure
- * that declares one carrying fields.
+ * `pullRequestChapters.read` refuses a repository out of reach, so it
+ * stands for a procedure that declares a refusal carrying fields.
  */
 
 const BASE_URL = "https://app.test";
@@ -68,7 +68,7 @@ it.effect.each<Row>([
     behavior: "a declared refusal is its slug with the fields it carries",
     status: HTTP_STATUS.FORBIDDEN,
     body: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached: UNREACHED },
-    call: (hosted) => hostedCall(hosted.models.list, undefined),
+    call: (hosted) => hostedCall(hosted.pullRequestChapters.read, { id: "agent-1", number: "7" }),
     expected: { failure: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached: UNREACHED },
   },
   {
@@ -78,7 +78,11 @@ it.effect.each<Row>([
     call: (hosted) => hostedCall(hosted.mcpClients.list, undefined),
     expected: {
       failure: "unanswered",
-      cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, code: HOSTED_API_ERROR.NOT_FOUND },
+      cause: {
+        _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+        status: HTTP_STATUS.NOT_FOUND,
+        code: HOSTED_API_ERROR.NOT_FOUND,
+      },
     },
   },
   {

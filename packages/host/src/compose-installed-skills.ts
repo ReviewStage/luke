@@ -1,23 +1,18 @@
 import type { HostedInstalledSkillClient } from "@repo/features/installed-skill-client";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
-  type InstalledSkillContentView,
-  type InstalledSkillInstallView,
-  type InstalledSkillPreviewView,
   installedSkillFollowParamsSchema,
-  installedSkillIdParamsSchema,
-  installedSkillInstallParamsSchema,
-  installedSkillPreviewParamsSchema,
 } from "@repo/features/installed-skill-view";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
-import { declaredMethod, type EntityPool } from "@repo/sync";
-import type { WireRecord } from "@repo/wire";
+import { declaredWrite, type EntityPool } from "@repo/sync";
 import { Effect, FiberMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AppInstalledSkills } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { INSTALLED_SKILL_ACTS } from "./contract/index.js";
 import type { HostMethodTable } from "./gateway-door.js";
+import type { HostActTable } from "./host-acts.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   heldInstalledSkills,
@@ -65,6 +60,8 @@ export interface InstalledSkillsDependencies {
 }
 
 export interface InstalledSkillsComposer extends Composer {
+  /** The installed skills' plain asks, answered directly as the panel's port asks them. */
+  readonly acts: HostActTable<typeof INSTALLED_SKILL_ACTS>;
   /** Every held workspace's skills followed anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
   /** Every follow let go and no read laid, as a sign-out lets them go; the windows' holds stand. */
@@ -121,6 +118,29 @@ function composed(
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
     gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
+  /** The installed skills' plain asks, answered as the panel's port asks them (`INSTALLED_SKILL_ACTS`). */
+  const acts: HostActTable<typeof INSTALLED_SKILL_ACTS> = {
+    INSTALLED_SKILLS_READ: ({ skillId }) => asked(client.read(skillId)),
+    INSTALLED_SKILLS_PREVIEW: ({ workspaceId, text }) => asked(client.preview(workspaceId, text)),
+    // An install's skills are drawn on every held read whose scope they are in the moment it answers, each standing until those reads carry its transaction.
+    INSTALLED_SKILLS_INSTALL: (install) =>
+      Effect.gen(function* () {
+        const view = yield* asked(client.install(install));
+        if ("skills" in view) {
+          yield* Effect.forEach(
+            view.skills,
+            (skill) => pool.write(SKILL_MADE, { row: skillRowOf(skill), txid: view.txid }),
+            { concurrency: "unbounded", discard: true },
+          );
+        }
+        return view;
+      }),
+    INSTALLED_SKILLS_REMOVE: declaredWrite(
+      pool,
+      skillRemoved((removal) => asked(client.remove(removal.skillId))),
+    ),
+  };
+
   const methods: HostMethodTable = {
     // Note that the windows' hold on a workspace is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW]: (params) =>
@@ -158,52 +178,8 @@ function composed(
         yield* skills.retry(workspaceId);
         return {};
       }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_READ]: (params) =>
-      Effect.gen(function* () {
-        const { skillId } = yield* readParams(
-          installedSkillIdParamsSchema,
-          params,
-          "a read names a skill",
-        );
-        const view = yield* asked(client.read(skillId));
-        return carried<InstalledSkillContentView>(view);
-      }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, text } = yield* readParams(
-          installedSkillPreviewParamsSchema,
-          params,
-          "a preview names a workspace and a paste",
-        );
-        const view = yield* asked(client.preview(workspaceId, text));
-        return carried<InstalledSkillPreviewView>(view);
-      }),
-    // An install's skills are drawn on every held read whose scope they are in the moment it answers, each standing until those reads carry its transaction.
-    [GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL]: (params) =>
-      Effect.gen(function* () {
-        const install = yield* readParams(
-          installedSkillInstallParamsSchema,
-          params,
-          "an install names a workspace, a scope, and a paste",
-        );
-        const view = yield* asked(client.install(install));
-        if ("skills" in view) {
-          yield* Effect.forEach(
-            view.skills,
-            (skill) => pool.write(SKILL_MADE, { row: skillRowOf(skill), txid: view.txid }),
-            { concurrency: "unbounded", discard: true },
-          );
-        }
-        return carried<InstalledSkillInstallView>(view);
-      }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE]: declaredMethod(
-      pool,
-      skillRemoved((removal) => asked(client.remove(removal.skillId))),
-      (params: WireRecord) =>
-        readParams(installedSkillIdParamsSchema, params, "a removal names a skill"),
-    ),
   };
 
   // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
-  return { methods, lifetime: Effect.void, open: skills.open, reset: skills.end };
+  return { methods, acts, lifetime: Effect.void, open: skills.open, reset: skills.end };
 }

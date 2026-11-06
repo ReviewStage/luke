@@ -56,7 +56,7 @@ import type {
 } from "@repo/host/app-state";
 import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
-import { isTranscriptTab } from "@repo/ui/tab-strip-model";
+import { STRIP_TAB_KIND } from "@repo/ui/tab-strip-model";
 import type { TaskMark } from "@repo/ui/tasks-model";
 import { QueryClientProvider } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -841,7 +841,9 @@ export function mount(
       sidePanel: sidePanel ?? {
         ...tasksControl().sidePanel,
         onPreview: (tab) => {
-          if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
+          if (typeof tab !== "string" && tab.kind === STRIP_TAB_KIND.TRANSCRIPT) {
+            asked.previewedAgents.push(tab.transcript);
+          }
         },
       },
       inbox: waiting,

@@ -37,7 +37,7 @@ interface MaintenanceSweeps {
   sweepDeviceWarmRunners: (now: number) => SweepRead<DeviceWarmSweepOutcome>;
   /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
   sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
-  /** Settles as failed the turns of the running native agents whose runner died mid-turn, their firewall cleared, a sweep's worth. */
+  /** Settles as failed the turns of the running native agents whose runner died mid-turn, a sweep's worth. */
   sweepNativeSandboxes: (now: number) => SweepRead<NativeSandboxSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from us. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;

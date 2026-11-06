@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";
+import { fakeCloudApi } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { HostedAutomationClient } from "./automation-client.js";
@@ -10,15 +10,13 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "./automation-wire.js";
-import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
-import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * The window's automation calls against a scripted service: each travels
  * under the account's bearer to its own path, a write's answer is read for
  * its summary alone so a secret the service answered never reaches the
- * window, a write the service would refuse by shape never travels, and a
- * refusal is named in the window's own words. Synthetic ids and words.
+ * window, and a write the service would refuse by shape never travels; how
+ * a refusal is read is `hosted-call.test.ts`'s. Synthetic ids and words.
  */
 
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
@@ -130,40 +128,21 @@ it.effect("each call goes to its own path, and the list names its workspace in t
   }),
 );
 
-it.effect(
-  "a refusal is named in the window's words, with why a repository is out of reach, and a write the service would refuse by shape never travels",
-  () =>
-    Effect.gen(function* () {
-      const unreached = { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/web" };
-      const api = fakeCloudApi({
-        "POST /api/automations": {
-          answer: () => ({ error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached }),
-          status: HTTP_STATUS.CONFLICT,
-        },
-        [`GET /api/automations/${AUTOMATION_ID}/runs`]: {
-          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-          status: HTTP_STATUS.NOT_FOUND,
-        },
-      });
-      const ask = client();
+it.effect("a write the service would refuse by shape is refused as invalid and never travels", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({});
+    const ask = client();
 
-      const outOfReach = yield* Effect.provide(ask.create(MADE), api.layer);
-      const gone = yield* Effect.provide(ask.runs({ automationId: AUTOMATION_ID }), api.layer);
-      const unnamed = yield* Effect.provide(ask.create({ ...MADE, name: "" }), api.layer);
-      const unspelled = yield* Effect.provide(
-        ask.change({ automationId: AUTOMATION_ID, change: { repositories: ["not a repository"] } }),
-        api.layer,
-      );
+    const unnamed = yield* Effect.provide(ask.create({ ...MADE, name: "" }), api.layer);
+    const unspelled = yield* Effect.provide(
+      ask.change({ automationId: AUTOMATION_ID, change: { repositories: ["not a repository"] } }),
+      api.layer,
+    );
 
-      assert.deepEqual(outOfReach, {
-        failure: AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-        unreached,
-      });
-      assert.deepEqual(gone, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(unnamed, { failure: AUTOMATION_CALL_FAILURE.INVALID });
-      assert.deepEqual(unspelled, { failure: AUTOMATION_CALL_FAILURE.INVALID });
-      assert.equal(api.requests().length, 2, "no unsendable write traveled");
-    }),
+    assert.deepEqual(unnamed, { failure: AUTOMATION_CALL_FAILURE.INVALID });
+    assert.deepEqual(unspelled, { failure: AUTOMATION_CALL_FAILURE.INVALID });
+    assert.equal(api.requests().length, 0, "no unsendable write traveled");
+  }),
 );
 
 it.effect(
