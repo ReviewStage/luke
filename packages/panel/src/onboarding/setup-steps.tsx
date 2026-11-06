@@ -153,11 +153,8 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     },
     [updateSetting],
   );
+  // Note that the place is first kept on the first move rather than as setup opens, because a preferences read that failed lets setup open without the account's place, and nothing written unasked may then put back another machine's.
   const move = (change: Partial<SetupPlace>) => keep({ ...(written.current ?? place), ...change });
-  // Setup starting is kept at once, so it stands until finished on a reload or another machine, whatever it connects meanwhile.
-  useEffect(() => {
-    if (kept === undefined && written.current === undefined) keep(start);
-  }, [kept, keep, start]);
   const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);

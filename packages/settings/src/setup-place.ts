@@ -24,7 +24,7 @@ const SETUP_TEAM_MAX_CHARS = 200;
 /** Where an account stands in setup: who it is for, the step it is on, and the team's workspace once made. */
 const setupPlaceSchema = Schema.Struct({
   audience: Schema.Literals(Object.values(SETUP_AUDIENCE)),
-  at: Schema.Number,
+  at: Schema.Int,
   team: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(SETUP_TEAM_MAX_CHARS))),
 });
 
