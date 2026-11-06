@@ -4,7 +4,6 @@ import {
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import {
-  type AgentInboxScope,
   type AgentPullRequestReadParams,
   type AgentTranscriptKey,
   PULL_REQUEST_PART,
@@ -15,11 +14,7 @@ import type { IntegrationProviderParams } from "@repo/features/integration-view"
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
-import {
-  COMMENT_SUBJECT,
-  type TasksCommentsFollow,
-  type TasksLinkStandingParams,
-} from "@repo/features/tasks-view";
+import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -27,7 +22,6 @@ import {
   type AppStateSnapshot,
   EVERY_WORKSPACE,
   HOST_READ_SLICE,
-  KEYS_ON,
   OWN_PULL_REQUEST,
   OWN_TRANSCRIPT,
   READ_KEYS,
@@ -82,12 +76,6 @@ export interface HostRead<Rows> extends HeldRead<Rows> {
   readonly retry: () => Promise<void>;
 }
 
-/** The holder whose own inbox a surface reads: a plan, or an agent, by its id. */
-export type InboxHolderKey = AgentInboxScope;
-
-/** The link whose standing a chip reads: the workspace it is read through, and the link's own address. */
-export type LinkStandingKey = TasksLinkStandingParams;
-
 /** A repository list's scope as its acts name it: its workspace, or nothing for every one (`EVERY_WORKSPACE`). */
 function repositoryScope(workspace: string): { readonly workspaceId?: string } {
   return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
@@ -113,11 +101,9 @@ function statusOf(held: AppHostRead<unknown> | undefined): HostReadStatus {
   return held?.failed === true ? HOST_READ_STATUS.FAILED : HOST_READ_STATUS.LOADING;
 }
 
-/** How deep a key of `read` stands in its slice: not at all for a read whose slice is one read, as the feed's is, else one segment per id its slice is keyed by (`HOST_READ_SLICE`). */
+/** How deep a key of `read` stands in its slice: one segment per id its slice is keyed by (`HOST_READ_SLICE`). */
 function depthOf(read: HostReadName): number {
-  const slice = HOST_READ_SLICE[read];
-  if (slice.on === KEYS_ON.ROWS) return 0;
-  return slice.keys === READ_KEYS.TWO ? 2 : 1;
+  return HOST_READ_SLICE[read].keys === READ_KEYS.TWO ? 2 : 1;
 }
 
 /** What `value` holds at `path`, record by record; none where it holds none. */
@@ -224,9 +210,7 @@ function pullRequestPartRead(part: PullRequestPart) {
 
 /**
  * Every read a surface reads through `useHostRead`, by its name, but
- * those moved onto TanStack Query (`live-reads.ts`): the feed of
- * every item the account reaches, held for the session; one holder's own
- * inbox; where the account's integrations stand, by the account, which every
+ * those moved onto TanStack Query (`live-reads.ts`): where the account's integrations stand, by the account, which every
  * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
  * page, the panel beside an Inbox item, an agent's page, and a page's card
  * or frame each hold; the parts of one agent's pull request a Pull request
@@ -246,8 +230,7 @@ function pullRequestPartRead(part: PullRequestPart) {
  * automations, one workspace's runs, or one automation's runs, by its id;
  * one plan's comments, or one page's, which the open task's plan and a
  * page's tab each hold; one task's plan history, which its version history
- * holds while it shows; the run that started one agent, which its page
- * holds; one workspace's people, its members and who its work names but
+ * holds while it shows; one workspace's people, its members and who its work names but
  * left, which every surface naming them holds; one workspace's token
  * repositories, which Settings › Workspace and onboarding's GitHub step
  * hold; one workspace's pending invitations, which an owner's or an
@@ -265,24 +248,6 @@ function pullRequestPartRead(part: PullRequestPart) {
  * none, since the host fetches it again as the workspaces next move.
  */
 const HOST_READS = {
-  [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
-    slice: APP_SLICE.AGENT_ORIGINS,
-    path: (agentId: string) => [agentId],
-    hold: (agentId) => askAct(ACT_KIND.AGENTS_ORIGIN_FOLLOW, { agentId }),
-    retry: (agentId) => tellAct(ACT_KIND.AGENTS_ORIGIN_RETRY, { agentId }),
-  }),
-  [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
-    slice: APP_SLICE.INBOX_ITEMS,
-    path: undefined,
-    hold: undefined,
-    retry: () => tellAct(ACT_KIND.AGENTS_INBOX_ITEMS_RETRY),
-  }),
-  [LIVE_READ.HOLDER_INBOX]: hostRead(LIVE_READ.HOLDER_INBOX, {
-    slice: APP_SLICE.HOLDER_INBOX,
-    path: (key: InboxHolderKey) => [key.kind, key.id],
-    hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
-    retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
-  }),
   [LIVE_READ.INSTALLED_SKILLS]: hostRead(LIVE_READ.INSTALLED_SKILLS, {
     slice: APP_SLICE.INSTALLED_SKILLS,
     path: (workspaceId: string) => [workspaceId],
@@ -301,13 +266,6 @@ const HOST_READS = {
     path: (server: IntegrationServer) => [server.connection ?? server.provider],
     hold: (server) => askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server),
     retry: (server) => tellAct(ACT_KIND.INTEGRATIONS_TOOLS_RETRY, server),
-  }),
-  [LIVE_READ.LINK_STANDINGS]: hostRead(LIVE_READ.LINK_STANDINGS, {
-    slice: APP_SLICE.LINK_STANDINGS,
-    path: (link: LinkStandingKey) => [link.workspaceId, link.address],
-    hold: ({ workspaceId, address }) =>
-      askAct(ACT_KIND.TASKS_LINK_STANDING_FOLLOW, { workspaceId, address }),
-    retry: undefined,
   }),
   [LIVE_READ.MEMORIES]: hostRead(LIVE_READ.MEMORIES, {
     slice: APP_SLICE.MEMORIES,

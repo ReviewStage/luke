@@ -58,6 +58,7 @@ import { NO_HOLDER_INBOXES, UNREAD } from "@repo/host/app-state";
 import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
 import { isTranscriptTab } from "@repo/ui/tab-strip-model";
 import type { TaskMark } from "@repo/ui/tasks-model";
+import { notifyManager } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -899,9 +900,31 @@ export function mount(
   return { page: container, asked };
 }
 
-/** Lets every promise settled so far run its continuations, and the frames a paint takes pass (`settleFrames`). */
+/** How many rounds of TanStack Query's notifications a settle waits out, since a notification drawn may lay a read that notifies in turn. */
+const NOTIFY_ROUNDS = 3;
+
+/**
+ * Lets every promise settled so far run its continuations, the frames a
+ * paint takes pass (`settleFrames`), and every notification TanStack Query
+ * has queued reach the surfaces observing it, round after round: what a
+ * live read laid on the document is drawn one notify tick later. Note that
+ * the wait joins the notify manager's own queue (`notifyManager.schedule`)
+ * rather than a timer of its own, so it holds whatever that queue's
+ * scheduler is, and that a test faking timers waits on frames alone. The
+ * Inbox's tests act step after step on what each push left, an item chosen,
+ * marked, or answered, so a `vi.waitFor` on one step's outcome alone left the
+ * next step racing the notification after it; waiting out the queue here
+ * holds every step.
+ */
 export async function settle(): Promise<void> {
   await settleFrames();
+  if (vi.isFakeTimers()) return;
+  for (let round = 0; round < NOTIFY_ROUNDS; round += 1) {
+    const notified = Promise.withResolvers<void>();
+    notifyManager.schedule(() => notified.resolve());
+    await act(() => notified.promise);
+    await settleFrames();
+  }
 }
 
 /**

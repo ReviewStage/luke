@@ -46,7 +46,9 @@
  * that open a follow (`anti-slop/no-follow-outside-host-read`).
  */
 
+import { type AgentInboxScope, agentInboxScopeSchema } from "@repo/features/agent-view";
 import { LIVE_READ } from "@repo/features/live-wire";
+import type { TasksLinkStandingParams } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
@@ -57,7 +59,7 @@ import {
   READ_KEYS,
 } from "@repo/host/app-state";
 import { type Query, type QueryClient, queryOptions, useQueryClient } from "@tanstack/react-query";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { useEffect } from "react";
 import { askAct } from "./act.js";
 import { actMutation } from "./act-mutations.js";
@@ -80,6 +82,15 @@ export class LiveReadFailed extends Error {
   }
 }
 
+/** The holder whose own inbox a surface reads: a plan, or an agent, by its id. */
+type InboxHolderKey = AgentInboxScope;
+
+/** The link whose standing a chip reads: the workspace it is read through, and the link's own address. */
+type LinkStandingKey = TasksLinkStandingParams;
+
+/** The holder a holder inbox's ids name, as its follow takes it; its key is built from one (`holderInboxQuery`), so it always reads. */
+const readHolder = Schema.decodeUnknownSync(agentInboxScopeSchema);
+
 /** A follow, a stream on the act port that carries nothing and that the host keeps the read followed for, by the read's ids. */
 type LiveFollow = (
   ids: readonly string[],
@@ -97,6 +108,11 @@ const LIVE_FOLLOWS: { readonly [Read in LiveReadName]?: LiveFollow } = {
   [LIVE_READ.GITHUB_TOKEN]: () => askAct(ACT_KIND.GITHUB_TOKEN_FOLLOW),
   [LIVE_READ.DEVICE_PRESENCE]: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
   [LIVE_READ.HOSTS]: () => askAct(ACT_KIND.HOSTS_FOLLOW),
+  [LIVE_READ.AGENT_ORIGINS]: ([agentId = ""]) => askAct(ACT_KIND.AGENTS_ORIGIN_FOLLOW, { agentId }),
+  [LIVE_READ.HOLDER_INBOX]: ([kind, id]) =>
+    askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, readHolder({ kind, id })),
+  [LIVE_READ.LINK_STANDINGS]: ([workspaceId = "", address = ""]) =>
+    askAct(ACT_KIND.TASKS_LINK_STANDING_FOLLOW, { workspaceId, address }),
 };
 
 /** Every live read moved here, by its name, which `use-host-read.ts` reads no more. */
@@ -108,6 +124,10 @@ const LIVE_QUERY_READS = [
   LIVE_READ.DEVICE_PRESENCE,
   LIVE_READ.HOSTS,
   LIVE_READ.THIS_MAC_HOST,
+  LIVE_READ.AGENT_ORIGINS,
+  LIVE_READ.INBOX_ITEMS,
+  LIVE_READ.HOLDER_INBOX,
+  LIVE_READ.LINK_STANDINGS,
 ] as const satisfies readonly LiveReadName[];
 
 /** A live read moved here, by its name. */
@@ -264,6 +284,27 @@ export const hostsQuery = (accountId: string | undefined) =>
 export const thisMacHostQuery = (accountId: string | undefined) =>
   liveReadQuery(LIVE_READ.THIS_MAC_HOST, accountIds(accountId));
 
+/** The run that started one agent, by the agent, which its page holds. */
+export const agentOriginQuery = (agentId: string | undefined) =>
+  liveReadQuery(LIVE_READ.AGENT_ORIGINS, agentId === undefined ? undefined : [agentId]);
+
+/** The feed of every item the account reaches, which the host holds for the session. */
+export const inboxItemsQuery = () => liveReadQuery(LIVE_READ.INBOX_ITEMS, []);
+
+/** One holder's own inbox, by its kind and its id. */
+export const holderInboxQuery = (holder: InboxHolderKey | undefined) =>
+  liveReadQuery(
+    LIVE_READ.HOLDER_INBOX,
+    holder === undefined ? undefined : [holder.kind, holder.id],
+  );
+
+/** What GitHub holds of one pull request or issue a chip draws, by the workspace it is read through and its address; none offers Try again, since the host reads it again on its own. */
+export const linkStandingQuery = (link: LinkStandingKey | undefined) =>
+  liveReadQuery(
+    LIVE_READ.LINK_STANDINGS,
+    link === undefined ? undefined : [link.workspaceId, link.address],
+  );
+
 /** Try again on the account's preferences row. */
 export const accountPreferencesRetryMutation = () => actMutation(ACT_KIND.AGENTS_PREFERENCES_RETRY);
 
@@ -281,6 +322,12 @@ export const devicePresenceRefreshMutation = () => actMutation(ACT_KIND.HOSTS_PR
 
 /** Try again on the hosts. */
 export const hostsRetryMutation = () => actMutation(ACT_KIND.HOSTS_RETRY);
+
+/** Try again on the feed of every item the account reaches. */
+export const inboxItemsRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_ITEMS_RETRY);
+
+/** Try again on one holder's own inbox. */
+export const holderInboxRetryMutation = () => actMutation(ACT_KIND.AGENTS_INBOX_RETRY);
 
 /**
  * Writes what each push lays of a live read into its query: the rows of

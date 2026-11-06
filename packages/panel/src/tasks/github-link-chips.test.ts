@@ -309,9 +309,8 @@ test("a pull request's link says its number, live title, and state, wearing its 
     ["#5", "Open", PULL_REQUEST_STATE.OPEN],
     ["secret#7", null, undefined],
   ]);
+  // Note that the three chips of one pull request hold its one read.
   assert.deepEqual(standingsHeld(asked), [
-    { workspaceId: "workspace-acme", address: MERGED },
-    { workspaceId: "workspace-acme", address: MERGED },
     { workspaceId: "workspace-acme", address: MERGED },
     { workspaceId: "workspace-acme", address: ELSEWHERE },
     { workspaceId: "workspace-acme", address: UNREACHED },

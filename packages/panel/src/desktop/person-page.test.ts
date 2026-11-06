@@ -35,7 +35,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
@@ -581,7 +581,10 @@ test("an Inbox that could not be read says so and offers Retry, and never passes
   const { page } = mount("user-sam");
   await settle();
 
-  assert.match(page.textContent ?? "", /Some inbox items could not be read\./u);
+  // Note that the feed's refusal reaches its query one notify tick later.
+  await vi.waitFor(() =>
+    assert.match(page.textContent ?? "", /Some inbox items could not be read\./u),
+  );
   assert.ok(button(page, "Retry"));
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });

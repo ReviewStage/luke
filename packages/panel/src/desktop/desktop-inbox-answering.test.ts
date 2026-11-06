@@ -386,12 +386,21 @@ test("an item gone from under its open box, as a teammate's delete takes it, let
   world.inboxes.set(BILLING.id, [RETRY]);
   act(() => pushAgain());
   await settle();
+  await vi.waitFor(() =>
+    assert.equal(
+      listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+      false,
+      "the item is gone",
+    ),
+  );
   // Note that the item standing again shows what was kept of its draft, since its row and its box went with it.
   world.inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
   act(() => pushAgain());
   await settle();
 
-  assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go"),
+  );
 });
 
 test("an answer box whose editor bundle could not be loaded says so beside Retry, and Retry mounts the editor once the bundle lands", async () => {
@@ -839,10 +848,12 @@ test("an answer leaves Needs you the moment it is sent, its row staying where it
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.deepEqual(
-    listed(page),
-    ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
-    "the answered row stays where it stood",
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      listed(page),
+      ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
+      "the answered row stays where it stood",
+    ),
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
 });
@@ -905,6 +916,8 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   // The invites plan's change is pushed, as an answer from another Mac would be.
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }, { items: [answered] });
   await settle();
+  // Note that the push reaches the hidden Inbox's read one notify tick later, which lands before it is shown again.
+  await vi.waitFor(() => assert.deepEqual(listed(page), ["*Alert at 80%?"]));
   act(() => world.setInboxOpen(true));
   await settle();
   assert.deepEqual(
@@ -972,7 +985,7 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   await settle();
   const pane = itemPane(page);
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
   assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
   assert.ok(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,
@@ -1009,7 +1022,9 @@ test("an answer no reply came back for is taken as sent once its thread holds a 
   world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [landed, RETRY] });
   await settle();
   const pane = itemPane(page);
-  assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go");
+  await vi.waitFor(() =>
+    assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go"),
+  );
   assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null);
 });
 
@@ -1066,8 +1081,7 @@ test("an item its agent posts again after it was answered needs you again once a
       { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
     ]),
   );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  await vi.waitFor(() => assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*"));
 });
 
 test("a message the service took stays the last word on its item's row once another plan's item is chosen, though the list's read of its plan is older than the message", async () => {
