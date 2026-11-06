@@ -622,6 +622,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(bearerPlaceholder !== undefined && bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
+        // The fingerprint reads the token held at the firewall by its slot, never a placeholder, as warm runners
+        // launched before were recorded: the first 32 hex characters of the SHA-256 of
+        // {"env":[],"names":["linear"],"held":{"slot":"claude","credential":PLAN_TOKEN}}.
+        const record = Option.getOrThrow(yield* readAgentRunnerRecord(userId, opened.sessionId));
+        assert.equal(record.fingerprint, "780f5f77680c20a5ad5b4c255021deb7");
 
         const [config, first] = (yield* launchLines(command)) as [ClaudeCodeConfig, InputLine];
         assert.deepEqual(config, {
@@ -951,6 +956,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(env[RUNNER_ENV.API_KEY], API_KEY);
         assert.equal(env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         assert.deepEqual(onKey.policies, []);
+        // Its fingerprint reads the key in its variable, as warm runners launched before were recorded: the first
+        // 32 hex characters of the SHA-256 of {"env":[["ANTHROPIC_API_KEY",API_KEY]],"names":["linear"]}.
+        assert.equal(launch.payload.fingerprint, "586cbee90aa20b9bb788adc7a378466c");
       }),
   );
 
